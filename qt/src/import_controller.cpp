@@ -205,10 +205,15 @@ ImportController::~ImportController()
 
 void ImportController::cancel()
 {
+    // Non-blocking: only set the cancelled flag and signal completion. We must
+    // NOT waitForFinished() here — the probe (FFmpeg metadata open) may be
+    // blocked on slow/unresponsive I/O, and shutdown calls cancel() first, so
+    // waiting would stall the entire shutdown. The background task checks the
+    // cancelled flag on its next iteration and exits gracefully. A late
+    // handleResult is harmless: the model append is idempotent
+    // (containsPath check) and handleResult guards the finished emission on
+    // busy_ to avoid double delivery.
     markCancelled(callbackState_, true);
-    if (future_.isRunning()) {
-        future_.waitForFinished();
-    }
     if (busy_) {
         busy_ = false;
         emit busyChanged();
@@ -341,7 +346,7 @@ void ImportController::handleResult(const QString& path,
         emit progressChanged();
     }
 
-    if (completed == total) {
+    if (completed == total && busy_) {
         busy_ = false;
         emit busyChanged();
         emit finished();

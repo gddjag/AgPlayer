@@ -1,11 +1,14 @@
 #include <agplayer/c_api.h>
 
+#include "waveform_cache.hpp"
+
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include <crtdbg.h>
@@ -133,29 +136,76 @@ int main(const int argc, char** argv)
         std::filesystem::remove(missing_source, cleanup_ec);
     }
 
-    // 4. Corrupt cache: re-analyze when cache is bad (uses waveform API directly)
+    // 4. Corrupt cache: re-analyze when cache is bad
     {
+        // Isolated source copy so the cache key is stable and does not
+        // interfere with other tests sharing the fixture.
+        const std::filesystem::path cache_source =
+            work_dir / "cache-source.wav";
+        std::filesystem::copy_file(fixture_path, cache_source);
+
         ag_cancel_token* token = ag_cancel_token_create();
         assert(token != nullptr);
 
-        const std::string fixture = fixture_path.string();
-        ag_waveform* waveform = nullptr;
+        // First analysis produces a valid waveform from the source. The
+        // analyze API does not itself touch the on-disk cache; WaveformCache
+        // is a separate persistence layer, so we save explicitly here to
+        // model the integration scenario the spec requires.
+        const std::string source_str = cache_source.string();
+        ag_waveform* first_waveform = nullptr;
         const ag_result first_result =
-            ag_waveform_analyze(fixture.c_str(), 64U, token, nullptr, nullptr, &waveform);
+            ag_waveform_analyze(source_str.c_str(), 64U, token, nullptr,
+                                nullptr, &first_waveform);
         assert(first_result == AG_OK);
-        assert(waveform != nullptr);
-        const size_t wc = ag_waveform_count(waveform);
-        assert(wc == 64U);
-        ag_waveform_destroy(waveform);
+        assert(first_waveform != nullptr);
+        const size_t first_count = ag_waveform_count(first_waveform);
+        assert(first_count == 64U);
 
-        // Cancelled token makes a second analyze return AG_CANCELLED
-        ag_cancel_token_cancel(token);
-        ag_waveform* cancelled_waveform = nullptr;
-        const ag_result cancelled_result =
-            ag_waveform_analyze(fixture.c_str(), 64U, token, nullptr, nullptr,
-                                &cancelled_waveform);
-        assert(cancelled_result == AG_CANCELLED);
-        assert(cancelled_waveform == nullptr);
+        std::vector<float> peaks(first_count);
+        for (size_t index = 0U; index < first_count; ++index) {
+            peaks[index] = ag_waveform_peak(first_waveform, index);
+        }
+        ag_waveform_destroy(first_waveform);
+
+        const std::filesystem::path cache_file =
+            work_dir / "corrupt-cache.agwf";
+        assert(agplayer::WaveformCache::save(cache_file, cache_source, peaks));
+
+        // A valid cache loads back cleanly.
+        std::vector<float> loaded;
+        assert(agplayer::WaveformCache::load(cache_file, cache_source, loaded));
+        assert(loaded == peaks);
+
+        // Corrupt the cache: keep the "AGWF" magic but zero the rest so the
+        // version field no longer matches. The cache layer must reject it.
+        {
+            std::ofstream overwrite(cache_file,
+                                    std::ios::binary | std::ios::trunc);
+            assert(overwrite);
+            overwrite.write("AGWF", 4);
+            const std::vector<char> zeros(28, '\0');
+            overwrite.write(zeros.data(),
+                            static_cast<std::streamsize>(zeros.size()));
+            assert(overwrite);
+        }
+        std::vector<float> corrupt_loaded;
+        assert(!agplayer::WaveformCache::load(cache_file, cache_source,
+                                              corrupt_loaded));
+        assert(corrupt_loaded.empty());
+
+        // Re-analyze from source: a corrupt cache must not break analysis.
+        // The analyze API re-derives peaks from the source every time.
+        ag_waveform* second_waveform = nullptr;
+        const ag_result second_result =
+            ag_waveform_analyze(source_str.c_str(), 64U, token, nullptr,
+                                nullptr, &second_waveform);
+        assert(second_result == AG_OK);
+        assert(second_waveform != nullptr);
+        assert(ag_waveform_count(second_waveform) == first_count);
+        for (size_t index = 0U; index < first_count; ++index) {
+            assert(ag_waveform_peak(second_waveform, index) == peaks[index]);
+        }
+        ag_waveform_destroy(second_waveform);
 
         ag_cancel_token_destroy(token);
     }
@@ -190,7 +240,8 @@ int main(const int argc, char** argv)
         std::filesystem::remove(truncated, trunc_ec);
     }
 
-    // 6. Repeated destroy/cancel calls are idempotent
+    // 6. Repeated destroy/cancel calls are idempotent; cancellation during
+    //    analyze returns AG_CANCELLED
     {
         ag_player* player = nullptr;
         const ag_result c6 = ag_player_create(&player);
@@ -207,6 +258,19 @@ int main(const int argc, char** argv)
 
         ag_waveform_destroy(nullptr);
         ag_metadata_destroy(nullptr);
+
+        // A cancelled token makes ag_waveform_analyze return AG_CANCELLED
+        // without producing a waveform (moved here from the former section 4).
+        ag_cancel_token* analyze_token = ag_cancel_token_create();
+        ag_cancel_token_cancel(analyze_token);
+        ag_waveform* cancelled_waveform = nullptr;
+        const ag_result cancelled_result =
+            ag_waveform_analyze(fixture_path.string().c_str(), 64U,
+                                analyze_token, nullptr, nullptr,
+                                &cancelled_waveform);
+        assert(cancelled_result == AG_CANCELLED);
+        assert(cancelled_waveform == nullptr);
+        ag_cancel_token_destroy(analyze_token);
     }
 
     // 7. Device loss notification does not terminate process

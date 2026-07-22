@@ -432,6 +432,12 @@ public:
         }
         try {
             if (device_initialized_) {
+                // Stop the device before uninit regardless of whether the loss
+                // was real (notification_callback only flips device_lost_ and
+                // state_; it does NOT stop the device) or simulated
+                // (simulate_device_loss already calls stop_output). Calling
+                // stop_output() is safe even if the device is already stopped.
+                stop_output();
                 ma_device_uninit(&device_);
                 device_initialized_ = false;
             }

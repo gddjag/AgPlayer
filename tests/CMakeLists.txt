@@ -155,6 +155,9 @@ add_executable(recovery_test
     core/recovery_test.cpp
 )
 add_dependencies(recovery_test decoder_fixture)
+target_include_directories(recovery_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
 target_link_libraries(recovery_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(recovery_test)
