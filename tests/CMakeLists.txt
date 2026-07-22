@@ -74,3 +74,14 @@ agplayer_enable_warnings(decoder_test)
 
 add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(decoder_test PROPERTIES TIMEOUT 10)
+
+add_executable(audio_engine_test
+    core/audio_engine_test.cpp
+)
+add_dependencies(audio_engine_test decoder_fixture)
+target_link_libraries(audio_engine_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(audio_engine_test)
+
+add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)

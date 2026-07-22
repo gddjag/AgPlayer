@@ -6,7 +6,44 @@
 #include <cstring>
 #include <new>
 
+namespace {
+
+template <typename Operation>
+ag_result guard_result(Operation&& operation) noexcept
+{
+    try {
+        return operation();
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
+}
+
+ag_playback_state to_c_state(const agplayer::EngineState state) noexcept
+{
+    switch (state) {
+    case agplayer::EngineState::Stopped:
+        return AG_STOPPED;
+    case agplayer::EngineState::Loading:
+        return AG_LOADING;
+    case agplayer::EngineState::Playing:
+        return AG_PLAYING;
+    case agplayer::EngineState::Paused:
+        return AG_PAUSED;
+    case agplayer::EngineState::Error:
+        return AG_ERROR;
+    }
+    return AG_ERROR;
+}
+
+} // namespace
+
 struct ag_player {
+    ag_player(const agplayer::AudioBackend backend,
+              const std::size_t buffer_frames)
+        : context(backend, buffer_frames)
+    {
+    }
+
     agplayer::CoreContext context;
 };
 
@@ -16,12 +53,35 @@ struct ag_metadata {
 
 ag_result ag_player_create(ag_player** out_player)
 {
+    const ag_player_config config{AG_AUDIO_BACKEND_DEFAULT, 0U};
+    return ag_player_create_with_config(&config, out_player);
+}
+
+ag_result ag_player_create_with_config(const ag_player_config* config,
+                                       ag_player** out_player)
+{
     if (out_player == nullptr) {
         return AG_INVALID_ARGUMENT;
     }
 
-    *out_player = new (std::nothrow) ag_player{};
-    return *out_player == nullptr ? AG_INTERNAL_ERROR : AG_OK;
+    *out_player = nullptr;
+    if (config == nullptr
+        || (config->backend != AG_AUDIO_BACKEND_DEFAULT
+            && config->backend != AG_AUDIO_BACKEND_NULL)) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        const agplayer::AudioBackend backend =
+            config->backend == AG_AUDIO_BACKEND_NULL
+                ? agplayer::AudioBackend::Null
+                : agplayer::AudioBackend::Default;
+        *out_player = new (std::nothrow) ag_player(backend,
+                                                  config->buffer_frames);
+        return *out_player == nullptr ? AG_INTERNAL_ERROR : AG_OK;
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
 }
 
 void ag_player_destroy(ag_player* player)
@@ -50,6 +110,78 @@ ag_result ag_player_last_error(const ag_player* player,
 
     std::memcpy(buffer, message.c_str(), *required);
     return AG_OK;
+}
+
+ag_result ag_player_load(ag_player* player, const char* utf8_path)
+{
+    if (player == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] { return player->context.load(utf8_path); });
+}
+
+ag_result ag_player_play(ag_player* player)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.play(); });
+}
+
+ag_result ag_player_pause(ag_player* player)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.pause(); });
+}
+
+ag_result ag_player_stop(ag_player* player)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.stop(); });
+}
+
+ag_result ag_player_seek(ag_player* player, const long long position_ms)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.seek(position_ms); });
+}
+
+ag_result ag_player_set_volume(ag_player* player, const float volume)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.set_volume(volume); });
+}
+
+ag_result ag_player_set_muted(ag_player* player, const int muted)
+{
+    if (player == nullptr || (muted != 0 && muted != 1)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        player->context.set_muted(muted != 0);
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_snapshot(const ag_player* player,
+                             ag_playback_snapshot* snapshot)
+{
+    if (player == nullptr || snapshot == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    return guard_result([&] {
+        const agplayer::EngineSnapshot value = player->context.snapshot();
+        snapshot->state = to_c_state(value.state);
+        snapshot->position_ms = value.position_ms;
+        snapshot->duration_ms = value.duration_ms;
+        snapshot->volume = value.volume;
+        snapshot->muted = value.muted ? 1 : 0;
+        return AG_OK;
+    });
 }
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)

@@ -1,4 +1,5 @@
 add_library(agplayer_core STATIC
+    src/audio_engine.cpp
     src/c_api.cpp
     src/core_context.cpp
     src/decoder.cpp

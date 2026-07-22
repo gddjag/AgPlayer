@@ -508,6 +508,11 @@ ag_result Decoder::open(const std::string& utf8_path) noexcept
     }
 }
 
+void Decoder::close() noexcept
+{
+    impl_->reset();
+}
+
 ag_result Decoder::read(DecodedAudioBlock& block) noexcept
 {
     try {

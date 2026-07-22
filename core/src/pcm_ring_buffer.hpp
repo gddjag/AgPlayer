@@ -9,6 +9,8 @@
 
 namespace agplayer {
 
+static_assert(std::atomic<std::size_t>::is_always_lock_free);
+
 class PcmRingBuffer final {
 public:
     PcmRingBuffer(const std::size_t capacity_frames, const std::size_t channels)
