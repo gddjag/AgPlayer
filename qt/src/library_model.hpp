@@ -2,8 +2,8 @@
 
 #include <QAbstractListModel>
 #include <QList>
+#include <QSet>
 #include <QUrl>
-#include <QtQml/qqmlregistration.h>
 
 struct TrackRecord {
     QString trackId;
@@ -26,9 +26,8 @@ struct TrackRecord {
 QString canonicalLibraryPath(const QString& path);
 QString trackIdForPath(const QString& path);
 
-class LibraryModel final : public QAbstractListModel {
+class LibraryModel : public QAbstractListModel {
     Q_OBJECT
-    QML_ELEMENT
 
 public:
     enum Role {
@@ -56,7 +55,8 @@ public:
     QVariant data(const QModelIndex& index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void append(TrackRecord track);
+    bool append(TrackRecord track);
+    void replaceAll(QList<TrackRecord> tracks);
     const QList<TrackRecord>& tracks() const noexcept;
     bool containsPath(const QString& path) const;
 
@@ -68,4 +68,5 @@ signals:
 
 private:
     QList<TrackRecord> tracks_;
+    QSet<QString> pathKeys_;
 };

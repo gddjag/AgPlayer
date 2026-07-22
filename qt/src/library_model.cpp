@@ -6,14 +6,18 @@
 #include <QFileInfo>
 
 namespace {
+QString normalizedCanonicalKey(const QString& canonicalPath)
+{
+#ifdef Q_OS_WIN
+    return canonicalPath.toCaseFolded();
+#else
+    return canonicalPath;
+#endif
+}
+
 QString pathKey(const QString& path)
 {
-    const QString canonical = canonicalLibraryPath(path);
-#ifdef Q_OS_WIN
-    return canonical.toCaseFolded();
-#else
-    return canonical;
-#endif
+    return normalizedCanonicalKey(canonicalLibraryPath(path));
 }
 }
 
@@ -114,16 +118,44 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {ImportErrorRole, "importError"}};
 }
 
-void LibraryModel::append(TrackRecord track)
+bool LibraryModel::append(TrackRecord track)
 {
     track.path = canonicalLibraryPath(track.path);
+    const QString key = normalizedCanonicalKey(track.path);
+    if (pathKeys_.contains(key)) {
+        return false;
+    }
     if (track.trackId.isEmpty()) {
         track.trackId = trackIdForPath(track.path);
     }
     const int row = tracks_.size();
     beginInsertRows({}, row, row);
     tracks_.append(std::move(track));
+    pathKeys_.insert(key);
     endInsertRows();
+    return true;
+}
+
+void LibraryModel::replaceAll(QList<TrackRecord> tracks)
+{
+    beginResetModel();
+    tracks_.clear();
+    pathKeys_.clear();
+    tracks_.reserve(tracks.size());
+    pathKeys_.reserve(tracks.size());
+    for (TrackRecord& track : tracks) {
+        track.path = canonicalLibraryPath(track.path);
+        const QString key = normalizedCanonicalKey(track.path);
+        if (pathKeys_.contains(key)) {
+            continue;
+        }
+        if (track.trackId.isEmpty()) {
+            track.trackId = trackIdForPath(track.path);
+        }
+        pathKeys_.insert(key);
+        tracks_.append(std::move(track));
+    }
+    endResetModel();
 }
 
 const QList<TrackRecord>& LibraryModel::tracks() const noexcept
@@ -133,13 +165,7 @@ const QList<TrackRecord>& LibraryModel::tracks() const noexcept
 
 bool LibraryModel::containsPath(const QString& path) const
 {
-    const QString candidate = pathKey(path);
-    for (const TrackRecord& track : tracks_) {
-        if (pathKey(track.path) == candidate) {
-            return true;
-        }
-    }
-    return false;
+    return pathKeys_.contains(pathKey(path));
 }
 
 bool LibraryModel::setFavorite(int row, bool favorite)

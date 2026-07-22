@@ -5,10 +5,14 @@
 
 #include <QFuture>
 #include <QObject>
+#include <QPointer>
 #include <QStringList>
 #include <QUrl>
 
 #include <functional>
+#include <memory>
+
+struct ImportCallbackState;
 
 struct ProbeResult {
     ag_result result = AG_INTERNAL_ERROR;
@@ -27,6 +31,7 @@ class ImportController final : public QObject {
 public:
     explicit ImportController(LibraryModel* model, QObject* parent = nullptr);
     ImportController(LibraryModel* model, ProbeFunction probe, QObject* parent = nullptr);
+    ~ImportController() override;
 
     double progress() const noexcept;
     bool busy() const noexcept;
@@ -40,10 +45,12 @@ signals:
     void finished();
 
 private:
+    void finishWithoutImport(const QString& error);
     void handleResult(const QString& path, ProbeResult result, int completed, int total);
 
-    LibraryModel* model_ = nullptr;
+    QPointer<LibraryModel> model_;
     ProbeFunction probe_;
+    std::shared_ptr<ImportCallbackState> callbackState_;
     QFuture<void> future_;
     double progress_ = 0.0;
     bool busy_ = false;

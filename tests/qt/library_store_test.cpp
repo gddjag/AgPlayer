@@ -13,6 +13,9 @@ class LibraryStoreTest final : public QObject {
 private slots:
     void persistsEveryRoleAndMarksMissingFilesUnavailable();
     void mergesDeferredSaveRequests();
+    void preservesIntegersBeyondJsonDoublePrecision();
+    void destructorFlushesPendingSnapshot();
+    void explicitFlushCommitsPendingSnapshot();
 };
 
 namespace {
@@ -72,6 +75,9 @@ void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()
     QCOMPARE(track.favorite, source.favorite);
     QVERIFY(!track.available);
     QCOMPARE(track.importError, source.importError);
+    LibraryModel model;
+    model.replaceAll(loaded);
+    QVERIFY(model.containsPath(source.path));
 }
 
 void LibraryStoreTest::mergesDeferredSaveRequests()
@@ -89,6 +95,60 @@ void LibraryStoreTest::mergesDeferredSaveRequests()
     const QList<TrackRecord> loaded = store.load();
     QCOMPARE(loaded.size(), 1);
     QCOMPARE(loaded.front().title, QStringLiteral("Last"));
+}
+
+void LibraryStoreTest::preservesIntegersBeyondJsonDoublePrecision()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryStore store(dir.filePath(QStringLiteral("library.json")));
+    TrackRecord source = makeTrack(QStringLiteral("large.flac"), QStringLiteral("Large"));
+    source.bitRate = Q_INT64_C(9007199254740993);
+    source.durationMs = Q_INT64_C(9007199254740995);
+    source.fileSize = Q_INT64_C(9007199254740997);
+
+    QVERIFY(store.save({source}));
+    const QList<TrackRecord> loaded = store.load();
+    QCOMPARE(loaded.size(), 1);
+    QCOMPARE(loaded.front().bitRate, source.bitRate);
+    QCOMPARE(loaded.front().durationMs, source.durationMs);
+    QCOMPARE(loaded.front().fileSize, source.fileSize);
+}
+
+void LibraryStoreTest::destructorFlushesPendingSnapshot()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("library.json"));
+    {
+        LibraryStore store(path);
+        store.requestSave({makeTrack(QStringLiteral("shutdown.flac"),
+                                     QStringLiteral("Shutdown"))});
+    }
+
+    LibraryStore reader(path);
+    const QList<TrackRecord> loaded = reader.load();
+    QCOMPARE(loaded.size(), 1);
+    QCOMPARE(loaded.front().title, QStringLiteral("Shutdown"));
+
+    {
+        LibraryStore store(path);
+        store.requestSave({});
+    }
+    QCOMPARE(reader.load().size(), 0);
+}
+
+void LibraryStoreTest::explicitFlushCommitsPendingSnapshot()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryStore store(dir.filePath(QStringLiteral("library.json")));
+    store.requestSave({makeTrack(QStringLiteral("flush.flac"), QStringLiteral("Flush"))});
+
+    QVERIFY(store.flush());
+    const QList<TrackRecord> loaded = store.load();
+    QCOMPARE(loaded.size(), 1);
+    QCOMPARE(loaded.front().title, QStringLiteral("Flush"));
 }
 
 QTEST_GUILESS_MAIN(LibraryStoreTest)

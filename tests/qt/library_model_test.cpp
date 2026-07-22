@@ -12,6 +12,8 @@ private slots:
     void exposesRolesAndUpdatesFavorite();
     void playRowOnlyRequestsAvailableTracks();
     void trackIdUsesCanonicalPathAndFileIdentity();
+    void appendRejectsNormalizedDuplicate();
+    void replaceAllRebuildsCanonicalIndexForLargeLibrary();
 };
 
 void LibraryModelTest::exposesRolesAndUpdatesFavorite()
@@ -114,6 +116,56 @@ void LibraryModelTest::trackIdUsesCanonicalPathAndFileIdentity()
     LibraryModel changedModel;
     changedModel.append(first);
     QVERIFY(firstModel.tracks().front().trackId != changedModel.tracks().front().trackId);
+}
+
+void LibraryModelTest::appendRejectsNormalizedDuplicate()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("duplicate.wav"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("audio"), 5);
+    file.close();
+    TrackRecord first;
+    first.path = path;
+    TrackRecord duplicate;
+    duplicate.path = dir.filePath(QStringLiteral("./duplicate.wav"));
+    LibraryModel model;
+
+    QVERIFY(model.append(first));
+    QVERIFY(!model.append(duplicate));
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(model.containsPath(duplicate.path));
+}
+
+void LibraryModelTest::replaceAllRebuildsCanonicalIndexForLargeLibrary()
+{
+    constexpr int trackCount = 4096;
+    QList<TrackRecord> tracks;
+    tracks.reserve(trackCount + 1);
+    for (int index = 0; index < trackCount; ++index) {
+        TrackRecord track;
+        track.path = QStringLiteral("C:/large-library/track-%1.flac").arg(index);
+        tracks.append(std::move(track));
+    }
+    tracks.append(tracks.front());
+    LibraryModel model;
+
+    model.replaceAll(tracks);
+
+    QCOMPARE(model.rowCount(), trackCount);
+    for (int index = 0; index < trackCount; ++index) {
+        QVERIFY(model.containsPath(
+            QStringLiteral("C:/large-library/./track-%1.flac").arg(index)));
+    }
+    QVERIFY(!model.append(tracks.at(trackCount / 2)));
+    TrackRecord replacement;
+    replacement.path = QStringLiteral("C:/replacement/new.flac");
+    model.replaceAll({replacement});
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(model.containsPath(replacement.path));
+    QVERIFY(!model.containsPath(tracks.front().path));
 }
 
 QTEST_GUILESS_MAIN(LibraryModelTest)

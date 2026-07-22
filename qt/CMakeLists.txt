@@ -5,6 +5,8 @@ add_library(agplayer_qt STATIC
     src/library_model.hpp
     src/library_store.cpp
     src/library_store.hpp
+    src/qml_registration.cpp
+    src/qml_registration.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)

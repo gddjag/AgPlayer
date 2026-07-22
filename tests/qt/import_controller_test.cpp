@@ -3,12 +3,14 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QThread>
 
 #include <atomic>
+#include <memory>
 
 class ImportControllerTest final : public QObject {
     Q_OBJECT
@@ -16,6 +18,9 @@ class ImportControllerTest final : public QObject {
 private slots:
     void deduplicatesCanonicalPathsAndContinuesAfterFailure();
     void productionProbeImportsMetadataAndUsesBrandFallback();
+    void modelCanBeDestroyedWhileProbeIsBlocked();
+    void controllerCanBeDestroyedWhileProbeIsBlocked();
+    void rejectsModelWithDifferentThreadAffinity();
 };
 
 namespace {
@@ -97,6 +102,106 @@ void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
     QVERIFY(track.fileSize > 0);
     QCOMPARE(track.coverUrl,
              QUrl(QStringLiteral("qrc:/AgPlayer/assets/brand/logo-mark.png")));
+}
+
+void ImportControllerTest::modelCanBeDestroyedWhileProbeIsBlocked()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("blocked.wav"));
+    createFile(path);
+    QSemaphore entered;
+    QSemaphore release;
+    auto model = std::make_unique<LibraryModel>();
+    const ProbeFunction probe = [&entered, &release](const QString& requestedPath) {
+        entered.release();
+        release.acquire();
+        TrackRecord track;
+        track.path = requestedPath;
+        track.title = QStringLiteral("Late result");
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(model.get(), probe);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(path)});
+    QVERIFY(entered.tryAcquire(1, 3000));
+    model.reset();
+    release.release();
+
+    QVERIFY(finished.wait(3000));
+    QVERIFY(!importer.busy());
+    QCOMPARE(importer.progress(), 1.0);
+}
+
+void ImportControllerTest::controllerCanBeDestroyedWhileProbeIsBlocked()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("blocked.wav"));
+    createFile(path);
+    QSemaphore entered;
+    QSemaphore release;
+    QSemaphore exited;
+    LibraryModel model;
+    const ProbeFunction probe = [&entered, &release, &exited](const QString& requestedPath) {
+        entered.release();
+        release.acquire();
+        exited.release();
+        TrackRecord track;
+        track.path = requestedPath;
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    auto importer = std::make_unique<ImportController>(&model, probe);
+
+    importer->importUrls({QUrl::fromLocalFile(path)});
+    QVERIFY(entered.tryAcquire(1, 3000));
+    importer.reset();
+    release.release();
+
+    QVERIFY(exited.tryAcquire(1, 3000));
+    QCoreApplication::processEvents();
+    QCOMPARE(model.rowCount(), 0);
+}
+
+void ImportControllerTest::rejectsModelWithDifferentThreadAffinity()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("thread.wav"));
+    createFile(path);
+    QThread modelThread;
+    LibraryModel model;
+    model.moveToThread(&modelThread);
+    modelThread.start();
+    std::atomic_int probeCalls{0};
+    const ProbeFunction probe = [&probeCalls](const QString& requestedPath) {
+        ++probeCalls;
+        TrackRecord track;
+        track.path = requestedPath;
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(&model, probe);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(path)});
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 3000);
+
+    QThread* const testThread = QThread::currentThread();
+    QVERIFY(QMetaObject::invokeMethod(
+        &model,
+        [&model, testThread] { model.moveToThread(testThread); },
+        Qt::BlockingQueuedConnection));
+    modelThread.quit();
+    QVERIFY(modelThread.wait(3000));
+    QCOMPARE(probeCalls.load(), 0);
+    QCOMPARE(model.rowCount(), 0);
+    QCOMPARE(importer.errors().size(), 1);
+    QVERIFY(importer.errors().front().contains(QStringLiteral("thread"), Qt::CaseInsensitive));
+    QVERIFY(!importer.busy());
 }
 
 QTEST_GUILESS_MAIN(ImportControllerTest)

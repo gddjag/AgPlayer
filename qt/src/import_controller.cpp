@@ -5,11 +5,17 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QMetaObject>
-#include <QPointer>
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
+
+#include <mutex>
+
+struct ImportCallbackState {
+    std::mutex mutex;
+    ImportController* controller = nullptr;
+};
 
 namespace {
 const QUrl kBrandCover(QStringLiteral("qrc:/AgPlayer/assets/brand/logo-mark.png"));
@@ -131,6 +137,20 @@ QString deduplicationKey(const QString& path)
     return canonical;
 #endif
 }
+
+template<typename Function>
+void postToController(const std::shared_ptr<ImportCallbackState>& state, Function function)
+{
+    std::lock_guard<std::mutex> lock(state->mutex);
+    ImportController* const controller = state->controller;
+    if (controller == nullptr) {
+        return;
+    }
+    QMetaObject::invokeMethod(
+        controller,
+        [controller, function = std::move(function)]() mutable { function(controller); },
+        Qt::QueuedConnection);
+}
 }
 
 ImportController::ImportController(LibraryModel* model, QObject* parent)
@@ -139,9 +159,18 @@ ImportController::ImportController(LibraryModel* model, QObject* parent)
 }
 
 ImportController::ImportController(LibraryModel* model, ProbeFunction probe, QObject* parent)
-    : QObject(parent), model_(model), probe_(std::move(probe))
+    : QObject(parent),
+      model_(model),
+      probe_(std::move(probe)),
+      callbackState_(std::make_shared<ImportCallbackState>())
 {
-    Q_ASSERT(model_ != nullptr);
+    callbackState_->controller = this;
+}
+
+ImportController::~ImportController()
+{
+    std::lock_guard<std::mutex> lock(callbackState_->mutex);
+    callbackState_->controller = nullptr;
 }
 
 double ImportController::progress() const noexcept
@@ -172,6 +201,15 @@ void ImportController::importUrls(const QList<QUrl>& urls)
     busy_ = true;
     emit busyChanged();
 
+    if (model_.isNull()) {
+        finishWithoutImport(QStringLiteral("library model is unavailable"));
+        return;
+    }
+    if (model_->thread() != thread()) {
+        finishWithoutImport(QStringLiteral("library model thread affinity mismatch"));
+        return;
+    }
+
     QSet<QString> seen;
     for (const TrackRecord& track : model_->tracks()) {
         seen.insert(deduplicationKey(track.path));
@@ -186,38 +224,38 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         }
     }
 
-    const QPointer<ImportController> guard(this);
+    const std::shared_ptr<ImportCallbackState> callbackState = callbackState_;
     const ProbeFunction probe = probe_;
-    future_ = QtConcurrent::run([guard, paths, probe] {
+    future_ = QtConcurrent::run([callbackState, paths, probe] {
         if (paths.isEmpty()) {
-            if (guard != nullptr) {
-                QMetaObject::invokeMethod(
-                    guard.data(),
-                    [guard] {
-                        if (guard != nullptr) {
-                            guard->handleResult({}, {AG_OK, {}, {}}, 0, 0);
-                        }
-                    },
-                    Qt::QueuedConnection);
-            }
+            postToController(callbackState, [](ImportController* controller) {
+                controller->handleResult({}, {AG_OK, {}, {}}, 0, 0);
+            });
             return;
         }
         int completed = 0;
         for (const QString& path : paths) {
             ProbeResult result = probe(path);
             ++completed;
-            if (guard != nullptr) {
-                QMetaObject::invokeMethod(
-                    guard.data(),
-                    [guard, path, result = std::move(result), completed, total = paths.size()]() mutable {
-                        if (guard != nullptr) {
-                            guard->handleResult(path, std::move(result), completed, total);
-                        }
-                    },
-                    Qt::QueuedConnection);
-            }
+            postToController(
+                callbackState,
+                [path, result = std::move(result), completed, total = paths.size()](
+                    ImportController* controller) mutable {
+                    controller->handleResult(path, std::move(result), completed, total);
+                });
         }
     });
+}
+
+void ImportController::finishWithoutImport(const QString& error)
+{
+    errors_.append(error);
+    emit errorsChanged();
+    progress_ = 1.0;
+    emit progressChanged();
+    busy_ = false;
+    emit busyChanged();
+    emit finished();
 }
 
 void ImportController::handleResult(const QString& path,
@@ -228,8 +266,15 @@ void ImportController::handleResult(const QString& path,
     if (total > 0) {
         if (result.result == AG_OK) {
             result.track.path = canonicalLibraryPath(result.track.path.isEmpty() ? path : result.track.path);
-            if (!model_->containsPath(result.track.path)) {
-                model_->append(std::move(result.track));
+            LibraryModel* const model = model_.data();
+            if (model == nullptr) {
+                errors_.append(QStringLiteral("%1: library model is unavailable").arg(path));
+                emit errorsChanged();
+            } else if (model->thread() != thread()) {
+                errors_.append(QStringLiteral("%1: library model thread affinity mismatch").arg(path));
+                emit errorsChanged();
+            } else if (!model->containsPath(result.track.path)) {
+                model->append(std::move(result.track));
             }
         } else {
             const QString detail = result.error.isEmpty() ? errorFor(result.result) : result.error;

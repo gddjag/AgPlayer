@@ -155,6 +155,7 @@ foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
     import_controller_test
+    qml_registration_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
