@@ -2,6 +2,7 @@
 
 #include "library_model.hpp"
 #include "playback_controller.hpp"
+#include "waveform_item.hpp"
 #include "window_controller.hpp"
 
 #include <QtQml/qqml.h>
@@ -13,6 +14,7 @@ void registerAgPlayerQmlTypes()
     static std::once_flag baseTypesRegistered;
     std::call_once(baseTypesRegistered, [] {
         qmlRegisterType<LibraryModel>("AgPlayer", 1, 0, "LibraryModel");
+        qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
     });
 }
 

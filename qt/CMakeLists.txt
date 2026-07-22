@@ -11,6 +11,8 @@ add_library(agplayer_qt STATIC
     src/qml_registration.hpp
     src/window_controller.cpp
     src/window_controller.hpp
+    src/waveform_item.cpp
+    src/waveform_item.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
@@ -22,6 +24,7 @@ target_link_libraries(agplayer_qt
         Qt6::Core
         Qt6::Gui
         Qt6::Qml
+        Qt6::Quick
         agplayer_core
     PRIVATE
         Qt6::Concurrent

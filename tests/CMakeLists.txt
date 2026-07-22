@@ -158,6 +158,7 @@ foreach(qt_test IN ITEMS
     qml_registration_test
     playback_controller_test
     window_controller_test
+    waveform_item_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
@@ -173,6 +174,29 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
 endforeach()
+
+add_executable(qml_waveform_test
+    qt/qml_waveform_test_main.cpp
+)
+set_target_properties(qml_waveform_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_waveform_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(qml_waveform_test PRIVATE
+    agplayer_qt
+    Qt6::QuickTest
+)
+target_compile_definitions(qml_waveform_test PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+)
+agplayer_enable_warnings(qml_waveform_test)
+add_test(NAME qml_waveform_test COMMAND qml_waveform_test)
+set_tests_properties(qml_waveform_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
 
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
