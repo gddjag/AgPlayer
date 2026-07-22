@@ -1,5 +1,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
+#include <QWindow>
 #include <qqml.h>
 
 #include <agplayer/c_api.h>
@@ -35,8 +37,27 @@ int main(int argc, char* argv[])
 
         QQmlApplicationEngine engine;
         engine.loadFromModule("AgPlayer", "Main");
-        if (!engine.rootObjects().isEmpty())
+        if (!engine.rootObjects().isEmpty()) {
+            QObject* mainWindow = engine.rootObjects().first();
+
+            // Load the mini player window from the same module so it shares the
+            // registered singletons. WindowController toggles visibility between
+            // the two QWindow instances via setWindows().
+            QQmlComponent miniComponent(&engine);
+            miniComponent.loadFromModule("AgPlayer", "MiniPlayerWindow");
+            QObject* miniWindow = nullptr;
+            if (!miniComponent.isError()) {
+                miniWindow = miniComponent.create();
+            }
+
+            windows.setWindows(qobject_cast<QWindow*>(mainWindow),
+                               qobject_cast<QWindow*>(miniWindow));
+
             result = app.exec();
+
+            if (miniWindow)
+                delete miniWindow;
+        }
     }
 
     ag_player_destroy(core);

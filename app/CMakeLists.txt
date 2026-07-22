@@ -40,12 +40,14 @@ qt_add_qml_module(agplayer_app_qml
     VERSION 1.0
     QML_FILES
         qml/AgPlayer/Main.qml
+        qml/AgPlayer/MiniPlayerWindow.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/TrackList.qml
         qml/AgPlayer/components/EmptyLibrary.qml
+        qml/AgPlayer/components/MiniPlayerControls.qml
     RESOURCES
         ${BRAND_FILES}
         ${ICON_FILES}

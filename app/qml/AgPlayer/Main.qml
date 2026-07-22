@@ -15,6 +15,12 @@ ApplicationWindow {
     color: Theme.background
     title: "AgPlayer"
 
+    // Shared-state surface so the main window and the mini player can bind to
+    // the same playback source. Defaults to the production singleton; tests
+    // override this with a fake QtObject to verify shared state without audio.
+    property var playback: PlaybackController
+    property int positionMs: playback.positionMs
+
     function openImportDialog() {
         var dialog = Qt.createQmlObject(
             'import QtQuick.Dialogs\nimport AgPlayer\n' +

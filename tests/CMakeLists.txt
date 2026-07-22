@@ -222,6 +222,31 @@ set_tests_properties(qml_main_window_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(qml_mini_player_test
+    qt/qml_mini_player_test_main.cpp
+)
+set_target_properties(qml_mini_player_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_mini_player_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+target_link_libraries(qml_mini_player_test PRIVATE
+    agplayer_app_qml
+    agplayer_app_qmlplugin
+    Qt6::QuickTest
+)
+target_compile_definitions(qml_mini_player_test PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+)
+agplayer_enable_warnings(qml_mini_player_test)
+add_test(NAME qml_mini_player_test COMMAND qml_mini_player_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_mini_player.qml)
+set_tests_properties(qml_mini_player_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
