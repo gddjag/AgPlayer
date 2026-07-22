@@ -1,6 +1,7 @@
 add_library(agplayer_core STATIC
     src/c_api.cpp
     src/core_context.cpp
+    src/playback_session.cpp
 )
 
 target_include_directories(agplayer_core

@@ -1,0 +1,53 @@
+#pragma once
+
+#include <cstddef>
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace agplayer {
+
+enum class PlaybackState {
+    Stopped,
+    Loading,
+    Playing,
+    Paused,
+    Error
+};
+
+enum class PlaybackMode {
+    Sequential,
+    RepeatOne,
+    Shuffle
+};
+
+class PlaybackSession final {
+public:
+    using ShuffleIndexFunction =
+        std::function<std::size_t(std::size_t current_index, std::size_t queue_size)>;
+
+    static constexpr std::size_t npos = static_cast<std::size_t>(-1);
+
+    explicit PlaybackSession(ShuffleIndexFunction shuffle_index = {});
+
+    void set_queue(std::vector<std::string> paths, std::size_t start_index);
+    void set_mode(PlaybackMode mode) noexcept;
+
+    [[nodiscard]] std::size_t next_index() const;
+    [[nodiscard]] std::size_t previous_index() const noexcept;
+    [[nodiscard]] const std::string& current_path() const;
+    [[nodiscard]] PlaybackState state() const noexcept;
+    [[nodiscard]] const std::string& error_message() const noexcept;
+
+    void mark_error(std::string message);
+
+private:
+    std::vector<std::string> paths_;
+    std::size_t index_ = 0U;
+    PlaybackMode mode_ = PlaybackMode::Sequential;
+    PlaybackState state_ = PlaybackState::Stopped;
+    std::string error_;
+    ShuffleIndexFunction shuffle_index_;
+};
+
+} // namespace agplayer
