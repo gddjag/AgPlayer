@@ -71,5 +71,7 @@ int main(const int argc, char** argv)
         write_u16(output, static_cast<std::uint16_t>(sample));
     }
 
+    output.flush();
+    output.close();
     return output ? 0 : 3;
 }

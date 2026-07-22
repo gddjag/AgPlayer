@@ -24,10 +24,14 @@ namespace {
 
 ag_result map_open_error(const int error) noexcept
 {
-    if (error == AVERROR(ENOENT) || error == AVERROR(EACCES)) {
-        return AG_IO_ERROR;
+    if (error == AVERROR(ENOMEM)) {
+        return AG_INTERNAL_ERROR;
     }
-    return AG_UNSUPPORTED_FORMAT;
+    if (error == AVERROR_INVALIDDATA || error == AVERROR_DEMUXER_NOT_FOUND
+        || error == AVERROR_PROTOCOL_NOT_FOUND) {
+        return AG_UNSUPPORTED_FORMAT;
+    }
+    return AG_IO_ERROR;
 }
 
 std::string read_tag(AVDictionary* preferred,
@@ -201,13 +205,15 @@ public:
         }
 
         const AVStream* const stream = format_context_->streams[audio_stream_index_];
-        const std::int64_t target_timestamp = av_rescale_q(
+        const std::int64_t stream_origin =
+            stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
+        const std::int64_t target_timestamp = stream_origin + av_rescale_q(
             target_ms, AVRational{1, 1'000}, stream->time_base);
         const int result = avformat_seek_file(format_context_,
                                               audio_stream_index_,
                                               std::numeric_limits<std::int64_t>::min(),
                                               target_timestamp,
-                                              std::numeric_limits<std::int64_t>::max(),
+                                              target_timestamp,
                                               AVSEEK_FLAG_BACKWARD);
         if (result < 0) {
             return AG_DECODE_ERROR;
@@ -224,7 +230,11 @@ public:
         input_eof_ = false;
         drain_sent_ = false;
         seek_target_ms_ = target_ms;
-        fallback_timestamp_ms_ = target_ms;
+        seek_target_frame_ = av_rescale_rnd(target_ms,
+                                            codec_context_->sample_rate,
+                                            1'000,
+                                            AV_ROUND_UP);
+        fallback_frame_valid_ = false;
         return AG_OK;
     }
 
@@ -236,6 +246,7 @@ public:
     void reset() noexcept
     {
         swr_free(&swr_context_);
+        av_channel_layout_uninit(&input_layout_);
         av_frame_free(&frame_);
         av_packet_free(&packet_);
         avcodec_free_context(&codec_context_);
@@ -244,20 +255,23 @@ public:
         input_eof_ = false;
         drain_sent_ = false;
         seek_target_ms_ = -1;
-        fallback_timestamp_ms_ = 0;
+        seek_target_frame_ = -1;
+        block_start_frame_ = 0;
+        fallback_frame_ = 0;
+        fallback_frame_valid_ = true;
         metadata_ = {};
     }
 
 private:
     int initialize_resampler()
     {
-        AVChannelLayout channel_layout{};
+        av_channel_layout_uninit(&input_layout_);
         int result = 0;
         if (codec_context_->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
             av_channel_layout_default(
-                &channel_layout, codec_context_->ch_layout.nb_channels);
+                &input_layout_, codec_context_->ch_layout.nb_channels);
         } else {
-            result = av_channel_layout_copy(&channel_layout,
+            result = av_channel_layout_copy(&input_layout_,
                                             &codec_context_->ch_layout);
             if (result < 0) {
                 return result;
@@ -265,15 +279,14 @@ private:
         }
 
         result = swr_alloc_set_opts2(&swr_context_,
-                                     &channel_layout,
+                                     &input_layout_,
                                      AV_SAMPLE_FMT_FLT,
                                      codec_context_->sample_rate,
-                                     &channel_layout,
+                                     &input_layout_,
                                      codec_context_->sample_fmt,
                                      codec_context_->sample_rate,
                                      0,
                                      nullptr);
-        av_channel_layout_uninit(&channel_layout);
         if (result < 0) {
             return result;
         }
@@ -302,9 +315,7 @@ private:
                                         ? parameters->bits_per_raw_sample
                                     : parameters->bits_per_coded_sample > 0
                                         ? parameters->bits_per_coded_sample
-                                        : av_get_bytes_per_sample(
-                                              codec_context_->sample_fmt)
-                                              * CHAR_BIT;
+                                        : 0;
         metadata_.bit_rate = parameters->bit_rate > 0
                                  ? parameters->bit_rate
                                  : format_context_->bit_rate;
@@ -335,6 +346,15 @@ private:
 
     ag_result convert_frame(DecodedAudioBlock& block)
     {
+        const int frame_sample_rate = frame_->sample_rate > 0
+                                          ? frame_->sample_rate
+                                          : codec_context_->sample_rate;
+        if (frame_->format != codec_context_->sample_fmt
+            || frame_sample_rate != codec_context_->sample_rate
+            || !frame_layout_matches()) {
+            return AG_DECODE_ERROR;
+        }
+
         const std::int64_t output_capacity = av_rescale_rnd(
             swr_get_delay(swr_context_, codec_context_->sample_rate)
                 + frame_->nb_samples,
@@ -374,17 +394,47 @@ private:
                                        : frame_->pts != AV_NOPTS_VALUE
                                            ? frame_->pts
                                            : AV_NOPTS_VALUE;
-        block.timestamp_ms = timestamp == AV_NOPTS_VALUE
-                                 ? fallback_timestamp_ms_
-                                 : av_rescale_q(timestamp,
-                                                stream->time_base,
-                                                AVRational{1, 1'000});
-        fallback_timestamp_ms_ = block.timestamp_ms
-                                 + av_rescale_q(
-                                     static_cast<std::int64_t>(block.frames),
-                                     AVRational{1, codec_context_->sample_rate},
-                                     AVRational{1, 1'000});
+        if (timestamp != AV_NOPTS_VALUE) {
+            const std::int64_t stream_origin =
+                stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
+            block_start_frame_ = av_rescale_q(timestamp - stream_origin,
+                                              stream->time_base,
+                                              AVRational{1,
+                                                         codec_context_->sample_rate});
+            fallback_frame_valid_ = true;
+        } else if (fallback_frame_valid_) {
+            block_start_frame_ = fallback_frame_;
+        } else {
+            return AG_DECODE_ERROR;
+        }
+        block.timestamp_ms = av_rescale_q(block_start_frame_,
+                                          AVRational{1, codec_context_->sample_rate},
+                                          AVRational{1, 1'000});
+        fallback_frame_ = block_start_frame_
+                          + static_cast<std::int64_t>(block.frames);
         return AG_OK;
+    }
+
+    bool frame_layout_matches() const noexcept
+    {
+        if (frame_->ch_layout.nb_channels <= 0) {
+            return false;
+        }
+
+        AVChannelLayout frame_layout{};
+        int result = 0;
+        if (frame_->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
+            av_channel_layout_default(&frame_layout,
+                                      frame_->ch_layout.nb_channels);
+        } else {
+            result = av_channel_layout_copy(&frame_layout,
+                                            &frame_->ch_layout);
+        }
+        const bool matches = result >= 0
+                             && av_channel_layout_compare(&frame_layout,
+                                                          &input_layout_) == 0;
+        av_channel_layout_uninit(&frame_layout);
+        return matches;
     }
 
     bool trim_to_seek_target(DecodedAudioBlock& block)
@@ -393,20 +443,15 @@ private:
             return true;
         }
 
-        const std::int64_t block_duration_ms = av_rescale_q(
-            static_cast<std::int64_t>(block.frames),
-            AVRational{1, codec_context_->sample_rate},
-            AVRational{1, 1'000});
-        if (block.timestamp_ms + block_duration_ms <= seek_target_ms_) {
+        const std::int64_t block_end_frame =
+            block_start_frame_ + static_cast<std::int64_t>(block.frames);
+        if (block_end_frame <= seek_target_frame_) {
             return false;
         }
 
-        if (block.timestamp_ms < seek_target_ms_) {
-            const std::int64_t frames_to_skip = av_rescale_rnd(
-                seek_target_ms_ - block.timestamp_ms,
-                codec_context_->sample_rate,
-                1'000,
-                AV_ROUND_UP);
+        if (block_start_frame_ < seek_target_frame_) {
+            const std::int64_t frames_to_skip =
+                seek_target_frame_ - block_start_frame_;
             if (frames_to_skip >= static_cast<std::int64_t>(block.frames)) {
                 return false;
             }
@@ -421,22 +466,28 @@ private:
             block.frames -= static_cast<std::size_t>(frames_to_skip);
             block.samples.resize(block.frames * channels);
             block.timestamp_ms = seek_target_ms_;
+            block_start_frame_ = seek_target_frame_;
         }
 
         seek_target_ms_ = -1;
+        seek_target_frame_ = -1;
         return true;
     }
 
     AVFormatContext* format_context_ = nullptr;
     AVCodecContext* codec_context_ = nullptr;
     SwrContext* swr_context_ = nullptr;
+    AVChannelLayout input_layout_{};
     AVPacket* packet_ = nullptr;
     AVFrame* frame_ = nullptr;
     int audio_stream_index_ = -1;
     bool input_eof_ = false;
     bool drain_sent_ = false;
     std::int64_t seek_target_ms_ = -1;
-    std::int64_t fallback_timestamp_ms_ = 0;
+    std::int64_t seek_target_frame_ = -1;
+    std::int64_t block_start_frame_ = 0;
+    std::int64_t fallback_frame_ = 0;
+    bool fallback_frame_valid_ = true;
     MediaMetadata metadata_;
 };
 
@@ -462,9 +513,7 @@ ag_result Decoder::read(DecodedAudioBlock& block) noexcept
     try {
         return impl_->read(block);
     } catch (...) {
-        block.samples.clear();
-        block.frames = 0U;
-        block.end_of_stream = false;
+        block = {};
         return AG_INTERNAL_ERROR;
     }
 }

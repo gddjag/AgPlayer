@@ -35,6 +35,14 @@ int main(const int argc, char** argv)
     assert(std::strcmp(cover_mime_type, "") == 0);
     ag_metadata_destroy(metadata);
 
+    const std::filesystem::path missing_path =
+        sine_path.parent_path() / "does-not-exist.wav";
+    std::filesystem::remove(missing_path);
+    metadata = nullptr;
+    const std::string missing_filename = missing_path.string();
+    assert(ag_metadata_open(missing_filename.c_str(), &metadata) == AG_IO_ERROR);
+    assert(metadata == nullptr);
+
     agplayer::Decoder decoder;
     assert(decoder.open(sine_path.string()) == AG_OK);
     agplayer::DecodedAudioBlock block;
@@ -42,12 +50,37 @@ int main(const int argc, char** argv)
     assert(block.frames > 0U);
     assert(block.samples.size() == block.frames * 2U);
 
-    assert(decoder.seek(1'500) == AG_OK);
+    constexpr std::int64_t seek_target_ms = 1'517;
+    assert(decoder.seek(seek_target_ms) == AG_OK);
     do {
         assert(decoder.read(block) == AG_OK);
     } while (block.frames == 0U && !block.end_of_stream);
     assert(block.frames > 0U);
-    assert(block.timestamp_ms >= 1'490);
+    assert(block.timestamp_ms >= seek_target_ms);
+    assert(block.timestamp_ms <= seek_target_ms + 1);
+    constexpr std::int64_t sample_rate = 44'100;
+    const std::int64_t expected_frame =
+        (seek_target_ms * sample_rate + 999) / 1'000;
+    const double pi = std::acos(-1.0);
+    const double phase = 2.0 * pi * 440.0 * static_cast<double>(expected_frame)
+                         / static_cast<double>(sample_rate);
+    const auto expected_pcm = static_cast<std::int16_t>(
+        std::lround(std::sin(phase) * 0.251188643150958 * 32'767.0));
+    const float expected_sample = static_cast<float>(expected_pcm) / 32'768.0F;
+    assert(std::abs(block.samples[0] - expected_sample) < 0.000'1F);
+    assert(std::abs(block.samples[1] - expected_sample) < 0.000'1F);
+
+    const std::filesystem::path utf8_path =
+        sine_path.parent_path()
+        / std::filesystem::path(L"\u97F3\u9891-\u6D4B\u8BD5.wav");
+    std::filesystem::copy_file(
+        sine_path, utf8_path, std::filesystem::copy_options::overwrite_existing);
+    metadata = nullptr;
+    const std::string utf8_filename = utf8_path.u8string();
+    assert(ag_metadata_open(utf8_filename.c_str(), &metadata) == AG_OK);
+    assert(metadata != nullptr);
+    assert(ag_metadata_sample_rate(metadata) == 44'100);
+    ag_metadata_destroy(metadata);
 
     agplayer::Decoder full_decoder;
     assert(full_decoder.open(sine_path.string()) == AG_OK);
