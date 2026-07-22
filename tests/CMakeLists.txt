@@ -93,6 +93,9 @@ add_executable(waveform_analyzer_test
     core/waveform_analyzer_test.cpp
 )
 add_dependencies(waveform_analyzer_test decoder_fixture)
+target_include_directories(waveform_analyzer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
 target_link_libraries(waveform_analyzer_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(waveform_analyzer_test)

@@ -1,15 +1,64 @@
 #include <agplayer/c_api.h>
 
+#include "waveform_analyzer.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace {
+
+void test_actual_frame_bucketing_and_channel_combination()
+{
+    agplayer::WaveformBucketizer bucketizer(8U, 3U, 2U);
+    const std::vector<float> samples{
+        0.1F, -0.6F,
+        0.2F, 0.1F,
+        -0.3F, 0.2F,
+        0.4F, 0.1F,
+        0.2F, -0.8F,
+        0.1F, 0.2F,
+        -0.2F, 0.5F,
+        0.1F, -0.4F,
+    };
+    assert(samples.size() == 16U);
+    assert(bucketizer.add(samples, 8U) == AG_OK);
+    std::vector<float> peaks;
+    assert(bucketizer.finish(peaks) == AG_OK);
+    assert(peaks.size() == 3U);
+    assert(std::abs(peaks[0] - 0.75F) < 0.000'001F);
+    assert(std::abs(peaks[1] - 1.0F) < 0.000'001F);
+    assert(std::abs(peaks[2] - 0.625F) < 0.000'001F);
+
+    agplayer::WaveformBucketizer more_points_than_frames(3U, 10U, 1U);
+    assert(more_points_than_frames.add({0.2F, 0.4F, 0.8F}, 3U)
+           == AG_OK);
+    assert(more_points_than_frames.finish(peaks) == AG_OK);
+    assert(peaks.size() == 3U);
+    assert(std::abs(peaks[0] - 0.25F) < 0.000'001F);
+    assert(std::abs(peaks[1] - 0.5F) < 0.000'001F);
+    assert(std::abs(peaks[2] - 1.0F) < 0.000'001F);
+}
+
+void test_non_finite_pcm_is_rejected()
+{
+    for (const float invalid : {
+             std::numeric_limits<float>::quiet_NaN(),
+             std::numeric_limits<float>::infinity(),
+         }) {
+        agplayer::WaveformBucketizer bucketizer(1U, 1U, 2U);
+        assert(bucketizer.add({0.5F, invalid}, 1U) == AG_DECODE_ERROR);
+        std::vector<float> peaks{1.0F};
+        assert(bucketizer.finish(peaks) == AG_DECODE_ERROR);
+        assert(peaks.empty());
+    }
+}
 
 struct ProgressState final {
     std::vector<float> values;
@@ -36,6 +85,8 @@ void record_progress(const float progress, void* user_data)
 int main(const int argc, char** argv)
 {
     assert(argc == 2);
+    test_actual_frame_bucketing_and_channel_combination();
+    test_non_finite_pcm_is_rejected();
     const std::string source_path = argv[1];
 
     ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
