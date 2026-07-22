@@ -8,6 +8,9 @@ extern "C" {
 
 typedef struct ag_player ag_player;
 typedef struct ag_metadata ag_metadata;
+typedef struct ag_waveform ag_waveform;
+typedef struct ag_cancel_token ag_cancel_token;
+typedef void (*ag_progress_callback)(float progress, void* user_data);
 
 typedef enum ag_result {
     AG_OK = 0,
@@ -94,6 +97,19 @@ long long ag_metadata_duration_ms(const ag_metadata* metadata);
 const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
                                        size_t* size,
                                        const char** mime_type);
+
+ag_cancel_token* ag_cancel_token_create(void);
+void ag_cancel_token_cancel(ag_cancel_token* token);
+void ag_cancel_token_destroy(ag_cancel_token* token);
+ag_result ag_waveform_analyze(const char* utf8_path,
+                              size_t target_points,
+                              const ag_cancel_token* cancel_token,
+                              ag_progress_callback progress_callback,
+                              void* user_data,
+                              ag_waveform** out_waveform);
+size_t ag_waveform_count(const ag_waveform* waveform);
+float ag_waveform_peak(const ag_waveform* waveform, size_t index);
+void ag_waveform_destroy(ag_waveform* waveform);
 
 #ifdef __cplusplus
 }

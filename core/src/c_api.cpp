@@ -2,7 +2,9 @@
 
 #include "core_context.hpp"
 #include "decoder.hpp"
+#include "waveform_analyzer.hpp"
 
+#include <atomic>
 #include <cstring>
 #include <new>
 #include <string>
@@ -65,6 +67,14 @@ struct ag_player {
 
 struct ag_metadata {
     agplayer::MediaMetadata value;
+};
+
+struct ag_waveform {
+    std::vector<float> peaks;
+};
+
+struct ag_cancel_token {
+    std::atomic_bool cancelled{false};
 };
 
 ag_result ag_player_create(ag_player** out_player)
@@ -344,4 +354,71 @@ const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
     return metadata == nullptr || metadata->value.cover.empty()
                ? nullptr
                : metadata->value.cover.data();
+}
+
+ag_cancel_token* ag_cancel_token_create(void)
+{
+    return new (std::nothrow) ag_cancel_token;
+}
+
+void ag_cancel_token_cancel(ag_cancel_token* token)
+{
+    if (token != nullptr) {
+        token->cancelled.store(true, std::memory_order_relaxed);
+    }
+}
+
+void ag_cancel_token_destroy(ag_cancel_token* token)
+{
+    delete token;
+}
+
+ag_result ag_waveform_analyze(const char* utf8_path,
+                              const size_t target_points,
+                              const ag_cancel_token* cancel_token,
+                              const ag_progress_callback progress_callback,
+                              void* const user_data,
+                              ag_waveform** out_waveform)
+{
+    if (out_waveform == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    *out_waveform = nullptr;
+    if (utf8_path == nullptr || utf8_path[0] == '\0'
+        || target_points == 0U) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        std::vector<float> peaks;
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const ag_result result = agplayer::WaveformAnalyzer::analyze(
+            utf8_path, target_points, cancelled, progress_callback, user_data,
+            peaks);
+        if (result != AG_OK) {
+            return result;
+        }
+        *out_waveform = new (std::nothrow) ag_waveform{std::move(peaks)};
+        return *out_waveform == nullptr ? AG_INTERNAL_ERROR : AG_OK;
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
+}
+
+size_t ag_waveform_count(const ag_waveform* waveform)
+{
+    return waveform == nullptr ? 0U : waveform->peaks.size();
+}
+
+float ag_waveform_peak(const ag_waveform* waveform, const size_t index)
+{
+    return waveform == nullptr || index >= waveform->peaks.size()
+               ? 0.0F
+               : waveform->peaks[index];
+}
+
+void ag_waveform_destroy(ag_waveform* waveform)
+{
+    delete waveform;
 }

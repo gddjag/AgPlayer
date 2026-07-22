@@ -89,6 +89,35 @@ agplayer_enable_warnings(decoder_test)
 add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(decoder_test PROPERTIES TIMEOUT 10)
 
+add_executable(waveform_analyzer_test
+    core/waveform_analyzer_test.cpp
+)
+add_dependencies(waveform_analyzer_test decoder_fixture)
+target_link_libraries(waveform_analyzer_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(waveform_analyzer_test)
+
+add_test(NAME waveform_analyzer_test
+    COMMAND waveform_analyzer_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(waveform_analyzer_test PROPERTIES TIMEOUT 10)
+
+add_executable(waveform_cache_test
+    core/waveform_cache_test.cpp
+)
+add_dependencies(waveform_cache_test decoder_fixture)
+target_include_directories(waveform_cache_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(waveform_cache_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(waveform_cache_test)
+
+add_test(NAME waveform_cache_test
+    COMMAND waveform_cache_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(waveform_cache_test PROPERTIES TIMEOUT 10)
+
 add_executable(audio_engine_test
     core/audio_engine_test.cpp
 )

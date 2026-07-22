@@ -4,6 +4,8 @@ add_library(agplayer_core STATIC
     src/core_context.cpp
     src/decoder.cpp
     src/playback_session.cpp
+    src/waveform_analyzer.cpp
+    src/waveform_cache.cpp
 )
 
 target_include_directories(agplayer_core
