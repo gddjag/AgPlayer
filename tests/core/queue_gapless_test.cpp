@@ -9,6 +9,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <thread>
 #include <vector>
@@ -16,6 +18,19 @@
 #ifdef _WIN32
 #include <crtdbg.h>
 #endif
+
+// Always-evaluate check macro. Unlike AG_CHECK(), AG_CHECK evaluates its
+// expression even under NDEBUG (Release builds), so side-effecting calls
+// (engine.play(), ag_player_set_queue(), etc.) always execute. On failure it
+// prints the location and exits with a non-zero code so ctest detects failure.
+#define AG_CHECK(expr)                                                        \
+    do {                                                                      \
+        if (!(expr)) {                                                        \
+            std::fprintf(stderr, "AG_CHECK failed at %s:%d: %s\n",            \
+                         __FILE__, __LINE__, #expr);                          \
+            std::exit(1);                                                     \
+        }                                                                     \
+    } while (0)
 
 namespace {
 
@@ -29,10 +44,10 @@ void wait_for_frames(const agplayer::AudioEngine& engine,
         if (engine.buffered_frames() >= frames) {
             return;
         }
-        assert(engine.snapshot().state != agplayer::EngineState::Error);
+        AG_CHECK(engine.snapshot().state != agplayer::EngineState::Error);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    assert(false);
+    AG_CHECK(false);
 }
 
 std::vector<float> capture(agplayer::AudioEngine& engine,
@@ -67,7 +82,7 @@ std::vector<float> capture_realtime(agplayer::AudioEngine& engine,
         engine.render(block.data(), requested);
         const auto end = block.begin()
                          + static_cast<std::ptrdiff_t>(requested * channels);
-        assert(std::any_of(block.begin(), end, [](const float sample) {
+        AG_CHECK(std::any_of(block.begin(), end, [](const float sample) {
             return std::abs(sample) > 0.001F;
         }));
         captured.insert(captured.end(), block.begin(), end);
@@ -89,31 +104,31 @@ int main(const int argc, char** argv)
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
 
-    assert(argc == 4);
+    AG_CHECK(argc == 4);
     (void)argc;
     agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
-    assert(engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
-    assert(engine.set_mode(agplayer::PlaybackMode::Sequential) == AG_OK);
-    assert(engine.previous() == AG_INVALID_ARGUMENT);
-    assert(engine.play() == AG_OK);
+    AG_CHECK(engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+    AG_CHECK(engine.set_mode(agplayer::PlaybackMode::Sequential) == AG_OK);
+    AG_CHECK(engine.previous() == AG_INVALID_ARGUMENT);
+    AG_CHECK(engine.play() == AG_OK);
 
     const std::vector<float> captured = capture(engine, sample_rate * 2U);
 
     const std::size_t boundary = sample_rate * channels;
-    assert(std::abs(captured[boundary] - captured[boundary - channels]) < 0.05F);
+    AG_CHECK(std::abs(captured[boundary] - captured[boundary - channels]) < 0.05F);
     (void)boundary;
     const agplayer::EngineSnapshot internal_snapshot = engine.snapshot();
-    assert(internal_snapshot.track_index == 1U);
-    assert(internal_snapshot.track_count == 2U);
+    AG_CHECK(internal_snapshot.track_index == 1U);
+    AG_CHECK(internal_snapshot.track_count == 2U);
 
     {
         agplayer::AudioEngine realtime_engine(agplayer::AudioBackend::Manual,
                                               8'192U);
-        assert(realtime_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
-        assert(realtime_engine.play() == AG_OK);
+        AG_CHECK(realtime_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+        AG_CHECK(realtime_engine.play() == AG_OK);
         const std::vector<float> realtime = capture_realtime(
             realtime_engine, sample_rate * 2U);
-        assert(std::abs(realtime[boundary] - realtime[boundary - channels])
+        AG_CHECK(std::abs(realtime[boundary] - realtime[boundary - channels])
                < 0.05F);
     }
 
@@ -123,8 +138,8 @@ int main(const int argc, char** argv)
         };
         agplayer::AudioEngine snapshot_engine(agplayer::AudioBackend::Manual,
                                               4'096U);
-        assert(snapshot_engine.set_queue(alternating_queue, 0U) == AG_OK);
-        assert(snapshot_engine.play() == AG_OK);
+        AG_CHECK(snapshot_engine.set_queue(alternating_queue, 0U) == AG_OK);
+        AG_CHECK(snapshot_engine.play() == AG_OK);
         std::atomic<bool> capture_done{false};
         std::thread render_thread([&] {
             capture(snapshot_engine, sample_rate * 9U);
@@ -142,39 +157,39 @@ int main(const int argc, char** argv)
             std::this_thread::yield();
         }
         render_thread.join();
-        assert(consistent);
+        AG_CHECK(consistent);
     }
 
     agplayer::AudioEngine repeat_engine(agplayer::AudioBackend::Manual, 4'096U);
-    assert(repeat_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
-    assert(repeat_engine.set_mode(agplayer::PlaybackMode::RepeatOne) == AG_OK);
-    assert(repeat_engine.play() == AG_OK);
+    AG_CHECK(repeat_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+    AG_CHECK(repeat_engine.set_mode(agplayer::PlaybackMode::RepeatOne) == AG_OK);
+    AG_CHECK(repeat_engine.play() == AG_OK);
     const std::vector<float> repeated = capture(repeat_engine,
                                                 sample_rate + 1'024U);
-    assert(std::abs(repeated[boundary] - repeated[boundary - channels]) < 0.05F);
+    AG_CHECK(std::abs(repeated[boundary] - repeated[boundary - channels]) < 0.05F);
     const agplayer::EngineSnapshot repeat_snapshot = repeat_engine.snapshot();
-    assert(repeat_snapshot.track_index == 0U);
-    assert(repeat_snapshot.position_ms < 50);
+    AG_CHECK(repeat_snapshot.track_index == 0U);
+    AG_CHECK(repeat_snapshot.position_ms < 50);
     agplayer::AudioEngine shuffle_engine(agplayer::AudioBackend::Manual, 4'096U);
-    assert(shuffle_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
-    assert(shuffle_engine.set_mode(agplayer::PlaybackMode::Shuffle) == AG_OK);
-    assert(shuffle_engine.play() == AG_OK);
+    AG_CHECK(shuffle_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+    AG_CHECK(shuffle_engine.set_mode(agplayer::PlaybackMode::Shuffle) == AG_OK);
+    AG_CHECK(shuffle_engine.play() == AG_OK);
     const std::vector<float> shuffled = capture(shuffle_engine,
                                                 sample_rate + 1'024U);
-    assert(std::abs(shuffled[boundary] - shuffled[boundary - channels]) < 0.05F);
-    assert(shuffle_engine.snapshot().track_index == 1U);
+    AG_CHECK(std::abs(shuffled[boundary] - shuffled[boundary - channels]) < 0.05F);
+    AG_CHECK(shuffle_engine.snapshot().track_index == 1U);
 
     {
         agplayer::AudioEngine shuffle_control_engine(
             agplayer::AudioBackend::Manual, 131'072U);
-        assert(shuffle_control_engine.set_queue(
+        AG_CHECK(shuffle_control_engine.set_queue(
                    {argv[1], argv[2], argv[3]}, 0U)
                == AG_OK);
-        assert(shuffle_control_engine.set_mode(agplayer::PlaybackMode::Shuffle)
+        AG_CHECK(shuffle_control_engine.set_mode(agplayer::PlaybackMode::Shuffle)
                == AG_OK);
-        assert(shuffle_control_engine.play() == AG_OK);
+        AG_CHECK(shuffle_control_engine.play() == AG_OK);
         for (int transition = 0; transition < 50; ++transition) {
-            assert(shuffle_control_engine.next() == AG_OK);
+            AG_CHECK(shuffle_control_engine.next() == AG_OK);
         }
     }
 
@@ -183,15 +198,15 @@ int main(const int argc, char** argv)
         constexpr std::size_t long_track_frames = sample_rate * 2U;
         agplayer::AudioEngine seek_engine(agplayer::AudioBackend::Manual,
                                           preload_capacity);
-        assert(seek_engine.set_queue({argv[3], argv[1]}, 0U) == AG_OK);
+        AG_CHECK(seek_engine.set_queue({argv[3], argv[1]}, 0U) == AG_OK);
         wait_for_frames(seek_engine, long_track_frames + 1U);
-        assert(seek_engine.snapshot().track_index == 0U);
-        assert(seek_engine.seek(1'500) == AG_OK);
-        assert(seek_engine.snapshot().track_index == 0U);
-        assert(seek_engine.snapshot().position_ms == 1'500);
-        assert(seek_engine.play() == AG_OK);
+        AG_CHECK(seek_engine.snapshot().track_index == 0U);
+        AG_CHECK(seek_engine.seek(1'500) == AG_OK);
+        AG_CHECK(seek_engine.snapshot().track_index == 0U);
+        AG_CHECK(seek_engine.snapshot().position_ms == 1'500);
+        AG_CHECK(seek_engine.play() == AG_OK);
         capture(seek_engine, 1'024U);
-        assert(seek_engine.snapshot().track_index == 0U);
+        AG_CHECK(seek_engine.snapshot().track_index == 0U);
     }
 
     {
@@ -199,12 +214,12 @@ int main(const int argc, char** argv)
         constexpr std::size_t long_track_frames = sample_rate * 2U;
         agplayer::AudioEngine stop_engine(agplayer::AudioBackend::Manual,
                                           preload_capacity);
-        assert(stop_engine.set_queue({argv[3], argv[1]}, 0U) == AG_OK);
+        AG_CHECK(stop_engine.set_queue({argv[3], argv[1]}, 0U) == AG_OK);
         wait_for_frames(stop_engine, long_track_frames + 1U);
-        assert(stop_engine.stop() == AG_OK);
-        assert(stop_engine.play() == AG_OK);
+        AG_CHECK(stop_engine.stop() == AG_OK);
+        AG_CHECK(stop_engine.play() == AG_OK);
         capture(stop_engine, sample_rate + 1'024U);
-        assert(stop_engine.snapshot().track_index == 0U);
+        AG_CHECK(stop_engine.snapshot().track_index == 0U);
     }
 
     const std::filesystem::path missing_path =
@@ -214,71 +229,71 @@ int main(const int argc, char** argv)
     {
         agplayer::AudioEngine failed_stop_engine(
             agplayer::AudioBackend::Manual, 65'536U);
-        assert(failed_stop_engine.set_queue(
+        AG_CHECK(failed_stop_engine.set_queue(
                    {argv[1], missing_path.string()}, 0U)
                == AG_OK);
         wait_for_frames(failed_stop_engine, sample_rate);
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        assert(failed_stop_engine.stop() == AG_OK);
-        assert(failed_stop_engine.snapshot().state
+        AG_CHECK(failed_stop_engine.stop() == AG_OK);
+        AG_CHECK(failed_stop_engine.snapshot().state
                == agplayer::EngineState::Stopped);
     }
 
     {
         agplayer::AudioEngine failed_seek_engine(
             agplayer::AudioBackend::Manual, 65'536U);
-        assert(failed_seek_engine.set_queue(
+        AG_CHECK(failed_seek_engine.set_queue(
                    {argv[1], missing_path.string()}, 0U)
                == AG_OK);
         wait_for_frames(failed_seek_engine, sample_rate);
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        assert(failed_seek_engine.seek(500) == AG_OK);
-        assert(failed_seek_engine.snapshot().track_index == 0U);
-        assert(failed_seek_engine.snapshot().position_ms == 500);
+        AG_CHECK(failed_seek_engine.seek(500) == AG_OK);
+        AG_CHECK(failed_seek_engine.snapshot().track_index == 0U);
+        AG_CHECK(failed_seek_engine.snapshot().position_ms == 500);
     }
 
     agplayer::AudioEngine failure_engine(agplayer::AudioBackend::Manual, 65'536U);
-    assert(failure_engine.set_queue({argv[1], missing_path.string()}, 0U)
+    AG_CHECK(failure_engine.set_queue({argv[1], missing_path.string()}, 0U)
            == AG_OK);
     wait_for_frames(failure_engine, sample_rate);
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    assert(failure_engine.play() == AG_OK);
+    AG_CHECK(failure_engine.play() == AG_OK);
     std::array<float, 512U * channels> failure_block{};
     while (failure_engine.buffered_frames() > 0U) {
         failure_engine.render(failure_block.data(), 512U);
     }
-    assert(failure_engine.snapshot().state == agplayer::EngineState::Error);
-    assert(failure_engine.play() != AG_OK);
-    assert(failure_engine.next() != AG_OK);
-    assert(failure_engine.load(argv[1]) == AG_OK);
-    assert(failure_engine.snapshot().state == agplayer::EngineState::Stopped);
+    AG_CHECK(failure_engine.snapshot().state == agplayer::EngineState::Error);
+    AG_CHECK(failure_engine.play() != AG_OK);
+    AG_CHECK(failure_engine.next() != AG_OK);
+    AG_CHECK(failure_engine.load(argv[1]) == AG_OK);
+    AG_CHECK(failure_engine.snapshot().state == agplayer::EngineState::Stopped);
 
     ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
     ag_player* player = nullptr;
-    assert(ag_player_create_with_config(&config, &player) == AG_OK);
+    AG_CHECK(ag_player_create_with_config(&config, &player) == AG_OK);
     const char* queue[] = {argv[1], argv[2]};
     const char* invalid_queue[] = {argv[1], nullptr};
-    assert(ag_player_set_queue(nullptr, queue, 2U, 0U) == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_queue(player, nullptr, 2U, 0U) == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_queue(player, queue, 0U, 0U) == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_queue(player, queue, 2U, 2U) == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_queue(player, invalid_queue, 2U, 0U)
+    AG_CHECK(ag_player_set_queue(nullptr, queue, 2U, 0U) == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_queue(player, nullptr, 2U, 0U) == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_queue(player, queue, 0U, 0U) == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_queue(player, queue, 2U, 2U) == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_queue(player, invalid_queue, 2U, 0U)
            == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_mode(player, static_cast<ag_playback_mode>(99))
+    AG_CHECK(ag_player_set_mode(player, static_cast<ag_playback_mode>(99))
            == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_queue(player, queue, 2U, 0U) == AG_OK);
-    assert(ag_player_set_mode(player, AG_MODE_SEQUENTIAL) == AG_OK);
-    assert(ag_player_previous(player) == AG_INVALID_ARGUMENT);
-    assert(ag_player_set_mode(player, AG_MODE_REPEAT_ONE) == AG_OK);
+    AG_CHECK(ag_player_set_queue(player, queue, 2U, 0U) == AG_OK);
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_SEQUENTIAL) == AG_OK);
+    AG_CHECK(ag_player_previous(player) == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_REPEAT_ONE) == AG_OK);
     ag_playback_snapshot snapshot{};
-    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
-    assert(snapshot.track_index == 0U);
-    assert(snapshot.track_count == 2U);
-    assert(snapshot.mode == AG_MODE_REPEAT_ONE);
-    assert(ag_player_previous(player) == AG_OK);
-    assert(ag_player_set_mode(player, AG_MODE_SHUFFLE) == AG_OK);
-    assert(ag_player_next(player) == AG_OK);
-    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
-    assert(snapshot.track_index != 0U);
+    AG_CHECK(ag_player_snapshot(player, &snapshot) == AG_OK);
+    AG_CHECK(snapshot.track_index == 0U);
+    AG_CHECK(snapshot.track_count == 2U);
+    AG_CHECK(snapshot.mode == AG_MODE_REPEAT_ONE);
+    AG_CHECK(ag_player_previous(player) == AG_OK);
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_SHUFFLE) == AG_OK);
+    AG_CHECK(ag_player_next(player) == AG_OK);
+    AG_CHECK(ag_player_snapshot(player, &snapshot) == AG_OK);
+    AG_CHECK(snapshot.track_index != 0U);
     ag_player_destroy(player);
 }

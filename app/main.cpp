@@ -142,11 +142,34 @@ int main(int argc, char* argv[])
             // --qa-play: load + play through the normal production path. The
             // shared core pointer is the same one the controllers observe, so
             // no state is faked. For the memory probe the app just stays
-            // running inside app.exec() below.
+            // running inside app.exec() below. Return values are checked so a
+            // failed load/play is logged instead of silently idling.
+            int qaErrorCode = 0;
             if (!qaPlayPath.isEmpty()) {
                 const QByteArray utf8Path = qaPlayPath.toUtf8();
-                ag_player_load(core, utf8Path.constData());
-                ag_player_play(core);
+                const ag_result loadResult = ag_player_load(core, utf8Path.constData());
+                if (loadResult != AG_OK) {
+                    RuntimeLog::log(loadResult, QStringLiteral("qa-play"),
+                        QStringLiteral("ag_player_load failed: %1").arg(qaPlayPath));
+                    qWarning("ag_player_load failed (%d) for %s",
+                        static_cast<int>(loadResult), qUtf8Printable(qaPlayPath));
+                    // For screenshot mode, exit non-zero; for --qa-play the app
+                    // must stay running so the memory probe can measure it.
+                    if (!qaScreenshotMain.isEmpty() || !qaScreenshotMini.isEmpty()) {
+                        qaErrorCode = 3;
+                    }
+                } else {
+                    const ag_result playResult = ag_player_play(core);
+                    if (playResult != AG_OK) {
+                        RuntimeLog::log(playResult, QStringLiteral("qa-play"),
+                            QStringLiteral("ag_player_play failed: %1").arg(qaPlayPath));
+                        qWarning("ag_player_play failed (%d) for %s",
+                            static_cast<int>(playResult), qUtf8Printable(qaPlayPath));
+                        if (!qaScreenshotMain.isEmpty() || !qaScreenshotMini.isEmpty()) {
+                            qaErrorCode = 3;
+                        }
+                    }
+                }
             }
 
             // --qa-screenshot-main / --qa-screenshot-mini: poll for AG_PLAYING,
@@ -154,7 +177,7 @@ int main(int argc, char* argv[])
             // PNG, then quit through the normal shutdown path.
             const bool wantScreenshotMain = !qaScreenshotMain.isEmpty();
             const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
-            if (wantScreenshotMain || wantScreenshotMini) {
+            if (qaErrorCode == 0 && (wantScreenshotMain || wantScreenshotMini)) {
                 QWindow* const targetWindow = wantScreenshotMain
                     ? qobject_cast<QWindow*>(mainWindow)
                     : qobject_cast<QWindow*>(miniWindow);
@@ -202,7 +225,7 @@ int main(int argc, char* argv[])
 #endif
             });
 
-            result = app.exec();
+            result = (qaErrorCode != 0) ? qaErrorCode : app.exec();
 
             if (miniWindow)
                 delete miniWindow;

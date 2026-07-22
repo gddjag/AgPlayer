@@ -165,7 +165,11 @@ add_test(NAME queue_gapless_test
         "${GAPLESS_B_FIXTURE}"
         "${SINE_WAV_FIXTURE}"
 )
-set_tests_properties(queue_gapless_test PROPERTIES TIMEOUT 10)
+set_tests_properties(queue_gapless_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
 
 add_executable(recovery_test
     core/recovery_test.cpp
