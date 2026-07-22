@@ -1,1 +1,8 @@
 /.worktrees/
+/build/
+/.cache/
+/.vs/
+/out/
+/tests/fixtures/generated/
+*.user
+*.tmp
