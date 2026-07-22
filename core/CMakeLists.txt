@@ -1,5 +1,6 @@
 add_library(agplayer_core STATIC
-    src/bootstrap.cpp
+    src/c_api.cpp
+    src/core_context.cpp
 )
 
 target_include_directories(agplayer_core
