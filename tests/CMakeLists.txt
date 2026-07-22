@@ -44,3 +44,33 @@ target_link_libraries(playback_session_test PRIVATE agplayer_core)
 agplayer_enable_warnings(playback_session_test)
 
 add_test(NAME playback_session_test COMMAND playback_session_test)
+
+add_executable(fixture_generator
+    "${CMAKE_SOURCE_DIR}/tools/fixture_generator.cpp"
+)
+agplayer_enable_warnings(fixture_generator)
+
+set(DECODER_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
+set(SINE_WAV_FIXTURE "${DECODER_FIXTURE_DIR}/sine-440hz.wav")
+add_custom_command(
+    OUTPUT "${SINE_WAV_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECODER_FIXTURE_DIR}"
+    COMMAND $<TARGET_FILE:fixture_generator> "${SINE_WAV_FIXTURE}"
+    DEPENDS fixture_generator
+    VERBATIM
+)
+add_custom_target(decoder_fixture DEPENDS "${SINE_WAV_FIXTURE}")
+
+add_executable(decoder_test
+    core/decoder_test.cpp
+)
+add_dependencies(decoder_test decoder_fixture)
+target_include_directories(decoder_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(decoder_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(decoder_test)
+
+add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(decoder_test PROPERTIES TIMEOUT 10)
