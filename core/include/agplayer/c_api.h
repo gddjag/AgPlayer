@@ -33,6 +33,12 @@ typedef enum ag_playback_state {
     AG_ERROR = 4
 } ag_playback_state;
 
+typedef enum ag_playback_mode {
+    AG_MODE_SEQUENTIAL = 0,
+    AG_MODE_REPEAT_ONE = 1,
+    AG_MODE_SHUFFLE = 2
+} ag_playback_mode;
+
 typedef struct ag_player_config {
     ag_audio_backend backend;
     unsigned int buffer_frames;
@@ -44,6 +50,9 @@ typedef struct ag_playback_snapshot {
     long long duration_ms;
     float volume;
     int muted;
+    size_t track_index;
+    size_t track_count;
+    ag_playback_mode mode;
 } ag_playback_snapshot;
 
 ag_result ag_player_create(ag_player** out_player);
@@ -55,10 +64,17 @@ ag_result ag_player_last_error(const ag_player* player,
                                size_t capacity,
                                size_t* required);
 ag_result ag_player_load(ag_player* player, const char* utf8_path);
+ag_result ag_player_set_queue(ag_player* player,
+                              const char* const* utf8_paths,
+                              size_t count,
+                              size_t start_index);
 ag_result ag_player_play(ag_player* player);
 ag_result ag_player_pause(ag_player* player);
 ag_result ag_player_stop(ag_player* player);
 ag_result ag_player_seek(ag_player* player, long long position_ms);
+ag_result ag_player_next(ag_player* player);
+ag_result ag_player_previous(ag_player* player);
+ag_result ag_player_set_mode(ag_player* player, ag_playback_mode mode);
 ag_result ag_player_set_volume(ag_player* player, float volume);
 ag_result ag_player_set_muted(ag_player* player, int muted);
 ag_result ag_player_snapshot(const ag_player* player,

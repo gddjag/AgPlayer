@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace agplayer {
 
@@ -15,10 +16,15 @@ public:
     [[nodiscard]] const std::string& last_error() const noexcept;
     void set_error(std::string value) noexcept;
     ag_result load(const std::string& utf8_path) noexcept;
+    ag_result set_queue(std::vector<std::string> utf8_paths,
+                        std::size_t start_index) noexcept;
     ag_result play() noexcept;
     ag_result pause() noexcept;
     ag_result stop() noexcept;
     ag_result seek(std::int64_t position_ms) noexcept;
+    ag_result next() noexcept;
+    ag_result previous() noexcept;
+    ag_result set_mode(PlaybackMode mode) noexcept;
     ag_result set_volume(float volume) noexcept;
     void set_muted(bool muted) noexcept;
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;

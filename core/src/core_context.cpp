@@ -29,6 +29,13 @@ ag_result CoreContext::load(const std::string& utf8_path) noexcept
     return record(audio_engine_.load(utf8_path), "load failed");
 }
 
+ag_result CoreContext::set_queue(std::vector<std::string> utf8_paths,
+                                 const std::size_t start_index) noexcept
+{
+    return record(audio_engine_.set_queue(std::move(utf8_paths), start_index),
+                  "queue change failed");
+}
+
 ag_result CoreContext::play() noexcept
 {
     return record(audio_engine_.play(), "play failed");
@@ -47,6 +54,21 @@ ag_result CoreContext::stop() noexcept
 ag_result CoreContext::seek(const std::int64_t position_ms) noexcept
 {
     return record(audio_engine_.seek(position_ms), "seek failed");
+}
+
+ag_result CoreContext::next() noexcept
+{
+    return record(audio_engine_.next(), "next track failed");
+}
+
+ag_result CoreContext::previous() noexcept
+{
+    return record(audio_engine_.previous(), "previous track failed");
+}
+
+ag_result CoreContext::set_mode(const PlaybackMode mode) noexcept
+{
+    return record(audio_engine_.set_mode(mode), "playback mode change failed");
 }
 
 ag_result CoreContext::set_volume(const float volume) noexcept

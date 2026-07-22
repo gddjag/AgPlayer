@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <atomic>
 #include <functional>
 #include <string>
 #include <vector>
@@ -31,11 +32,18 @@ public:
     explicit PlaybackSession(ShuffleIndexFunction shuffle_index = {});
 
     void set_queue(std::vector<std::string> paths, std::size_t start_index);
+    void clear() noexcept;
     void set_mode(PlaybackMode mode) noexcept;
+    void set_index(std::size_t index) noexcept;
 
     [[nodiscard]] std::size_t next_index() const;
+    [[nodiscard]] std::size_t next_index_from(std::size_t current_index) const;
     [[nodiscard]] std::size_t previous_index() const noexcept;
     [[nodiscard]] const std::string& current_path() const;
+    [[nodiscard]] const std::string& path_at(std::size_t index) const noexcept;
+    [[nodiscard]] std::size_t index() const noexcept;
+    [[nodiscard]] std::size_t size() const noexcept;
+    [[nodiscard]] PlaybackMode mode() const noexcept;
     [[nodiscard]] PlaybackState state() const noexcept;
     [[nodiscard]] const std::string& error_message() const noexcept;
 
@@ -43,8 +51,8 @@ public:
 
 private:
     std::vector<std::string> paths_;
-    std::size_t index_ = 0U;
-    PlaybackMode mode_ = PlaybackMode::Sequential;
+    std::atomic<std::size_t> index_{0U};
+    std::atomic<PlaybackMode> mode_{PlaybackMode::Sequential};
     PlaybackState state_ = PlaybackState::Stopped;
     std::string error_;
     ShuffleIndexFunction shuffle_index_;

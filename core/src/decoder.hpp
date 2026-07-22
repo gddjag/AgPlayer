@@ -40,7 +40,11 @@ public:
     Decoder& operator=(const Decoder&) = delete;
 
     [[nodiscard]] ag_result open(const std::string& utf8_path) noexcept;
+    [[nodiscard]] ag_result open(const std::string& utf8_path,
+                                 int output_sample_rate,
+                                 int output_channels) noexcept;
     void close() noexcept;
+    [[nodiscard]] bool is_open() const noexcept;
     [[nodiscard]] ag_result read(DecodedAudioBlock& block) noexcept;
     [[nodiscard]] ag_result seek(std::int64_t target_ms) noexcept;
     [[nodiscard]] const MediaMetadata& metadata() const noexcept;

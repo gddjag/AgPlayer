@@ -5,6 +5,9 @@
 
 #include <cstring>
 #include <new>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -33,6 +36,19 @@ ag_playback_state to_c_state(const agplayer::EngineState state) noexcept
         return AG_ERROR;
     }
     return AG_ERROR;
+}
+
+ag_playback_mode to_c_mode(const agplayer::PlaybackMode mode) noexcept
+{
+    switch (mode) {
+    case agplayer::PlaybackMode::Sequential:
+        return AG_MODE_SEQUENTIAL;
+    case agplayer::PlaybackMode::RepeatOne:
+        return AG_MODE_REPEAT_ONE;
+    case agplayer::PlaybackMode::Shuffle:
+        return AG_MODE_SHUFFLE;
+    }
+    return AG_MODE_SEQUENTIAL;
 }
 
 } // namespace
@@ -120,6 +136,29 @@ ag_result ag_player_load(ag_player* player, const char* utf8_path)
     return guard_result([&] { return player->context.load(utf8_path); });
 }
 
+ag_result ag_player_set_queue(ag_player* player,
+                              const char* const* utf8_paths,
+                              const size_t count,
+                              const size_t start_index)
+{
+    if (player == nullptr || utf8_paths == nullptr || count == 0U
+        || start_index >= count) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    return guard_result([&] {
+        std::vector<std::string> paths;
+        paths.reserve(count);
+        for (size_t index = 0U; index < count; ++index) {
+            if (utf8_paths[index] == nullptr || utf8_paths[index][0] == '\0') {
+                return AG_INVALID_ARGUMENT;
+            }
+            paths.emplace_back(utf8_paths[index]);
+        }
+        return player->context.set_queue(std::move(paths), start_index);
+    });
+}
+
 ag_result ag_player_play(ag_player* player)
 {
     return player == nullptr
@@ -146,6 +185,35 @@ ag_result ag_player_seek(ag_player* player, const long long position_ms)
     return player == nullptr
                ? AG_INVALID_ARGUMENT
                : guard_result([&] { return player->context.seek(position_ms); });
+}
+
+ag_result ag_player_next(ag_player* player)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.next(); });
+}
+
+ag_result ag_player_previous(ag_player* player)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.previous(); });
+}
+
+ag_result ag_player_set_mode(ag_player* player, const ag_playback_mode mode)
+{
+    if (player == nullptr
+        || (mode != AG_MODE_SEQUENTIAL && mode != AG_MODE_REPEAT_ONE
+            && mode != AG_MODE_SHUFFLE)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    const agplayer::PlaybackMode value = mode == AG_MODE_REPEAT_ONE
+                                             ? agplayer::PlaybackMode::RepeatOne
+                                         : mode == AG_MODE_SHUFFLE
+                                             ? agplayer::PlaybackMode::Shuffle
+                                             : agplayer::PlaybackMode::Sequential;
+    return guard_result([&] { return player->context.set_mode(value); });
 }
 
 ag_result ag_player_set_volume(ag_player* player, const float volume)
@@ -180,6 +248,9 @@ ag_result ag_player_snapshot(const ag_player* player,
         snapshot->duration_ms = value.duration_ms;
         snapshot->volume = value.volume;
         snapshot->muted = value.muted ? 1 : 0;
+        snapshot->track_index = value.track_index;
+        snapshot->track_count = value.track_count;
+        snapshot->mode = to_c_mode(value.mode);
         return AG_OK;
     });
 }

@@ -44,7 +44,9 @@ int main(const int argc, char** argv)
     assert(metadata == nullptr);
 
     agplayer::Decoder decoder;
+    assert(!decoder.is_open());
     assert(decoder.open(sine_path.string()) == AG_OK);
+    assert(decoder.is_open());
     agplayer::DecodedAudioBlock block;
     assert(decoder.read(block) == AG_OK);
     assert(block.frames > 0U);
@@ -69,6 +71,10 @@ int main(const int argc, char** argv)
     const float expected_sample = static_cast<float>(expected_pcm) / 32'768.0F;
     assert(std::abs(block.samples[0] - expected_sample) < 0.000'1F);
     assert(std::abs(block.samples[1] - expected_sample) < 0.000'1F);
+
+    agplayer::Decoder failed_decoder;
+    assert(failed_decoder.open(missing_filename) == AG_IO_ERROR);
+    assert(!failed_decoder.is_open());
 
     const std::filesystem::path utf8_path =
         sine_path.parent_path()

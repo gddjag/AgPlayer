@@ -68,7 +68,9 @@ public:
         reset();
     }
 
-    ag_result open(const std::string& utf8_path)
+    ag_result open(const std::string& utf8_path,
+                   const int output_sample_rate,
+                   const int output_channels)
     {
         reset();
         if (utf8_path.empty()) {
@@ -111,6 +113,13 @@ public:
             return AG_UNSUPPORTED_FORMAT;
         }
 
+        output_sample_rate_ = output_sample_rate > 0
+                                  ? output_sample_rate
+                                  : codec_context_->sample_rate;
+        output_channels_ = output_channels > 0
+                               ? output_channels
+                               : codec_context_->ch_layout.nb_channels;
+
         result = initialize_resampler();
         if (result < 0) {
             reset();
@@ -126,6 +135,13 @@ public:
 
         populate_metadata(*stream);
         return AG_OK;
+    }
+
+    [[nodiscard]] bool is_open() const noexcept
+    {
+        return format_context_ != nullptr && codec_context_ != nullptr
+               && swr_context_ != nullptr && packet_ != nullptr
+               && frame_ != nullptr;
     }
 
     ag_result read(DecodedAudioBlock& block)
@@ -152,6 +168,16 @@ public:
                 return AG_OK;
             }
             if (receive_result == AVERROR_EOF) {
+                if (!resampler_drained_) {
+                    const ag_result drain_result = drain_resampler(block);
+                    if (drain_result != AG_OK) {
+                        return drain_result;
+                    }
+                    if (block.frames > 0U) {
+                        return AG_OK;
+                    }
+                    resampler_drained_ = true;
+                }
                 block.end_of_stream = true;
                 return AG_OK;
             }
@@ -229,9 +255,10 @@ public:
 
         input_eof_ = false;
         drain_sent_ = false;
+        resampler_drained_ = false;
         seek_target_ms_ = target_ms;
         seek_target_frame_ = av_rescale_rnd(target_ms,
-                                            codec_context_->sample_rate,
+                                            output_sample_rate_,
                                             1'000,
                                             AV_ROUND_UP);
         fallback_frame_valid_ = false;
@@ -247,13 +274,17 @@ public:
     {
         swr_free(&swr_context_);
         av_channel_layout_uninit(&input_layout_);
+        av_channel_layout_uninit(&output_layout_);
         av_frame_free(&frame_);
         av_packet_free(&packet_);
         avcodec_free_context(&codec_context_);
         avformat_close_input(&format_context_);
         audio_stream_index_ = -1;
+        output_sample_rate_ = 0;
+        output_channels_ = 0;
         input_eof_ = false;
         drain_sent_ = false;
+        resampler_drained_ = false;
         seek_target_ms_ = -1;
         seek_target_frame_ = -1;
         block_start_frame_ = 0;
@@ -278,10 +309,13 @@ private:
             }
         }
 
+        av_channel_layout_uninit(&output_layout_);
+        av_channel_layout_default(&output_layout_, output_channels_);
+
         result = swr_alloc_set_opts2(&swr_context_,
-                                     &input_layout_,
+                                     &output_layout_,
                                      AV_SAMPLE_FMT_FLT,
-                                     codec_context_->sample_rate,
+                                     output_sample_rate_,
                                      &input_layout_,
                                      codec_context_->sample_fmt,
                                      codec_context_->sample_rate,
@@ -358,7 +392,7 @@ private:
         const std::int64_t output_capacity = av_rescale_rnd(
             swr_get_delay(swr_context_, codec_context_->sample_rate)
                 + frame_->nb_samples,
-            codec_context_->sample_rate,
+            output_sample_rate_,
             codec_context_->sample_rate,
             AV_ROUND_UP);
         if (output_capacity <= 0 || output_capacity > INT_MAX) {
@@ -366,7 +400,7 @@ private:
         }
 
         const std::size_t channels =
-            static_cast<std::size_t>(codec_context_->ch_layout.nb_channels);
+            static_cast<std::size_t>(output_channels_);
         if (static_cast<std::uint64_t>(output_capacity)
             > std::numeric_limits<std::size_t>::max() / channels) {
             return AG_INTERNAL_ERROR;
@@ -399,8 +433,7 @@ private:
                 stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
             block_start_frame_ = av_rescale_q(timestamp - stream_origin,
                                               stream->time_base,
-                                              AVRational{1,
-                                                         codec_context_->sample_rate});
+                                              AVRational{1, output_sample_rate_});
             fallback_frame_valid_ = true;
         } else if (fallback_frame_valid_) {
             block_start_frame_ = fallback_frame_;
@@ -408,10 +441,51 @@ private:
             return AG_DECODE_ERROR;
         }
         block.timestamp_ms = av_rescale_q(block_start_frame_,
-                                          AVRational{1, codec_context_->sample_rate},
+                                          AVRational{1, output_sample_rate_},
                                           AVRational{1, 1'000});
         fallback_frame_ = block_start_frame_
                           + static_cast<std::int64_t>(block.frames);
+        return AG_OK;
+    }
+
+    ag_result drain_resampler(DecodedAudioBlock& block)
+    {
+        const std::int64_t output_capacity = av_rescale_rnd(
+            swr_get_delay(swr_context_, codec_context_->sample_rate),
+            output_sample_rate_,
+            codec_context_->sample_rate,
+            AV_ROUND_UP);
+        if (output_capacity <= 0) {
+            return AG_OK;
+        }
+        if (output_capacity > INT_MAX) {
+            return AG_DECODE_ERROR;
+        }
+
+        const std::size_t channels = static_cast<std::size_t>(output_channels_);
+        if (static_cast<std::uint64_t>(output_capacity)
+            > std::numeric_limits<std::size_t>::max() / channels) {
+            return AG_INTERNAL_ERROR;
+        }
+        block.samples.resize(static_cast<std::size_t>(output_capacity) * channels);
+        uint8_t* output_data[] = {
+            reinterpret_cast<uint8_t*>(block.samples.data()),
+        };
+        const int converted = swr_convert(swr_context_,
+                                          output_data,
+                                          static_cast<int>(output_capacity),
+                                          nullptr,
+                                          0);
+        if (converted < 0) {
+            return AG_DECODE_ERROR;
+        }
+
+        block.frames = static_cast<std::size_t>(converted);
+        block.samples.resize(block.frames * channels);
+        block.timestamp_ms = av_rescale_q(fallback_frame_,
+                                          AVRational{1, output_sample_rate_},
+                                          AVRational{1, 1'000});
+        fallback_frame_ += static_cast<std::int64_t>(block.frames);
         return AG_OK;
     }
 
@@ -457,7 +531,7 @@ private:
             }
 
             const std::size_t channels =
-                static_cast<std::size_t>(codec_context_->ch_layout.nb_channels);
+                static_cast<std::size_t>(output_channels_);
             const std::size_t samples_to_skip =
                 static_cast<std::size_t>(frames_to_skip) * channels;
             std::move(block.samples.begin() + static_cast<std::ptrdiff_t>(samples_to_skip),
@@ -478,11 +552,15 @@ private:
     AVCodecContext* codec_context_ = nullptr;
     SwrContext* swr_context_ = nullptr;
     AVChannelLayout input_layout_{};
+    AVChannelLayout output_layout_{};
     AVPacket* packet_ = nullptr;
     AVFrame* frame_ = nullptr;
     int audio_stream_index_ = -1;
+    int output_sample_rate_ = 0;
+    int output_channels_ = 0;
     bool input_eof_ = false;
     bool drain_sent_ = false;
+    bool resampler_drained_ = false;
     std::int64_t seek_target_ms_ = -1;
     std::int64_t seek_target_frame_ = -1;
     std::int64_t block_start_frame_ = 0;
@@ -500,8 +578,15 @@ Decoder::~Decoder() = default;
 
 ag_result Decoder::open(const std::string& utf8_path) noexcept
 {
+    return open(utf8_path, 0, 0);
+}
+
+ag_result Decoder::open(const std::string& utf8_path,
+                        const int output_sample_rate,
+                        const int output_channels) noexcept
+{
     try {
-        return impl_->open(utf8_path);
+        return impl_->open(utf8_path, output_sample_rate, output_channels);
     } catch (...) {
         impl_->reset();
         return AG_INTERNAL_ERROR;
@@ -511,6 +596,11 @@ ag_result Decoder::open(const std::string& utf8_path) noexcept
 void Decoder::close() noexcept
 {
     impl_->reset();
+}
+
+bool Decoder::is_open() const noexcept
+{
+    return impl_->is_open();
 }
 
 ag_result Decoder::read(DecodedAudioBlock& block) noexcept

@@ -6,8 +6,16 @@
 #include <filesystem>
 #include <thread>
 
+#ifdef _WIN32
+#include <crtdbg.h>
+#endif
+
 int main(const int argc, char** argv)
 {
+#ifdef _WIN32
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
     assert(argc == 2);
 
     ag_player_config config{};

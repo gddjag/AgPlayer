@@ -52,6 +52,8 @@ agplayer_enable_warnings(fixture_generator)
 
 set(DECODER_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
 set(SINE_WAV_FIXTURE "${DECODER_FIXTURE_DIR}/sine-440hz.wav")
+set(GAPLESS_A_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-a.wav")
+set(GAPLESS_B_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-b.wav")
 add_custom_command(
     OUTPUT "${SINE_WAV_FIXTURE}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECODER_FIXTURE_DIR}"
@@ -60,6 +62,18 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(decoder_fixture DEPENDS "${SINE_WAV_FIXTURE}")
+
+add_custom_command(
+    OUTPUT "${GAPLESS_A_FIXTURE}" "${GAPLESS_B_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECODER_FIXTURE_DIR}"
+    COMMAND $<TARGET_FILE:fixture_generator> "${GAPLESS_A_FIXTURE}" 0 44100
+    COMMAND $<TARGET_FILE:fixture_generator> "${GAPLESS_B_FIXTURE}" 48000 48000 48000 1
+    DEPENDS fixture_generator
+    VERBATIM
+)
+add_custom_target(gapless_fixtures
+    DEPENDS "${GAPLESS_A_FIXTURE}" "${GAPLESS_B_FIXTURE}"
+)
 
 add_executable(decoder_test
     core/decoder_test.cpp
@@ -85,3 +99,22 @@ agplayer_enable_warnings(audio_engine_test)
 
 add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
+
+add_executable(queue_gapless_test
+    core/queue_gapless_test.cpp
+)
+add_dependencies(queue_gapless_test decoder_fixture gapless_fixtures)
+target_include_directories(queue_gapless_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(queue_gapless_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(queue_gapless_test)
+
+add_test(NAME queue_gapless_test
+    COMMAND queue_gapless_test
+        "${GAPLESS_A_FIXTURE}"
+        "${GAPLESS_B_FIXTURE}"
+        "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(queue_gapless_test PROPERTIES TIMEOUT 10)
