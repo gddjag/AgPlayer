@@ -189,8 +189,33 @@ target_compile_definitions(qml_waveform_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
 )
 agplayer_enable_warnings(qml_waveform_test)
-add_test(NAME qml_waveform_test COMMAND qml_waveform_test)
+add_test(NAME qml_waveform_test COMMAND qml_waveform_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_waveform.qml)
 set_tests_properties(qml_waveform_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
+add_executable(qml_main_window_test
+    qt/qml_main_window_test_main.cpp
+)
+set_target_properties(qml_main_window_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_main_window_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+target_link_libraries(qml_main_window_test PRIVATE
+    agplayer_app_qml
+    agplayer_app_qmlplugin
+    Qt6::QuickTest
+)
+target_compile_definitions(qml_main_window_test PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+)
+agplayer_enable_warnings(qml_main_window_test)
+add_test(NAME qml_main_window_test COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml)
+set_tests_properties(qml_main_window_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
