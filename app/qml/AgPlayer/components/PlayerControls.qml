@@ -36,7 +36,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }
@@ -56,7 +62,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }
@@ -80,7 +92,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }
@@ -98,7 +116,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }
@@ -136,7 +160,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }
@@ -161,7 +191,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }
@@ -185,7 +221,13 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: parent.hovered ? Theme.border : "transparent"
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
         }

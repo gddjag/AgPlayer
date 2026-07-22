@@ -107,6 +107,9 @@ Rectangle {
                         var bd = root.currentTrackValue(LibraryModel.BitDepthRole)
                         if (bd > 0)
                             badges.push(bd + "-bit")
+                        var br = root.currentTrackValue(LibraryModel.BitRateRole)
+                        if (br > 0)
+                            badges.push(Math.round(br / 1000) + " kbps")
                         return badges
                     }
 
