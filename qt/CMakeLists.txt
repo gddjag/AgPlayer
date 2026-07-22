@@ -5,8 +5,12 @@ add_library(agplayer_qt STATIC
     src/library_model.hpp
     src/library_store.cpp
     src/library_store.hpp
+    src/playback_controller.cpp
+    src/playback_controller.hpp
     src/qml_registration.cpp
     src/qml_registration.hpp
+    src/window_controller.cpp
+    src/window_controller.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
@@ -16,6 +20,7 @@ target_include_directories(agplayer_qt PUBLIC
 target_link_libraries(agplayer_qt
     PUBLIC
         Qt6::Core
+        Qt6::Gui
         Qt6::Qml
         agplayer_core
     PRIVATE

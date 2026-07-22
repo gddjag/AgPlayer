@@ -156,6 +156,8 @@ foreach(qt_test IN ITEMS
     library_store_test
     import_controller_test
     qml_registration_test
+    playback_controller_test
+    window_controller_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
@@ -173,6 +175,10 @@ foreach(qt_test IN ITEMS
 endforeach()
 
 add_dependencies(import_controller_test decoder_fixture)
+add_dependencies(playback_controller_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(playback_controller_test PROPERTIES
+    ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
