@@ -63,6 +63,6 @@ target_link_libraries(agplayer_app_qml
 )
 
 qt_add_executable(AgPlayer main.cpp)
-target_link_libraries(AgPlayer PRIVATE agplayer_app_qml)
+target_link_libraries(AgPlayer PRIVATE agplayer_app_qml agplayer_app_qmlplugin)
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)

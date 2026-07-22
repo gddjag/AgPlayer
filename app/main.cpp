@@ -1,10 +1,18 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
+#include <QImage>
+#include <QQuickWindow>
 #include <QStandardPaths>
+#include <QStringList>
+#include <QTimer>
 #include <QWindow>
+#include <QtPlugin>
 
 #include <agplayer/c_api.h>
+
+#include <functional>
+#include <memory>
 
 #include "import_controller.hpp"
 #include "library_model.hpp"
@@ -14,6 +22,8 @@
 #include "runtime_log.hpp"
 #include "window_controller.hpp"
 
+Q_IMPORT_PLUGIN(AgPlayerPlugin)
+
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
@@ -21,6 +31,30 @@ int main(int argc, char* argv[])
     app.setOrganizationName(QStringLiteral("AgPlayer"));
 
     RuntimeLog::install();
+
+    // Development-only QA arguments. Parsed before ag_player_create so the
+    // production player instance is reused (controllers are never bypassed).
+    //   --qa-play <path>            load + play a file through the normal path
+    //   --qa-screenshot-main <png>  grab the main window after playback starts
+    //   --qa-screenshot-mini <png>  grab the mini player window likewise
+    QString qaPlayPath;
+    QString qaScreenshotMain;
+    QString qaScreenshotMini;
+    {
+        const QStringList cliArgs = QGuiApplication::arguments();
+        for (int i = 1; i < cliArgs.size(); ++i) {
+            const QString& arg = cliArgs.at(i);
+            if (arg == QStringLiteral("--qa-play") && i + 1 < cliArgs.size()) {
+                qaPlayPath = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-screenshot-main")
+                       && i + 1 < cliArgs.size()) {
+                qaScreenshotMain = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-screenshot-mini")
+                       && i + 1 < cliArgs.size()) {
+                qaScreenshotMini = cliArgs.at(++i);
+            }
+        }
+    }
 
     ag_player* core = nullptr;
     if (ag_player_create(&core) != AG_OK) {
@@ -81,6 +115,7 @@ int main(int argc, char* argv[])
         });
 
         QQmlApplicationEngine engine;
+        engine.addImportPath("qrc:/");
         engine.loadFromModule("AgPlayer", "Main");
         if (!engine.rootObjects().isEmpty()) {
             QObject* mainWindow = engine.rootObjects().first();
@@ -97,6 +132,54 @@ int main(int argc, char* argv[])
 
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
+
+            // --qa-play: load + play through the normal production path. The
+            // shared core pointer is the same one the controllers observe, so
+            // no state is faked. For the memory probe the app just stays
+            // running inside app.exec() below.
+            if (!qaPlayPath.isEmpty()) {
+                const QByteArray utf8Path = qaPlayPath.toUtf8();
+                ag_player_load(core, utf8Path.constData());
+                ag_player_play(core);
+            }
+
+            // --qa-screenshot-main / --qa-screenshot-mini: poll for AG_PLAYING,
+            // wait 500ms for the waveform to render, grab the window, save the
+            // PNG, then quit through the normal shutdown path.
+            const bool wantScreenshotMain = !qaScreenshotMain.isEmpty();
+            const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
+            if (wantScreenshotMain || wantScreenshotMini) {
+                QWindow* const targetWindow = wantScreenshotMain
+                    ? qobject_cast<QWindow*>(mainWindow)
+                    : qobject_cast<QWindow*>(miniWindow);
+                const QString screenshotPath = wantScreenshotMain
+                    ? qaScreenshotMain : qaScreenshotMini;
+
+                auto attempts = std::make_shared<int>(0);
+                auto pollFunc = std::make_shared<std::function<void()>>();
+                *pollFunc = [core, targetWindow, screenshotPath,
+                             attempts, pollFunc]() {
+                    ag_playback_snapshot snapshot{};
+                    ag_player_snapshot(core, &snapshot);
+                    if (snapshot.state == AG_PLAYING) {
+                        QTimer::singleShot(500, [targetWindow, screenshotPath]() {
+                            auto* const quickWin =
+                                qobject_cast<QQuickWindow*>(targetWindow);
+                            if (quickWin != nullptr) {
+                                quickWin->grabWindow().save(screenshotPath);
+                            }
+                            QCoreApplication::quit();
+                        });
+                        return;
+                    }
+                    if (++(*attempts) > 200) { // 10s timeout at 50ms polls
+                        QCoreApplication::quit();
+                        return;
+                    }
+                    QTimer::singleShot(50, *pollFunc);
+                };
+                QTimer::singleShot(50, *pollFunc);
+            }
 
             result = app.exec();
 

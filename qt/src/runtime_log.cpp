@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QMessageLogContext>
+#include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QtGlobal>
 
@@ -67,7 +68,17 @@ void RuntimeLog::install(const QString& logPath)
     if (instance_ != nullptr) {
         return;
     }
-    instance_ = new RuntimeLog(logPath.isEmpty() ? defaultLogPath() : logPath);
+    QString resolved = logPath;
+    if (resolved.isEmpty()) {
+        // Honor AGPLAYER_LOG_DIR so QA tooling can redirect logs to a
+        // sandbox-writable location without touching QStandardPaths.
+        const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        const QString envDir = env.value(QStringLiteral("AGPLAYER_LOG_DIR"));
+        if (!envDir.isEmpty()) {
+            resolved = QDir(envDir).filePath(QStringLiteral("agplayer.log"));
+        }
+    }
+    instance_ = new RuntimeLog(resolved.isEmpty() ? defaultLogPath() : resolved);
     previousMessageHandler = qInstallMessageHandler(
         [](QtMsgType type, const QMessageLogContext& context, const QString& message) {
             if (RuntimeLog::instance_ != nullptr) {

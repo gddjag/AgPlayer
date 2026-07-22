@@ -21,6 +21,22 @@ agplayer_enable_warnings(c_api_lifecycle_test)
 
 add_test(NAME c_api_lifecycle_test COMMAND c_api_lifecycle_test)
 
+add_executable(format_matrix_test
+    core/format_matrix_test.cpp
+)
+set_target_properties(format_matrix_test PROPERTIES AUTOMOC ON)
+target_link_libraries(format_matrix_test PRIVATE agplayer_core Qt6::Test)
+target_compile_definitions(format_matrix_test PRIVATE
+    AGPLAYER_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/generated"
+)
+agplayer_enable_warnings(format_matrix_test)
+add_test(NAME format_matrix_test COMMAND format_matrix_test)
+set_tests_properties(format_matrix_test PROPERTIES
+    TIMEOUT 120
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(pcm_ring_buffer_test
     core/pcm_ring_buffer_test.cpp
 )

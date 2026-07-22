@@ -90,6 +90,7 @@ int main(const int argc, char** argv)
 #endif
 
     assert(argc == 4);
+    (void)argc;
     agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
     assert(engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
     assert(engine.set_mode(agplayer::PlaybackMode::Sequential) == AG_OK);
@@ -100,6 +101,7 @@ int main(const int argc, char** argv)
 
     const std::size_t boundary = sample_rate * channels;
     assert(std::abs(captured[boundary] - captured[boundary - channels]) < 0.05F);
+    (void)boundary;
     const agplayer::EngineSnapshot internal_snapshot = engine.snapshot();
     assert(internal_snapshot.track_index == 1U);
     assert(internal_snapshot.track_count == 2U);
