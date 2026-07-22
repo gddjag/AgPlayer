@@ -53,7 +53,17 @@ public:
         const std::size_t write_frame = write_frame_.load(std::memory_order_acquire);
         const std::size_t frames = std::min(frame_count, write_frame - read_frame);
         copy_from_storage(interleaved, read_frame, frames);
-        read_frame_.store(read_frame + frames, std::memory_order_release);
+        // Use CAS to handle a concurrent clear(): if clear() advanced read_frame
+        // past our loaded value, our copied data is stale -- discard it by
+        // returning 0 so the caller fills with silence.
+        std::size_t expected = read_frame;
+        if (!read_frame_.compare_exchange_strong(
+                expected,
+                read_frame + frames,
+                std::memory_order_release,
+                std::memory_order_relaxed)) {
+            return 0U;
+        }
         return frames;
     }
 

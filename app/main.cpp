@@ -14,6 +14,12 @@
 #include <functional>
 #include <memory>
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
@@ -180,6 +186,21 @@ int main(int argc, char* argv[])
                 };
                 QTimer::singleShot(50, *pollFunc);
             }
+
+            // Trim the working set a few seconds after startup. During launch
+            // the OS faults in many pages for DLL init, relocation, and one-time
+            // setup that are not touched again during steady-state playback.
+            // SetProcessWorkingSetSize(-1, -1) asks the OS to page those out,
+            // reducing physical RAM usage. Actively-used pages (audio callback,
+            // decode loop, QML scene graph) are re-faulted immediately and stay
+            // resident, so playback is unaffected.
+            QTimer::singleShot(3000, []() {
+#ifdef Q_OS_WIN
+                SetProcessWorkingSetSize(GetCurrentProcess(),
+                                         static_cast<SIZE_T>(-1),
+                                         static_cast<SIZE_T>(-1));
+#endif
+            });
 
             result = app.exec();
 

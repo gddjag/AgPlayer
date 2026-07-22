@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <random>
@@ -235,6 +236,55 @@ public:
             return AG_INVALID_ARGUMENT;
         }
 
+        // Fast path: the decode thread is running. Hand the seek off to it
+        // via atomic flags so we avoid stopping/restarting the output device
+        // and decode thread (saves ~30ms of ma_device_start/stop + thread
+        // join/create overhead per seek). The output device keeps running;
+        // render() emits silence while seeking_ is set.
+        if (decode_running_.load(std::memory_order_acquire)) {
+            seek_done_.store(false, std::memory_order_release);
+            seek_target_ms_.store(position_ms, std::memory_order_release);
+            seeking_.store(true, std::memory_order_release);
+            seek_requested_.store(true, std::memory_order_release);
+            seek_cv_.notify_one();
+
+            // Wait for the decode thread to complete the seek. Using a
+            // condition_variable instead of sleep_for() because Windows
+            // timer granularity is ~15ms, which would make the polling loop
+            // far slower than the actual seek (~0.02ms). The CV wakes
+            // immediately when the decode thread signals completion.
+            {
+                std::unique_lock<std::mutex> lock(seek_mutex_);
+                seek_cv_.wait_for(lock,
+                    std::chrono::seconds(2),
+                    [this] {
+                        return seek_done_.load(std::memory_order_acquire)
+                               || !decode_running_.load(
+                                      std::memory_order_acquire);
+                    });
+            }
+
+            if (seek_done_.load(std::memory_order_acquire)) {
+                seek_done_.store(false, std::memory_order_release);
+                seeking_.store(false, std::memory_order_release);
+                const ag_result result =
+                    seek_result_.load(std::memory_order_acquire);
+                if (result != AG_OK) {
+                    return enter_error(result);
+                }
+                return state_.load(std::memory_order_acquire)
+                                == EngineState::Error
+                           ? current_error()
+                           : AG_OK;
+            }
+            // Timed out or thread died -- fall through to the slow path.
+            seeking_.store(false, std::memory_order_release);
+            seek_requested_.store(false, std::memory_order_release);
+        }
+
+        // Slow path: stop the decode thread and perform the seek on the main
+        // thread. Used when the decode thread is not running (e.g. EOF,
+        // stopped state) or the fast path bailed out.
         const EngineState previous_state = state_.load(std::memory_order_acquire);
         const bool resume = previous_state == EngineState::Playing;
         if (stop_output() != AG_OK) {
@@ -370,7 +420,8 @@ public:
         }
         const std::size_t channels = static_cast<std::size_t>(channels_);
         if (state_.load(std::memory_order_acquire) != EngineState::Playing
-            || device_lost_.load(std::memory_order_acquire)) {
+            || device_lost_.load(std::memory_order_acquire)
+            || seeking_.load(std::memory_order_acquire)) {
             std::fill(output, output + requested_frames * channels, 0.0F);
             return;
         }
@@ -558,6 +609,10 @@ private:
     ag_result start_decode_thread() noexcept
     {
         stop_decode_.store(false, std::memory_order_release);
+        seek_requested_.store(false, std::memory_order_release);
+        seek_done_.store(false, std::memory_order_release);
+        seeking_.store(false, std::memory_order_release);
+        decode_running_.store(false, std::memory_order_release);
         try {
             decode_thread_ = std::thread([this] { decode_loop(); });
             return AG_OK;
@@ -570,19 +625,75 @@ private:
     void stop_decode_thread() noexcept
     {
         stop_decode_.store(true, std::memory_order_release);
+        // Clear any pending seek request so a restarting thread does not pick
+        // up a stale target from a previous seek.
+        seek_requested_.store(false, std::memory_order_release);
+        seeking_.store(false, std::memory_order_release);
+        // Wake the decode thread if it is blocked on the seek CV.
+        seek_cv_.notify_all();
         if (decode_thread_.joinable()) {
             decode_thread_.join();
         }
+        decode_running_.store(false, std::memory_order_release);
     }
 
     void decode_loop() noexcept
     {
+        struct RunningGuard {
+            std::atomic<bool>& flag;
+            explicit RunningGuard(std::atomic<bool>& f) noexcept : flag(f)
+            {
+                flag.store(true, std::memory_order_release);
+            }
+            ~RunningGuard() noexcept
+            {
+                flag.store(false, std::memory_order_release);
+            }
+        } guard{decode_running_};
         try {
             DecodedAudioBlock block;
             std::size_t frame_offset = 0U;
             while (!stop_decode_.load(std::memory_order_acquire)) {
+            handle_top_of_loop:
                 if (device_lost_.load(std::memory_order_acquire)) {
                     return;
+                }
+                // Handle a pending seek request from the main thread. The
+                // decode thread owns the decoder and timeline, so performing
+                // the seek here avoids stopping the output device and
+                // recreating the decode thread.
+                if (seek_requested_.load(std::memory_order_acquire)) {
+                    const std::int64_t target_ms =
+                        seek_target_ms_.load(std::memory_order_acquire);
+                    ag_result result = restore_published_decoder();
+                    if (result == AG_OK) {
+                        result = decoder_.seek(target_ms);
+                    }
+                    if (result == AG_OK) {
+                        ring_buffer_->clear();
+                        const std::int64_t position_frames =
+                            (target_ms * sample_rate_ + 999) / 1'000;
+                        decode_track_index_ = session_.index();
+                        reset_timeline(position_frames);
+                        terminal_error_.store(AG_OK,
+                                              std::memory_order_release);
+                    }
+                    seek_result_.store(result, std::memory_order_release);
+                    seek_requested_.store(false,
+                                         std::memory_order_release);
+                    seeking_.store(false, std::memory_order_release);
+                    seek_done_.store(true, std::memory_order_release);
+                    seek_cv_.notify_one();
+                    // Discard any pre-seek decoded data so the next read
+                    // fetches fresh samples from the new position.
+                    block = {};
+                    frame_offset = 0U;
+                    if (result != AG_OK) {
+                        // Seek failed: exit so the main thread can enter
+                        // the error state and restart the decode thread.
+                        return;
+                    }
+                    continue;
                 }
                 if (frame_offset < block.frames) {
                     const std::size_t written = ring_buffer_->write(
@@ -592,7 +703,17 @@ private:
                     frame_offset += written;
                     produced_frames_total_ += static_cast<std::int64_t>(written);
                     if (written == 0U) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        // Ring buffer full. Wait on the seek CV so that a
+                        // seek request can wake us immediately instead of
+                        // suffering Windows timer granularity (~15ms).
+                        std::unique_lock<std::mutex> lock(seek_mutex_);
+                        seek_cv_.wait_for(lock, std::chrono::milliseconds(10),
+                            [this] {
+                                return seek_requested_.load(
+                                           std::memory_order_acquire)
+                                       || stop_decode_.load(
+                                              std::memory_order_acquire);
+                            });
                     }
                     continue;
                 }
@@ -617,7 +738,26 @@ private:
                 while (pending_boundary_frame_.load(std::memory_order_acquire)
                            != no_pending_boundary
                        && !stop_decode_.load(std::memory_order_acquire)) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    if (seek_requested_.load(std::memory_order_acquire)) {
+                        // A seek was requested while waiting for a pending
+                        // track transition. Abandon the transition so the
+                        // seek handler at the top of the loop can run. The
+                        // seek's reset_timeline() will also clear the
+                        // pending boundary.
+                        pending_boundary_frame_.store(no_pending_boundary,
+                                                      std::memory_order_release);
+                        goto handle_top_of_loop;
+                    }
+                    {
+                        std::unique_lock<std::mutex> lock(seek_mutex_);
+                        seek_cv_.wait_for(lock, std::chrono::milliseconds(1),
+                            [this] {
+                                return seek_requested_.load(
+                                           std::memory_order_acquire)
+                                       || stop_decode_.load(
+                                              std::memory_order_acquire);
+                            });
+                    }
                 }
                 if (stop_decode_.load(std::memory_order_acquire)) {
                     return;
@@ -842,6 +982,14 @@ private:
     std::atomic<bool> stop_decode_{false};
     std::atomic<bool> decode_eof_{false};
     std::atomic<bool> device_lost_{false};
+    std::atomic<bool> decode_running_{false};
+    std::atomic<bool> seeking_{false};
+    std::atomic<bool> seek_requested_{false};
+    std::atomic<std::int64_t> seek_target_ms_{0};
+    std::atomic<ag_result> seek_result_{AG_OK};
+    std::atomic<bool> seek_done_{false};
+    std::mutex seek_mutex_;
+    std::condition_variable seek_cv_;
     std::atomic<EngineState> state_{EngineState::Stopped};
     std::atomic<ag_result> terminal_error_{AG_OK};
     std::atomic<std::int64_t> rendered_frames_total_{0};
