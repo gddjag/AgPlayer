@@ -4,5 +4,5 @@ class PlaybackController;
 class WindowController;
 
 void registerAgPlayerQmlTypes();
-void registerAgPlayerQmlTypes(PlaybackController* playbackController,
-                              WindowController* windowController);
+void registerAgPlayerQmlTypes(PlaybackController& playbackController,
+                              WindowController& windowController);

@@ -79,7 +79,7 @@ PlaybackController::PlaybackController(ag_player* player,
     : QObject(parent), player_(player)
 {
     setLibraryModel(library);
-    pollTimer_.setInterval(34);
+    pollTimer_.setInterval(PollIntervalMs);
     pollTimer_.setTimerType(Qt::PreciseTimer);
     connect(&pollTimer_, &QTimer::timeout, this, &PlaybackController::pollSnapshot);
     pollSnapshot();

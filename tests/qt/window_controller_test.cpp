@@ -1,6 +1,7 @@
 #include "window_controller.hpp"
 
 #include <QTest>
+#include <QWindow>
 
 #include <vector>
 
@@ -9,8 +10,10 @@ class WindowControllerTest final : public QObject {
 
 private slots:
     void switchingWindowsDoesNotRecreatePlayback();
+    void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
     void shutdownIsOrderedAndIdempotent();
+    void missingShutdownCollaboratorsRemainIdempotent();
 };
 
 void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
@@ -22,6 +25,30 @@ void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
     windows.showMain();
     QVERIFY(windows.mainVisible());
     QVERIFY(!windows.miniVisible());
+}
+
+void WindowControllerTest::updatesExistingWindowObjectsAndFlags()
+{
+    QWindow mainWindow;
+    QWindow miniWindow;
+    QWindow* const originalMiniWindow = &miniWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, &miniWindow);
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+
+    windows.showMini();
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(miniWindow.isVisible());
+    windows.setAlwaysOnTop(true);
+    QCOMPARE(&miniWindow, originalMiniWindow);
+    QVERIFY(miniWindow.flags().testFlag(Qt::WindowStaysOnTopHint));
+    windows.setAlwaysOnTop(false);
+    QVERIFY(!miniWindow.flags().testFlag(Qt::WindowStaysOnTopHint));
+
+    windows.showMain();
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
 }
 
 void WindowControllerTest::visibilityWaitsForDestinationReadiness()
@@ -62,5 +89,16 @@ void WindowControllerTest::shutdownIsOrderedAndIdempotent()
     QCOMPARE(calls, std::vector<int>({1, 2, 3, 4}));
 }
 
-QTEST_GUILESS_MAIN(WindowControllerTest)
+void WindowControllerTest::missingShutdownCollaboratorsRemainIdempotent()
+{
+    int quitCalls = 0;
+    WindowController::ShutdownActions actions;
+    actions.quitApplication = [&quitCalls] { ++quitCalls; };
+    WindowController windows(std::move(actions));
+    windows.requestClose();
+    windows.requestClose();
+    QCOMPARE(quitCalls, 1);
+}
+
+QTEST_MAIN(WindowControllerTest)
 #include "window_controller_test.moc"

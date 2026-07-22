@@ -182,3 +182,6 @@ set_tests_properties(import_controller_test PROPERTIES
 set_tests_properties(playback_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
+set_tests_properties(window_controller_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)

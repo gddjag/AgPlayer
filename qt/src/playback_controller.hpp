@@ -24,6 +24,8 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
 
 public:
+    static constexpr int PollIntervalMs = 34;
+
     enum State { Stopped, Loading, Playing, Paused, Error };
     Q_ENUM(State)
 
