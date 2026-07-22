@@ -29,4 +29,5 @@ find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)
 
 add_subdirectory(core)
+add_subdirectory(qt)
 add_subdirectory(tests)
