@@ -54,7 +54,6 @@ private:
     ProbeFunction probe_;
     std::shared_ptr<ImportCallbackState> callbackState_;
     QFuture<void> future_;
-    std::atomic_bool cancelled_{false};
     double progress_ = 0.0;
     bool busy_ = false;
     QStringList errors_;

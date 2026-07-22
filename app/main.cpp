@@ -3,7 +3,6 @@
 #include <QQmlComponent>
 #include <QStandardPaths>
 #include <QWindow>
-#include <qqml.h>
 
 #include <agplayer/c_api.h>
 
@@ -11,8 +10,8 @@
 #include "library_model.hpp"
 #include "library_store.hpp"
 #include "playback_controller.hpp"
+#include "qml_registration.hpp"
 #include "runtime_log.hpp"
-#include "waveform_item.hpp"
 #include "window_controller.hpp"
 
 int main(int argc, char* argv[])
@@ -61,11 +60,7 @@ int main(int argc, char* argv[])
         ImportController importer(&library);
         WindowController windows;
 
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", &library);
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", &playback);
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", &importer);
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", &windows);
-        qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
+        register_agplayer_qml_types(&library, &playback, &importer, &windows);
 
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },

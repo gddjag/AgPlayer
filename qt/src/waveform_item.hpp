@@ -13,7 +13,7 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(qreal position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(qreal duration READ duration WRITE setDuration NOTIFY durationChanged)
     Q_PROPERTY(qint64 hoverPosition READ hoverPosition NOTIFY hoverPositionChanged)
-    Q_PROPERTY(qreal analysisProgress READ analysisProgress WRITE setAnalysisProgress
+    Q_PROPERTY(double analysisProgress READ analysisProgress WRITE setAnalysisProgress
                    NOTIFY analysisProgressChanged)
 
 public:
@@ -30,8 +30,8 @@ public:
 
     qint64 hoverPosition() const;
 
-    qreal analysisProgress() const;
-    void setAnalysisProgress(qreal progress);
+    double analysisProgress() const;
+    void setAnalysisProgress(double progress);
 
     Q_INVOKABLE qint64 timeForX(qreal x) const;
 
@@ -68,6 +68,6 @@ private:
     qint64 position_ = 0;
     qint64 duration_ = 0;
     qint64 hoverPosition_ = -1;
-    qreal analysisProgress_ = 0.0;
+    double analysisProgress_ = 0.0;
     bool pointerPressed_ = false;
 };

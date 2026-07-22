@@ -1,8 +1,8 @@
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "playback_controller.hpp"
+#include "qml_registration.hpp"
 #include "runtime_log.hpp"
-#include "waveform_item.hpp"
 #include "window_controller.hpp"
 
 #include <agplayer/c_api.h>
@@ -15,7 +15,6 @@
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QtPlugin>
-#include <QtQml/qqml.h>
 #include <QtQuickTest/quicktest.h>
 
 #include <memory>
@@ -116,11 +115,8 @@ public slots:
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
 
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library_.get());
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback_.get());
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer_.get());
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows_.get());
-        qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
+        register_agplayer_qml_types(library_.get(), playback_.get(),
+                                    importer_.get(), windows_.get());
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)

@@ -107,7 +107,7 @@ void WaveformItem::setPeaks(const QVariantList& peaks)
 
 qreal WaveformItem::position() const
 {
-    return position_;
+    return static_cast<qreal>(position_);
 }
 
 void WaveformItem::setPosition(qreal position)
@@ -125,7 +125,7 @@ void WaveformItem::setPosition(qreal position)
 
 qreal WaveformItem::duration() const
 {
-    return duration_;
+    return static_cast<qreal>(duration_);
 }
 
 void WaveformItem::setDuration(qreal duration)
@@ -153,15 +153,15 @@ qint64 WaveformItem::hoverPosition() const
     return hoverPosition_;
 }
 
-qreal WaveformItem::analysisProgress() const
+double WaveformItem::analysisProgress() const
 {
     return analysisProgress_;
 }
 
-void WaveformItem::setAnalysisProgress(qreal progress)
+void WaveformItem::setAnalysisProgress(double progress)
 {
-    const qreal finite = std::isfinite(progress) ? progress : 0.0;
-    const qreal clamped = std::clamp(finite, qreal{0.0}, qreal{1.0});
+    const double finite = std::isfinite(progress) ? progress : 0.0;
+    const double clamped = std::clamp(finite, 0.0, 1.0);
     if (qFuzzyCompare(clamped, analysisProgress_)) {
         return;
     }

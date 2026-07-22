@@ -10,12 +10,17 @@
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 
+#include <atomic>
+#include <memory>
 #include <mutex>
 
 struct ImportCallbackState {
     std::mutex mutex;
     ImportController* controller = nullptr;
-    std::atomic_bool* cancelled = nullptr;
+    // Shared ownership so the background task can read the cancelled flag
+    // safely after the ImportController is destroyed (the destructor does
+    // not wait for the task — see ~ImportController).
+    std::shared_ptr<std::atomic_bool> cancelled;
 };
 
 namespace {
@@ -158,6 +163,13 @@ bool isCancelled(const std::shared_ptr<ImportCallbackState>& state)
     return state->cancelled != nullptr
            && state->cancelled->load(std::memory_order_relaxed);
 }
+
+void markCancelled(const std::shared_ptr<ImportCallbackState>& state, bool value)
+{
+    if (state->cancelled != nullptr) {
+        state->cancelled->store(value, std::memory_order_release);
+    }
+}
 }
 
 ImportController::ImportController(LibraryModel* model, QObject* parent)
@@ -172,19 +184,28 @@ ImportController::ImportController(LibraryModel* model, ProbeFunction probe, QOb
       callbackState_(std::make_shared<ImportCallbackState>())
 {
     callbackState_->controller = this;
-    callbackState_->cancelled = &cancelled_;
+    callbackState_->cancelled = std::make_shared<std::atomic_bool>(false);
 }
 
 ImportController::~ImportController()
 {
-    cancel();
+    // Mark the background task as cancelled so it exits gracefully on the
+    // next iteration.  We must NOT call cancel() (which waits for the
+    // future) — the probe might be blocked (e.g. on slow I/O or a test
+    // semaphore), and waiting would deadlock.  The future's lambda holds a
+    // shared_ptr to callbackState_, so it can safely check the cancelled
+    // flag and post no-ops (controller == nullptr) after we're gone.
+    // QObject's destructor drops any still-queued invokeMethod events for
+    // this object, so the raw pointer captured by postToController never
+    // fires into a destroyed receiver.
+    markCancelled(callbackState_, true);
     std::lock_guard<std::mutex> lock(callbackState_->mutex);
     callbackState_->controller = nullptr;
 }
 
 void ImportController::cancel()
 {
-    cancelled_.store(true, std::memory_order_release);
+    markCancelled(callbackState_, true);
     if (future_.isRunning()) {
         future_.waitForFinished();
     }
@@ -216,7 +237,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         return;
     }
 
-    cancelled_.store(false, std::memory_order_release);
+    markCancelled(callbackState_, false);
     errors_.clear();
     emit errorsChanged();
     progress_ = 0.0;
