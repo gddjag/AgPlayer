@@ -33,25 +33,75 @@ void PlaybackControllerTest::commandsReflectOnlyCoreSnapshots()
     ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
     ag_player* core = nullptr;
     QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
-    QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
     {
         PlaybackController controller(core);
-        const auto initialState = controller.state();
+        QSignalSpy durationChanged(&controller, &PlaybackController::durationMsChanged);
         QSignalSpy stateChanged(&controller, &PlaybackController::stateChanged);
+        QSignalSpy positionChanged(&controller, &PlaybackController::positionMsChanged);
+
+        QCOMPARE(controller.durationMs(), 0);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        QTRY_COMPARE(controller.durationMs(), 2'000);
+        QCOMPARE(durationChanged.count(), 1);
+        ag_playback_snapshot snapshot{};
+        QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
+        QCOMPARE(snapshot.duration_ms, 2'000);
+        QCOMPARE(controller.durationMs(), snapshot.duration_ms);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(durationChanged.count(), 1);
+
+        const auto initialState = controller.state();
         controller.play();
         QCOMPARE(controller.state(), initialState);
         QTRY_COMPARE(controller.state(), PlaybackController::Playing);
-        QVERIFY(stateChanged.count() >= 1);
+        QCOMPARE(stateChanged.count(), 1);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(stateChanged.count(), 1);
         controller.pause();
         QCOMPARE(controller.state(), PlaybackController::Playing);
         QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QCOMPARE(stateChanged.count(), 2);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(stateChanged.count(), 2);
 
         controller.togglePlayback();
         QCOMPARE(controller.state(), PlaybackController::Paused);
         QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QCOMPARE(stateChanged.count(), 3);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(stateChanged.count(), 3);
 
-        controller.seek(250);
-        QTRY_VERIFY(controller.positionMs() >= 250);
+        controller.pause();
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QCOMPARE(stateChanged.count(), 4);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(stateChanged.count(), 4);
+
+        const qint64 pausedPosition = controller.positionMs();
+        const qint64 laterTarget = controller.durationMs() * 3 / 4;
+        const qint64 earlierTarget = controller.durationMs() / 4;
+        const qint64 seekTarget = qAbs(laterTarget - pausedPosition) >= 100
+                                      ? laterTarget
+                                      : earlierTarget;
+        QVERIFY(seekTarget > 0);
+        QVERIFY(seekTarget < controller.durationMs());
+        QVERIFY(qAbs(seekTarget - pausedPosition) >= 100);
+        positionChanged.clear();
+
+        controller.seek(seekTarget);
+        QCOMPARE(controller.positionMs(), pausedPosition);
+        QTRY_VERIFY(qAbs(controller.positionMs() - seekTarget) <= 2);
+        QCOMPARE(positionChanged.count(), 1);
+        QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
+        QVERIFY(qAbs(snapshot.position_ms - seekTarget) <= 2);
+        QCOMPARE(controller.positionMs(), snapshot.position_ms);
+        const qint64 landedPosition = controller.positionMs();
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(positionChanged.count(), 1);
+        QCOMPARE(controller.positionMs(), landedPosition);
+        QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
+        QCOMPARE(snapshot.position_ms, landedPosition);
 
         QSignalSpy volumeChanged(&controller, &PlaybackController::volumeChanged);
         controller.setVolume(0.25F);
@@ -145,20 +195,44 @@ void PlaybackControllerTest::unavailableRowsAreExcludedFromQueueIndices()
     QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
     {
         PlaybackController controller(core, &model);
+        QSignalSpy indexChanged(&controller, &PlaybackController::trackIndexChanged);
+        QSignalSpy countChanged(&controller, &PlaybackController::trackCountChanged);
+        QSignalSpy trackIdChanged(&controller, &PlaybackController::currentTrackIdChanged);
         controller.playRow(2);
         QTRY_COMPARE(controller.trackCount(), 2);
         QTRY_COMPARE(controller.trackIndex(), 1);
         QCOMPARE(controller.currentTrackId(), QStringLiteral("third"));
+        QCOMPARE(countChanged.count(), 1);
+        QCOMPARE(indexChanged.count(), 1);
+        QCOMPARE(trackIdChanged.count(), 1);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(countChanged.count(), 1);
+        QCOMPARE(indexChanged.count(), 1);
+        QCOMPARE(trackIdChanged.count(), 1);
 
         controller.previous();
         QCOMPARE(controller.trackIndex(), 1);
         QTRY_COMPARE(controller.trackIndex(), 0);
         QCOMPARE(controller.currentTrackId(), QStringLiteral("first"));
+        QCOMPARE(countChanged.count(), 1);
+        QCOMPARE(indexChanged.count(), 2);
+        QCOMPARE(trackIdChanged.count(), 2);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(countChanged.count(), 1);
+        QCOMPARE(indexChanged.count(), 2);
+        QCOMPARE(trackIdChanged.count(), 2);
 
         controller.next();
         QCOMPARE(controller.trackIndex(), 0);
         QTRY_COMPARE(controller.trackIndex(), 1);
         QCOMPARE(controller.currentTrackId(), QStringLiteral("third"));
+        QCOMPARE(countChanged.count(), 1);
+        QCOMPARE(indexChanged.count(), 3);
+        QCOMPARE(trackIdChanged.count(), 3);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(countChanged.count(), 1);
+        QCOMPARE(indexChanged.count(), 3);
+        QCOMPARE(trackIdChanged.count(), 3);
     }
     ag_player_destroy(core);
 }
