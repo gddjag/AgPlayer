@@ -7,8 +7,6 @@ add_library(agplayer_qt STATIC
     src/library_store.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
-    src/qml_registration.cpp
-    src/qml_registration.hpp
     src/window_controller.cpp
     src/window_controller.hpp
     src/waveform_item.cpp

@@ -155,7 +155,6 @@ foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
     import_controller_test
-    qml_registration_test
     playback_controller_test
     window_controller_test
     waveform_item_test

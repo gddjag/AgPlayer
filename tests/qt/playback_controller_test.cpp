@@ -1,12 +1,12 @@
 #include "library_model.hpp"
 #include "playback_controller.hpp"
-#include "qml_registration.hpp"
 #include "window_controller.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QtQml/qqml.h>
 #include <QFile>
 #include <QScopedPointer>
 #include <QSignalSpy>
@@ -296,8 +296,8 @@ void PlaybackControllerTest::playbackControllerIsAnAgPlayerQmlSingleton()
 {
     PlaybackController playback;
     WindowController windows;
-    registerAgPlayerQmlTypes();
-    registerAgPlayerQmlTypes(playback, windows);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", &playback);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", &windows);
     QQmlEngine engine;
     QQmlComponent component(&engine);
     component.setData(
