@@ -15,6 +15,7 @@
 struct ImportCallbackState {
     std::mutex mutex;
     ImportController* controller = nullptr;
+    std::atomic_bool* cancelled = nullptr;
 };
 
 namespace {
@@ -151,6 +152,12 @@ void postToController(const std::shared_ptr<ImportCallbackState>& state, Functio
         [controller, function = std::move(function)]() mutable { function(controller); },
         Qt::QueuedConnection);
 }
+
+bool isCancelled(const std::shared_ptr<ImportCallbackState>& state)
+{
+    return state->cancelled != nullptr
+           && state->cancelled->load(std::memory_order_relaxed);
+}
 }
 
 ImportController::ImportController(LibraryModel* model, QObject* parent)
@@ -165,12 +172,27 @@ ImportController::ImportController(LibraryModel* model, ProbeFunction probe, QOb
       callbackState_(std::make_shared<ImportCallbackState>())
 {
     callbackState_->controller = this;
+    callbackState_->cancelled = &cancelled_;
 }
 
 ImportController::~ImportController()
 {
+    cancel();
     std::lock_guard<std::mutex> lock(callbackState_->mutex);
     callbackState_->controller = nullptr;
+}
+
+void ImportController::cancel()
+{
+    cancelled_.store(true, std::memory_order_release);
+    if (future_.isRunning()) {
+        future_.waitForFinished();
+    }
+    if (busy_) {
+        busy_ = false;
+        emit busyChanged();
+        emit finished();
+    }
 }
 
 double ImportController::progress() const noexcept
@@ -194,6 +216,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         return;
     }
 
+    cancelled_.store(false, std::memory_order_release);
     errors_.clear();
     emit errorsChanged();
     progress_ = 0.0;
@@ -235,6 +258,15 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         }
         int completed = 0;
         for (const QString& path : paths) {
+            if (isCancelled(callbackState)) {
+                postToController(callbackState,
+                                 [completed, total = paths.size()](
+                                     ImportController* controller) {
+                                     controller->handleResult({}, {AG_CANCELLED, {}, {}},
+                                                              total, total);
+                                 });
+                return;
+            }
             ProbeResult result = probe(path);
             ++completed;
             postToController(

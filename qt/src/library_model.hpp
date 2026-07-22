@@ -62,9 +62,11 @@ public:
 
     Q_INVOKABLE bool setFavorite(int row, bool favorite);
     Q_INVOKABLE void playRow(int row);
+    Q_INVOKABLE void flush();
 
 signals:
     void playRequested(int row);
+    void flushRequested();
 
 private:
     QList<TrackRecord> tracks_;

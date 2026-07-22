@@ -60,6 +60,9 @@ public:
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
     void render(float* output, std::size_t requested_frames) noexcept;
     [[nodiscard]] std::size_t buffered_frames() const noexcept;
+    [[nodiscard]] bool device_lost() const noexcept;
+    ag_result retry_device() noexcept;
+    void simulate_device_loss() noexcept;
 
 private:
     class Impl;

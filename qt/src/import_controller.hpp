@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -37,6 +38,7 @@ public:
     bool busy() const noexcept;
     QStringList errors() const;
     Q_INVOKABLE void importUrls(const QList<QUrl>& urls);
+    void cancel();
 
 signals:
     void progressChanged();
@@ -52,6 +54,7 @@ private:
     ProbeFunction probe_;
     std::shared_ptr<ImportCallbackState> callbackState_;
     QFuture<void> future_;
+    std::atomic_bool cancelled_{false};
     double progress_ = 0.0;
     bool busy_ = false;
     QStringList errors_;

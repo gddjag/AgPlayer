@@ -265,6 +265,27 @@ ag_result ag_player_snapshot(const ag_player* player,
     });
 }
 
+ag_result ag_player_retry_device(ag_player* player)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] { return player->context.retry_device(); });
+}
+
+int ag_player_device_lost(const ag_player* player)
+{
+    return player != nullptr && player->context.device_lost() ? 1 : 0;
+}
+
+ag_result ag_player_simulate_device_loss(ag_player* player)
+{
+    if (player == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    guard_result([&] { player->context.simulate_device_loss(); return AG_OK; });
+    return AG_OK;
+}
+
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)
 {
     if (out_metadata == nullptr) {

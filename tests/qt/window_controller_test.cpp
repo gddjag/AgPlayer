@@ -77,16 +77,17 @@ void WindowControllerTest::shutdownIsOrderedAndIdempotent()
 {
     std::vector<int> calls;
     WindowController::ShutdownActions actions;
-    actions.stopPlayback = [&calls] { calls.push_back(1); };
-    actions.flushLibrary = [&calls] { calls.push_back(2); };
-    actions.cancelWaveform = [&calls] { calls.push_back(3); };
-    actions.quitApplication = [&calls] { calls.push_back(4); };
+    actions.cancelWaveform = [&calls] { calls.push_back(1); };
+    actions.stopPlayback = [&calls] { calls.push_back(2); };
+    actions.flushLibrary = [&calls] { calls.push_back(3); };
+    actions.releaseCore = [&calls] { calls.push_back(4); };
+    actions.quitApplication = [&calls] { calls.push_back(5); };
     WindowController windows(std::move(actions));
 
     windows.requestClose();
     windows.requestClose();
 
-    QCOMPARE(calls, std::vector<int>({1, 2, 3, 4}));
+    QCOMPARE(calls, std::vector<int>({1, 2, 3, 4, 5}));
 }
 
 void WindowControllerTest::missingShutdownCollaboratorsRemainIdempotent()

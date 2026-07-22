@@ -15,9 +15,10 @@ class WindowController final : public QObject {
 
 public:
     struct ShutdownActions {
+        std::function<void()> cancelWaveform;
         std::function<void()> stopPlayback;
         std::function<void()> flushLibrary;
-        std::function<void()> cancelWaveform;
+        std::function<void()> releaseCore;
         std::function<void()> quitApplication;
     };
 

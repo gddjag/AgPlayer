@@ -151,6 +151,19 @@ add_test(NAME queue_gapless_test
 )
 set_tests_properties(queue_gapless_test PROPERTIES TIMEOUT 10)
 
+add_executable(recovery_test
+    core/recovery_test.cpp
+)
+add_dependencies(recovery_test decoder_fixture)
+target_link_libraries(recovery_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(recovery_test)
+
+add_test(NAME recovery_test
+    COMMAND recovery_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
+
 foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
@@ -158,6 +171,8 @@ foreach(qt_test IN ITEMS
     playback_controller_test
     window_controller_test
     waveform_item_test
+    shutdown_test
+    runtime_log_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
@@ -173,6 +188,9 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
 endforeach()
+
+set_tests_properties(shutdown_test PROPERTIES TIMEOUT 30)
+set_tests_properties(runtime_log_test PROPERTIES TIMEOUT 30)
 
 add_executable(qml_waveform_test
     qt/qml_waveform_test_main.cpp
@@ -242,6 +260,31 @@ agplayer_enable_warnings(qml_mini_player_test)
 add_test(NAME qml_mini_player_test COMMAND qml_mini_player_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_mini_player.qml)
 set_tests_properties(qml_mini_player_test PROPERTIES
     TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
+add_executable(qml_error_states_test
+    qt/qml_error_states_test_main.cpp
+)
+set_target_properties(qml_error_states_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_error_states_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+target_link_libraries(qml_error_states_test PRIVATE
+    agplayer_app_qml
+    agplayer_app_qmlplugin
+    Qt6::QuickTest
+)
+target_compile_definitions(qml_error_states_test PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+)
+agplayer_enable_warnings(qml_error_states_test)
+add_test(NAME qml_error_states_test COMMAND qml_error_states_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_error_states.qml)
+set_tests_properties(qml_error_states_test PROPERTIES
+    TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"

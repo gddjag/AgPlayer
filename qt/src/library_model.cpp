@@ -188,3 +188,8 @@ void LibraryModel::playRow(int row)
         emit playRequested(row);
     }
 }
+
+void LibraryModel::flush()
+{
+    emit flushRequested();
+}

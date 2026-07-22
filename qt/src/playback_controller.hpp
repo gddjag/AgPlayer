@@ -22,6 +22,7 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(qint64 trackCount READ trackCount NOTIFY trackCountChanged)
     Q_PROPERTY(QString currentTrackId READ currentTrackId NOTIFY currentTrackIdChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
+    Q_PROPERTY(bool deviceLost READ deviceLost NOTIFY deviceLostChanged)
 
 public:
     static constexpr int PollIntervalMs = 34;
@@ -46,8 +47,10 @@ public:
     qint64 trackCount() const noexcept;
     QString currentTrackId() const;
     QString errorMessage() const;
+    bool deviceLost() const noexcept;
 
     void setLibraryModel(LibraryModel* library);
+    void setPlayer(ag_player* player) noexcept;
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -61,6 +64,7 @@ public:
     Q_INVOKABLE void playRow(int row);
     Q_INVOKABLE void toggleFavorite();
     Q_INVOKABLE void toggleFavorite(int row);
+    Q_INVOKABLE void retryDevice();
 
 signals:
     void stateChanged();
@@ -73,6 +77,7 @@ signals:
     void trackCountChanged();
     void currentTrackIdChanged();
     void errorMessageChanged();
+    void deviceLostChanged();
 
 private:
     void pollSnapshot();
@@ -94,4 +99,5 @@ private:
     QString currentTrackId_;
     QString errorMessage_;
     QStringList queueTrackIds_;
+    bool deviceLost_ = false;
 };

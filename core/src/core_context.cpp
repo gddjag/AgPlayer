@@ -87,6 +87,22 @@ EngineSnapshot CoreContext::snapshot() const noexcept
     return audio_engine_.snapshot();
 }
 
+bool CoreContext::device_lost() const noexcept
+{
+    return audio_engine_.device_lost();
+}
+
+ag_result CoreContext::retry_device() noexcept
+{
+    return record(audio_engine_.retry_device(), "device retry failed");
+}
+
+void CoreContext::simulate_device_loss() noexcept
+{
+    audio_engine_.simulate_device_loss();
+    last_error_ = "device lost";
+}
+
 ag_result CoreContext::record(const ag_result result,
                               const char* operation) noexcept
 {

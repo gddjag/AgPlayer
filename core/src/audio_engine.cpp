@@ -369,7 +369,8 @@ public:
             return;
         }
         const std::size_t channels = static_cast<std::size_t>(channels_);
-        if (state_.load(std::memory_order_acquire) != EngineState::Playing) {
+        if (state_.load(std::memory_order_acquire) != EngineState::Playing
+            || device_lost_.load(std::memory_order_acquire)) {
             std::fill(output, output + requested_frames * channels, 0.0F);
             return;
         }
@@ -410,6 +411,50 @@ public:
         return ring_buffer_ == nullptr ? 0U : ring_buffer_->available_frames();
     }
 
+    [[nodiscard]] bool device_lost() const noexcept
+    {
+        return device_lost_.load(std::memory_order_acquire);
+    }
+
+    ag_result retry_device() noexcept
+    {
+        if (!device_lost_.load(std::memory_order_acquire)) {
+            return AG_OK;
+        }
+        if (!loaded_) {
+            // No media loaded: nothing to reinitialize. Clear the stale flag
+            // so callers (and tests) see the recovered state. The device will
+            // be initialized fresh on the next load().
+            device_lost_.store(false, std::memory_order_release);
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            return AG_OK;
+        }
+        try {
+            if (device_initialized_) {
+                ma_device_uninit(&device_);
+                device_initialized_ = false;
+            }
+            const ag_result device_result = initialize_device();
+            if (device_result != AG_OK) {
+                return device_result;
+            }
+            device_lost_.store(false, std::memory_order_release);
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Paused, std::memory_order_release);
+            return AG_OK;
+        } catch (...) {
+            return AG_INTERNAL_ERROR;
+        }
+    }
+
+    void simulate_device_loss() noexcept
+    {
+        device_lost_.store(true, std::memory_order_release);
+        stop_output();
+        state_.store(EngineState::Paused, std::memory_order_release);
+    }
+
 private:
     static void data_callback(ma_device* device,
                               void* output,
@@ -419,6 +464,29 @@ private:
         auto* const self = static_cast<Impl*>(device->pUserData);
         self->render(static_cast<float*>(output),
                      static_cast<std::size_t>(frame_count));
+    }
+
+    static void notification_callback(const ma_device_notification* notification) noexcept
+    {
+        if (notification == nullptr) {
+            return;
+        }
+        auto* const self = static_cast<Impl*>(notification->pDevice->pUserData);
+        if (self == nullptr) {
+            return;
+        }
+        // ma_device_notification_type_disconnected is not available in the
+        // miniaudio version shipped via vcpkg. interruption_began is the
+        // closest equivalent and fires when the audio session is interrupted
+        // (device unplugged, exclusive-mode takeover, etc.).
+        if (notification->type == ma_device_notification_type_interruption_began) {
+            self->device_lost_.store(true, std::memory_order_release);
+            EngineState expected = EngineState::Playing;
+            self->state_.compare_exchange_strong(expected,
+                                                 EngineState::Paused,
+                                                 std::memory_order_acq_rel,
+                                                 std::memory_order_acquire);
+        }
     }
 
     [[nodiscard]] bool output_ready() const noexcept
@@ -450,25 +518,28 @@ private:
             return AG_OK;
         }
 
-        ma_result result = MA_SUCCESS;
-        if (backend_ == AudioBackend::Null) {
-            const ma_backend backend = ma_backend_null;
-            result = ma_context_init(&backend, 1U, nullptr, &context_);
-        } else {
-            result = ma_context_init(nullptr, 0U, nullptr, &context_);
+        if (!context_initialized_) {
+            ma_result result = MA_SUCCESS;
+            if (backend_ == AudioBackend::Null) {
+                const ma_backend backend = ma_backend_null;
+                result = ma_context_init(&backend, 1U, nullptr, &context_);
+            } else {
+                result = ma_context_init(nullptr, 0U, nullptr, &context_);
+            }
+            if (result != MA_SUCCESS) {
+                return AG_DEVICE_ERROR;
+            }
+            context_initialized_ = true;
         }
-        if (result != MA_SUCCESS) {
-            return AG_DEVICE_ERROR;
-        }
-        context_initialized_ = true;
 
         ma_device_config config = ma_device_config_init(ma_device_type_playback);
         config.playback.format = ma_format_f32;
         config.playback.channels = static_cast<ma_uint32>(channels_);
         config.sampleRate = static_cast<ma_uint32>(sample_rate_);
         config.dataCallback = data_callback;
+        config.notificationCallback = notification_callback;
         config.pUserData = this;
-        result = ma_device_init(&context_, &config, &device_);
+        const ma_result result = ma_device_init(&context_, &config, &device_);
         if (result != MA_SUCCESS) {
             ma_context_uninit(&context_);
             context_initialized_ = false;
@@ -504,6 +575,9 @@ private:
             DecodedAudioBlock block;
             std::size_t frame_offset = 0U;
             while (!stop_decode_.load(std::memory_order_acquire)) {
+                if (device_lost_.load(std::memory_order_acquire)) {
+                    return;
+                }
                 if (frame_offset < block.frames) {
                     const std::size_t written = ring_buffer_->write(
                         block.samples.data() + frame_offset
@@ -717,6 +791,7 @@ private:
         decode_track_index_ = 0U;
         reset_timeline(0);
         terminal_error_.store(AG_OK, std::memory_order_release);
+        device_lost_.store(false, std::memory_order_release);
         state_.store(EngineState::Stopped, std::memory_order_release);
     }
 
@@ -760,6 +835,7 @@ private:
     std::thread decode_thread_;
     std::atomic<bool> stop_decode_{false};
     std::atomic<bool> decode_eof_{false};
+    std::atomic<bool> device_lost_{false};
     std::atomic<EngineState> state_{EngineState::Stopped};
     std::atomic<ag_result> terminal_error_{AG_OK};
     std::atomic<std::int64_t> rendered_frames_total_{0};
@@ -856,6 +932,21 @@ void AudioEngine::render(float* output,
 std::size_t AudioEngine::buffered_frames() const noexcept
 {
     return impl_->buffered_frames();
+}
+
+bool AudioEngine::device_lost() const noexcept
+{
+    return impl_->device_lost();
+}
+
+ag_result AudioEngine::retry_device() noexcept
+{
+    return impl_->retry_device();
+}
+
+void AudioEngine::simulate_device_loss() noexcept
+{
+    impl_->simulate_device_loss();
 }
 
 } // namespace agplayer

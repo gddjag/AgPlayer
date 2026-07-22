@@ -87,14 +87,17 @@ void WindowController::requestClose()
         return;
     }
     shutdownRequested_ = true;
+    if (shutdownActions_.cancelWaveform) {
+        shutdownActions_.cancelWaveform();
+    }
     if (shutdownActions_.stopPlayback) {
         shutdownActions_.stopPlayback();
     }
     if (shutdownActions_.flushLibrary) {
         shutdownActions_.flushLibrary();
     }
-    if (shutdownActions_.cancelWaveform) {
-        shutdownActions_.cancelWaveform();
+    if (shutdownActions_.releaseCore) {
+        shutdownActions_.releaseCore();
     }
     if (shutdownActions_.quitApplication) {
         shutdownActions_.quitApplication();

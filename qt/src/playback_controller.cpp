@@ -1,6 +1,7 @@
 #include "playback_controller.hpp"
 
 #include "library_model.hpp"
+#include "runtime_log.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -96,6 +97,7 @@ qint64 PlaybackController::trackIndex() const noexcept { return trackIndex_; }
 qint64 PlaybackController::trackCount() const noexcept { return trackCount_; }
 QString PlaybackController::currentTrackId() const { return currentTrackId_; }
 QString PlaybackController::errorMessage() const { return errorMessage_; }
+bool PlaybackController::deviceLost() const noexcept { return deviceLost_; }
 
 void PlaybackController::setLibraryModel(LibraryModel* library)
 {
@@ -105,6 +107,11 @@ void PlaybackController::setLibraryModel(LibraryModel* library)
         playRequestedConnection_ = connect(
             library_, &LibraryModel::playRequested, this, &PlaybackController::playRow);
     }
+}
+
+void PlaybackController::setPlayer(ag_player* player) noexcept
+{
+    player_ = player;
 }
 
 void PlaybackController::play()
@@ -218,6 +225,22 @@ void PlaybackController::toggleFavorite(int row)
     library_->setFavorite(row, !library_->tracks().at(row).favorite);
 }
 
+void PlaybackController::retryDevice()
+{
+    if (player_ == nullptr) {
+        return;
+    }
+    const ag_result result = ag_player_retry_device(player_);
+    if (result != AG_OK) {
+        RuntimeLog::log(result, QStringLiteral("Playback"),
+                        QStringLiteral("retry device failed"));
+        setErrorMessage(RuntimeLog::mapResult(result));
+    } else {
+        setErrorMessage(QString());
+    }
+    pollSnapshot();
+}
+
 void PlaybackController::pollSnapshot()
 {
     if (player_ == nullptr) {
@@ -226,6 +249,8 @@ void PlaybackController::pollSnapshot()
     ag_playback_snapshot snapshot{};
     const ag_result result = ag_player_snapshot(player_, &snapshot);
     if (result != AG_OK) {
+        RuntimeLog::log(result, QStringLiteral("Playback"),
+                        QStringLiteral("snapshot failed"));
         setErrorMessage(playerError(player_));
         return;
     }
@@ -234,6 +259,7 @@ void PlaybackController::pollSnapshot()
     const qint64 nextTrackIndex = checkedSize(snapshot.track_index);
     const qint64 nextTrackCount = checkedSize(snapshot.track_count);
     const Mode nextMode = toMode(snapshot.mode);
+    const bool nextDeviceLost = ag_player_device_lost(player_) != 0;
     QString nextTrackId;
     if (nextTrackIndex >= 0 && nextTrackIndex < queueTrackIds_.size()) {
         nextTrackId = queueTrackIds_.at(nextTrackIndex);
@@ -276,7 +302,18 @@ void PlaybackController::pollSnapshot()
         currentTrackId_ = std::move(nextTrackId);
         emit currentTrackIdChanged();
     }
-    setErrorMessage(nextState == Error ? playerError(player_) : QString());
+    if (deviceLost_ != nextDeviceLost) {
+        deviceLost_ = nextDeviceLost;
+        emit deviceLostChanged();
+    }
+    if (nextDeviceLost) {
+        setErrorMessage(RuntimeLog::mapResult(AG_DEVICE_ERROR));
+    } else if (nextState == Error) {
+        const QString detail = playerError(player_);
+        setErrorMessage(detail.isEmpty() ? RuntimeLog::mapResult(AG_INTERNAL_ERROR) : detail);
+    } else {
+        setErrorMessage(QString());
+    }
 }
 
 void PlaybackController::setErrorMessage(QString message)
@@ -290,7 +327,12 @@ void PlaybackController::setErrorMessage(QString message)
 void PlaybackController::runCommand(int result)
 {
     if (result != AG_OK) {
-        setErrorMessage(player_ != nullptr ? playerError(player_)
-                                           : QStringLiteral("Playback core is unavailable"));
+        const auto agRes = static_cast<ag_result>(result);
+        RuntimeLog::log(agRes, QStringLiteral("Playback"),
+                        player_ != nullptr ? playerError(player_)
+                                           : QStringLiteral("core unavailable"));
+        setErrorMessage(player_ != nullptr
+                            ? RuntimeLog::mapResult(agRes)
+                            : QStringLiteral("Playback core is unavailable"));
     }
 }
