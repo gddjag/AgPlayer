@@ -177,6 +177,12 @@ int main(int argc, char* argv[])
             // PNG, then quit through the normal shutdown path.
             const bool wantScreenshotMain = !qaScreenshotMain.isEmpty();
             const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
+            if (wantScreenshotMini && miniWindow != nullptr) {
+                auto* miniWin = qobject_cast<QWindow*>(miniWindow);
+                if (miniWin) {
+                    miniWin->show();
+                }
+            }
             if (qaErrorCode == 0 && (wantScreenshotMain || wantScreenshotMini)) {
                 QWindow* const targetWindow = wantScreenshotMain
                     ? qobject_cast<QWindow*>(mainWindow)
@@ -191,10 +197,17 @@ int main(int argc, char* argv[])
                     ag_playback_snapshot snapshot{};
                     ag_player_snapshot(core, &snapshot);
                     if (snapshot.state == AG_PLAYING) {
-                        QTimer::singleShot(500, [targetWindow, screenshotPath]() {
+                        // Ensure the window is visible and rendered before grabbing
+                        targetWindow->setVisible(true);
+                        targetWindow->requestActivate();
+                        QTimer::singleShot(1500, [targetWindow, screenshotPath]() {
                             auto* const quickWin =
                                 qobject_cast<QQuickWindow*>(targetWindow);
                             if (quickWin != nullptr) {
+                                quickWin->update();
+                                // Process events to let the scene graph render
+                                QCoreApplication::processEvents(
+                                    QEventLoop::AllEvents, 500);
                                 quickWin->grabWindow().save(screenshotPath);
                             }
                             QCoreApplication::quit();

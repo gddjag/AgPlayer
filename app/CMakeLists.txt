@@ -34,6 +34,15 @@ foreach(resource_file ${BRAND_FILES} ${ICON_FILES})
     set_source_files_properties(${resource_file} PROPERTIES QT_RESOURCE_ALIAS ${alias})
 endforeach()
 
+# Explicitly mark Theme.qml as a singleton type so the generated qmldir
+# includes the 'singleton' keyword. Must be set BEFORE qt_add_qml_module
+# processes the file. Without this, Theme.icon() calls fail with "Property
+# 'icon' of object [object Object] is not a function" and Theme color
+# properties resolve to undefined (QColor assignment errors).
+set_source_files_properties(qml/AgPlayer/theme/Theme.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+
 qt_add_qml_module(agplayer_app_qml
     STATIC
     URI AgPlayer
