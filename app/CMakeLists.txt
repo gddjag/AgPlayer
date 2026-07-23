@@ -50,6 +50,7 @@ qt_add_qml_module(agplayer_app_qml
     QML_FILES
         qml/AgPlayer/Main.qml
         qml/AgPlayer/MiniPlayerWindow.qml
+        qml/AgPlayer/AudioToolsWindow.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/PlayerPane.qml
@@ -57,6 +58,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/TrackList.qml
         qml/AgPlayer/components/EmptyLibrary.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
+        qml/AgPlayer/components/tools/ComingSoonPage.qml
+        qml/AgPlayer/components/tools/ToolSidebar.qml
+        qml/AgPlayer/components/tools/InfoEditPage.qml
     RESOURCES
         ${BRAND_FILES}
         ${ICON_FILES}
