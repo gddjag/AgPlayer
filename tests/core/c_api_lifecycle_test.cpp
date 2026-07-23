@@ -1,3 +1,8 @@
+// Test files deliberately keep assert() active even in Release builds: many
+// test cases embed function calls with side effects inside assert(), and
+// silencing them under NDEBUG would skip those calls and crash on cleanup.
+#undef NDEBUG
+
 #include <agplayer/c_api.h>
 
 #include <array>

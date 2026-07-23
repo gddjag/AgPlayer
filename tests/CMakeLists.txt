@@ -11,6 +11,10 @@ target_link_libraries(dependency_smoke_test PRIVATE ${FFMPEG_LIBRARIES})
 agplayer_enable_warnings(dependency_smoke_test)
 
 add_test(NAME dependency_smoke_test COMMAND dependency_smoke_test)
+set_tests_properties(dependency_smoke_test PROPERTIES
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
 
 add_executable(c_api_lifecycle_test
     core/c_api_lifecycle_test.cpp
@@ -60,6 +64,10 @@ target_link_libraries(playback_session_test PRIVATE agplayer_core)
 agplayer_enable_warnings(playback_session_test)
 
 add_test(NAME playback_session_test COMMAND playback_session_test)
+set_tests_properties(playback_session_test PROPERTIES
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
 
 add_executable(fixture_generator
     "${CMAKE_SOURCE_DIR}/tools/fixture_generator.cpp"
@@ -103,7 +111,11 @@ target_link_libraries(decoder_test PRIVATE agplayer_core)
 agplayer_enable_warnings(decoder_test)
 
 add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
-set_tests_properties(decoder_test PROPERTIES TIMEOUT 10)
+set_tests_properties(decoder_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
 
 add_executable(waveform_analyzer_test
     core/waveform_analyzer_test.cpp
@@ -133,9 +145,12 @@ target_link_libraries(waveform_cache_test PRIVATE agplayer_core)
 agplayer_enable_warnings(waveform_cache_test)
 
 add_test(NAME waveform_cache_test
-    COMMAND waveform_cache_test "${SINE_WAV_FIXTURE}"
+    COMMAND waveform_cache_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(waveform_cache_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
-set_tests_properties(waveform_cache_test PROPERTIES TIMEOUT 10)
 
 add_executable(audio_engine_test
     core/audio_engine_test.cpp
@@ -208,7 +223,7 @@ foreach(qt_test IN ITEMS
     set_tests_properties(${qt_test} PROPERTIES
         TIMEOUT 10
         ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
     )
 endforeach()
 
@@ -235,7 +250,7 @@ set_tests_properties(qml_waveform_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
 add_executable(qml_main_window_test
@@ -260,7 +275,7 @@ set_tests_properties(qml_main_window_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
 add_executable(qml_mini_player_test
@@ -285,7 +300,7 @@ set_tests_properties(qml_mini_player_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
 add_executable(qml_error_states_test
@@ -310,7 +325,7 @@ set_tests_properties(qml_error_states_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
 add_dependencies(import_controller_test decoder_fixture)

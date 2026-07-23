@@ -1,3 +1,10 @@
+// Test files deliberately keep assert() active even in Release builds: many
+// test cases embed function calls with side effects inside assert() (e.g.
+// ag_metadata_open), and silencing them under NDEBUG would leave dangling
+// pointers that crash on cleanup. Undefine NDEBUG before <cassert> so the
+// macro always evaluates its argument and aborts on failure.
+#undef NDEBUG
+
 #include <agplayer/c_api.h>
 
 #include "decoder.hpp"
