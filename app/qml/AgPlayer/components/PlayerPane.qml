@@ -69,6 +69,13 @@ Rectangle {
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
                 Layout.fillWidth: true
+                ToolTip.text: text
+                ToolTip.visible: titleHover.hovered && text !== qsTr("No track loaded")
+                ToolTip.delay: 500
+
+                HoverHandler {
+                    id: titleHover
+                }
             }
 
             Text {
@@ -89,6 +96,13 @@ Rectangle {
                 font.pixelSize: 14
                 elide: Text.ElideRight
                 Layout.fillWidth: true
+                ToolTip.text: text
+                ToolTip.visible: artistAlbumHover.hovered
+                ToolTip.delay: 500
+
+                HoverHandler {
+                    id: artistAlbumHover
+                }
             }
 
             RowLayout {

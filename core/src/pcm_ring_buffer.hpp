@@ -55,13 +55,15 @@ public:
         copy_from_storage(interleaved, read_frame, frames);
         // Use CAS to handle a concurrent clear(): if clear() advanced read_frame
         // past our loaded value, our copied data is stale -- discard it by
-        // returning 0 so the caller fills with silence.
+        // returning 0 so the caller fills with silence. acq_rel on success
+        // synchronizes with clear()'s release store; acquire on failure sees
+        // the latest clear() so the caller observes the recovered state.
         std::size_t expected = read_frame;
         if (!read_frame_.compare_exchange_strong(
                 expected,
                 read_frame + frames,
-                std::memory_order_release,
-                std::memory_order_relaxed)) {
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
             return 0U;
         }
         return frames;

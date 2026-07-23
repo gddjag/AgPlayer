@@ -282,8 +282,7 @@ ag_result ag_player_simulate_device_loss(ag_player* player)
     if (player == nullptr) {
         return AG_INVALID_ARGUMENT;
     }
-    guard_result([&] { player->context.simulate_device_loss(); return AG_OK; });
-    return AG_OK;
+    return guard_result([&] { player->context.simulate_device_loss(); return AG_OK; });
 }
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)

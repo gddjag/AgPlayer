@@ -138,13 +138,15 @@ Rectangle {
         }
     }
 
+    // Drag the window from any empty area of the title bar. `z: -1` keeps
+    // this MouseArea below the RowLayout so ToolButtons receive presses first;
+    // no propagateComposedEvents / mouse.accepted forwarding is needed.
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        propagateComposedEvents: true
+        z: -1
         onPressed: function(mouse) {
             if (window) window.startSystemMove()
-            mouse.accepted = false
         }
         onDoubleClicked: function(mouse) {
             if (window) {
@@ -153,7 +155,6 @@ Rectangle {
                 else
                     window.showMaximized()
             }
-            mouse.accepted = false
         }
     }
 }

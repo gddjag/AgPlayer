@@ -105,6 +105,7 @@ int main(const int argc, char** argv)
     std::uint64_t rng_state = 0xDEADBEEFCAFEBABEULL;
     std::vector<double> latencies_ms;
     latencies_ms.reserve(static_cast<std::size_t>(seek_count));
+    int failed_seeks = 0;
     // Avoid seeking into the final 500ms where some decoders (e.g. FLAC)
     // report AG_DECODE_ERROR on short fixtures.
     const long long seek_ceiling = duration_ms > 500LL
@@ -122,6 +123,7 @@ int main(const int argc, char** argv)
         if (seek_result != AG_OK) {
             // Skip seeks that the decoder rejects (e.g. edge cases near EOF)
             // so the benchmark still produces latency statistics.
+            ++failed_seeks;
             continue;
         }
 
@@ -165,6 +167,7 @@ int main(const int argc, char** argv)
         "  \"backend\": \"AG_AUDIO_BACKEND_NULL\",\n"
         "  \"file\": \"%s\",\n"
         "  \"samples\": %zu,\n"
+        "  \"failed_seeks\": %d,\n"
         "  \"min_ms\": %.4f,\n"
         "  \"median_ms\": %.4f,\n"
         "  \"p95_ms\": %.4f,\n"
@@ -173,6 +176,7 @@ int main(const int argc, char** argv)
         "}\n",
         path,
         latencies_ms.size(),
+        failed_seeks,
         min_ms,
         median_ms,
         p95_ms,

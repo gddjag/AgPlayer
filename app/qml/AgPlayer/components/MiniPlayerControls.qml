@@ -47,15 +47,6 @@ Rectangle {
         return "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
     }
 
-    function formatTime(ms): string {
-        if (ms <= 0)
-            return "00:00"
-        var totalSec = Math.floor(ms / 1000)
-        var min = Math.floor(totalSec / 60)
-        var sec = totalSec % 60
-        return (min < 10 ? "0" : "") + min + ":" + (sec < 10 ? "0" : "") + sec
-    }
-
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingMd
@@ -125,8 +116,12 @@ Rectangle {
                 elide: Text.ElideRight
                 Layout.fillWidth: true
                 ToolTip.text: text
-                ToolTip.visible: hovered && text !== qsTr("No track loaded")
+                ToolTip.visible: miniTitleHover.hovered && text !== qsTr("No track loaded")
                 ToolTip.delay: 500
+
+                HoverHandler {
+                    id: miniTitleHover
+                }
             }
 
             RowLayout {
@@ -142,8 +137,12 @@ Rectangle {
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     ToolTip.text: text
-                    ToolTip.visible: hovered
+                    ToolTip.visible: miniArtistHover.hovered
                     ToolTip.delay: 500
+
+                    HoverHandler {
+                        id: miniArtistHover
+                    }
                 }
 
                 Repeater {
@@ -355,11 +354,15 @@ Rectangle {
             id: volumeSlider
             from: 0
             to: 1
-            value: playback.muted ? 0 : playback.volume
             onMoved: playback.setVolume(value)
             Layout.preferredWidth: 80
             Accessible.name: qsTr("Volume")
             focusPolicy: Qt.StrongFocus
+
+            Binding on value {
+                value: playback.muted ? 0 : playback.volume
+                restoreMode: Binding.RestoreBindingOrValue
+            }
         }
     }
 }

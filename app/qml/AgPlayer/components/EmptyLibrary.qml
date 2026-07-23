@@ -62,20 +62,18 @@ Rectangle {
                 border.color: Theme.cyan
                 border.width: parent.visualFocus ? 2 : 1
                 radius: Theme.radiusSm
-                implicitWidth: importLabel.implicitWidth + Theme.spacingXl * 2
                 implicitHeight: 36
-
-                Text {
-                    id: importLabel
-                    anchors.centerIn: parent
-                    text: parent.parent.text
-                    color: parent.parent.hovered ? Theme.background : Theme.cyan
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                }
             }
 
-            contentItem: Item {}
+            contentItem: Text {
+                id: importLabel
+                text: parent.text
+                color: parent.hovered ? Theme.background : Theme.cyan
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
         }
     }
 
@@ -153,20 +151,18 @@ Rectangle {
                 border.color: Theme.cyan
                 border.width: parent.visualFocus ? 2 : 1
                 radius: Theme.radiusSm
-                implicitWidth: errorImportLabel.implicitWidth + Theme.spacingXl * 2
                 implicitHeight: 36
-
-                Text {
-                    id: errorImportLabel
-                    anchors.centerIn: parent
-                    text: parent.parent.text
-                    color: parent.parent.hovered ? Theme.background : Theme.cyan
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                }
             }
 
-            contentItem: Item {}
+            contentItem: Text {
+                id: errorImportLabel
+                text: parent.text
+                color: parent.hovered ? Theme.background : Theme.cyan
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
         }
     }
 }

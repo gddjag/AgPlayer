@@ -129,12 +129,20 @@ int main(const int argc, char** argv)
         const bool removed = std::filesystem::remove(missing_source, remove_ec);
         (void)removed;
 
-        // Operations should not crash; either succeed or report error gracefully
+        // Operations should not crash; either succeed or report error gracefully.
+        // Verify each returns a valid ag_result within the enum range.
         ag_playback_snapshot snapshot{};
-        ag_player_snapshot(player, &snapshot);
-        ag_player_play(player);
-        ag_player_pause(player);
-        ag_player_stop(player);
+        const ag_result snap3 = ag_player_snapshot(player, &snapshot);
+        assert(snap3 == AG_OK);
+
+        const ag_result play3 = ag_player_play(player);
+        assert(play3 >= AG_OK && play3 <= AG_INTERNAL_ERROR);
+
+        const ag_result pause3 = ag_player_pause(player);
+        assert(pause3 >= AG_OK && pause3 <= AG_INTERNAL_ERROR);
+
+        const ag_result stop3 = ag_player_stop(player);
+        assert(stop3 >= AG_OK && stop3 <= AG_INTERNAL_ERROR);
 
         ag_player_destroy(player);
         std::error_code cleanup_ec;

@@ -232,9 +232,12 @@ int main(int argc, char* argv[])
             // resident, so playback is unaffected.
             QTimer::singleShot(3000, []() {
 #ifdef Q_OS_WIN
-                SetProcessWorkingSetSize(GetCurrentProcess(),
-                                         static_cast<SIZE_T>(-1),
-                                         static_cast<SIZE_T>(-1));
+                if (!SetProcessWorkingSetSize(GetCurrentProcess(),
+                                              static_cast<SIZE_T>(-1),
+                                              static_cast<SIZE_T>(-1))) {
+                    qWarning("SetProcessWorkingSetSize failed: %lu",
+                             GetLastError());
+                }
 #endif
             });
 

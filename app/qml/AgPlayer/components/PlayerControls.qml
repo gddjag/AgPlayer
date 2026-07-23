@@ -236,11 +236,15 @@ Rectangle {
             objectName: "volumeSlider"
             from: 0
             to: 1
-            value: PlaybackController.muted ? 0 : PlaybackController.volume
             onMoved: PlaybackController.setVolume(value)
             Layout.preferredWidth: 120
             Accessible.name: qsTr("Volume")
             focusPolicy: Qt.StrongFocus
+
+            Binding on value {
+                value: PlaybackController.muted ? 0 : PlaybackController.volume
+                restoreMode: Binding.RestoreBindingOrValue
+            }
         }
     }
 }

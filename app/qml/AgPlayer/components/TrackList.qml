@@ -95,6 +95,13 @@ ListView {
                 elide: Text.ElideRight
                 Layout.fillWidth: true
                 Layout.minimumWidth: 200
+                ToolTip.text: text
+                ToolTip.visible: titleRowHover.hovered
+                ToolTip.delay: 500
+
+                HoverHandler {
+                    id: titleRowHover
+                }
             }
 
             Text {
@@ -104,6 +111,13 @@ ListView {
                 font.pixelSize: 13
                 elide: Text.ElideRight
                 Layout.preferredWidth: 160
+                ToolTip.text: text
+                ToolTip.visible: artistRowHover.hovered
+                ToolTip.delay: 500
+
+                HoverHandler {
+                    id: artistRowHover
+                }
             }
 
             Text {

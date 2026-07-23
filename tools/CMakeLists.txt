@@ -1,4 +1,3 @@
-# tools/CMakeLists.txt
 # Development-only tooling. seek_benchmark measures seek latency through the
 # public C ABI with the null backend. fixture_generator is intentionally NOT
 # defined here: it is already built from tests/CMakeLists.txt so the test

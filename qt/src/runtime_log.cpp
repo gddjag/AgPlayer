@@ -1,7 +1,6 @@
 #include "runtime_log.hpp"
 
 #include <QDateTime>
-#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QMessageLogContext>
@@ -56,11 +55,14 @@ RuntimeLog::~RuntimeLog()
 
 QString RuntimeLog::defaultLogPath()
 {
-    QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    // AppLocalDataLocation resolves to <AppData>/<ApplicationName> on Windows,
+    // matching the path used by LibraryStore in main.cpp. The application name
+    // is set in main() before RuntimeLog::install() is called.
+    QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (base.isEmpty()) {
         base = QStringLiteral(".");
     }
-    return QDir(base).filePath(QStringLiteral("AgPlayer/logs/agplayer.log"));
+    return QDir(base).filePath(QStringLiteral("logs/agplayer.log"));
 }
 
 void RuntimeLog::install(const QString& logPath)
@@ -199,6 +201,12 @@ void RuntimeLog::writeLine(const QString& severity, const QString& component,
     const QByteArray utf8 = line.toUtf8();
     std::lock_guard<std::mutex> lock(mutex_);
     fileBuffer_.append(utf8.constData(), static_cast<std::size_t>(utf8.size()));
+    // Cap the in-memory buffer so a persistently unwritable log path doesn't
+    // cause unbounded memory growth. The cap is well above the rotation
+    // threshold (2 MiB) so normal operation never truncates.
+    if (fileBuffer_.size() > MaxBufferBytes) {
+        fileBuffer_.erase(0, fileBuffer_.size() - MaxBufferBytes);
+    }
     rotateIfNeeded();
     if (!fileBuffer_.empty()) {
         std::ofstream stream(logPath_.toStdString(),
@@ -232,12 +240,4 @@ void RuntimeLog::rotateIfNeeded()
     QFile file(logPath_);
     file.rename(oldPath);
     fileBuffer_.clear();
-}
-
-QDebug operator<<(QDebug debug, ag_result result)
-{
-    QDebugStateSaver saver(debug);
-    debug.nospace() << "ag_result(" << static_cast<int>(result) << "): "
-                    << RuntimeLog::mapResult(result);
-    return debug;
 }

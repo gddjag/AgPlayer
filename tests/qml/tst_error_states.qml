@@ -91,5 +91,7 @@ TestCase {
         wait(100)
         compare(PlaybackController.deviceLost, false,
                 "deviceLost should remain false when no loss occurred")
+        compare(PlaybackController.errorMessage, initialError,
+                "errorMessage should not change when retryDevice is called without device loss")
     }
 }

@@ -481,28 +481,27 @@ public:
             state_.store(EngineState::Stopped, std::memory_order_release);
             return AG_OK;
         }
-        try {
-            if (device_initialized_) {
-                // Stop the device before uninit regardless of whether the loss
-                // was real (notification_callback only flips device_lost_ and
-                // state_; it does NOT stop the device) or simulated
-                // (simulate_device_loss already calls stop_output). Calling
-                // stop_output() is safe even if the device is already stopped.
-                stop_output();
-                ma_device_uninit(&device_);
-                device_initialized_ = false;
-            }
-            const ag_result device_result = initialize_device();
-            if (device_result != AG_OK) {
-                return device_result;
-            }
-            device_lost_.store(false, std::memory_order_release);
-            terminal_error_.store(AG_OK, std::memory_order_release);
-            state_.store(EngineState::Paused, std::memory_order_release);
-            return AG_OK;
-        } catch (...) {
-            return AG_INTERNAL_ERROR;
+        // No try/catch needed: stop_output, ma_device_uninit and
+        // initialize_device are all noexcept (C functions + noexcept method),
+        // and atomic stores cannot throw.
+        if (device_initialized_) {
+            // Stop the device before uninit regardless of whether the loss
+            // was real (notification_callback only flips device_lost_ and
+            // state_; it does NOT stop the device) or simulated
+            // (simulate_device_loss already calls stop_output). Calling
+            // stop_output() is safe even if the device is already stopped.
+            stop_output();
+            ma_device_uninit(&device_);
+            device_initialized_ = false;
         }
+        const ag_result device_result = initialize_device();
+        if (device_result != AG_OK) {
+            return device_result;
+        }
+        device_lost_.store(false, std::memory_order_release);
+        terminal_error_.store(AG_OK, std::memory_order_release);
+        state_.store(EngineState::Paused, std::memory_order_release);
+        return AG_OK;
     }
 
     void simulate_device_loss() noexcept
@@ -654,7 +653,6 @@ private:
             DecodedAudioBlock block;
             std::size_t frame_offset = 0U;
             while (!stop_decode_.load(std::memory_order_acquire)) {
-            handle_top_of_loop:
                 if (device_lost_.load(std::memory_order_acquire)) {
                     return;
                 }
@@ -735,6 +733,7 @@ private:
                     return;
                 }
 
+                bool seek_preempted = false;
                 while (pending_boundary_frame_.load(std::memory_order_acquire)
                            != no_pending_boundary
                        && !stop_decode_.load(std::memory_order_acquire)) {
@@ -746,7 +745,8 @@ private:
                         // pending boundary.
                         pending_boundary_frame_.store(no_pending_boundary,
                                                       std::memory_order_release);
-                        goto handle_top_of_loop;
+                        seek_preempted = true;
+                        break;
                     }
                     {
                         std::unique_lock<std::mutex> lock(seek_mutex_);
@@ -758,6 +758,9 @@ private:
                                               std::memory_order_acquire);
                             });
                     }
+                }
+                if (seek_preempted) {
+                    continue;
                 }
                 if (stop_decode_.load(std::memory_order_acquire)) {
                     return;

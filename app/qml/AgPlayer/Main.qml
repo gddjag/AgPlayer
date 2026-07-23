@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -22,18 +23,18 @@ ApplicationWindow {
     property int positionMs: playback.positionMs
 
     function openImportDialog() {
-        var dialog = Qt.createQmlObject(
-            'import QtQuick.Dialogs\nimport AgPlayer\n' +
-            'FileDialog {\n' +
-            '    fileMode: FileDialog.OpenFiles\n' +
-            '    nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]\n' +
-            '    onAccepted: ImportController.importUrls(files)\n' +
-            '}',
-            mainWindow,
-            "importDialog"
-        )
+        var dialog = importDialogComponent.createObject(mainWindow)
         if (dialog)
             dialog.open()
+    }
+
+    Component {
+        id: importDialogComponent
+        FileDialog {
+            fileMode: FileDialog.OpenFiles
+            nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+            onAccepted: ImportController.importUrls(files)
+        }
     }
 
     ColumnLayout {

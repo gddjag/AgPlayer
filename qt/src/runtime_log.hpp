@@ -11,6 +11,7 @@
 class RuntimeLog final {
 public:
     static constexpr std::size_t RotationThresholdBytes = 2U * 1024U * 1024U;
+    static constexpr std::size_t MaxBufferBytes = 4U * 1024U * 1024U;
 
     static void install(const QString& logPath = {});
     static void uninstall();
@@ -37,5 +38,3 @@ private:
     std::mutex mutex_;
     bool installed_ = false;
 };
-
-QDebug operator<<(QDebug debug, ag_result result);

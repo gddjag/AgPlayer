@@ -197,14 +197,14 @@ Window {
         }
 
         // Drag the frameless window from anywhere not covered by a button.
+        // `z: -1` keeps this MouseArea behind the RowLayout so ToolButtons
+        // receive presses first; no event forwarding is required.
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
-            propagateComposedEvents: true
             z: -1
             onPressed: function(mouse) {
                 miniWindow.startSystemMove()
-                mouse.accepted = false
             }
         }
     }
