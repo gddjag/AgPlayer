@@ -1,5 +1,6 @@
 #include "settings_controller.hpp"
 
+#include <QCoreApplication>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QDir>
@@ -93,6 +94,16 @@ void SettingsController::setAutoStartWithWindows(bool value)
     }
     autoStartWithWindows_ = value;
     settings_.setValue(QStringLiteral("general/autoStartWithWindows"), value);
+
+    const QString appPath = QCoreApplication::applicationFilePath();
+    QSettings run(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+                  QSettings::NativeFormat);
+    if (value) {
+        run.setValue(QStringLiteral("AgPlayer"), QStringLiteral("\"%1\"").arg(appPath));
+    } else {
+        run.remove(QStringLiteral("AgPlayer"));
+    }
+
     emit autoStartWithWindowsChanged();
 }
 
@@ -566,6 +577,50 @@ void SettingsController::resetToDefaults()
     emit currentCacheSizeMBChanged();
 }
 
+static bool isSafeCachePath(const QString& path)
+{
+    if (path.isEmpty()) {
+        return false;
+    }
+    const QFileInfo info(path);
+    if (!info.isAbsolute()) {
+        return false;
+    }
+    const QString canonical = info.canonicalFilePath();
+    if (canonical.isEmpty()) {
+        return false;
+    }
+    // Refuse root/system paths (e.g. C:/, D:/).
+    if (canonical.length() <= 3) {
+        return false;
+    }
+    // Require the path to contain "AgPlayer" to avoid wiping arbitrary directories.
+    if (!canonical.contains(QStringLiteral("AgPlayer"), Qt::CaseInsensitive)) {
+        return false;
+    }
+    return true;
+}
+
+static bool removeDirectoryContents(const QString& path)
+{
+    QDir dir(path);
+    if (!dir.exists()) {
+        return true;
+    }
+    bool ok = true;
+    for (const QString& entry : dir.entryList(QDir::NoDotAndDotDot | QDir::Files
+                                              | QDir::Dirs | QDir::Hidden)) {
+        const QString fullPath = dir.absoluteFilePath(entry);
+        const QFileInfo info(fullPath);
+        if (info.isDir() && !info.isSymLink()) {
+            ok &= QDir(fullPath).removeRecursively();
+        } else {
+            ok &= QFile::remove(fullPath);
+        }
+    }
+    return ok;
+}
+
 void SettingsController::rebindFileAssociations()
 {
     qDebug() << "Rebinding file associations for:" << fileAssociations_;
@@ -573,37 +628,36 @@ void SettingsController::rebindFileAssociations()
 
 void SettingsController::clearWaveformCache()
 {
-    qDebug() << "Clearing waveform cache";
+    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
+    if (isSafeCachePath(dir)) {
+        removeDirectoryContents(dir + QStringLiteral("/waveforms"));
+    }
     recalculateCacheSize();
 }
 
 void SettingsController::clearCoverCache()
 {
-    qDebug() << "Clearing cover cache";
+    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
+    if (isSafeCachePath(dir)) {
+        removeDirectoryContents(dir + QStringLiteral("/covers"));
+    }
     recalculateCacheSize();
 }
 
 void SettingsController::clearTempFiles()
 {
-    qDebug() << "Clearing temporary files";
+    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
+    if (isSafeCachePath(dir)) {
+        removeDirectoryContents(dir + QStringLiteral("/temp"));
+    }
     recalculateCacheSize();
 }
 
 void SettingsController::clearAllCache()
 {
     const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    if (!dir.isEmpty() && QDir(dir).exists()) {
-        QDir directory(dir);
-        for (const QString& entry : directory.entryList(QDir::NoDotAndDotDot | QDir::Files
-                                                        | QDir::Dirs | QDir::Hidden)) {
-            const QString path = directory.absoluteFilePath(entry);
-            QFileInfo info(path);
-            if (info.isDir() && !info.isSymLink()) {
-                QDir(path).removeRecursively();
-            } else {
-                QFile::remove(path);
-            }
-        }
+    if (isSafeCachePath(dir)) {
+        removeDirectoryContents(dir);
     }
     recalculateCacheSize();
 }
@@ -842,16 +896,12 @@ QString SettingsController::defaultMusicDirectory()
 
 QString SettingsController::defaultCacheDirectory()
 {
-    const QString location = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    if (location.isEmpty()) {
-        return QDir::homePath() + QStringLiteral("/AgPlayer/cache");
-    }
-    return location + QStringLiteral("/AgPlayer");
+    return QStringLiteral("D:\\Music\\AgPlayer\\Cache\\");
 }
 
 QString SettingsController::defaultExportDir()
 {
-    return defaultMusicDirectory() + QStringLiteral("/AgPlayer_Export");
+    return QStringLiteral("D:\\Music\\AgPlayer_Export\\");
 }
 
 QString SettingsController::validatedLanguage(const QString& value)

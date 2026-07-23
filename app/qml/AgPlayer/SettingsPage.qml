@@ -19,6 +19,43 @@ Popup {
     property int selectedSection: 0
     property string searchText: ""
 
+    function sectionList() {
+        return [
+            { index: 0, text: qsTr("常规"), subtitle: "General", icon: "\u2699" },
+            { index: 1, text: qsTr("播放与音频"), subtitle: "Playback", icon: "\u25B6" },
+            { index: 2, text: qsTr("外观与波形"), subtitle: "Appearance", icon: "\u223F" },
+            { index: 3, text: qsTr("音频工具预设"), subtitle: "Audio Tools", icon: "\u2692" },
+            { index: 4, text: qsTr("快捷键设置"), subtitle: "Hotkeys", icon: "\u2328" },
+            { index: 5, text: qsTr("缓存与数据"), subtitle: "Cache", icon: "\u2672" },
+            { index: 6, text: qsTr("关于"), subtitle: "About", icon: "\u2139" }
+        ]
+    }
+
+    function filteredSections() {
+        const all = sectionList()
+        if (!searchText) {
+            return all
+        }
+        return all.filter(function(item) {
+            return item.text.toLowerCase().indexOf(searchText) >= 0
+                || item.subtitle.toLowerCase().indexOf(searchText) >= 0
+        })
+    }
+
+    onSearchTextChanged: {
+        const filtered = filteredSections()
+        let found = false
+        for (let i = 0; i < filtered.length; ++i) {
+            if (filtered[i].index === selectedSection) {
+                found = true
+                break
+            }
+        }
+        if (!found && filtered.length > 0) {
+            selectedSection = filtered[0].index
+        }
+    }
+
     background: Rectangle {
         color: Theme.panel
         radius: Theme.radiusLg
@@ -153,24 +190,7 @@ Popup {
                     spacing: Theme.spacingXs
 
                     Repeater {
-                        model: {
-                            const all = [
-                                { index: 0, text: qsTr("常规"), subtitle: "General", icon: "\u2699" },
-                                { index: 1, text: qsTr("播放与音频"), subtitle: "Playback", icon: "\u25B6" },
-                                { index: 2, text: qsTr("外观与波形"), subtitle: "Appearance", icon: "\u223F" },
-                                { index: 3, text: qsTr("音频工具预设"), subtitle: "Audio Tools", icon: "\u2692" },
-                                { index: 4, text: qsTr("快捷键设置"), subtitle: "Hotkeys", icon: "\u2328" },
-                                { index: 5, text: qsTr("缓存与数据"), subtitle: "Cache", icon: "\u2672" },
-                                { index: 6, text: qsTr("关于"), subtitle: "About", icon: "\u2139" }
-                            ]
-                            if (!root.searchText) {
-                                return all
-                            }
-                            return all.filter(function(item) {
-                                return item.text.toLowerCase().indexOf(root.searchText) >= 0
-                                    || item.subtitle.toLowerCase().indexOf(root.searchText) >= 0
-                            })
-                        }
+                        model: filteredSections()
 
                         delegate: Rectangle {
                             Layout.fillWidth: true
@@ -886,7 +906,12 @@ Popup {
                         valueModel: [
                             { text: qsTr("自动 / 系统默认设备"), value: "\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907" }
                         ]
-                        currentIndex: 0
+                        currentIndex: {
+                            for (let i = 0; i < valueModel.length; ++i) {
+                                if (valueModel[i].value === SettingsController.outputDevice) return i
+                            }
+                            return 0
+                        }
                         onActivated: SettingsController.outputDevice = currentValue
                     }
                 }
