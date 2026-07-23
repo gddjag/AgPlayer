@@ -7,6 +7,7 @@
 #include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
+#include "settings_controller.hpp"
 #include "speed_adjuster.hpp"
 #include "window_controller.hpp"
 
@@ -66,12 +67,14 @@ public slots:
         pitchShifter_ = std::make_unique<PitchShifter>();
         speedAdjuster_ = std::make_unique<SpeedAdjuster>();
         lightEditor_ = std::make_unique<LightEditor>();
+        settings_ = std::make_unique<SettingsController>();
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), pitchShifter_.get(),
-                                    speedAdjuster_.get(), lightEditor_.get());
+                                    speedAdjuster_.get(), lightEditor_.get(),
+                                    settings_.get());
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -113,6 +116,7 @@ private:
     std::unique_ptr<PitchShifter> pitchShifter_;
     std::unique_ptr<SpeedAdjuster> speedAdjuster_;
     std::unique_ptr<LightEditor> lightEditor_;
+    std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<QQmlComponent> mainComponent_;
     std::unique_ptr<QQmlComponent> miniComponent_;
     QObject* mainWindow_ = nullptr;

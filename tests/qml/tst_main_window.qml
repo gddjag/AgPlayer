@@ -29,7 +29,7 @@ TestCase {
         verify(findChild(mainWindow, "modeButton"), "modeButton should exist")
         verify(findChild(mainWindow, "volumeSlider"), "volumeSlider should exist")
         verify(findChild(mainWindow, "miniPlayerButton"), "miniPlayerButton should exist")
-        compare(findChild(mainWindow, "settingsButton"), null, "settingsButton should not exist in Phase 1")
+        verify(findChild(mainWindow, "settingsButton"), "settingsButton should exist in Phase 2 settings task")
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
     }
 

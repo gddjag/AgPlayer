@@ -79,6 +79,12 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
                 window: mainWindow
+                onOpenSettings: settingsPage.open()
+            }
+
+            SettingsPage {
+                id: settingsPage
+                objectName: "settingsPage"
             }
 
             PlayerPane {

@@ -9,6 +9,8 @@ Rectangle {
 
     property Window window
 
+    signal openSettings()
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingLg
@@ -44,6 +46,30 @@ Rectangle {
             focusPolicy: Qt.StrongFocus
             onClicked: WindowController.showAudioTools()
             ToolTip.text: qsTr("Audio tools")
+            ToolTip.visible: hovered
+
+            background: Rectangle {
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
+                radius: Theme.radiusSm
+            }
+        }
+
+        ToolButton {
+            objectName: "settingsButton"
+            icon.source: Theme.icon("settings-3-fill")
+            icon.color: Theme.secondaryText
+            icon.width: 18
+            icon.height: 18
+            Accessible.name: qsTr("Open settings")
+            focusPolicy: Qt.StrongFocus
+            onClicked: titleBar.openSettings()
+            ToolTip.text: qsTr("Settings")
             ToolTip.visible: hovered
 
             background: Rectangle {

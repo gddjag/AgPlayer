@@ -23,6 +23,8 @@ add_library(agplayer_qt STATIC
     src/qml_registration.cpp
     src/qml_registration.hpp
     src/runtime_log.cpp
+    src/settings_controller.cpp
+    src/settings_controller.hpp
     src/runtime_log.hpp
     src/speed_adjuster.cpp
     src/speed_adjuster.hpp

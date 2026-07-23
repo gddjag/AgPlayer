@@ -17,6 +17,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
@@ -55,6 +56,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/MiniPlayerWindow.qml
         qml/AgPlayer/ListWindow.qml
         qml/AgPlayer/AudioToolsWindow.qml
+        qml/AgPlayer/SettingsPage.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/PlayerPane.qml

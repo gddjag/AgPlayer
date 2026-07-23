@@ -9,6 +9,7 @@ class LightEditor;
 class MetadataEditor;
 class PitchShifter;
 class PlaybackController;
+class SettingsController;
 class SpeedAdjuster;
 class WindowController;
 
@@ -25,4 +26,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  FormatConverter* formatConverter,
                                  PitchShifter* pitchShifter,
                                  SpeedAdjuster* speedAdjuster,
-                                 LightEditor* lightEditor);
+                                 LightEditor* lightEditor,
+                                 SettingsController* settings);
