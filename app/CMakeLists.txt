@@ -53,6 +53,7 @@ qt_add_qml_module(agplayer_app_qml
     QML_FILES
         qml/AgPlayer/Main.qml
         qml/AgPlayer/MiniPlayerWindow.qml
+        qml/AgPlayer/ListWindow.qml
         qml/AgPlayer/AudioToolsWindow.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml

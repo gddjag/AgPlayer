@@ -59,6 +59,32 @@ Rectangle {
         }
 
         ToolButton {
+            objectName: "listWindowButton"
+            icon.source: Theme.icon("playlist-2-fill")
+            icon.color: WindowController.listWindowDetached ? Theme.cyan : Theme.secondaryText
+            icon.width: 18
+            icon.height: 18
+            Accessible.name: WindowController.listWindowDetached
+                             ? qsTr("Attach track list")
+                             : qsTr("Detach track list")
+            focusPolicy: Qt.StrongFocus
+            onClicked: WindowController.listWindowDetached = !WindowController.listWindowDetached
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+
+            background: Rectangle {
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
+                radius: Theme.radiusSm
+            }
+        }
+
+        ToolButton {
             objectName: "miniPlayerButton"
             icon.source: Theme.icon("restore-line")
             icon.color: Theme.secondaryText

@@ -39,6 +39,7 @@ ApplicationWindow {
 
     LibraryFilterModel {
         id: filterModel
+        objectName: "filterModel"
         sourceModel: LibraryModel
         searchText: searchFilter.searchText
         minRating: searchFilter.minRating
@@ -94,10 +95,12 @@ ApplicationWindow {
             }
 
             Rectangle {
+                id: listContainer
                 color: Theme.panel
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 160
+                visible: !WindowController.listWindowDetached
 
                 StackLayout {
                     id: listStack

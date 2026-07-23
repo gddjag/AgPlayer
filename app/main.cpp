@@ -160,8 +160,26 @@ int main(int argc, char* argv[])
                 audioToolsWindow = audioToolsComponent.create();
             }
 
+            // Detachable track-list window. Reuses the LibraryFilterModel
+            // instance owned by Main.qml so filtering state stays in sync.
+            QObject* filterModel = mainWindow->findChild<QObject*>(
+                QStringLiteral("filterModel"));
+            QQmlComponent listComponent(&engine);
+            listComponent.loadFromModule("AgPlayer", "ListWindow");
+            QObject* listWindow = nullptr;
+            if (!listComponent.isError()) {
+                if (filterModel != nullptr) {
+                    listWindow = listComponent.createWithInitialProperties(
+                        QVariantMap{{QStringLiteral("trackModel"),
+                                     QVariant::fromValue(filterModel)}});
+                } else {
+                    listWindow = listComponent.create();
+                }
+            }
+
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
+            windows.setListWindow(qobject_cast<QWindow*>(listWindow));
             windows.setAudioToolsWindow(qobject_cast<QWindow*>(audioToolsWindow));
 
             // --qa-play: load + play through the normal production path. The
@@ -270,6 +288,8 @@ int main(int argc, char* argv[])
 
             if (audioToolsWindow)
                 delete audioToolsWindow;
+            if (listWindow)
+                delete listWindow;
             if (miniWindow)
                 delete miniWindow;
         }
