@@ -4,18 +4,10 @@
 
 #include <QFileInfo>
 #include <QFutureWatcher>
-#include <QMutex>
 #include <QSet>
-#include <QStandardPaths>
-#include <QThreadPool>
 #include <QtConcurrent>
 
 namespace {
-
-struct TranscodeResult {
-    bool success = false;
-    QString error;
-};
 
 // Map format string to FFmpeg codec name + file extension.
 struct FormatInfo {
@@ -61,6 +53,7 @@ bool FormatConverter::busy() const noexcept
 
 int FormatConverter::fileCount() const noexcept
 {
+    QMutexLocker lock(&mutex_);
     return static_cast<int>(entries_.size());
 }
 
@@ -72,6 +65,24 @@ int FormatConverter::completedCount() const noexcept
 int FormatConverter::failedCount() const noexcept
 {
     return failedCount_.load(std::memory_order_acquire);
+}
+
+QVariantList FormatConverter::files() const
+{
+    QMutexLocker lock(&mutex_);
+    QVariantList list;
+    list.reserve(entries_.size());
+    for (const FileEntry& entry : entries_) {
+        QVariantMap map;
+        map[QStringLiteral("fileName")] = entry.fileName;
+        map[QStringLiteral("format")] = entry.format;
+        map[QStringLiteral("fileSize")] = entry.fileSize;
+        map[QStringLiteral("durationMs")] = entry.durationMs;
+        map[QStringLiteral("status")] = statusString(entry.status);
+        map[QStringLiteral("errorMessage")] = entry.errorMessage;
+        list.append(map);
+    }
+    return list;
 }
 
 void FormatConverter::setBusy(bool value)
@@ -98,30 +109,162 @@ void FormatConverter::setFailedCount(int value)
     emit failedCountChanged();
 }
 
+QString FormatConverter::statusString(FileStatus status)
+{
+    switch (status) {
+    case FileStatus::Waiting:
+        return QStringLiteral("Waiting");
+    case FileStatus::Converting:
+        return QStringLiteral("Converting");
+    case FileStatus::Done:
+        return QStringLiteral("Done");
+    case FileStatus::Error:
+        return QStringLiteral("Error");
+    }
+    return QStringLiteral("Waiting");
+}
+
+void FormatConverter::setEntryStatus(int index, FileStatus status)
+{
+    {
+        QMutexLocker lock(&mutex_);
+        if (index < 0 || index >= entries_.size()) {
+            return;
+        }
+        entries_[index].status = status;
+    }
+    emit filesChanged();
+}
+
+void FormatConverter::setEntryError(int index, const QString& error)
+{
+    {
+        QMutexLocker lock(&mutex_);
+        if (index < 0 || index >= entries_.size()) {
+            return;
+        }
+        entries_[index].errorMessage = error;
+    }
+    emit filesChanged();
+}
+
 void FormatConverter::loadFiles(const QList<QUrl>& urls)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
 
-    entries_.clear();
+    QSet<QString> seen;
+    {
+        QMutexLocker lock(&mutex_);
+        for (const FileEntry& entry : entries_) {
+            seen.insert(entry.path);
+        }
+    }
+
+    QList<FileEntry> newEntries;
     for (const QUrl& url : urls) {
         const QString path = url.toLocalFile();
-        if (path.isEmpty()) continue;
+        if (path.isEmpty() || seen.contains(path)) {
+            continue;
+        }
+
         FileEntry entry;
         entry.path = path;
-        entry.fileName = QFileInfo(path).fileName();
-        entries_.append(entry);
+        const QFileInfo info(path);
+        entry.fileName = info.fileName();
+        entry.fileSize = info.size();
+        entry.status = FileStatus::Waiting;
+
+        // Read audio metadata to populate format and duration.
+        ag_metadata* metadata = nullptr;
+        if (ag_metadata_open(path.toUtf8().constData(), &metadata) == AG_OK) {
+            entry.format = QString::fromUtf8(ag_metadata_format(metadata));
+            entry.durationMs = ag_metadata_duration_ms(metadata);
+            ag_metadata_destroy(metadata);
+        }
+        if (entry.format.isEmpty()) {
+            entry.format = info.suffix().toUpper();
+        }
+
+        newEntries.append(entry);
+        seen.insert(path);
+    }
+
+    {
+        QMutexLocker lock(&mutex_);
+        entries_.append(newEntries);
     }
     emit fileCountChanged();
+    emit filesChanged();
 }
 
 QString FormatConverter::entryAt(int index) const
 {
+    QMutexLocker lock(&mutex_);
     if (index < 0 || index >= static_cast<int>(entries_.size())) {
         return {};
     }
     return entries_[index].fileName;
+}
+
+void FormatConverter::removeFile(int index)
+{
+    if (busy_.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    {
+        QMutexLocker lock(&mutex_);
+        if (index < 0 || index >= entries_.size()) {
+            return;
+        }
+        entries_.removeAt(index);
+    }
+    emit fileCountChanged();
+    emit filesChanged();
+}
+
+void FormatConverter::clear()
+{
+    if (busy_.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    {
+        QMutexLocker lock(&mutex_);
+        entries_.clear();
+    }
+    setProgress(0.0);
+    setCompletedCount(0);
+    setFailedCount(0);
+    emit fileCountChanged();
+    emit filesChanged();
+}
+
+QString FormatConverter::formatFileSize(qint64 bytes) const
+{
+    if (bytes < 1024) {
+        return QStringLiteral("%1 B").arg(bytes);
+    }
+    if (bytes < 1024 * 1024) {
+        return QStringLiteral("%1 KB").arg(bytes / 1024.0, 0, 'f', 2);
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+        return QStringLiteral("%1 MB").arg(bytes / (1024.0 * 1024.0), 0, 'f', 2);
+    }
+    return QStringLiteral("%1 GB").arg(bytes / (1024.0 * 1024.0 * 1024.0), 0, 'f', 2);
+}
+
+QString FormatConverter::formatDuration(qint64 ms) const
+{
+    if (ms <= 0) {
+        return QStringLiteral("--:--");
+    }
+    const qint64 totalSeconds = ms / 1000;
+    const qint64 minutes = totalSeconds / 60;
+    const qint64 seconds = totalSeconds % 60;
+    return QStringLiteral("%1:%2").arg(minutes).arg(seconds, 2, 10, QChar('0'));
 }
 
 QString FormatConverter::computeOutputPath(const QString& inputPath,
@@ -153,15 +296,34 @@ void FormatConverter::start(const QString& outputFormat,
                             int bitRate,
                             int sampleRate,
                             int channels,
-                            int cpuCores,
-                            const QString& outputDir)
+                            const QString& outputDir,
+                            bool keepMetadata,
+                            bool volumeNormalize,
+                            bool extractAudio)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
-    if (entries_.isEmpty()) {
+
+    int fileCount = 0;
+    {
+        QMutexLocker lock(&mutex_);
+        fileCount = static_cast<int>(entries_.size());
+    }
+    if (fileCount == 0) {
         emit errorOccurred(QStringLiteral("No files to transcode"));
         return;
+    }
+
+    // Inform the user about options that are not yet supported by the Core.
+    if (volumeNormalize) {
+        emit warningOccurred(QStringLiteral("Volume normalization is not supported yet; files will be transcoded without normalization."));
+    }
+    if (extractAudio) {
+        emit warningOccurred(QStringLiteral("Extracting audio from video is not supported yet; audio files will be transcoded normally."));
+    }
+    if (!keepMetadata) {
+        emit warningOccurred(QStringLiteral("Metadata stripping is not supported yet; existing metadata will be preserved."));
     }
 
     cancelFlag_.store(false, std::memory_order_release);
@@ -170,64 +332,72 @@ void FormatConverter::start(const QString& outputFormat,
     setCompletedCount(0);
     setFailedCount(0);
 
-    const FormatInfo fi = format_info(outputFormat);
-    const QByteArray codecName = QByteArray(fi.codec_name);
-
-    // Prepare the list of transcode jobs.
-    struct TranscodeJob {
-        QString inputPath;
-        QString outputPath;
-    };
-    QList<TranscodeJob> jobs;
-    jobs.reserve(entries_.size());
-    for (const FileEntry& entry : entries_) {
-        TranscodeJob job;
-        job.inputPath = entry.path;
-        job.outputPath = computeOutputPath(entry.path, outputFormat, outputDir);
-        jobs.append(job);
+    // Reset all statuses to Waiting before starting.
+    {
+        QMutexLocker lock(&mutex_);
+        for (FileEntry& entry : entries_) {
+            entry.status = FileStatus::Waiting;
+            entry.errorMessage.clear();
+        }
     }
+    emit filesChanged();
 
-    // Configure thread pool for parallel transcoding. Each job runs in its
-    // own thread; max threads = cpuCores (clamped to 1..32).
-    const int clampedCores = qBound(1, cpuCores, 32);
-    QThreadPool* pool = QThreadPool::globalInstance();
-    const int prevMax = pool->maxThreadCount();
-    pool->setMaxThreadCount(clampedCores);
-
-    const int totalJobs = jobs.size();
-    const QString codecNameStr = QString::fromLatin1(fi.codec_name);
-
-    auto* watcher = new QFutureWatcher<TranscodeResult>(this);
-    connect(watcher, &QFutureWatcher<TranscodeResult>::finished, this,
-        [this, watcher, prevMax, totalJobs]() {
+    auto* watcher = new QFutureWatcher<void>(this);
+    connect(watcher, &QFutureWatcher<void>::finished, this,
+        [this, watcher]() {
             watcher->deleteLater();
-            QThreadPool::globalInstance()->setMaxThreadCount(prevMax);
-
-            const QList<TranscodeResult> results = watcher->future().results();
-            int success = 0;
-            int failure = 0;
-            for (const TranscodeResult& r : results) {
-                if (r.success) ++success;
-                else ++failure;
-            }
-            setCompletedCount(success);
-            setFailedCount(failure);
+            const int success = completedCount_.load(std::memory_order_acquire)
+                                - failedCount_.load(std::memory_order_acquire);
+            const int failure = failedCount_.load(std::memory_order_acquire);
             setProgress(1.0);
             setBusy(false);
             emit transcodeCompleted(success, failure);
         });
 
-    // Run transcoding in parallel. Each job calls ag_transcode independently.
-    // Progress is tracked atomically across all jobs.
-    auto transcodeOne = [this, codecName, bitRate, sampleRate, channels, totalJobs]
-                        (const TranscodeJob& job) -> TranscodeResult {
+    QFuture<void> future = QtConcurrent::run(
+        [this, outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata]() {
+            runTranscode(outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata);
+        });
+    watcher->setFuture(future);
+}
+
+void FormatConverter::runTranscode(const QString& outputFormat,
+                                   int bitRate,
+                                   int sampleRate,
+                                   int channels,
+                                   const QString& outputDir,
+                                   bool /*keepMetadata*/)
+{
+    const FormatInfo fi = format_info(outputFormat);
+    const QByteArray codecName = QByteArray(fi.codec_name);
+
+    int totalJobs = 0;
+    {
+        QMutexLocker lock(&mutex_);
+        totalJobs = static_cast<int>(entries_.size());
+    }
+
+    for (int i = 0; i < totalJobs; ++i) {
         if (cancelFlag_.load(std::memory_order_acquire)) {
-            return {false, QStringLiteral("Cancelled")};
+            break;
         }
 
+        QString inputPath;
+        QString outputPath;
+        {
+            QMutexLocker lock(&mutex_);
+            if (i >= entries_.size()) {
+                break;
+            }
+            inputPath = entries_[i].path;
+        }
+        outputPath = computeOutputPath(inputPath, outputFormat, outputDir);
+
+        setEntryStatus(i, FileStatus::Converting);
+
         ag_cancel_token* token = ag_cancel_token_create();
-        const QByteArray inputUtf8 = job.inputPath.toUtf8();
-        const QByteArray outputUtf8 = job.outputPath.toUtf8();
+        const QByteArray inputUtf8 = inputPath.toUtf8();
+        const QByteArray outputUtf8 = outputPath.toUtf8();
 
         const ag_result result = ag_transcode(
             inputUtf8.constData(),
@@ -242,46 +412,33 @@ void FormatConverter::start(const QString& outputFormat,
 
         ag_cancel_token_destroy(token);
 
-        TranscodeResult tr;
-        if (result == AG_OK) {
-            tr.success = true;
+        if (cancelFlag_.load(std::memory_order_acquire)) {
+            setEntryError(i, QStringLiteral("Cancelled"));
+            setEntryStatus(i, FileStatus::Error);
+            failedCount_.fetch_add(1, std::memory_order_acq_rel);
+            emit failedCountChanged();
+        } else if (result == AG_OK) {
+            setEntryStatus(i, FileStatus::Done);
         } else if (result == AG_CANCELLED) {
-            tr.success = false;
-            tr.error = QStringLiteral("Cancelled");
+            setEntryError(i, QStringLiteral("Cancelled"));
+            setEntryStatus(i, FileStatus::Error);
+            failedCount_.fetch_add(1, std::memory_order_acq_rel);
+            emit failedCountChanged();
         } else {
-            tr.success = false;
-            tr.error = QStringLiteral("Transcode failed (error %1)").arg(result);
+            setEntryError(i, QStringLiteral("Transcode failed (error %1)").arg(result));
+            setEntryStatus(i, FileStatus::Error);
+            failedCount_.fetch_add(1, std::memory_order_acq_rel);
+            emit failedCountChanged();
         }
 
-        if (!cancelFlag_.load(std::memory_order_acquire)) {
-            const int completed = completedCount_.fetch_add(1, std::memory_order_acq_rel) + 1;
-            const int failed = failedCount_.load(std::memory_order_acquire);
-            const int done = completed + failed;
-            if (totalJobs > 0) {
-                const double frac = static_cast<double>(done) / totalJobs;
-                progress_.store(frac, std::memory_order_release);
-            }
+        const int completed = completedCount_.fetch_add(1, std::memory_order_acq_rel) + 1;
+        if (totalJobs > 0) {
+            setProgress(static_cast<double>(completed) / totalJobs);
         }
-        return tr;
-    };
-
-    QFuture<TranscodeResult> future = QtConcurrent::mapped(jobs, transcodeOne);
-    watcher->setFuture(future);
+    }
 }
 
 void FormatConverter::cancel()
 {
     cancelFlag_.store(true, std::memory_order_release);
-}
-
-void FormatConverter::clear()
-{
-    if (busy_.load(std::memory_order_acquire)) {
-        return;
-    }
-    entries_.clear();
-    setProgress(0.0);
-    setCompletedCount(0);
-    setFailedCount(0);
-    emit fileCountChanged();
 }
