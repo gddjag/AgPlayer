@@ -62,6 +62,7 @@ public:
     qreal height_ = -1.0;
     qint64 position_ = -1;
     qint64 duration_ = -1;
+    QColor waveformColor_;
 };
 
 } // namespace
@@ -148,6 +149,21 @@ void WaveformItem::setDuration(qreal duration)
     update();
 }
 
+QColor WaveformItem::waveformColor() const
+{
+    return waveformColor_;
+}
+
+void WaveformItem::setWaveformColor(const QColor& color)
+{
+    if (color == waveformColor_) {
+        return;
+    }
+    waveformColor_ = color;
+    emit waveformColorChanged();
+    update();
+}
+
 qint64 WaveformItem::hoverPosition() const
 {
     return hoverPosition_;
@@ -209,7 +225,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || !qFuzzyCompare(node->width_, width())
                                  || !qFuzzyCompare(node->height_, height());
     const bool colorChanged = geometryChanged || node->position_ != position_
-                              || node->duration_ != duration_;
+                              || node->duration_ != duration_
+                              || node->waveformColor_ != waveformColor_;
     if (!colorChanged) {
         return node;
     }
@@ -239,12 +256,22 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                              / static_cast<double>(peakCount - 1U);
         const float x = static_cast<float>(normalizedX * width());
         const float amplitude = snapshot->values[index] * center;
-        const Rgb color = gradientColor(normalizedX);
         const auto alpha = static_cast<unsigned char>(
             normalizedX <= playedFraction ? 255 : unplayedAlpha());
-        const auto red = static_cast<unsigned char>(color.red);
-        const auto green = static_cast<unsigned char>(color.green);
-        const auto blue = static_cast<unsigned char>(color.blue);
+
+        unsigned char red = 0;
+        unsigned char green = 0;
+        unsigned char blue = 0;
+        if (waveformColor_.isValid()) {
+            red = static_cast<unsigned char>(waveformColor_.red());
+            green = static_cast<unsigned char>(waveformColor_.green());
+            blue = static_cast<unsigned char>(waveformColor_.blue());
+        } else {
+            const Rgb color = gradientColor(normalizedX);
+            red = static_cast<unsigned char>(color.red);
+            green = static_cast<unsigned char>(color.green);
+            blue = static_cast<unsigned char>(color.blue);
+        }
         vertices[index * 2U].set(x, center - amplitude, red, green, blue, alpha);
         vertices[index * 2U + 1U].set(x, center + amplitude, red, green, blue, alpha);
     }
@@ -254,6 +281,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     node->height_ = height();
     node->position_ = position_;
     node->duration_ = duration_;
+    node->waveformColor_ = waveformColor_;
     node->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
     return node;
 }

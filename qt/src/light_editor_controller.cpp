@@ -41,6 +41,26 @@ qint64 LightEditor::durationMs() const noexcept
     return durationMs_;
 }
 
+QString LightEditor::inputFormat() const noexcept
+{
+    return inputFormat_;
+}
+
+int LightEditor::inputSampleRate() const noexcept
+{
+    return inputSampleRate_;
+}
+
+int LightEditor::inputChannels() const noexcept
+{
+    return inputChannels_;
+}
+
+QVariantList LightEditor::waveformPeaks() const noexcept
+{
+    return waveformPeaks_;
+}
+
 void LightEditor::setBusy(bool value)
 {
     busy_.store(value, std::memory_order_release);
@@ -60,14 +80,37 @@ void LightEditor::loadFile(const QUrl& url)
     inputPath_ = url.toLocalFile();
     inputFileName_ = QFileInfo(inputPath_).fileName();
 
-    // Read duration via metadata API so QML trim sliders can be bounded
+    // Read metadata and waveform peaks so the multi-track editor can display
+    // the active audio track and bound the trim region correctly.
     durationMs_ = 0;
+    inputFormat_.clear();
+    inputSampleRate_ = 0;
+    inputChannels_ = 0;
+    waveformPeaks_.clear();
+
     const QByteArray utf8Path = inputPath_.toUtf8();
     ag_metadata* meta = nullptr;
     if (ag_metadata_open(utf8Path.constData(), &meta) == AG_OK && meta != nullptr) {
+        const char* fmt = ag_metadata_format(meta);
+        inputFormat_ = fmt != nullptr ? QString::fromUtf8(fmt) : QString();
+        inputSampleRate_ = ag_metadata_sample_rate(meta);
+        inputChannels_ = ag_metadata_channels(meta);
         durationMs_ = ag_metadata_duration_ms(meta);
         ag_metadata_destroy(meta);
     }
+
+    ag_waveform* waveform = nullptr;
+    if (ag_waveform_analyze(utf8Path.constData(), 256, nullptr, nullptr,
+                            nullptr, &waveform) == AG_OK
+        && waveform != nullptr) {
+        const size_t count = ag_waveform_count(waveform);
+        waveformPeaks_.reserve(static_cast<int>(count));
+        for (size_t i = 0; i < count; ++i) {
+            waveformPeaks_.append(static_cast<double>(ag_waveform_peak(waveform, i)));
+        }
+        ag_waveform_destroy(waveform);
+    }
+    emit waveformPeaksChanged();
 
     emit inputFileChanged();
 }
@@ -178,7 +221,12 @@ void LightEditor::clear()
     if (busy_.load(std::memory_order_acquire)) return;
     inputPath_.clear();
     inputFileName_.clear();
+    inputFormat_.clear();
     durationMs_ = 0;
+    inputSampleRate_ = 0;
+    inputChannels_ = 0;
+    waveformPeaks_.clear();
     setProgress(0.0);
+    emit waveformPeaksChanged();
     emit inputFileChanged();
 }
