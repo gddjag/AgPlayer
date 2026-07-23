@@ -17,12 +17,21 @@ Popup {
     padding: 0
 
     property int selectedSection: 0
+    property string searchText: ""
 
     background: Rectangle {
         color: Theme.panel
         radius: Theme.radiusLg
         border.color: Theme.border
         border.width: 1
+    }
+
+    MessageDialog {
+        id: clearCacheConfirmDialog
+        title: qsTr("确认清空缓存")
+        text: qsTr("确定要一键清空全部缓存吗？此操作不可撤销。")
+        buttons: MessageDialog.Yes | MessageDialog.No
+        onAccepted: SettingsController.clearAllCache()
     }
 
     contentItem: ColumnLayout {
@@ -34,16 +43,72 @@ Popup {
             Layout.preferredHeight: 56
             Layout.leftMargin: Theme.spacingLg
             Layout.rightMargin: Theme.spacingLg
+            spacing: Theme.spacingMd
+
+            Image {
+                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                sourceSize.width: 28
+                sourceSize.height: 28
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
+                fillMode: Image.PreserveAspectFit
+            }
 
             Text {
-                text: qsTr("设置")
+                text: qsTr("AgPlayer · 设置")
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 20
+                font.pixelSize: 18
                 font.weight: Font.Bold
             }
 
             Item { Layout.fillWidth: true }
+
+            TextField {
+                id: searchField
+                Layout.preferredWidth: 220
+                Layout.preferredHeight: 32
+                placeholderText: qsTr("搜索设置...")
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                verticalAlignment: Text.AlignVCenter
+
+                background: Rectangle {
+                    color: Theme.background
+                    radius: Theme.radiusSm
+                    border.color: Theme.border
+                    border.width: 1
+                }
+
+                onTextChanged: root.searchText = text.toLowerCase()
+            }
+
+            Button {
+                text: qsTr("恢复默认")
+                focusPolicy: Qt.StrongFocus
+                onClicked: SettingsController.resetToDefaults()
+
+                contentItem: Text {
+                    text: parent.text
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    color: parent.pressed ? Theme.border
+                          : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                          : "transparent"
+                    border.color: Theme.border
+                    border.width: 1
+                    radius: Theme.radiusSm
+                    implicitWidth: 90
+                    implicitHeight: 32
+                }
+            }
 
             ToolButton {
                 objectName: "settingsCloseButton"
@@ -88,24 +153,31 @@ Popup {
                     spacing: Theme.spacingXs
 
                     Repeater {
-                        model: [
-                            { text: qsTr("常规"), icon: "\u2699" },
-                            { text: qsTr("外观主题"), icon: "\u2728" },
-                            { text: qsTr("播放设置"), icon: "\u25B6" },
-                            { text: qsTr("波形样式"), icon: "\u223F" },
-                            { text: qsTr("音频工具"), icon: "\u2692" },
-                            { text: qsTr("快捷键"), icon: "\u2328" },
-                            { text: qsTr("缓存管理"), icon: "\u2672" },
-                            { text: qsTr("关于"), icon: "\u2139" }
-                        ]
+                        model: {
+                            const all = [
+                                { index: 0, text: qsTr("常规"), subtitle: "General", icon: "\u2699" },
+                                { index: 1, text: qsTr("播放与音频"), subtitle: "Playback", icon: "\u25B6" },
+                                { index: 2, text: qsTr("外观与波形"), subtitle: "Appearance", icon: "\u223F" },
+                                { index: 3, text: qsTr("音频工具预设"), subtitle: "Audio Tools", icon: "\u2692" },
+                                { index: 4, text: qsTr("快捷键设置"), subtitle: "Hotkeys", icon: "\u2328" },
+                                { index: 5, text: qsTr("缓存与数据"), subtitle: "Cache", icon: "\u2672" },
+                                { index: 6, text: qsTr("关于"), subtitle: "About", icon: "\u2139" }
+                            ]
+                            if (!root.searchText) {
+                                return all
+                            }
+                            return all.filter(function(item) {
+                                return item.text.toLowerCase().indexOf(root.searchText) >= 0
+                                    || item.subtitle.toLowerCase().indexOf(root.searchText) >= 0
+                            })
+                        }
 
                         delegate: Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 42
                             radius: Theme.radiusSm
-                            color: root.selectedSection === index
-                                   ? Qt.rgba(SettingsController.accentColor.r, SettingsController.accentColor.g,
-                                             SettingsController.accentColor.b, 0.15)
+                            color: root.selectedSection === modelData.index
+                                   ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
                                    : (mouseArea.containsMouse ? Theme.border : "transparent")
 
                             RowLayout {
@@ -116,8 +188,8 @@ Popup {
 
                                 Text {
                                     text: modelData.icon
-                                    color: root.selectedSection === index
-                                           ? SettingsController.accentColor
+                                    color: root.selectedSection === modelData.index
+                                           ? Theme.cyan
                                            : Theme.secondaryText
                                     font.pixelSize: 16
                                     font.family: "Segoe UI Symbol"
@@ -127,7 +199,7 @@ Popup {
 
                                 Text {
                                     text: modelData.text
-                                    color: root.selectedSection === index
+                                    color: root.selectedSection === modelData.index
                                            ? Theme.primaryText
                                            : Theme.secondaryText
                                     font.family: Theme.fontPrimary
@@ -140,7 +212,7 @@ Popup {
                                 id: mouseArea
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                onClicked: root.selectedSection = index
+                                onClicked: root.selectedSection = modelData.index
                             }
                         }
                     }
@@ -163,11 +235,10 @@ Popup {
                 currentIndex: root.selectedSection
 
                 GeneralSection {}
-                AppearanceSection {}
                 PlaybackSection {}
-                WaveformSection {}
+                AppearanceSection {}
                 AudioToolsSection {}
-                ShortcutsSection {}
+                HotkeysSection {}
                 CacheSection {}
                 AboutSection {}
             }
@@ -190,9 +261,9 @@ Popup {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: qsTr("恢复默认")
+                text: qsTr("取消")
                 focusPolicy: Qt.StrongFocus
-                onClicked: SettingsController.resetToDefaults()
+                onClicked: root.close()
 
                 contentItem: Text {
                     text: parent.text
@@ -216,7 +287,7 @@ Popup {
             }
 
             Button {
-                text: qsTr("应用")
+                text: qsTr("保存更改")
                 focusPolicy: Qt.StrongFocus
                 onClicked: root.close()
 
@@ -231,13 +302,84 @@ Popup {
                 }
 
                 background: Rectangle {
-                    color: parent.pressed ? Qt.lighter(SettingsController.accentColor, 1.1)
-                          : parent.hovered ? Qt.lighter(SettingsController.accentColor, 1.2)
-                          : SettingsController.accentColor
+                    color: parent.pressed ? Qt.lighter(Theme.cyan, 1.1)
+                          : parent.hovered ? Qt.lighter(Theme.cyan, 1.2)
+                          : Theme.cyan
                     radius: Theme.radiusSm
                     implicitWidth: 110
                     implicitHeight: 36
                 }
+            }
+        }
+    }
+
+    component SettingCard: Rectangle {
+        property alias title: titleText.text
+        property alias content: contentContainer.children
+
+        color: Qt.rgba(1, 1, 1, 0.03)
+        radius: Theme.radiusMd
+        border.color: Theme.border
+        border.width: 1
+        Layout.fillWidth: true
+        Layout.alignment: Qt.AlignTop
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: Theme.spacingMd
+            spacing: Theme.spacingMd
+
+            Text {
+                id: titleText
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 14
+                font.weight: Font.Bold
+                Layout.fillWidth: true
+            }
+
+            ColumnLayout {
+                id: contentContainer
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
+            }
+
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    component SectionHeader: RowLayout {
+        property alias title: titleText.text
+        property alias subtitle: subtitleText.text
+
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.spacingLg
+        Layout.bottomMargin: Theme.spacingMd
+        spacing: Theme.spacingMd
+
+        Rectangle {
+            Layout.preferredWidth: 4
+            Layout.preferredHeight: 24
+            color: Theme.cyan
+            radius: 2
+        }
+
+        ColumnLayout {
+            spacing: 2
+
+            Text {
+                id: titleText
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 18
+                font.weight: Font.Bold
+            }
+
+            Text {
+                id: subtitleText
+                color: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 12
             }
         }
     }
@@ -255,7 +397,7 @@ Popup {
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 14
-            Layout.preferredWidth: 120
+            Layout.preferredWidth: 130
             Layout.alignment: Qt.AlignVCenter
         }
 
@@ -266,52 +408,268 @@ Popup {
         }
     }
 
-    component SettingSlider: RowLayout {
-        property alias value: slider.value
-        property alias from: slider.from
-        property alias to: slider.to
-        property alias label: labelText.text
-        property string suffix
-        property int decimals: 0
+    component SettingSwitch: Switch {
+        property alias labelText: label.text
 
-        Layout.fillWidth: true
-        Layout.preferredHeight: 40
-        spacing: Theme.spacingMd
+        indicator: Rectangle {
+            implicitWidth: 40
+            implicitHeight: 22
+            radius: 11
+            color: parent.checked ? Theme.cyan : Theme.border
 
-        Text {
-            id: labelText
-            color: Theme.secondaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 14
-            Layout.preferredWidth: 120
-            Layout.alignment: Qt.AlignVCenter
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                x: parent.checked ? parent.width - width - 2 : 2
+                width: 18
+                height: 18
+                radius: 9
+                color: "#FFFFFF"
+
+                Behavior on x {
+                    NumberAnimation { duration: 120 }
+                }
+            }
         }
 
-        Slider {
-            id: slider
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-        }
-
-        Text {
-            text: decimals > 0 ? (slider.value.toFixed(decimals) + suffix)
-                               : (Math.round(slider.value) + suffix)
+        contentItem: Text {
+            id: label
+            text: parent.text
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
-            Layout.preferredWidth: 56
-            horizontalAlignment: Text.AlignRight
+            font.pixelSize: 14
+            leftPadding: parent.indicator ? parent.indicator.width + parent.spacing : 0
+            verticalAlignment: Text.AlignVCenter
         }
     }
 
-    component SectionTitle: Text {
-        color: Theme.primaryText
-        font.family: Theme.fontPrimary
-        font.pixelSize: 16
-        font.weight: Font.Bold
+    component SettingCombo: ComboBox {
+        id: combo
+        property var valueModel
+
+        width: 180
+        textRole: "text"
+        valueRole: "value"
+        model: valueModel
+
+        contentItem: Text {
+            text: combo.displayText
+            color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: 13
+            verticalAlignment: Text.AlignVCenter
+            leftPadding: Theme.spacingSm
+        }
+
+        background: Rectangle {
+            color: Theme.background
+            radius: Theme.radiusSm
+            border.color: Theme.border
+            border.width: 1
+        }
+
+        popup: Popup {
+            y: combo.height + 2
+            width: combo.width
+            padding: 1
+
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: combo.popup.visible ? combo.delegateModel : null
+                currentIndex: combo.highlightedIndex
+                ScrollIndicator.vertical: ScrollIndicator {}
+            }
+
+            background: Rectangle {
+                color: Theme.panel
+                radius: Theme.radiusSm
+                border.color: Theme.border
+                border.width: 1
+            }
+        }
+
+        delegate: ItemDelegate {
+            width: combo.width
+            highlighted: combo.highlightedIndex === index
+
+            contentItem: Text {
+                text: modelData.text
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            background: Rectangle {
+                color: highlighted ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
+                                  : "transparent"
+            }
+        }
+    }
+
+    component FileAssociationCheck: CheckBox {
+        property string extPrimary
+        property string extSecondary: ""
+
+        indicator: Rectangle {
+            implicitWidth: 18
+            implicitHeight: 18
+            radius: 4
+            color: parent.checked ? Theme.cyan : "transparent"
+            border.color: parent.checked ? Theme.cyan : Theme.border
+            border.width: 1
+
+            Text {
+                anchors.centerIn: parent
+                text: "\u2713"
+                color: "#0A0A0F"
+                font.pixelSize: 11
+                visible: parent.parent.checked
+            }
+        }
+
+        contentItem: Text {
+            text: parent.text
+            color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: 12
+            leftPadding: parent.indicator.width + parent.spacing
+            verticalAlignment: Text.AlignVCenter
+        }
+    }
+
+    component PathFieldRow: RowLayout {
+        property alias path: pathField.text
+        property alias dialogFolder: folderDialog.currentFolder
+        signal pathSelected(string newPath)
+
         Layout.fillWidth: true
-        Layout.topMargin: Theme.spacingLg
-        Layout.bottomMargin: Theme.spacingMd
+        spacing: Theme.spacingSm
+
+        TextField {
+            id: pathField
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: 13
+            verticalAlignment: Text.AlignVCenter
+            background: Rectangle {
+                color: Theme.background
+                radius: Theme.radiusSm
+                border.color: Theme.border
+                border.width: 1
+            }
+            onEditingFinished: parent.pathSelected(text)
+        }
+
+        ToolButton {
+            icon.source: Theme.icon("folder-open-fill")
+            icon.color: Theme.secondaryText
+            icon.width: 18
+            icon.height: 18
+            onClicked: folderDialog.open()
+
+            background: Rectangle {
+                color: parent.pressed ? Theme.border
+                      : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                      : "transparent"
+                radius: Theme.radiusSm
+            }
+        }
+
+        FolderDialog {
+            id: folderDialog
+            onAccepted: parent.pathSelected(selectedFolder.toString().replace("file:///", ""))
+        }
+    }
+
+    component WaveformThumbnail: Rectangle {
+        id: thumb
+        property int mode: 0
+        property bool selected: false
+        signal clicked()
+
+        width: 80
+        height: 56
+        radius: Theme.radiusSm
+        color: selected ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
+                        : Qt.rgba(0, 0, 0, 0.2)
+        border.color: selected ? Theme.cyan : Theme.border
+        border.width: 1
+
+        Canvas {
+            anchors.fill: parent
+            anchors.margins: 6
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                var cy = height / 2
+
+                if (mode === 1) {
+                    // RGB gradient
+                    var grad = ctx.createLinearGradient(0, 0, width, 0)
+                    grad.addColorStop(0, "#FF4057")
+                    grad.addColorStop(0.33, "#00E676")
+                    grad.addColorStop(0.66, "#1688FF")
+                    grad.addColorStop(1, "#7B2FF7")
+                    ctx.strokeStyle = grad
+                    ctx.lineWidth = 2
+                    ctx.beginPath()
+                    for (var x = 0; x <= width; x += 3) {
+                        var amp = Math.sin(x * 0.12) * Math.cos(x * 0.05)
+                        var y = cy + amp * (height * 0.35)
+                        if (x === 0) ctx.moveTo(x, y)
+                        else ctx.lineTo(x, y)
+                    }
+                    ctx.stroke()
+                } else if (mode === 2) {
+                    // Spectrum bars
+                    var step = 4
+                    for (var bx = 0; bx < width; bx += step * 2) {
+                        var barHeight = Math.abs(Math.sin(bx * 0.15) * Math.cos(bx * 0.08)) * (height * 0.8)
+                        var hue = (bx / width) * 280
+                        ctx.fillStyle = "hsl(" + hue + ", 80%, 60%)"
+                        ctx.fillRect(bx, cy - barHeight / 2, step, barHeight)
+                    }
+                } else {
+                    // Solid cyan
+                    ctx.strokeStyle = Theme.cyan
+                    ctx.lineWidth = 2
+                    ctx.beginPath()
+                    for (var sx = 0; sx <= width; sx += 3) {
+                        var sa = Math.sin(sx * 0.12) * Math.cos(sx * 0.05)
+                        var sy = cy + sa * (height * 0.35)
+                        if (sx === 0) ctx.moveTo(sx, sy)
+                        else ctx.lineTo(sx, sy)
+                    }
+                    ctx.stroke()
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 4
+            width: 18
+            height: 18
+            radius: 9
+            color: Theme.cyan
+            visible: thumb.selected
+
+            Text {
+                anchors.centerIn: parent
+                text: "\u2713"
+                color: "#0A0A0F"
+                font.pixelSize: 11
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: thumb.clicked()
+        }
     }
 
     component SectionScroll: ScrollView {
@@ -327,126 +685,275 @@ Popup {
     component GeneralSection: ColumnLayout {
         spacing: Theme.spacingSm
 
-        SectionTitle { text: qsTr("常规") }
-
-        SettingRow {
-            label: qsTr("启动时自动播放")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.startupAutoPlay
-                onToggled: SettingsController.startupAutoPlay = checked
-            }
+        SectionHeader {
+            title: qsTr("常规")
+            subtitle: "General"
         }
 
-        SettingRow {
-            label: qsTr("启动后最小化")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.minimizeOnStartup
-                onToggled: SettingsController.minimizeOnStartup = checked
-            }
-        }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingMd
 
-        SettingRow {
-            label: qsTr("关闭窗口类型")
-            ComboBox {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 180
-                model: [
-                    { text: qsTr("退出"), value: 0 },
-                    { text: qsTr("最小化到托盘"), value: 1 },
-                    { text: qsTr("最小化"), value: 2 }
-                ]
-                textRole: "text"
-                valueRole: "value"
-                currentIndex: SettingsController.closeBehavior
-                onActivated: SettingsController.closeBehavior = currentValue
-            }
-        }
+            SettingCard {
+                title: qsTr("开机与窗口")
+                Layout.preferredHeight: 320
 
-        SettingRow {
-            label: qsTr("记住窗口大小与位置")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.rememberWindowState
-                onToggled: SettingsController.rememberWindowState = checked
-            }
-        }
-
-        SettingRow {
-            label: qsTr("语言")
-            ComboBox {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 180
-                model: [
-                    { text: qsTr("简体中文"), value: "zh" },
-                    { text: qsTr("English"), value: "en" }
-                ]
-                textRole: "text"
-                valueRole: "value"
-                currentIndex: SettingsController.language === "en" ? 1 : 0
-                onActivated: SettingsController.language = currentValue
-            }
-        }
-
-        SettingRow {
-            label: qsTr("默认播放器")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.setAsDefaultPlayer
-                onToggled: SettingsController.setAsDefaultPlayer = checked
-            }
-        }
-
-        SettingRow {
-            label: qsTr("导出目录")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                TextField {
-                    id: exportDirField
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    text: SettingsController.defaultExportDirectory
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    background: Rectangle {
-                        color: Theme.background
-                        radius: Theme.radiusSm
-                        border.color: Theme.border
-                        border.width: 1
-                    }
-                    onEditingFinished: SettingsController.defaultExportDirectory = text
+                SettingSwitch {
+                    text: qsTr("开机自动启动")
+                    checked: SettingsController.autoStartWithWindows
+                    onToggled: SettingsController.autoStartWithWindows = checked
                 }
 
-                ToolButton {
-                    icon.source: Theme.icon("folder-open-fill")
-                    icon.color: Theme.secondaryText
-                    icon.width: 18
-                    icon.height: 18
-                    onClicked: exportFolderDialog.open()
+                SettingSwitch {
+                    text: qsTr("启动时自动恢复上次播放进度")
+                    checked: SettingsController.restoreLastPlaybackOnStartup
+                    onToggled: SettingsController.restoreLastPlaybackOnStartup = checked
+                }
+
+                SettingSwitch {
+                    text: qsTr("双窗口歌单面板")
+                    checked: SettingsController.showListWindowPanel
+                    onToggled: SettingsController.showListWindowPanel = checked
+                }
+
+                SettingSwitch {
+                    text: qsTr("窗口磁吸吸附对齐 (15px)")
+                    checked: SettingsController.windowMagneticSnap
+                    onToggled: SettingsController.windowMagneticSnap = checked
+                }
+
+                SettingRow {
+                    label: qsTr("歌曲列表位置")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("上"), value: 0 },
+                            { text: qsTr("下"), value: 1 },
+                            { text: qsTr("左"), value: 2 },
+                            { text: qsTr("右"), value: 3 }
+                        ]
+                        currentIndex: SettingsController.listWindowPosition
+                        onActivated: SettingsController.listWindowPosition = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("退出程序行为")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("最小化到托盘"), value: 0 },
+                            { text: qsTr("直接关闭"), value: 1 }
+                        ]
+                        currentIndex: SettingsController.closeBehavior
+                        onActivated: SettingsController.closeBehavior = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("语言")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("中文"), value: "zh" },
+                            { text: qsTr("English"), value: "en" },
+                            { text: qsTr("\uD55C\uAD6D\uC5B4"), value: "ko" },
+                            { text: qsTr("\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22"), value: "th" },
+                            { text: qsTr("\u1019\u103C\u1014\u103A\u1019\u102C\u1004\u102F"), value: "my" },
+                            { text: qsTr("Ti\u1EBFng Vi\u1EC7t"), value: "vi" },
+                            { text: qsTr("\u0E25\u0EB2\u0EA7"), value: "lo" }
+                        ]
+                        currentIndex: {
+                            const values = ["zh", "en", "ko", "th", "my", "vi", "lo"]
+                            return values.indexOf(SettingsController.language)
+                        }
+                        onActivated: SettingsController.language = currentValue
+                    }
+                }
+            }
+
+            SettingCard {
+                title: qsTr("文件关联")
+                Layout.preferredHeight: 320
+
+                SettingSwitch {
+                    text: qsTr("设为系统默认音频播放器")
+                    checked: SettingsController.setAsDefaultPlayer
+                    onToggled: SettingsController.setAsDefaultPlayer = checked
+                }
+
+                SettingRow {
+                    label: qsTr("关联格式")
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.spacingMd
+
+                        FileAssociationCheck {
+                            text: "MP3"
+                            extPrimary: "mp3"
+                            checked: SettingsController.fileAssociations.indexOf("mp3") >= 0
+                            onToggled: updateAssociation("mp3", checked)
+                        }
+
+                        FileAssociationCheck {
+                            text: "WAV"
+                            extPrimary: "wav"
+                            checked: SettingsController.fileAssociations.indexOf("wav") >= 0
+                            onToggled: updateAssociation("wav", checked)
+                        }
+
+                        FileAssociationCheck {
+                            text: "FLAC"
+                            extPrimary: "flac"
+                            checked: SettingsController.fileAssociations.indexOf("flac") >= 0
+                            onToggled: updateAssociation("flac", checked)
+                        }
+
+                        FileAssociationCheck {
+                            text: "AAC/M4A"
+                            extPrimary: "aac"
+                            extSecondary: "m4a"
+                            checked: SettingsController.fileAssociations.indexOf("aac") >= 0
+                            onToggled: {
+                                updateAssociation("aac", checked)
+                                updateAssociation("m4a", checked)
+                            }
+                        }
+
+                        FileAssociationCheck {
+                            text: "OGG"
+                            extPrimary: "ogg"
+                            checked: SettingsController.fileAssociations.indexOf("ogg") >= 0
+                            onToggled: updateAssociation("ogg", checked)
+                        }
+                    }
+                }
+
+                Button {
+                    text: qsTr("重新绑定文件关联与图标")
+                    onClicked: SettingsController.rebindFileAssociations()
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
 
                     background: Rectangle {
                         color: parent.pressed ? Theme.border
                               : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
                               : "transparent"
+                        border.color: Theme.border
+                        border.width: 1
                         radius: Theme.radiusSm
+                        implicitWidth: 180
+                        implicitHeight: 36
                     }
                 }
             }
+        }
 
-            FolderDialog {
-                id: exportFolderDialog
-                currentFolder: SettingsController.defaultExportDirectory
-                onAccepted: SettingsController.defaultExportDirectory = selectedFolder.toString().replace("file:///", "")
+        Item { Layout.fillHeight: true }
+    }
+
+    component PlaybackSection: ColumnLayout {
+        spacing: Theme.spacingSm
+
+        SectionHeader {
+            title: qsTr("播放与音频")
+            subtitle: "Playback & Engine"
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingMd
+
+            SettingCard {
+                title: qsTr("音频输出 (miniaudio)")
+                Layout.preferredHeight: 180
+
+                SettingRow {
+                    label: qsTr("输出设备")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("自动 / 系统默认设备"), value: "\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907" }
+                        ]
+                        currentIndex: 0
+                        onActivated: SettingsController.outputDevice = currentValue
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("音频独占模式 (Exclusive Mode / WASAPI / ALSA)")
+                    checked: SettingsController.audioExclusiveMode
+                    onToggled: SettingsController.audioExclusiveMode = checked
+                }
+            }
+
+            SettingCard {
+                title: qsTr("播放行为")
+                Layout.preferredHeight: 260
+
+                SettingSwitch {
+                    text: qsTr("播放键 RGB 光晕")
+                    checked: SettingsController.playButtonRgbGlow
+                    onToggled: SettingsController.playButtonRgbGlow = checked
+                }
+
+                SettingRow {
+                    label: qsTr("默认播放模式")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("顺序播放"), value: 0 },
+                            { text: qsTr("随机播放"), value: 1 },
+                            { text: qsTr("单曲循环"), value: 2 },
+                            { text: qsTr("列表循环"), value: 3 }
+                        ]
+                        currentIndex: SettingsController.defaultPlaybackMode
+                        onActivated: SettingsController.defaultPlaybackMode = currentValue
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("开启无间隙播放")
+                    checked: SettingsController.gaplessPlayback
+                    onToggled: SettingsController.gaplessPlayback = checked
+                }
+
+                SettingRow {
+                    label: qsTr("歌曲切换淡入淡出")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("0ms (关闭)"), value: 0 },
+                            { text: qsTr("200ms"), value: 1 },
+                            { text: qsTr("500ms"), value: 2 }
+                        ]
+                        currentIndex: SettingsController.crossfadeMs
+                        onActivated: SettingsController.crossfadeMs = currentValue
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("自动匹配采样率")
+                    checked: SettingsController.autoMatchSampleRate
+                    onToggled: SettingsController.autoMatchSampleRate = checked
+                }
+
+                SettingSwitch {
+                    text: qsTr("自动读取歌曲 BPM、星级评分")
+                    checked: SettingsController.autoReadBpmAndRating
+                    onToggled: SettingsController.autoReadBpmAndRating = checked
+                }
             }
         }
 
@@ -456,521 +963,134 @@ Popup {
     component AppearanceSection: ColumnLayout {
         spacing: Theme.spacingSm
 
-        SectionTitle { text: qsTr("外观主题") }
-
-        SettingRow {
-            label: qsTr("列表页位置")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                Repeater {
-                    model: [
-                        { text: qsTr("下"), value: 0 },
-                        { text: qsTr("左"), value: 1 },
-                        { text: qsTr("右"), value: 2 },
-                        { text: qsTr("上"), value: 3 }
-                    ]
-
-                    delegate: Button {
-                        text: modelData.text
-                        checked: SettingsController.listWindowPosition === modelData.value
-                        checkable: true
-                        onClicked: SettingsController.listWindowPosition = modelData.value
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: parent.checked ? "#0A0A0F" : Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.checked ? SettingsController.accentColor : "transparent"
-                            border.color: parent.checked ? SettingsController.accentColor : Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                        }
-                    }
-                }
-            }
+        SectionHeader {
+            title: qsTr("外观与波形")
+            subtitle: "Appearance & Visualizer"
         }
 
-        SettingRow {
-            label: qsTr("主题模式")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                Repeater {
-                    model: [
-                        { text: qsTr("深色"), value: 0 },
-                        { text: qsTr("浅色"), value: 1 },
-                        { text: qsTr("自动"), value: 2 }
-                    ]
-
-                    delegate: Button {
-                        text: modelData.text
-                        checked: SettingsController.themeMode === modelData.value
-                        checkable: true
-                        onClicked: SettingsController.themeMode = modelData.value
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: parent.checked ? "#0A0A0F" : Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.checked ? SettingsController.accentColor : "transparent"
-                            border.color: parent.checked ? SettingsController.accentColor : Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 80
-                        }
-                    }
-                }
-            }
-        }
-
-        SettingRow {
-            label: qsTr("主题色")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                Repeater {
-                    model: [
-                        "#00D4FF", "#1688FF", "#7B2FF7", "#E62E9B",
-                        "#FF4057", "#FF9800", "#00E676", "#F5F7FA"
-                    ]
-
-                    delegate: Rectangle {
-                        width: 24
-                        height: 24
-                        radius: width / 2
-                        color: modelData
-                        border.color: SettingsController.accentColor.toString().toUpperCase() === modelData.toUpperCase()
-                                      ? Theme.primaryText
-                                      : "transparent"
-                        border.width: 2
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: SettingsController.accentColor = modelData
-                        }
-                    }
-                }
-
-                Button {
-                    text: qsTr("自定义")
-                    onClicked: accentColorDialog.open()
-
-                    contentItem: Text {
-                        text: parent.text
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        color: parent.pressed ? Theme.border
-                              : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                              : "transparent"
-                        border.color: Theme.border
-                        border.width: 1
-                        radius: Theme.radiusSm
-                    }
-                }
-            }
-
-            ColorDialog {
-                id: accentColorDialog
-                selectedColor: SettingsController.accentColor
-                onAccepted: SettingsController.accentColor = selectedColor
-            }
-        }
-
-        SettingSlider {
-            label: qsTr("界面透明度")
-            from: 0.5
-            to: 1.0
-            value: SettingsController.windowTransparency
-            decimals: 2
-            suffix: ""
-            onValueChanged: SettingsController.windowTransparency = value
-        }
-
-        SettingSlider {
-            label: qsTr("字体透明度")
-            from: 0.5
-            to: 1.0
-            value: SettingsController.fontTransparency
-            decimals: 2
-            suffix: ""
-            onValueChanged: SettingsController.fontTransparency = value
-        }
-
-        SettingSlider {
-            label: qsTr("圆角强度")
-            from: 0
-            to: 16
-            value: SettingsController.cornerRadius
-            decimals: 0
-            suffix: ""
-            onValueChanged: SettingsController.cornerRadius = Math.round(value)
-        }
-
-        Item { Layout.fillHeight: true }
-    }
-
-    component PlaybackSection: ColumnLayout {
-        spacing: Theme.spacingSm
-
-        SectionTitle { text: qsTr("播放设置") }
-
-        SettingRow {
-            label: qsTr("输出设备")
-            ComboBox {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 260
-                model: [qsTr("Default")]
-                currentIndex: model.indexOf(SettingsController.outputDevice)
-                onActivated: function(index) {
-                    SettingsController.outputDevice = model[index]
-                }
-            }
-        }
-
-        SettingRow {
-            label: qsTr("输出格式")
-            ComboBox {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 220
-                model: [
-                    { text: "WASAPI", value: 0 },
-                    { text: "DirectSound", value: 1 },
-                    { text: "WaveOut", value: 2 }
-                ]
-                textRole: "text"
-                valueRole: "value"
-                currentIndex: SettingsController.outputFormat
-                onActivated: SettingsController.outputFormat = currentValue
-            }
-        }
-
-        SettingRow {
-            label: qsTr("自动匹配采样率")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.autoSampleRate
-                onToggled: SettingsController.autoSampleRate = checked
-            }
-        }
-
-        SettingSlider {
-            label: qsTr("默认音量")
-            from: 0.0
-            to: 1.0
-            value: SettingsController.defaultVolume
-            decimals: 2
-            suffix: ""
-            onValueChanged: SettingsController.defaultVolume = value
-        }
-
-        SettingSlider {
-            label: qsTr("淡入时长")
-            from: 0
-            to: 5000
-            value: SettingsController.fadeInDuration
-            decimals: 0
-            suffix: " ms"
-            onValueChanged: SettingsController.fadeInDuration = Math.round(value)
-        }
-
-        SettingSlider {
-            label: qsTr("淡出时长")
-            from: 0
-            to: 5000
-            value: SettingsController.fadeOutDuration
-            decimals: 0
-            suffix: " ms"
-            onValueChanged: SettingsController.fadeOutDuration = Math.round(value)
-        }
-
-        SettingRow {
-            label: qsTr("关联文件")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingMd
-
-                Repeater {
-                    model: ["mp3", "wav", "flac", "aac", "m4a", "ogg", "ape"]
-
-                    delegate: CheckBox {
-                        text: modelData.toUpperCase()
-                        checked: SettingsController.fileAssociations.indexOf(modelData) >= 0
-                        onToggled: {
-                            let list = SettingsController.fileAssociations
-                            const idx = list.indexOf(modelData)
-                            if (checked && idx < 0) {
-                                list.push(modelData)
-                            } else if (!checked && idx >= 0) {
-                                list.splice(idx, 1)
-                            }
-                            SettingsController.fileAssociations = list
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 18
-                            implicitHeight: 18
-                            radius: 4
-                            color: parent.checked ? SettingsController.accentColor : "transparent"
-                            border.color: parent.checked ? SettingsController.accentColor : Theme.border
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "\u2713"
-                                color: "#0A0A0F"
-                                font.pixelSize: 11
-                                visible: parent.parent.checked
-                            }
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 12
-                            leftPadding: parent.indicator.width + parent.spacing
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-            }
-        }
-
-        Item { Layout.fillHeight: true }
-    }
-
-    component WaveformSection: ColumnLayout {
-        spacing: Theme.spacingSm
-
-        SectionTitle { text: qsTr("波形样式") }
-
-        Rectangle {
+        GridLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 80
-            color: Qt.rgba(0, 0, 0, 0.2)
-            radius: Theme.radiusMd
-            border.color: Theme.border
-            border.width: 1
+            columns: 2
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingMd
 
-            Canvas {
-                id: waveformPreview
-                anchors.fill: parent
-                anchors.margins: Theme.spacingMd
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
+            SettingCard {
+                title: qsTr("主题样式")
+                Layout.preferredHeight: 160
 
-                    var thickness = SettingsController.waveformThickness
-                    var density = SettingsController.waveformDensity
-                    var brightness = SettingsController.waveformBrightness
-                    var step = Math.max(2, 6 - density)
-                    var cx = width / 2
-                    var cy = height / 2
+                SettingRow {
+                    label: qsTr("主题模式")
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.spacingSm
 
-                    ctx.globalAlpha = Math.min(1.0, brightness)
-                    ctx.lineWidth = thickness
-                    ctx.lineCap = "round"
-                    ctx.lineJoin = "round"
+                        Repeater {
+                            model: [
+                                { text: qsTr("深色"), value: 0 },
+                                { text: qsTr("浅色"), value: 1 },
+                                { text: qsTr("跟随系统"), value: 2 }
+                            ]
 
-                    if (SettingsController.waveformMode === 1) {
-                        // RGB mode: rainbow gradient stroke
-                        var grad = ctx.createLinearGradient(0, 0, width, 0)
-                        grad.addColorStop(0, "#FF4057")
-                        grad.addColorStop(0.33, "#00E676")
-                        grad.addColorStop(0.66, "#1688FF")
-                        grad.addColorStop(1, "#7B2FF7")
-                        ctx.strokeStyle = grad
-                    } else if (SettingsController.waveformMode === 2) {
-                        // Spectrum mode: bar colors by frequency
-                        ctx.fillStyle = SettingsController.waveformColor
-                        for (var bx = 0; bx < width; bx += step * 2) {
-                            var barHeight = Math.abs(Math.sin(bx * 0.05) * Math.cos(bx * 0.02)) * (height * 0.8)
-                            var hue = (bx / width) * 280
-                            ctx.fillStyle = "hsl(" + hue + ", 80%, 60%)"
-                            ctx.fillRect(bx, cy - barHeight / 2, Math.max(2, step), barHeight)
-                        }
-                        return
-                    } else {
-                        ctx.strokeStyle = SettingsController.waveformColor
-                    }
+                            delegate: Button {
+                                text: modelData.text
+                                checked: SettingsController.themeMode === modelData.value
+                                checkable: true
+                                onClicked: SettingsController.themeMode = modelData.value
 
-                    ctx.beginPath()
-                    for (var x = 0; x <= width; x += step) {
-                        var amp = Math.sin(x * 0.03) * Math.cos(x * 0.07) * Math.sin(x * 0.01 + 1.0)
-                        var y = cy + amp * (height * 0.35)
-                        if (x === 0) {
-                            ctx.moveTo(x, y)
-                        } else {
-                            ctx.lineTo(x, y)
-                        }
-                    }
-                    ctx.stroke()
-                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: parent.checked ? "#0A0A0F" : Theme.primaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 13
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
 
-                Connections {
-                    target: SettingsController
-                    function onWaveformModeChanged() { waveformPreview.requestPaint() }
-                    function onWaveformColorChanged() { waveformPreview.requestPaint() }
-                    function onWaveformBrightnessChanged() { waveformPreview.requestPaint() }
-                    function onWaveformThicknessChanged() { waveformPreview.requestPaint() }
-                    function onWaveformDensityChanged() { waveformPreview.requestPaint() }
-                }
-            }
-        }
-
-        SettingRow {
-            label: qsTr("波形模式")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                Repeater {
-                    model: [
-                        { text: qsTr("纯色"), value: 0 },
-                        { text: qsTr("RGB"), value: 1 },
-                        { text: qsTr("频谱"), value: 2 }
-                    ]
-
-                    delegate: Button {
-                        text: modelData.text
-                        checked: SettingsController.waveformMode === modelData.value
-                        checkable: true
-                        onClicked: SettingsController.waveformMode = modelData.value
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: parent.checked ? "#0A0A0F" : Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.checked ? SettingsController.accentColor : "transparent"
-                            border.color: parent.checked ? SettingsController.accentColor : Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 80
-                        }
-                    }
-                }
-            }
-        }
-
-        SettingRow {
-            label: qsTr("波形颜色")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                Repeater {
-                    model: [
-                        "#00D4FF", "#1688FF", "#00E676", "#7B2FF7",
-                        "#E62E9B", "#FF4057", "#FF9800"
-                    ]
-
-                    delegate: Rectangle {
-                        width: 24
-                        height: 24
-                        radius: width / 2
-                        color: modelData
-                        border.color: SettingsController.waveformColor.toString().toUpperCase() === modelData.toUpperCase()
-                                      ? Theme.primaryText
-                                      : "transparent"
-                        border.width: 2
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: SettingsController.waveformColor = modelData
+                                background: Rectangle {
+                                    color: parent.checked ? Theme.cyan : "transparent"
+                                    border.color: parent.checked ? Theme.cyan : Theme.border
+                                    border.width: 1
+                                    radius: Theme.radiusSm
+                                    implicitWidth: 80
+                                    implicitHeight: 32
+                                }
+                            }
                         }
                     }
                 }
 
-                Button {
-                    text: qsTr("自定义")
-                    onClicked: waveformColorDialog.open()
-
-                    contentItem: Text {
-                        text: parent.text
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        color: parent.pressed ? Theme.border
-                              : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                              : "transparent"
-                        border.color: Theme.border
-                        border.width: 1
-                        radius: Theme.radiusSm
-                    }
+                SettingSwitch {
+                    text: qsTr("毛玻璃 / 悬浮特效")
+                    checked: SettingsController.glassEffect
+                    onToggled: SettingsController.glassEffect = checked
                 }
             }
 
-            ColorDialog {
-                id: waveformColorDialog
-                selectedColor: SettingsController.waveformColor
-                onAccepted: SettingsController.waveformColor = selectedColor
+            SettingCard {
+                title: qsTr("Waveform RGB 波形设置")
+                Layout.preferredHeight: 240
+
+                SettingRow {
+                    label: qsTr("波形样式")
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.spacingMd
+
+                        WaveformThumbnail {
+                            mode: 0
+                            selected: SettingsController.waveformMode === 0
+                            onClicked: SettingsController.waveformMode = 0
+                        }
+
+                        WaveformThumbnail {
+                            mode: 1
+                            selected: SettingsController.waveformMode === 1
+                            onClicked: SettingsController.waveformMode = 1
+                        }
+
+                        WaveformThumbnail {
+                            mode: 2
+                            selected: SettingsController.waveformMode === 2
+                            onClicked: SettingsController.waveformMode = 2
+                        }
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("渲染密度")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("稀疏"), value: 0 },
+                            { text: qsTr("适中（推荐）"), value: 1 },
+                            { text: qsTr("精细"), value: 2 }
+                        ]
+                        currentIndex: SettingsController.waveformDensity
+                        onActivated: SettingsController.waveformDensity = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("线条粗细")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("1px"), value: 1 },
+                            { text: qsTr("2px"), value: 2 },
+                            { text: qsTr("3px"), value: 3 },
+                            { text: qsTr("4px"), value: 4 }
+                        ]
+                        currentIndex: SettingsController.waveformThickness - 1
+                        onActivated: SettingsController.waveformThickness = currentValue
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("鼠标悬停波形时显示时间预览胶囊")
+                    checked: SettingsController.waveformHoverTimePreview
+                    onToggled: SettingsController.waveformHoverTimePreview = checked
+                }
             }
-        }
-
-        SettingSlider {
-            label: qsTr("波形亮度")
-            from: 0.5
-            to: 2.0
-            value: SettingsController.waveformBrightness
-            decimals: 2
-            suffix: ""
-            onValueChanged: SettingsController.waveformBrightness = value
-        }
-
-        SettingSlider {
-            label: qsTr("波形粗细")
-            from: 1
-            to: 4
-            value: SettingsController.waveformThickness
-            decimals: 0
-            suffix: ""
-            onValueChanged: SettingsController.waveformThickness = Math.round(value)
-        }
-
-        SettingSlider {
-            label: qsTr("波形密度")
-            from: 1
-            to: 4
-            value: SettingsController.waveformDensity
-            decimals: 0
-            suffix: ""
-            onValueChanged: SettingsController.waveformDensity = Math.round(value)
         }
 
         Item { Layout.fillHeight: true }
@@ -979,148 +1099,146 @@ Popup {
     component AudioToolsSection: ColumnLayout {
         spacing: Theme.spacingSm
 
-        SectionTitle { text: qsTr("音频工具") }
+        SectionHeader {
+            title: qsTr("音频工具预设")
+            subtitle: "Audio Tools"
+        }
 
-        SettingRow {
-            label: qsTr("导出目录")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 3
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingMd
 
-                TextField {
-                    id: toolsOutputDirField
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    text: SettingsController.defaultOutputDirectory
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    background: Rectangle {
-                        color: Theme.background
-                        radius: Theme.radiusSm
-                        border.color: Theme.border
-                        border.width: 1
+            SettingCard {
+                title: qsTr("通用导出")
+                Layout.preferredHeight: 160
+
+                SettingRow {
+                    label: qsTr("默认导出路径")
+                    PathFieldRow {
+                        anchors.fill: parent
+                        path: SettingsController.defaultOutputDirectory
+                        dialogFolder: SettingsController.defaultOutputDirectory
+                        onPathSelected: SettingsController.defaultOutputDirectory = newPath
                     }
-                    onEditingFinished: SettingsController.defaultOutputDirectory = text
                 }
 
-                ToolButton {
-                    icon.source: Theme.icon("folder-open-fill")
-                    icon.color: Theme.secondaryText
-                    icon.width: 18
-                    icon.height: 18
-                    onClicked: toolsOutputFolderDialog.open()
-
-                    background: Rectangle {
-                        color: parent.pressed ? Theme.border
-                              : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                              : "transparent"
-                        radius: Theme.radiusSm
+                SettingRow {
+                    label: qsTr("覆盖策略")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("自动重命名 (例: _edited)"), value: 0 },
+                            { text: qsTr("直接覆盖"), value: 1 }
+                        ]
+                        currentIndex: SettingsController.overwritePolicy
+                        onActivated: SettingsController.overwritePolicy = currentValue
                     }
                 }
             }
 
-            FolderDialog {
-                id: toolsOutputFolderDialog
-                currentFolder: SettingsController.defaultOutputDirectory
-                onAccepted: SettingsController.defaultOutputDirectory = selectedFolder.toString().replace("file:///", "")
-            }
-        }
+            SettingCard {
+                title: qsTr("转码与剪辑预设")
+                Layout.preferredHeight: 160
 
-        SettingRow {
-            label: qsTr("默认格式")
-            ComboBox {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 120
-                model: ["mp3", "wav", "flac"]
-                currentIndex: model.indexOf(SettingsController.defaultOutputFormat)
-                onActivated: SettingsController.defaultOutputFormat = currentValue
-            }
-        }
-
-        SettingRow {
-            label: qsTr("默认比特率")
-            ComboBox {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 120
-                model: [
-                    { text: "64 Kbps", value: 64 },
-                    { text: "128 Kbps", value: 128 },
-                    { text: "192 Kbps", value: 192 },
-                    { text: "256 Kbps", value: 256 },
-                    { text: "320 Kbps", value: 320 }
-                ]
-                textRole: "text"
-                valueRole: "value"
-                currentIndex: {
-                    const v = SettingsController.defaultBitrate
-                    return [64, 128, 192, 256, 320].indexOf(v)
+                SettingRow {
+                    label: qsTr("默认转码格式")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 240
+                        valueModel: [
+                            { text: qsTr("MP3 / 320kbps / 44.1kHz / Stereo"), value: "MP3 / 320kbps / 44.1kHz / Stereo" },
+                            { text: qsTr("MP3 / 256kbps / 44.1kHz / Stereo"), value: "MP3 / 256kbps / 44.1kHz / Stereo" },
+                            { text: qsTr("MP3 / 192kbps / 44.1kHz / Stereo"), value: "MP3 / 192kbps / 44.1kHz / Stereo" },
+                            { text: qsTr("FLAC / 44.1kHz / Stereo"), value: "FLAC / 44.1kHz / Stereo" },
+                            { text: qsTr("WAV / 44.1kHz / Stereo"), value: "WAV / 44.1kHz / Stereo" }
+                        ]
+                        currentIndex: {
+                            const values = [
+                                "MP3 / 320kbps / 44.1kHz / Stereo",
+                                "MP3 / 256kbps / 44.1kHz / Stereo",
+                                "MP3 / 192kbps / 44.1kHz / Stereo",
+                                "FLAC / 44.1kHz / Stereo",
+                                "WAV / 44.1kHz / Stereo"
+                            ]
+                            return values.indexOf(SettingsController.defaultTranscodeFormat)
+                        }
+                        onActivated: SettingsController.defaultTranscodeFormat = currentValue
+                    }
                 }
-                onActivated: SettingsController.defaultBitrate = currentValue
+
+                SettingSwitch {
+                    text: qsTr("批量转码时保持原音频元数据")
+                    checked: SettingsController.preserveMetadata
+                    onToggled: SettingsController.preserveMetadata = checked
+                }
+            }
+
+            SettingCard {
+                title: qsTr("变调与变速预设 (SoundTouch)")
+                Layout.preferredHeight: 160
+
+                SettingSwitch {
+                    text: qsTr("变速时保持原音高 / 语速 (Time-stretch)")
+                    checked: SettingsController.keepPitchWhileSpeedChange
+                    onToggled: SettingsController.keepPitchWhileSpeedChange = checked
+                }
+
+                SettingSwitch {
+                    text: qsTr("升降调人声保护 (实验性)")
+                    checked: SettingsController.vocalProtection
+                    onToggled: SettingsController.vocalProtection = checked
+                }
             }
         }
 
         Item { Layout.fillHeight: true }
     }
 
-    component ShortcutsSection: ColumnLayout {
+    component HotkeysSection: ColumnLayout {
         spacing: Theme.spacingSm
 
-        SectionTitle { text: qsTr("快捷键") }
+        SectionHeader {
+            title: qsTr("快捷键设置")
+            subtitle: "Hotkeys"
+        }
 
-        ColumnLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Theme.spacingSm
+            columns: 2
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingMd
 
-            ShortcutRow {
-                label: qsTr("播放/暂停")
-                value: SettingsController.shortcutPlayPause
-                onEditingFinished: SettingsController.shortcutPlayPause = newValue
+            SettingCard {
+                title: qsTr("全局快捷键")
+                Layout.preferredHeight: 220
+
+                HotkeyRow { label: qsTr("播放 / 暂停"); value: SettingsController.hkPlayPause }
+                HotkeyRow { label: qsTr("上一首 / 下一首"); value: SettingsController.hkPrevNext }
+                HotkeyRow { label: qsTr("音量加 / 减"); value: SettingsController.hkVolumeUpDown }
+                HotkeyRow { label: qsTr("显示 / 隐藏迷你播放器"); value: SettingsController.hkToggleMiniPlayer }
             }
 
-            ShortcutRow {
-                label: qsTr("停止")
-                value: SettingsController.shortcutStop
-                onEditingFinished: SettingsController.shortcutStop = newValue
-            }
+            SettingCard {
+                title: qsTr("应用内快捷键")
+                Layout.preferredHeight: 220
 
-            ShortcutRow {
-                label: qsTr("下一首")
-                value: SettingsController.shortcutNext
-                onEditingFinished: SettingsController.shortcutNext = newValue
-            }
-
-            ShortcutRow {
-                label: qsTr("上一首")
-                value: SettingsController.shortcutPrev
-                onEditingFinished: SettingsController.shortcutPrev = newValue
-            }
-
-            ShortcutRow {
-                label: qsTr("音量+")
-                value: SettingsController.shortcutVolumeUp
-                onEditingFinished: SettingsController.shortcutVolumeUp = newValue
-            }
-
-            ShortcutRow {
-                label: qsTr("音量-")
-                value: SettingsController.shortcutVolumeDown
-                onEditingFinished: SettingsController.shortcutVolumeDown = newValue
+                HotkeyRow { label: qsTr("快速搜索歌曲"); value: SettingsController.hkSearch }
+                HotkeyRow { label: qsTr("快速切换波形模式"); value: SettingsController.hkWaveformMode }
+                HotkeyRow { label: qsTr("打开音频工具"); value: SettingsController.hkAudioTools }
             }
         }
 
         Item { Layout.fillHeight: true }
     }
 
-    component ShortcutRow: RowLayout {
+    component HotkeyRow: RowLayout {
         property alias label: labelText.text
-        property string value
-        signal editingFinished(string newValue)
+        property alias value: valueText.text
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 40
+        Layout.preferredHeight: 36
         spacing: Theme.spacingMd
 
         Text {
@@ -1128,138 +1246,188 @@ Popup {
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 14
-            Layout.preferredWidth: 100
+            Layout.preferredWidth: 140
             Layout.alignment: Qt.AlignVCenter
         }
 
-        TextField {
+        Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            text: parent.value
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 13
-            horizontalAlignment: Text.AlignHCenter
-            background: Rectangle {
-                color: Theme.background
-                radius: Theme.radiusSm
-                border.color: Theme.border
-                border.width: 1
+            color: Theme.background
+            radius: Theme.radiusSm
+            border.color: Theme.border
+            border.width: 1
+
+            Text {
+                id: valueText
+                anchors.fill: parent
+                anchors.leftMargin: Theme.spacingMd
+                anchors.rightMargin: Theme.spacingMd
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignVCenter
             }
-            onEditingFinished: parent.editingFinished(text)
         }
     }
 
     component CacheSection: ColumnLayout {
         spacing: Theme.spacingSm
 
-        SectionTitle { text: qsTr("缓存管理") }
+        SectionHeader {
+            title: qsTr("缓存与数据")
+            subtitle: "Cache & Storage"
+        }
 
-        SettingRow {
-            label: qsTr("当前缓存")
-            Text {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: SettingsController.currentCacheSizeMB + " MB"
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 14
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingMd
+
+            SettingCard {
+                title: qsTr("路径与自动清理")
+                Layout.preferredHeight: 220
+
+                SettingRow {
+                    label: qsTr("缓存路径")
+                    PathFieldRow {
+                        anchors.fill: parent
+                        path: SettingsController.cacheDirectory
+                        dialogFolder: SettingsController.cacheDirectory
+                        onPathSelected: SettingsController.cacheDirectory = newPath
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("缓存自动清理（超出上限自动删旧文件）")
+                    checked: SettingsController.autoCleanCache
+                    onToggled: SettingsController.autoCleanCache = checked
+                }
+
+                SettingSwitch {
+                    text: qsTr("退出自动清理临时转码文件")
+                    checked: SettingsController.cleanTempOnExit
+                    onToggled: SettingsController.cleanTempOnExit = checked
+                }
+
+                SettingRow {
+                    label: qsTr("当前缓存")
+                    Text {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: SettingsController.currentCacheSizeMB + " MB"
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 14
+                    }
+                }
             }
-        }
 
-        SettingSlider {
-            label: qsTr("缓存上限")
-            from: 100
-            to: 10240
-            value: SettingsController.cacheSizeLimitMB
-            decimals: 0
-            suffix: " MB"
-            onValueChanged: SettingsController.cacheSizeLimitMB = Math.round(value)
-        }
+            SettingCard {
+                title: qsTr("清理按钮")
+                Layout.preferredHeight: 220
 
-        SettingRow {
-            label: qsTr("缓存目录")
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.spacingSm
-
-                TextField {
-                    id: cacheDirField
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    text: SettingsController.cacheDirectory
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    background: Rectangle {
-                        color: Theme.background
-                        radius: Theme.radiusSm
-                        border.color: Theme.border
-                        border.width: 1
+                    spacing: Theme.spacingSm
+
+                    Button {
+                        text: qsTr("波形缓存")
+                        onClicked: SettingsController.clearWaveformCache()
+                        contentItem: Text {
+                            text: parent.text
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: parent.pressed ? Theme.border
+                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: 90
+                            implicitHeight: 32
+                        }
                     }
-                    onEditingFinished: SettingsController.cacheDirectory = text
-                }
 
-                ToolButton {
-                    icon.source: Theme.icon("folder-open-fill")
-                    icon.color: Theme.secondaryText
-                    icon.width: 18
-                    icon.height: 18
-                    onClicked: cacheFolderDialog.open()
+                    Button {
+                        text: qsTr("封面缓存")
+                        onClicked: SettingsController.clearCoverCache()
+                        contentItem: Text {
+                            text: parent.text
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: parent.pressed ? Theme.border
+                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: 90
+                            implicitHeight: 32
+                        }
+                    }
 
-                    background: Rectangle {
-                        color: parent.pressed ? Theme.border
-                              : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                              : "transparent"
-                        radius: Theme.radiusSm
+                    Button {
+                        text: qsTr("转码临时文件")
+                        onClicked: SettingsController.clearTempFiles()
+                        contentItem: Text {
+                            text: parent.text
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: parent.pressed ? Theme.border
+                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: 100
+                            implicitHeight: 32
+                        }
                     }
                 }
-            }
 
-            FolderDialog {
-                id: cacheFolderDialog
-                currentFolder: SettingsController.cacheDirectory
-                onAccepted: SettingsController.cacheDirectory = selectedFolder.toString().replace("file:///", "")
-            }
-        }
+                Button {
+                    text: qsTr("一键清空全部缓存")
+                    onClicked: clearCacheConfirmDialog.open()
 
-        SettingRow {
-            label: qsTr("退出后清理")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.clearCacheOnExit
-                onToggled: SettingsController.clearCacheOnExit = checked
-            }
-        }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#FFFFFF"
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
 
-        SettingRow {
-            label: ""
-            Button {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("清理缓存")
-                onClicked: SettingsController.clearCache()
-
-                contentItem: Text {
-                    text: parent.text
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    background: Rectangle {
+                        color: parent.pressed ? Qt.darker(Theme.favoriteRed, 1.2)
+                              : parent.hovered ? Qt.lighter(Theme.favoriteRed, 1.1)
+                              : Theme.favoriteRed
+                        radius: Theme.radiusSm
+                        implicitWidth: 180
+                        implicitHeight: 36
+                    }
                 }
 
-                background: Rectangle {
-                    color: parent.pressed ? Theme.border
-                          : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                          : "transparent"
-                    border.color: Theme.border
-                    border.width: 1
-                    radius: Theme.radiusSm
-                    implicitWidth: 120
-                    implicitHeight: 36
-                }
+                Item { Layout.fillHeight: true }
             }
         }
 
@@ -1269,120 +1437,131 @@ Popup {
     component AboutSection: ColumnLayout {
         spacing: Theme.spacingLg
 
-        SectionTitle { text: qsTr("关于") }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacingLg
-
-            Image {
-                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                sourceSize.width: 72
-                sourceSize.height: 72
-                Layout.preferredWidth: 72
-                Layout.preferredHeight: 72
-                fillMode: Image.PreserveAspectFit
-            }
-
-            ColumnLayout {
-                spacing: Theme.spacingXs
-
-                Text {
-                    text: "AgPlayer"
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 22
-                    font.weight: Font.Bold
-                }
-
-                Text {
-                    text: qsTr("版本: ") + SettingsController.version
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                }
-
-                Text {
-                    text: qsTr("构建号: ") + SettingsController.buildNumber
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                }
-
-                Text {
-                    text: qsTr("发布日期: ") + SettingsController.releaseDate
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                }
-            }
+        SectionHeader {
+            title: qsTr("关于")
+            subtitle: "About"
         }
 
-        SettingRow {
-            label: qsTr("启动时检查更新")
-            Switch {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                checked: SettingsController.checkUpdatesOnStartup
-                onToggled: SettingsController.checkUpdatesOnStartup = checked
-            }
-        }
-
-        RowLayout {
+        SettingCard {
+            title: ""
             Layout.fillWidth: true
-            spacing: Theme.spacingMd
+            Layout.preferredHeight: 220
 
-            Button {
-                text: qsTr("检查更新")
-                onClicked: SettingsController.checkForUpdates()
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingLg
 
-                contentItem: Text {
-                    text: parent.text
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                Image {
+                    source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                    sourceSize.width: 72
+                    sourceSize.height: 72
+                    Layout.preferredWidth: 72
+                    Layout.preferredHeight: 72
+                    fillMode: Image.PreserveAspectFit
                 }
 
-                background: Rectangle {
-                    color: parent.pressed ? Theme.border
-                          : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                          : "transparent"
-                    border.color: Theme.border
-                    border.width: 1
-                    radius: Theme.radiusSm
-                    implicitWidth: 120
-                    implicitHeight: 36
+                ColumnLayout {
+                    spacing: Theme.spacingXs
+
+                    Text {
+                        text: "AgPlayer"
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 22
+                        font.weight: Font.Bold
+                    }
+
+                    Text {
+                        text: SettingsController.version
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                    }
+
+                    Text {
+                        text: qsTr("发布日期: ") + SettingsController.releaseDate
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                    }
+
+                    Text {
+                        text: qsTr("轻量、纯粹、为音乐而生。")
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                    }
                 }
-            }
 
-            Button {
-                text: qsTr("官方网站")
-                onClicked: SettingsController.openOfficialWebsite()
+                Item { Layout.fillWidth: true }
 
-                contentItem: Text {
-                    text: parent.text
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                ColumnLayout {
+                    spacing: Theme.spacingMd
 
-                background: Rectangle {
-                    color: parent.pressed ? Theme.border
-                          : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
-                          : "transparent"
-                    border.color: Theme.border
-                    border.width: 1
-                    radius: Theme.radiusSm
-                    implicitWidth: 120
-                    implicitHeight: 36
+                    Button {
+                        text: qsTr("检查更新")
+                        onClicked: SettingsController.checkForUpdates()
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: parent.pressed ? Theme.border
+                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: 120
+                            implicitHeight: 36
+                        }
+                    }
+
+                    Button {
+                        text: qsTr("访问官网")
+                        onClicked: SettingsController.openOfficialWebsite()
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: parent.pressed ? Theme.border
+                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: 120
+                            implicitHeight: 36
+                        }
+                    }
                 }
             }
         }
 
         Item { Layout.fillHeight: true }
+    }
+
+    function updateAssociation(ext, checked) {
+        var list = SettingsController.fileAssociations
+        var idx = list.indexOf(ext)
+        if (checked && idx < 0) {
+            list.push(ext)
+        } else if (!checked && idx >= 0) {
+            list.splice(idx, 1)
+        }
+        SettingsController.fileAssociations = list
     }
 }

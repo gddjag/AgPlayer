@@ -1,5 +1,6 @@
 #include "settings_controller.hpp"
 
+#include <QDebug>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
@@ -7,7 +8,6 @@
 #include <QUrl>
 
 #include <algorithm>
-#include <cmath>
 
 namespace {
 
@@ -15,27 +15,6 @@ template<typename T>
 T clampValue(T value, T min, T max) noexcept
 {
     return std::max(min, std::min(value, max));
-}
-
-QString colorToString(const QColor& color)
-{
-    return color.name(QColor::HexRgb);
-}
-
-QColor colorFromString(const QString& value)
-{
-    if (value.isEmpty()) {
-        return QColor();
-    }
-    return QColor(value);
-}
-
-QString validatedLanguage(const QString& value)
-{
-    if (value.compare(QStringLiteral("en"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral("en");
-    }
-    return QStringLiteral("zh");
 }
 
 } // namespace
@@ -49,103 +28,124 @@ SettingsController::SettingsController(QObject* parent)
 }
 
 // General getters
-bool SettingsController::startupAutoPlay() const noexcept { return startupAutoPlay_; }
-bool SettingsController::minimizeOnStartup() const noexcept { return minimizeOnStartup_; }
+bool SettingsController::autoStartWithWindows() const noexcept { return autoStartWithWindows_; }
+bool SettingsController::restoreLastPlaybackOnStartup() const noexcept { return restoreLastPlaybackOnStartup_; }
+bool SettingsController::showListWindowPanel() const noexcept { return showListWindowPanel_; }
+bool SettingsController::windowMagneticSnap() const noexcept { return windowMagneticSnap_; }
+int SettingsController::listWindowPosition() const noexcept { return listWindowPosition_; }
 int SettingsController::closeBehavior() const noexcept { return closeBehavior_; }
-bool SettingsController::rememberWindowState() const noexcept { return rememberWindowState_; }
 QString SettingsController::language() const { return language_; }
 bool SettingsController::setAsDefaultPlayer() const noexcept { return setAsDefaultPlayer_; }
+QStringList SettingsController::fileAssociations() const { return fileAssociations_; }
 QString SettingsController::defaultExportDirectory() const { return defaultExportDirectory_; }
 
-// Appearance getters
-int SettingsController::listWindowPosition() const noexcept { return listWindowPosition_; }
-int SettingsController::themeMode() const noexcept { return themeMode_; }
-QColor SettingsController::accentColor() const { return accentColor_; }
-double SettingsController::windowTransparency() const noexcept { return windowTransparency_; }
-double SettingsController::fontTransparency() const noexcept { return fontTransparency_; }
-int SettingsController::cornerRadius() const noexcept { return cornerRadius_; }
-
-// Playback getters
+// Playback & Engine getters
 QString SettingsController::outputDevice() const { return outputDevice_; }
-int SettingsController::outputFormat() const noexcept { return outputFormat_; }
-bool SettingsController::autoSampleRate() const noexcept { return autoSampleRate_; }
-double SettingsController::defaultVolume() const noexcept { return defaultVolume_; }
-int SettingsController::fadeInDuration() const noexcept { return fadeInDuration_; }
-int SettingsController::fadeOutDuration() const noexcept { return fadeOutDuration_; }
-QStringList SettingsController::fileAssociations() const { return fileAssociations_; }
+bool SettingsController::audioExclusiveMode() const noexcept { return audioExclusiveMode_; }
+bool SettingsController::playButtonRgbGlow() const noexcept { return playButtonRgbGlow_; }
+int SettingsController::defaultPlaybackMode() const noexcept { return defaultPlaybackMode_; }
+bool SettingsController::gaplessPlayback() const noexcept { return gaplessPlayback_; }
+int SettingsController::crossfadeMs() const noexcept { return crossfadeMs_; }
+bool SettingsController::autoMatchSampleRate() const noexcept { return autoMatchSampleRate_; }
+bool SettingsController::autoReadBpmAndRating() const noexcept { return autoReadBpmAndRating_; }
 
-// Waveform getters
+// Appearance & Visualizer getters
+int SettingsController::themeMode() const noexcept { return themeMode_; }
+bool SettingsController::glassEffect() const noexcept { return glassEffect_; }
 int SettingsController::waveformMode() const noexcept { return waveformMode_; }
-QColor SettingsController::waveformColor() const { return waveformColor_; }
-double SettingsController::waveformBrightness() const noexcept { return waveformBrightness_; }
-int SettingsController::waveformThickness() const noexcept { return waveformThickness_; }
 int SettingsController::waveformDensity() const noexcept { return waveformDensity_; }
+int SettingsController::waveformThickness() const noexcept { return waveformThickness_; }
+bool SettingsController::waveformHoverTimePreview() const noexcept { return waveformHoverTimePreview_; }
 
 // Audio Tools getters
-QString SettingsController::defaultOutputFormat() const { return defaultOutputFormat_; }
-int SettingsController::defaultBitrate() const noexcept { return defaultBitrate_; }
 QString SettingsController::defaultOutputDirectory() const { return defaultOutputDirectory_; }
+int SettingsController::overwritePolicy() const noexcept { return overwritePolicy_; }
+QString SettingsController::defaultTranscodeFormat() const { return defaultTranscodeFormat_; }
+bool SettingsController::preserveMetadata() const noexcept { return preserveMetadata_; }
+bool SettingsController::keepPitchWhileSpeedChange() const noexcept { return keepPitchWhileSpeedChange_; }
+bool SettingsController::vocalProtection() const noexcept { return vocalProtection_; }
 
-// Shortcuts getters
-QString SettingsController::shortcutPlayPause() const { return shortcutPlayPause_; }
-QString SettingsController::shortcutStop() const { return shortcutStop_; }
-QString SettingsController::shortcutNext() const { return shortcutNext_; }
-QString SettingsController::shortcutPrev() const { return shortcutPrev_; }
-QString SettingsController::shortcutVolumeUp() const { return shortcutVolumeUp_; }
-QString SettingsController::shortcutVolumeDown() const { return shortcutVolumeDown_; }
+// Hotkeys getters
+QString SettingsController::hkPlayPause() const { return hkPlayPause_; }
+QString SettingsController::hkPrevNext() const { return hkPrevNext_; }
+QString SettingsController::hkVolumeUpDown() const { return hkVolumeUpDown_; }
+QString SettingsController::hkToggleMiniPlayer() const { return hkToggleMiniPlayer_; }
+QString SettingsController::hkSearch() const { return hkSearch_; }
+QString SettingsController::hkWaveformMode() const { return hkWaveformMode_; }
+QString SettingsController::hkAudioTools() const { return hkAudioTools_; }
 
-// Cache getters
-int SettingsController::cacheSizeLimitMB() const noexcept { return cacheSizeLimitMB_; }
+// Cache & Storage getters
 QString SettingsController::cacheDirectory() const { return cacheDirectory_; }
-bool SettingsController::clearCacheOnExit() const noexcept { return clearCacheOnExit_; }
+bool SettingsController::autoCleanCache() const noexcept { return autoCleanCache_; }
+bool SettingsController::cleanTempOnExit() const noexcept { return cleanTempOnExit_; }
+int SettingsController::cacheSizeLimitMB() const noexcept { return cacheSizeLimitMB_; }
 int SettingsController::currentCacheSizeMB() const noexcept { return currentCacheSizeMB_; }
 
 // About getters
-bool SettingsController::checkUpdatesOnStartup() const noexcept { return checkUpdatesOnStartup_; }
-QString SettingsController::version() const { return QStringLiteral("v1.0"); }
-QString SettingsController::buildNumber() const { return QStringLiteral("2024.05.18.001"); }
-QString SettingsController::releaseDate() const { return QStringLiteral("2024-05-18"); }
+QString SettingsController::version() const { return QStringLiteral("AgPlayer v1.0.0"); }
+QString SettingsController::releaseDate() const { return QStringLiteral("2026.10"); }
 
 // General setters
-void SettingsController::setStartupAutoPlay(bool value)
+void SettingsController::setAutoStartWithWindows(bool value)
 {
-    if (startupAutoPlay_ == value) {
+    if (autoStartWithWindows_ == value) {
         return;
     }
-    startupAutoPlay_ = value;
-    settings_.setValue(QStringLiteral("general/startupAutoPlay"), value);
-    emit startupAutoPlayChanged();
+    autoStartWithWindows_ = value;
+    settings_.setValue(QStringLiteral("general/autoStartWithWindows"), value);
+    emit autoStartWithWindowsChanged();
 }
 
-void SettingsController::setMinimizeOnStartup(bool value)
+void SettingsController::setRestoreLastPlaybackOnStartup(bool value)
 {
-    if (minimizeOnStartup_ == value) {
+    if (restoreLastPlaybackOnStartup_ == value) {
         return;
     }
-    minimizeOnStartup_ = value;
-    settings_.setValue(QStringLiteral("general/minimizeOnStartup"), value);
-    emit minimizeOnStartupChanged();
+    restoreLastPlaybackOnStartup_ = value;
+    settings_.setValue(QStringLiteral("general/restoreLastPlaybackOnStartup"), value);
+    emit restoreLastPlaybackOnStartupChanged();
+}
+
+void SettingsController::setShowListWindowPanel(bool value)
+{
+    if (showListWindowPanel_ == value) {
+        return;
+    }
+    showListWindowPanel_ = value;
+    settings_.setValue(QStringLiteral("general/showListWindowPanel"), value);
+    emit showListWindowPanelChanged();
+}
+
+void SettingsController::setWindowMagneticSnap(bool value)
+{
+    if (windowMagneticSnap_ == value) {
+        return;
+    }
+    windowMagneticSnap_ = value;
+    settings_.setValue(QStringLiteral("general/windowMagneticSnap"), value);
+    emit windowMagneticSnapChanged();
+}
+
+void SettingsController::setListWindowPosition(int value)
+{
+    value = clampValue(value, 0, 3);
+    if (listWindowPosition_ == value) {
+        return;
+    }
+    listWindowPosition_ = value;
+    settings_.setValue(QStringLiteral("general/listWindowPosition"), value);
+    emit listWindowPositionChanged();
 }
 
 void SettingsController::setCloseBehavior(int value)
 {
-    value = clampValue(value, 0, 2);
+    value = clampValue(value, 0, 1);
     if (closeBehavior_ == value) {
         return;
     }
     closeBehavior_ = value;
     settings_.setValue(QStringLiteral("general/closeBehavior"), value);
     emit closeBehaviorChanged();
-}
-
-void SettingsController::setRememberWindowState(bool value)
-{
-    if (rememberWindowState_ == value) {
-        return;
-    }
-    rememberWindowState_ = value;
-    settings_.setValue(QStringLiteral("general/rememberWindowState"), value);
-    emit rememberWindowStateChanged();
 }
 
 void SettingsController::setLanguage(const QString& value)
@@ -169,6 +169,16 @@ void SettingsController::setSetAsDefaultPlayer(bool value)
     emit setAsDefaultPlayerChanged();
 }
 
+void SettingsController::setFileAssociations(const QStringList& value)
+{
+    if (fileAssociations_ == value) {
+        return;
+    }
+    fileAssociations_ = value;
+    settings_.setValue(QStringLiteral("general/fileAssociations"), value);
+    emit fileAssociationsChanged();
+}
+
 void SettingsController::setDefaultExportDirectory(const QString& value)
 {
     if (defaultExportDirectory_ == value) {
@@ -179,18 +189,90 @@ void SettingsController::setDefaultExportDirectory(const QString& value)
     emit defaultExportDirectoryChanged();
 }
 
-// Appearance setters
-void SettingsController::setListWindowPosition(int value)
+// Playback & Engine setters
+void SettingsController::setOutputDevice(const QString& value)
 {
-    value = clampValue(value, 0, 3);
-    if (listWindowPosition_ == value) {
+    if (outputDevice_ == value) {
         return;
     }
-    listWindowPosition_ = value;
-    settings_.setValue(QStringLiteral("appearance/listWindowPosition"), value);
-    emit listWindowPositionChanged();
+    outputDevice_ = value;
+    settings_.setValue(QStringLiteral("playback/outputDevice"), value);
+    emit outputDeviceChanged();
 }
 
+void SettingsController::setAudioExclusiveMode(bool value)
+{
+    if (audioExclusiveMode_ == value) {
+        return;
+    }
+    audioExclusiveMode_ = value;
+    settings_.setValue(QStringLiteral("playback/audioExclusiveMode"), value);
+    emit audioExclusiveModeChanged();
+}
+
+void SettingsController::setPlayButtonRgbGlow(bool value)
+{
+    if (playButtonRgbGlow_ == value) {
+        return;
+    }
+    playButtonRgbGlow_ = value;
+    settings_.setValue(QStringLiteral("playback/playButtonRgbGlow"), value);
+    emit playButtonRgbGlowChanged();
+}
+
+void SettingsController::setDefaultPlaybackMode(int value)
+{
+    value = clampValue(value, 0, 3);
+    if (defaultPlaybackMode_ == value) {
+        return;
+    }
+    defaultPlaybackMode_ = value;
+    settings_.setValue(QStringLiteral("playback/defaultPlaybackMode"), value);
+    emit defaultPlaybackModeChanged();
+}
+
+void SettingsController::setGaplessPlayback(bool value)
+{
+    if (gaplessPlayback_ == value) {
+        return;
+    }
+    gaplessPlayback_ = value;
+    settings_.setValue(QStringLiteral("playback/gaplessPlayback"), value);
+    emit gaplessPlaybackChanged();
+}
+
+void SettingsController::setCrossfadeMs(int value)
+{
+    value = clampValue(value, 0, 2);
+    if (crossfadeMs_ == value) {
+        return;
+    }
+    crossfadeMs_ = value;
+    settings_.setValue(QStringLiteral("playback/crossfadeMs"), value);
+    emit crossfadeMsChanged();
+}
+
+void SettingsController::setAutoMatchSampleRate(bool value)
+{
+    if (autoMatchSampleRate_ == value) {
+        return;
+    }
+    autoMatchSampleRate_ = value;
+    settings_.setValue(QStringLiteral("playback/autoMatchSampleRate"), value);
+    emit autoMatchSampleRateChanged();
+}
+
+void SettingsController::setAutoReadBpmAndRating(bool value)
+{
+    if (autoReadBpmAndRating_ == value) {
+        return;
+    }
+    autoReadBpmAndRating_ = value;
+    settings_.setValue(QStringLiteral("playback/autoReadBpmAndRating"), value);
+    emit autoReadBpmAndRatingChanged();
+}
+
+// Appearance & Visualizer setters
 void SettingsController::setThemeMode(int value)
 {
     value = clampValue(value, 0, 2);
@@ -202,125 +284,16 @@ void SettingsController::setThemeMode(int value)
     emit themeModeChanged();
 }
 
-void SettingsController::setAccentColor(const QColor& value)
+void SettingsController::setGlassEffect(bool value)
 {
-    if (accentColor_ == value) {
+    if (glassEffect_ == value) {
         return;
     }
-    accentColor_ = value;
-    settings_.setValue(QStringLiteral("appearance/accentColor"), colorToString(value));
-    emit accentColorChanged();
+    glassEffect_ = value;
+    settings_.setValue(QStringLiteral("appearance/glassEffect"), value);
+    emit glassEffectChanged();
 }
 
-void SettingsController::setWindowTransparency(double value)
-{
-    value = clampValue(value, 0.5, 1.0);
-    if (std::fabs(windowTransparency_ - value) < 0.001) {
-        return;
-    }
-    windowTransparency_ = value;
-    settings_.setValue(QStringLiteral("appearance/windowTransparency"), value);
-    emit windowTransparencyChanged();
-}
-
-void SettingsController::setFontTransparency(double value)
-{
-    value = clampValue(value, 0.5, 1.0);
-    if (std::fabs(fontTransparency_ - value) < 0.001) {
-        return;
-    }
-    fontTransparency_ = value;
-    settings_.setValue(QStringLiteral("appearance/fontTransparency"), value);
-    emit fontTransparencyChanged();
-}
-
-void SettingsController::setCornerRadius(int value)
-{
-    value = clampValue(value, 0, 16);
-    if (cornerRadius_ == value) {
-        return;
-    }
-    cornerRadius_ = value;
-    settings_.setValue(QStringLiteral("appearance/cornerRadius"), value);
-    emit cornerRadiusChanged();
-}
-
-// Playback setters
-void SettingsController::setOutputDevice(const QString& value)
-{
-    if (outputDevice_ == value) {
-        return;
-    }
-    outputDevice_ = value;
-    settings_.setValue(QStringLiteral("playback/outputDevice"), value);
-    emit outputDeviceChanged();
-}
-
-void SettingsController::setOutputFormat(int value)
-{
-    value = clampValue(value, 0, 2);
-    if (outputFormat_ == value) {
-        return;
-    }
-    outputFormat_ = value;
-    settings_.setValue(QStringLiteral("playback/outputFormat"), value);
-    emit outputFormatChanged();
-}
-
-void SettingsController::setAutoSampleRate(bool value)
-{
-    if (autoSampleRate_ == value) {
-        return;
-    }
-    autoSampleRate_ = value;
-    settings_.setValue(QStringLiteral("playback/autoSampleRate"), value);
-    emit autoSampleRateChanged();
-}
-
-void SettingsController::setDefaultVolume(double value)
-{
-    value = clampValue(value, 0.0, 1.0);
-    if (std::fabs(defaultVolume_ - value) < 0.001) {
-        return;
-    }
-    defaultVolume_ = value;
-    settings_.setValue(QStringLiteral("playback/defaultVolume"), value);
-    emit defaultVolumeChanged();
-}
-
-void SettingsController::setFadeInDuration(int value)
-{
-    value = clampValue(value, 0, 5000);
-    if (fadeInDuration_ == value) {
-        return;
-    }
-    fadeInDuration_ = value;
-    settings_.setValue(QStringLiteral("playback/fadeInDuration"), value);
-    emit fadeInDurationChanged();
-}
-
-void SettingsController::setFadeOutDuration(int value)
-{
-    value = clampValue(value, 0, 5000);
-    if (fadeOutDuration_ == value) {
-        return;
-    }
-    fadeOutDuration_ = value;
-    settings_.setValue(QStringLiteral("playback/fadeOutDuration"), value);
-    emit fadeOutDurationChanged();
-}
-
-void SettingsController::setFileAssociations(const QStringList& value)
-{
-    if (fileAssociations_ == value) {
-        return;
-    }
-    fileAssociations_ = value;
-    settings_.setValue(QStringLiteral("playback/fileAssociations"), value);
-    emit fileAssociationsChanged();
-}
-
-// Waveform setters
 void SettingsController::setWaveformMode(int value)
 {
     value = clampValue(value, 0, 2);
@@ -328,29 +301,19 @@ void SettingsController::setWaveformMode(int value)
         return;
     }
     waveformMode_ = value;
-    settings_.setValue(QStringLiteral("waveform/mode"), value);
+    settings_.setValue(QStringLiteral("appearance/waveformMode"), value);
     emit waveformModeChanged();
 }
 
-void SettingsController::setWaveformColor(const QColor& value)
+void SettingsController::setWaveformDensity(int value)
 {
-    if (waveformColor_ == value) {
+    value = clampValue(value, 0, 2);
+    if (waveformDensity_ == value) {
         return;
     }
-    waveformColor_ = value;
-    settings_.setValue(QStringLiteral("waveform/color"), colorToString(value));
-    emit waveformColorChanged();
-}
-
-void SettingsController::setWaveformBrightness(double value)
-{
-    value = clampValue(value, 0.5, 2.0);
-    if (std::fabs(waveformBrightness_ - value) < 0.001) {
-        return;
-    }
-    waveformBrightness_ = value;
-    settings_.setValue(QStringLiteral("waveform/brightness"), value);
-    emit waveformBrightnessChanged();
+    waveformDensity_ = value;
+    settings_.setValue(QStringLiteral("appearance/waveformDensity"), value);
+    emit waveformDensityChanged();
 }
 
 void SettingsController::setWaveformThickness(int value)
@@ -360,43 +323,21 @@ void SettingsController::setWaveformThickness(int value)
         return;
     }
     waveformThickness_ = value;
-    settings_.setValue(QStringLiteral("waveform/thickness"), value);
+    settings_.setValue(QStringLiteral("appearance/waveformThickness"), value);
     emit waveformThicknessChanged();
 }
 
-void SettingsController::setWaveformDensity(int value)
+void SettingsController::setWaveformHoverTimePreview(bool value)
 {
-    value = clampValue(value, 1, 4);
-    if (waveformDensity_ == value) {
+    if (waveformHoverTimePreview_ == value) {
         return;
     }
-    waveformDensity_ = value;
-    settings_.setValue(QStringLiteral("waveform/density"), value);
-    emit waveformDensityChanged();
+    waveformHoverTimePreview_ = value;
+    settings_.setValue(QStringLiteral("appearance/waveformHoverTimePreview"), value);
+    emit waveformHoverTimePreviewChanged();
 }
 
 // Audio Tools setters
-void SettingsController::setDefaultOutputFormat(const QString& value)
-{
-    if (defaultOutputFormat_ == value) {
-        return;
-    }
-    defaultOutputFormat_ = value;
-    settings_.setValue(QStringLiteral("audioTools/defaultOutputFormat"), value);
-    emit defaultOutputFormatChanged();
-}
-
-void SettingsController::setDefaultBitrate(int value)
-{
-    value = clampValue(value, 64, 320);
-    if (defaultBitrate_ == value) {
-        return;
-    }
-    defaultBitrate_ = value;
-    settings_.setValue(QStringLiteral("audioTools/defaultBitrate"), value);
-    emit defaultBitrateChanged();
-}
-
 void SettingsController::setDefaultOutputDirectory(const QString& value)
 {
     if (defaultOutputDirectory_ == value) {
@@ -407,68 +348,159 @@ void SettingsController::setDefaultOutputDirectory(const QString& value)
     emit defaultOutputDirectoryChanged();
 }
 
-// Shortcuts setters
-void SettingsController::setShortcutPlayPause(const QString& value)
+void SettingsController::setOverwritePolicy(int value)
 {
-    if (shortcutPlayPause_ == value) {
+    value = clampValue(value, 0, 1);
+    if (overwritePolicy_ == value) {
         return;
     }
-    shortcutPlayPause_ = value;
-    settings_.setValue(QStringLiteral("shortcuts/playPause"), value);
-    emit shortcutPlayPauseChanged();
+    overwritePolicy_ = value;
+    settings_.setValue(QStringLiteral("audioTools/overwritePolicy"), value);
+    emit overwritePolicyChanged();
 }
 
-void SettingsController::setShortcutStop(const QString& value)
+void SettingsController::setDefaultTranscodeFormat(const QString& value)
 {
-    if (shortcutStop_ == value) {
+    if (defaultTranscodeFormat_ == value) {
         return;
     }
-    shortcutStop_ = value;
-    settings_.setValue(QStringLiteral("shortcuts/stop"), value);
-    emit shortcutStopChanged();
+    defaultTranscodeFormat_ = value;
+    settings_.setValue(QStringLiteral("audioTools/defaultTranscodeFormat"), value);
+    emit defaultTranscodeFormatChanged();
 }
 
-void SettingsController::setShortcutNext(const QString& value)
+void SettingsController::setPreserveMetadata(bool value)
 {
-    if (shortcutNext_ == value) {
+    if (preserveMetadata_ == value) {
         return;
     }
-    shortcutNext_ = value;
-    settings_.setValue(QStringLiteral("shortcuts/next"), value);
-    emit shortcutNextChanged();
+    preserveMetadata_ = value;
+    settings_.setValue(QStringLiteral("audioTools/preserveMetadata"), value);
+    emit preserveMetadataChanged();
 }
 
-void SettingsController::setShortcutPrev(const QString& value)
+void SettingsController::setKeepPitchWhileSpeedChange(bool value)
 {
-    if (shortcutPrev_ == value) {
+    if (keepPitchWhileSpeedChange_ == value) {
         return;
     }
-    shortcutPrev_ = value;
-    settings_.setValue(QStringLiteral("shortcuts/prev"), value);
-    emit shortcutPrevChanged();
+    keepPitchWhileSpeedChange_ = value;
+    settings_.setValue(QStringLiteral("audioTools/keepPitchWhileSpeedChange"), value);
+    emit keepPitchWhileSpeedChangeChanged();
 }
 
-void SettingsController::setShortcutVolumeUp(const QString& value)
+void SettingsController::setVocalProtection(bool value)
 {
-    if (shortcutVolumeUp_ == value) {
+    if (vocalProtection_ == value) {
         return;
     }
-    shortcutVolumeUp_ = value;
-    settings_.setValue(QStringLiteral("shortcuts/volumeUp"), value);
-    emit shortcutVolumeUpChanged();
+    vocalProtection_ = value;
+    settings_.setValue(QStringLiteral("audioTools/vocalProtection"), value);
+    emit vocalProtectionChanged();
 }
 
-void SettingsController::setShortcutVolumeDown(const QString& value)
+// Hotkeys setters
+void SettingsController::setHkPlayPause(const QString& value)
 {
-    if (shortcutVolumeDown_ == value) {
+    if (hkPlayPause_ == value) {
         return;
     }
-    shortcutVolumeDown_ = value;
-    settings_.setValue(QStringLiteral("shortcuts/volumeDown"), value);
-    emit shortcutVolumeDownChanged();
+    hkPlayPause_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/playPause"), value);
+    emit hkPlayPauseChanged();
 }
 
-// Cache setters
+void SettingsController::setHkPrevNext(const QString& value)
+{
+    if (hkPrevNext_ == value) {
+        return;
+    }
+    hkPrevNext_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/prevNext"), value);
+    emit hkPrevNextChanged();
+}
+
+void SettingsController::setHkVolumeUpDown(const QString& value)
+{
+    if (hkVolumeUpDown_ == value) {
+        return;
+    }
+    hkVolumeUpDown_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/volumeUpDown"), value);
+    emit hkVolumeUpDownChanged();
+}
+
+void SettingsController::setHkToggleMiniPlayer(const QString& value)
+{
+    if (hkToggleMiniPlayer_ == value) {
+        return;
+    }
+    hkToggleMiniPlayer_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/toggleMiniPlayer"), value);
+    emit hkToggleMiniPlayerChanged();
+}
+
+void SettingsController::setHkSearch(const QString& value)
+{
+    if (hkSearch_ == value) {
+        return;
+    }
+    hkSearch_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/search"), value);
+    emit hkSearchChanged();
+}
+
+void SettingsController::setHkWaveformMode(const QString& value)
+{
+    if (hkWaveformMode_ == value) {
+        return;
+    }
+    hkWaveformMode_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/waveformMode"), value);
+    emit hkWaveformModeChanged();
+}
+
+void SettingsController::setHkAudioTools(const QString& value)
+{
+    if (hkAudioTools_ == value) {
+        return;
+    }
+    hkAudioTools_ = value;
+    settings_.setValue(QStringLiteral("hotkeys/audioTools"), value);
+    emit hkAudioToolsChanged();
+}
+
+// Cache & Storage setters
+void SettingsController::setCacheDirectory(const QString& value)
+{
+    if (cacheDirectory_ == value) {
+        return;
+    }
+    cacheDirectory_ = value;
+    settings_.setValue(QStringLiteral("cache/directory"), value);
+    emit cacheDirectoryChanged();
+}
+
+void SettingsController::setAutoCleanCache(bool value)
+{
+    if (autoCleanCache_ == value) {
+        return;
+    }
+    autoCleanCache_ = value;
+    settings_.setValue(QStringLiteral("cache/autoCleanCache"), value);
+    emit autoCleanCacheChanged();
+}
+
+void SettingsController::setCleanTempOnExit(bool value)
+{
+    if (cleanTempOnExit_ == value) {
+        return;
+    }
+    cleanTempOnExit_ = value;
+    settings_.setValue(QStringLiteral("cache/cleanTempOnExit"), value);
+    emit cleanTempOnExitChanged();
+}
+
 void SettingsController::setCacheSizeLimitMB(int value)
 {
     value = std::max(value, 100);
@@ -480,91 +512,84 @@ void SettingsController::setCacheSizeLimitMB(int value)
     emit cacheSizeLimitMBChanged();
 }
 
-void SettingsController::setCacheDirectory(const QString& value)
-{
-    if (cacheDirectory_ == value) {
-        return;
-    }
-    cacheDirectory_ = value;
-    settings_.setValue(QStringLiteral("cache/directory"), value);
-    emit cacheDirectoryChanged();
-}
-
-void SettingsController::setClearCacheOnExit(bool value)
-{
-    if (clearCacheOnExit_ == value) {
-        return;
-    }
-    clearCacheOnExit_ = value;
-    settings_.setValue(QStringLiteral("cache/clearOnExit"), value);
-    emit clearCacheOnExitChanged();
-}
-
-// About setters
-void SettingsController::setCheckUpdatesOnStartup(bool value)
-{
-    if (checkUpdatesOnStartup_ == value) {
-        return;
-    }
-    checkUpdatesOnStartup_ = value;
-    settings_.setValue(QStringLiteral("about/checkUpdatesOnStartup"), value);
-    emit checkUpdatesOnStartupChanged();
-}
-
 void SettingsController::resetToDefaults()
 {
     restoreDefaults();
     saveAll();
 
-    emit startupAutoPlayChanged();
-    emit minimizeOnStartupChanged();
+    emit autoStartWithWindowsChanged();
+    emit restoreLastPlaybackOnStartupChanged();
+    emit showListWindowPanelChanged();
+    emit windowMagneticSnapChanged();
+    emit listWindowPositionChanged();
     emit closeBehaviorChanged();
-    emit rememberWindowStateChanged();
     emit languageChanged();
     emit setAsDefaultPlayerChanged();
+    emit fileAssociationsChanged();
     emit defaultExportDirectoryChanged();
 
-    emit listWindowPositionChanged();
-    emit themeModeChanged();
-    emit accentColorChanged();
-    emit windowTransparencyChanged();
-    emit fontTransparencyChanged();
-    emit cornerRadiusChanged();
-
     emit outputDeviceChanged();
-    emit outputFormatChanged();
-    emit autoSampleRateChanged();
-    emit defaultVolumeChanged();
-    emit fadeInDurationChanged();
-    emit fadeOutDurationChanged();
-    emit fileAssociationsChanged();
+    emit audioExclusiveModeChanged();
+    emit playButtonRgbGlowChanged();
+    emit defaultPlaybackModeChanged();
+    emit gaplessPlaybackChanged();
+    emit crossfadeMsChanged();
+    emit autoMatchSampleRateChanged();
+    emit autoReadBpmAndRatingChanged();
 
+    emit themeModeChanged();
+    emit glassEffectChanged();
     emit waveformModeChanged();
-    emit waveformColorChanged();
-    emit waveformBrightnessChanged();
-    emit waveformThicknessChanged();
     emit waveformDensityChanged();
+    emit waveformThicknessChanged();
+    emit waveformHoverTimePreviewChanged();
 
-    emit defaultOutputFormatChanged();
-    emit defaultBitrateChanged();
     emit defaultOutputDirectoryChanged();
+    emit overwritePolicyChanged();
+    emit defaultTranscodeFormatChanged();
+    emit preserveMetadataChanged();
+    emit keepPitchWhileSpeedChangeChanged();
+    emit vocalProtectionChanged();
 
-    emit shortcutPlayPauseChanged();
-    emit shortcutStopChanged();
-    emit shortcutNextChanged();
-    emit shortcutPrevChanged();
-    emit shortcutVolumeUpChanged();
-    emit shortcutVolumeDownChanged();
+    emit hkPlayPauseChanged();
+    emit hkPrevNextChanged();
+    emit hkVolumeUpDownChanged();
+    emit hkToggleMiniPlayerChanged();
+    emit hkSearchChanged();
+    emit hkWaveformModeChanged();
+    emit hkAudioToolsChanged();
 
-    emit cacheSizeLimitMBChanged();
     emit cacheDirectoryChanged();
-    emit clearCacheOnExitChanged();
+    emit autoCleanCacheChanged();
+    emit cleanTempOnExitChanged();
+    emit cacheSizeLimitMBChanged();
     emit currentCacheSizeMBChanged();
-
-    emit checkUpdatesOnStartupChanged();
 }
 
-void SettingsController::clearCache()
+void SettingsController::rebindFileAssociations()
+{
+    qDebug() << "Rebinding file associations for:" << fileAssociations_;
+}
+
+void SettingsController::clearWaveformCache()
+{
+    qDebug() << "Clearing waveform cache";
+    recalculateCacheSize();
+}
+
+void SettingsController::clearCoverCache()
+{
+    qDebug() << "Clearing cover cache";
+    recalculateCacheSize();
+}
+
+void SettingsController::clearTempFiles()
+{
+    qDebug() << "Clearing temporary files";
+    recalculateCacheSize();
+}
+
+void SettingsController::clearAllCache()
 {
     const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
     if (!dir.isEmpty() && QDir(dir).exists()) {
@@ -598,199 +623,189 @@ void SettingsController::load()
     restoreDefaults();
 
     settings_.beginGroup(QStringLiteral("general"));
-    startupAutoPlay_ = settings_.value(QStringLiteral("startupAutoPlay"), startupAutoPlay_).toBool();
-    minimizeOnStartup_ = settings_.value(QStringLiteral("minimizeOnStartup"), minimizeOnStartup_).toBool();
+    autoStartWithWindows_ = settings_.value(QStringLiteral("autoStartWithWindows"), autoStartWithWindows_).toBool();
+    restoreLastPlaybackOnStartup_ = settings_.value(QStringLiteral("restoreLastPlaybackOnStartup"), restoreLastPlaybackOnStartup_).toBool();
+    showListWindowPanel_ = settings_.value(QStringLiteral("showListWindowPanel"), showListWindowPanel_).toBool();
+    windowMagneticSnap_ = settings_.value(QStringLiteral("windowMagneticSnap"), windowMagneticSnap_).toBool();
+    listWindowPosition_ = settings_.value(QStringLiteral("listWindowPosition"), listWindowPosition_).toInt();
     closeBehavior_ = settings_.value(QStringLiteral("closeBehavior"), closeBehavior_).toInt();
-    rememberWindowState_ = settings_.value(QStringLiteral("rememberWindowState"), rememberWindowState_).toBool();
     language_ = validatedLanguage(settings_.value(QStringLiteral("language"), language_).toString());
     setAsDefaultPlayer_ = settings_.value(QStringLiteral("setAsDefaultPlayer"), setAsDefaultPlayer_).toBool();
+    fileAssociations_ = settings_.value(QStringLiteral("fileAssociations"), fileAssociations_).toStringList();
     defaultExportDirectory_ = settings_.value(QStringLiteral("defaultExportDirectory"), defaultExportDirectory_).toString();
-    settings_.endGroup();
-
-    settings_.beginGroup(QStringLiteral("appearance"));
-    listWindowPosition_ = settings_.value(QStringLiteral("listWindowPosition"), listWindowPosition_).toInt();
-    themeMode_ = settings_.value(QStringLiteral("themeMode"), themeMode_).toInt();
-    accentColor_ = colorFromString(settings_.value(QStringLiteral("accentColor"), colorToString(accentColor_)).toString());
-    windowTransparency_ = settings_.value(QStringLiteral("windowTransparency"), windowTransparency_).toDouble();
-    fontTransparency_ = settings_.value(QStringLiteral("fontTransparency"), fontTransparency_).toDouble();
-    cornerRadius_ = settings_.value(QStringLiteral("cornerRadius"), cornerRadius_).toInt();
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("playback"));
     outputDevice_ = settings_.value(QStringLiteral("outputDevice"), outputDevice_).toString();
-    outputFormat_ = settings_.value(QStringLiteral("outputFormat"), outputFormat_).toInt();
-    autoSampleRate_ = settings_.value(QStringLiteral("autoSampleRate"), autoSampleRate_).toBool();
-    defaultVolume_ = settings_.value(QStringLiteral("defaultVolume"), defaultVolume_).toDouble();
-    fadeInDuration_ = settings_.value(QStringLiteral("fadeInDuration"), fadeInDuration_).toInt();
-    fadeOutDuration_ = settings_.value(QStringLiteral("fadeOutDuration"), fadeOutDuration_).toInt();
-    fileAssociations_ = settings_.value(QStringLiteral("fileAssociations"), fileAssociations_).toStringList();
+    audioExclusiveMode_ = settings_.value(QStringLiteral("audioExclusiveMode"), audioExclusiveMode_).toBool();
+    playButtonRgbGlow_ = settings_.value(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_).toBool();
+    defaultPlaybackMode_ = settings_.value(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_).toInt();
+    gaplessPlayback_ = settings_.value(QStringLiteral("gaplessPlayback"), gaplessPlayback_).toBool();
+    crossfadeMs_ = settings_.value(QStringLiteral("crossfadeMs"), crossfadeMs_).toInt();
+    autoMatchSampleRate_ = settings_.value(QStringLiteral("autoMatchSampleRate"), autoMatchSampleRate_).toBool();
+    autoReadBpmAndRating_ = settings_.value(QStringLiteral("autoReadBpmAndRating"), autoReadBpmAndRating_).toBool();
     settings_.endGroup();
 
-    settings_.beginGroup(QStringLiteral("waveform"));
-    waveformMode_ = settings_.value(QStringLiteral("mode"), waveformMode_).toInt();
-    waveformColor_ = colorFromString(settings_.value(QStringLiteral("color"), colorToString(waveformColor_)).toString());
-    waveformBrightness_ = settings_.value(QStringLiteral("brightness"), waveformBrightness_).toDouble();
-    waveformThickness_ = settings_.value(QStringLiteral("thickness"), waveformThickness_).toInt();
-    waveformDensity_ = settings_.value(QStringLiteral("density"), waveformDensity_).toInt();
+    settings_.beginGroup(QStringLiteral("appearance"));
+    themeMode_ = settings_.value(QStringLiteral("themeMode"), themeMode_).toInt();
+    glassEffect_ = settings_.value(QStringLiteral("glassEffect"), glassEffect_).toBool();
+    waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
+    waveformDensity_ = settings_.value(QStringLiteral("waveformDensity"), waveformDensity_).toInt();
+    waveformThickness_ = settings_.value(QStringLiteral("waveformThickness"), waveformThickness_).toInt();
+    waveformHoverTimePreview_ = settings_.value(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_).toBool();
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("audioTools"));
-    defaultOutputFormat_ = settings_.value(QStringLiteral("defaultOutputFormat"), defaultOutputFormat_).toString();
-    defaultBitrate_ = settings_.value(QStringLiteral("defaultBitrate"), defaultBitrate_).toInt();
     defaultOutputDirectory_ = settings_.value(QStringLiteral("defaultOutputDirectory"), defaultOutputDirectory_).toString();
+    overwritePolicy_ = settings_.value(QStringLiteral("overwritePolicy"), overwritePolicy_).toInt();
+    defaultTranscodeFormat_ = settings_.value(QStringLiteral("defaultTranscodeFormat"), defaultTranscodeFormat_).toString();
+    preserveMetadata_ = settings_.value(QStringLiteral("preserveMetadata"), preserveMetadata_).toBool();
+    keepPitchWhileSpeedChange_ = settings_.value(QStringLiteral("keepPitchWhileSpeedChange"), keepPitchWhileSpeedChange_).toBool();
+    vocalProtection_ = settings_.value(QStringLiteral("vocalProtection"), vocalProtection_).toBool();
     settings_.endGroup();
 
-    settings_.beginGroup(QStringLiteral("shortcuts"));
-    shortcutPlayPause_ = settings_.value(QStringLiteral("playPause"), shortcutPlayPause_).toString();
-    shortcutStop_ = settings_.value(QStringLiteral("stop"), shortcutStop_).toString();
-    shortcutNext_ = settings_.value(QStringLiteral("next"), shortcutNext_).toString();
-    shortcutPrev_ = settings_.value(QStringLiteral("prev"), shortcutPrev_).toString();
-    shortcutVolumeUp_ = settings_.value(QStringLiteral("volumeUp"), shortcutVolumeUp_).toString();
-    shortcutVolumeDown_ = settings_.value(QStringLiteral("volumeDown"), shortcutVolumeDown_).toString();
+    settings_.beginGroup(QStringLiteral("hotkeys"));
+    hkPlayPause_ = settings_.value(QStringLiteral("playPause"), hkPlayPause_).toString();
+    hkPrevNext_ = settings_.value(QStringLiteral("prevNext"), hkPrevNext_).toString();
+    hkVolumeUpDown_ = settings_.value(QStringLiteral("volumeUpDown"), hkVolumeUpDown_).toString();
+    hkToggleMiniPlayer_ = settings_.value(QStringLiteral("toggleMiniPlayer"), hkToggleMiniPlayer_).toString();
+    hkSearch_ = settings_.value(QStringLiteral("search"), hkSearch_).toString();
+    hkWaveformMode_ = settings_.value(QStringLiteral("waveformMode"), hkWaveformMode_).toString();
+    hkAudioTools_ = settings_.value(QStringLiteral("audioTools"), hkAudioTools_).toString();
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("cache"));
-    cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
     cacheDirectory_ = settings_.value(QStringLiteral("directory"), cacheDirectory_).toString();
-    clearCacheOnExit_ = settings_.value(QStringLiteral("clearOnExit"), clearCacheOnExit_).toBool();
-    settings_.endGroup();
-
-    settings_.beginGroup(QStringLiteral("about"));
-    checkUpdatesOnStartup_ = settings_.value(QStringLiteral("checkUpdatesOnStartup"), checkUpdatesOnStartup_).toBool();
+    autoCleanCache_ = settings_.value(QStringLiteral("autoCleanCache"), autoCleanCache_).toBool();
+    cleanTempOnExit_ = settings_.value(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_).toBool();
+    cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
     settings_.endGroup();
 
     // Ensure clamped values are stored within valid ranges.
-    closeBehavior_ = clampValue(closeBehavior_, 0, 2);
     listWindowPosition_ = clampValue(listWindowPosition_, 0, 3);
+    closeBehavior_ = clampValue(closeBehavior_, 0, 1);
+    defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
+    crossfadeMs_ = clampValue(crossfadeMs_, 0, 2);
     themeMode_ = clampValue(themeMode_, 0, 2);
-    windowTransparency_ = clampValue(windowTransparency_, 0.5, 1.0);
-    fontTransparency_ = clampValue(fontTransparency_, 0.5, 1.0);
-    cornerRadius_ = clampValue(cornerRadius_, 0, 16);
-    outputFormat_ = clampValue(outputFormat_, 0, 2);
-    defaultVolume_ = clampValue(defaultVolume_, 0.0, 1.0);
-    fadeInDuration_ = clampValue(fadeInDuration_, 0, 5000);
-    fadeOutDuration_ = clampValue(fadeOutDuration_, 0, 5000);
-    waveformBrightness_ = clampValue(waveformBrightness_, 0.5, 2.0);
+    waveformMode_ = clampValue(waveformMode_, 0, 2);
+    waveformDensity_ = clampValue(waveformDensity_, 0, 2);
     waveformThickness_ = clampValue(waveformThickness_, 1, 4);
-    waveformDensity_ = clampValue(waveformDensity_, 1, 4);
-    defaultBitrate_ = clampValue(defaultBitrate_, 64, 320);
+    overwritePolicy_ = clampValue(overwritePolicy_, 0, 1);
     cacheSizeLimitMB_ = std::max(cacheSizeLimitMB_, 100);
 }
 
 void SettingsController::saveAll()
 {
     settings_.beginGroup(QStringLiteral("general"));
-    settings_.setValue(QStringLiteral("startupAutoPlay"), startupAutoPlay_);
-    settings_.setValue(QStringLiteral("minimizeOnStartup"), minimizeOnStartup_);
+    settings_.setValue(QStringLiteral("autoStartWithWindows"), autoStartWithWindows_);
+    settings_.setValue(QStringLiteral("restoreLastPlaybackOnStartup"), restoreLastPlaybackOnStartup_);
+    settings_.setValue(QStringLiteral("showListWindowPanel"), showListWindowPanel_);
+    settings_.setValue(QStringLiteral("windowMagneticSnap"), windowMagneticSnap_);
+    settings_.setValue(QStringLiteral("listWindowPosition"), listWindowPosition_);
     settings_.setValue(QStringLiteral("closeBehavior"), closeBehavior_);
-    settings_.setValue(QStringLiteral("rememberWindowState"), rememberWindowState_);
     settings_.setValue(QStringLiteral("language"), language_);
     settings_.setValue(QStringLiteral("setAsDefaultPlayer"), setAsDefaultPlayer_);
+    settings_.setValue(QStringLiteral("fileAssociations"), fileAssociations_);
     settings_.setValue(QStringLiteral("defaultExportDirectory"), defaultExportDirectory_);
-    settings_.endGroup();
-
-    settings_.beginGroup(QStringLiteral("appearance"));
-    settings_.setValue(QStringLiteral("listWindowPosition"), listWindowPosition_);
-    settings_.setValue(QStringLiteral("themeMode"), themeMode_);
-    settings_.setValue(QStringLiteral("accentColor"), colorToString(accentColor_));
-    settings_.setValue(QStringLiteral("windowTransparency"), windowTransparency_);
-    settings_.setValue(QStringLiteral("fontTransparency"), fontTransparency_);
-    settings_.setValue(QStringLiteral("cornerRadius"), cornerRadius_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("playback"));
     settings_.setValue(QStringLiteral("outputDevice"), outputDevice_);
-    settings_.setValue(QStringLiteral("outputFormat"), outputFormat_);
-    settings_.setValue(QStringLiteral("autoSampleRate"), autoSampleRate_);
-    settings_.setValue(QStringLiteral("defaultVolume"), defaultVolume_);
-    settings_.setValue(QStringLiteral("fadeInDuration"), fadeInDuration_);
-    settings_.setValue(QStringLiteral("fadeOutDuration"), fadeOutDuration_);
-    settings_.setValue(QStringLiteral("fileAssociations"), fileAssociations_);
+    settings_.setValue(QStringLiteral("audioExclusiveMode"), audioExclusiveMode_);
+    settings_.setValue(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_);
+    settings_.setValue(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_);
+    settings_.setValue(QStringLiteral("gaplessPlayback"), gaplessPlayback_);
+    settings_.setValue(QStringLiteral("crossfadeMs"), crossfadeMs_);
+    settings_.setValue(QStringLiteral("autoMatchSampleRate"), autoMatchSampleRate_);
+    settings_.setValue(QStringLiteral("autoReadBpmAndRating"), autoReadBpmAndRating_);
     settings_.endGroup();
 
-    settings_.beginGroup(QStringLiteral("waveform"));
-    settings_.setValue(QStringLiteral("mode"), waveformMode_);
-    settings_.setValue(QStringLiteral("color"), colorToString(waveformColor_));
-    settings_.setValue(QStringLiteral("brightness"), waveformBrightness_);
-    settings_.setValue(QStringLiteral("thickness"), waveformThickness_);
-    settings_.setValue(QStringLiteral("density"), waveformDensity_);
+    settings_.beginGroup(QStringLiteral("appearance"));
+    settings_.setValue(QStringLiteral("themeMode"), themeMode_);
+    settings_.setValue(QStringLiteral("glassEffect"), glassEffect_);
+    settings_.setValue(QStringLiteral("waveformMode"), waveformMode_);
+    settings_.setValue(QStringLiteral("waveformDensity"), waveformDensity_);
+    settings_.setValue(QStringLiteral("waveformThickness"), waveformThickness_);
+    settings_.setValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("audioTools"));
-    settings_.setValue(QStringLiteral("defaultOutputFormat"), defaultOutputFormat_);
-    settings_.setValue(QStringLiteral("defaultBitrate"), defaultBitrate_);
     settings_.setValue(QStringLiteral("defaultOutputDirectory"), defaultOutputDirectory_);
+    settings_.setValue(QStringLiteral("overwritePolicy"), overwritePolicy_);
+    settings_.setValue(QStringLiteral("defaultTranscodeFormat"), defaultTranscodeFormat_);
+    settings_.setValue(QStringLiteral("preserveMetadata"), preserveMetadata_);
+    settings_.setValue(QStringLiteral("keepPitchWhileSpeedChange"), keepPitchWhileSpeedChange_);
+    settings_.setValue(QStringLiteral("vocalProtection"), vocalProtection_);
     settings_.endGroup();
 
-    settings_.beginGroup(QStringLiteral("shortcuts"));
-    settings_.setValue(QStringLiteral("playPause"), shortcutPlayPause_);
-    settings_.setValue(QStringLiteral("stop"), shortcutStop_);
-    settings_.setValue(QStringLiteral("next"), shortcutNext_);
-    settings_.setValue(QStringLiteral("prev"), shortcutPrev_);
-    settings_.setValue(QStringLiteral("volumeUp"), shortcutVolumeUp_);
-    settings_.setValue(QStringLiteral("volumeDown"), shortcutVolumeDown_);
+    settings_.beginGroup(QStringLiteral("hotkeys"));
+    settings_.setValue(QStringLiteral("playPause"), hkPlayPause_);
+    settings_.setValue(QStringLiteral("prevNext"), hkPrevNext_);
+    settings_.setValue(QStringLiteral("volumeUpDown"), hkVolumeUpDown_);
+    settings_.setValue(QStringLiteral("toggleMiniPlayer"), hkToggleMiniPlayer_);
+    settings_.setValue(QStringLiteral("search"), hkSearch_);
+    settings_.setValue(QStringLiteral("waveformMode"), hkWaveformMode_);
+    settings_.setValue(QStringLiteral("audioTools"), hkAudioTools_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("cache"));
-    settings_.setValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);
     settings_.setValue(QStringLiteral("directory"), cacheDirectory_);
-    settings_.setValue(QStringLiteral("clearOnExit"), clearCacheOnExit_);
-    settings_.endGroup();
-
-    settings_.beginGroup(QStringLiteral("about"));
-    settings_.setValue(QStringLiteral("checkUpdatesOnStartup"), checkUpdatesOnStartup_);
+    settings_.setValue(QStringLiteral("autoCleanCache"), autoCleanCache_);
+    settings_.setValue(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_);
+    settings_.setValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);
     settings_.endGroup();
 }
 
 void SettingsController::restoreDefaults()
 {
-    startupAutoPlay_ = false;
-    minimizeOnStartup_ = false;
+    autoStartWithWindows_ = false;
+    restoreLastPlaybackOnStartup_ = true;
+    showListWindowPanel_ = true;
+    windowMagneticSnap_ = true;
+    listWindowPosition_ = 1;
     closeBehavior_ = 0;
-    rememberWindowState_ = true;
     language_ = QStringLiteral("zh");
     setAsDefaultPlayer_ = false;
-    defaultExportDirectory_ = defaultMusicDirectory();
-
-    listWindowPosition_ = 0;
-    themeMode_ = 0;
-    accentColor_ = QColor(QStringLiteral("#00D4FF"));
-    windowTransparency_ = 1.0;
-    fontTransparency_ = 1.0;
-    cornerRadius_ = 12;
-
-    outputDevice_ = QStringLiteral("Default");
-    outputFormat_ = 0;
-    autoSampleRate_ = true;
-    defaultVolume_ = 0.6;
-    fadeInDuration_ = 0;
-    fadeOutDuration_ = 0;
     fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
         QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
         QStringLiteral("ogg")};
+    defaultExportDirectory_ = defaultExportDir();
 
-    waveformMode_ = 0;
-    waveformColor_ = QColor(QStringLiteral("#00D4FF"));
-    waveformBrightness_ = 1.0;
+    outputDevice_ = QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907");
+    audioExclusiveMode_ = false;
+    playButtonRgbGlow_ = true;
+    defaultPlaybackMode_ = 3;
+    gaplessPlayback_ = true;
+    crossfadeMs_ = 0;
+    autoMatchSampleRate_ = true;
+    autoReadBpmAndRating_ = true;
+
+    themeMode_ = 0;
+    glassEffect_ = true;
+    waveformMode_ = 1;
+    waveformDensity_ = 1;
     waveformThickness_ = 2;
-    waveformDensity_ = 2;
+    waveformHoverTimePreview_ = true;
 
-    defaultOutputFormat_ = QStringLiteral("mp3");
-    defaultBitrate_ = 320;
-    defaultOutputDirectory_ = defaultMusicDirectory() + QStringLiteral("/AgPlayer Export");
+    defaultOutputDirectory_ = defaultExportDir();
+    overwritePolicy_ = 0;
+    defaultTranscodeFormat_ = QStringLiteral("MP3 / 320kbps / 44.1kHz / Stereo");
+    preserveMetadata_ = true;
+    keepPitchWhileSpeedChange_ = true;
+    vocalProtection_ = true;
 
-    shortcutPlayPause_ = QStringLiteral("Space");
-    shortcutStop_ = QStringLiteral("Ctrl+S");
-    shortcutNext_ = QStringLiteral("Ctrl+Right");
-    shortcutPrev_ = QStringLiteral("Ctrl+Left");
-    shortcutVolumeUp_ = QStringLiteral("Ctrl+Up");
-    shortcutVolumeDown_ = QStringLiteral("Ctrl+Down");
+    hkPlayPause_ = QStringLiteral("Global + Space");
+    hkPrevNext_ = QStringLiteral("Global + Left / Global + Right");
+    hkVolumeUpDown_ = QStringLiteral("Global + Up / Global + Down");
+    hkToggleMiniPlayer_ = QStringLiteral("Alt + P");
+    hkSearch_ = QStringLiteral("Ctrl + F");
+    hkWaveformMode_ = QStringLiteral("Tab");
+    hkAudioTools_ = QStringLiteral("Alt + D");
 
-    cacheSizeLimitMB_ = 1024;
     cacheDirectory_ = defaultCacheDirectory();
-    clearCacheOnExit_ = false;
-
-    checkUpdatesOnStartup_ = true;
+    autoCleanCache_ = true;
+    cleanTempOnExit_ = true;
+    cacheSizeLimitMB_ = 1024;
 }
 
 void SettingsController::recalculateCacheSize()
@@ -831,5 +846,22 @@ QString SettingsController::defaultCacheDirectory()
     if (location.isEmpty()) {
         return QDir::homePath() + QStringLiteral("/AgPlayer/cache");
     }
-    return location;
+    return location + QStringLiteral("/AgPlayer");
+}
+
+QString SettingsController::defaultExportDir()
+{
+    return defaultMusicDirectory() + QStringLiteral("/AgPlayer_Export");
+}
+
+QString SettingsController::validatedLanguage(const QString& value)
+{
+    static const QStringList supported = {QStringLiteral("zh"), QStringLiteral("en"),
+        QStringLiteral("ko"), QStringLiteral("th"), QStringLiteral("my"),
+        QStringLiteral("vi"), QStringLiteral("lo")};
+    const QString lower = value.toLower();
+    if (supported.contains(lower)) {
+        return lower;
+    }
+    return QStringLiteral("zh");
 }
