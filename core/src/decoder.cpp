@@ -339,6 +339,12 @@ private:
         metadata_.album = read_tag(audio_stream.metadata,
                                    format_context_->metadata,
                                    "album");
+        metadata_.year = read_tag(audio_stream.metadata,
+                                  format_context_->metadata,
+                                  "date");
+        metadata_.genre = read_tag(audio_stream.metadata,
+                                   format_context_->metadata,
+                                   "genre");
         metadata_.format = format_context_->iformat != nullptr
                                && format_context_->iformat->name != nullptr
                            ? format_context_->iformat->name
