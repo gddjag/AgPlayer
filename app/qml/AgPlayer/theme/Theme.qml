@@ -27,6 +27,7 @@ QtObject {
 
     readonly property color waveformCyan: "#00D4FF"
     readonly property color waveformBlue: "#1688FF"
+    readonly property color waveformGreen: "#00E676"
     readonly property color waveformViolet: "#7B2FF7"
     readonly property color waveformMagenta: "#E62E9B"
     readonly property color waveformRed: "#FF4057"

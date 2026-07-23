@@ -54,7 +54,12 @@ Rectangle {
 
     function applyCrop() {
         if (!page.hasDuration) return
-        page.trimEndMs = Math.max(page.trimStartMs + 200, page.playheadMs)
+        const mid = (page.trimStartMs + page.trimEndMs) / 2
+        if (page.playheadMs < mid) {
+            page.trimEndMs = Math.max(page.trimStartMs + 200, page.playheadMs)
+        } else {
+            page.trimStartMs = Math.min(page.trimEndMs - 200, page.playheadMs)
+        }
     }
 
     function zoomIn() {
@@ -139,6 +144,31 @@ Rectangle {
                     contentItem: Text {
                         text: parent.text
                         color: Theme.background
+                        font.pixelSize: 13
+                        font.family: Theme.fontPrimary
+                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                Button {
+                    text: qsTr("Clear")
+                    enabled: editor.hasInput && !editor.busy
+                    onClicked: editor.clear()
+
+                    background: Rectangle {
+                        color: parent.pressed ? Theme.violet
+                              : parent.hovered ? Theme.border
+                              : Theme.background
+                        border.color: Theme.border
+                        border.width: 1
+                        radius: Theme.radiusSm
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: Theme.primaryText
                         font.pixelSize: 13
                         font.family: Theme.fontPrimary
                         font.weight: Font.Medium
@@ -347,6 +377,8 @@ Rectangle {
                     model: trackModel
 
                     MultiTrackWaveform {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                         trackIndex: index
                         trackName: model.name
                         trackDurationMs: model.durationMs
@@ -364,6 +396,43 @@ Rectangle {
                         onSeekRequested: function(positionMs) {
                             page.playheadMs = Math.max(0, Math.min(positionMs, editor.durationMs))
                         }
+                    }
+                }
+            }
+
+            DropArea {
+                id: trackDropArea
+                anchors.fill: parent
+                enabled: !editor.busy
+                keys: ["text/uri-list"]
+
+                onEntered: function(drag) {
+                    if (drag.hasUrls) drag.accept(Qt.CopyAction)
+                    else drag.accepted = false
+                }
+                onDropped: function(drop) {
+                    if (drop.hasUrls && drop.urls.length > 0)
+                        editor.loadFile(drop.urls[0])
+                }
+
+                Rectangle {
+                    id: dropOverlay
+                    anchors.fill: parent
+                    color: Qt.rgba(0, 0, 0, 0.5)
+                    border.color: Theme.cyan
+                    border.width: 2
+                    opacity: trackDropArea.containsDrag ? 1 : 0
+                    visible: opacity > 0
+
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("Drop audio file here")
+                        color: Theme.cyan
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 14
+                        font.weight: Font.Medium
                     }
                 }
             }

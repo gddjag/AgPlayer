@@ -13,6 +13,7 @@ Rectangle {
     border.color: root.isSelected ? Theme.cyan : Theme.border
     border.width: root.isSelected ? 2 : 1
     height: 78
+    Layout.fillWidth: true
 
     property int trackIndex: 0
     property string trackName: ""
@@ -217,7 +218,7 @@ Rectangle {
 
                     Text {
                         anchors.centerIn: parent
-                        text: qsTr("Drop an audio file to load this track")
+                        text: qsTr("Empty track")
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 12
