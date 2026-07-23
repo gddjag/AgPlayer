@@ -43,7 +43,11 @@ Rectangle {
         FileDialog {
             fileMode: FileDialog.OpenFiles
             nameFilters: [qsTr("Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)")]
-            onAccepted: editor.loadFiles(files)
+            onAccepted: {
+                editor.loadFiles(files)
+                destroy()
+            }
+            onRejected: destroy()
         }
     }
 
@@ -52,7 +56,11 @@ Rectangle {
         FileDialog {
             fileMode: FileDialog.OpenFile
             nameFilters: [qsTr("Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")]
-            onAccepted: editor.setCoverImage(file)
+            onAccepted: {
+                editor.setCoverImage(file)
+                destroy()
+            }
+            onRejected: destroy()
         }
     }
 
@@ -593,6 +601,14 @@ Rectangle {
                                         }
                                     }
                                 }
+
+                                Text {
+                                    text: qsTr("No files selected")
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 11
+                                    visible: selectedFilesRadio.checked && page.selectedIndices.length === 0
+                                }
                             }
 
                             Item { Layout.fillWidth: true }
@@ -600,6 +616,7 @@ Rectangle {
                             Button {
                                 text: qsTr("Process")
                                 enabled: !editor.busy && editor.fileCount > 0
+                                         && (!selectedFilesRadio.checked || page.selectedIndices.length > 0)
                                 onClicked: {
                                     const fields = {
                                         "title": titleField.text,

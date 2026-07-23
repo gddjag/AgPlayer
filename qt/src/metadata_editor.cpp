@@ -29,7 +29,7 @@ int MetadataEditor::fileCount() const noexcept
 
 QString MetadataEditor::coverImage() const
 {
-    return coverPath_;
+    return coverPath_.isEmpty() ? QString() : QUrl::fromLocalFile(coverPath_).toString();
 }
 
 void MetadataEditor::resetCover()
