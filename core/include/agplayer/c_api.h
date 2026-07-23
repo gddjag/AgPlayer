@@ -137,13 +137,36 @@ ag_result ag_transcode(const char* input_path,
                        ag_progress_callback progress_callback,
                        void* user_data);
 
+/* Extended options for ag_pitch_shift_ex. Set unused fields to 0/NULL. */
+typedef struct ag_pitch_shift_options {
+    int vocal_protection;    /* 1 = attempt to preserve vocal formants (experimental) */
+    int smooth_transition;   /* 1 = use smooth transition blending (experimental) */
+    int output_sample_rate;  /* 0 = auto (follow pitch/tempo), else target Hz */
+} ag_pitch_shift_options;
+
 /* Pitch-shift an audio file using FFmpeg asetrate + atempo filters.
  * pitch_cents: pitch shift in cents (1 semitone = 100 cents), range -1200..1200.
  * keep_tempo: 1 = preserve original tempo/duration (pitch only), 0 = pitch and
  *   tempo change together.
  * tempo_ratio: additional tempo multiplier (1.0 = no change), range 0.5..2.0.
- * output_path: destination file path (format determined by extension).
+ * output_codec_name: NULL = same codec as input, else FFmpeg codec name
+ *   (e.g. "libmp3lame", "flac", "libopus"). Output container is inferred from
+ *   output_path extension.
+ * options: additional options (may be NULL for defaults).
  * Returns AG_OK on success, AG_CANCELLED if cancelled. */
+ag_result ag_pitch_shift_ex(const char* input_path,
+                            const char* output_path,
+                            int pitch_cents,
+                            int keep_tempo,
+                            double tempo_ratio,
+                            const char* output_codec_name,
+                            const ag_pitch_shift_options* options,
+                            const ag_cancel_token* cancel_token,
+                            ag_progress_callback progress_callback,
+                            void* user_data);
+
+/* Backwards-compatible pitch-shift wrapper. Calls ag_pitch_shift_ex with
+ * output_codec_name = NULL and default options. */
 ag_result ag_pitch_shift(const char* input_path,
                          const char* output_path,
                          int pitch_cents,

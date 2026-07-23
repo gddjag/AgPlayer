@@ -181,6 +181,10 @@ ag_result pitch_shift(const std::string& input_path,
         error = "Tempo ratio out of range (0.5..2.0)";
         return AG_INVALID_ARGUMENT;
     }
+    if (config.output_sample_rate < 0) {
+        error = "Output sample rate must be non-negative";
+        return AG_INVALID_ARGUMENT;
+    }
 
     // 1. Open decoder
     DecoderState dec;
@@ -407,7 +411,7 @@ ag_result pitch_shift(const std::string& input_path,
 
     if (progress_callback) progress_callback(0.7f);
 
-    // 5. Set up encoder: same codec as input
+    // 5. Set up encoder: same codec as input unless a specific codec is requested
     AVFormatContext* out_fmt = nullptr;
     if (avformat_alloc_output_context2(&out_fmt, nullptr, nullptr,
                                        config.output_path.c_str()) < 0
@@ -417,6 +421,19 @@ ag_result pitch_shift(const std::string& input_path,
     }
 
     const AVCodec* enc_codec = dec.codec;
+    if (!config.output_codec_name.empty()) {
+        const AVCodec* requested = avcodec_find_encoder_by_name(
+            config.output_codec_name.c_str());
+        if (requested != nullptr) {
+            enc_codec = requested;
+        }
+    }
+    if (enc_codec == nullptr) {
+        avformat_free_context(out_fmt);
+        error = "Failed to find output encoder";
+        return AG_INTERNAL_ERROR;
+    }
+
     AVCodecContext* enc_ctx = avcodec_alloc_context3(enc_codec);
     if (enc_ctx == nullptr) {
         avformat_free_context(out_fmt);
@@ -436,6 +453,12 @@ ag_result pitch_shift(const std::string& input_path,
             std::round(dec.ctx->sample_rate * pitch_ratio));
         if (enc_sample_rate < 1) enc_sample_rate = 1;
     }
+
+    // If a specific output sample rate is requested, the stretched audio is
+    // resampled to this rate before encoding.
+    const int final_sample_rate = config.output_sample_rate > 0
+        ? config.output_sample_rate
+        : enc_sample_rate;
 
     // Use a sample format the encoder supports (prefer original, fallback to FLTP)
     AVSampleFormat enc_sample_fmt = dec.ctx->sample_fmt;
@@ -461,7 +484,7 @@ ag_result pitch_shift(const std::string& input_path,
 #endif
 
     enc_ctx->sample_fmt = enc_sample_fmt;
-    enc_ctx->sample_rate = enc_sample_rate;
+    enc_ctx->sample_rate = final_sample_rate;
     av_channel_layout_copy(&enc_ctx->ch_layout, &dec.ctx->ch_layout);
     enc_ctx->bit_rate = dec.ctx->bit_rate;
     enc_ctx->thread_count = 1;
@@ -514,7 +537,7 @@ ag_result pitch_shift(const std::string& input_path,
     av_opt_set_chlayout(fmt_swr, "in_chlayout", &fmt_in_ch, 0);
     av_opt_set_chlayout(fmt_swr, "out_chlayout", &fmt_out_ch, 0);
     av_opt_set_int(fmt_swr, "in_sample_rate", enc_sample_rate, 0);
-    av_opt_set_int(fmt_swr, "out_sample_rate", enc_sample_rate, 0);
+    av_opt_set_int(fmt_swr, "out_sample_rate", final_sample_rate, 0);
     av_opt_set_sample_fmt(fmt_swr, "in_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
     av_opt_set_sample_fmt(fmt_swr, "out_sample_fmt", enc_sample_fmt, 0);
 
@@ -562,11 +585,10 @@ ag_result pitch_shift(const std::string& input_path,
         // Convert to encoder format: allocate encoder frame and convert
         AVFrame* enc_frame = av_frame_alloc();
         enc_frame->format = enc_sample_fmt;
-        enc_frame->sample_rate = enc_sample_rate;
+        enc_frame->sample_rate = final_sample_rate;
         av_channel_layout_copy(&enc_frame->ch_layout, &enc_ctx->ch_layout);
         enc_frame->nb_samples = samples_this_frame;
         enc_frame->pts = pts;
-        pts += samples_this_frame;
         if (av_frame_get_buffer(enc_frame, 0) < 0) {
             av_frame_free(&enc_frame);
             av_frame_unref(out_frame);
@@ -585,6 +607,7 @@ ag_result pitch_shift(const std::string& input_path,
             continue;
         }
         enc_frame->nb_samples = conv_samples;
+        pts += conv_samples;
 
         if (!encode_frame(enc_ctx, out_fmt, enc_frame, error)) {
             av_frame_free(&enc_frame);

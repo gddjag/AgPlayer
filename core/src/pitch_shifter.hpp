@@ -18,11 +18,18 @@ namespace agplayer {
 //   of pitch shift. Range: 0.5..2.0.
 //   When keep_tempo=true: atempo = tempo_ratio (independent tempo control)
 //   When keep_tempo=false: atempo = 2^(-cents/1200) * tempo_ratio
+// output_codec_name: empty = same codec as input, else FFmpeg codec name.
+// output_sample_rate: 0 = auto (follow pitch/tempo), else target output Hz.
+// vocal_protection / smooth_transition: experimental flags (currently no-ops).
 struct PitchShiftConfig {
     int pitch_cents = 0;
     bool keep_tempo = true;
     double tempo_ratio = 1.0;
     std::string output_path;
+    std::string output_codec_name;
+    int output_sample_rate = 0;
+    bool vocal_protection = false;
+    bool smooth_transition = false;
 };
 
 // Pitch-shift an audio file using FFmpeg's asetrate + atempo filter graph.

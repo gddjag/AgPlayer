@@ -480,14 +480,16 @@ ag_result ag_transcode(const char* input_path,
     }
 }
 
-ag_result ag_pitch_shift(const char* input_path,
-                         const char* output_path,
-                         const int pitch_cents,
-                         const int keep_tempo,
-                         const double tempo_ratio,
-                         const ag_cancel_token* cancel_token,
-                         const ag_progress_callback progress_callback,
-                         void* const user_data)
+ag_result ag_pitch_shift_ex(const char* input_path,
+                            const char* output_path,
+                            const int pitch_cents,
+                            const int keep_tempo,
+                            const double tempo_ratio,
+                            const char* output_codec_name,
+                            const ag_pitch_shift_options* options,
+                            const ag_cancel_token* cancel_token,
+                            const ag_progress_callback progress_callback,
+                            void* const user_data)
 {
     if (input_path == nullptr || input_path[0] == '\0'
         || output_path == nullptr || output_path[0] == '\0') {
@@ -500,6 +502,14 @@ ag_result ag_pitch_shift(const char* input_path,
         config.pitch_cents = pitch_cents;
         config.keep_tempo = keep_tempo != 0;
         config.tempo_ratio = tempo_ratio;
+        if (output_codec_name != nullptr) {
+            config.output_codec_name = output_codec_name;
+        }
+        if (options != nullptr) {
+            config.vocal_protection = options->vocal_protection != 0;
+            config.smooth_transition = options->smooth_transition != 0;
+            config.output_sample_rate = options->output_sample_rate;
+        }
 
         const std::atomic_bool* cancelled =
             cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
@@ -517,6 +527,20 @@ ag_result ag_pitch_shift(const char* input_path,
     } catch (...) {
         return AG_INTERNAL_ERROR;
     }
+}
+
+ag_result ag_pitch_shift(const char* input_path,
+                         const char* output_path,
+                         const int pitch_cents,
+                         const int keep_tempo,
+                         const double tempo_ratio,
+                         const ag_cancel_token* cancel_token,
+                         const ag_progress_callback progress_callback,
+                         void* const user_data)
+{
+    return ag_pitch_shift_ex(input_path, output_path, pitch_cents, keep_tempo,
+                             tempo_ratio, nullptr, nullptr, cancel_token,
+                             progress_callback, user_data);
 }
 
 ag_result ag_light_edit(const char* input_path,
