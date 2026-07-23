@@ -38,33 +38,6 @@ Rectangle {
         selectedIndicesChanged()
     }
 
-    function buildExample() {
-        const prefix = prefixField.text
-        const suffix = suffixField.text
-        const autoNumber = autoNumberCheck.checked
-        const start = numberStartSpin.value
-        const digits = numberDigitsSpin.value
-        let stem = "Song"
-        if (editor.fileCount > 0) {
-            const first = editor.entryAt(0)
-            const name = first.fileName
-            const dot = name.lastIndexOf(".")
-            stem = dot > 0 ? name.substring(0, dot) : name
-        }
-        let number = ""
-        if (autoNumber) {
-            let n = start
-            for (let i = 0; i < digits; ++i) {
-                number = (n % 10) + number
-                n = Math.floor(n / 10)
-            }
-            number = (start + "").padStart(digits, "0")
-        }
-        return number + (prefix ? "-" + prefix : "")
-            + (autoNumber ? "-" : "") + stem
-            + (suffix ? "-" + suffix : "") + ".mp3"
-    }
-
     Component {
         id: audioFileDialogComponent
         FileDialog {
@@ -634,7 +607,7 @@ Rectangle {
                                         "album": albumField.text
                                     }
                                     let indices = []
-                                    if (rangeGroup.checkedButton.text === qsTr("Apply to Selected Files")) {
+                                    if (selectedFilesRadio.checked) {
                                         indices = page.selectedIndices
                                     }
                                     editor.applyMetadata(fields, indices)
@@ -954,7 +927,12 @@ Rectangle {
                             }
 
                             Text {
-                                text: qsTr("Example: %1").arg(page.buildExample())
+                                text: qsTr("Example: %1").arg(editor.renameExample(
+                                    prefixField.text,
+                                    suffixField.text,
+                                    autoNumberCheck.checked,
+                                    numberStartSpin.value,
+                                    numberDigitsSpin.value))
                                 color: Theme.secondaryText
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: 12

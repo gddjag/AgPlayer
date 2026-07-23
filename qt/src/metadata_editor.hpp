@@ -55,6 +55,11 @@ public:
                                                   bool autoNumber,
                                                   int numberStart,
                                                   int numberDigits) const;
+    Q_INVOKABLE QString renameExample(const QString& prefix,
+                                      const QString& suffix,
+                                      bool autoNumber,
+                                      int numberStart,
+                                      int numberDigits) const;
     Q_INVOKABLE void applyRename(const QString& prefix,
                                  const QString& suffix,
                                  bool autoNumber,

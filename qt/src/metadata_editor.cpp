@@ -328,6 +328,18 @@ QVariantList MetadataEditor::renamePreviewEntries(const QString& prefix,
     return result;
 }
 
+QString MetadataEditor::renameExample(const QString& prefix,
+                                      const QString& suffix,
+                                      bool autoNumber,
+                                      int numberStart,
+                                      int numberDigits) const
+{
+    const QString placeholder = QStringLiteral("Song.mp3");
+    const QString original = entries_.isEmpty() ? placeholder : entries_[0].fileName;
+    return computeNewName(original, prefix, suffix, autoNumber,
+                          numberStart, numberDigits);
+}
+
 void MetadataEditor::applyRename(const QString& prefix,
                                  const QString& suffix,
                                  bool autoNumber,
