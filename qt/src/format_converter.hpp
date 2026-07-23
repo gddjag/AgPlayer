@@ -1,5 +1,7 @@
 #pragma once
 
+#include <agplayer/c_api.h>
+
 #include <QList>
 #include <QMutex>
 #include <QObject>
@@ -86,6 +88,7 @@ private:
     std::atomic<bool> busy_{false};
     std::atomic<int> completedCount_{0};
     std::atomic<int> failedCount_{0};
+    std::atomic<ag_cancel_token*> currentToken_{nullptr};
 
     void setBusy(bool value);
     void setProgress(double value);

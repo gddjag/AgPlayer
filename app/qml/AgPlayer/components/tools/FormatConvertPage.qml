@@ -31,7 +31,7 @@ Rectangle {
         id: outputDirDialogComponent
         FolderDialog {
             onAccepted: {
-                outputDirField.text = folder
+                outputDirField.text = folder.toString().replace(/^file:\/+/, "")
                 destroy()
             }
             onRejected: destroy()
@@ -463,12 +463,12 @@ Rectangle {
                     id: bitRateCombo
                     Layout.fillWidth: true
                     model: [
-                        { label: "64 kbps", value: 64000 },
-                        { label: "96 kbps", value: 96000 },
-                        { label: "128 kbps", value: 128000 },
-                        { label: "192 kbps", value: 192000 },
-                        { label: "256 kbps", value: 256000 },
-                        { label: "320 kbps", value: 320000 },
+                        { label: qsTr("%1 kbps").arg(64), value: 64000 },
+                        { label: qsTr("%1 kbps").arg(96), value: 96000 },
+                        { label: qsTr("%1 kbps").arg(128), value: 128000 },
+                        { label: qsTr("%1 kbps").arg(192), value: 192000 },
+                        { label: qsTr("%1 kbps").arg(256), value: 256000 },
+                        { label: qsTr("%1 kbps").arg(320), value: 320000 },
                         { label: qsTr("Lossless"), value: 0 }
                     ]
                     textRole: "label"
@@ -503,11 +503,11 @@ Rectangle {
                     Layout.fillWidth: true
                     model: [
                         { label: qsTr("Auto"), value: 0 },
-                        { label: "44100 Hz", value: 44100 },
-                        { label: "48000 Hz", value: 48000 },
-                        { label: "22050 Hz", value: 22050 },
-                        { label: "16000 Hz", value: 16000 },
-                        { label: "8000 Hz", value: 8000 }
+                        { label: qsTr("%1 Hz").arg(44100), value: 44100 },
+                        { label: qsTr("%1 Hz").arg(48000), value: 48000 },
+                        { label: qsTr("%1 Hz").arg(22050), value: 22050 },
+                        { label: qsTr("%1 Hz").arg(16000), value: 16000 },
+                        { label: qsTr("%1 Hz").arg(8000), value: 8000 }
                     ]
                     textRole: "label"
                     valueRole: "value"

@@ -327,6 +327,7 @@ void FormatConverter::start(const QString& outputFormat,
     }
 
     cancelFlag_.store(false, std::memory_order_release);
+    currentToken_.store(nullptr, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
     setCompletedCount(0);
@@ -346,10 +347,17 @@ void FormatConverter::start(const QString& outputFormat,
     connect(watcher, &QFutureWatcher<void>::finished, this,
         [this, watcher]() {
             watcher->deleteLater();
+            ag_cancel_token* t = currentToken_.exchange(nullptr,
+                std::memory_order_acq_rel);
+            if (t) ag_cancel_token_destroy(t);
             const int success = completedCount_.load(std::memory_order_acquire)
                                 - failedCount_.load(std::memory_order_acquire);
             const int failure = failedCount_.load(std::memory_order_acquire);
-            setProgress(1.0);
+            if (cancelFlag_.load(std::memory_order_acquire)) {
+                setProgress(0.0);
+            } else {
+                setProgress(1.0);
+            }
             setBusy(false);
             emit transcodeCompleted(success, failure);
         });
@@ -396,6 +404,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         setEntryStatus(i, FileStatus::Converting);
 
         ag_cancel_token* token = ag_cancel_token_create();
+        currentToken_.store(token, std::memory_order_release);
         const QByteArray inputUtf8 = inputPath.toUtf8();
         const QByteArray outputUtf8 = outputPath.toUtf8();
 
@@ -410,6 +419,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             nullptr,
             nullptr);
 
+        currentToken_.store(nullptr, std::memory_order_release);
         ag_cancel_token_destroy(token);
 
         if (cancelFlag_.load(std::memory_order_acquire)) {
@@ -441,4 +451,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
 void FormatConverter::cancel()
 {
     cancelFlag_.store(true, std::memory_order_release);
+    ag_cancel_token* t = currentToken_.load(std::memory_order_acquire);
+    if (t) {
+        ag_cancel_token_cancel(t);
+    }
 }
