@@ -195,6 +195,10 @@ bool LibraryFilterModel::rowMatchesRating(int sourceRow) const
 
 bool LibraryFilterModel::rowMatchesBpm(int sourceRow) const
 {
+    // Default range means "BPM filter disabled" so tracks with unknown BPM still show.
+    if (qFuzzyCompare(minBpm_, 0.0) && qFuzzyCompare(maxBpm_, 300.0)) {
+        return true;
+    }
     QAbstractItemModel* model = sourceModel();
     const QModelIndex idx = model->index(sourceRow, 0);
     bool ok = false;

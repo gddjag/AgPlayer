@@ -9,8 +9,8 @@ Rectangle {
 
     property string searchText: ""
     property int minRating: 0
-    property double minBpm: 60.0
-    property double maxBpm: 160.0
+    property double minBpm: 0.0
+    property double maxBpm: 300.0
 
     readonly property bool expanded: hoverArea.containsMouse || collapseTimer.running
 
@@ -162,7 +162,10 @@ Rectangle {
 
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: root.minRating = index + 1
+                                onClicked: {
+                                    var next = index + 1
+                                    root.minRating = (root.minRating === next) ? 0 : next
+                                }
                             }
                         }
                     }

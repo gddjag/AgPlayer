@@ -60,6 +60,10 @@ ApplicationWindow {
             selectedCategory: filterModel.category
             allCount: LibraryModel.rowCount
             favoriteCount: LibraryModel.favoriteCount
+            historyCount: LibraryModel.rowCount
+            workoutCount: LibraryModel.rowCount
+            carCount: LibraryModel.rowCount
+            networkCount: LibraryModel.rowCount
             onCategorySelected: function(category) { filterModel.category = category }
             onImportRequested: mainWindow.openImportDialog()
         }

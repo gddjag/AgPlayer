@@ -8,6 +8,7 @@ Rectangle {
     color: Theme.background
 
     property string selectedCategory: "all"
+    property bool expanded: true
     property int allCount: 0
     property int favoriteCount: 0
     property int historyCount: 0
@@ -47,11 +48,13 @@ Rectangle {
             }
 
             ToolButton {
-                icon.source: Theme.icon("checkbox-blank-circle-fill")
+                icon.source: root.expanded
+                             ? Theme.icon("arrow-up-s-line")
+                             : Theme.icon("arrow-down-s-line")
                 icon.color: Theme.secondaryText
                 icon.width: 14
                 icon.height: 14
-                onClicked: root.categorySelected("all")
+                onClicked: root.expanded = !root.expanded
 
                 background: Rectangle {
                     color: "transparent"
@@ -64,6 +67,7 @@ Rectangle {
             id: categories
             Layout.fillWidth: true
             spacing: 2
+            visible: root.expanded
 
             CategoryItem {
                 Layout.fillWidth: true
