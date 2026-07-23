@@ -15,16 +15,16 @@ Rectangle {
 
     // Internal pitch state: semitone + cents are independent controls.
     // Effective pitch cents is clamped to the Core supported range.
-    property int selectedPreset: 0 // 0 = Original, -1 = custom
+    property int selectedPreset: 0 // 0 = Original, 7 = Custom
     property int semitoneValue: 0
     property int centsValue: 0
 
     function formatTime(ms): string {
-        if (ms <= 0) return "00:00"
+        if (ms <= 0) return "0:00"
         const totalSec = Math.floor(ms / 1000)
         const min = Math.floor(totalSec / 60)
         const sec = totalSec % 60
-        return (min < 10 ? "0" : "") + min + ":" + (sec < 10 ? "0" : "") + sec
+        return min + ":" + (sec < 10 ? "0" : "") + sec
     }
 
     function effectivePitchCents(): int {
@@ -39,7 +39,7 @@ Rectangle {
     }
 
     function updatePresetFromManual(): void {
-        // If the current values match a preset, highlight it; otherwise custom.
+        // If the current values match a preset, highlight it; otherwise Custom (7).
         const presets = [
             { s: 0, c: 0 },
             { s: 2, c: 0 },
@@ -49,7 +49,7 @@ Rectangle {
             { s: -2, c: 0 },
             { s: -4, c: 0 }
         ]
-        let match = -1
+        let match = 7
         for (let i = 0; i < presets.length; ++i) {
             if (presets[i].s === semitoneValue && presets[i].c === centsValue) {
                 match = i
@@ -175,7 +175,7 @@ Rectangle {
                     }
                 }
 
-                // Decorative play button
+                // Playback preview (not supported)
                 Rectangle {
                     Layout.preferredWidth: 40
                     Layout.preferredHeight: 40
@@ -185,12 +185,27 @@ Rectangle {
                     border.color: shifter.hasInput ? Theme.border : "transparent"
                     border.width: 1
                     visible: shifter.hasInput
+                    opacity: 0.5
 
                     Text {
                         anchors.centerIn: parent
                         text: "\u25B6"
                         color: Theme.primaryText
                         font.pixelSize: 18
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: statusText.text = qsTr("Playback preview not supported")
+                    }
+
+                    ToolTip.text: qsTr("Playback preview not supported")
+                    ToolTip.visible: previewHover.hovered
+                    ToolTip.delay: 500
+
+                    HoverHandler {
+                        id: previewHover
                     }
                 }
 
@@ -485,9 +500,10 @@ Rectangle {
                             value: page.semitoneValue
                             stepSize: 1
                             enabled: !shifter.busy
-                            onValueChanged: {
-                                if (page.semitoneValue !== Math.round(value)) {
-                                    page.semitoneValue = Math.round(value)
+                            onMoved: {
+                                const rounded = Math.round(value)
+                                if (page.semitoneValue !== rounded) {
+                                    page.semitoneValue = rounded
                                     page.updatePresetFromManual()
                                 }
                             }
@@ -635,9 +651,10 @@ Rectangle {
                             value: page.centsValue
                             stepSize: 1
                             enabled: !shifter.busy
-                            onValueChanged: {
-                                if (page.centsValue !== Math.round(value)) {
-                                    page.centsValue = Math.round(value)
+                            onMoved: {
+                                const rounded = Math.round(value)
+                                if (page.centsValue !== rounded) {
+                                    page.centsValue = rounded
                                     page.updatePresetFromManual()
                                 }
                             }
