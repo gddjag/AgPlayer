@@ -11,8 +11,9 @@ Rectangle {
     property int minRating: 0
     property double minBpm: 0.0
     property double maxBpm: 300.0
+    property bool forceExpanded: false
 
-    readonly property bool expanded: hoverArea.containsMouse || collapseTimer.running
+    readonly property bool expanded: hoverArea.containsMouse || collapseTimer.running || forceExpanded
 
     implicitWidth: expanded ? 260 : 44
     implicitHeight: expanded ? 220 : 44
@@ -36,6 +37,13 @@ Rectangle {
 
     function collapse() {
         searchField.focus = false
+        forceExpanded = false
+    }
+
+    function focusSearch() {
+        forceExpanded = true
+        searchField.forceActiveFocus()
+        searchField.selectAll()
     }
 
     MouseArea {

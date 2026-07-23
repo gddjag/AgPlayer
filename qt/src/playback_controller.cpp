@@ -7,6 +7,7 @@
 
 #include <QByteArray>
 
+#include <algorithm>
 #include <limits>
 #include <vector>
 
@@ -151,6 +152,18 @@ void PlaybackController::previous()
 void PlaybackController::setVolume(float volume)
 {
     runCommand(player_ != nullptr ? ag_player_set_volume(player_, volume) : AG_INVALID_ARGUMENT);
+}
+
+void PlaybackController::volumeUp(float step)
+{
+    const float target = std::min(1.0F, volume_ + step);
+    setVolume(target);
+}
+
+void PlaybackController::volumeDown(float step)
+{
+    const float target = std::max(0.0F, volume_ - step);
+    setVolume(target);
 }
 
 void PlaybackController::toggleMuted()

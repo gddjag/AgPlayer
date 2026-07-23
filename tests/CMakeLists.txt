@@ -208,6 +208,7 @@ foreach(qt_test IN ITEMS
     import_controller_test
     playback_controller_test
     window_controller_test
+    global_hotkey_manager_test
     waveform_item_test
     shutdown_test
     runtime_log_test

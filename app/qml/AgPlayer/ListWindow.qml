@@ -3,24 +3,24 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
-// Detachable track-list window. Shares the LibraryFilterModel instance from
-// Main.qml so filtering and selection stay in sync between the main window
-// and the detached list.
+// Stand-alone playlist window. It is always shown alongside the main player
+// window and reuses the LibraryFilterModel owned by Main.qml so filtering and
+// the track list stay in sync between the two windows.
 Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1000
-    height: 420
-    minimumWidth: 640
-    minimumHeight: 240
+    width: 1040
+    height: 560
+    minimumWidth: 720
+    minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: Theme.background
     title: qsTr("AgPlayer Track List")
 
     // Injected dependencies — defaults keep production wiring implicit.
     property var windows: WindowController
-    property var trackModel: null
+    property var filterModel: null
 
     // Internal drag state for custom frameless window movement with
     // continuous magnetic snapping through WindowController.
@@ -34,6 +34,29 @@ Window {
     onYChanged: if (windows) windows.listWindowY = y
     onWidthChanged: if (windows) windows.listWindowWidth = width
     onHeightChanged: if (windows) windows.listWindowHeight = height
+
+    Connections {
+        target: windows
+        function onSearchRequested() {
+            if (searchFilter)
+                searchFilter.focusSearch()
+        }
+    }
+
+    function openImportDialog() {
+        var dialog = importDialogComponent.createObject(listWindow)
+        if (dialog)
+            dialog.open()
+    }
+
+    Component {
+        id: importDialogComponent
+        FileDialog {
+            fileMode: FileDialog.OpenFiles
+            nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+            onAccepted: ImportController.importUrls(files)
+        }
+    }
 
     Rectangle {
         id: surface
@@ -86,7 +109,7 @@ Window {
                         icon.color: Theme.secondaryText
                         icon.width: 14
                         icon.height: 14
-                        Accessible.name: qsTr("Close and re-attach list")
+                        Accessible.name: qsTr("Hide playlist window")
                         focusPolicy: Qt.StrongFocus
                         onClicked: windows.hideListWindow()
                         ToolTip.text: Accessible.name
@@ -141,17 +164,94 @@ Window {
                 }
             }
 
-            // --- Track list content ---
+            // --- Playlist body: side navigation + track list ---
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: Theme.background
 
-                TrackList {
-                    id: trackList
-                    objectName: "detachedTrackList"
+                RowLayout {
                     anchors.fill: parent
-                    trackModel: listWindow.trackModel
+                    spacing: 0
+
+                    // Left sidebar: categories and filters.
+                    Rectangle {
+                        Layout.preferredWidth: 220
+                        Layout.fillHeight: true
+                        color: Theme.background
+                        border.color: Theme.border
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingMd
+                            spacing: Theme.spacingMd
+
+                            SideNavigation {
+                                id: sideNav
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 260
+                                selectedCategory: filterModel ? filterModel.category : "all"
+                                allCount: LibraryModel.rowCount
+                                favoriteCount: LibraryModel.favoriteCount
+                                historyCount: LibraryModel.rowCount
+                                workoutCount: LibraryModel.rowCount
+                                carCount: LibraryModel.rowCount
+                                networkCount: LibraryModel.rowCount
+                                onCategorySelected: function(category) {
+                                    if (filterModel)
+                                        filterModel.category = category
+                                }
+                                onImportRequested: listWindow.openImportDialog()
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 1
+                                color: Theme.border
+                            }
+
+                            SearchFilter {
+                                id: searchFilter
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                searchText: filterModel ? filterModel.searchText : ""
+                                minRating: filterModel ? filterModel.minRating : 0
+                                minBpm: filterModel ? filterModel.minBpm : 0.0
+                                maxBpm: filterModel ? filterModel.maxBpm : 300.0
+                                onSearchTextChanged: if (filterModel) filterModel.searchText = searchText
+                                onMinRatingChanged: if (filterModel) filterModel.minRating = minRating
+                                onMinBpmChanged: if (filterModel) filterModel.minBpm = minBpm
+                                onMaxBpmChanged: if (filterModel) filterModel.maxBpm = maxBpm
+                            }
+                        }
+                    }
+
+                    // Right area: track list.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        color: Theme.background
+
+                        StackLayout {
+                            id: listStack
+                            anchors.fill: parent
+                            currentIndex: filterModel && filterModel.count > 0 ? 0 : 1
+
+                            TrackList {
+                                id: trackList
+                                objectName: "detachedTrackList"
+                                anchors.fill: parent
+                                trackModel: filterModel
+                            }
+
+                            EmptyLibrary {
+                                id: emptyLibrary
+                                objectName: "emptyLibrary"
+                                onImportRequested: listWindow.openImportDialog()
+                            }
+                        }
+                    }
                 }
             }
         }

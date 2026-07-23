@@ -608,69 +608,110 @@ Popup {
         id: thumb
         property int mode: 0
         property bool selected: false
+        property string modeLabel: mode === 0 ? qsTr("纯色波形") : (mode === 1 ? qsTr("RGB波形") : qsTr("频谱波形"))
         signal clicked()
 
-        width: 80
-        height: 56
+        width: 96
+        height: 72
         radius: Theme.radiusSm
-        color: selected ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
-                        : Qt.rgba(0, 0, 0, 0.2)
+        color: selected ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.12)
+                        : Qt.rgba(0, 0, 0, 0.22)
         border.color: selected ? Theme.cyan : Theme.border
         border.width: 1
 
-        Canvas {
+        ColumnLayout {
             anchors.fill: parent
             anchors.margins: 6
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.clearRect(0, 0, width, height)
-                var cy = height / 2
+            spacing: 4
 
-                if (mode === 1) {
-                    // RGB gradient
-                    var grad = ctx.createLinearGradient(0, 0, width, 0)
-                    grad.addColorStop(0, "#FF4057")
-                    grad.addColorStop(0.33, "#00E676")
-                    grad.addColorStop(0.66, "#1688FF")
-                    grad.addColorStop(1, "#7B2FF7")
-                    ctx.strokeStyle = grad
-                    ctx.lineWidth = 2
+            Canvas {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    var cy = height / 2
+
+                    // Draw subtle center line
+                    ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.08)
+                    ctx.lineWidth = 1
                     ctx.beginPath()
-                    for (var x = 0; x <= width; x += 3) {
-                        var amp = Math.sin(x * 0.12) * Math.cos(x * 0.05)
-                        var y = cy + amp * (height * 0.35)
-                        if (x === 0) ctx.moveTo(x, y)
-                        else ctx.lineTo(x, y)
-                    }
+                    ctx.moveTo(0, cy)
+                    ctx.lineTo(width, cy)
                     ctx.stroke()
-                } else if (mode === 2) {
-                    // Spectrum bars
-                    var step = 4
-                    for (var bx = 0; bx < width; bx += step * 2) {
-                        var barHeight = Math.abs(Math.sin(bx * 0.15) * Math.cos(bx * 0.08)) * (height * 0.8)
-                        var hue = (bx / width) * 280
-                        ctx.fillStyle = "hsl(" + hue + ", 80%, 60%)"
-                        ctx.fillRect(bx, cy - barHeight / 2, step, barHeight)
+
+                    if (mode === 1) {
+                        // RGB gradient waveform using project RGBA layers
+                        var rGrad = ctx.createLinearGradient(0, 0, width, 0)
+                        rGrad.addColorStop(0, "rgba(170,55,55,0.62)")
+                        rGrad.addColorStop(0.35, "rgba(55,140,55,0.58)")
+                        rGrad.addColorStop(0.7, "rgba(55,90,145,0.52)")
+                        rGrad.addColorStop(1, "rgba(170,55,55,0.62)")
+                        ctx.strokeStyle = rGrad
+                        ctx.lineWidth = 2
+                        ctx.beginPath()
+                        for (var x = 0; x <= width; x += 2) {
+                            var amp = Math.sin(x * 0.18) * Math.cos(x * 0.07) * Math.sin(x * 0.04)
+                            var y = cy + amp * (height * 0.38)
+                            if (x === 0) ctx.moveTo(x, y)
+                            else ctx.lineTo(x, y)
+                        }
+                        ctx.stroke()
+                    } else if (mode === 2) {
+                        // Spectrum bars
+                        var step = 3
+                        var barCount = Math.floor(width / (step + 2))
+                        for (var i = 0; i < barCount; ++i) {
+                            var bx = i * (step + 2)
+                            var barHeight = Math.max(2, Math.abs(Math.sin(i * 0.4) * Math.cos(i * 0.17)) * (height * 0.82))
+                            var t = i / barCount
+                            var rr = Math.round(170 * (1 - t) + 55 * t)
+                            var gg = Math.round(55 * (1 - t) + 140 * t)
+                            var bb = Math.round(55 + 90 * t)
+                            ctx.fillStyle = "rgba(" + rr + "," + gg + "," + bb + ",0.72)"
+                            ctx.fillRect(bx, cy - barHeight / 2, step, barHeight)
+                        }
+                    } else {
+                        // Solid cyan filled waveform
+                        ctx.fillStyle = Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.35)
+                        ctx.beginPath()
+                        ctx.moveTo(0, cy)
+                        for (var sx = 0; sx <= width; sx += 2) {
+                            var sa = Math.sin(sx * 0.18) * Math.cos(sx * 0.07) * Math.sin(sx * 0.04)
+                            var sy = cy + sa * (height * 0.38)
+                            ctx.lineTo(sx, sy)
+                        }
+                        ctx.lineTo(width, cy)
+                        ctx.closePath()
+                        ctx.fill()
+
+                        ctx.strokeStyle = Theme.cyan
+                        ctx.lineWidth = 1.5
+                        ctx.beginPath()
+                        for (sx = 0; sx <= width; sx += 2) {
+                            sa = Math.sin(sx * 0.18) * Math.cos(sx * 0.07) * Math.sin(sx * 0.04)
+                            sy = cy + sa * (height * 0.38)
+                            if (sx === 0) ctx.moveTo(sx, sy)
+                            else ctx.lineTo(sx, sy)
+                        }
+                        ctx.stroke()
                     }
-                } else {
-                    // Solid cyan
-                    ctx.strokeStyle = Theme.cyan
-                    ctx.lineWidth = 2
-                    ctx.beginPath()
-                    for (var sx = 0; sx <= width; sx += 3) {
-                        var sa = Math.sin(sx * 0.12) * Math.cos(sx * 0.05)
-                        var sy = cy + sa * (height * 0.35)
-                        if (sx === 0) ctx.moveTo(sx, sy)
-                        else ctx.lineTo(sx, sy)
-                    }
-                    ctx.stroke()
                 }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: thumb.modeLabel
+                color: selected ? Theme.primaryText : Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 11
+                horizontalAlignment: Text.AlignHCenter
             }
         }
 
         Rectangle {
             anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.top: parent.top
             anchors.margins: 4
             width: 18
             height: 18
@@ -739,7 +780,7 @@ Popup {
                 }
 
                 SettingSwitch {
-                    text: qsTr("窗口磁吸吸附对齐 (15px)")
+                    text: qsTr("窗口磁吸吸附对齐 (15px 阈值)")
                     checked: SettingsController.windowMagneticSnap
                     onToggled: SettingsController.windowMagneticSnap = checked
                 }
@@ -896,7 +937,7 @@ Popup {
             rowSpacing: Theme.spacingMd
 
             SettingCard {
-                title: qsTr("音频输出 (miniaudio)")
+                title: qsTr("音频输出")
                 Layout.preferredHeight: 180
 
                 SettingRow {
@@ -917,7 +958,7 @@ Popup {
                 }
 
                 SettingSwitch {
-                    text: qsTr("音频独占模式 (Exclusive Mode / WASAPI / ALSA)")
+                    text: qsTr("音频独占模式 (Exclusive Mode/WASAPI/ALSA) (降低延迟，但其他软件静音)")
                     checked: SettingsController.audioExclusiveMode
                     onToggled: SettingsController.audioExclusiveMode = checked
                 }
@@ -975,9 +1016,15 @@ Popup {
                 }
 
                 SettingSwitch {
-                    text: qsTr("自动读取歌曲 BPM、星级评分")
-                    checked: SettingsController.autoReadBpmAndRating
-                    onToggled: SettingsController.autoReadBpmAndRating = checked
+                    text: qsTr("自动读取歌曲 BPM")
+                    checked: SettingsController.autoReadBpm
+                    onToggled: SettingsController.autoReadBpm = checked
+                }
+
+                SettingSwitch {
+                    text: qsTr("星级评分")
+                    checked: SettingsController.autoReadRating
+                    onToggled: SettingsController.autoReadRating = checked
                 }
             }
         }
@@ -1045,7 +1092,7 @@ Popup {
                 }
 
                 SettingSwitch {
-                    text: qsTr("毛玻璃 / 悬浮特效")
+                    text: qsTr("毛玻璃 / 悬浮特效：开启迷你播放器与悬浮窗口模糊背景")
                     checked: SettingsController.glassEffect
                     onToggled: SettingsController.glassEffect = checked
                 }
@@ -1053,10 +1100,11 @@ Popup {
 
             SettingCard {
                 title: qsTr("Waveform RGB 波形设置")
-                Layout.preferredHeight: 240
+                Layout.preferredHeight: 280
 
                 SettingRow {
-                    label: qsTr("波形样式")
+                    label: qsTr("默认波形模式")
+                    Layout.preferredHeight: 90
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingMd
@@ -1082,7 +1130,7 @@ Popup {
                 }
 
                 SettingRow {
-                    label: qsTr("渲染密度")
+                    label: qsTr("波形渲染密度")
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
@@ -1096,16 +1144,24 @@ Popup {
                 }
 
                 SettingRow {
-                    label: qsTr("线条粗细")
+                    label: qsTr("波形线条粗细")
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: qsTr("1px"), value: 1 },
-                            { text: qsTr("2px"), value: 2 },
-                            { text: qsTr("3px"), value: 3 },
-                            { text: qsTr("4px"), value: 4 }
+                            { text: qsTr("1px"), value: 1.0 },
+                            { text: qsTr("1.5px"), value: 1.5 },
+                            { text: qsTr("2px"), value: 2.0 },
+                            { text: qsTr("3px"), value: 3.0 },
+                            { text: qsTr("4px"), value: 4.0 },
+                            { text: qsTr("6px"), value: 6.0 }
                         ]
-                        currentIndex: SettingsController.waveformThickness - 1
+                        currentIndex: {
+                            const values = [1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
+                            for (let i = 0; i < values.length; ++i) {
+                                if (Math.abs(values[i] - SettingsController.waveformThickness) < 0.01) return i
+                            }
+                            return 2
+                        }
                         onActivated: SettingsController.waveformThickness = currentValue
                     }
                 }
@@ -1150,7 +1206,7 @@ Popup {
                 }
 
                 SettingRow {
-                    label: qsTr("覆盖策略")
+                    label: qsTr("文件覆盖策略")
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
@@ -1168,7 +1224,7 @@ Popup {
                 Layout.preferredHeight: 160
 
                 SettingRow {
-                    label: qsTr("默认转码格式")
+                    label: qsTr("默认转码输出格式")
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 240
@@ -1201,17 +1257,17 @@ Popup {
             }
 
             SettingCard {
-                title: qsTr("变调与变速预设 (SoundTouch)")
+                title: qsTr("变调与变速预设")
                 Layout.preferredHeight: 160
 
                 SettingSwitch {
-                    text: qsTr("变速时保持原音高 / 语速 (Time-stretch)")
+                    text: qsTr("变速时变调行为：保持原音高/语速")
                     checked: SettingsController.keepPitchWhileSpeedChange
                     onToggled: SettingsController.keepPitchWhileSpeedChange = checked
                 }
 
                 SettingSwitch {
-                    text: qsTr("升降调人声保护 (实验性)")
+                    text: qsTr("升降调人声保护")
                     checked: SettingsController.vocalProtection
                     onToggled: SettingsController.vocalProtection = checked
                 }
@@ -1326,13 +1382,13 @@ Popup {
                 }
 
                 SettingSwitch {
-                    text: qsTr("缓存自动清理（超出上限自动删旧文件）")
+                    text: qsTr("缓存自动清理（超出上限自动删旧文件，默认开启）")
                     checked: SettingsController.autoCleanCache
                     onToggled: SettingsController.autoCleanCache = checked
                 }
 
                 SettingSwitch {
-                    text: qsTr("退出自动清理临时转码文件")
+                    text: qsTr("退出自动清理临时转码文件（默认开启）")
                     checked: SettingsController.cleanTempOnExit
                     onToggled: SettingsController.cleanTempOnExit = checked
                 }

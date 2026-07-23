@@ -59,6 +59,8 @@ public:
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
     Q_INVOKABLE void setVolume(float volume);
+    Q_INVOKABLE void volumeUp(float step = 0.05F);
+    Q_INVOKABLE void volumeDown(float step = 0.05F);
     Q_INVOKABLE void toggleMuted();
     Q_INVOKABLE void cycleMode();
     Q_INVOKABLE void playRow(int row);

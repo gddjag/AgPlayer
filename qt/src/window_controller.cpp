@@ -7,7 +7,7 @@
 
 namespace {
 
-constexpr int kSnapDistance = 20;
+constexpr int kSnapDistance = 15;
 
 int snapDistance(int a, int b) noexcept
 {
@@ -230,7 +230,6 @@ void WindowController::showListWindow()
 void WindowController::hideListWindow()
 {
     applyListWindowVisible(false);
-    setListWindowDetached(false);
 }
 
 void WindowController::toggleListWindow()
@@ -268,6 +267,25 @@ void WindowController::snapListWindow(const QString& direction)
     setListWindowY(snapped.y());
 }
 
+void WindowController::activateSearch()
+{
+    showListWindow();
+    if (listWindow_ != nullptr) {
+        listWindow_->requestActivate();
+        listWindow_->raise();
+    }
+    emit searchRequested();
+}
+
+void WindowController::toggleMiniPlayer()
+{
+    if (miniVisible_) {
+        showMain();
+    } else {
+        showMini();
+    }
+}
+
 void WindowController::applyMainVisible(bool visible)
 {
     if (mainVisible_ == visible) {
@@ -278,6 +296,14 @@ void WindowController::applyMainVisible(bool visible)
     }
     mainVisible_ = visible;
     emit mainVisibleChanged();
+
+    // Keep the playlist window in sync with the main window: hide it when the
+    // main window is hidden and restore it when the main window is shown.
+    if (visible) {
+        applyListWindowVisible(true);
+    } else {
+        applyListWindowVisible(false);
+    }
 }
 
 void WindowController::applyMiniVisible(bool visible)

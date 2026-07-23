@@ -5,6 +5,7 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
+#include <QList>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -48,14 +49,15 @@ int SettingsController::defaultPlaybackMode() const noexcept { return defaultPla
 bool SettingsController::gaplessPlayback() const noexcept { return gaplessPlayback_; }
 int SettingsController::crossfadeMs() const noexcept { return crossfadeMs_; }
 bool SettingsController::autoMatchSampleRate() const noexcept { return autoMatchSampleRate_; }
-bool SettingsController::autoReadBpmAndRating() const noexcept { return autoReadBpmAndRating_; }
+bool SettingsController::autoReadBpm() const noexcept { return autoReadBpm_; }
+bool SettingsController::autoReadRating() const noexcept { return autoReadRating_; }
 
 // Appearance & Visualizer getters
 int SettingsController::themeMode() const noexcept { return themeMode_; }
 bool SettingsController::glassEffect() const noexcept { return glassEffect_; }
 int SettingsController::waveformMode() const noexcept { return waveformMode_; }
 int SettingsController::waveformDensity() const noexcept { return waveformDensity_; }
-int SettingsController::waveformThickness() const noexcept { return waveformThickness_; }
+double SettingsController::waveformThickness() const noexcept { return waveformThickness_; }
 bool SettingsController::waveformHoverTimePreview() const noexcept { return waveformHoverTimePreview_; }
 
 // Audio Tools getters
@@ -273,14 +275,24 @@ void SettingsController::setAutoMatchSampleRate(bool value)
     emit autoMatchSampleRateChanged();
 }
 
-void SettingsController::setAutoReadBpmAndRating(bool value)
+void SettingsController::setAutoReadBpm(bool value)
 {
-    if (autoReadBpmAndRating_ == value) {
+    if (autoReadBpm_ == value) {
         return;
     }
-    autoReadBpmAndRating_ = value;
-    settings_.setValue(QStringLiteral("playback/autoReadBpmAndRating"), value);
-    emit autoReadBpmAndRatingChanged();
+    autoReadBpm_ = value;
+    settings_.setValue(QStringLiteral("playback/autoReadBpm"), value);
+    emit autoReadBpmChanged();
+}
+
+void SettingsController::setAutoReadRating(bool value)
+{
+    if (autoReadRating_ == value) {
+        return;
+    }
+    autoReadRating_ = value;
+    settings_.setValue(QStringLiteral("playback/autoReadRating"), value);
+    emit autoReadRatingChanged();
 }
 
 // Appearance & Visualizer setters
@@ -327,10 +339,20 @@ void SettingsController::setWaveformDensity(int value)
     emit waveformDensityChanged();
 }
 
-void SettingsController::setWaveformThickness(int value)
+void SettingsController::setWaveformThickness(double value)
 {
-    value = clampValue(value, 1, 4);
-    if (waveformThickness_ == value) {
+    static const QList<double> kValidThicknesses = {1.0, 1.5, 2.0, 3.0, 4.0, 6.0};
+    double closest = kValidThicknesses.first();
+    double bestDelta = std::abs(value - closest);
+    for (double v : kValidThicknesses) {
+        const double delta = std::abs(value - v);
+        if (delta < bestDelta) {
+            bestDelta = delta;
+            closest = v;
+        }
+    }
+    value = closest;
+    if (qFuzzyCompare(waveformThickness_, value)) {
         return;
     }
     waveformThickness_ = value;
@@ -546,7 +568,8 @@ void SettingsController::resetToDefaults()
     emit gaplessPlaybackChanged();
     emit crossfadeMsChanged();
     emit autoMatchSampleRateChanged();
-    emit autoReadBpmAndRatingChanged();
+    emit autoReadBpmChanged();
+    emit autoReadRatingChanged();
 
     emit themeModeChanged();
     emit glassEffectChanged();
@@ -697,7 +720,8 @@ void SettingsController::load()
     gaplessPlayback_ = settings_.value(QStringLiteral("gaplessPlayback"), gaplessPlayback_).toBool();
     crossfadeMs_ = settings_.value(QStringLiteral("crossfadeMs"), crossfadeMs_).toInt();
     autoMatchSampleRate_ = settings_.value(QStringLiteral("autoMatchSampleRate"), autoMatchSampleRate_).toBool();
-    autoReadBpmAndRating_ = settings_.value(QStringLiteral("autoReadBpmAndRating"), autoReadBpmAndRating_).toBool();
+    autoReadBpm_ = settings_.value(QStringLiteral("autoReadBpm"), autoReadBpm_).toBool();
+    autoReadRating_ = settings_.value(QStringLiteral("autoReadRating"), autoReadRating_).toBool();
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
@@ -705,7 +729,7 @@ void SettingsController::load()
     glassEffect_ = settings_.value(QStringLiteral("glassEffect"), glassEffect_).toBool();
     waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
     waveformDensity_ = settings_.value(QStringLiteral("waveformDensity"), waveformDensity_).toInt();
-    waveformThickness_ = settings_.value(QStringLiteral("waveformThickness"), waveformThickness_).toInt();
+    waveformThickness_ = settings_.value(QStringLiteral("waveformThickness"), waveformThickness_).toDouble();
     waveformHoverTimePreview_ = settings_.value(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_).toBool();
     settings_.endGroup();
 
@@ -743,7 +767,19 @@ void SettingsController::load()
     themeMode_ = clampValue(themeMode_, 0, 2);
     waveformMode_ = clampValue(waveformMode_, 0, 2);
     waveformDensity_ = clampValue(waveformDensity_, 0, 2);
-    waveformThickness_ = clampValue(waveformThickness_, 1, 4);
+    {
+        static const QList<double> kValid = {1.0, 1.5, 2.0, 3.0, 4.0, 6.0};
+        double closest = kValid.first();
+        double bestDelta = std::abs(waveformThickness_ - closest);
+        for (double v : kValid) {
+            const double delta = std::abs(waveformThickness_ - v);
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                closest = v;
+            }
+        }
+        waveformThickness_ = closest;
+    }
     overwritePolicy_ = clampValue(overwritePolicy_, 0, 1);
     cacheSizeLimitMB_ = std::max(cacheSizeLimitMB_, 100);
 }
@@ -771,7 +807,8 @@ void SettingsController::saveAll()
     settings_.setValue(QStringLiteral("gaplessPlayback"), gaplessPlayback_);
     settings_.setValue(QStringLiteral("crossfadeMs"), crossfadeMs_);
     settings_.setValue(QStringLiteral("autoMatchSampleRate"), autoMatchSampleRate_);
-    settings_.setValue(QStringLiteral("autoReadBpmAndRating"), autoReadBpmAndRating_);
+    settings_.setValue(QStringLiteral("autoReadBpm"), autoReadBpm_);
+    settings_.setValue(QStringLiteral("autoReadRating"), autoReadRating_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
@@ -832,13 +869,14 @@ void SettingsController::restoreDefaults()
     gaplessPlayback_ = true;
     crossfadeMs_ = 0;
     autoMatchSampleRate_ = true;
-    autoReadBpmAndRating_ = true;
+    autoReadBpm_ = true;
+    autoReadRating_ = true;
 
     themeMode_ = 0;
     glassEffect_ = true;
     waveformMode_ = 1;
     waveformDensity_ = 1;
-    waveformThickness_ = 2;
+    waveformThickness_ = 2.0;
     waveformHoverTimePreview_ = true;
 
     defaultOutputDirectory_ = defaultExportDir();

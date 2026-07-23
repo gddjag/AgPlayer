@@ -22,7 +22,6 @@ TestCase {
 
     function test_visible_controls_have_actions() {
         verify(mainWindow !== null, "Main window should exist")
-        verify(findChild(mainWindow, "importButton"), "importButton should exist")
         verify(findChild(mainWindow, "playPauseButton"), "playPauseButton should exist")
         verify(findChild(mainWindow, "previousButton"), "previousButton should exist")
         verify(findChild(mainWindow, "nextButton"), "nextButton should exist")
@@ -31,10 +30,6 @@ TestCase {
         verify(findChild(mainWindow, "miniPlayerButton"), "miniPlayerButton should exist")
         verify(findChild(mainWindow, "settingsButton"), "settingsButton should exist in Phase 2 settings task")
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
-    }
-
-    function test_track_list_and_empty_library_exist() {
-        verify(findChild(mainWindow, "trackList"), "trackList should exist")
-        verify(findChild(mainWindow, "emptyLibrary"), "emptyLibrary should exist")
+        verify(findChild(mainWindow, "listWindowButton"), "listWindowButton should exist")
     }
 }

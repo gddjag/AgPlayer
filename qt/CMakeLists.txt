@@ -4,6 +4,8 @@ add_library(agplayer_qt STATIC
     src/bpm_analyzer.hpp
     src/format_converter.cpp
     src/format_converter.hpp
+    src/global_hotkey_manager.cpp
+    src/global_hotkey_manager.hpp
     src/import_controller.cpp
     src/import_controller.hpp
     src/library_filter_model.cpp

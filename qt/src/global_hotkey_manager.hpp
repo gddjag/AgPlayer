@@ -1,0 +1,58 @@
+#pragma once
+
+#include <QAbstractNativeEventFilter>
+#include <QList>
+#include <QObject>
+#include <QString>
+
+class GlobalHotkeyManager final : public QObject, public QAbstractNativeEventFilter {
+    Q_OBJECT
+
+public:
+    enum class Action {
+        PlayPause,
+        Previous,
+        Next,
+        VolumeUp,
+        VolumeDown,
+        ToggleMiniPlayer,
+    };
+    Q_ENUM(Action)
+
+    explicit GlobalHotkeyManager(QObject* parent = nullptr);
+    ~GlobalHotkeyManager() override;
+
+    // Parse a user-facing string such as "Global + Space" or "Alt + P" and
+    // register the resulting key combination. Returns false if the string is
+    // empty or cannot be parsed.
+    bool registerShortcut(const QString& combo, Action action);
+
+    // Register a raw hotkey. Returns false if registration failed.
+    bool registerHotkey(uint modifiers, uint key, Action action);
+
+    void unregisterAll();
+
+    // Enables or disables all registered hotkeys without losing registrations.
+    void setEnabled(bool enabled);
+
+    bool nativeEventFilter(const QByteArray& eventType, void* message,
+                           qintptr* result) override;
+
+signals:
+    void triggered(Action action);
+
+private:
+    struct Hotkey {
+        int id;
+        uint modifiers;
+        uint key;
+        Action action;
+    };
+
+    bool registerNativeHotkey(const Hotkey& hotkey);
+    void unregisterNativeHotkey(int id);
+
+    QList<Hotkey> hotkeys_;
+    int nextId_ = 1;
+    bool enabled_ = true;
+};

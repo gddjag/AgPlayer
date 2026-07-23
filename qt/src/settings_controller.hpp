@@ -45,8 +45,9 @@ class SettingsController final : public QObject {
                    NOTIFY crossfadeMsChanged)
     Q_PROPERTY(bool autoMatchSampleRate READ autoMatchSampleRate WRITE setAutoMatchSampleRate
                    NOTIFY autoMatchSampleRateChanged)
-    Q_PROPERTY(bool autoReadBpmAndRating READ autoReadBpmAndRating
-                   WRITE setAutoReadBpmAndRating NOTIFY autoReadBpmAndRatingChanged)
+    Q_PROPERTY(bool autoReadBpm READ autoReadBpm WRITE setAutoReadBpm NOTIFY autoReadBpmChanged)
+    Q_PROPERTY(bool autoReadRating READ autoReadRating WRITE setAutoReadRating
+                   NOTIFY autoReadRatingChanged)
 
     // Appearance & Visualizer
     Q_PROPERTY(int themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
@@ -54,7 +55,7 @@ class SettingsController final : public QObject {
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
     Q_PROPERTY(int waveformDensity READ waveformDensity WRITE setWaveformDensity
                    NOTIFY waveformDensityChanged)
-    Q_PROPERTY(int waveformThickness READ waveformThickness WRITE setWaveformThickness
+    Q_PROPERTY(double waveformThickness READ waveformThickness WRITE setWaveformThickness
                    NOTIFY waveformThicknessChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
                    WRITE setWaveformHoverTimePreview NOTIFY waveformHoverTimePreviewChanged)
@@ -124,14 +125,15 @@ public:
     bool gaplessPlayback() const noexcept;
     int crossfadeMs() const noexcept;
     bool autoMatchSampleRate() const noexcept;
-    bool autoReadBpmAndRating() const noexcept;
+    bool autoReadBpm() const noexcept;
+    bool autoReadRating() const noexcept;
 
     // Appearance & Visualizer getters
     int themeMode() const noexcept;
     bool glassEffect() const noexcept;
     int waveformMode() const noexcept;
     int waveformDensity() const noexcept;
-    int waveformThickness() const noexcept;
+    double waveformThickness() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
 
     // Audio Tools getters
@@ -182,14 +184,15 @@ public:
     void setGaplessPlayback(bool value);
     void setCrossfadeMs(int value);
     void setAutoMatchSampleRate(bool value);
-    void setAutoReadBpmAndRating(bool value);
+    void setAutoReadBpm(bool value);
+    void setAutoReadRating(bool value);
 
     // Appearance & Visualizer setters
     void setThemeMode(int value);
     void setGlassEffect(bool value);
     void setWaveformMode(int value);
     void setWaveformDensity(int value);
-    void setWaveformThickness(int value);
+    void setWaveformThickness(double value);
     void setWaveformHoverTimePreview(bool value);
 
     // Audio Tools setters
@@ -243,7 +246,8 @@ signals:
     void gaplessPlaybackChanged();
     void crossfadeMsChanged();
     void autoMatchSampleRateChanged();
-    void autoReadBpmAndRatingChanged();
+    void autoReadBpmChanged();
+    void autoReadRatingChanged();
 
     void themeModeChanged();
     void glassEffectChanged();
@@ -308,14 +312,15 @@ private:
     bool gaplessPlayback_ = true;
     int crossfadeMs_ = 0;
     bool autoMatchSampleRate_ = true;
-    bool autoReadBpmAndRating_ = true;
+    bool autoReadBpm_ = true;
+    bool autoReadRating_ = true;
 
     // Appearance & Visualizer
     int themeMode_ = 0;
     bool glassEffect_ = true;
     int waveformMode_ = 1;
     int waveformDensity_ = 1;
-    int waveformThickness_ = 2;
+    double waveformThickness_ = 2.0;
     bool waveformHoverTimePreview_ = true;
 
     // Audio Tools

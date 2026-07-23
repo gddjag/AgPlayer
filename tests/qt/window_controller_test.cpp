@@ -14,7 +14,7 @@ private slots:
     void visibilityWaitsForDestinationReadiness();
     void shutdownIsOrderedAndIdempotent();
     void missingShutdownCollaboratorsRemainIdempotent();
-    void listWindowVisibilityFollowsDetachedState();
+    void listWindowVisibilityCanBeToggled();
     void listWindowMagneticSnappingToMainWindowEdges();
     void listWindowExplicitSnapToEachEdge();
 };
@@ -104,7 +104,7 @@ void WindowControllerTest::missingShutdownCollaboratorsRemainIdempotent()
     QCOMPARE(quitCalls, 1);
 }
 
-void WindowControllerTest::listWindowVisibilityFollowsDetachedState()
+void WindowControllerTest::listWindowVisibilityCanBeToggled()
 {
     QWindow mainWindow;
     QWindow listWindow;
@@ -112,17 +112,17 @@ void WindowControllerTest::listWindowVisibilityFollowsDetachedState()
     windows.setWindows(&mainWindow, nullptr);
     windows.setListWindow(&listWindow);
 
-    QVERIFY(!windows.listWindowDetached());
+    QVERIFY(windows.listWindowDetached());
     QVERIFY(!windows.listWindowVisible());
     QVERIFY(!listWindow.isVisible());
 
-    windows.setListWindowDetached(true);
+    windows.showListWindow();
     QVERIFY(windows.listWindowDetached());
     QVERIFY(windows.listWindowVisible());
     QVERIFY(listWindow.isVisible());
 
     windows.hideListWindow();
-    QVERIFY(!windows.listWindowDetached());
+    QVERIFY(windows.listWindowDetached());
     QVERIFY(!windows.listWindowVisible());
     QVERIFY(!listWindow.isVisible());
 
@@ -150,7 +150,7 @@ void WindowControllerTest::listWindowMagneticSnappingToMainWindowEdges()
     windows.setListWindow(&listWindow);
     windows.setListWindowDetached(true);
 
-    // Move the left edge of the list window within 20 px of the main window's
+    // Move the left edge of the list window within 15 px of the main window's
     // right edge; it should snap so the list window's left edge aligns with the
     // main window's right edge and it is vertically centered.
     const int expectedRightX = mainWindow.frameGeometry().right() + 1;

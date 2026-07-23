@@ -87,14 +87,14 @@ Rectangle {
         ToolButton {
             objectName: "listWindowButton"
             icon.source: Theme.icon("playlist-2-fill")
-            icon.color: WindowController.listWindowDetached ? Theme.cyan : Theme.secondaryText
+            icon.color: WindowController.listWindowVisible ? Theme.cyan : Theme.secondaryText
             icon.width: 18
             icon.height: 18
-            Accessible.name: WindowController.listWindowDetached
-                             ? qsTr("Attach track list")
-                             : qsTr("Detach track list")
+            Accessible.name: WindowController.listWindowVisible
+                             ? qsTr("Hide playlist window")
+                             : qsTr("Show playlist window")
             focusPolicy: Qt.StrongFocus
-            onClicked: WindowController.listWindowDetached = !WindowController.listWindowDetached
+            onClicked: WindowController.toggleListWindow()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
 

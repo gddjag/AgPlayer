@@ -69,6 +69,8 @@ public:
     Q_INVOKABLE void toggleListWindow();
     Q_INVOKABLE void moveListWindow(int x, int y);
     Q_INVOKABLE void snapListWindow(const QString& direction);
+    Q_INVOKABLE void activateSearch();
+    Q_INVOKABLE void toggleMiniPlayer();
 
 signals:
     void mainVisibleChanged();
@@ -81,6 +83,7 @@ signals:
     void listWindowYChanged();
     void listWindowWidthChanged();
     void listWindowHeightChanged();
+    void searchRequested();
 
 private:
     enum class PendingView { None, Main, Mini };
@@ -107,7 +110,7 @@ private:
     bool miniReady_ = true;
     bool shutdownRequested_ = false;
     bool listWindowVisible_ = false;
-    bool listWindowDetached_ = false;
+    bool listWindowDetached_ = true;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
     int listWindowWidth_ = 1000;

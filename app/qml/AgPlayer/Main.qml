@@ -8,10 +8,10 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 1448
-    height: 1086
-    minimumWidth: 1000
-    minimumHeight: 700
+    width: 1040
+    height: 520
+    minimumWidth: 800
+    minimumHeight: 420
     flags: Qt.FramelessWindowHint
     color: Theme.background
     title: "AgPlayer"
@@ -21,6 +21,14 @@ ApplicationWindow {
     // override this with a fake QtObject to verify shared state without audio.
     property var playback: PlaybackController
     property int positionMs: playback.positionMs
+
+    // The filter model is owned by the main window but consumed by the
+    // separate ListWindow so filtering state stays in sync.
+    LibraryFilterModel {
+        id: filterModel
+        objectName: "filterModel"
+        sourceModel: LibraryModel
+    }
 
     function openImportDialog() {
         var dialog = importDialogComponent.createObject(mainWindow)
@@ -37,104 +45,35 @@ ApplicationWindow {
         }
     }
 
-    LibraryFilterModel {
-        id: filterModel
-        objectName: "filterModel"
-        sourceModel: LibraryModel
-        searchText: searchFilter.searchText
-        minRating: searchFilter.minRating
-        minBpm: searchFilter.minBpm
-        maxBpm: searchFilter.maxBpm
-        category: sideNav.selectedCategory
-    }
-
-    RowLayout {
+    ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        SideNavigation {
-            id: sideNav
-            Layout.preferredWidth: 200
-            Layout.minimumWidth: 180
-            Layout.maximumWidth: 240
-            Layout.fillHeight: true
-            selectedCategory: filterModel.category
-            allCount: LibraryModel.rowCount
-            favoriteCount: LibraryModel.favoriteCount
-            historyCount: LibraryModel.rowCount
-            workoutCount: LibraryModel.rowCount
-            carCount: LibraryModel.rowCount
-            networkCount: LibraryModel.rowCount
-            onCategorySelected: function(category) { filterModel.category = category }
-            onImportRequested: mainWindow.openImportDialog()
+        TitleBar {
+            id: titleBar
+            Layout.fillWidth: true
+            Layout.preferredHeight: 48
+            window: mainWindow
+            onOpenSettings: settingsPage.open()
         }
 
-        ColumnLayout {
+        SettingsPage {
+            id: settingsPage
+            objectName: "settingsPage"
+        }
+
+        PlayerPane {
+            id: playerPane
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
-
-            TitleBar {
-                id: titleBar
-                Layout.fillWidth: true
-                Layout.preferredHeight: 48
-                window: mainWindow
-                onOpenSettings: settingsPage.open()
-            }
-
-            SettingsPage {
-                id: settingsPage
-                objectName: "settingsPage"
-            }
-
-            PlayerPane {
-                id: playerPane
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.minimumHeight: 280
-            }
-
-            PlayerControls {
-                id: playerControls
-                Layout.fillWidth: true
-                Layout.preferredHeight: 80
-            }
-
-            Rectangle {
-                id: listContainer
-                color: Theme.panel
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.minimumHeight: 160
-                visible: !WindowController.listWindowDetached
-
-                StackLayout {
-                    id: listStack
-                    anchors.fill: parent
-                    currentIndex: filterModel.count > 0 ? 0 : 1
-
-                    TrackList {
-                        id: trackList
-                        objectName: "trackList"
-                        trackModel: filterModel
-                    }
-
-                    EmptyLibrary {
-                        id: emptyLibrary
-                        objectName: "emptyLibrary"
-                        onImportRequested: mainWindow.openImportDialog()
-                    }
-                }
-            }
+            Layout.minimumHeight: 280
         }
-    }
 
-    SearchFilter {
-        id: searchFilter
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.margins: Theme.spacingMd
-        z: 100
+        PlayerControls {
+            id: playerControls
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+        }
     }
 
     DropArea {
@@ -147,5 +86,11 @@ ApplicationWindow {
             ImportController.importUrls(urls)
             drop.acceptProposedAction()
         }
+    }
+
+    Shortcut {
+        sequence: StandardKey.Find
+        context: Qt.ApplicationShortcut
+        onActivated: WindowController.activateSearch()
     }
 }

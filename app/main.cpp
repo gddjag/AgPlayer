@@ -22,6 +22,7 @@
 
 #include "audio_tools_controller.hpp"
 #include "format_converter.hpp"
+#include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
@@ -162,7 +163,7 @@ int main(int argc, char* argv[])
                 audioToolsWindow = audioToolsComponent.create();
             }
 
-            // Detachable track-list window. Reuses the LibraryFilterModel
+            // Stand-alone playlist window. Reuses the LibraryFilterModel
             // instance owned by Main.qml so filtering state stays in sync.
             QObject* filterModel = mainWindow->findChild<QObject*>(
                 QStringLiteral("filterModel"));
@@ -172,7 +173,7 @@ int main(int argc, char* argv[])
             if (!listComponent.isError()) {
                 if (filterModel != nullptr) {
                     listWindow = listComponent.createWithInitialProperties(
-                        QVariantMap{{QStringLiteral("trackModel"),
+                        QVariantMap{{QStringLiteral("filterModel"),
                                      QVariant::fromValue(filterModel)}});
                 } else {
                     listWindow = listComponent.create();
@@ -183,6 +184,82 @@ int main(int argc, char* argv[])
                                qobject_cast<QWindow*>(miniWindow));
             windows.setListWindow(qobject_cast<QWindow*>(listWindow));
             windows.setAudioToolsWindow(qobject_cast<QWindow*>(audioToolsWindow));
+
+            // The playlist window is a permanent second window in the new UI;
+            // show it immediately below the main player window.
+            windows.showListWindow();
+
+            // Global hotkeys (Windows RegisterHotKey). Parsed from the settings
+            // defaults and re-registered whenever the user changes a shortcut.
+            GlobalHotkeyManager hotkeys;
+            app.installNativeEventFilter(&hotkeys);
+
+            auto registerGlobalHotkeys = [&]() {
+                hotkeys.unregisterAll();
+
+                const auto registerCombo = [&](const QString& combo,
+                                               GlobalHotkeyManager::Action action) {
+                    const QStringList parts = combo.split('/', Qt::SkipEmptyParts);
+                    for (const QString& part : parts) {
+                        hotkeys.registerShortcut(part.trimmed(), action);
+                    }
+                };
+
+                const auto registerPair = [&](const QString& combo,
+                                              GlobalHotkeyManager::Action first,
+                                              GlobalHotkeyManager::Action second) {
+                    const QStringList parts = combo.split('/', Qt::SkipEmptyParts);
+                    if (parts.size() >= 1) {
+                        hotkeys.registerShortcut(parts[0].trimmed(), first);
+                    }
+                    if (parts.size() >= 2) {
+                        hotkeys.registerShortcut(parts[1].trimmed(), second);
+                    }
+                };
+
+                registerCombo(settings.hkPlayPause(), GlobalHotkeyManager::Action::PlayPause);
+                registerPair(settings.hkPrevNext(), GlobalHotkeyManager::Action::Previous,
+                             GlobalHotkeyManager::Action::Next);
+                registerPair(settings.hkVolumeUpDown(), GlobalHotkeyManager::Action::VolumeUp,
+                             GlobalHotkeyManager::Action::VolumeDown);
+                registerCombo(settings.hkToggleMiniPlayer(),
+                              GlobalHotkeyManager::Action::ToggleMiniPlayer);
+            };
+
+            registerGlobalHotkeys();
+
+            QObject::connect(&settings, &SettingsController::hkPlayPauseChanged,
+                             &app, registerGlobalHotkeys);
+            QObject::connect(&settings, &SettingsController::hkPrevNextChanged,
+                             &app, registerGlobalHotkeys);
+            QObject::connect(&settings, &SettingsController::hkVolumeUpDownChanged,
+                             &app, registerGlobalHotkeys);
+            QObject::connect(&settings, &SettingsController::hkToggleMiniPlayerChanged,
+                             &app, registerGlobalHotkeys);
+
+            QObject::connect(&hotkeys, &GlobalHotkeyManager::triggered, &app,
+                             [&](GlobalHotkeyManager::Action action) {
+                                 switch (action) {
+                                 case GlobalHotkeyManager::Action::PlayPause:
+                                     playback.togglePlayback();
+                                     break;
+                                 case GlobalHotkeyManager::Action::Previous:
+                                     playback.previous();
+                                     break;
+                                 case GlobalHotkeyManager::Action::Next:
+                                     playback.next();
+                                     break;
+                                 case GlobalHotkeyManager::Action::VolumeUp:
+                                     playback.volumeUp();
+                                     break;
+                                 case GlobalHotkeyManager::Action::VolumeDown:
+                                     playback.volumeDown();
+                                     break;
+                                 case GlobalHotkeyManager::Action::ToggleMiniPlayer:
+                                     windows.toggleMiniPlayer();
+                                     break;
+                                 }
+                             });
 
             // --qa-play: load + play through the normal production path. The
             // shared core pointer is the same one the controllers observe, so
