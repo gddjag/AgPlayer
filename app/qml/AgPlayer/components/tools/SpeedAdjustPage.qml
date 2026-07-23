@@ -53,7 +53,7 @@ Rectangle {
     Component {
         id: outputDirDialogComponent
         FolderDialog {
-            onAccepted: outputDirField.text = folder
+            onAccepted: outputDirField.text = folder.toString().replace(/^file:\/+/, "")
         }
     }
 
@@ -539,7 +539,6 @@ Rectangle {
                             TextField {
                                 id: targetBpmField
                                 Layout.preferredWidth: 100
-                                text: adjuster.targetBpm.toFixed(2)
                                 color: Theme.primaryText
                                 font.pixelSize: 14
                                 font.family: Theme.fontPrimary
@@ -555,6 +554,14 @@ Rectangle {
                                     if (!isNaN(value))
                                         adjuster.targetBpm = value
                                 }
+
+                                Binding {
+                                    target: targetBpmField
+                                    property: "text"
+                                    value: adjuster.targetBpm.toFixed(2)
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+
                                 background: Rectangle {
                                     color: Theme.background
                                     radius: Theme.radiusSm
@@ -616,12 +623,18 @@ Rectangle {
                             Layout.fillWidth: true
                             from: 50
                             to: 200
-                            value: adjuster.speedPercentage
                             stepSize: 0.1
                             enabled: adjuster.hasInput && adjuster.detectedBpm > 0 && !adjuster.busy
                             onMoved: {
                                 const ratio = value / 100.0
                                 adjuster.targetBpm = adjuster.detectedBpm * ratio
+                            }
+
+                            Binding {
+                                target: speedSlider
+                                property: "value"
+                                value: adjuster.speedPercentage
+                                restoreMode: Binding.RestoreBindingOrValue
                             }
 
                             background: Rectangle {
@@ -668,9 +681,15 @@ Rectangle {
 
                         Switch {
                             id: keepPitchSwitch
-                            checked: adjuster.keepPitch
                             enabled: adjuster.hasInput && !adjuster.busy
                             onClicked: adjuster.keepPitch = checked
+
+                            Binding {
+                                target: keepPitchSwitch
+                                property: "checked"
+                                value: adjuster.keepPitch
+                                restoreMode: Binding.RestoreBindingOrValue
+                            }
 
                             indicator: Rectangle {
                                 implicitWidth: 44
@@ -729,9 +748,15 @@ Rectangle {
 
                         Switch {
                             id: beatAlignSwitch
-                            checked: adjuster.beatAlign
                             enabled: adjuster.hasInput && !adjuster.busy
                             onClicked: adjuster.beatAlign = checked
+
+                            Binding {
+                                target: beatAlignSwitch
+                                property: "checked"
+                                value: adjuster.beatAlign
+                                restoreMode: Binding.RestoreBindingOrValue
+                            }
 
                             indicator: Rectangle {
                                 implicitWidth: 44
@@ -944,7 +969,15 @@ Rectangle {
                         from: 0
                         to: Math.max(1, adjuster.inputDurationMs)
                         value: 0
-                        enabled: adjuster.hasInput && !adjuster.busy
+                        enabled: false
+
+                        ToolTip.text: qsTr("Preview playback not supported")
+                        ToolTip.visible: previewHover.hovered
+                        ToolTip.delay: 500
+
+                        HoverHandler {
+                            id: previewHover
+                        }
 
                         background: Rectangle {
                             x: parent.leftPadding
@@ -1338,6 +1371,11 @@ Rectangle {
         function onSpeedAdjustCompleted(outputPath) {
             statusText.text = qsTr("Exported: %1").arg(outputPath)
             statusText.color = Theme.cyan
+            statusTimer.restart()
+        }
+        function onWarningOccurred(message) {
+            statusText.text = message
+            statusText.color = "#FFC107"
             statusTimer.restart()
         }
         function onErrorOccurred(message) {

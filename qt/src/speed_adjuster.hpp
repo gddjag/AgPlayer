@@ -83,6 +83,7 @@ signals:
     void beatAlignChanged();
     void markersChanged();
     void speedAdjustCompleted(const QString& outputPath);
+    void warningOccurred(const QString& message);
     void errorOccurred(const QString& message);
 
 private:
@@ -109,6 +110,7 @@ private:
     void refreshWaveform();
     QString computeOutputPath(const QString& inputPath,
                               const QString& outputFormat,
-                              const QString& outputDir) const;
+                              const QString& outputDir,
+                              const QString& suffix) const;
     double targetBpmToSpeedRatio(double targetBpm) const noexcept;
 };

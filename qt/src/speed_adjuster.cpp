@@ -252,7 +252,8 @@ void SpeedAdjuster::clearMarkers()
 
 QString SpeedAdjuster::computeOutputPath(const QString& inputPath,
                                          const QString& outputFormat,
-                                         const QString& outputDir) const
+                                         const QString& outputDir,
+                                         const QString& suffix) const
 {
     const QFileInfo info(inputPath);
     const FormatInfo fi = format_info(outputFormat);
@@ -264,12 +265,12 @@ QString SpeedAdjuster::computeOutputPath(const QString& inputPath,
         : info.suffix();
 
     QString candidate = dir + QStringLiteral("/") + baseName
-                        + QStringLiteral("_bpm.") + ext;
+                        + QStringLiteral("_") + suffix + QStringLiteral(".") + ext;
     int counter = 1;
     while (QFileInfo::exists(candidate)) {
         candidate = dir + QStringLiteral("/") + baseName
-                    + QStringLiteral("_bpm_") + QString::number(counter)
-                    + QStringLiteral(".") + ext;
+                    + QStringLiteral("_") + suffix + QStringLiteral("_")
+                    + QString::number(counter) + QStringLiteral(".") + ext;
         ++counter;
     }
     return candidate;
@@ -300,7 +301,7 @@ void SpeedAdjuster::start(double speedRatio, const QString& outputDir)
     ag_cancel_token* token = ag_cancel_token_create();
     token_.store(token, std::memory_order_release);
 
-    const QString outputPath = computeOutputPath(inputPath_, QString(), outputDir);
+    const QString outputPath = computeOutputPath(inputPath_, QString(), outputDir, QStringLiteral("speed"));
     const QString inputPath = inputPath_;
     // speed_ratio -> tempo_ratio: speed_ratio=2.0 (2x faster) means
     // tempo_ratio=0.5 (OLA compress to half length, preserving pitch).
@@ -388,7 +389,7 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
     ag_cancel_token* token = ag_cancel_token_create();
     token_.store(token, std::memory_order_release);
 
-    const QString outputPath = computeOutputPath(inputPath_, outputFormat, outputDir);
+    const QString outputPath = computeOutputPath(inputPath_, outputFormat, outputDir, QStringLiteral("bpm"));
     const QString inputPath = inputPath_;
     const double tempoRatio = 1.0 / speedRatio;
     const QByteArray codecName = [&outputFormat]() -> QByteArray {
@@ -409,7 +410,7 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
             if (result == AG_OK) {
                 setProgress(1.0);
                 if (beatAlign) {
-                    emit errorOccurred(QStringLiteral(
+                    emit warningOccurred(QStringLiteral(
                         "Exported: %1 (beat align not supported)").arg(outputPath));
                 } else {
                     emit speedAdjustCompleted(outputPath);

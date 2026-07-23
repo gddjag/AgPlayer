@@ -28,7 +28,7 @@ inline BpmAnalyzeResult analyze_bpm(const QString& filePath)
     // The result is intentionally deterministic for the same input file so
     // repeated analysis yields the same value.
     const qint64 size = info.size();
-    const double normalized = std::fmod(static_cast<double>(std::abs(size)), 10000.0) / 10000.0;
+    const double normalized = std::fmod(static_cast<double>(qAbs(size)), 10000.0) / 10000.0;
     const double bpm = 80.0 + normalized * 80.0;            // Range: 80..160 BPM.
     const double confidence = 65.0 + normalized * 30.0;     // Range: 65..95%.
 
