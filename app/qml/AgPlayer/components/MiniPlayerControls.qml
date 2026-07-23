@@ -47,8 +47,6 @@ Rectangle {
         return "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
     }
 
-    readonly property color starColor: "#FFD700"
-
     function currentTrackRating(): int {
         if (typeof LibraryModel.RatingRole === "undefined")
             return 0
@@ -152,24 +150,15 @@ Rectangle {
 
                     Repeater {
                         model: 5
-                        delegate: ToolButton {
-                            icon.source: index < root.currentTrackRating()
-                                         ? Theme.icon("star-fill")
-                                         : Theme.icon("star-line")
-                            icon.color: root.starColor
-                            icon.width: 10
-                            icon.height: 10
-                            padding: 0
-                            topPadding: 0
-                            bottomPadding: 0
-                            leftPadding: 0
-                            rightPadding: 0
-                            focusPolicy: Qt.NoFocus
-                            hoverEnabled: false
-                            enabled: false
-                            background: Rectangle { color: "transparent" }
+                        delegate: Image {
+                            source: index < root.currentTrackRating()
+                                    ? Theme.icon("star-fill")
+                                    : Theme.icon("star-line")
+                            sourceSize.width: 10
+                            sourceSize.height: 10
                             Layout.preferredWidth: 12
                             Layout.preferredHeight: 12
+                            fillMode: Image.PreserveAspectFit
                         }
                     }
                 }
