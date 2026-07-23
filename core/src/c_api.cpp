@@ -3,6 +3,7 @@
 #include "core_context.hpp"
 #include "decoder.hpp"
 #include "metadata_writer.hpp"
+#include "pitch_shifter.hpp"
 #include "transcoder.hpp"
 #include "waveform_analyzer.hpp"
 
@@ -473,6 +474,45 @@ ag_result ag_transcode(const char* input_path,
         std::string error;
         return agplayer::transcode(input_path, config, cancelled,
                                    std::move(cb), error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
+}
+
+ag_result ag_pitch_shift(const char* input_path,
+                         const char* output_path,
+                         const int pitch_cents,
+                         const int keep_tempo,
+                         const double tempo_ratio,
+                         const ag_cancel_token* cancel_token,
+                         const ag_progress_callback progress_callback,
+                         void* const user_data)
+{
+    if (input_path == nullptr || input_path[0] == '\0'
+        || output_path == nullptr || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::PitchShiftConfig config;
+        config.output_path = output_path;
+        config.pitch_cents = pitch_cents;
+        config.keep_tempo = keep_tempo != 0;
+        config.tempo_ratio = tempo_ratio;
+
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+
+        std::function<void(float)> cb;
+        if (progress_callback != nullptr) {
+            cb = [progress_callback, user_data](float frac) {
+                progress_callback(frac, user_data);
+            };
+        }
+
+        std::string error;
+        return agplayer::pitch_shift(input_path, config, cancelled,
+                                     std::move(cb), error);
     } catch (...) {
         return AG_INTERNAL_ERROR;
     }

@@ -26,6 +26,7 @@
 #include "library_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
+#include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "runtime_log.hpp"
@@ -105,9 +106,11 @@ int main(int argc, char* argv[])
         AudioToolsController audioTools;
         MetadataEditor metadataEditor;
         FormatConverter formatConverter;
+        PitchShifter pitchShifter;
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
-                                    &audioTools, &metadataEditor, &formatConverter);
+                                    &audioTools, &metadataEditor,
+                                    &formatConverter, &pitchShifter);
 
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },

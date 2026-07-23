@@ -4,6 +4,7 @@ add_library(agplayer_core STATIC
     src/core_context.cpp
     src/decoder.cpp
     src/metadata_writer.cpp
+    src/pitch_shifter.cpp
     src/playback_session.cpp
     src/transcoder.cpp
     src/waveform_analyzer.cpp

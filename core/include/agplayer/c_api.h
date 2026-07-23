@@ -137,6 +137,22 @@ ag_result ag_transcode(const char* input_path,
                        ag_progress_callback progress_callback,
                        void* user_data);
 
+/* Pitch-shift an audio file using FFmpeg asetrate + atempo filters.
+ * pitch_cents: pitch shift in cents (1 semitone = 100 cents), range -1200..1200.
+ * keep_tempo: 1 = preserve original tempo/duration (pitch only), 0 = pitch and
+ *   tempo change together.
+ * tempo_ratio: additional tempo multiplier (1.0 = no change), range 0.5..2.0.
+ * output_path: destination file path (format determined by extension).
+ * Returns AG_OK on success, AG_CANCELLED if cancelled. */
+ag_result ag_pitch_shift(const char* input_path,
+                         const char* output_path,
+                         int pitch_cents,
+                         int keep_tempo,
+                         double tempo_ratio,
+                         const ag_cancel_token* cancel_token,
+                         ag_progress_callback progress_callback,
+                         void* user_data);
+
 ag_result ag_waveform_analyze(const char* utf8_path,
                               size_t target_points,
                               const ag_cancel_token* cancel_token,

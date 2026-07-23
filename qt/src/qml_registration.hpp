@@ -5,6 +5,7 @@ class FormatConverter;
 class ImportController;
 class LibraryModel;
 class MetadataEditor;
+class PitchShifter;
 class PlaybackController;
 class WindowController;
 
@@ -18,4 +19,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WindowController* windows,
                                  AudioToolsController* audioTools,
                                  MetadataEditor* metadataEditor,
-                                 FormatConverter* formatConverter);
+                                 FormatConverter* formatConverter,
+                                 PitchShifter* pitchShifter);
