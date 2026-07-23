@@ -47,6 +47,40 @@ Rectangle {
         return "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
     }
 
+    readonly property color starColor: "#FFD700"
+
+    function currentTrackRating(): int {
+        if (typeof LibraryModel.RatingRole === "undefined")
+            return 0
+        var raw = root.currentTrackValue(LibraryModel.RatingRole)
+        var value = parseInt(raw, 10)
+        if (isNaN(value))
+            return 0
+        return Math.max(0, Math.min(5, value))
+    }
+
+    function currentTrackBpm(): string {
+        if (typeof LibraryModel.BpmRole === "undefined")
+            return "--"
+        var raw = root.currentTrackValue(LibraryModel.BpmRole)
+        var value = parseFloat(raw)
+        if (isNaN(value) || value <= 0)
+            return "--"
+        return Math.round(value) + " BPM"
+    }
+
+    function formatFileSize(bytes): string {
+        if (bytes <= 0)
+            return ""
+        if (bytes >= 1024 * 1024 * 1024)
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB"
+        if (bytes >= 1024 * 1024)
+            return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+        if (bytes >= 1024)
+            return Math.round(bytes / 1024) + " KB"
+        return bytes + " B"
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingMd
@@ -107,20 +141,55 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             spacing: 2
 
-            Text {
-                text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("No track loaded")
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
+            RowLayout {
                 Layout.fillWidth: true
-                ToolTip.text: text
-                ToolTip.visible: miniTitleHover.hovered && text !== qsTr("No track loaded")
-                ToolTip.delay: 500
+                spacing: Theme.spacingXs
 
-                HoverHandler {
-                    id: miniTitleHover
+                RowLayout {
+                    spacing: 1
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: playback.trackIndex >= 0
+
+                    Repeater {
+                        model: 5
+                        delegate: ToolButton {
+                            icon.source: index < root.currentTrackRating()
+                                         ? Theme.icon("star-fill")
+                                         : Theme.icon("star-line")
+                            icon.color: root.starColor
+                            icon.width: 10
+                            icon.height: 10
+                            padding: 0
+                            topPadding: 0
+                            bottomPadding: 0
+                            leftPadding: 0
+                            rightPadding: 0
+                            focusPolicy: Qt.NoFocus
+                            hoverEnabled: false
+                            enabled: false
+                            background: Rectangle { color: "transparent" }
+                            Layout.preferredWidth: 12
+                            Layout.preferredHeight: 12
+                        }
+                    }
+                }
+
+                Text {
+                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("No track loaded")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.text: text
+                    ToolTip.visible: miniTitleHover.hovered && text !== qsTr("No track loaded")
+                    ToolTip.delay: 500
+
+                    HoverHandler {
+                        id: miniTitleHover
+                    }
                 }
             }
 
@@ -151,15 +220,23 @@ Rectangle {
                         var fmt = root.currentTrackValue(LibraryModel.FormatRole)
                         if (fmt && fmt.length > 0)
                             badges.push(fmt.toUpperCase())
-                        var sr = root.currentTrackValue(LibraryModel.SampleRateRole)
-                        if (sr > 0)
-                            badges.push((sr / 1000) + " kHz")
                         var bd = root.currentTrackValue(LibraryModel.BitDepthRole)
                         if (bd > 0)
                             badges.push(bd + "-bit")
+                        var sr = root.currentTrackValue(LibraryModel.SampleRateRole)
+                        if (sr > 0)
+                            badges.push((sr / 1000) + " kHz")
                         var br = root.currentTrackValue(LibraryModel.BitRateRole)
                         if (br > 0)
                             badges.push(Math.round(br / 1000) + " kbps")
+                        if (playback.trackIndex >= 0) {
+                            var bpm = root.currentTrackBpm()
+                            if (bpm.length > 0)
+                                badges.push(bpm)
+                        }
+                        var size = root.currentTrackValue(LibraryModel.FileSizeRole)
+                        if (size > 0)
+                            badges.push(root.formatFileSize(size))
                         return badges
                     }
 

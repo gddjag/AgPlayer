@@ -20,6 +20,8 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/star-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
