@@ -153,6 +153,24 @@ ag_result ag_pitch_shift(const char* input_path,
                          ag_progress_callback progress_callback,
                          void* user_data);
 
+/* Light edit: trim + fade in/out + gain. Decodes to float32, applies edits
+ * in-memory, re-encodes with the same codec as input.
+ * trim_start_ms: 0 = start of file. trim_end_ms: 0 = end of file.
+ * fade_in_ms / fade_out_ms: 0 = no fade. Linear fade.
+ * gain: linear amplitude factor (1.0 = no change, 0.5 = -6dB, 2.0 = +6dB).
+ * output_path: destination file path (same codec as input).
+ * Returns AG_OK on success, AG_CANCELLED if cancelled. */
+ag_result ag_light_edit(const char* input_path,
+                        const char* output_path,
+                        long long trim_start_ms,
+                        long long trim_end_ms,
+                        int fade_in_ms,
+                        int fade_out_ms,
+                        double gain,
+                        const ag_cancel_token* cancel_token,
+                        ag_progress_callback progress_callback,
+                        void* user_data);
+
 ag_result ag_waveform_analyze(const char* utf8_path,
                               size_t target_points,
                               const ag_cancel_token* cancel_token,

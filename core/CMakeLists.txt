@@ -3,6 +3,7 @@ add_library(agplayer_core STATIC
     src/c_api.cpp
     src/core_context.cpp
     src/decoder.cpp
+    src/light_editor.cpp
     src/metadata_writer.cpp
     src/pitch_shifter.cpp
     src/playback_session.cpp

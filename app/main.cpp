@@ -25,6 +25,7 @@
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
+#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
@@ -109,11 +110,12 @@ int main(int argc, char* argv[])
         FormatConverter formatConverter;
         PitchShifter pitchShifter;
         SpeedAdjuster speedAdjuster;
+        LightEditor lightEditor;
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &pitchShifter,
-                                    &speedAdjuster);
+                                    &speedAdjuster, &lightEditor);
 
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },

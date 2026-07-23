@@ -9,6 +9,8 @@ add_library(agplayer_qt STATIC
     src/library_model.hpp
     src/library_store.cpp
     src/library_store.hpp
+    src/light_editor_controller.cpp
+    src/light_editor_controller.hpp
     src/metadata_editor.cpp
     src/metadata_editor.hpp
     src/pitch_shifter.cpp

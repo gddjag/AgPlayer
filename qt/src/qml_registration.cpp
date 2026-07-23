@@ -4,6 +4,7 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
@@ -21,7 +22,8 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  MetadataEditor* metadataEditor,
                                  FormatConverter* formatConverter,
                                  PitchShifter* pitchShifter,
-                                 SpeedAdjuster* speedAdjuster)
+                                 SpeedAdjuster* speedAdjuster,
+                                 LightEditor* lightEditor)
 {
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
@@ -32,5 +34,6 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FormatConverter", formatConverter);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PitchShifter", pitchShifter);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SpeedAdjuster", speedAdjuster);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LightEditor", lightEditor);
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
 }

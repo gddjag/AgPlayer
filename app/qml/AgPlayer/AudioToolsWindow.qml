@@ -5,8 +5,8 @@ import AgPlayer
 
 // Frameless audio tools window. 240px left sidebar navigation + right content
 // area with a StackLayout bound to AudioToolsController.currentTool.
-// Implemented: tool 0 (Format Convert), tool 2 (Speed Adjust), tool 3 (Pitch
-// Shift), tool 4 (Info Edit). Tool 1 (Light Edit) still shows a ComingSoonPage.
+// All five tools implemented: 0 (Format Convert), 1 (Light Edit), 2 (Speed
+// Adjust), 3 (Pitch Shift), 4 (Info Edit).
 Window {
     id: window
     objectName: "audioToolsWindow"
@@ -43,7 +43,7 @@ Window {
                 currentIndex: AudioToolsController.currentTool
 
                 FormatConvertPage {}
-                ComingSoonPage { toolName: qsTr("Light Edit") }
+                LightEditPage {}
                 SpeedAdjustPage {}
                 PitchShiftPage {}
                 InfoEditPage {}

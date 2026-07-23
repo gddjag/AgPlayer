@@ -4,6 +4,7 @@
 #include "decoder.hpp"
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
+#include "light_editor.hpp"
 #include "transcoder.hpp"
 #include "waveform_analyzer.hpp"
 
@@ -512,6 +513,49 @@ ag_result ag_pitch_shift(const char* input_path,
 
         std::string error;
         return agplayer::pitch_shift(input_path, config, cancelled,
+                                     std::move(cb), error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
+}
+
+ag_result ag_light_edit(const char* input_path,
+                        const char* output_path,
+                        const long long trim_start_ms,
+                        const long long trim_end_ms,
+                        const int fade_in_ms,
+                        const int fade_out_ms,
+                        const double gain,
+                        const ag_cancel_token* cancel_token,
+                        const ag_progress_callback progress_callback,
+                        void* const user_data)
+{
+    if (input_path == nullptr || input_path[0] == '\0'
+        || output_path == nullptr || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::LightEditConfig config;
+        config.output_path = output_path;
+        config.trim_start_ms = trim_start_ms;
+        config.trim_end_ms = trim_end_ms;
+        config.fade_in_ms = fade_in_ms;
+        config.fade_out_ms = fade_out_ms;
+        config.gain = gain;
+
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+
+        std::function<void(float)> cb;
+        if (progress_callback != nullptr) {
+            cb = [progress_callback, user_data](float frac) {
+                progress_callback(frac, user_data);
+            };
+        }
+
+        std::string error;
+        return agplayer::light_edit(input_path, config, cancelled,
                                      std::move(cb), error);
     } catch (...) {
         return AG_INTERNAL_ERROR;

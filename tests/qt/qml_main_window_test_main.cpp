@@ -2,6 +2,7 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
@@ -56,12 +57,13 @@ public slots:
         formatConverter_ = std::make_unique<FormatConverter>();
         pitchShifter_ = std::make_unique<PitchShifter>();
         speedAdjuster_ = std::make_unique<SpeedAdjuster>();
+        lightEditor_ = std::make_unique<LightEditor>();
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), pitchShifter_.get(),
-                                    speedAdjuster_.get());
+                                    speedAdjuster_.get(), lightEditor_.get());
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -91,6 +93,7 @@ private:
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<PitchShifter> pitchShifter_;
     std::unique_ptr<SpeedAdjuster> speedAdjuster_;
+    std::unique_ptr<LightEditor> lightEditor_;
     std::unique_ptr<QQmlComponent> component_;
     QObject* mainWindow_ = nullptr;
 };
