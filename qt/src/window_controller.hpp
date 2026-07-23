@@ -11,6 +11,7 @@ class WindowController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool mainVisible READ mainVisible NOTIFY mainVisibleChanged)
     Q_PROPERTY(bool miniVisible READ miniVisible NOTIFY miniVisibleChanged)
+    Q_PROPERTY(bool audioToolsVisible READ audioToolsVisible NOTIFY audioToolsVisibleChanged)
     Q_PROPERTY(bool alwaysOnTop READ alwaysOnTop WRITE setAlwaysOnTop NOTIFY alwaysOnTopChanged)
 
 public:
@@ -27,21 +28,26 @@ public:
 
     bool mainVisible() const noexcept;
     bool miniVisible() const noexcept;
+    bool audioToolsVisible() const noexcept;
     bool alwaysOnTop() const noexcept;
 
     void setWindows(QWindow* mainWindow, QWindow* miniWindow);
+    void setAudioToolsWindow(QWindow* audioToolsWindow);
     void setMainReady(bool ready) noexcept;
     void setMiniReady(bool ready) noexcept;
     void setShutdownActions(ShutdownActions actions);
 
     Q_INVOKABLE void showMini();
     Q_INVOKABLE void showMain();
+    Q_INVOKABLE void showAudioTools();
+    Q_INVOKABLE void hideAudioTools();
     Q_INVOKABLE void requestClose();
     Q_INVOKABLE void setAlwaysOnTop(bool alwaysOnTop);
 
 signals:
     void mainVisibleChanged();
     void miniVisibleChanged();
+    void audioToolsVisibleChanged();
     void alwaysOnTopChanged();
 
 private:
@@ -49,12 +55,15 @@ private:
 
     void applyMainVisible(bool visible);
     void applyMiniVisible(bool visible);
+    void applyAudioToolsVisible(bool visible);
 
     QPointer<QWindow> mainWindow_;
     QPointer<QWindow> miniWindow_;
+    QPointer<QWindow> audioToolsWindow_;
     ShutdownActions shutdownActions_;
     bool mainVisible_ = true;
     bool miniVisible_ = false;
+    bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
     bool mainReady_ = true;
     bool miniReady_ = true;

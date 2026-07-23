@@ -20,9 +20,11 @@
 #include <windows.h>
 #endif
 
+#include "audio_tools_controller.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
+#include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "runtime_log.hpp"
@@ -99,8 +101,11 @@ int main(int argc, char* argv[])
         PlaybackController playback(core, &library);
         ImportController importer(&library);
         WindowController windows;
+        AudioToolsController audioTools;
+        MetadataEditor metadataEditor;
 
-        register_agplayer_qml_types(&library, &playback, &importer, &windows);
+        register_agplayer_qml_types(&library, &playback, &importer, &windows,
+                                    &audioTools, &metadataEditor);
 
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },

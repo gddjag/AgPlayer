@@ -20,6 +20,7 @@ WindowController::WindowController(ShutdownActions actions, QObject* parent)
 
 bool WindowController::mainVisible() const noexcept { return mainVisible_; }
 bool WindowController::miniVisible() const noexcept { return miniVisible_; }
+bool WindowController::audioToolsVisible() const noexcept { return audioToolsVisible_; }
 bool WindowController::alwaysOnTop() const noexcept { return alwaysOnTop_; }
 
 void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
@@ -32,6 +33,14 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
     if (miniWindow_ != nullptr) {
         miniWindow_->setFlag(Qt::WindowStaysOnTopHint, alwaysOnTop_);
         miniWindow_->setVisible(miniVisible_);
+    }
+}
+
+void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
+{
+    audioToolsWindow_ = audioToolsWindow;
+    if (audioToolsWindow_ != nullptr) {
+        audioToolsWindow_->setVisible(audioToolsVisible_);
     }
 }
 
@@ -79,6 +88,16 @@ void WindowController::showMain()
     applyMainVisible(true);
     applyMiniVisible(false);
     pendingView_ = PendingView::None;
+}
+
+void WindowController::showAudioTools()
+{
+    applyAudioToolsVisible(true);
+}
+
+void WindowController::hideAudioTools()
+{
+    applyAudioToolsVisible(false);
 }
 
 void WindowController::requestClose()
@@ -142,4 +161,20 @@ void WindowController::applyMiniVisible(bool visible)
     }
     miniVisible_ = visible;
     emit miniVisibleChanged();
+}
+
+void WindowController::applyAudioToolsVisible(bool visible)
+{
+    if (audioToolsVisible_ == visible) {
+        return;
+    }
+    if (audioToolsWindow_ != nullptr) {
+        audioToolsWindow_->setVisible(visible);
+        if (visible) {
+            audioToolsWindow_->requestActivate();
+            audioToolsWindow_->raise();
+        }
+    }
+    audioToolsVisible_ = visible;
+    emit audioToolsVisibleChanged();
 }

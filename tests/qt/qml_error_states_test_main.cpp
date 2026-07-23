@@ -1,5 +1,7 @@
+#include "audio_tools_controller.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "runtime_log.hpp"
@@ -114,9 +116,12 @@ public slots:
         playback_ = std::make_unique<PlaybackController>(harness_->core_, library_.get());
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
+        audioTools_ = std::make_unique<AudioToolsController>();
+        metadataEditor_ = std::make_unique<MetadataEditor>();
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
-                                    importer_.get(), windows_.get());
+                                    importer_.get(), windows_.get(),
+                                    audioTools_.get(), metadataEditor_.get());
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -133,6 +138,8 @@ private:
     std::unique_ptr<PlaybackController> playback_;
     std::unique_ptr<ImportController> importer_;
     std::unique_ptr<WindowController> windows_;
+    std::unique_ptr<AudioToolsController> audioTools_;
+    std::unique_ptr<MetadataEditor> metadataEditor_;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(qml_error_states, QmlErrorStatesSetup)
