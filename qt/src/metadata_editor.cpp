@@ -2,6 +2,7 @@
 
 #include "agplayer/c_api.h"
 
+#include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QtConcurrent>
@@ -26,6 +27,74 @@ int MetadataEditor::fileCount() const noexcept
     return static_cast<int>(entries_.size());
 }
 
+QString MetadataEditor::coverImage() const
+{
+    return coverPath_;
+}
+
+void MetadataEditor::resetCover()
+{
+    if (!coverPath_.isEmpty() || !coverData_.isEmpty()) {
+        coverPath_.clear();
+        coverData_.clear();
+        coverMime_.clear();
+        emit coverImageChanged();
+    }
+}
+
+QString MetadataEditor::mimeTypeForImage(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    if (suffix == QLatin1String("png")) {
+        return QStringLiteral("image/png");
+    }
+    if (suffix == QLatin1String("jpg") || suffix == QLatin1String("jpeg")) {
+        return QStringLiteral("image/jpeg");
+    }
+    if (suffix == QLatin1String("gif")) {
+        return QStringLiteral("image/gif");
+    }
+    if (suffix == QLatin1String("bmp")) {
+        return QStringLiteral("image/bmp");
+    }
+    if (suffix == QLatin1String("webp")) {
+        return QStringLiteral("image/webp");
+    }
+    return QStringLiteral("application/octet-stream");
+}
+
+void MetadataEditor::setCoverImage(const QUrl& url)
+{
+    if (!url.isValid()) {
+        return;
+    }
+    const QString path = url.toLocalFile();
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        emit errorOccurred(tr("Failed to open cover image: %1").arg(path));
+        return;
+    }
+    const QByteArray data = file.readAll();
+    if (data.isEmpty()) {
+        emit errorOccurred(tr("Cover image is empty: %1").arg(path));
+        return;
+    }
+
+    coverPath_ = path;
+    coverData_ = data;
+    coverMime_ = mimeTypeForImage(path);
+    emit coverImageChanged();
+}
+
+void MetadataEditor::clearCoverImage()
+{
+    resetCover();
+}
+
 void MetadataEditor::setBusy(bool value)
 {
     busy_.store(value, std::memory_order_release);
@@ -43,6 +112,7 @@ void MetadataEditor::loadFiles(const QList<QUrl>& urls)
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
+    resetCover();
     cancelFlag_.store(false, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
@@ -142,44 +212,62 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
             watcher->deleteLater();
         });
 
-    watcher->setFuture(QtConcurrent::run([fields, targets, this]() {
-        int success = 0;
-        int failure = 0;
-        const int total = targets.size();
-        for (int i = 0; i < total; ++i) {
-            if (cancelFlag_.load(std::memory_order_acquire)) {
-                break;
+    const QByteArray coverData = coverData_;
+    const QByteArray coverMime = coverMime_.toUtf8();
+
+    watcher->setFuture(QtConcurrent::run(
+        [fields, targets, coverData, coverMime, this]() {
+            int success = 0;
+            int failure = 0;
+            const int total = targets.size();
+            for (int i = 0; i < total; ++i) {
+                if (cancelFlag_.load(std::memory_order_acquire)) {
+                    break;
+                }
+                const int idx = targets[i];
+                if (idx < 0 || idx >= entries_.size()) {
+                    ++failure;
+                    continue;
+                }
+                const MetadataEntry& e = entries_[idx];
+                const QByteArray pathUtf8 = e.path.toUtf8();
+                const std::string title =
+                    fields.value("title").toString().toStdString();
+                const std::string artist =
+                    fields.value("artist").toString().toStdString();
+                const std::string album =
+                    fields.value("album").toString().toStdString();
+                const std::string year =
+                    fields.value("year").toString().toStdString();
+                const std::string genre =
+                    fields.value("genre").toString().toStdString();
+                const unsigned char* coverPtr = nullptr;
+                size_t coverSize = 0;
+                const char* mimePtr = nullptr;
+                if (!coverData.isEmpty()) {
+                    coverPtr = reinterpret_cast<const unsigned char*>(
+                        coverData.constData());
+                    coverSize = static_cast<size_t>(coverData.size());
+                    mimePtr = coverMime.constData();
+                }
+                const ag_result result = ag_metadata_write(
+                    pathUtf8.constData(),
+                    title.empty() ? nullptr : title.c_str(),
+                    artist.empty() ? nullptr : artist.c_str(),
+                    album.empty() ? nullptr : album.c_str(),
+                    year.empty() ? nullptr : year.c_str(),
+                    genre.empty() ? nullptr : genre.c_str(),
+                    coverPtr, coverSize, mimePtr);
+                if (result == AG_OK) {
+                    ++success;
+                } else {
+                    ++failure;
+                }
+                progress_.store(static_cast<double>(i + 1) / total,
+                                std::memory_order_release);
             }
-            const int idx = targets[i];
-            if (idx < 0 || idx >= entries_.size()) {
-                ++failure;
-                continue;
-            }
-            const MetadataEntry& e = entries_[idx];
-            const QByteArray pathUtf8 = e.path.toUtf8();
-            const std::string title = fields.value("title").toString().toStdString();
-            const std::string artist = fields.value("artist").toString().toStdString();
-            const std::string album = fields.value("album").toString().toStdString();
-            const std::string year = fields.value("year").toString().toStdString();
-            const std::string genre = fields.value("genre").toString().toStdString();
-            const ag_result result = ag_metadata_write(
-                pathUtf8.constData(),
-                title.empty() ? nullptr : title.c_str(),
-                artist.empty() ? nullptr : artist.c_str(),
-                album.empty() ? nullptr : album.c_str(),
-                year.empty() ? nullptr : year.c_str(),
-                genre.empty() ? nullptr : genre.c_str(),
-                nullptr, 0, nullptr);
-            if (result == AG_OK) {
-                ++success;
-            } else {
-                ++failure;
-            }
-            progress_.store(static_cast<double>(i + 1) / total,
-                            std::memory_order_release);
-        }
-        return QPair<int, int>{success, failure};
-    }));
+            return QPair<int, int>{success, failure};
+        }));
 }
 
 QString MetadataEditor::computeNewName(const QString& original,
@@ -217,6 +305,25 @@ QStringList MetadataEditor::previewRename(const QString& prefix,
                                                suffix, autoNumber,
                                                numberStart + i, numberDigits);
         result.append(entries_[i].fileName + " -> " + newName);
+    }
+    return result;
+}
+
+QVariantList MetadataEditor::renamePreviewEntries(const QString& prefix,
+                                                  const QString& suffix,
+                                                  bool autoNumber,
+                                                  int numberStart,
+                                                  int numberDigits) const
+{
+    QVariantList result;
+    for (int i = 0; i < entries_.size(); ++i) {
+        const QString newName = computeNewName(entries_[i].fileName, prefix,
+                                               suffix, autoNumber,
+                                               numberStart + i, numberDigits);
+        QVariantMap map;
+        map["original"] = entries_[i].fileName;
+        map["preview"] = newName;
+        result.append(map);
     }
     return result;
 }
@@ -300,5 +407,6 @@ void MetadataEditor::cancel()
 void MetadataEditor::clear()
 {
     entries_.clear();
+    resetCover();
     emit fileCountChanged();
 }

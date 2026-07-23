@@ -29,6 +29,7 @@ class MetadataEditor final : public QObject {
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(int fileCount READ fileCount NOTIFY fileCountChanged)
+    Q_PROPERTY(QString coverImage READ coverImage NOTIFY coverImageChanged)
 
 public:
     explicit MetadataEditor(QObject* parent = nullptr);
@@ -36,16 +37,24 @@ public:
     double progress() const noexcept;
     bool busy() const noexcept;
     int fileCount() const noexcept;
+    QString coverImage() const;
 
     Q_INVOKABLE void loadFiles(const QList<QUrl>& urls);
     Q_INVOKABLE QVariantMap entryAt(int index) const;
     Q_INVOKABLE void applyMetadata(const QVariantMap& fields,
                                    const QList<int>& indices);
+    Q_INVOKABLE void setCoverImage(const QUrl& url);
+    Q_INVOKABLE void clearCoverImage();
     Q_INVOKABLE QStringList previewRename(const QString& prefix,
                                           const QString& suffix,
                                           bool autoNumber,
                                           int numberStart,
                                           int numberDigits) const;
+    Q_INVOKABLE QVariantList renamePreviewEntries(const QString& prefix,
+                                                  const QString& suffix,
+                                                  bool autoNumber,
+                                                  int numberStart,
+                                                  int numberDigits) const;
     Q_INVOKABLE void applyRename(const QString& prefix,
                                  const QString& suffix,
                                  bool autoNumber,
@@ -59,6 +68,7 @@ signals:
     void busyChanged();
     void fileCountChanged();
     void entriesLoaded();
+    void coverImageChanged();
     void metadataApplied(int successCount, int failureCount);
     void renameApplied(int successCount, int failureCount);
     void errorOccurred(const QString& message);
@@ -69,8 +79,14 @@ private:
     std::atomic<double> progress_{0.0};
     std::atomic<bool> busy_{false};
 
+    QString coverPath_;
+    QByteArray coverData_;
+    QString coverMime_;
+
     void setBusy(bool value);
     void setProgress(double value);
+    void resetCover();
+    static QString mimeTypeForImage(const QString& path);
     QString computeNewName(const QString& original, const QString& prefix,
                            const QString& suffix, bool autoNumber,
                            int number, int numberDigits) const;

@@ -12,14 +12,74 @@ Rectangle {
     color: Theme.background
 
     property var editor: MetadataEditor
-    property var selectedIndices: []  // tracked locally for "Selected Files" apply
+    property var selectedIndices: [] // tracked locally for "Selected Files" apply
+
+    function formatDuration(ms) {
+        if (ms <= 0) {
+            return "00:00"
+        }
+        const totalSec = Math.floor(ms / 1000)
+        const min = Math.floor(totalSec / 60)
+        const sec = totalSec % 60
+        return (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec)
+    }
+
+    function isSelected(index) {
+        return selectedIndices.indexOf(index) !== -1
+    }
+
+    function toggleSelection(index) {
+        const idx = selectedIndices.indexOf(index)
+        if (idx === -1) {
+            selectedIndices.push(index)
+        } else {
+            selectedIndices.splice(idx, 1)
+        }
+        selectedIndicesChanged()
+    }
+
+    function buildExample() {
+        const prefix = prefixField.text
+        const suffix = suffixField.text
+        const autoNumber = autoNumberCheck.checked
+        const start = numberStartSpin.value
+        const digits = numberDigitsSpin.value
+        let stem = "Song"
+        if (editor.fileCount > 0) {
+            const first = editor.entryAt(0)
+            const name = first.fileName
+            const dot = name.lastIndexOf(".")
+            stem = dot > 0 ? name.substring(0, dot) : name
+        }
+        let number = ""
+        if (autoNumber) {
+            let n = start
+            for (let i = 0; i < digits; ++i) {
+                number = (n % 10) + number
+                n = Math.floor(n / 10)
+            }
+            number = (start + "").padStart(digits, "0")
+        }
+        return number + (prefix ? "-" + prefix : "")
+            + (autoNumber ? "-" : "") + stem
+            + (suffix ? "-" + suffix : "") + ".mp3"
+    }
 
     Component {
-        id: fileDialogComponent
+        id: audioFileDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
             nameFilters: [qsTr("Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)")]
             onAccepted: editor.loadFiles(files)
+        }
+    }
+
+    Component {
+        id: imageFileDialogComponent
+        FileDialog {
+            fileMode: FileDialog.OpenFile
+            nameFilters: [qsTr("Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")]
+            onAccepted: editor.setCoverImage(file)
         }
     }
 
@@ -32,15 +92,113 @@ Rectangle {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: Theme.spacingSm
+            spacing: Theme.spacingMd
 
-            Text {
-                text: qsTr("METADATA BATCH EDIT")
-                color: Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 11
-                font.capitalization: Font.AllUppercase
-                font.weight: Font.Medium
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
+
+                Text {
+                    text: qsTr("Batch Metadata Edit")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 16
+                    font.weight: Font.Medium
+                }
+
+                Text {
+                    text: "\u24D8"
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 14
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            // Drag-and-drop import area
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 72
+                color: "transparent"
+                radius: Theme.radiusSm
+
+                Canvas {
+                    anchors.fill: parent
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        const w = width
+                        const h = height
+                        const r = Theme.radiusSm
+                        ctx.clearRect(0, 0, w, h)
+                        ctx.strokeStyle = Theme.border
+                        ctx.lineWidth = 1
+                        ctx.setLineDash([6, 4])
+                        ctx.beginPath()
+                        ctx.moveTo(r, 0)
+                        ctx.lineTo(w - r, 0)
+                        ctx.quadraticCurveTo(w, 0, w, r)
+                        ctx.lineTo(w, h - r)
+                        ctx.quadraticCurveTo(w, h, w - r, h)
+                        ctx.lineTo(r, h)
+                        ctx.quadraticCurveTo(0, h, 0, h - r)
+                        ctx.lineTo(0, r)
+                        ctx.quadraticCurveTo(0, 0, r, 0)
+                        ctx.closePath()
+                        ctx.stroke()
+                    }
+                }
+
+                DropArea {
+                    anchors.fill: parent
+                    keys: ["text/uri-list"]
+                    onDropped: function(drop) {
+                        if (drop.hasUrls) {
+                            editor.loadFiles(drop.urls)
+                            drop.acceptProposedAction()
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        const dlg = audioFileDialogComponent.createObject(page)
+                        dlg.open()
+                    }
+                }
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: Theme.spacingMd
+
+                    Text {
+                        text: "\uFF0B"
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 24
+                    }
+
+                    ColumnLayout {
+                        spacing: Theme.spacingXs
+
+                        Text {
+                            text: qsTr("Drop audio files here or click to add")
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        Text {
+                            text: qsTr("Supports MP3 / WAV / FLAC / M4A, etc.")
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 11
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+                    }
+                }
             }
 
             RowLayout {
@@ -48,110 +206,137 @@ Rectangle {
                 Layout.fillHeight: true
                 spacing: Theme.spacingMd
 
-                // File list (left, 40%)
+                // File list (left)
                 Rectangle {
                     id: fileListContainer
                     Layout.fillHeight: true
-                    Layout.preferredWidth: parent.width * 0.4
+                    Layout.preferredWidth: parent.width * 0.42
                     color: Theme.panel
                     radius: Theme.radiusSm
                     border.color: Theme.border
                     border.width: 1
 
-                    DropArea {
-                        anchors.fill: parent
-                        keys: ["text/uri-list"]
-                        onDropped: function(drop) {
-                            if (drop.hasUrls) {
-                                editor.loadFiles(drop.urls)
-                                drop.acceptProposedAction()
-                            }
-                        }
-                    }
-
-                    ListView {
-                        id: fileList
-                        anchors.fill: parent
-                        anchors.margins: 1
-                        clip: true
-                        model: editor.fileCount
-                        delegate: Rectangle {
-                            width: fileList.width
-                            height: 36
-                            color: index % 2 === 0 ? "transparent"
-                                                   : Qt.rgba(1, 1, 1, 0.02)
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacingSm
-                                anchors.rightMargin: Theme.spacingSm
-                                spacing: Theme.spacingSm
-
-                                CheckBox {
-                                    id: fileCheck
-                                    checked: true
-                                    onCheckedChanged: {
-                                        if (checked) {
-                                            if (page.selectedIndices.indexOf(index) === -1)
-                                                page.selectedIndices.push(index)
-                                        } else {
-                                            var idx = page.selectedIndices.indexOf(index)
-                                            if (idx !== -1)
-                                                page.selectedIndices.splice(idx, 1)
-                                        }
-                                        page.selectedIndicesChanged()
-                                    }
-                                    Component.onCompleted: {
-                                        if (page.selectedIndices.indexOf(index) === -1)
-                                            page.selectedIndices.push(index)
-                                    }
-                                }
-
-                                Text {
-                                    text: editor.entryAt(index).fileName
-                                    color: Theme.primaryText
-                                    font.family: Theme.fontPrimary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    Layout.fillWidth: true
-                                }
-
-                                Text {
-                                    text: editor.entryAt(index).format
-                                    color: Theme.secondaryText
-                                    font.family: Theme.fontPrimary
-                                    font.pixelSize: 10
-                                }
-                            }
-                        }
-                    }
-
-                    // Empty state
                     ColumnLayout {
-                        anchors.centerIn: parent
-                        visible: editor.fileCount === 0
+                        anchors.fill: parent
+                        anchors.margins: Theme.spacingMd
                         spacing: Theme.spacingSm
 
-                        Text {
-                            text: qsTr("Drop audio files here or click Add")
-                            color: Theme.secondaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            Layout.alignment: Qt.AlignHCenter
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacingSm
+
+                            Text {
+                                text: qsTr("File List") + " (" + editor.fileCount + ")"
+                                color: Theme.primaryText
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 13
+                                font.weight: Font.Medium
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Button {
+                                text: qsTr("Clear List")
+                                enabled: editor.fileCount > 0
+                                onClicked: editor.clear()
+
+                                background: Rectangle {
+                                    color: "transparent"
+                                }
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: parent.enabled ? Theme.secondaryText : Theme.border
+                                    font.pixelSize: 12
+                                    font.family: Theme.fontPrimary
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
                         }
 
-                        Button {
-                            text: qsTr("Add Files")
-                            Layout.alignment: Qt.AlignHCenter
-                            onClicked: {
-                                var dlg = fileDialogComponent.createObject(page)
-                                dlg.open()
+                        ListView {
+                            id: fileList
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            model: editor.fileCount
+                            delegate: Rectangle {
+                                width: fileList.width
+                                height: 36
+                                color: {
+                                    if (page.isSelected(index)) {
+                                        return Qt.rgba(0, 0.83, 1, 0.12)
+                                    }
+                                    return index % 2 === 0 ? "transparent"
+                                                           : Qt.rgba(1, 1, 1, 0.02)
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: page.toggleSelection(index)
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: Theme.spacingSm
+                                    anchors.rightMargin: Theme.spacingSm
+                                    spacing: Theme.spacingSm
+
+                                    Text {
+                                        text: (index + 1) + "."
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 12
+                                        Layout.preferredWidth: 28
+                                    }
+
+                                    Text {
+                                        text: "\u266A"
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 12
+                                        Layout.preferredWidth: 18
+                                    }
+
+                                    Text {
+                                        text: editor.entryAt(index).fileName
+                                        color: Theme.primaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 12
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: page.formatDuration(editor.entryAt(index).durationMs)
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 11
+                                        Layout.alignment: Qt.AlignRight
+                                    }
+                                }
+                            }
+
+                            // Empty state inside the list panel
+                            ColumnLayout {
+                                anchors.centerIn: parent
+                                visible: editor.fileCount === 0
+                                spacing: Theme.spacingSm
+
+                                Text {
+                                    text: qsTr("No audio files")
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 13
+                                    Layout.alignment: Qt.AlignHCenter
+                                }
                             }
                         }
                     }
                 }
 
-                // Metadata form (right, 60%)
+                // Metadata form (right)
                 Rectangle {
                     Layout.fillHeight: true
                     Layout.fillWidth: true
@@ -172,7 +357,7 @@ Rectangle {
                             color: Theme.secondaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
-                            Layout.alignment: Qt.AlignRight
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         }
                         TextField {
                             id: titleField
@@ -180,6 +365,7 @@ Rectangle {
                             color: Theme.primaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
+                            placeholderText: qsTr("e.g., Song Title")
                             background: Rectangle {
                                 color: Theme.background
                                 radius: Theme.radiusSm
@@ -193,7 +379,7 @@ Rectangle {
                             color: Theme.secondaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
-                            Layout.alignment: Qt.AlignRight
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         }
                         TextField {
                             id: artistField
@@ -201,6 +387,7 @@ Rectangle {
                             color: Theme.primaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
+                            placeholderText: qsTr("e.g., Artist Name")
                             background: Rectangle {
                                 color: Theme.background
                                 radius: Theme.radiusSm
@@ -214,7 +401,7 @@ Rectangle {
                             color: Theme.secondaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
-                            Layout.alignment: Qt.AlignRight
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         }
                         TextField {
                             id: albumField
@@ -222,6 +409,7 @@ Rectangle {
                             color: Theme.primaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
+                            placeholderText: qsTr("e.g., Album Name")
                             background: Rectangle {
                                 color: Theme.background
                                 radius: Theme.radiusSm
@@ -231,84 +419,222 @@ Rectangle {
                         }
 
                         Label {
-                            text: qsTr("Year")
+                            text: qsTr("Cover")
                             color: Theme.secondaryText
                             font.pixelSize: 12
                             font.family: Theme.fontPrimary
-                            Layout.alignment: Qt.AlignRight
+                            Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                            Layout.topMargin: Theme.spacingSm
                         }
-                        TextField {
-                            id: yearField
-                            Layout.fillWidth: true
-                            color: Theme.primaryText
-                            font.pixelSize: 12
-                            font.family: Theme.fontPrimary
-                            background: Rectangle {
-                                color: Theme.background
-                                radius: Theme.radiusSm
-                                border.color: Theme.border
-                                border.width: 1
-                            }
-                        }
+                        RowLayout {
+                            spacing: Theme.spacingMd
 
-                        Label {
-                            text: qsTr("Genre")
-                            color: Theme.secondaryText
-                            font.pixelSize: 12
-                            font.family: Theme.fontPrimary
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        TextField {
-                            id: genreField
-                            Layout.fillWidth: true
-                            color: Theme.primaryText
-                            font.pixelSize: 12
-                            font.family: Theme.fontPrimary
-                            background: Rectangle {
+                            Rectangle {
+                                Layout.preferredWidth: 96
+                                Layout.preferredHeight: 96
                                 color: Theme.background
                                 radius: Theme.radiusSm
                                 border.color: Theme.border
                                 border.width: 1
+
+                                Image {
+                                    id: coverImage
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.spacingSm
+                                    source: editor.coverImage
+                                    fillMode: Image.PreserveAspectFit
+                                    visible: editor.coverImage !== ""
+                                }
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    visible: editor.coverImage === ""
+                                    spacing: Theme.spacingXs
+
+                                    Text {
+                                        text: "\uD83D\uDBC4"
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 28
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
+
+                                    Text {
+                                        text: "\uFF0B"
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 14
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
+                                }
                             }
+
+                            ColumnLayout {
+                                spacing: Theme.spacingSm
+
+                                Button {
+                                    text: qsTr("Select Image")
+                                    onClicked: {
+                                        const dlg = imageFileDialogComponent.createObject(page)
+                                        dlg.open()
+                                    }
+
+                                    background: Rectangle {
+                                        color: parent.pressed ? Theme.violet
+                                              : parent.hovered ? Theme.cyan
+                                              : Theme.panel
+                                        border.color: Theme.border
+                                        border.width: 1
+                                        radius: Theme.radiusSm
+                                    }
+
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: Theme.primaryText
+                                        font.pixelSize: 12
+                                        font.family: Theme.fontPrimary
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+
+                                Button {
+                                    text: qsTr("Clear Image")
+                                    enabled: editor.coverImage !== ""
+                                    onClicked: editor.clearCoverImage()
+
+                                    background: Rectangle {
+                                        color: parent.pressed ? Theme.violet
+                                              : parent.hovered ? Theme.cyan
+                                              : Theme.panel
+                                        border.color: Theme.border
+                                        border.width: 1
+                                        radius: Theme.radiusSm
+                                    }
+
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: parent.enabled ? Theme.primaryText : Theme.secondaryText
+                                        font.pixelSize: 12
+                                        font.family: Theme.fontPrimary
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
 
                         Item { Layout.fillHeight: true; Layout.columnSpan: 2 }
 
-                        // Apply range + button
+                        // Apply range + action button
                         RowLayout {
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                             spacing: Theme.spacingMd
 
-                            ButtonGroup { id: rangeGroup }
+                            ColumnLayout {
+                                spacing: Theme.spacingXs
 
-                            RadioButton {
-                                text: qsTr("All Files")
-                                checked: true
-                                ButtonGroup.group: rangeGroup
-                                color: Theme.primaryText
-                            }
-                            RadioButton {
-                                text: qsTr("Selected Files")
-                                ButtonGroup.group: rangeGroup
-                                color: Theme.primaryText
+                                Text {
+                                    text: qsTr("Apply Range:")
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 12
+                                }
+
+                                RowLayout {
+                                    spacing: Theme.spacingMd
+
+                                    ButtonGroup { id: rangeGroup }
+
+                                    RadioButton {
+                                        id: selectedFilesRadio
+                                        text: qsTr("Apply to Selected Files")
+                                        ButtonGroup.group: rangeGroup
+
+                                        contentItem: Text {
+                                            text: parent.text
+                                            color: Theme.primaryText
+                                            font.pixelSize: 12
+                                            font.family: Theme.fontPrimary
+                                            leftPadding: parent.indicator.width + parent.spacing
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+
+                                        indicator: Rectangle {
+                                            implicitWidth: 16
+                                            implicitHeight: 16
+                                            x: parent.leftPadding
+                                            y: parent.height / 2 - height / 2
+                                            radius: width / 2
+                                            color: "transparent"
+                                            border.color: parent.checked ? Theme.cyan : Theme.border
+                                            border.width: 1
+
+                                            Rectangle {
+                                                width: 8
+                                                height: 8
+                                                anchors.centerIn: parent
+                                                radius: width / 2
+                                                color: Theme.cyan
+                                                visible: parent.parent.checked
+                                            }
+                                        }
+                                    }
+
+                                    RadioButton {
+                                        id: allFilesRadio
+                                        text: qsTr("Apply to All Files")
+                                        checked: true
+                                        ButtonGroup.group: rangeGroup
+
+                                        contentItem: Text {
+                                            text: parent.text
+                                            color: Theme.primaryText
+                                            font.pixelSize: 12
+                                            font.family: Theme.fontPrimary
+                                            leftPadding: parent.indicator.width + parent.spacing
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+
+                                        indicator: Rectangle {
+                                            implicitWidth: 16
+                                            implicitHeight: 16
+                                            x: parent.leftPadding
+                                            y: parent.height / 2 - height / 2
+                                            radius: width / 2
+                                            color: "transparent"
+                                            border.color: parent.checked ? Theme.cyan : Theme.border
+                                            border.width: 1
+
+                                            Rectangle {
+                                                width: 8
+                                                height: 8
+                                                anchors.centerIn: parent
+                                                radius: width / 2
+                                                color: Theme.cyan
+                                                visible: parent.parent.checked
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             Item { Layout.fillWidth: true }
 
                             Button {
-                                text: qsTr("Batch Apply")
+                                text: qsTr("Process")
                                 enabled: !editor.busy && editor.fileCount > 0
                                 onClicked: {
-                                    var fields = {
+                                    const fields = {
                                         "title": titleField.text,
                                         "artist": artistField.text,
-                                        "album": albumField.text,
-                                        "year": yearField.text,
-                                        "genre": genreField.text
+                                        "album": albumField.text
                                     }
-                                    var indices = []
-                                    if (rangeGroup.checkedButton.text === qsTr("Selected Files")) {
+                                    let indices = []
+                                    if (rangeGroup.checkedButton.text === qsTr("Apply to Selected Files")) {
                                         indices = page.selectedIndices
                                     }
                                     editor.applyMetadata(fields, indices)
@@ -317,20 +643,16 @@ Rectangle {
                                 background: Rectangle {
                                     color: !parent.enabled ? Theme.panel
                                           : parent.pressed ? Theme.violet
-                                          : parent.hovered ? Theme.cyan
-                                          : Theme.panel
-                                    border.color: !parent.enabled ? Theme.border
-                                                 : Theme.cyan
-                                    border.width: 1
+                                          : Theme.cyan
                                     radius: Theme.radiusSm
                                 }
 
                                 contentItem: Text {
                                     text: parent.text
-                                    color: parent.enabled ? Theme.primaryText
-                                                          : Theme.secondaryText
-                                    font.pixelSize: 12
+                                    color: parent.enabled ? Theme.background : Theme.secondaryText
+                                    font.pixelSize: 13
                                     font.family: Theme.fontPrimary
+                                    font.weight: Font.Medium
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -339,41 +661,119 @@ Rectangle {
                     }
                 }
             }
-
-            // Progress bar
-            ProgressBar {
-                Layout.fillWidth: true
-                visible: editor.busy
-                value: editor.progress
-                background: Rectangle {
-                    color: Theme.background
-                    radius: Theme.radiusSm
-                    border.color: Theme.border
-                    border.width: 1
-                    implicitHeight: 4
-                }
-                contentItem: Rectangle {
-                    color: Theme.cyan
-                    radius: Theme.radiusSm
-                    implicitHeight: 4
-                    width: parent.width * parent.value
-                }
-            }
         }
 
         // === Bottom Section: Filename Batch Rename ===
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 260
-            spacing: Theme.spacingSm
+            Layout.preferredHeight: 300
+            spacing: Theme.spacingMd
 
-            Text {
-                text: qsTr("BATCH FILENAME RENAME")
-                color: Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 11
-                font.capitalization: Font.AllUppercase
-                font.weight: Font.Medium
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
+
+                Text {
+                    text: qsTr("Batch Filename Rename")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 16
+                    font.weight: Font.Medium
+                }
+
+                Text {
+                    text: "\u24D8"
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 14
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            // Drag-and-drop import area for rename
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 64
+                color: "transparent"
+                radius: Theme.radiusSm
+
+                Canvas {
+                    anchors.fill: parent
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        const w = width
+                        const h = height
+                        const r = Theme.radiusSm
+                        ctx.clearRect(0, 0, w, h)
+                        ctx.strokeStyle = Theme.border
+                        ctx.lineWidth = 1
+                        ctx.setLineDash([6, 4])
+                        ctx.beginPath()
+                        ctx.moveTo(r, 0)
+                        ctx.lineTo(w - r, 0)
+                        ctx.quadraticCurveTo(w, 0, w, r)
+                        ctx.lineTo(w, h - r)
+                        ctx.quadraticCurveTo(w, h, w - r, h)
+                        ctx.lineTo(r, h)
+                        ctx.quadraticCurveTo(0, h, 0, h - r)
+                        ctx.lineTo(0, r)
+                        ctx.quadraticCurveTo(0, 0, r, 0)
+                        ctx.closePath()
+                        ctx.stroke()
+                    }
+                }
+
+                DropArea {
+                    anchors.fill: parent
+                    keys: ["text/uri-list"]
+                    onDropped: function(drop) {
+                        if (drop.hasUrls) {
+                            editor.loadFiles(drop.urls)
+                            drop.acceptProposedAction()
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        const dlg = audioFileDialogComponent.createObject(page)
+                        dlg.open()
+                    }
+                }
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: Theme.spacingMd
+
+                    Text {
+                        text: "\uFF0B"
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 24
+                    }
+
+                    ColumnLayout {
+                        spacing: Theme.spacingXs
+
+                        Text {
+                            text: qsTr("Drop audio files here or click to add")
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        Text {
+                            text: qsTr("Supports MP3 / WAV / FLAC / M4A, etc.")
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 11
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+                    }
+                }
             }
 
             Rectangle {
@@ -389,26 +789,38 @@ Rectangle {
                     anchors.margins: Theme.spacingMd
                     spacing: Theme.spacingLg
 
-                    // Rename controls (left)
+                    // Rename controls
                     ColumnLayout {
                         Layout.fillHeight: true
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingSm
+                        Layout.preferredWidth: parent.width * 0.45
+                        spacing: Theme.spacingMd
+
+                        Text {
+                            text: qsTr("Naming Rule Settings")
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                        }
 
                         RowLayout {
                             spacing: Theme.spacingSm
+
                             Label {
                                 text: qsTr("Prefix")
                                 color: Theme.secondaryText
                                 font.pixelSize: 12
                                 font.family: Theme.fontPrimary
+                                Layout.preferredWidth: 56
                             }
+
                             TextField {
                                 id: prefixField
                                 Layout.fillWidth: true
                                 color: Theme.primaryText
                                 font.pixelSize: 12
                                 font.family: Theme.fontPrimary
+                                placeholderText: qsTr("Optional prefix")
                                 background: Rectangle {
                                     color: Theme.background
                                     radius: Theme.radiusSm
@@ -416,41 +828,40 @@ Rectangle {
                                     border.width: 1
                                 }
                             }
-                        }
 
-                        RowLayout {
-                            spacing: Theme.spacingSm
-                            Label {
-                                text: qsTr("Suffix")
-                                color: Theme.secondaryText
-                                font.pixelSize: 12
-                                font.family: Theme.fontPrimary
-                            }
-                            TextField {
-                                id: suffixField
-                                Layout.fillWidth: true
-                                color: Theme.primaryText
-                                font.pixelSize: 12
-                                font.family: Theme.fontPrimary
-                                background: Rectangle {
-                                    color: Theme.background
-                                    radius: Theme.radiusSm
-                                    border.color: Theme.border
-                                    border.width: 1
-                                }
-                            }
-                        }
-
-                        RowLayout {
-                            spacing: Theme.spacingSm
                             CheckBox {
                                 id: autoNumberCheck
-                                text: qsTr("Auto Number")
-                                checked: false
-                                color: Theme.primaryText
-                                font.family: Theme.fontPrimary
-                                font.pixelSize: 12
+                                checked: true
+
+                                indicator: Rectangle {
+                                    implicitWidth: 16
+                                    implicitHeight: 16
+                                    x: parent.leftPadding
+                                    y: parent.height / 2 - height / 2
+                                    radius: Theme.radiusSm
+                                    color: parent.checked ? Theme.cyan : "transparent"
+                                    border.color: parent.checked ? Theme.cyan : Theme.border
+                                    border.width: 1
+
+                                    Text {
+                                        text: "\u2713"
+                                        color: Theme.background
+                                        font.pixelSize: 10
+                                        anchors.centerIn: parent
+                                        visible: parent.parent.checked
+                                    }
+                                }
+
+                                contentItem: Text {
+                                    text: qsTr("Auto Number")
+                                    color: Theme.primaryText
+                                    font.pixelSize: 12
+                                    font.family: Theme.fontPrimary
+                                    leftPadding: parent.indicator.width + parent.spacing
+                                    verticalAlignment: Text.AlignVCenter
+                                }
                             }
+
                             Label {
                                 text: qsTr("Start")
                                 color: Theme.secondaryText
@@ -458,13 +869,31 @@ Rectangle {
                                 font.family: Theme.fontPrimary
                                 enabled: autoNumberCheck.checked
                             }
+
                             SpinBox {
                                 id: numberStartSpin
                                 from: 0
                                 to: 99999
                                 value: 1
                                 enabled: autoNumberCheck.checked
+
+                                contentItem: Text {
+                                    text: parent.value
+                                    color: Theme.primaryText
+                                    font.pixelSize: 12
+                                    font.family: Theme.fontPrimary
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    color: Theme.background
+                                    radius: Theme.radiusSm
+                                    border.color: Theme.border
+                                    border.width: 1
+                                }
                             }
+
                             Label {
                                 text: qsTr("Digits")
                                 color: Theme.secondaryText
@@ -472,19 +901,72 @@ Rectangle {
                                 font.family: Theme.fontPrimary
                                 enabled: autoNumberCheck.checked
                             }
+
                             SpinBox {
                                 id: numberDigitsSpin
                                 from: 1
                                 to: 5
                                 value: 2
                                 enabled: autoNumberCheck.checked
+
+                                contentItem: Text {
+                                    text: parent.value
+                                    color: Theme.primaryText
+                                    font.pixelSize: 12
+                                    font.family: Theme.fontPrimary
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    color: Theme.background
+                                    radius: Theme.radiusSm
+                                    border.color: Theme.border
+                                    border.width: 1
+                                }
                             }
+                        }
+
+                        RowLayout {
+                            spacing: Theme.spacingSm
+
+                            Label {
+                                text: qsTr("Suffix")
+                                color: Theme.secondaryText
+                                font.pixelSize: 12
+                                font.family: Theme.fontPrimary
+                                Layout.preferredWidth: 56
+                            }
+
+                            TextField {
+                                id: suffixField
+                                Layout.fillWidth: true
+                                color: Theme.primaryText
+                                font.pixelSize: 12
+                                font.family: Theme.fontPrimary
+                                placeholderText: qsTr("Optional suffix")
+                                background: Rectangle {
+                                    color: Theme.background
+                                    radius: Theme.radiusSm
+                                    border.color: Theme.border
+                                    border.width: 1
+                                }
+                            }
+
+                            Text {
+                                text: qsTr("Example: %1").arg(page.buildExample())
+                                color: Theme.secondaryText
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 12
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
 
                         Item { Layout.fillHeight: true }
 
                         Button {
-                            text: qsTr("Batch Rename")
+                            text: qsTr("Process")
                             enabled: !editor.busy && editor.fileCount > 0
                             onClicked: {
                                 editor.applyRename(prefixField.text,
@@ -497,60 +979,150 @@ Rectangle {
                             background: Rectangle {
                                 color: !parent.enabled ? Theme.panel
                                       : parent.pressed ? Theme.violet
-                                      : parent.hovered ? Theme.cyan
-                                      : Theme.panel
-                                border.color: !parent.enabled ? Theme.border
-                                             : Theme.cyan
-                                border.width: 1
+                                      : Theme.cyan
                                 radius: Theme.radiusSm
                             }
 
                             contentItem: Text {
                                 text: parent.text
-                                color: parent.enabled ? Theme.primaryText
-                                                      : Theme.secondaryText
-                                font.pixelSize: 12
+                                color: parent.enabled ? Theme.background : Theme.secondaryText
+                                font.pixelSize: 13
                                 font.family: Theme.fontPrimary
+                                font.weight: Font.Medium
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
                     }
 
-                    // Preview list (right)
-                    ColumnLayout {
+                    // Preview table
+                    Rectangle {
                         Layout.fillHeight: true
                         Layout.fillWidth: true
-                        spacing: Theme.spacingXs
+                        color: Theme.background
+                        radius: Theme.radiusSm
+                        border.color: Theme.border
+                        border.width: 1
 
-                        Text {
-                            text: qsTr("PREVIEW")
-                            color: Theme.secondaryText
-                            font.pixelSize: 10
-                            font.family: Theme.fontPrimary
-                            font.capitalization: Font.AllUppercase
-                        }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingMd
+                            spacing: Theme.spacingSm
 
-                        ScrollView {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingSm
 
-                            ListView {
-                                id: previewList
-                                clip: true
-                                model: editor.previewRename(
-                                    prefixField.text,
-                                    suffixField.text,
-                                    autoNumberCheck.checked,
-                                    numberStartSpin.value,
-                                    numberDigitsSpin.value)
-                                delegate: Text {
-                                    text: modelData
+                                Text {
+                                    text: qsTr("File Preview") + " (" + editor.fileCount + ")"
                                     color: Theme.primaryText
-                                    font.pixelSize: 11
                                     font.family: Theme.fontPrimary
-                                    elide: Text.ElideMiddle
-                                    width: previewList.width
+                                    font.pixelSize: 13
+                                    font.weight: Font.Medium
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Button {
+                                    text: qsTr("Clear List")
+                                    enabled: editor.fileCount > 0
+                                    onClicked: editor.clear()
+
+                                    background: Rectangle {
+                                        color: "transparent"
+                                    }
+
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: parent.enabled ? Theme.secondaryText : Theme.border
+                                        font.pixelSize: 12
+                                        font.family: Theme.fontPrimary
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingSm
+
+                                Text {
+                                    text: qsTr("#")
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 11
+                                    Layout.preferredWidth: 28
+                                }
+
+                                Text {
+                                    text: qsTr("Original File Name")
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 11
+                                    Layout.fillWidth: true
+                                }
+
+                                Text {
+                                    text: qsTr("New File Name (Preview)")
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 11
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                ListView {
+                                    id: previewList
+                                    clip: true
+                                    model: editor.renamePreviewEntries(
+                                        prefixField.text,
+                                        suffixField.text,
+                                        autoNumberCheck.checked,
+                                        numberStartSpin.value,
+                                        numberDigitsSpin.value)
+                                    delegate: RowLayout {
+                                        width: previewList.width
+                                        height: 28
+                                        spacing: Theme.spacingSm
+
+                                        Text {
+                                            text: (index + 1) + "."
+                                            color: Theme.secondaryText
+                                            font.family: Theme.fontPrimary
+                                            font.pixelSize: 11
+                                            Layout.preferredWidth: 28
+                                        }
+
+                                        Text {
+                                            text: modelData.original
+                                            color: Theme.primaryText
+                                            font.family: Theme.fontPrimary
+                                            font.pixelSize: 11
+                                            elide: Text.ElideMiddle
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Text {
+                                            text: "\u2192"
+                                            color: Theme.secondaryText
+                                            font.family: Theme.fontPrimary
+                                            font.pixelSize: 11
+                                        }
+
+                                        Text {
+                                            text: modelData.preview
+                                            color: Theme.primaryText
+                                            font.family: Theme.fontPrimary
+                                            font.pixelSize: 11
+                                            elide: Text.ElideMiddle
+                                            Layout.fillWidth: true
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -558,25 +1130,94 @@ Rectangle {
                 }
             }
         }
+
+        // Progress bar
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingXs
+            visible: editor.busy || editor.progress > 0
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
+
+                Text {
+                    text: editor.busy ? qsTr("Processing...") : qsTr("Done")
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: Math.round(editor.progress * 100) + "%"
+                    color: Theme.cyan
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                }
+            }
+
+            ProgressBar {
+                Layout.fillWidth: true
+                value: editor.progress
+                background: Rectangle {
+                    color: Theme.panel
+                    radius: Theme.radiusSm
+                    border.color: Theme.border
+                    border.width: 1
+                    implicitHeight: 4
+                }
+                contentItem: Rectangle {
+                    color: Theme.cyan
+                    radius: Theme.radiusSm
+                    implicitHeight: 4
+                    width: parent.width * parent.value
+                }
+            }
+        }
+
+        // Privacy note
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingSm
+
+            Text {
+                text: "\u24D8"
+                color: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 12
+            }
+
+            Text {
+                text: qsTr("All operations are performed locally; no files are uploaded.")
+                color: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 11
+            }
+
+            Item { Layout.fillWidth: true }
+        }
     }
 
-    // Pre-fill form with first file's metadata when entries are loaded.
+    // Pre-fill form with the first file's metadata when entries are loaded.
     Connections {
         target: editor
         function onEntriesLoaded() {
+            titleField.text = ""
+            artistField.text = ""
+            albumField.text = ""
+            page.selectedIndices = []
             if (editor.fileCount > 0) {
-                var first = editor.entryAt(0)
+                const first = editor.entryAt(0)
                 titleField.text = first.title
                 artistField.text = first.artist
                 albumField.text = first.album
-                yearField.text = first.year
-                genreField.text = first.genre
-                page.selectedIndices = []
-                for (var i = 0; i < editor.fileCount; ++i) {
+                for (let i = 0; i < editor.fileCount; ++i) {
                     page.selectedIndices.push(i)
                 }
-                page.selectedIndicesChanged()
             }
+            page.selectedIndicesChanged()
         }
     }
 }
