@@ -141,8 +141,18 @@ int main(int argc, char* argv[])
                 miniWindow = miniComponent.create();
             }
 
+            // Audio tools window: separate frameless window toggled from the
+            // TitleBar. Loaded from the same module so it shares singletons.
+            QQmlComponent audioToolsComponent(&engine);
+            audioToolsComponent.loadFromModule("AgPlayer", "AudioToolsWindow");
+            QObject* audioToolsWindow = nullptr;
+            if (!audioToolsComponent.isError()) {
+                audioToolsWindow = audioToolsComponent.create();
+            }
+
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
+            windows.setAudioToolsWindow(qobject_cast<QWindow*>(audioToolsWindow));
 
             // --qa-play: load + play through the normal production path. The
             // shared core pointer is the same one the controllers observe, so
@@ -248,6 +258,8 @@ int main(int argc, char* argv[])
 
             result = (qaErrorCode != 0) ? qaErrorCode : app.exec();
 
+            if (audioToolsWindow)
+                delete audioToolsWindow;
             if (miniWindow)
                 delete miniWindow;
         }

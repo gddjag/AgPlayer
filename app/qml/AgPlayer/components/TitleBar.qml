@@ -35,6 +35,30 @@ Rectangle {
         Item { Layout.fillWidth: true }
 
         ToolButton {
+            objectName: "audioToolsButton"
+            icon.source: Theme.icon("equalizer-fill")
+            icon.color: Theme.secondaryText
+            icon.width: 18
+            icon.height: 18
+            Accessible.name: "Open audio tools"
+            focusPolicy: Qt.StrongFocus
+            onClicked: WindowController.showAudioTools()
+            ToolTip.text: qsTr("Audio tools")
+            ToolTip.visible: hovered
+
+            background: Rectangle {
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
+                radius: Theme.radiusSm
+            }
+        }
+
+        ToolButton {
             objectName: "miniPlayerButton"
             icon.source: Theme.icon("restore-line")
             icon.color: Theme.secondaryText

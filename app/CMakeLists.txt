@@ -3,6 +3,7 @@ set(CMAKE_AUTOMOC ON)
 set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-exit-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-fill.svg

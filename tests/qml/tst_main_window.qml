@@ -30,7 +30,7 @@ TestCase {
         verify(findChild(mainWindow, "volumeSlider"), "volumeSlider should exist")
         verify(findChild(mainWindow, "miniPlayerButton"), "miniPlayerButton should exist")
         compare(findChild(mainWindow, "settingsButton"), null, "settingsButton should not exist in Phase 1")
-        compare(findChild(mainWindow, "audioToolsButton"), null, "audioToolsButton should not exist in Phase 1")
+        verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
     }
 
     function test_track_list_and_empty_library_exist() {
