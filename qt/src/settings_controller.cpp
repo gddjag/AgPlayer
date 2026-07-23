@@ -585,6 +585,11 @@ void SettingsController::clearCache()
 
 void SettingsController::checkForUpdates()
 {
+    QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/AgPlayer/AgPlayer/releases")));
+}
+
+void SettingsController::openOfficialWebsite()
+{
     QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/AgPlayer/AgPlayer")));
 }
 

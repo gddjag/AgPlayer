@@ -218,6 +218,7 @@ public:
     Q_INVOKABLE void resetToDefaults();
     Q_INVOKABLE void clearCache();
     Q_INVOKABLE void checkForUpdates();
+    Q_INVOKABLE void openOfficialWebsite();
 
 signals:
     void startupAutoPlayChanged();

@@ -446,7 +446,7 @@ Popup {
             FolderDialog {
                 id: exportFolderDialog
                 currentFolder: SettingsController.defaultExportDirectory
-                onAccepted: SettingsController.defaultExportDirectory = selectedFolder
+                onAccepted: SettingsController.defaultExportDirectory = selectedFolder.toString().replace("file:///", "")
             }
         }
 
@@ -643,7 +643,10 @@ Popup {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 260
                 model: [qsTr("Default")]
-                currentIndex: 0
+                currentIndex: model.indexOf(SettingsController.outputDevice)
+                onActivated: function(index) {
+                    SettingsController.outputDevice = model[index]
+                }
             }
         }
 
@@ -765,6 +768,80 @@ Popup {
         spacing: Theme.spacingSm
 
         SectionTitle { text: qsTr("波形样式") }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+            color: Qt.rgba(0, 0, 0, 0.2)
+            radius: Theme.radiusMd
+            border.color: Theme.border
+            border.width: 1
+
+            Canvas {
+                id: waveformPreview
+                anchors.fill: parent
+                anchors.margins: Theme.spacingMd
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+
+                    var thickness = SettingsController.waveformThickness
+                    var density = SettingsController.waveformDensity
+                    var brightness = SettingsController.waveformBrightness
+                    var step = Math.max(2, 6 - density)
+                    var cx = width / 2
+                    var cy = height / 2
+
+                    ctx.globalAlpha = Math.min(1.0, brightness)
+                    ctx.lineWidth = thickness
+                    ctx.lineCap = "round"
+                    ctx.lineJoin = "round"
+
+                    if (SettingsController.waveformMode === 1) {
+                        // RGB mode: rainbow gradient stroke
+                        var grad = ctx.createLinearGradient(0, 0, width, 0)
+                        grad.addColorStop(0, "#FF4057")
+                        grad.addColorStop(0.33, "#00E676")
+                        grad.addColorStop(0.66, "#1688FF")
+                        grad.addColorStop(1, "#7B2FF7")
+                        ctx.strokeStyle = grad
+                    } else if (SettingsController.waveformMode === 2) {
+                        // Spectrum mode: bar colors by frequency
+                        ctx.fillStyle = SettingsController.waveformColor
+                        for (var bx = 0; bx < width; bx += step * 2) {
+                            var barHeight = Math.abs(Math.sin(bx * 0.05) * Math.cos(bx * 0.02)) * (height * 0.8)
+                            var hue = (bx / width) * 280
+                            ctx.fillStyle = "hsl(" + hue + ", 80%, 60%)"
+                            ctx.fillRect(bx, cy - barHeight / 2, Math.max(2, step), barHeight)
+                        }
+                        return
+                    } else {
+                        ctx.strokeStyle = SettingsController.waveformColor
+                    }
+
+                    ctx.beginPath()
+                    for (var x = 0; x <= width; x += step) {
+                        var amp = Math.sin(x * 0.03) * Math.cos(x * 0.07) * Math.sin(x * 0.01 + 1.0)
+                        var y = cy + amp * (height * 0.35)
+                        if (x === 0) {
+                            ctx.moveTo(x, y)
+                        } else {
+                            ctx.lineTo(x, y)
+                        }
+                    }
+                    ctx.stroke()
+                }
+
+                Connections {
+                    target: SettingsController
+                    function onWaveformModeChanged() { waveformPreview.requestPaint() }
+                    function onWaveformColorChanged() { waveformPreview.requestPaint() }
+                    function onWaveformBrightnessChanged() { waveformPreview.requestPaint() }
+                    function onWaveformThicknessChanged() { waveformPreview.requestPaint() }
+                    function onWaveformDensityChanged() { waveformPreview.requestPaint() }
+                }
+            }
+        }
 
         SettingRow {
             label: qsTr("波形模式")
@@ -946,7 +1023,7 @@ Popup {
             FolderDialog {
                 id: toolsOutputFolderDialog
                 currentFolder: SettingsController.defaultOutputDirectory
-                onAccepted: SettingsController.defaultOutputDirectory = selectedFolder
+                onAccepted: SettingsController.defaultOutputDirectory = selectedFolder.toString().replace("file:///", "")
             }
         }
 
@@ -1142,7 +1219,7 @@ Popup {
             FolderDialog {
                 id: cacheFolderDialog
                 currentFolder: SettingsController.cacheDirectory
-                onAccepted: SettingsController.cacheDirectory = selectedFolder
+                onAccepted: SettingsController.cacheDirectory = selectedFolder.toString().replace("file:///", "")
             }
         }
 
@@ -1282,7 +1359,7 @@ Popup {
 
             Button {
                 text: qsTr("官方网站")
-                onClicked: SettingsController.checkForUpdates()
+                onClicked: SettingsController.openOfficialWebsite()
 
                 contentItem: Text {
                     text: parent.text
