@@ -64,6 +64,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
         qml/AgPlayer/components/tools/InfoEditPage.qml
         qml/AgPlayer/components/tools/PitchShiftPage.qml
+        qml/AgPlayer/components/tools/SpeedAdjustPage.qml
     RESOURCES
         ${BRAND_FILES}
         ${ICON_FILES}

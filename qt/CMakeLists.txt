@@ -19,6 +19,8 @@ add_library(agplayer_qt STATIC
     src/qml_registration.hpp
     src/runtime_log.cpp
     src/runtime_log.hpp
+    src/speed_adjuster.cpp
+    src/speed_adjuster.hpp
     src/window_controller.cpp
     src/window_controller.hpp
     src/waveform_item.cpp

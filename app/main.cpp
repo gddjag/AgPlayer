@@ -30,6 +30,7 @@
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "runtime_log.hpp"
+#include "speed_adjuster.hpp"
 #include "window_controller.hpp"
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
@@ -107,10 +108,12 @@ int main(int argc, char* argv[])
         MetadataEditor metadataEditor;
         FormatConverter formatConverter;
         PitchShifter pitchShifter;
+        SpeedAdjuster speedAdjuster;
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,
-                                    &formatConverter, &pitchShifter);
+                                    &formatConverter, &pitchShifter,
+                                    &speedAdjuster);
 
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },
