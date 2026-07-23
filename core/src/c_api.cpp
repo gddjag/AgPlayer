@@ -2,6 +2,7 @@
 
 #include "core_context.hpp"
 #include "decoder.hpp"
+#include "metadata_writer.hpp"
 #include "waveform_analyzer.hpp"
 
 #include <atomic>
@@ -374,6 +375,47 @@ const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
     return metadata == nullptr || metadata->value.cover.empty()
                ? nullptr
                : metadata->value.cover.data();
+}
+
+const char* ag_metadata_year(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.year.c_str();
+}
+
+const char* ag_metadata_genre(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.genre.c_str();
+}
+
+ag_result ag_metadata_write(const char* utf8_path,
+                            const char* title,
+                            const char* artist,
+                            const char* album,
+                            const char* year,
+                            const char* genre,
+                            const unsigned char* cover_data,
+                            const size_t cover_size,
+                            const char* cover_mime_type)
+{
+    if (utf8_path == nullptr || utf8_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::MetadataUpdate update;
+        if (title != nullptr) update.title = title;
+        if (artist != nullptr) update.artist = artist;
+        if (album != nullptr) update.album = album;
+        if (year != nullptr) update.year = year;
+        if (genre != nullptr) update.genre = genre;
+        update.cover_data = cover_data;
+        update.cover_size = cover_size;
+        if (cover_mime_type != nullptr) update.cover_mime_type = cover_mime_type;
+        std::string error;
+        return agplayer::write_metadata(utf8_path, update, error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
 }
 
 ag_cancel_token* ag_cancel_token_create(void)

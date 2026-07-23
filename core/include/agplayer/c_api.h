@@ -100,6 +100,22 @@ long long ag_metadata_duration_ms(const ag_metadata* metadata);
 const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
                                        size_t* size,
                                        const char** mime_type);
+const char* ag_metadata_year(const ag_metadata* metadata);
+const char* ag_metadata_genre(const ag_metadata* metadata);
+
+/* Write metadata to an audio file using FFmpeg stream copy (no re-encoding).
+ * Fields set to NULL are preserved from the source. cover_data is applied
+ * only if non-NULL and cover_size > 0. Writes to a temp file then atomically
+ * replaces the original. Returns AG_OK on success, or an error code. */
+ag_result ag_metadata_write(const char* utf8_path,
+                            const char* title,
+                            const char* artist,
+                            const char* album,
+                            const char* year,
+                            const char* genre,
+                            const unsigned char* cover_data,
+                            size_t cover_size,
+                            const char* cover_mime_type);
 
 ag_cancel_token* ag_cancel_token_create(void);
 void ag_cancel_token_cancel(ag_cancel_token* token);
