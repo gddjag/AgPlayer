@@ -6,6 +6,8 @@ add_library(agplayer_qt STATIC
     src/format_converter.hpp
     src/import_controller.cpp
     src/import_controller.hpp
+    src/library_filter_model.cpp
+    src/library_filter_model.hpp
     src/library_model.cpp
     src/library_model.hpp
     src/library_store.cpp

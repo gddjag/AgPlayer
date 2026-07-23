@@ -90,6 +90,10 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.coverUrl;
     case FavoriteRole:
         return track.favorite;
+    case RatingRole:
+        return track.rating;
+    case BpmRole:
+        return track.bpm;
     case AvailableRole:
         return track.available;
     case ImportErrorRole:
@@ -114,6 +118,8 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {FileSizeRole, "fileSize"},
             {CoverUrlRole, "coverUrl"},
             {FavoriteRole, "favorite"},
+            {RatingRole, "rating"},
+            {BpmRole, "bpm"},
             {AvailableRole, "available"},
             {ImportErrorRole, "importError"}};
 }
@@ -133,6 +139,9 @@ bool LibraryModel::append(TrackRecord track)
     tracks_.append(std::move(track));
     pathKeys_.insert(key);
     endInsertRows();
+    if (tracks_.back().favorite) {
+        emit favoriteCountChanged();
+    }
     return true;
 }
 
@@ -156,6 +165,7 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
         tracks_.append(std::move(track));
     }
     endResetModel();
+    emit favoriteCountChanged();
 }
 
 const QList<TrackRecord>& LibraryModel::tracks() const noexcept
@@ -178,6 +188,7 @@ bool LibraryModel::setFavorite(int row, bool favorite)
         track.favorite = favorite;
         const QModelIndex changed = index(row);
         emit dataChanged(changed, changed, {FavoriteRole});
+        emit favoriteCountChanged();
     }
     return true;
 }
@@ -192,4 +203,15 @@ void LibraryModel::playRow(int row)
 void LibraryModel::flush()
 {
     emit flushRequested();
+}
+
+int LibraryModel::favoriteCount() const noexcept
+{
+    int count = 0;
+    for (const TrackRecord& track : tracks_) {
+        if (track.favorite) {
+            ++count;
+        }
+    }
+    return count;
 }

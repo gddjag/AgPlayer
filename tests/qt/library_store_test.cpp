@@ -35,6 +35,8 @@ TrackRecord makeTrack(const QString& path, const QString& title)
     track.fileSize = 4321;
     track.coverUrl = QUrl::fromLocalFile(QStringLiteral("C:/cache/cover.png"));
     track.favorite = true;
+    track.rating = 3;
+    track.bpm = 120.0;
     track.available = true;
     track.importError = QStringLiteral("old warning");
     return track;
@@ -73,6 +75,8 @@ void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()
     QCOMPARE(track.fileSize, source.fileSize);
     QCOMPARE(track.coverUrl, source.coverUrl);
     QCOMPARE(track.favorite, source.favorite);
+    QCOMPARE(track.rating, source.rating);
+    QCOMPARE(track.bpm, source.bpm);
     QVERIFY(!track.available);
     QCOMPARE(track.importError, source.importError);
     LibraryModel model;

@@ -7,47 +7,11 @@ Rectangle {
     id: root
     color: Theme.panel
 
-    signal importRequested()
-
-    function currentTrackFavorite(): bool {
-        var row = PlaybackController.trackIndex
-        if (row < 0 || row >= LibraryModel.rowCount())
-            return false
-        var idx = LibraryModel.index(row, 0)
-        return LibraryModel.data(idx, LibraryModel.FavoriteRole)
-    }
-
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingXl
         anchors.rightMargin: Theme.spacingXl
         spacing: Theme.spacingLg
-
-        ToolButton {
-            objectName: "importButton"
-            icon.source: Theme.icon("folder-open-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("Import audio files")
-            focusPolicy: Qt.StrongFocus
-            onClicked: root.importRequested()
-            ToolTip.text: qsTr("Import")
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        Item { Layout.preferredWidth: Theme.spacingMd }
 
         ToolButton {
             objectName: "previousButton"
@@ -156,37 +120,6 @@ Rectangle {
             }
             focusPolicy: Qt.StrongFocus
             onClicked: PlaybackController.cycleMode()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        ToolButton {
-            objectName: "favoriteButton"
-            icon.source: root.currentTrackFavorite()
-                         ? Theme.icon("heart-fill")
-                         : Theme.icon("heart-line")
-            icon.color: root.currentTrackFavorite()
-                        ? Theme.favoriteRed
-                        : Theme.secondaryText
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: root.currentTrackFavorite()
-                             ? qsTr("Remove from favorites")
-                             : qsTr("Add to favorites")
-            focusPolicy: Qt.StrongFocus
-            enabled: PlaybackController.trackIndex >= 0
-            onClicked: PlaybackController.toggleFavorite()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
 

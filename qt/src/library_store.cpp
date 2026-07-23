@@ -23,6 +23,8 @@ QJsonObject toJson(const TrackRecord& track)
             {QStringLiteral("fileSize"), QJsonValue(track.fileSize)},
             {QStringLiteral("coverUrl"), track.coverUrl.toString()},
             {QStringLiteral("favorite"), track.favorite},
+            {QStringLiteral("rating"), track.rating},
+            {QStringLiteral("bpm"), track.bpm},
             {QStringLiteral("available"), track.available},
             {QStringLiteral("importError"), track.importError}};
 }
@@ -43,6 +45,8 @@ TrackRecord fromJson(const QJsonObject& object)
     track.fileSize = object.value(QStringLiteral("fileSize")).toInteger();
     track.coverUrl = QUrl(object.value(QStringLiteral("coverUrl")).toString());
     track.favorite = object.value(QStringLiteral("favorite")).toBool();
+    track.rating = object.value(QStringLiteral("rating")).toInt();
+    track.bpm = object.value(QStringLiteral("bpm")).toDouble();
     track.available = QFileInfo(track.path).isFile();
     track.importError = object.value(QStringLiteral("importError")).toString();
     return track;

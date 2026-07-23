@@ -32,6 +32,9 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     track.durationMs = 1234;
     track.fileSize = 5678;
     track.coverUrl = QUrl(QStringLiteral("qrc:/AgPlayer/assets/brand/logo-mark.png"));
+    track.favorite = false;
+    track.rating = 4;
+    track.bpm = 128.5;
     track.available = true;
     model.append(track);
 
@@ -41,6 +44,10 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(model.data(index, LibraryModel::PathRole).toString(), track.path);
     QCOMPARE(model.data(index, LibraryModel::TitleRole).toString(), track.title);
     QCOMPARE(model.data(index, LibraryModel::CoverUrlRole).toUrl(), track.coverUrl);
+    QCOMPARE(model.data(index, LibraryModel::FavoriteRole).toBool(), track.favorite);
+    QCOMPARE(model.data(index, LibraryModel::RatingRole).toInt(), track.rating);
+    QCOMPARE(model.data(index, LibraryModel::BpmRole).toDouble(), track.bpm);
+    QCOMPARE(model.favoriteCount(), 0);
     const QHash<int, QByteArray> roles = model.roleNames();
     QCOMPARE(roles.value(LibraryModel::TrackIdRole), QByteArray("trackId"));
     QCOMPARE(roles.value(LibraryModel::PathRole), QByteArray("path"));
@@ -55,14 +62,19 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(roles.value(LibraryModel::FileSizeRole), QByteArray("fileSize"));
     QCOMPARE(roles.value(LibraryModel::CoverUrlRole), QByteArray("coverUrl"));
     QCOMPARE(roles.value(LibraryModel::FavoriteRole), QByteArray("favorite"));
+    QCOMPARE(roles.value(LibraryModel::RatingRole), QByteArray("rating"));
+    QCOMPARE(roles.value(LibraryModel::BpmRole), QByteArray("bpm"));
     QCOMPARE(roles.value(LibraryModel::AvailableRole), QByteArray("available"));
     QCOMPARE(roles.value(LibraryModel::ImportErrorRole), QByteArray("importError"));
 
     QSignalSpy changed(&model, &LibraryModel::dataChanged);
+    QSignalSpy favoriteCountChanged(&model, &LibraryModel::favoriteCountChanged);
     QVERIFY(model.setFavorite(0, true));
     QVERIFY(model.tracks().front().favorite);
+    QCOMPARE(model.favoriteCount(), 1);
     QCOMPARE(changed.count(), 1);
     QCOMPARE(changed.front().at(2).value<QList<int>>(), QList<int>{LibraryModel::FavoriteRole});
+    QCOMPARE(favoriteCountChanged.count(), 1);
     QVERIFY(!model.setFavorite(-1, true));
 }
 

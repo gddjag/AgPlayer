@@ -37,54 +37,91 @@ ApplicationWindow {
         }
     }
 
-    ColumnLayout {
+    LibraryFilterModel {
+        id: filterModel
+        sourceModel: LibraryModel
+        searchText: searchFilter.searchText
+        minRating: searchFilter.minRating
+        minBpm: searchFilter.minBpm
+        maxBpm: searchFilter.maxBpm
+        category: sideNav.selectedCategory
+    }
+
+    RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        TitleBar {
-            id: titleBar
-            Layout.fillWidth: true
-            Layout.preferredHeight: 48
-            window: mainWindow
-        }
-
-        PlayerPane {
-            id: playerPane
-            Layout.fillWidth: true
+        SideNavigation {
+            id: sideNav
+            Layout.preferredWidth: 200
+            Layout.minimumWidth: 180
+            Layout.maximumWidth: 240
             Layout.fillHeight: true
-            Layout.minimumHeight: 360
-        }
-
-        PlayerControls {
-            id: playerControls
-            Layout.fillWidth: true
-            Layout.preferredHeight: 80
+            selectedCategory: filterModel.category
+            allCount: LibraryModel.rowCount
+            favoriteCount: LibraryModel.favoriteCount
+            onCategorySelected: function(category) { filterModel.category = category }
             onImportRequested: mainWindow.openImportDialog()
         }
 
-        Rectangle {
-            color: Theme.panel
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 300
-            Layout.minimumHeight: 160
+            Layout.fillHeight: true
+            spacing: 0
 
-            StackLayout {
-                id: listStack
-                anchors.fill: parent
-                currentIndex: LibraryModel.rowCount > 0 ? 0 : 1
+            TitleBar {
+                id: titleBar
+                Layout.fillWidth: true
+                Layout.preferredHeight: 48
+                window: mainWindow
+            }
 
-                TrackList {
-                    id: trackList
-                    objectName: "trackList"
-                }
+            PlayerPane {
+                id: playerPane
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 280
+            }
 
-                EmptyLibrary {
-                    id: emptyLibrary
-                    objectName: "emptyLibrary"
-                    onImportRequested: mainWindow.openImportDialog()
+            PlayerControls {
+                id: playerControls
+                Layout.fillWidth: true
+                Layout.preferredHeight: 80
+            }
+
+            Rectangle {
+                color: Theme.panel
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 160
+
+                StackLayout {
+                    id: listStack
+                    anchors.fill: parent
+                    currentIndex: filterModel.count > 0 ? 0 : 1
+
+                    TrackList {
+                        id: trackList
+                        objectName: "trackList"
+                        trackModel: filterModel
+                    }
+
+                    EmptyLibrary {
+                        id: emptyLibrary
+                        objectName: "emptyLibrary"
+                        onImportRequested: mainWindow.openImportDialog()
+                    }
                 }
             }
         }
+    }
+
+    SearchFilter {
+        id: searchFilter
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: Theme.spacingMd
+        z: 100
     }
 
     DropArea {

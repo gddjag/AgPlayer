@@ -3,6 +3,7 @@
 class AudioToolsController;
 class FormatConverter;
 class ImportController;
+class LibraryFilterModel;
 class LibraryModel;
 class LightEditor;
 class MetadataEditor;

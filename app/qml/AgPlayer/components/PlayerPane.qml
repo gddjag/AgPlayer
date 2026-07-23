@@ -15,6 +15,31 @@ Rectangle {
         return LibraryModel.data(idx, role)
     }
 
+    function currentTrackRating(): int {
+        if (typeof LibraryModel.RatingRole === "undefined")
+            return 0
+        var raw = root.currentTrackValue(LibraryModel.RatingRole)
+        var value = parseInt(raw, 10)
+        if (isNaN(value))
+            return 0
+        return Math.max(0, Math.min(5, value))
+    }
+
+    function currentTrackFavorite(): bool {
+        var row = PlaybackController.trackIndex
+        if (row < 0 || row >= LibraryModel.rowCount())
+            return false
+        var idx = LibraryModel.index(row, 0)
+        return LibraryModel.data(idx, LibraryModel.FavoriteRole)
+    }
+
+    function toggleCurrentFavorite() {
+        var row = PlaybackController.trackIndex
+        if (row >= 0 && row < LibraryModel.rowCount()) {
+            LibraryModel.setFavorite(row, !root.currentTrackFavorite())
+        }
+    }
+
     function formatTime(ms): string {
         if (ms <= 0)
             return "00:00"
@@ -22,6 +47,28 @@ Rectangle {
         var min = Math.floor(totalSec / 60)
         var sec = totalSec % 60
         return (min < 10 ? "0" : "") + min + ":" + (sec < 10 ? "0" : "") + sec
+    }
+
+    function formatFileSize(bytes): string {
+        if (bytes <= 0)
+            return ""
+        if (bytes >= 1024 * 1024 * 1024)
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB"
+        if (bytes >= 1024 * 1024)
+            return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+        if (bytes >= 1024)
+            return Math.round(bytes / 1024) + " KB"
+        return bytes + " B"
+    }
+
+    function currentTrackBpm(): string {
+        if (typeof LibraryModel.BpmRole === "undefined")
+            return ""
+        var raw = root.currentTrackValue(LibraryModel.BpmRole)
+        var value = parseFloat(raw)
+        if (isNaN(value) || value <= 0)
+            return ""
+        return Math.round(value) + " BPM"
     }
 
     function coverSource(): string {
@@ -61,47 +108,107 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             spacing: Theme.spacingMd
 
-            Text {
-                text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("No track loaded")
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 22
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
+            RowLayout {
                 Layout.fillWidth: true
-                ToolTip.text: text
-                ToolTip.visible: titleHover.hovered && text !== qsTr("No track loaded")
-                ToolTip.delay: 500
+                spacing: Theme.spacingSm
 
-                HoverHandler {
-                    id: titleHover
+                Text {
+                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("No track loaded")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 22
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    ToolTip.text: text
+                    ToolTip.visible: titleHover.hovered && text !== qsTr("No track loaded")
+                    ToolTip.delay: 500
+
+                    HoverHandler {
+                        id: titleHover
+                    }
+                }
+
+                ToolButton {
+                    icon.source: root.currentTrackFavorite()
+                                 ? Theme.icon("heart-fill")
+                                 : Theme.icon("heart-line")
+                    icon.color: root.currentTrackFavorite()
+                                ? Theme.favoriteRed
+                                : Theme.secondaryText
+                    icon.width: 20
+                    icon.height: 20
+                    Accessible.name: root.currentTrackFavorite()
+                                     ? qsTr("Remove from favorites")
+                                     : qsTr("Add to favorites")
+                    focusPolicy: Qt.StrongFocus
+                    enabled: PlaybackController.trackIndex >= 0
+                    onClicked: root.toggleCurrentFavorite()
+                    ToolTip.text: Accessible.name
+                    ToolTip.visible: hovered
+
+                    background: Rectangle {
+                        color: !parent.enabled ? "transparent"
+                              : parent.pressed ? Theme.cyan
+                              : parent.visualFocus ? Theme.border
+                              : parent.hovered ? Theme.border
+                              : "transparent"
+                        border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                        border.width: parent.visualFocus ? 2 : 0
+                        radius: Theme.radiusSm
+                    }
                 }
             }
 
-            Text {
-                property string artist: root.currentTrackValue(LibraryModel.ArtistRole)
-                property string album: root.currentTrackValue(LibraryModel.AlbumRole)
-                text: {
-                    var parts = []
-                    if (artist && artist.length > 0)
-                        parts.push(artist)
-                    if (album && album.length > 0)
-                        parts.push(album)
-                    if (parts.length === 0)
-                        return qsTr("Unknown artist")
-                    return parts.join("  -  ")
-                }
-                color: Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 14
-                elide: Text.ElideRight
+            RowLayout {
                 Layout.fillWidth: true
-                ToolTip.text: text
-                ToolTip.visible: artistAlbumHover.hovered
-                ToolTip.delay: 500
+                spacing: Theme.spacingSm
 
-                HoverHandler {
-                    id: artistAlbumHover
+                Text {
+                    property string artist: root.currentTrackValue(LibraryModel.ArtistRole)
+                    property string album: root.currentTrackValue(LibraryModel.AlbumRole)
+                    text: {
+                        var parts = []
+                        if (artist && artist.length > 0)
+                            parts.push(artist)
+                        if (album && album.length > 0)
+                            parts.push(album)
+                        if (parts.length === 0)
+                            return qsTr("Unknown artist")
+                        return parts.join("  ·  ")
+                    }
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 14
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    ToolTip.text: text
+                    ToolTip.visible: artistAlbumHover.hovered
+                    ToolTip.delay: 500
+
+                    HoverHandler {
+                        id: artistAlbumHover
+                    }
+                }
+
+                RowLayout {
+                    spacing: 1
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: PlaybackController.trackIndex >= 0
+
+                    Repeater {
+                        model: 5
+                        delegate: Image {
+                            source: index < root.currentTrackRating()
+                                    ? Theme.icon("star-fill")
+                                    : Theme.icon("star-line")
+                            sourceSize.width: 12
+                            sourceSize.height: 12
+                            Layout.preferredWidth: 14
+                            Layout.preferredHeight: 14
+                            fillMode: Image.PreserveAspectFit
+                        }
+                    }
                 }
             }
 
@@ -115,15 +222,23 @@ Rectangle {
                         var fmt = root.currentTrackValue(LibraryModel.FormatRole)
                         if (fmt && fmt.length > 0)
                             badges.push(fmt.toUpperCase())
-                        var sr = root.currentTrackValue(LibraryModel.SampleRateRole)
-                        if (sr > 0)
-                            badges.push((sr / 1000) + " kHz")
                         var bd = root.currentTrackValue(LibraryModel.BitDepthRole)
                         if (bd > 0)
                             badges.push(bd + "-bit")
+                        var sr = root.currentTrackValue(LibraryModel.SampleRateRole)
+                        if (sr > 0)
+                            badges.push((sr / 1000) + " kHz")
                         var br = root.currentTrackValue(LibraryModel.BitRateRole)
                         if (br > 0)
                             badges.push(Math.round(br / 1000) + " kbps")
+                        if (PlaybackController.trackIndex >= 0) {
+                            var bpm = root.currentTrackBpm()
+                            if (bpm.length > 0)
+                                badges.push(bpm)
+                        }
+                        var size = root.currentTrackValue(LibraryModel.FileSizeRole)
+                        if (size > 0)
+                            badges.push(root.formatFileSize(size))
                         return badges
                     }
 

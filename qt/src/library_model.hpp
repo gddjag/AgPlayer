@@ -19,6 +19,8 @@ struct TrackRecord {
     qint64 fileSize = 0;
     QUrl coverUrl;
     bool favorite = false;
+    int rating = 0;
+    double bpm = 0.0;
     bool available = false;
     QString importError;
 };
@@ -44,6 +46,8 @@ public:
         FileSizeRole,
         CoverUrlRole,
         FavoriteRole,
+        RatingRole,
+        BpmRole,
         AvailableRole,
         ImportErrorRole
     };
@@ -64,9 +68,12 @@ public:
     Q_INVOKABLE void playRow(int row);
     Q_INVOKABLE void flush();
 
+    int favoriteCount() const noexcept;
+
 signals:
     void playRequested(int row);
     void flushRequested();
+    void favoriteCountChanged();
 
 private:
     QList<TrackRecord> tracks_;

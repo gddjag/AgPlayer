@@ -3,6 +3,7 @@
 #include "audio_tools_controller.hpp"
 #include "format_converter.hpp"
 #include "import_controller.hpp"
+#include "library_filter_model.hpp"
 #include "library_model.hpp"
 #include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
@@ -26,6 +27,7 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  LightEditor* lightEditor)
 {
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
+    qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows);
