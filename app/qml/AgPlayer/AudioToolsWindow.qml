@@ -42,7 +42,7 @@ Window {
                 anchors.fill: parent
                 currentIndex: AudioToolsController.currentTool
 
-                ComingSoonPage { toolName: qsTr("Format Convert") }
+                FormatConvertPage {}
                 ComingSoonPage { toolName: qsTr("Light Edit") }
                 ComingSoonPage { toolName: qsTr("Speed Adjust") }
                 ComingSoonPage { toolName: qsTr("Pitch Shift") }

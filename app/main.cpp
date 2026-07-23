@@ -21,6 +21,7 @@
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
@@ -103,9 +104,10 @@ int main(int argc, char* argv[])
         WindowController windows;
         AudioToolsController audioTools;
         MetadataEditor metadataEditor;
+        FormatConverter formatConverter;
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
-                                    &audioTools, &metadataEditor);
+                                    &audioTools, &metadataEditor, &formatConverter);
 
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },

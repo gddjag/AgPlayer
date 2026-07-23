@@ -1,6 +1,7 @@
 #pragma once
 
 class AudioToolsController;
+class FormatConverter;
 class ImportController;
 class LibraryModel;
 class MetadataEditor;
@@ -16,4 +17,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  ImportController* importer,
                                  WindowController* windows,
                                  AudioToolsController* audioTools,
-                                 MetadataEditor* metadataEditor);
+                                 MetadataEditor* metadataEditor,
+                                 FormatConverter* formatConverter);

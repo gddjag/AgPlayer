@@ -1,6 +1,7 @@
 #include "qml_registration.hpp"
 
 #include "audio_tools_controller.hpp"
+#include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "metadata_editor.hpp"
@@ -15,7 +16,8 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  ImportController* importer,
                                  WindowController* windows,
                                  AudioToolsController* audioTools,
-                                 MetadataEditor* metadataEditor)
+                                 MetadataEditor* metadataEditor,
+                                 FormatConverter* formatConverter)
 {
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
@@ -23,5 +25,6 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioToolsController", audioTools);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "MetadataEditor", metadataEditor);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FormatConverter", formatConverter);
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
 }

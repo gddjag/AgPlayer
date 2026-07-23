@@ -60,6 +60,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/EmptyLibrary.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/tools/ComingSoonPage.qml
+        qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
         qml/AgPlayer/components/tools/InfoEditPage.qml
     RESOURCES

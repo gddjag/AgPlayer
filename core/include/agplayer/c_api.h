@@ -120,6 +120,23 @@ ag_result ag_metadata_write(const char* utf8_path,
 ag_cancel_token* ag_cancel_token_create(void);
 void ag_cancel_token_cancel(ag_cancel_token* token);
 void ag_cancel_token_destroy(ag_cancel_token* token);
+
+/* Transcode an audio file to a new format/path. The output container is
+ * determined by the output_path file extension (e.g. .mp3, .wav, .flac,
+ * .m4a, .ogg). codec_name NULL = auto-select encoder for the container.
+ * bit_rate 0 = codec default. sample_rate 0 = keep source. channels 0 = keep
+ * source. cancel_token NULL = not cancellable. progress_callback NULL = no
+ * progress reporting. Returns AG_OK on success, AG_CANCELLED if cancelled. */
+ag_result ag_transcode(const char* input_path,
+                       const char* output_path,
+                       const char* codec_name,
+                       long long bit_rate,
+                       int sample_rate,
+                       int channels,
+                       const ag_cancel_token* cancel_token,
+                       ag_progress_callback progress_callback,
+                       void* user_data);
+
 ag_result ag_waveform_analyze(const char* utf8_path,
                               size_t target_points,
                               const ag_cancel_token* cancel_token,

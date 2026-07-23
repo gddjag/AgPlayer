@@ -1,6 +1,8 @@
 add_library(agplayer_qt STATIC
     src/audio_tools_controller.cpp
     src/audio_tools_controller.hpp
+    src/format_converter.cpp
+    src/format_converter.hpp
     src/import_controller.cpp
     src/import_controller.hpp
     src/library_model.cpp

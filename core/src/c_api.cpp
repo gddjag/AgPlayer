@@ -3,10 +3,12 @@
 #include "core_context.hpp"
 #include "decoder.hpp"
 #include "metadata_writer.hpp"
+#include "transcoder.hpp"
 #include "waveform_analyzer.hpp"
 
 #include <atomic>
 #include <cstring>
+#include <functional>
 #include <new>
 #include <string>
 #include <utility>
@@ -433,6 +435,47 @@ void ag_cancel_token_cancel(ag_cancel_token* token)
 void ag_cancel_token_destroy(ag_cancel_token* token)
 {
     delete token;
+}
+
+ag_result ag_transcode(const char* input_path,
+                       const char* output_path,
+                       const char* codec_name,
+                       const long long bit_rate,
+                       const int sample_rate,
+                       const int channels,
+                       const ag_cancel_token* cancel_token,
+                       const ag_progress_callback progress_callback,
+                       void* const user_data)
+{
+    if (input_path == nullptr || input_path[0] == '\0'
+        || output_path == nullptr || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::TranscodeConfig config;
+        config.output_path = output_path;
+        if (codec_name != nullptr) config.codec_name = codec_name;
+        config.bit_rate = bit_rate;
+        config.sample_rate = sample_rate;
+        config.channels = channels;
+
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+
+        std::function<void(float)> cb;
+        if (progress_callback != nullptr) {
+            cb = [progress_callback, user_data](float frac) {
+                progress_callback(frac, user_data);
+            };
+        }
+
+        std::string error;
+        return agplayer::transcode(input_path, config, cancelled,
+                                   std::move(cb), error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
 }
 
 ag_result ag_waveform_analyze(const char* utf8_path,
