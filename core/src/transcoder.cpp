@@ -344,8 +344,10 @@ ag_result transcode(const std::string& input_path,
 
         // Send packet to decoder.
         if (avcodec_send_packet(dec.ctx, in_pkt) < 0) {
+            error = "Failed to send packet to decoder";
+            failed = true;
             av_packet_unref(in_pkt);
-            continue;
+            break;
         }
         av_packet_unref(in_pkt);
 

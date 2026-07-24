@@ -199,8 +199,10 @@ ag_result light_edit(const std::string& input_path,
         }
 
         if (avcodec_send_packet(dec.ctx, in_pkt) < 0) {
+            error = "Failed to send packet to decoder";
+            failed = true;
             av_packet_unref(in_pkt);
-            continue;
+            break;
         }
         av_packet_unref(in_pkt);
 
@@ -363,7 +365,14 @@ ag_result light_edit(const std::string& input_path,
         return AG_INTERNAL_ERROR;
     }
 
-    AVCodecContext* enc_ctx = avcodec_alloc_context3(dec.codec);
+    const AVCodec* enc_codec = avcodec_find_encoder(dec.codec->id);
+    if (enc_codec == nullptr) {
+        avformat_free_context(out_fmt);
+        error = "Failed to find output encoder";
+        return AG_UNSUPPORTED_FORMAT;
+    }
+
+    AVCodecContext* enc_ctx = avcodec_alloc_context3(enc_codec);
     if (enc_ctx == nullptr) {
         avformat_free_context(out_fmt);
         error = "Failed to allocate encoder context";
@@ -376,16 +385,16 @@ ag_result light_edit(const std::string& input_path,
 #pragma warning(push)
 #pragma warning(disable: 4996)
 #endif
-    if (dec.codec->sample_fmts != nullptr) {
+    if (enc_codec->sample_fmts != nullptr) {
         bool supported = false;
-        for (int i = 0; dec.codec->sample_fmts[i] != AV_SAMPLE_FMT_NONE; ++i) {
-            if (dec.codec->sample_fmts[i] == enc_sample_fmt) {
+        for (int i = 0; enc_codec->sample_fmts[i] != AV_SAMPLE_FMT_NONE; ++i) {
+            if (enc_codec->sample_fmts[i] == enc_sample_fmt) {
                 supported = true;
                 break;
             }
         }
         if (!supported) {
-            enc_sample_fmt = dec.codec->sample_fmts[0];
+            enc_sample_fmt = enc_codec->sample_fmts[0];
         }
     }
 #ifdef _MSC_VER
@@ -401,14 +410,14 @@ ag_result light_edit(const std::string& input_path,
         enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
 
-    if (avcodec_open2(enc_ctx, dec.codec, nullptr) < 0) {
+    if (avcodec_open2(enc_ctx, enc_codec, nullptr) < 0) {
         avcodec_free_context(&enc_ctx);
         avformat_free_context(out_fmt);
         error = "Failed to open encoder";
         return AG_INTERNAL_ERROR;
     }
 
-    AVStream* out_stream = avformat_new_stream(out_fmt, dec.codec);
+    AVStream* out_stream = avformat_new_stream(out_fmt, enc_codec);
     if (out_stream == nullptr
         || avcodec_parameters_from_context(out_stream->codecpar, enc_ctx) < 0) {
         avcodec_free_context(&enc_ctx);
@@ -464,16 +473,15 @@ ag_result light_edit(const std::string& input_path,
     const int frame_size = 1024;
     int64_t encoded_samples = 0;
     AVFrame* out_frame = av_frame_alloc();
-    out_frame->format = AV_SAMPLE_FMT_FLTP;
-    out_frame->sample_rate = sample_rate;
-    av_channel_layout_copy(&out_frame->ch_layout, &enc_ctx->ch_layout);
-    out_frame->nb_samples = frame_size;
 
     int64_t pts = 0;
     while (encoded_samples < edited_samples && !is_cancelled(cancelled)) {
         const int samples_this_frame = static_cast<int>(
             std::min<int64_t>(frame_size, edited_samples - encoded_samples));
 
+        out_frame->format = AV_SAMPLE_FMT_FLTP;
+        out_frame->sample_rate = sample_rate;
+        av_channel_layout_copy(&out_frame->ch_layout, &enc_ctx->ch_layout);
         out_frame->nb_samples = samples_this_frame;
         if (av_frame_get_buffer(out_frame, 0) < 0) {
             error = "Failed to allocate output frame buffer";

@@ -163,6 +163,60 @@ agplayer_enable_warnings(audio_engine_test)
 add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
 
+add_executable(transcoder_test
+    core/transcoder_test.cpp
+)
+add_dependencies(transcoder_test decoder_fixture)
+target_include_directories(transcoder_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(transcoder_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(transcoder_test)
+
+add_test(NAME transcoder_test COMMAND transcoder_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(transcoder_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(pitch_shifter_test
+    core/pitch_shifter_test.cpp
+)
+add_dependencies(pitch_shifter_test decoder_fixture)
+target_include_directories(pitch_shifter_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(pitch_shifter_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(pitch_shifter_test)
+
+add_test(NAME pitch_shifter_test COMMAND pitch_shifter_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(pitch_shifter_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(light_editor_test
+    core/light_editor_test.cpp
+)
+add_dependencies(light_editor_test decoder_fixture)
+target_include_directories(light_editor_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(light_editor_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(light_editor_test)
+
+add_test(NAME light_editor_test COMMAND light_editor_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(light_editor_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(queue_gapless_test
     core/queue_gapless_test.cpp
 )

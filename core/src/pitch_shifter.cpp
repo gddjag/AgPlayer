@@ -280,8 +280,10 @@ ag_result pitch_shift(const std::string& input_path,
         }
 
         if (avcodec_send_packet(dec.ctx, in_pkt) < 0) {
+            error = "Failed to send packet to decoder";
+            failed = true;
             av_packet_unref(in_pkt);
-            continue;
+            break;
         }
         av_packet_unref(in_pkt);
 
@@ -558,10 +560,6 @@ ag_result pitch_shift(const std::string& input_path,
     const int64_t total_samples = stretched[0].size();
     int64_t encoded_samples = 0;
     AVFrame* out_frame = av_frame_alloc();
-    out_frame->format = AV_SAMPLE_FMT_FLTP;
-    out_frame->sample_rate = enc_sample_rate;
-    av_channel_layout_copy(&out_frame->ch_layout, &enc_ctx->ch_layout);
-    out_frame->nb_samples = frame_size;
 
     int64_t pts = 0;
     while (encoded_samples < total_samples && !is_cancelled(cancelled)) {
@@ -569,6 +567,9 @@ ag_result pitch_shift(const std::string& input_path,
             std::min<int64_t>(frame_size, total_samples - encoded_samples));
 
         // Prepare float32 planar input
+        out_frame->format = AV_SAMPLE_FMT_FLTP;
+        out_frame->sample_rate = enc_sample_rate;
+        av_channel_layout_copy(&out_frame->ch_layout, &enc_ctx->ch_layout);
         out_frame->nb_samples = samples_this_frame;
         if (av_frame_get_buffer(out_frame, 0) < 0) {
             error = "Failed to allocate output frame buffer";
