@@ -11,6 +11,7 @@ class PitchShifter;
 class PlaybackController;
 class SettingsController;
 class SpeedAdjuster;
+class WaveformProvider;
 class WindowController;
 
 // Registers all AgPlayer QML singletons and the WaveformItem type into the
@@ -27,4 +28,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  PitchShifter* pitchShifter,
                                  SpeedAdjuster* speedAdjuster,
                                  LightEditor* lightEditor,
-                                 SettingsController* settings);
+                                 SettingsController* settings,
+                                 WaveformProvider* waveformProvider = nullptr);

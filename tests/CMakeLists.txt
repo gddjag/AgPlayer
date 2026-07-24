@@ -451,3 +451,19 @@ set_tests_properties(window_controller_test PROPERTIES
 set_tests_properties(settings_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+add_executable(library_stress_test
+    stress/library_stress_test.cpp
+)
+target_include_directories(library_stress_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(library_stress_test PRIVATE agplayer_core)
+agplayer_enable_warnings(library_stress_test)
+
+add_test(NAME library_stress_test COMMAND library_stress_test)
+set_tests_properties(library_stress_test PROPERTIES
+    TIMEOUT 600
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)

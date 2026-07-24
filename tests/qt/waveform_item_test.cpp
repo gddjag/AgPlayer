@@ -268,7 +268,7 @@ void WaveformItemTest::reusesGeometryWhenPositionChangesWithinBucket()
     const void* firstVertexData = geometry->vertexDataAsColoredPoint2D();
     const int firstVertexCount = geometry->vertexCount();
 
-    // Same bucket: playedCount stays at 1, so geometry is untouched and colors are rewritten with the same values.
+    // Same bucket: playedCount stays at 1, so geometry is untouched and colors are not updated.
     item.setPosition(10);
     QSGNode* sameNode = item.updatePaintNode(node, nullptr);
     QCOMPARE(sameNode, node);

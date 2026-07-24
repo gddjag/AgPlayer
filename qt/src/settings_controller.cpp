@@ -7,8 +7,10 @@
 #include <QDirIterator>
 #include <QList>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QUrl>
 
+#include "cache_janitor.hpp"
 #include "runtime_log.hpp"
 #include "file_association_controller.hpp"
 
@@ -31,6 +33,7 @@ SettingsController::SettingsController(QObject* parent)
 {
     load();
     recalculateCacheSize();
+    QTimer::singleShot(10000, this, [this] { enforceCacheSizeLimit(); });
 }
 
 SettingsController::~SettingsController() = default;
@@ -534,6 +537,9 @@ void SettingsController::setAutoCleanCache(bool value)
     autoCleanCache_ = value;
     settings_.setValue(QStringLiteral("cache/autoCleanCache"), value);
     emit autoCleanCacheChanged();
+    if (autoCleanCache_) {
+        enforceCacheSizeLimit();
+    }
 }
 
 void SettingsController::setCleanTempOnExit(bool value)
@@ -555,6 +561,9 @@ void SettingsController::setCacheSizeLimitMB(int value)
     cacheSizeLimitMB_ = value;
     settings_.setValue(QStringLiteral("cache/sizeLimitMB"), value);
     emit cacheSizeLimitMBChanged();
+    if (autoCleanCache_ && cacheSizeLimitMB_ > 0) {
+        enforceCacheSizeLimit();
+    }
 }
 
 void SettingsController::resetToDefaults()
@@ -717,6 +726,33 @@ void SettingsController::checkForUpdates()
 void SettingsController::openOfficialWebsite()
 {
     QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/AgPlayer/AgPlayer")));
+}
+
+void SettingsController::trimCacheNow()
+{
+    enforceCacheSizeLimit();
+}
+
+void SettingsController::onWaveformCacheSaved()
+{
+    enforceCacheSizeLimit();
+}
+
+void SettingsController::enforceCacheSizeLimit()
+{
+    if (!autoCleanCache_ || cacheSizeLimitMB_ <= 0) {
+        return;
+    }
+    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
+    if (!isSafeCachePath(dir)) {
+        return;
+    }
+    const qint64 limitBytes = static_cast<qint64>(cacheSizeLimitMB_) * 1024 * 1024;
+    const CacheJanitor::TrimReport report = CacheJanitor::trimToSize(dir, limitBytes);
+    if (report.filesRemoved > 0) {
+        recalculateCacheSize();
+        emit cacheTrimReport(report.bytesFreed, report.filesRemoved);
+    }
 }
 
 void SettingsController::load()

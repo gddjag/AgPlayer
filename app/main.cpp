@@ -35,6 +35,7 @@
 #include "runtime_log.hpp"
 #include "settings_controller.hpp"
 #include "speed_adjuster.hpp"
+#include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
@@ -112,6 +113,7 @@ int main(int argc, char* argv[])
 
         PlaybackController playback(core, &library);
         SettingsController settings;
+        WaveformProvider waveformProvider(&settings);
         auto autoReadBpmFlag = std::make_shared<std::atomic_bool>(settings.autoReadBpm());
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
@@ -131,7 +133,8 @@ int main(int argc, char* argv[])
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &pitchShifter,
-                                    &speedAdjuster, &lightEditor, &settings);
+                                    &speedAdjuster, &lightEditor, &settings,
+                                    &waveformProvider);
 
         QString pendingPlayFilePath;
 

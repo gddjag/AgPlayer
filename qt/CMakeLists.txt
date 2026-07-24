@@ -5,6 +5,8 @@ add_library(agplayer_qt STATIC
     src/audio_tools_controller.hpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
+    src/cache_janitor.cpp
+    src/cache_janitor.hpp
     src/format_converter.cpp
     src/format_converter.hpp
     src/global_hotkey_manager.cpp
@@ -33,6 +35,8 @@ add_library(agplayer_qt STATIC
     src/runtime_log.hpp
     src/speed_adjuster.cpp
     src/speed_adjuster.hpp
+    src/waveform_provider.cpp
+    src/waveform_provider.hpp
     src/window_controller.cpp
     src/window_controller.hpp
     src/waveform_item.cpp
@@ -40,8 +44,11 @@ add_library(agplayer_qt STATIC
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
-target_include_directories(agplayer_qt PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+target_include_directories(agplayer_qt
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    PRIVATE
+        "${CMAKE_SOURCE_DIR}/core/src"
 )
 target_link_libraries(agplayer_qt
     PUBLIC

@@ -231,6 +231,9 @@ public:
     Q_INVOKABLE void clearAllCache();
     Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void openOfficialWebsite();
+    Q_INVOKABLE void trimCacheNow();
+
+    void onWaveformCacheSaved();
 
 signals:
     void updateCheckFinished(const QString& message, bool success);
@@ -282,12 +285,14 @@ signals:
     void cleanTempOnExitChanged();
     void cacheSizeLimitMBChanged();
     void currentCacheSizeMBChanged();
+    void cacheTrimReport(qint64 bytesFreed, int filesRemoved);
 
 private:
     void load();
     void saveAll();
     void restoreDefaults();
     void recalculateCacheSize();
+    void enforceCacheSizeLimit();
     static qint64 directorySizeBytes(const QString& path);
     static QString defaultMusicDirectory();
     static QString defaultCacheDirectory();

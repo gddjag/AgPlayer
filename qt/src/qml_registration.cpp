@@ -12,6 +12,7 @@
 #include "settings_controller.hpp"
 #include "speed_adjuster.hpp"
 #include "waveform_item.hpp"
+#include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
 #include <qqml.h>
@@ -26,7 +27,8 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  PitchShifter* pitchShifter,
                                  SpeedAdjuster* speedAdjuster,
                                  LightEditor* lightEditor,
-                                 SettingsController* settings)
+                                 SettingsController* settings,
+                                 WaveformProvider* waveformProvider)
 {
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
@@ -40,5 +42,8 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SpeedAdjuster", speedAdjuster);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LightEditor", lightEditor);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SettingsController", settings);
+    if (waveformProvider != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", waveformProvider);
+    }
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
 }

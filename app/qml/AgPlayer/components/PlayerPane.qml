@@ -78,6 +78,14 @@ Rectangle {
         return "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
     }
 
+    function loadWaveform() {
+        var path = root.currentTrackValue(LibraryModel.PathRole)
+        if (path.length === 0) {
+            waveform.peaks = []
+        }
+        WaveformProvider.loadForTrack(path)
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.margins: Theme.spacingXl
@@ -271,8 +279,27 @@ Rectangle {
                 Layout.minimumHeight: 48
                 position: PlaybackController.positionMs
                 duration: PlaybackController.durationMs
+                analysisProgress: WaveformProvider.analysisProgress
                 clip: true
             }
+
+            Connections {
+                target: PlaybackController
+                function onTrackIndexChanged() { root.loadWaveform() }
+                function onCurrentTrackIdChanged() { root.loadWaveform() }
+            }
+
+            Connections {
+                target: WaveformProvider
+                function onWaveformReady(path, peaks) {
+                    var currentPath = root.currentTrackValue(LibraryModel.PathRole)
+                    if (path === currentPath) {
+                        waveform.peaks = peaks
+                    }
+                }
+            }
+
+            Component.onCompleted: root.loadWaveform()
 
             RowLayout {
                 Layout.fillWidth: true
