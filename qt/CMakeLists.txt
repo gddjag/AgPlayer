@@ -1,4 +1,6 @@
 add_library(agplayer_qt STATIC
+    src/file_association_controller.cpp
+    src/file_association_controller.hpp
     src/audio_tools_controller.cpp
     src/audio_tools_controller.hpp
     src/bpm_analyzer.hpp
