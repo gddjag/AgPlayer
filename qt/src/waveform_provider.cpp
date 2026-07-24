@@ -1,4 +1,5 @@
 #include "waveform_provider.hpp"
+#include "runtime_log.hpp"
 #include "settings_controller.hpp"
 #include "waveform_cache.hpp"
 
@@ -72,8 +73,12 @@ void saveWaveformCache(const QString& cachePath,
         data.mix[index] = ag_waveform_peak(waveform, index);
     }
     data.bpm = ag_waveform_bpm(waveform);
-    (void)agplayer::WaveformCache::save_v2(
-        cachePath.toStdString(), sourcePath.toStdString(), data);
+    if (!agplayer::WaveformCache::save_v2(
+            cachePath.toStdString(), sourcePath.toStdString(), data)) {
+        RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Waveform"),
+            QStringLiteral("Failed to save waveform cache for %1")
+                .arg(sourcePath));
+    }
 }
 
 } // namespace

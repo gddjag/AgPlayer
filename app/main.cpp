@@ -179,6 +179,13 @@ int main(int argc, char* argv[])
         engine.addImportPath("qrc:/");
         engine.loadFromModule("AgPlayer", "Main");
 
+        if (engine.rootObjects().isEmpty()) {
+            RuntimeLog::log(AG_INTERNAL_ERROR, QStringLiteral("Main"),
+                QStringLiteral("Failed to load Main QML module"));
+            result = 3;
+            return result;
+        }
+
         if (!qaPlayPath.isEmpty()) {
             initialFilePath = qaPlayPath;
         }

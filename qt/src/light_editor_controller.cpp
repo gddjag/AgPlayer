@@ -350,7 +350,10 @@ void LightEditor::start(qint64 trimStartMs, qint64 trimEndMs,
             auto* self = static_cast<LightEditor*>(userData);
             if (self) {
                 self->progress_.store(frac, std::memory_order_release);
-                emit self->progressChanged();
+                // Queue the signal emission back to the main thread; the C
+                // progress callback runs on the worker thread.
+                QMetaObject::invokeMethod(
+                    self, &LightEditor::progressChanged, Qt::QueuedConnection);
             }
         };
 
