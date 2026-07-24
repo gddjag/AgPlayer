@@ -13,7 +13,16 @@ LightEditor::LightEditor(QObject* parent)
 
 LightEditor::~LightEditor()
 {
-    token_.store(nullptr, std::memory_order_release);
+    cancel();
+    if (watcher_ != nullptr) {
+        watcher_->waitForFinished();
+    }
+    QMutexLocker lock(&tokenMutex_);
+    ag_cancel_token* t = token_.exchange(nullptr, std::memory_order_acq_rel);
+    lock.unlock();
+    if (t != nullptr) {
+        ag_cancel_token_destroy(t);
+    }
 }
 
 double LightEditor::progress() const noexcept
@@ -155,12 +164,18 @@ void LightEditor::start(qint64 trimStartMs, qint64 trimEndMs,
     const QString inputPath = inputPath_;
 
     auto* watcher = new QFutureWatcher<int>(this);
+    watcher_ = watcher;
     connect(watcher, &QFutureWatcher<int>::finished, this,
         [this, watcher, outputPath]() {
-            watcher->deleteLater();
-            ag_cancel_token* t = token_.exchange(nullptr,
-                std::memory_order_acq_rel);
-            if (t) ag_cancel_token_destroy(t);
+            watcher_->deleteLater();
+            ag_cancel_token* t = nullptr;
+            {
+                QMutexLocker lock(&tokenMutex_);
+                t = token_.exchange(nullptr, std::memory_order_acq_rel);
+            }
+            if (t != nullptr) {
+                ag_cancel_token_destroy(t);
+            }
             const int result = watcher->result();
             setBusy(false);
             if (result == AG_OK) {
@@ -210,8 +225,9 @@ void LightEditor::start(qint64 trimStartMs, qint64 trimEndMs,
 
 void LightEditor::cancel()
 {
+    QMutexLocker lock(&tokenMutex_);
     ag_cancel_token* t = token_.load(std::memory_order_acquire);
-    if (t) {
+    if (t != nullptr) {
         ag_cancel_token_cancel(t);
     }
 }

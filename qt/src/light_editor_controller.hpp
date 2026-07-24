@@ -7,7 +7,13 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include <QMutex>
+#include <QPointer>
+
 #include <atomic>
+
+template <typename T>
+class QFutureWatcher;
 
 // LightEditor: QML singleton for basic audio editing (trim, fade, gain).
 // Wraps ag_light_edit. When a file is loaded, duration is read via
@@ -64,6 +70,8 @@ private:
     std::atomic<bool> busy_{false};
     std::atomic<double> progress_{0.0};
     std::atomic<ag_cancel_token*> token_{nullptr};
+    QMutex tokenMutex_;
+    QPointer<QFutureWatcher<int>> watcher_;
 
     void setBusy(bool value);
     void setProgress(double value);
