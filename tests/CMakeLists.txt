@@ -216,6 +216,22 @@ set_tests_properties(pitch_shifter_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(multitrack_editor_test
+    core/multitrack_editor_test.cpp
+)
+add_dependencies(multitrack_editor_test decoder_fixture)
+target_include_directories(multitrack_editor_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(multitrack_editor_test PRIVATE agplayer_core)
+agplayer_enable_warnings(multitrack_editor_test)
+add_test(NAME multitrack_editor_test COMMAND multitrack_editor_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(multitrack_editor_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(light_editor_test
     core/light_editor_test.cpp
 )

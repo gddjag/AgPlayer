@@ -2,7 +2,10 @@
 
 #include "pitch_shifter.hpp"
 
+#include "decoder.hpp"
+
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,6 +28,77 @@ std::filesystem::path make_corrupt_adpcm_wav(const std::filesystem::path& source
     file.write(tag, sizeof(tag));
     assert(file);
     return dest;
+}
+
+// Simple second-order high-pass filter for measuring high-frequency energy.
+class HighPassFilter {
+public:
+    HighPassFilter(double cutoff_hz, double sample_rate) noexcept
+    {
+        const double pi = std::acos(-1.0);
+        const double omega = 2.0 * pi * cutoff_hz / sample_rate;
+        const double cos_omega = std::cos(omega);
+        const double sin_omega = std::sin(omega);
+        const double alpha = sin_omega / (2.0 * 0.707);
+
+        b0_ = (1.0 + cos_omega) / 2.0;
+        b1_ = -(1.0 + cos_omega);
+        b2_ = (1.0 + cos_omega) / 2.0;
+        a0_ = 1.0 + alpha;
+        a1_ = -2.0 * cos_omega;
+        a2_ = 1.0 - alpha;
+
+        b0_ /= a0_; b1_ /= a0_; b2_ /= a0_;
+        a1_ /= a0_; a2_ /= a0_;
+    }
+
+    float process(float input) noexcept
+    {
+        const double output = b0_ * input + b1_ * x1_ + b2_ * x2_
+                              - a1_ * y1_ - a2_ * y2_;
+        x2_ = x1_;
+        x1_ = input;
+        y2_ = y1_;
+        y1_ = output;
+        return static_cast<float>(output);
+    }
+
+private:
+    double b0_ = 0.0, b1_ = 0.0, b2_ = 0.0;
+    double a1_ = 0.0, a2_ = 0.0, a0_ = 1.0;
+    double x1_ = 0.0, x2_ = 0.0;
+    double y1_ = 0.0, y2_ = 0.0;
+};
+
+float high_frequency_energy(const std::filesystem::path& path,
+                            double cutoff_hz)
+{
+    agplayer::Decoder decoder;
+    if (decoder.open(path.string()) != AG_OK) {
+        return -1.0f;
+    }
+    const int sample_rate = decoder.metadata().sample_rate;
+    if (sample_rate <= 0) {
+        return -1.0f;
+    }
+    HighPassFilter hp(cutoff_hz, sample_rate);
+    agplayer::DecodedAudioBlock block;
+    double sum = 0.0;
+    std::size_t count = 0;
+    do {
+        if (decoder.read(block) != AG_OK) {
+            return -1.0f;
+        }
+        for (float sample : block.samples) {
+            const float filtered = hp.process(sample);
+            sum += static_cast<double>(filtered) * filtered;
+            ++count;
+        }
+    } while (!block.end_of_stream);
+    if (count == 0) {
+        return 0.0f;
+    }
+    return static_cast<float>(sum / static_cast<double>(count));
 }
 
 } // namespace
@@ -79,7 +153,59 @@ int main(const int argc, char** argv)
     assert(result != AG_OK);
     assert(!std::filesystem::exists(failure_output));
 
+    // Vocal protection comparison: pitch up with protection should have
+    // less high-frequency energy than without protection.
+    const std::filesystem::path protected_output =
+        input_path.parent_path() / "pitch-shifter-protected.wav";
+    const std::filesystem::path unprotected_output =
+        input_path.parent_path() / "pitch-shifter-unprotected.wav";
+    std::filesystem::remove(protected_output);
+    std::filesystem::remove(unprotected_output);
+
+    agplayer::PitchShiftConfig protected_config;
+    protected_config.pitch_cents = 400;
+    protected_config.keep_tempo = true;
+    protected_config.tempo_ratio = 1.0;
+    protected_config.output_path = protected_output.string();
+    protected_config.output_codec_name = "pcm_s16le";
+    protected_config.vocal_protection = true;
+
+    agplayer::PitchShiftConfig unprotected_config = protected_config;
+    unprotected_config.output_path = unprotected_output.string();
+    unprotected_config.vocal_protection = false;
+
+    error.clear();
+    result = agplayer::pitch_shift(input_path.string(), protected_config,
+                                   nullptr, nullptr, error);
+    if (result != AG_OK) {
+        std::cerr << "pitch_shift vocal protection (protected) failed: "
+                  << static_cast<int>(result) << " " << error << "\n";
+    }
+    assert(result == AG_OK);
+    assert(std::filesystem::exists(protected_output));
+
+    error.clear();
+    result = agplayer::pitch_shift(input_path.string(), unprotected_config,
+                                   nullptr, nullptr, error);
+    if (result != AG_OK) {
+        std::cerr << "pitch_shift vocal protection (unprotected) failed: "
+                  << static_cast<int>(result) << " " << error << "\n";
+    }
+    assert(result == AG_OK);
+    assert(std::filesystem::exists(unprotected_output));
+
+    constexpr double high_freq_cutoff = 6000.0;
+    const float protected_energy =
+        high_frequency_energy(protected_output, high_freq_cutoff);
+    const float unprotected_energy =
+        high_frequency_energy(unprotected_output, high_freq_cutoff);
+    assert(protected_energy >= 0.0f);
+    assert(unprotected_energy >= 0.0f);
+    assert(protected_energy < unprotected_energy);
+
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
+    std::filesystem::remove(protected_output);
+    std::filesystem::remove(unprotected_output);
     return 0;
 }

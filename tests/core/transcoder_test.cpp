@@ -2,6 +2,9 @@
 
 #include "transcoder.hpp"
 
+#include "decoder.hpp"
+
+#include <cmath>
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -25,6 +28,28 @@ std::filesystem::path make_corrupt_adpcm_wav(const std::filesystem::path& source
     file.write(tag, sizeof(tag));
     assert(file);
     return dest;
+}
+
+float scan_peak(const std::filesystem::path& path)
+{
+    agplayer::Decoder decoder;
+    if (decoder.open(path.string()) != AG_OK) {
+        return -1.0f;
+    }
+    agplayer::DecodedAudioBlock block;
+    float peak = 0.0f;
+    do {
+        if (decoder.read(block) != AG_OK) {
+            return -1.0f;
+        }
+        for (float sample : block.samples) {
+            const float abs_sample = std::abs(sample);
+            if (abs_sample > peak) {
+                peak = abs_sample;
+            }
+        }
+    } while (!block.end_of_stream);
+    return peak;
 }
 
 } // namespace
@@ -91,6 +116,31 @@ int main(const int argc, char** argv)
     }
     assert(result == AG_INVALID_ARGUMENT);
     std::filesystem::remove(collision_path);
+
+    // Volume normalize: output peak should approach -1 dBFS for a quiet fixture.
+    // For sine fixture (already loud), gain should be capped at 1.0.
+    const std::filesystem::path normalize_output =
+        input_path.parent_path() / "transcoder-normalized.wav";
+    std::filesystem::remove(normalize_output);
+    agplayer::TranscodeConfig normalize_config;
+    normalize_config.output_path = normalize_output.string();
+    normalize_config.codec_name = "pcm_s16le";
+    normalize_config.volume_normalize = true;
+    error.clear();
+    result = agplayer::transcode(input_path.string(), normalize_config,
+                                 nullptr, nullptr, error);
+    if (result != AG_OK) {
+        std::cerr << "transcode volume normalize failed: "
+                  << static_cast<int>(result) << " " << error << "\n";
+    }
+    assert(result == AG_OK);
+    assert(std::filesystem::exists(normalize_output));
+    const float input_peak = scan_peak(input_path);
+    const float normalized_peak = scan_peak(normalize_output);
+    assert(input_peak > 0.0f);
+    assert(normalized_peak > 0.0f);
+    assert(normalized_peak <= input_peak * 1.01f);
+    std::filesystem::remove(normalize_output);
 
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
