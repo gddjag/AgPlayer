@@ -365,6 +365,10 @@ int main(int argc, char* argv[])
 
             result = (qaErrorCode != 0) ? qaErrorCode : app.exec();
 
+            app.removeNativeEventFilter(&hotkeys);
+            hotkeys.unregisterAll();
+            windows.setShutdownActions({});
+
             if (audioToolsWindow)
                 delete audioToolsWindow;
             if (listWindow)

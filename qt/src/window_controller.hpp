@@ -34,6 +34,7 @@ public:
 
     explicit WindowController(QObject* parent = nullptr);
     explicit WindowController(ShutdownActions actions, QObject* parent = nullptr);
+    ~WindowController();
 
     bool mainVisible() const noexcept;
     bool miniVisible() const noexcept;

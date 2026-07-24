@@ -30,6 +30,11 @@ WindowController::WindowController(ShutdownActions actions, QObject* parent)
     }
 }
 
+WindowController::~WindowController()
+{
+    shutdownActions_ = {};
+}
+
 bool WindowController::mainVisible() const noexcept { return mainVisible_; }
 bool WindowController::miniVisible() const noexcept { return miniVisible_; }
 bool WindowController::audioToolsVisible() const noexcept { return audioToolsVisible_; }
