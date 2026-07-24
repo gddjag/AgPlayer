@@ -14,7 +14,6 @@ Rectangle {
     property var editor: LightEditor
     property bool hasDuration: editor.durationMs > 0
 
-    property int selectedTrack: 0
     property real zoomScale: 1.0
     property int viewportOffsetMs: 0
     property int playheadMs: 0
@@ -86,7 +85,7 @@ Rectangle {
         FileDialog {
             fileMode: FileDialog.OpenFile
             nameFilters: [qsTr("Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)")]
-            onAccepted: editor.loadFile(files[0])
+            onAccepted: editor.loadFileToTrack(editor.selectedTrack, files[0])
         }
     }
 
@@ -97,15 +96,6 @@ Rectangle {
         }
     }
 
-    ListModel {
-        id: trackModel
-        ListElement { name: ""; durationMs: 0; peaks: []; hasFile: false }
-        ListElement { name: ""; durationMs: 0; peaks: []; hasFile: false }
-        ListElement { name: ""; durationMs: 0; peaks: []; hasFile: false }
-        ListElement { name: ""; durationMs: 0; peaks: []; hasFile: false }
-        ListElement { name: ""; durationMs: 0; peaks: []; hasFile: false }
-        ListElement { name: ""; durationMs: 0; peaks: []; hasFile: false }
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -155,7 +145,7 @@ Rectangle {
                 Button {
                     text: qsTr("Clear")
                     enabled: editor.hasInput && !editor.busy
-                    onClicked: editor.clear()
+                    onClicked: editor.clearTrack(editor.selectedTrack)
 
                     background: Rectangle {
                         color: parent.pressed ? Theme.violet
@@ -374,25 +364,25 @@ Rectangle {
                 spacing: Theme.spacingSm
 
                 Repeater {
-                    model: trackModel
+                    model: editor.trackCount
 
                     MultiTrackWaveform {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         trackIndex: index
-                        trackName: model.name
-                        trackDurationMs: model.durationMs
-                        trackPeaks: model.peaks
+                        trackName: editor.trackNames[index] || ""
+                        trackDurationMs: index === editor.selectedTrack ? editor.durationMs : 0
+                        trackPeaks: editor.trackPeaks[index] || []
                         trackColor: page.trackColors[index]
-                        isActive: index === 0
-                        isSelected: page.selectedTrack === index
+                        isActive: index === editor.selectedTrack
+                        isSelected: editor.selectedTrack === index
                         showTimeRuler: index === 0
                         zoomScale: page.zoomScale
                         viewportOffsetMs: page.viewportOffsetMs
                         playheadMs: page.playheadMs
-                        hasFile: model.hasFile
+                        hasFile: editor.trackHasFiles[index] || false
 
-                        onTrackClicked: page.selectedTrack = index
+                        onTrackClicked: editor.selectedTrack = index
                         onSeekRequested: function(positionMs) {
                             page.playheadMs = Math.max(0, Math.min(positionMs, editor.durationMs))
                         }
@@ -412,7 +402,7 @@ Rectangle {
                 }
                 onDropped: function(drop) {
                     if (drop.hasUrls && drop.urls.length > 0)
-                        editor.loadFile(drop.urls[0])
+                        editor.loadFileToTrack(editor.selectedTrack, drop.urls[0])
                 }
 
                 Rectangle {
@@ -1050,7 +1040,10 @@ Rectangle {
                                          fadeIn,
                                          fadeOut,
                                          gainSlider.value,
-                                         outputDirField.text.trim())
+                                         outputDirField.text.trim(),
+                                         formatCombo.currentValue,
+                                         sampleRateCombo.currentValue,
+                                         channelsCombo.currentValue)
                         }
 
                         background: Rectangle {
@@ -1073,27 +1066,7 @@ Rectangle {
                     }
                 }
 
-                // Info note.
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingXs
 
-                    Text {
-                        text: "\u24D8"
-                        color: Theme.secondaryText
-                        font.pixelSize: 12
-                        font.family: Theme.fontFallback
-                    }
-
-                    Text {
-                        text: qsTr("Output format, sample rate and channel settings are preview-only in this phase; export keeps the source codec.")
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 11
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                    }
-                }
             }
         }
 
@@ -1171,17 +1144,6 @@ Rectangle {
             page.playheadMs = 0
             page.viewportOffsetMs = 0
             page.zoomScale = 1.0
-            page.selectedTrack = 0
-
-            trackModel.set(0, {
-                name: editor.inputFileName,
-                durationMs: editor.durationMs,
-                peaks: editor.waveformPeaks,
-                hasFile: editor.hasInput
-            })
-            for (let i = 1; i < 6; ++i) {
-                trackModel.set(i, { name: "", durationMs: 0, peaks: [], hasFile: false })
-            }
         }
         function onLightEditCompleted(outputPath) {
             statusText.text = qsTr("Exported: %1").arg(outputPath)
