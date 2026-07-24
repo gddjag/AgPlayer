@@ -9,6 +9,8 @@ add_library(agplayer_core STATIC
     src/playback_session.cpp
     src/transcoder.cpp
     src/waveform_analyzer.cpp
+    src/bpm_analyzer.cpp
+    src/bpm_analyzer.hpp
     src/waveform_cache.cpp
 )
 

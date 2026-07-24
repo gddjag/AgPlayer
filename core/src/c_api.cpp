@@ -6,6 +6,7 @@
 #include "pitch_shifter.hpp"
 #include "light_editor.hpp"
 #include "transcoder.hpp"
+#include "bpm_analyzer.hpp"
 #include "waveform_analyzer.hpp"
 
 #include <atomic>
@@ -645,4 +646,29 @@ float ag_waveform_peak(const ag_waveform* waveform, const size_t index)
 void ag_waveform_destroy(ag_waveform* waveform)
 {
     delete waveform;
+}
+
+ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out)
+{
+    if (out == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    *out = {0.0, 0.0};
+
+    if (file_path == nullptr || file_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    return guard_result([&] {
+        agplayer::BpmAnalyzeInput input;
+        input.file_path = file_path;
+        agplayer::BpmAnalyzeOutput output;
+        const ag_result result = agplayer::analyze_bpm(input, &output);
+        if (result == AG_OK) {
+            out->bpm = output.bpm;
+            out->confidence = output.confidence;
+        }
+        return result;
+    });
 }
