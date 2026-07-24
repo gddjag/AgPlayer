@@ -30,12 +30,12 @@ double hann(int n, int N) noexcept
     return 0.5 * (1.0 - std::cos(2.0 * 3.14159265358979323846 * n / (N - 1)));
 }
 
-// Simple first-order low-pass or high-pass filter for vocal formant compensation.
-class FirstOrderFilter {
+// Simple second-order biquad low-pass or high-pass filter for vocal formant compensation.
+class SecondOrderFilter {
 public:
     enum class Type { LowPass, HighPass };
 
-    FirstOrderFilter(Type type, double cutoff_hz, double sample_rate) noexcept
+    SecondOrderFilter(Type type, double cutoff_hz, double sample_rate) noexcept
     {
         const double omega = 2.0 * M_PI * cutoff_hz / sample_rate;
         const double cos_omega = std::cos(omega);
@@ -476,19 +476,29 @@ ag_result pitch_shift(const std::string& input_path,
         if (pitch_ratio > 1.0) {
             // Pitch up: reduce excessive brightness with gentle low-pass.
             const double cutoff = 8000.0 / pitch_ratio;
-            FirstOrderFilter lp(FirstOrderFilter::Type::LowPass, cutoff, enc_sample_rate);
+            std::vector<SecondOrderFilter> lp_filters;
+            lp_filters.reserve(channels);
+            for (int ch = 0; ch < channels; ++ch) {
+                lp_filters.emplace_back(SecondOrderFilter::Type::LowPass,
+                                        cutoff, enc_sample_rate);
+            }
             for (int ch = 0; ch < channels; ++ch) {
                 for (float& sample : stretched[ch]) {
-                    sample = lp.process(sample);
+                    sample = lp_filters[ch].process(sample);
                 }
             }
         } else if (pitch_ratio < 1.0) {
             // Pitch down: reduce muffled sound with gentle high-pass.
             const double cutoff = 80.0 * pitch_ratio;
-            FirstOrderFilter hp(FirstOrderFilter::Type::HighPass, cutoff, enc_sample_rate);
+            std::vector<SecondOrderFilter> hp_filters;
+            hp_filters.reserve(channels);
+            for (int ch = 0; ch < channels; ++ch) {
+                hp_filters.emplace_back(SecondOrderFilter::Type::HighPass,
+                                        cutoff, enc_sample_rate);
+            }
             for (int ch = 0; ch < channels; ++ch) {
                 for (float& sample : stretched[ch]) {
-                    sample = hp.process(sample);
+                    sample = hp_filters[ch].process(sample);
                 }
             }
         }
