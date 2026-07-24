@@ -10,7 +10,6 @@ extern "C" {
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
-#include <random>
 #include <string>
 
 #ifdef _WIN32
@@ -133,6 +132,8 @@ ag_result write_metadata(const std::string& utf8_path,
         if (avio_open(&out_ctx->pb, temp_path.c_str(), AVIO_FLAG_WRITE) < 0) {
             avformat_close_input(&in_ctx);
             cleanup_output(out_ctx);
+            std::error_code ec;
+            std::filesystem::remove(temp_path, ec);
             error = "Failed to open temp output file";
             return AG_IO_ERROR;
         }
