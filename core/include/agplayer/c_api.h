@@ -208,6 +208,17 @@ size_t ag_waveform_count(const ag_waveform* waveform);
 float ag_waveform_peak(const ag_waveform* waveform, size_t index);
 void ag_waveform_destroy(ag_waveform* waveform);
 
+typedef struct ag_bpm_result {
+    double bpm;
+    double confidence;
+} ag_bpm_result;
+
+/* Analyze the BPM of an audio file offline.
+ * Returns AG_OK on success and fills `out`. The caller does not free `out`.
+ * Returns AG_INVALID_ARGUMENT if file_path or out is NULL.
+ * Returns AG_DECODE_ERROR if the file cannot be decoded or is too short. */
+ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out);
+
 #ifdef __cplusplus
 }
 #endif
