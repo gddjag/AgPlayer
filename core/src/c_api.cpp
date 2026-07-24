@@ -451,15 +451,16 @@ void ag_cancel_token_destroy(ag_cancel_token* token)
     delete token;
 }
 
-ag_result ag_transcode(const char* input_path,
-                       const char* output_path,
-                       const char* codec_name,
-                       const long long bit_rate,
-                       const int sample_rate,
-                       const int channels,
-                       const ag_cancel_token* cancel_token,
-                       const ag_progress_callback progress_callback,
-                       void* const user_data)
+ag_result ag_transcode_ex(const char* input_path,
+                          const char* output_path,
+                          const char* codec_name,
+                          const long long bit_rate,
+                          const int sample_rate,
+                          const int channels,
+                          const ag_transcode_options* options,
+                          const ag_cancel_token* cancel_token,
+                          const ag_progress_callback progress_callback,
+                          void* const user_data)
 {
     if (input_path == nullptr || input_path[0] == '\0'
         || output_path == nullptr || output_path[0] == '\0') {
@@ -473,6 +474,9 @@ ag_result ag_transcode(const char* input_path,
         config.bit_rate = bit_rate;
         config.sample_rate = sample_rate;
         config.channels = channels;
+        if (options != nullptr) {
+            config.volume_normalize = options->volume_normalize != 0;
+        }
 
         const std::atomic_bool* cancelled =
             cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
@@ -490,6 +494,21 @@ ag_result ag_transcode(const char* input_path,
     } catch (...) {
         return AG_INTERNAL_ERROR;
     }
+}
+
+ag_result ag_transcode(const char* input_path,
+                       const char* output_path,
+                       const char* codec_name,
+                       const long long bit_rate,
+                       const int sample_rate,
+                       const int channels,
+                       const ag_cancel_token* cancel_token,
+                       const ag_progress_callback progress_callback,
+                       void* const user_data)
+{
+    return ag_transcode_ex(input_path, output_path, codec_name, bit_rate,
+                           sample_rate, channels, nullptr, cancel_token,
+                           progress_callback, user_data);
 }
 
 ag_result ag_pitch_shift_ex(const char* input_path,
@@ -671,4 +690,34 @@ ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out)
         }
         return result;
     });
+}
+
+ag_result ag_multitrack_edit(const size_t track_count,
+                             const char* const* input_paths,
+                             const long long* trim_start_ms,
+                             const long long* trim_end_ms,
+                             const int* fade_in_ms,
+                             const int* fade_out_ms,
+                             const double* gain,
+                             const char* output_path,
+                             const ag_cancel_token* cancel_token,
+                             const ag_progress_callback progress_callback,
+                             void* const user_data)
+{
+    if (track_count == 0 || output_path == nullptr || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    (void)input_paths;
+    (void)trim_start_ms;
+    (void)trim_end_ms;
+    (void)fade_in_ms;
+    (void)fade_out_ms;
+    (void)gain;
+    (void)cancel_token;
+    (void)progress_callback;
+    (void)user_data;
+
+    // TODO: delegate to agplayer::multitrack_edit in Task 6.
+    return AG_UNSUPPORTED_FORMAT;
 }
