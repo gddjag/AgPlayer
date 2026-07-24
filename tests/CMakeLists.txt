@@ -281,6 +281,7 @@ foreach(qt_test IN ITEMS
     waveform_item_test
     shutdown_test
     runtime_log_test
+    settings_controller_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
@@ -407,5 +408,8 @@ set_tests_properties(playback_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(window_controller_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+set_tests_properties(settings_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )

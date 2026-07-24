@@ -709,7 +709,11 @@ void SettingsController::load()
     language_ = validatedLanguage(settings_.value(QStringLiteral("language"), language_).toString());
     setAsDefaultPlayer_ = settings_.value(QStringLiteral("setAsDefaultPlayer"), setAsDefaultPlayer_).toBool();
     fileAssociations_ = settings_.value(QStringLiteral("fileAssociations"), fileAssociations_).toStringList();
-    defaultExportDirectory_ = settings_.value(QStringLiteral("defaultExportDirectory"), defaultExportDirectory_).toString();
+    defaultExportDirectory_ = settings_.value(QStringLiteral("defaultExportDirectory"), QString()).toString();
+    if (defaultExportDirectory_.isEmpty()) {
+        defaultExportDirectory_ = defaultExportDir();
+        QDir().mkpath(defaultExportDirectory_);
+    }
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("playback"));
@@ -753,7 +757,11 @@ void SettingsController::load()
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("cache"));
-    cacheDirectory_ = settings_.value(QStringLiteral("directory"), cacheDirectory_).toString();
+    cacheDirectory_ = settings_.value(QStringLiteral("directory"), QString()).toString();
+    if (cacheDirectory_.isEmpty()) {
+        cacheDirectory_ = defaultCacheDirectory();
+        QDir().mkpath(cacheDirectory_);
+    }
     autoCleanCache_ = settings_.value(QStringLiteral("autoCleanCache"), autoCleanCache_).toBool();
     cleanTempOnExit_ = settings_.value(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_).toBool();
     cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
@@ -934,12 +942,14 @@ QString SettingsController::defaultMusicDirectory()
 
 QString SettingsController::defaultCacheDirectory()
 {
-    return QStringLiteral("D:\\Music\\AgPlayer\\Cache\\");
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+           + QStringLiteral("/waveform");
 }
 
 QString SettingsController::defaultExportDir()
 {
-    return QStringLiteral("D:\\Music\\AgPlayer_Export\\");
+    return QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+           + QStringLiteral("/AgPlayer_Export");
 }
 
 QString SettingsController::validatedLanguage(const QString& value)
