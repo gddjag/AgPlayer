@@ -4,31 +4,76 @@
 
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+
+namespace {
+
+std::filesystem::path make_corrupt_adpcm_wav(const std::filesystem::path& source)
+{
+    const std::filesystem::path dest =
+        source.parent_path() / "corrupt-adpcm.wav";
+    std::filesystem::remove(dest);
+    std::filesystem::copy_file(
+        source, dest, std::filesystem::copy_options::overwrite_existing);
+
+    std::fstream file(dest, std::ios::in | std::ios::out | std::ios::binary);
+    assert(file);
+    file.seekp(20, std::ios::beg);
+    const char tag[] = {static_cast<char>(0x02), static_cast<char>(0x00)};
+    file.write(tag, sizeof(tag));
+    assert(file);
+    return dest;
+}
+
+} // namespace
 
 int main(const int argc, char** argv)
 {
     assert(argc == 2);
     const std::filesystem::path input_path = argv[1];
 
-    const std::filesystem::path output_path =
+    // Happy path: valid sine wave transcodes successfully.
+    const std::filesystem::path happy_output =
         input_path.parent_path() / "transcoder-out.wav";
-    std::filesystem::remove(output_path);
+    std::filesystem::remove(happy_output);
 
-    agplayer::TranscodeConfig config;
-    config.output_path = output_path.string();
-    config.codec_name = "pcm_s16le";
+    agplayer::TranscodeConfig happy_config;
+    happy_config.output_path = happy_output.string();
+    happy_config.codec_name = "pcm_s16le";
     std::string error;
-    const ag_result result =
-        agplayer::transcode(input_path.string(), config, nullptr, nullptr, error);
+    ag_result result =
+        agplayer::transcode(input_path.string(), happy_config,
+                            nullptr, nullptr, error);
     if (result != AG_OK) {
-        std::cerr << "transcode failed: " << static_cast<int>(result)
+        std::cerr << "transcode happy path failed: " << static_cast<int>(result)
                   << " " << error << "\n";
     }
     assert(result == AG_OK);
-    assert(std::filesystem::exists(output_path));
+    assert(std::filesystem::exists(happy_output));
 
-    std::filesystem::remove(output_path);
+    // Failure path: corrupted ADPCM-tagged WAV triggers avcodec_send_packet
+    // failure. The tool must return a non-AG_OK status and must not leave a
+    // complete/successful output file.
+    const std::filesystem::path corrupt_path = make_corrupt_adpcm_wav(input_path);
+    const std::filesystem::path failure_output =
+        corrupt_path.parent_path() / "transcoder-out.wav";
+    std::filesystem::remove(failure_output);
+
+    agplayer::TranscodeConfig failure_config;
+    failure_config.output_path = failure_output.string();
+    failure_config.codec_name = "pcm_s16le";
+    error.clear();
+    result = agplayer::transcode(corrupt_path.string(), failure_config,
+                                 nullptr, nullptr, error);
+    if (result == AG_OK) {
+        std::cerr << "expected transcode failure for corrupted input\n";
+    }
+    assert(result != AG_OK);
+    assert(!std::filesystem::exists(failure_output));
+
+    std::filesystem::remove(happy_output);
+    std::filesystem::remove(corrupt_path);
     return 0;
 }

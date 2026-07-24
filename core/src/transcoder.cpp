@@ -415,6 +415,9 @@ ag_result transcode(const std::string& input_path,
         av_frame_free(&in_frame);
         av_frame_free(&out_frame);
         av_write_trailer(enc.fmt_ctx);
+        if (enc.fmt_ctx->pb != nullptr) {
+            avio_closep(&enc.fmt_ctx->pb);
+        }
         std::error_code ec;
         std::filesystem::remove(config.output_path, ec);
         error = "Transcode cancelled";
@@ -486,6 +489,9 @@ ag_result transcode(const std::string& input_path,
     av_write_trailer(enc.fmt_ctx);
 
     if (failed) {
+        if (enc.fmt_ctx->pb != nullptr) {
+            avio_closep(&enc.fmt_ctx->pb);
+        }
         std::error_code ec;
         std::filesystem::remove(config.output_path, ec);
         return AG_INTERNAL_ERROR;
