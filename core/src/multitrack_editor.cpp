@@ -156,7 +156,7 @@ ag_result open_encoder(const std::string& output_path,
     enc.ctx->bit_rate = 0;
     enc.ctx->thread_count = 1;
     av_channel_layout_copy(&enc.out_ch_layout, &master_layout);
-    enc.ctx->ch_layout = enc.out_ch_layout;
+    av_channel_layout_copy(&enc.ctx->ch_layout, &enc.out_ch_layout);
 
     if (enc.fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
         enc.ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -256,6 +256,9 @@ ag_result render_track_to_temp(const std::string& input_path,
     const int64_t trim_end_req = (track_config.trim_end_ms > 0)
         ? track_config.trim_end_ms * master_sample_rate / 1000
         : std::numeric_limits<int64_t>::max();
+    const int64_t target_written = (track_config.trim_end_ms > 0)
+        ? std::max<int64_t>(0, trim_end_req - trim_start_req)
+        : std::numeric_limits<int64_t>::max();
 
     SwrContext* swr = swr_alloc();
     if (swr == nullptr) {
@@ -297,7 +300,9 @@ ag_result render_track_to_temp(const std::string& input_path,
     AVFrame* resampled = av_frame_alloc();
 
     int64_t decoded_samples = 0;
+    int64_t written_samples = 0;
     bool failed = false;
+    bool trim_end_reached = false;
 
     auto write_resampled_frame = [&](AVFrame* frame) -> bool {
         if (frame == nullptr || frame->nb_samples <= 0) return true;
@@ -340,8 +345,21 @@ ag_result render_track_to_temp(const std::string& input_path,
         if (decoded_samples < trim_start_req) {
             write_start_in_frame = trim_start_req - decoded_samples;
         }
-        const int64_t write_count =
+        int64_t write_count =
             static_cast<int64_t>(out_samples) - write_start_in_frame;
+
+        if (track_config.trim_end_ms > 0) {
+            const int64_t remaining = target_written - written_samples;
+            if (remaining <= 0) {
+                trim_end_reached = true;
+                decoded_samples += out_samples;
+                return true;
+            }
+            if (write_count > remaining) {
+                write_count = remaining;
+            }
+        }
+
         if (write_count > 0) {
             const float* src = interleaved.data()
                 + static_cast<size_t>(write_start_in_frame) * channels;
@@ -352,6 +370,11 @@ ag_result render_track_to_temp(const std::string& input_path,
             if (!out_file) {
                 error = "Failed to write temporary track data";
                 return false;
+            }
+            written_samples += write_count;
+            if (track_config.trim_end_ms > 0
+                && written_samples >= target_written) {
+                trim_end_reached = true;
             }
         }
 
@@ -396,9 +419,10 @@ ag_result render_track_to_temp(const std::string& input_path,
             av_frame_unref(in_frame);
         }
         if (failed) break;
+        if (trim_end_reached) break;
     }
 
-    if (!failed && !is_cancelled(cancelled)) {
+    if (!failed && !is_cancelled(cancelled) && !trim_end_reached) {
         avcodec_send_packet(dec.ctx, nullptr);
         while (true) {
             const int recv_ret = avcodec_receive_frame(dec.ctx, in_frame);
@@ -413,7 +437,7 @@ ag_result render_track_to_temp(const std::string& input_path,
         }
     }
 
-    if (!failed && !is_cancelled(cancelled)) {
+    if (!failed && !is_cancelled(cancelled) && !trim_end_reached) {
         while (true) {
             const int pending = swr_get_out_samples(swr, 0);
             if (pending <= 0) break;
