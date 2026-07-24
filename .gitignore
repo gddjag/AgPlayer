@@ -6,3 +6,5 @@
 /tests/fixtures/generated/
 *.user
 *.tmp
+/Testing/
+/CTestCostData.txt

@@ -39,6 +39,8 @@
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
 
+ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
+
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);

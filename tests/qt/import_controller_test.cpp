@@ -6,11 +6,16 @@
 #include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 #include <QThread>
 
 #include <atomic>
+#include <cmath>
 #include <memory>
+
+#include "bpm_analyzer.hpp"
+#include "bpm_fixture.hpp"
 
 class ImportControllerTest final : public QObject {
     Q_OBJECT
@@ -21,6 +26,8 @@ private slots:
     void modelCanBeDestroyedWhileProbeIsBlocked();
     void controllerCanBeDestroyedWhileProbeIsBlocked();
     void rejectsModelWithDifferentThreadAffinity();
+    void writesBpmWhenAutoReadEnabled();
+    void leavesBpmZeroWhenAutoReadDisabled();
 };
 
 namespace {
@@ -202,6 +209,53 @@ void ImportControllerTest::rejectsModelWithDifferentThreadAffinity()
     QCOMPARE(importer.errors().size(), 1);
     QVERIFY(importer.errors().front().contains(QStringLiteral("thread"), Qt::CaseInsensitive));
     QVERIFY(!importer.busy());
+}
+
+void ImportControllerTest::writesBpmWhenAutoReadEnabled()
+{
+    QTemporaryFile tempFile(QDir::temp().filePath(QStringLiteral("ag_bpm_click_XXXXXX.wav")));
+    QVERIFY(tempFile.open());
+    tempFile.close();
+
+    QVERIFY(agplayer::test::writeClickTrackWav(tempFile.fileName(), 120, 8));
+
+    LibraryModel model;
+    const ProbeFunction probe = [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.available = true;
+        const BpmAnalyzeResult bpm = analyze_bpm(path);
+        track.bpm = bpm.bpm;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(&model, probe);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(tempFile.fileName())});
+
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(importer.errors().size(), 0);
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
+}
+
+void ImportControllerTest::leavesBpmZeroWhenAutoReadDisabled()
+{
+    QTemporaryFile tempFile(QDir::temp().filePath(QStringLiteral("ag_bpm_click_off_XXXXXX.wav")));
+    QVERIFY(tempFile.open());
+    tempFile.close();
+
+    QVERIFY(agplayer::test::writeClickTrackWav(tempFile.fileName(), 120, 8));
+
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(tempFile.fileName())});
+
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.tracks().front().bpm, 0.0);
 }
 
 QTEST_GUILESS_MAIN(ImportControllerTest)

@@ -417,6 +417,10 @@ set_tests_properties(qml_error_states_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+target_include_directories(import_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/tests/core"
+)
+
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES

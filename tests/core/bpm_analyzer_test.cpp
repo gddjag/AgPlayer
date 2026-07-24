@@ -4,6 +4,8 @@
 
 #include <agplayer/c_api.h>
 
+#include <cmath>
+
 #include "bpm_fixture.hpp"
 
 class BpmAnalyzerTest : public QObject {

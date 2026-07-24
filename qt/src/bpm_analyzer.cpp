@@ -9,8 +9,9 @@ BpmAnalyzeResult analyze_bpm(const QString& filePath)
     BpmAnalyzeResult result;
     ag_bpm_result api_result{};
     const QByteArray path = filePath.toUtf8();
-    if (ag_bpm_analyze(path.constData(), &api_result) != AG_OK) {
-        RuntimeLog::log(AG_IO_ERROR, QStringLiteral("BPM"),
+    const ag_result api_status = ag_bpm_analyze(path.constData(), &api_result);
+    if (api_status != AG_OK) {
+        RuntimeLog::log(api_status, QStringLiteral("BPM"),
             QStringLiteral("Failed to analyze BPM for %1").arg(filePath));
         return result;
     }

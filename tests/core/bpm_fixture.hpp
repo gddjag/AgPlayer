@@ -59,6 +59,9 @@ inline bool writeClickTrackWav(const QString& path, int bpm, int duration_second
 
     const double period_seconds = 60.0 / static_cast<double>(bpm);
     const int period_samples = static_cast<int>(period_seconds * sample_rate);
+    if (bpm > 1000 || period_samples <= 0) {
+        return false;
+    }
     constexpr int click_duration = 400; // samples (~25 ms)
     constexpr double click_freq = 1000.0 * 2.0 * kPi / sample_rate;
 
@@ -73,6 +76,7 @@ inline bool writeClickTrackWav(const QString& path, int bpm, int duration_second
         stream << sample;
     }
 
+    file.flush();
     return file.error() == QFile::NoError;
 }
 
