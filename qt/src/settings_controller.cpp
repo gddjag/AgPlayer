@@ -9,6 +9,8 @@
 #include <QStandardPaths>
 #include <QUrl>
 
+#include "runtime_log.hpp"
+
 #include <algorithm>
 
 namespace {
@@ -712,7 +714,10 @@ void SettingsController::load()
     defaultExportDirectory_ = settings_.value(QStringLiteral("defaultExportDirectory"), QString()).toString();
     if (defaultExportDirectory_.isEmpty()) {
         defaultExportDirectory_ = defaultExportDir();
-        QDir().mkpath(defaultExportDirectory_);
+        if (!QDir().mkpath(defaultExportDirectory_)) {
+            RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
+                QStringLiteral("Failed to create default export directory: ") + defaultExportDirectory_);
+        }
     }
     settings_.endGroup();
 
@@ -760,7 +765,10 @@ void SettingsController::load()
     cacheDirectory_ = settings_.value(QStringLiteral("directory"), QString()).toString();
     if (cacheDirectory_.isEmpty()) {
         cacheDirectory_ = defaultCacheDirectory();
-        QDir().mkpath(cacheDirectory_);
+        if (!QDir().mkpath(cacheDirectory_)) {
+            RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
+                QStringLiteral("Failed to create default cache directory: ") + cacheDirectory_);
+        }
     }
     autoCleanCache_ = settings_.value(QStringLiteral("autoCleanCache"), autoCleanCache_).toBool();
     cleanTempOnExit_ = settings_.value(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_).toBool();
