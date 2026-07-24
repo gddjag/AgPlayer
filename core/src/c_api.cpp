@@ -78,6 +78,10 @@ struct ag_metadata {
 
 struct ag_waveform {
     std::vector<float> peaks;
+    std::vector<float> bass_;
+    std::vector<float> mid_;
+    std::vector<float> high_;
+    double bpm_ = 0.0;
 };
 
 struct ag_cancel_token {
@@ -666,6 +670,112 @@ float ag_waveform_peak(const ag_waveform* waveform, const size_t index)
 void ag_waveform_destroy(ag_waveform* waveform)
 {
     delete waveform;
+}
+
+size_t ag_waveform_layer_count(const ag_waveform* waveform,
+                               const ag_waveform_layer layer)
+{
+    if (waveform == nullptr) {
+        return 0U;
+    }
+    switch (layer) {
+    case AG_WAVEFORM_LAYER_MIX:
+        return waveform->peaks.size();
+    case AG_WAVEFORM_LAYER_BASS:
+        return waveform->bass_.size();
+    case AG_WAVEFORM_LAYER_MID:
+        return waveform->mid_.size();
+    case AG_WAVEFORM_LAYER_HIGH:
+        return waveform->high_.size();
+    }
+    return 0U;
+}
+
+float ag_waveform_layer_peak(const ag_waveform* waveform,
+                             const ag_waveform_layer layer,
+                             const size_t index)
+{
+    if (waveform == nullptr) {
+        return 0.0F;
+    }
+    const std::vector<float>* layer_peaks = nullptr;
+    switch (layer) {
+    case AG_WAVEFORM_LAYER_MIX:
+        layer_peaks = &waveform->peaks;
+        break;
+    case AG_WAVEFORM_LAYER_BASS:
+        layer_peaks = &waveform->bass_;
+        break;
+    case AG_WAVEFORM_LAYER_MID:
+        layer_peaks = &waveform->mid_;
+        break;
+    case AG_WAVEFORM_LAYER_HIGH:
+        layer_peaks = &waveform->high_;
+        break;
+    default:
+        return 0.0F;
+    }
+    return index >= layer_peaks->size() ? 0.0F : (*layer_peaks)[index];
+}
+
+double ag_waveform_bpm(const ag_waveform* waveform)
+{
+    return waveform == nullptr ? 0.0 : waveform->bpm_;
+}
+
+ag_result ag_track_analysis(const char* utf8_path,
+                            const size_t target_points,
+                            const ag_cancel_token* cancel_token,
+                            const ag_progress_callback progress_callback,
+                            void* const user_data,
+                            ag_waveform** out_waveform,
+                            double* const out_bpm)
+{
+    if (out_waveform == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    *out_waveform = nullptr;
+    if (out_bpm != nullptr) {
+        *out_bpm = 0.0;
+    }
+
+    if (utf8_path == nullptr || utf8_path[0] == '\0' || target_points == 0U) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    return guard_result([&] {
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+
+        std::vector<float> peaks;
+        ag_result waveform_result = agplayer::WaveformAnalyzer::analyze(
+            utf8_path, target_points, cancelled, progress_callback, user_data,
+            peaks);
+        if (waveform_result != AG_OK) {
+            return waveform_result;
+        }
+
+        ag_waveform* waveform = new (std::nothrow) ag_waveform{};
+        if (waveform == nullptr) {
+            return AG_INTERNAL_ERROR;
+        }
+        waveform->peaks = std::move(peaks);
+
+        agplayer::BpmAnalyzeInput bpm_input;
+        bpm_input.file_path = utf8_path;
+        agplayer::BpmAnalyzeOutput bpm_output;
+        const ag_result bpm_result = agplayer::analyze_bpm(bpm_input, &bpm_output);
+        if (bpm_result == AG_OK) {
+            waveform->bpm_ = bpm_output.bpm;
+            if (out_bpm != nullptr) {
+                *out_bpm = bpm_output.bpm;
+            }
+        }
+
+        *out_waveform = waveform;
+        return AG_OK;
+    });
 }
 
 ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out)

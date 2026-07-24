@@ -226,6 +226,28 @@ size_t ag_waveform_count(const ag_waveform* waveform);
 float ag_waveform_peak(const ag_waveform* waveform, size_t index);
 void ag_waveform_destroy(ag_waveform* waveform);
 
+typedef enum ag_waveform_layer {
+    AG_WAVEFORM_LAYER_MIX = 0,
+    AG_WAVEFORM_LAYER_BASS = 1,
+    AG_WAVEFORM_LAYER_MID = 2,
+    AG_WAVEFORM_LAYER_HIGH = 3
+} ag_waveform_layer;
+
+size_t ag_waveform_layer_count(const ag_waveform* waveform,
+                               ag_waveform_layer layer);
+float ag_waveform_layer_peak(const ag_waveform* waveform,
+                             ag_waveform_layer layer,
+                             size_t index);
+double ag_waveform_bpm(const ag_waveform* waveform);
+
+ag_result ag_track_analysis(const char* utf8_path,
+                            size_t target_points,
+                            const ag_cancel_token* cancel_token,
+                            ag_progress_callback progress_callback,
+                            void* user_data,
+                            ag_waveform** out_waveform,
+                            double* out_bpm);
+
 typedef struct ag_bpm_result {
     double bpm;
     double confidence;

@@ -5,6 +5,8 @@
 
 #include "waveform_cache.hpp"
 
+#include <agplayer/c_api.h>
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -217,6 +219,86 @@ int main(const int argc, char** argv)
         case_dir / "nan.agwf", source_path,
         {0.5F, std::numeric_limits<float>::quiet_NaN()}));
     assert(!path_exists(case_dir / "nan.agwf.tmp"));
+
+    // v2 round-trip: mix/bass/mid/high peaks, BPM, and CUE metadata.
+    {
+        agplayer::WaveformCacheData data;
+        data.mix = {0.1F, 0.2F, 0.3F};
+        data.bass = {0.05F, 0.15F};
+        data.mid = {0.08F, 0.18F, 0.28F};
+        data.high = {0.12F};
+        data.bpm = 128.5;
+        data.cues.push_back({1200U, "Intro"});
+        data.cues.push_back({5000U, "Drop"});
+
+        const std::filesystem::path v2_cache = case_dir / "v2.agwf";
+        assert(agplayer::WaveformCache::save_v2(v2_cache, source_path, data));
+
+        agplayer::WaveformCacheData loaded_v2;
+        assert(agplayer::WaveformCache::load_v2(v2_cache, source_path, loaded_v2));
+        assert(loaded_v2.mix == data.mix);
+        assert(loaded_v2.bass == data.bass);
+        assert(loaded_v2.mid == data.mid);
+        assert(loaded_v2.high == data.high);
+        assert(std::fabs(loaded_v2.bpm - data.bpm) < 1e-9);
+        assert(loaded_v2.cues.size() == data.cues.size());
+        for (std::size_t i = 0U; i < data.cues.size(); ++i) {
+            assert(loaded_v2.cues[i].position_ms == data.cues[i].position_ms);
+            assert(loaded_v2.cues[i].label == data.cues[i].label);
+        }
+    }
+
+    // v2 with missing layers: empty bass/mid/high are preserved.
+    {
+        agplayer::WaveformCacheData data;
+        data.mix = {0.5F, 0.6F};
+
+        const std::filesystem::path v2_sparse = case_dir / "v2-sparse.agwf";
+        assert(agplayer::WaveformCache::save_v2(v2_sparse, source_path, data));
+
+        agplayer::WaveformCacheData loaded_v2;
+        assert(agplayer::WaveformCache::load_v2(v2_sparse, source_path, loaded_v2));
+        assert(loaded_v2.mix == data.mix);
+        assert(loaded_v2.bass.empty());
+        assert(loaded_v2.mid.empty());
+        assert(loaded_v2.high.empty());
+        assert(loaded_v2.bpm == 0.0);
+        assert(loaded_v2.cues.empty());
+    }
+
+    // Corrupted v2 cache is rejected.
+    {
+        agplayer::WaveformCacheData data;
+        data.mix = {0.1F};
+        data.bass = {0.2F};
+
+        const std::filesystem::path v2_bad = case_dir / "v2-corrupt.agwf";
+        assert(agplayer::WaveformCache::save_v2(v2_bad, source_path, data));
+        robust_resize(v2_bad, 88U);
+
+        agplayer::WaveformCacheData loaded_v2;
+        assert(!agplayer::WaveformCache::load_v2(v2_bad, source_path, loaded_v2));
+        assert(loaded_v2.mix.empty() && loaded_v2.bass.empty());
+    }
+
+    // C API layer helpers: analyze produces only the mix layer.
+    {
+        ag_waveform* waveform = nullptr;
+        const ag_result result = ag_waveform_analyze(
+            source_path.string().c_str(), 8U, nullptr, nullptr, nullptr,
+            &waveform);
+        assert(result == AG_OK);
+        assert(waveform != nullptr);
+        assert(ag_waveform_count(waveform) == 8U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MIX) == 8U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS) == 0U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID) == 0U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH) == 0U);
+        assert(ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, 0U)
+               == 0.0F);
+        assert(ag_waveform_bpm(waveform) == 0.0);
+        ag_waveform_destroy(waveform);
+    }
 
     // The read-only-file rejection test is POSIX-only. On Windows,
     // MoveFileExW(MOVEFILE_REPLACE_EXISTING) - used by atomic_replace() - can
