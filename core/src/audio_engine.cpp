@@ -699,7 +699,8 @@ private:
                             * static_cast<std::size_t>(channels_),
                         block.frames - frame_offset);
                     frame_offset += written;
-                    produced_frames_total_ += static_cast<std::int64_t>(written);
+                    produced_frames_total_.fetch_add(static_cast<std::int64_t>(written),
+                                                     std::memory_order_relaxed);
                     if (written == 0U) {
                         // Ring buffer full. Wait on the seek CV so that a
                         // seek request can wake us immediately instead of
@@ -778,8 +779,9 @@ private:
                 if (transition_result != AG_OK) {
                     pending_transition_error_.store(transition_result,
                                                     std::memory_order_relaxed);
-                    pending_boundary_frame_.store(produced_frames_total_,
-                                                  std::memory_order_release);
+                    pending_boundary_frame_.store(
+                        produced_frames_total_.load(std::memory_order_relaxed),
+                        std::memory_order_release);
                     publish_pending_transition(
                         rendered_frames_total_.load(std::memory_order_acquire));
                     decode_eof_.store(true, std::memory_order_release);
@@ -791,8 +793,9 @@ private:
                 pending_track_index_.store(next_index, std::memory_order_relaxed);
                 pending_duration_ms_.store(decoder_.metadata().duration_ms,
                                            std::memory_order_relaxed);
-                pending_boundary_frame_.store(produced_frames_total_,
-                                              std::memory_order_release);
+                pending_boundary_frame_.store(
+                    produced_frames_total_.load(std::memory_order_relaxed),
+                    std::memory_order_release);
                 decode_track_index_ = next_index;
                 decode_eof_.store(false, std::memory_order_release);
                 block = {};
@@ -900,7 +903,7 @@ private:
     {
         rendered_frames_total_.store(position_frames, std::memory_order_release);
         track_start_frame_.store(0, std::memory_order_release);
-        produced_frames_total_ = position_frames;
+        produced_frames_total_.store(position_frames, std::memory_order_release);
         pending_boundary_frame_.store(no_pending_boundary,
                                       std::memory_order_release);
         pending_transition_error_.store(AG_OK, std::memory_order_release);
@@ -997,7 +1000,7 @@ private:
     std::atomic<ag_result> terminal_error_{AG_OK};
     std::atomic<std::int64_t> rendered_frames_total_{0};
     std::atomic<std::int64_t> track_start_frame_{0};
-    std::int64_t produced_frames_total_ = 0;
+    std::atomic<std::int64_t> produced_frames_total_{0};
     std::atomic<std::int64_t> pending_boundary_frame_{no_pending_boundary};
     std::atomic<ag_result> pending_transition_error_{AG_OK};
     std::atomic<std::size_t> pending_track_index_{0U};
