@@ -4,6 +4,8 @@ add_library(agplayer_core STATIC
     src/core_context.cpp
     src/decoder.cpp
     src/light_editor.cpp
+    src/multitrack_editor.cpp
+    src/multitrack_editor.hpp
     src/metadata_writer.cpp
     src/pitch_shifter.cpp
     src/playback_session.cpp

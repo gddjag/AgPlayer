@@ -5,6 +5,7 @@
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
 #include "light_editor.hpp"
+#include "multitrack_editor.hpp"
 #include "transcoder.hpp"
 #include "bpm_analyzer.hpp"
 #include "waveform_analyzer.hpp"
@@ -708,16 +709,37 @@ ag_result ag_multitrack_edit(const size_t track_count,
         return AG_INVALID_ARGUMENT;
     }
 
-    (void)input_paths;
-    (void)trim_start_ms;
-    (void)trim_end_ms;
-    (void)fade_in_ms;
-    (void)fade_out_ms;
-    (void)gain;
-    (void)cancel_token;
-    (void)progress_callback;
-    (void)user_data;
+    try {
+        agplayer::MultiTrackEditConfig config;
+        config.output_path = output_path;
+        config.tracks.reserve(track_count);
+        for (size_t i = 0; i < track_count; ++i) {
+            agplayer::MultiTrackEditConfig::Track track;
+            if (input_paths != nullptr && input_paths[i] != nullptr) {
+                track.input_path = input_paths[i];
+            }
+            if (trim_start_ms != nullptr) track.trim_start_ms = trim_start_ms[i];
+            if (trim_end_ms != nullptr) track.trim_end_ms = trim_end_ms[i];
+            if (fade_in_ms != nullptr) track.fade_in_ms = fade_in_ms[i];
+            if (fade_out_ms != nullptr) track.fade_out_ms = fade_out_ms[i];
+            if (gain != nullptr) track.gain = gain[i];
+            config.tracks.push_back(std::move(track));
+        }
 
-    // TODO: delegate to agplayer::multitrack_edit in Task 6.
-    return AG_UNSUPPORTED_FORMAT;
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+
+        std::function<void(float)> cb;
+        if (progress_callback != nullptr) {
+            cb = [progress_callback, user_data](float frac) {
+                progress_callback(frac, user_data);
+            };
+        }
+
+        std::string error;
+        return agplayer::multitrack_edit(config, cancelled, std::move(cb),
+                                         error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
 }
