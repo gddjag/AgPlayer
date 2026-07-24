@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include "pitch_shifter.hpp"
 
 extern "C" {
@@ -28,6 +29,53 @@ double hann(int n, int N) noexcept
 {
     return 0.5 * (1.0 - std::cos(2.0 * 3.14159265358979323846 * n / (N - 1)));
 }
+
+// Simple first-order low-pass or high-pass filter for vocal formant compensation.
+class FirstOrderFilter {
+public:
+    enum class Type { LowPass, HighPass };
+
+    FirstOrderFilter(Type type, double cutoff_hz, double sample_rate) noexcept
+    {
+        const double omega = 2.0 * M_PI * cutoff_hz / sample_rate;
+        const double cos_omega = std::cos(omega);
+        const double sin_omega = std::sin(omega);
+        const double alpha = sin_omega / (2.0 * 0.707); // Q = 0.707 for gentle slope
+
+        if (type == Type::LowPass) {
+            b0_ = (1.0 - cos_omega) / 2.0;
+            b1_ = 1.0 - cos_omega;
+            b2_ = (1.0 - cos_omega) / 2.0;
+        } else {
+            b0_ = (1.0 + cos_omega) / 2.0;
+            b1_ = -(1.0 + cos_omega);
+            b2_ = (1.0 + cos_omega) / 2.0;
+        }
+        a0_ = 1.0 + alpha;
+        a1_ = -2.0 * cos_omega;
+        a2_ = 1.0 - alpha;
+
+        b0_ /= a0_; b1_ /= a0_; b2_ /= a0_;
+        a1_ /= a0_; a2_ /= a0_; a0_ = 1.0;
+    }
+
+    float process(float input) noexcept
+    {
+        const double output = b0_ * input + b1_ * x1_ + b2_ * x2_
+                              - a1_ * y1_ - a2_ * y2_;
+        x2_ = x1_;
+        x1_ = input;
+        y2_ = y1_;
+        y1_ = output;
+        return static_cast<float>(output);
+    }
+
+private:
+    double b0_ = 0.0, b1_ = 0.0, b2_ = 0.0;
+    double a1_ = 0.0, a2_ = 0.0, a0_ = 1.0;
+    double x1_ = 0.0, x2_ = 0.0;
+    double y1_ = 0.0, y2_ = 0.0;
+};
 
 // OLA (Overlap-Add) time-stretch for a single channel of float samples.
 // stretch_factor > 1: stretch (longer), < 1: compress (shorter).
@@ -411,6 +459,41 @@ ag_result pitch_shift(const std::string& input_path,
             stretch_factor);
     }
 
+    // For keep_tempo: encode at original rate R (so pitch is shifted by
+    // pitch_ratio, since the audio was resampled to R/pitch_ratio)
+    // For non-keep_tempo: encode at R*pitch_ratio (pitch and tempo shift
+    // together)
+    int enc_sample_rate;
+    if (config.keep_tempo) {
+        enc_sample_rate = dec.ctx->sample_rate;
+    } else {
+        enc_sample_rate = static_cast<int>(
+            std::round(dec.ctx->sample_rate * pitch_ratio));
+        if (enc_sample_rate < 1) enc_sample_rate = 1;
+    }
+
+    if (config.vocal_protection) {
+        if (pitch_ratio > 1.0) {
+            // Pitch up: reduce excessive brightness with gentle low-pass.
+            const double cutoff = 8000.0 / pitch_ratio;
+            FirstOrderFilter lp(FirstOrderFilter::Type::LowPass, cutoff, enc_sample_rate);
+            for (int ch = 0; ch < channels; ++ch) {
+                for (float& sample : stretched[ch]) {
+                    sample = lp.process(sample);
+                }
+            }
+        } else if (pitch_ratio < 1.0) {
+            // Pitch down: reduce muffled sound with gentle high-pass.
+            const double cutoff = 80.0 * pitch_ratio;
+            FirstOrderFilter hp(FirstOrderFilter::Type::HighPass, cutoff, enc_sample_rate);
+            for (int ch = 0; ch < channels; ++ch) {
+                for (float& sample : stretched[ch]) {
+                    sample = hp.process(sample);
+                }
+            }
+        }
+    }
+
     if (progress_callback) progress_callback(0.7f);
 
     // 5. Set up encoder: same codec as input unless a specific codec is requested
@@ -441,19 +524,6 @@ ag_result pitch_shift(const std::string& input_path,
         avformat_free_context(out_fmt);
         error = "Failed to allocate encoder context";
         return AG_INTERNAL_ERROR;
-    }
-
-    // For keep_tempo: encode at original rate R (so pitch is shifted by
-    // pitch_ratio, since the audio was resampled to R/pitch_ratio)
-    // For non-keep_tempo: encode at R*pitch_ratio (pitch and tempo shift
-    // together)
-    int enc_sample_rate;
-    if (config.keep_tempo) {
-        enc_sample_rate = dec.ctx->sample_rate;
-    } else {
-        enc_sample_rate = static_cast<int>(
-            std::round(dec.ctx->sample_rate * pitch_ratio));
-        if (enc_sample_rate < 1) enc_sample_rate = 1;
     }
 
     // If a specific output sample rate is requested, the stretched audio is
