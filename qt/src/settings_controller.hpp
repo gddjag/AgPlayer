@@ -5,6 +5,10 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
+
+class FileAssociationController;
+
 class SettingsController final : public QObject {
     Q_OBJECT
 
@@ -104,6 +108,7 @@ class SettingsController final : public QObject {
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
+    ~SettingsController();
 
     // General getters
     bool autoStartWithWindows() const noexcept;
@@ -228,6 +233,7 @@ public:
     Q_INVOKABLE void openOfficialWebsite();
 
 signals:
+    void updateCheckFinished(const QString& message, bool success);
     void autoStartWithWindowsChanged();
     void restoreLastPlaybackOnStartupChanged();
     void showListWindowPanelChanged();
@@ -289,6 +295,9 @@ private:
     static QString validatedLanguage(const QString& value);
 
     QSettings settings_;
+    std::unique_ptr<FileAssociationController> fileAssociationController_;
+
+    void applyFileAssociations();
 
     // General
     bool autoStartWithWindows_ = false;

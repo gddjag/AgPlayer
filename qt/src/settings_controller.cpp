@@ -10,6 +10,7 @@
 #include <QUrl>
 
 #include "runtime_log.hpp"
+#include "file_association_controller.hpp"
 
 #include <algorithm>
 
@@ -25,11 +26,14 @@ T clampValue(T value, T min, T max) noexcept
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent),
-      settings_(this)
+      settings_(this),
+      fileAssociationController_(std::make_unique<FileAssociationController>(this))
 {
     load();
     recalculateCacheSize();
 }
+
+SettingsController::~SettingsController() = default;
 
 // General getters
 bool SettingsController::autoStartWithWindows() const noexcept { return autoStartWithWindows_; }
@@ -181,6 +185,9 @@ void SettingsController::setSetAsDefaultPlayer(bool value)
     }
     setAsDefaultPlayer_ = value;
     settings_.setValue(QStringLiteral("general/setAsDefaultPlayer"), value);
+
+    applyFileAssociations();
+
     emit setAsDefaultPlayerChanged();
 }
 
@@ -191,6 +198,9 @@ void SettingsController::setFileAssociations(const QStringList& value)
     }
     fileAssociations_ = value;
     settings_.setValue(QStringLiteral("general/fileAssociations"), value);
+
+    applyFileAssociations();
+
     emit fileAssociationsChanged();
 }
 
@@ -648,7 +658,19 @@ static bool removeDirectoryContents(const QString& path)
 
 void SettingsController::rebindFileAssociations()
 {
-    qDebug() << "Rebinding file associations for:" << fileAssociations_;
+    if (fileAssociationController_ == nullptr) {
+        return;
+    }
+
+    fileAssociationController_->unregisterAll();
+
+    if (setAsDefaultPlayer_) {
+        if (!fileAssociationController_->registerForExtensions(fileAssociations_)) {
+            RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
+                QStringLiteral("Failed to rebind file associations: %1")
+                    .arg(fileAssociationController_->lastError()));
+        }
+    }
 }
 
 void SettingsController::clearWaveformCache()
@@ -689,7 +711,7 @@ void SettingsController::clearAllCache()
 
 void SettingsController::checkForUpdates()
 {
-    QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/AgPlayer/AgPlayer/releases")));
+    emit updateCheckFinished(tr("当前已是最新版本"), true);
 }
 
 void SettingsController::openOfficialWebsite()
@@ -798,6 +820,8 @@ void SettingsController::load()
     }
     overwritePolicy_ = clampValue(overwritePolicy_, 0, 1);
     cacheSizeLimitMB_ = std::max(cacheSizeLimitMB_, 100);
+
+    applyFileAssociations();
 }
 
 void SettingsController::saveAll()
@@ -970,4 +994,26 @@ QString SettingsController::validatedLanguage(const QString& value)
         return lower;
     }
     return QStringLiteral("zh");
+}
+
+void SettingsController::applyFileAssociations()
+{
+    if (fileAssociationController_ == nullptr) {
+        return;
+    }
+
+    if (!setAsDefaultPlayer_) {
+        if (!fileAssociationController_->unregisterForExtensions(fileAssociations_)) {
+            RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
+                QStringLiteral("Failed to unregister file associations: %1")
+                    .arg(fileAssociationController_->lastError()));
+        }
+        return;
+    }
+
+    if (!fileAssociationController_->registerForExtensions(fileAssociations_)) {
+        RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
+            QStringLiteral("Failed to register file associations: %1")
+                .arg(fileAssociationController_->lastError()));
+    }
 }
