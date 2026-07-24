@@ -309,7 +309,7 @@ int main(int argc, char* argv[])
                     miniWin->show();
                 }
             }
-            if (qaErrorCode == 0 && (wantScreenshotMain || wantScreenshotMini)) {
+            if (wantScreenshotMain || wantScreenshotMini) {
                 QWindow* const targetWindow = wantScreenshotMain
                     ? qobject_cast<QWindow*>(mainWindow)
                     : qobject_cast<QWindow*>(miniWindow);
