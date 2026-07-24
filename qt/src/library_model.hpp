@@ -65,6 +65,7 @@ public:
     void replaceAll(QList<TrackRecord> tracks);
     const QList<TrackRecord>& tracks() const noexcept;
     bool containsPath(const QString& path) const;
+    int indexForLocalFile(const QString& localFilePath) const;
 
     Q_INVOKABLE bool setFavorite(int row, bool favorite);
     Q_INVOKABLE void playRow(int row);

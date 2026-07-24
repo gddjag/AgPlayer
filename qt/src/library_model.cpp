@@ -181,6 +181,25 @@ bool LibraryModel::containsPath(const QString& path) const
     return pathKeys_.contains(pathKey(path));
 }
 
+int LibraryModel::indexForLocalFile(const QString& localFilePath) const
+{
+    const QFileInfo targetInfo(localFilePath);
+    const QString canonicalTarget = targetInfo.canonicalFilePath();
+
+    for (int i = 0; i < static_cast<int>(tracks_.size()); ++i) {
+        if (tracks_[i].path == localFilePath) {
+            return i;
+        }
+        if (!canonicalTarget.isEmpty()) {
+            const QFileInfo candidateInfo(tracks_[i].path);
+            if (candidateInfo.canonicalFilePath() == canonicalTarget) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
 bool LibraryModel::setFavorite(int row, bool favorite)
 {
     if (row < 0 || row >= tracks_.size()) {
