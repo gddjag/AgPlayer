@@ -282,6 +282,7 @@ foreach(qt_test IN ITEMS
     shutdown_test
     runtime_log_test
     settings_controller_test
+    file_association_controller_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)

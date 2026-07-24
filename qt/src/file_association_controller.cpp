@@ -133,7 +133,32 @@ bool FileAssociationController::unregisterAll()
     lastError_.clear();
 
 #ifdef Q_OS_WIN
-    const QStringList extensions = supportedAudioExtensions();
+    // Remove every extension currently associated with our ProgID, not just
+    // the built-in supported audio extensions.
+    const QString classesPath = QStringLiteral("Software\\Classes");
+    const std::wstring classesPathW = classesPath.toStdWString();
+    HKEY classesKey = nullptr;
+    QStringList extensionsToRemove;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, classesPathW.c_str(), 0, KEY_READ, &classesKey)
+        == ERROR_SUCCESS) {
+        DWORD index = 0;
+        wchar_t subKeyName[256] = {};
+        DWORD subKeyNameSize = 256;
+        while (RegEnumKeyExW(classesKey, index, subKeyName, &subKeyNameSize,
+                             nullptr, nullptr, nullptr, nullptr)
+               == ERROR_SUCCESS) {
+            const QString subKey = QString::fromWCharArray(subKeyName, static_cast<int>(subKeyNameSize));
+            if (subKey.startsWith('.')) {
+                extensionsToRemove.append(subKey.mid(1));
+            }
+            subKeyNameSize = 256;
+            ++index;
+        }
+        RegCloseKey(classesKey);
+    }
+
+    // Always cover the supported built-ins as well in case enumeration missed any.
+    const QStringList extensions = extensionsToRemove + supportedAudioExtensions();
     for (const QString& ext : extensions) {
         removeExtension(ext);
     }
