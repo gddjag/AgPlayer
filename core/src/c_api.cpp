@@ -419,9 +419,13 @@ ag_result ag_metadata_write(const char* utf8_path,
         if (year != nullptr) update.year = year;
         if (genre != nullptr) update.genre = genre;
         if (lyrics != nullptr) update.lyrics = lyrics;
-        update.cover_data = cover_data;
-        update.cover_size = cover_size;
-        if (cover_mime_type != nullptr) update.cover_mime_type = cover_mime_type;
+        if (cover_size > 0U && cover_data != nullptr) {
+            update.cover_data = cover_data;
+            update.cover_size = cover_size;
+            if (cover_mime_type != nullptr) {
+                update.cover_mime_type = cover_mime_type;
+            }
+        }
         std::string error;
         return agplayer::write_metadata(utf8_path, update, error);
     } catch (...) {

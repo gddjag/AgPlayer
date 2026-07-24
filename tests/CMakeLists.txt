@@ -217,6 +217,21 @@ set_tests_properties(light_editor_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(metadata_writer_test
+    core/metadata_writer_test.cpp
+)
+add_dependencies(metadata_writer_test decoder_fixture)
+target_link_libraries(metadata_writer_test PRIVATE agplayer_core)
+
+agplayer_enable_warnings(metadata_writer_test)
+
+add_test(NAME metadata_writer_test COMMAND metadata_writer_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(metadata_writer_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(queue_gapless_test
     core/queue_gapless_test.cpp
 )
