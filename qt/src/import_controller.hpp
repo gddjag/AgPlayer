@@ -23,6 +23,8 @@ struct ProbeResult {
 
 using ProbeFunction = std::function<ProbeResult(const QString&)>;
 
+ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
+
 class ImportController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)

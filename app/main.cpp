@@ -109,7 +109,11 @@ int main(int argc, char* argv[])
         }
 
         PlaybackController playback(core, &library);
-        ImportController importer(&library);
+        SettingsController settings;
+        const bool autoReadBpm = settings.autoReadBpm();
+        ImportController importer(&library, [autoReadBpm](const QString& path) {
+            return probeMetadata(path, autoReadBpm);
+        });
         WindowController windows;
         AudioToolsController audioTools;
         MetadataEditor metadataEditor;
@@ -117,7 +121,6 @@ int main(int argc, char* argv[])
         PitchShifter pitchShifter;
         SpeedAdjuster speedAdjuster;
         LightEditor lightEditor;
-        SettingsController settings;
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,

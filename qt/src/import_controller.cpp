@@ -1,5 +1,7 @@
 #include "import_controller.hpp"
 
+#include "bpm_analyzer.hpp"
+
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QDir>
@@ -91,7 +93,45 @@ QUrl cacheCover(const QByteArray& bytes, const QString& mimeType)
     return QUrl::fromLocalFile(coverPath);
 }
 
-ProbeResult probeMetadata(const QString& requestedPath)
+QString deduplicationKey(const QString& path)
+{
+    const QString canonical = canonicalLibraryPath(path);
+#ifdef Q_OS_WIN
+    return canonical.toCaseFolded();
+#else
+    return canonical;
+#endif
+}
+
+template<typename Function>
+void postToController(const std::shared_ptr<ImportCallbackState>& state, Function function)
+{
+    std::lock_guard<std::mutex> lock(state->mutex);
+    ImportController* const controller = state->controller;
+    if (controller == nullptr) {
+        return;
+    }
+    QMetaObject::invokeMethod(
+        controller,
+        [controller, function = std::move(function)]() mutable { function(controller); },
+        Qt::QueuedConnection);
+}
+
+bool isCancelled(const std::shared_ptr<ImportCallbackState>& state)
+{
+    return state->cancelled != nullptr
+           && state->cancelled->load(std::memory_order_relaxed);
+}
+
+void markCancelled(const std::shared_ptr<ImportCallbackState>& state, bool value)
+{
+    if (state->cancelled != nullptr) {
+        state->cancelled->store(value, std::memory_order_release);
+    }
+}
+}
+
+ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
 {
     const QString path = canonicalLibraryPath(requestedPath);
     const QByteArray utf8Path = path.toUtf8();
@@ -132,49 +172,17 @@ ProbeResult probeMetadata(const QString& requestedPath)
     track.available = file.isFile();
     track.trackId = trackIdForPath(path);
     track.coverUrl = cacheCover(coverBytes, mimeType);
+    if (analyzeBpm) {
+        const BpmAnalyzeResult bpm = analyze_bpm(path);
+        track.bpm = bpm.bpm;
+    }
     return {AG_OK, std::move(track), {}};
 }
 
-QString deduplicationKey(const QString& path)
-{
-    const QString canonical = canonicalLibraryPath(path);
-#ifdef Q_OS_WIN
-    return canonical.toCaseFolded();
-#else
-    return canonical;
-#endif
-}
-
-template<typename Function>
-void postToController(const std::shared_ptr<ImportCallbackState>& state, Function function)
-{
-    std::lock_guard<std::mutex> lock(state->mutex);
-    ImportController* const controller = state->controller;
-    if (controller == nullptr) {
-        return;
-    }
-    QMetaObject::invokeMethod(
-        controller,
-        [controller, function = std::move(function)]() mutable { function(controller); },
-        Qt::QueuedConnection);
-}
-
-bool isCancelled(const std::shared_ptr<ImportCallbackState>& state)
-{
-    return state->cancelled != nullptr
-           && state->cancelled->load(std::memory_order_relaxed);
-}
-
-void markCancelled(const std::shared_ptr<ImportCallbackState>& state, bool value)
-{
-    if (state->cancelled != nullptr) {
-        state->cancelled->store(value, std::memory_order_release);
-    }
-}
-}
-
 ImportController::ImportController(LibraryModel* model, QObject* parent)
-    : ImportController(model, probeMetadata, parent)
+    : ImportController(model, [](const QString& path) {
+          return probeMetadata(path, false);
+      }, parent)
 {
 }
 
