@@ -274,6 +274,13 @@ ag_result transcode(const std::string& input_path,
         error = "Output path is empty";
         return AG_INVALID_ARGUMENT;
     }
+    std::error_code path_ec;
+    if (std::filesystem::equivalent(input_path, config.output_path, path_ec) ||
+        std::filesystem::canonical(input_path, path_ec)
+            == std::filesystem::canonical(config.output_path, path_ec)) {
+        error = "Input and output path must be different";
+        return AG_INVALID_ARGUMENT;
+    }
 
     DecoderState dec;
     ag_result r = open_decoder(input_path, dec, error);

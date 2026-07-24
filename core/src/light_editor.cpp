@@ -119,6 +119,13 @@ ag_result light_edit(const std::string& input_path,
         error = "Output path is empty";
         return AG_INVALID_ARGUMENT;
     }
+    std::error_code path_ec;
+    if (std::filesystem::equivalent(input_path, config.output_path, path_ec) ||
+        std::filesystem::canonical(input_path, path_ec)
+            == std::filesystem::canonical(config.output_path, path_ec)) {
+        error = "Input and output path must be different";
+        return AG_INVALID_ARGUMENT;
+    }
     if (config.gain < 0.0 || config.gain > 4.0) {
         error = "Gain out of range (0.0..4.0)";
         return AG_INVALID_ARGUMENT;

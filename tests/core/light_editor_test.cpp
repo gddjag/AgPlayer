@@ -81,6 +81,29 @@ int main(const int argc, char** argv)
     assert(result != AG_OK);
     assert(!std::filesystem::exists(failure_output));
 
+    // Invalid argument: input and output paths must differ.
+    const std::filesystem::path collision_path =
+        input_path.parent_path() / "light-editor-collision.wav";
+    std::filesystem::remove(collision_path);
+    std::filesystem::copy_file(input_path, collision_path);
+
+    agplayer::LightEditConfig collision_config;
+    collision_config.trim_start_ms = 0;
+    collision_config.trim_end_ms = 0;
+    collision_config.fade_in_ms = 0;
+    collision_config.fade_out_ms = 0;
+    collision_config.gain = 1.0;
+    collision_config.output_path = collision_path.string();
+    error.clear();
+    result = agplayer::light_edit(collision_path.string(), collision_config,
+                                  nullptr, nullptr, error);
+    if (result != AG_INVALID_ARGUMENT) {
+        std::cerr << "expected AG_INVALID_ARGUMENT for input/output collision, got "
+                  << static_cast<int>(result) << " " << error << "\n";
+    }
+    assert(result == AG_INVALID_ARGUMENT);
+    std::filesystem::remove(collision_path);
+
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
     return 0;

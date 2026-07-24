@@ -73,6 +73,25 @@ int main(const int argc, char** argv)
     assert(result != AG_OK);
     assert(!std::filesystem::exists(failure_output));
 
+    // Invalid argument: input and output paths must differ.
+    const std::filesystem::path collision_path =
+        input_path.parent_path() / "transcoder-collision.wav";
+    std::filesystem::remove(collision_path);
+    std::filesystem::copy_file(input_path, collision_path);
+
+    agplayer::TranscodeConfig collision_config;
+    collision_config.output_path = collision_path.string();
+    collision_config.codec_name = "pcm_s16le";
+    error.clear();
+    result = agplayer::transcode(collision_path.string(), collision_config,
+                                 nullptr, nullptr, error);
+    if (result != AG_INVALID_ARGUMENT) {
+        std::cerr << "expected AG_INVALID_ARGUMENT for input/output collision, got "
+                  << static_cast<int>(result) << " " << error << "\n";
+    }
+    assert(result == AG_INVALID_ARGUMENT);
+    std::filesystem::remove(collision_path);
+
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
     return 0;
