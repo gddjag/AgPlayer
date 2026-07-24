@@ -12,6 +12,8 @@ namespace agplayer {
 // via its file extension (e.g. .mp3, .wav, .flac, .m4a, .ogg, .opus).
 // codec_name empty = auto-select encoder for the container.
 // bit_rate 0 = codec default. sample_rate 0 = keep source. channels 0 = keep source.
+// volume_normalize enables a two-pass peak scan that scales the output so the
+// loudest sample reaches -1 dBFS (0.8913). Already-quiet files are not amplified.
 struct TranscodeConfig {
     std::string output_path;
     std::string codec_name;

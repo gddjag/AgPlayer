@@ -132,6 +132,7 @@ ag_result open_encoder(const std::string& output_path,
                        const DecoderState& d,
                        const TranscodeConfig& config,
                        EncoderState& enc,
+                       AVSampleFormat in_sample_fmt,
                        std::string& error)
 {
     // Output format guessed from file extension.
@@ -209,7 +210,7 @@ ag_result open_encoder(const std::string& output_path,
     av_opt_set_chlayout(swr, "out_chlayout", &out_ch_layout_copy, 0);
     av_opt_set_int(swr, "in_sample_rate", d.ctx->sample_rate, 0);
     av_opt_set_int(swr, "out_sample_rate", enc.ctx->sample_rate, 0);
-    av_opt_set_sample_fmt(swr, "in_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
+    av_opt_set_sample_fmt(swr, "in_sample_fmt", in_sample_fmt, 0);
     av_opt_set_sample_fmt(swr, "out_sample_fmt", enc.ctx->sample_fmt, 0);
 
     av_channel_layout_uninit(&in_ch_layout);
@@ -304,30 +305,45 @@ double scan_peak(const std::string& input_path,
     AVFrame* in_frame = av_frame_alloc();
     AVFrame* resampled = av_frame_alloc();
 
-    while (!is_cancelled(cancelled)) {
-        const int read_ret = av_read_frame(dec.fmt_ctx, in_pkt);
-        if (read_ret == AVERROR_EOF) break;
-        if (read_ret < 0) {
-            error = "Failed to read input packet";
-            peak = -1.0;
-            break;
-        }
-        if (in_pkt->stream_index != dec.stream_index) {
-            av_packet_unref(in_pkt);
-            continue;
-        }
+    bool sent_null = false;
+    bool decoder_eof = false;
+    while (!is_cancelled(cancelled) && !decoder_eof) {
+        if (!sent_null) {
+            const int read_ret = av_read_frame(dec.fmt_ctx, in_pkt);
+            if (read_ret == AVERROR_EOF) {
+                if (avcodec_send_packet(dec.ctx, nullptr) < 0) {
+                    error = "Failed to flush decoder";
+                    peak = -1.0;
+                    break;
+                }
+                sent_null = true;
+            } else if (read_ret < 0) {
+                error = "Failed to read input packet";
+                peak = -1.0;
+                break;
+            } else {
+                if (in_pkt->stream_index != dec.stream_index) {
+                    av_packet_unref(in_pkt);
+                    continue;
+                }
 
-        if (avcodec_send_packet(dec.ctx, in_pkt) < 0) {
-            error = "Failed to send packet to decoder";
-            peak = -1.0;
-            av_packet_unref(in_pkt);
-            break;
+                if (avcodec_send_packet(dec.ctx, in_pkt) < 0) {
+                    error = "Failed to send packet to decoder";
+                    peak = -1.0;
+                    av_packet_unref(in_pkt);
+                    break;
+                }
+                av_packet_unref(in_pkt);
+            }
         }
-        av_packet_unref(in_pkt);
 
         while (true) {
             const int recv_ret = avcodec_receive_frame(dec.ctx, in_frame);
-            if (recv_ret == AVERROR(EAGAIN) || recv_ret == AVERROR_EOF) break;
+            if (recv_ret == AVERROR(EAGAIN)) break;
+            if (recv_ret == AVERROR_EOF) {
+                decoder_eof = true;
+                break;
+            }
             if (recv_ret < 0) {
                 error = "Failed to decode frame";
                 peak = -1.0;
@@ -404,8 +420,12 @@ ag_result run_transcode_pass(const std::string& input_path,
     ag_result r = open_decoder(input_path, dec, error);
     if (r != AG_OK) return r;
 
+    const bool apply_gain = (gain != 1.0);
+
     EncoderState enc;
-    r = open_encoder(config.output_path, config.codec_name, dec, config, enc, error);
+    r = open_encoder(config.output_path, config.codec_name, dec, config, enc,
+                     apply_gain ? AV_SAMPLE_FMT_FLTP : dec.ctx->sample_fmt,
+                     error);
     if (r != AG_OK) return r;
 
     // Open output file.
@@ -422,38 +442,41 @@ ag_result run_transcode_pass(const std::string& input_path,
         return AG_INTERNAL_ERROR;
     }
 
-    // Set up input -> FLTP conversion for gain application.
-    SwrContext* in_to_flt_swr = swr_alloc();
-    if (in_to_flt_swr == nullptr) {
-        error = "Failed to allocate input-to-FLTP SwrContext";
-        av_write_trailer(enc.fmt_ctx);
-        if (enc.fmt_ctx->pb != nullptr) {
-            avio_closep(&enc.fmt_ctx->pb);
+    // Set up input -> FLTP conversion only when gain is actually applied.
+    SwrContext* in_to_flt_swr = nullptr;
+    if (apply_gain) {
+        in_to_flt_swr = swr_alloc();
+        if (in_to_flt_swr == nullptr) {
+            error = "Failed to allocate input-to-FLTP SwrContext";
+            av_write_trailer(enc.fmt_ctx);
+            if (enc.fmt_ctx->pb != nullptr) {
+                avio_closep(&enc.fmt_ctx->pb);
+            }
+            std::error_code ec;
+            std::filesystem::remove(config.output_path, ec);
+            return AG_INTERNAL_ERROR;
         }
-        std::error_code ec;
-        std::filesystem::remove(config.output_path, ec);
-        return AG_INTERNAL_ERROR;
-    }
-    AVChannelLayout flt_ch_layout{};
-    av_channel_layout_copy(&flt_ch_layout, &dec.ctx->ch_layout);
-    av_opt_set_chlayout(in_to_flt_swr, "in_chlayout", &flt_ch_layout, 0);
-    av_opt_set_chlayout(in_to_flt_swr, "out_chlayout", &flt_ch_layout, 0);
-    av_opt_set_int(in_to_flt_swr, "in_sample_rate", dec.ctx->sample_rate, 0);
-    av_opt_set_int(in_to_flt_swr, "out_sample_rate", dec.ctx->sample_rate, 0);
-    av_opt_set_sample_fmt(in_to_flt_swr, "in_sample_fmt", dec.ctx->sample_fmt, 0);
-    av_opt_set_sample_fmt(in_to_flt_swr, "out_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
-    av_channel_layout_uninit(&flt_ch_layout);
+        AVChannelLayout flt_ch_layout{};
+        av_channel_layout_copy(&flt_ch_layout, &dec.ctx->ch_layout);
+        av_opt_set_chlayout(in_to_flt_swr, "in_chlayout", &flt_ch_layout, 0);
+        av_opt_set_chlayout(in_to_flt_swr, "out_chlayout", &flt_ch_layout, 0);
+        av_opt_set_int(in_to_flt_swr, "in_sample_rate", dec.ctx->sample_rate, 0);
+        av_opt_set_int(in_to_flt_swr, "out_sample_rate", dec.ctx->sample_rate, 0);
+        av_opt_set_sample_fmt(in_to_flt_swr, "in_sample_fmt", dec.ctx->sample_fmt, 0);
+        av_opt_set_sample_fmt(in_to_flt_swr, "out_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
+        av_channel_layout_uninit(&flt_ch_layout);
 
-    if (swr_init(in_to_flt_swr) < 0) {
-        swr_free(&in_to_flt_swr);
-        error = "Failed to initialize input-to-FLTP SwrContext";
-        av_write_trailer(enc.fmt_ctx);
-        if (enc.fmt_ctx->pb != nullptr) {
-            avio_closep(&enc.fmt_ctx->pb);
+        if (swr_init(in_to_flt_swr) < 0) {
+            swr_free(&in_to_flt_swr);
+            error = "Failed to initialize input-to-FLTP SwrContext";
+            av_write_trailer(enc.fmt_ctx);
+            if (enc.fmt_ctx->pb != nullptr) {
+                avio_closep(&enc.fmt_ctx->pb);
+            }
+            std::error_code ec;
+            std::filesystem::remove(config.output_path, ec);
+            return AG_INTERNAL_ERROR;
         }
-        std::error_code ec;
-        std::filesystem::remove(config.output_path, ec);
-        return AG_INTERNAL_ERROR;
     }
 
     // Estimate total duration for progress.
@@ -481,36 +504,41 @@ ag_result run_transcode_pass(const std::string& input_path,
     bool failed = false;
     int64_t out_pts = 0;
 
+    // Convert a decoded frame to the encoder's input format and encode it.
+    // In the gain path this means input -> FLTP -> gain -> output.
+    // In the no-gain path this is a single-step input -> output conversion.
     auto convert_and_encode = [&](AVFrame* frame) -> bool {
-        // Convert input frame to FLTP.
-        const int flt_samples = swr_get_out_samples(in_to_flt_swr,
-            frame->nb_samples);
-        if (flt_samples < 0) {
-            error = "swr_get_out_samples (input->FLTP) failed";
-            return false;
-        }
+        AVFrame* src_for_enc = frame;
+        int src_samples = frame->nb_samples;
 
-        av_frame_unref(flt_frame);
-        flt_frame->format = AV_SAMPLE_FMT_FLTP;
-        flt_frame->sample_rate = dec.ctx->sample_rate;
-        av_channel_layout_copy(&flt_frame->ch_layout, &dec.ctx->ch_layout);
-        flt_frame->nb_samples = flt_samples;
-        if (av_frame_get_buffer(flt_frame, 0) < 0) {
-            error = "Failed to allocate FLTP frame buffer";
-            return false;
-        }
+        if (apply_gain) {
+            const int flt_samples = swr_get_out_samples(in_to_flt_swr,
+                frame->nb_samples);
+            if (flt_samples < 0) {
+                error = "swr_get_out_samples (input->FLTP) failed";
+                return false;
+            }
 
-        const int converted_flt = swr_convert(in_to_flt_swr,
-            flt_frame->data, flt_samples,
-            (const uint8_t**)frame->data, frame->nb_samples);
-        if (converted_flt < 0) {
-            error = "swr_convert (input->FLTP) failed";
-            return false;
-        }
-        flt_frame->nb_samples = converted_flt;
+            av_frame_unref(flt_frame);
+            flt_frame->format = AV_SAMPLE_FMT_FLTP;
+            flt_frame->sample_rate = dec.ctx->sample_rate;
+            av_channel_layout_copy(&flt_frame->ch_layout, &dec.ctx->ch_layout);
+            flt_frame->nb_samples = flt_samples;
+            if (av_frame_get_buffer(flt_frame, 0) < 0) {
+                error = "Failed to allocate FLTP frame buffer";
+                return false;
+            }
 
-        // Apply volume normalization gain.
-        if (gain != 1.0) {
+            const int converted_flt = swr_convert(in_to_flt_swr,
+                flt_frame->data, flt_samples,
+                (const uint8_t**)frame->data, frame->nb_samples);
+            if (converted_flt < 0) {
+                error = "swr_convert (input->FLTP) failed";
+                return false;
+            }
+            flt_frame->nb_samples = converted_flt;
+
+            // Apply volume normalization gain.
             const int channels = dec.ctx->ch_layout.nb_channels;
             for (int ch = 0; ch < channels; ++ch) {
                 float* src = reinterpret_cast<float*>(flt_frame->data[ch]);
@@ -519,10 +547,13 @@ ag_result run_transcode_pass(const std::string& input_path,
                         static_cast<double>(src[i]) * gain);
                 }
             }
+
+            src_for_enc = flt_frame;
+            src_samples = converted_flt;
         }
 
-        // Convert FLTP to output format.
-        const int out_samples = swr_get_out_samples(enc.swr, converted_flt);
+        // Convert src_for_enc to output format.
+        const int out_samples = swr_get_out_samples(enc.swr, src_samples);
         if (out_samples < 0) {
             error = "swr_get_out_samples failed";
             return false;
@@ -541,7 +572,7 @@ ag_result run_transcode_pass(const std::string& input_path,
 
         const int converted = swr_convert(enc.swr,
             out_frame->data, out_samples,
-            (const uint8_t**)flt_frame->data, converted_flt);
+            (const uint8_t**)src_for_enc->data, src_samples);
         if (converted < 0) {
             av_frame_unref(out_frame);
             error = "swr_convert failed";
@@ -648,6 +679,132 @@ ag_result run_transcode_pass(const std::string& input_path,
         }
     }
 
+    // In the FLTP path, drain the resamplers so no trailing samples are lost.
+    if (!failed && apply_gain) {
+        // Drain input -> FLTP resampler.
+        while (true) {
+            const int pending = swr_get_out_samples(in_to_flt_swr, 0);
+            if (pending < 0) {
+                error = "swr_get_out_samples (drain input->FLTP) failed";
+                failed = true;
+                break;
+            }
+            if (pending == 0) break;
+
+            av_frame_unref(flt_frame);
+            flt_frame->format = AV_SAMPLE_FMT_FLTP;
+            flt_frame->sample_rate = dec.ctx->sample_rate;
+            av_channel_layout_copy(&flt_frame->ch_layout, &dec.ctx->ch_layout);
+            flt_frame->nb_samples = pending;
+            if (av_frame_get_buffer(flt_frame, 0) < 0) {
+                error = "Failed to allocate FLTP drain frame buffer";
+                failed = true;
+                break;
+            }
+
+            const int got = swr_convert(in_to_flt_swr,
+                flt_frame->data, pending, nullptr, 0);
+            if (got < 0) {
+                error = "swr_convert (drain input->FLTP) failed";
+                failed = true;
+                break;
+            }
+            if (got == 0) break;
+            flt_frame->nb_samples = got;
+
+            // Apply gain to drained FLTP samples.
+            const int channels = dec.ctx->ch_layout.nb_channels;
+            for (int ch = 0; ch < channels; ++ch) {
+                float* src = reinterpret_cast<float*>(flt_frame->data[ch]);
+                for (int i = 0; i < got; ++i) {
+                    src[i] = static_cast<float>(
+                        static_cast<double>(src[i]) * gain);
+                }
+            }
+
+            // Feed drained FLTP through the encoder resampler and encode.
+            const int out_samples = swr_get_out_samples(enc.swr, got);
+            if (out_samples < 0) {
+                error = "swr_get_out_samples failed";
+                failed = true;
+                break;
+            }
+
+            av_frame_unref(out_frame);
+            out_frame->format = enc.ctx->sample_fmt;
+            out_frame->sample_rate = enc.ctx->sample_rate;
+            av_channel_layout_copy(&out_frame->ch_layout, &enc.ctx->ch_layout);
+            out_frame->nb_samples = out_samples;
+            out_frame->pts = out_pts;
+            if (av_frame_get_buffer(out_frame, 0) < 0) {
+                error = "Failed to allocate output drain frame buffer";
+                failed = true;
+                break;
+            }
+
+            const int converted = swr_convert(enc.swr,
+                out_frame->data, out_samples,
+                (const uint8_t**)flt_frame->data, got);
+            if (converted < 0) {
+                av_frame_unref(out_frame);
+                error = "swr_convert failed";
+                failed = true;
+                break;
+            }
+            out_frame->nb_samples = converted;
+            out_pts += converted;
+
+            if (!encode_frame(enc.ctx, enc.fmt_ctx, out_frame, error)) {
+                av_frame_unref(out_frame);
+                failed = true;
+                break;
+            }
+            av_frame_unref(out_frame);
+        }
+
+        // Drain encoder resampler.
+        while (!failed) {
+            const int pending = swr_get_out_samples(enc.swr, 0);
+            if (pending < 0) {
+                error = "swr_get_out_samples (drain encoder) failed";
+                failed = true;
+                break;
+            }
+            if (pending == 0) break;
+
+            av_frame_unref(out_frame);
+            out_frame->format = enc.ctx->sample_fmt;
+            out_frame->sample_rate = enc.ctx->sample_rate;
+            av_channel_layout_copy(&out_frame->ch_layout, &enc.ctx->ch_layout);
+            out_frame->nb_samples = pending;
+            out_frame->pts = out_pts;
+            if (av_frame_get_buffer(out_frame, 0) < 0) {
+                error = "Failed to allocate output drain frame buffer";
+                failed = true;
+                break;
+            }
+
+            const int got = swr_convert(enc.swr,
+                out_frame->data, pending, nullptr, 0);
+            if (got < 0) {
+                av_frame_unref(out_frame);
+                error = "swr_convert (drain encoder) failed";
+                failed = true;
+                break;
+            }
+            if (got == 0) break;
+            out_frame->nb_samples = got;
+            out_pts += got;
+
+            if (!encode_frame(enc.ctx, enc.fmt_ctx, out_frame, error)) {
+                av_frame_unref(out_frame);
+                failed = true;
+                break;
+            }
+            av_frame_unref(out_frame);
+        }
+    }
+
     // Flush encoder.
     if (!failed) {
         if (!encode_frame(enc.ctx, enc.fmt_ctx, nullptr, error)) {
@@ -691,7 +848,10 @@ ag_result transcode(const std::string& input_path,
     if (config.volume_normalize) {
         const double peak = scan_peak(input_path, cancelled, error);
         if (peak < 0.0) {
-            return AG_CANCELLED;
+            if (error == "Transcode cancelled" || is_cancelled(cancelled)) {
+                return AG_CANCELLED;
+            }
+            return AG_DECODE_ERROR;
         }
         if (peak > 0.0) {
             constexpr double target_peak = 0.8913; // -1 dBFS
