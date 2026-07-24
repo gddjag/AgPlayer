@@ -300,6 +300,47 @@ int main(const int argc, char** argv)
         ag_waveform_destroy(waveform);
     }
 
+    // C API combined analysis: waveform + BPM.
+    {
+        ag_waveform* waveform = nullptr;
+        double bpm = -1.0;
+        const ag_result result = ag_track_analysis(
+            source_path.string().c_str(), 16U, nullptr, nullptr, nullptr,
+            &waveform, &bpm);
+        assert(result == AG_OK);
+        assert(waveform != nullptr);
+        assert(ag_waveform_count(waveform) == 16U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MIX) == 16U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS) == 0U);
+        assert(ag_waveform_bpm(waveform) == bpm);
+        assert(bpm > 0.0);
+        ag_waveform_destroy(waveform);
+
+        // out_bpm may be NULL.
+        waveform = nullptr;
+        const ag_result no_bpm_result = ag_track_analysis(
+            source_path.string().c_str(), 8U, nullptr, nullptr, nullptr,
+            &waveform, nullptr);
+        assert(no_bpm_result == AG_OK);
+        assert(waveform != nullptr);
+        assert(ag_waveform_count(waveform) == 8U);
+        assert(ag_waveform_bpm(waveform) > 0.0);
+        ag_waveform_destroy(waveform);
+
+        // Cancellation is honored.
+        ag_cancel_token* token = ag_cancel_token_create();
+        ag_cancel_token_cancel(token);
+        waveform = nullptr;
+        bpm = -1.0;
+        const ag_result cancelled_result = ag_track_analysis(
+            source_path.string().c_str(), 16U, token, nullptr, nullptr,
+            &waveform, &bpm);
+        assert(cancelled_result == AG_CANCELLED);
+        assert(waveform == nullptr);
+        assert(bpm == 0.0);
+        ag_cancel_token_destroy(token);
+    }
+
     // The read-only-file rejection test is POSIX-only. On Windows,
     // MoveFileExW(MOVEFILE_REPLACE_EXISTING) - used by atomic_replace() - can
     // substitute a read-only destination when the process runs with

@@ -24,9 +24,10 @@ struct WaveformCacheData final {
 
 class WaveformCache final {
 public:
+    // Version-independent cache key based on source path metadata.
+    // The cache file's version field distinguishes v1 from v2 contents.
     [[nodiscard]] static std::string key_for(
-        const std::filesystem::path& source_path,
-        std::uint32_t version = 1U);
+        const std::filesystem::path& source_path);
 
     // v1 compatibility: read/write single-layer (mix) caches.
     [[nodiscard]] static bool load(

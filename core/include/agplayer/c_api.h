@@ -240,6 +240,14 @@ float ag_waveform_layer_peak(const ag_waveform* waveform,
                              size_t index);
 double ag_waveform_bpm(const ag_waveform* waveform);
 
+/* Analyze the waveform and BPM of an audio file offline.
+ * Returns AG_OK on success and fills *out_waveform. *out_bpm is set to the
+ * detected BPM when BPM analysis succeeds; when BPM analysis fails for a
+ * non-fatal reason (e.g. file too short) the function still returns AG_OK,
+ * returns the waveform, and sets *out_bpm to 0.
+ * Returns AG_CANCELLED if cancellation is requested during either phase.
+ * Returns AG_INVALID_ARGUMENT if utf8_path is NULL/empty, target_points is 0,
+ * or out_waveform is NULL. */
 ag_result ag_track_analysis(const char* utf8_path,
                             size_t target_points,
                             const ag_cancel_token* cancel_token,

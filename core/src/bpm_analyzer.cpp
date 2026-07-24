@@ -3,6 +3,7 @@
 #include "decoder.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -111,6 +112,9 @@ ag_result analyze_bpm(const BpmAnalyzeInput& input, BpmAnalyzeOutput* out)
     if (open_result != AG_OK) {
         return open_result;
     }
+    if (input.cancelled && input.cancelled->load(std::memory_order_relaxed)) {
+        return AG_CANCELLED;
+    }
 
     std::vector<float> pcm;
     pcm.reserve(static_cast<std::size_t>(input.max_duration_seconds) * kTargetSampleRate);
@@ -119,6 +123,9 @@ ag_result analyze_bpm(const BpmAnalyzeInput& input, BpmAnalyzeOutput* out)
     const std::int64_t max_frames = static_cast<std::int64_t>(input.max_duration_seconds)
                                     * kTargetSampleRate;
     while (decoder.read(block) == AG_OK) {
+        if (input.cancelled && input.cancelled->load(std::memory_order_relaxed)) {
+            return AG_CANCELLED;
+        }
         if (block.end_of_stream) {
             break;
         }

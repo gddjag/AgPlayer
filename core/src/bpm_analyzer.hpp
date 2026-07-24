@@ -2,11 +2,15 @@
 
 #include <agplayer/c_api.h>
 
+#include <atomic>
+#include <cstddef>
+
 namespace agplayer {
 
 struct BpmAnalyzeInput {
     const char* file_path = nullptr;
     int max_duration_seconds = 90;
+    const std::atomic_bool* cancelled = nullptr;
 };
 
 struct BpmAnalyzeOutput {

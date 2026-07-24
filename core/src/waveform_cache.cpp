@@ -245,8 +245,7 @@ bool read_layer(std::istream& stream,
 } // namespace
 
 std::string WaveformCache::key_for(
-    const std::filesystem::path& source_path,
-    const std::uint32_t version)
+    const std::filesystem::path& source_path)
 {
     SourceMetadata metadata;
     if (!source_metadata(source_path, metadata)) {
@@ -261,7 +260,6 @@ std::string WaveformCache::key_for(
     hash_byte(hash, 0U);
     hash_integer(hash, metadata.size);
     hash_integer(hash, metadata.mtime_ns);
-    hash_integer(hash, version);
 
     std::ostringstream key;
     key << std::hex << std::setfill('0') << std::setw(16) << hash;
@@ -565,11 +563,28 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
             return false;
         }
 
+        const std::uint64_t payload_bytes = v2_header_size + float_bytes;
+        const std::uint64_t remaining =
+            static_cast<std::uint64_t>(file_size) - payload_bytes;
+
+        // Each cue needs at least an 8-byte position and a 1-byte label length.
+        if (cue_count > remaining / 9U) {
+            return false;
+        }
+
+        std::uint64_t cue_consumed = 0U;
         for (std::uint64_t index = 0U; index < cue_count; ++index) {
             WaveformCacheCue cue;
             std::uint8_t label_length = 0U;
-            if (!read_little_endian(input, cue.position_ms)
+            constexpr std::uint64_t cue_header_size =
+                sizeof(std::uint64_t) + sizeof(std::uint8_t);
+            if (cue_consumed + cue_header_size > remaining
+                || !read_little_endian(input, cue.position_ms)
                 || !read_little_endian(input, label_length)) {
+                return false;
+            }
+            cue_consumed += cue_header_size;
+            if (cue_consumed + label_length > remaining) {
                 return false;
             }
             if (label_length > 0U) {
@@ -580,12 +595,11 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
                     return false;
                 }
             }
+            cue_consumed += label_length;
             loaded.cues.push_back(std::move(cue));
         }
 
-        // The file must end exactly after the last cue; any trailing bytes
-        // indicate corruption.
-        if (!input || input.tellg() != static_cast<std::streamoff>(file_size)) {
+        if (cue_consumed != remaining) {
             return false;
         }
 

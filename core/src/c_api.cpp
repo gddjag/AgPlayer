@@ -764,6 +764,7 @@ ag_result ag_track_analysis(const char* utf8_path,
 
         agplayer::BpmAnalyzeInput bpm_input;
         bpm_input.file_path = utf8_path;
+        bpm_input.cancelled = cancelled;
         agplayer::BpmAnalyzeOutput bpm_output;
         const ag_result bpm_result = agplayer::analyze_bpm(bpm_input, &bpm_output);
         if (bpm_result == AG_OK) {
@@ -771,7 +772,12 @@ ag_result ag_track_analysis(const char* utf8_path,
             if (out_bpm != nullptr) {
                 *out_bpm = bpm_output.bpm;
             }
+        } else if (bpm_result == AG_CANCELLED) {
+            delete waveform;
+            return AG_CANCELLED;
         }
+        // Non-fatal BPM failures (e.g. file too short) keep the waveform and
+        // leave *out_bpm at 0.
 
         *out_waveform = waveform;
         return AG_OK;
