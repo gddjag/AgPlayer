@@ -46,8 +46,11 @@ Rgb gradientColor(double normalizedX)
 
 std::size_t computePlayedCount(std::size_t peakCount, qint64 position, qint64 duration)
 {
-    if (peakCount == 0U || duration <= 0) {
+    if (peakCount == 0U) {
         return 0U;
+    }
+    if (duration <= 0) {
+        return 1U;
     }
     const double playedFraction = std::clamp(
         static_cast<double>(position) / static_cast<double>(duration), 0.0, 1.0);
@@ -279,8 +282,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     const qreal devicePixelRatio = window() ? window()->devicePixelRatio() : 1.0;
-    const std::size_t maxPoints = static_cast<std::size_t>(
-        std::max(0.0, width() * devicePixelRatio * 2.0));
+    const std::size_t maxPoints = std::max<std::size_t>(
+        1U,
+        static_cast<std::size_t>(std::max(0.0, width() * devicePixelRatio * 2.0)));
     const std::size_t rawPeakCount = snapshot->values.size();
     const std::size_t peakCount = std::min(rawPeakCount, maxPoints);
 
@@ -361,9 +365,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     const std::size_t newPlayedCount = computePlayedCount(peakCount, position_, duration_);
-    const bool colorChanged = node->position_ != position_
-                              || node->duration_ != duration_
-                              || node->waveformColor_ != waveformColor_
+    const bool colorChanged = node->waveformColor_ != waveformColor_
                               || node->playedCount_ != newPlayedCount;
     if (!colorChanged) {
         return node;

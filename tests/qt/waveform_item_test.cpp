@@ -36,6 +36,7 @@ private slots:
     void cancelDoesNotCommitAStaleSeek();
     void downsamplesPeaksToPixelBudget();
     void reusesGeometryWhenPositionChangesWithinBucket();
+    void subPixelWidthDoesNotCrash();
 };
 
 namespace {
@@ -267,7 +268,7 @@ void WaveformItemTest::reusesGeometryWhenPositionChangesWithinBucket()
     const void* firstVertexData = geometry->vertexDataAsColoredPoint2D();
     const int firstVertexCount = geometry->vertexCount();
 
-    // Same bucket: playedCount stays at 1, so geometry and colors are untouched.
+    // Same bucket: playedCount stays at 1, so geometry is untouched and colors are rewritten with the same values.
     item.setPosition(10);
     QSGNode* sameNode = item.updatePaintNode(node, nullptr);
     QCOMPARE(sameNode, node);
@@ -294,6 +295,22 @@ void WaveformItemTest::reusesGeometryWhenPositionChangesWithinBucket()
     QCOMPARE(coloredGeometry->vertexDataAsColoredPoint2D(), firstVertexData);
     compareColor(vertices(coloredNode)[0], 255, 0, 0, 255);
 
+    delete node;
+}
+
+void WaveformItemTest::subPixelWidthDoesNotCrash()
+{
+    TestableWaveformItem item;
+    item.setWidth(0.1);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setPosition(0);
+    item.setPeaks(peaks({1.0, 1.0, 1.0, 1.0, 1.0}));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 2);
     delete node;
 }
 
