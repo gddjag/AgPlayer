@@ -107,8 +107,9 @@ ag_result analyze_bpm(const BpmAnalyzeInput& input, BpmAnalyzeOutput* out)
     *out = {0.0, 0.0};
 
     Decoder decoder;
-    if (decoder.open(input.file_path, kTargetSampleRate, 1) != AG_OK) {
-        return AG_DECODE_ERROR;
+    const ag_result open_result = decoder.open(input.file_path, kTargetSampleRate, 1);
+    if (open_result != AG_OK) {
+        return open_result;
     }
 
     std::vector<float> pcm;

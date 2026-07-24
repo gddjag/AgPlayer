@@ -16,6 +16,23 @@ set_tests_properties(dependency_smoke_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(bpm_analyzer_test
+    core/bpm_analyzer_test.cpp
+)
+set_target_properties(bpm_analyzer_test PROPERTIES AUTOMOC ON)
+target_include_directories(bpm_analyzer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+    "${CMAKE_SOURCE_DIR}/tests/core"
+)
+target_link_libraries(bpm_analyzer_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(bpm_analyzer_test)
+
+add_test(NAME bpm_analyzer_test COMMAND bpm_analyzer_test)
+set_tests_properties(bpm_analyzer_test PROPERTIES
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(c_api_lifecycle_test
     core/c_api_lifecycle_test.cpp
 )
