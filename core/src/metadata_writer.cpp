@@ -176,7 +176,10 @@ ag_result write_metadata(const std::string& utf8_path,
         av_packet_unref(pkt);
     }
 
-    av_write_trailer(out_ctx);
+    if (av_write_trailer(out_ctx) < 0) {
+        failed = true;
+        error = "Failed to write trailer";
+    }
     av_packet_free(&pkt);
 
     if (failed) {
@@ -203,6 +206,12 @@ ag_result write_metadata(const std::string& utf8_path,
         std::filesystem::remove(backup_path, ec);
         std::filesystem::copy_file(original_path, backup_path,
                                    std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec) {
+            std::error_code remove_ec;
+            std::filesystem::remove(temp_path, remove_ec);
+            error = "Failed to create backup";
+            return AG_IO_ERROR;
+        }
     }
 
     if (!atomic_replace(temp_path, utf8_path)) {
