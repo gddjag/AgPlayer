@@ -2,6 +2,7 @@
 
 #include <QHoverEvent>
 #include <QMouseEvent>
+#include <QQuickWindow>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGVertexColorMaterial>
@@ -43,6 +44,59 @@ Rgb gradientColor(double normalizedX)
             interpolate(gradientStops[lower].blue, gradientStops[upper].blue)};
 }
 
+std::size_t computePlayedCount(std::size_t peakCount, qint64 position, qint64 duration)
+{
+    if (peakCount == 0U || duration <= 0) {
+        return 0U;
+    }
+    const double playedFraction = std::clamp(
+        static_cast<double>(position) / static_cast<double>(duration), 0.0, 1.0);
+    if (peakCount == 1U) {
+        return playedFraction >= 0.5 ? 1U : 0U;
+    }
+    const double playedIndex = playedFraction * static_cast<double>(peakCount - 1U);
+    return std::min(peakCount,
+                    static_cast<std::size_t>(std::floor(playedIndex)) + 1U);
+}
+
+void updateVertexColors(QSGGeometry::ColoredPoint2D* vertices,
+                        std::size_t peakCount,
+                        std::size_t playedCount,
+                        const QColor& waveformColor)
+{
+    for (std::size_t index = 0; index < peakCount; ++index) {
+        const double normalizedX = peakCount == 1U
+                                       ? 0.5
+                                       : static_cast<double>(index)
+                                             / static_cast<double>(peakCount - 1U);
+        const auto alpha = static_cast<unsigned char>(
+            index < playedCount ? 255 : WaveformItem::unplayedAlpha());
+
+        unsigned char red = 0;
+        unsigned char green = 0;
+        unsigned char blue = 0;
+        if (waveformColor.isValid()) {
+            red = static_cast<unsigned char>(waveformColor.red());
+            green = static_cast<unsigned char>(waveformColor.green());
+            blue = static_cast<unsigned char>(waveformColor.blue());
+        } else {
+            const Rgb color = gradientColor(normalizedX);
+            red = static_cast<unsigned char>(color.red);
+            green = static_cast<unsigned char>(color.green);
+            blue = static_cast<unsigned char>(color.blue);
+        }
+
+        vertices[index * 2U].r = red;
+        vertices[index * 2U].g = green;
+        vertices[index * 2U].b = blue;
+        vertices[index * 2U].a = alpha;
+        vertices[index * 2U + 1U].r = red;
+        vertices[index * 2U + 1U].g = green;
+        vertices[index * 2U + 1U].b = blue;
+        vertices[index * 2U + 1U].a = alpha;
+    }
+}
+
 class WaveformNode final : public QSGGeometryNode {
 public:
     WaveformNode()
@@ -60,9 +114,12 @@ public:
     std::uint64_t revision_ = 0;
     qreal width_ = -1.0;
     qreal height_ = -1.0;
+    qreal devicePixelRatio_ = -1.0;
     qint64 position_ = -1;
     qint64 duration_ = -1;
     QColor waveformColor_;
+    std::size_t peakCount_ = 0;
+    std::size_t playedCount_ = 0;
 };
 
 } // namespace
@@ -221,68 +278,104 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node = new WaveformNode();
     }
 
+    const qreal devicePixelRatio = window() ? window()->devicePixelRatio() : 1.0;
+    const std::size_t maxPoints = static_cast<std::size_t>(
+        std::max(0.0, width() * devicePixelRatio * 2.0));
+    const std::size_t rawPeakCount = snapshot->values.size();
+    const std::size_t peakCount = std::min(rawPeakCount, maxPoints);
+
     const bool geometryChanged = node->revision_ != snapshot->revision
                                  || !qFuzzyCompare(node->width_, width())
-                                 || !qFuzzyCompare(node->height_, height());
-    const bool colorChanged = geometryChanged || node->position_ != position_
+                                 || !qFuzzyCompare(node->height_, height())
+                                 || !qFuzzyCompare(node->devicePixelRatio_, devicePixelRatio);
+
+    if (geometryChanged) {
+        const auto vertexCount = peakCount * 2U;
+        if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+            delete node;
+            return nullptr;
+        }
+
+        node->geometry_.allocate(static_cast<int>(vertexCount));
+        auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
+        const float center = static_cast<float>(height() * 0.5);
+        const std::size_t playedCount = computePlayedCount(peakCount, position_, duration_);
+
+        const bool downsample = rawPeakCount > maxPoints;
+        const std::size_t bucketSize = downsample ? rawPeakCount / peakCount : 0;
+        const std::size_t remainder = downsample ? rawPeakCount % peakCount : 0;
+
+        std::size_t rawIndex = 0;
+        for (std::size_t index = 0; index < peakCount; ++index) {
+            float amplitude = 0.0F;
+            if (downsample) {
+                const std::size_t extra = index < remainder ? 1U : 0U;
+                const std::size_t end = rawIndex + bucketSize + extra;
+                float bucketMax = 0.0F;
+                for (std::size_t i = rawIndex; i < end; ++i) {
+                    bucketMax = std::max(bucketMax, snapshot->values[i]);
+                }
+                amplitude = bucketMax * center;
+                rawIndex = end;
+            } else {
+                amplitude = snapshot->values[index] * center;
+            }
+
+            const double normalizedX = peakCount == 1U
+                                           ? 0.5
+                                           : static_cast<double>(index)
+                                                 / static_cast<double>(peakCount - 1U);
+            const float x = static_cast<float>(normalizedX * width());
+            const auto alpha = static_cast<unsigned char>(
+                index < playedCount ? 255 : unplayedAlpha());
+
+            unsigned char red = 0;
+            unsigned char green = 0;
+            unsigned char blue = 0;
+            if (waveformColor_.isValid()) {
+                red = static_cast<unsigned char>(waveformColor_.red());
+                green = static_cast<unsigned char>(waveformColor_.green());
+                blue = static_cast<unsigned char>(waveformColor_.blue());
+            } else {
+                const Rgb color = gradientColor(normalizedX);
+                red = static_cast<unsigned char>(color.red);
+                green = static_cast<unsigned char>(color.green);
+                blue = static_cast<unsigned char>(color.blue);
+            }
+
+            vertices[index * 2U].set(x, center - amplitude, red, green, blue, alpha);
+            vertices[index * 2U + 1U].set(x, center + amplitude, red, green, blue, alpha);
+        }
+
+        node->revision_ = snapshot->revision;
+        node->width_ = width();
+        node->height_ = height();
+        node->devicePixelRatio_ = devicePixelRatio;
+        node->position_ = position_;
+        node->duration_ = duration_;
+        node->waveformColor_ = waveformColor_;
+        node->peakCount_ = peakCount;
+        node->playedCount_ = playedCount;
+        node->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+        return node;
+    }
+
+    const std::size_t newPlayedCount = computePlayedCount(peakCount, position_, duration_);
+    const bool colorChanged = node->position_ != position_
                               || node->duration_ != duration_
-                              || node->waveformColor_ != waveformColor_;
+                              || node->waveformColor_ != waveformColor_
+                              || node->playedCount_ != newPlayedCount;
     if (!colorChanged) {
         return node;
     }
 
-    const auto peakCount = snapshot->values.size();
-    const auto vertexCount = peakCount * 2U;
-    if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-        delete node;
-        return nullptr;
-    }
-    if (geometryChanged) {
-        node->geometry_.allocate(static_cast<int>(vertexCount));
-    }
     auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
-    const float center = static_cast<float>(height() * 0.5);
-    const double playedFraction = duration_ > 0
-                                      ? std::clamp(static_cast<double>(position_)
-                                                       / static_cast<double>(duration_),
-                                                   0.0,
-                                                   1.0)
-                                      : 0.0;
-
-    for (std::size_t index = 0; index < peakCount; ++index) {
-        const double normalizedX = peakCount == 1U
-                                       ? 0.5
-                                       : static_cast<double>(index)
-                                             / static_cast<double>(peakCount - 1U);
-        const float x = static_cast<float>(normalizedX * width());
-        const float amplitude = snapshot->values[index] * center;
-        const auto alpha = static_cast<unsigned char>(
-            normalizedX <= playedFraction ? 255 : unplayedAlpha());
-
-        unsigned char red = 0;
-        unsigned char green = 0;
-        unsigned char blue = 0;
-        if (waveformColor_.isValid()) {
-            red = static_cast<unsigned char>(waveformColor_.red());
-            green = static_cast<unsigned char>(waveformColor_.green());
-            blue = static_cast<unsigned char>(waveformColor_.blue());
-        } else {
-            const Rgb color = gradientColor(normalizedX);
-            red = static_cast<unsigned char>(color.red);
-            green = static_cast<unsigned char>(color.green);
-            blue = static_cast<unsigned char>(color.blue);
-        }
-        vertices[index * 2U].set(x, center - amplitude, red, green, blue, alpha);
-        vertices[index * 2U + 1U].set(x, center + amplitude, red, green, blue, alpha);
-    }
-
-    node->revision_ = snapshot->revision;
-    node->width_ = width();
-    node->height_ = height();
+    updateVertexColors(vertices, peakCount, newPlayedCount, waveformColor_);
     node->position_ = position_;
     node->duration_ = duration_;
     node->waveformColor_ = waveformColor_;
-    node->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+    node->playedCount_ = newPlayedCount;
+    node->markDirty(QSGNode::DirtyMaterial);
     return node;
 }
 
