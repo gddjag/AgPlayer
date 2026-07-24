@@ -202,7 +202,7 @@ void SpeedAdjuster::analyzeBpm()
         return;
     }
 
-    const agplayer::BpmAnalyzeResult result = agplayer::analyze_bpm(inputPath_);
+    const BpmAnalyzeResult result = analyze_bpm(inputPath_);
     detectedBpm_ = result.bpm;
     bpmConfidence_ = result.confidence;
     targetBpm_ = detectedBpm_;
