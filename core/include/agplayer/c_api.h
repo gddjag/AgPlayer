@@ -180,6 +180,24 @@ ag_result ag_pitch_shift(const char* input_path,
                          ag_progress_callback progress_callback,
                          void* user_data);
 
+/* Extended options for ag_transcode_ex. Set unused fields to 0/NULL. */
+typedef struct ag_transcode_options {
+    int volume_normalize;    /* 1 = normalize peak to -1 dBFS before encoding */
+} ag_transcode_options;
+
+/* Transcode with extended options. Behaves like ag_transcode when options is
+ * NULL or all fields are zero. */
+ag_result ag_transcode_ex(const char* input_path,
+                          const char* output_path,
+                          const char* codec_name,
+                          long long bit_rate,
+                          int sample_rate,
+                          int channels,
+                          const ag_transcode_options* options,
+                          const ag_cancel_token* cancel_token,
+                          ag_progress_callback progress_callback,
+                          void* user_data);
+
 /* Light edit: trim + fade in/out + gain. Decodes to float32, applies edits
  * in-memory, re-encodes with the same codec as input.
  * trim_start_ms: 0 = start of file. trim_end_ms: 0 = end of file.
@@ -218,6 +236,26 @@ typedef struct ag_bpm_result {
  * Returns AG_INVALID_ARGUMENT if file_path or out is NULL.
  * Returns AG_DECODE_ERROR if the file cannot be decoded or is too short. */
 ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out);
+
+/* Multi-track non-destructive edit: mix multiple audio files with optional
+ * per-track trim/fade/gain, and render to output_path.
+ * track_count: number of tracks.
+ * input_paths: array of UTF-8 input paths. NULL or empty string = silent track.
+ * trim_start_ms / trim_end_ms / fade_in_ms / fade_out_ms / gain: per-track
+ *   arrays. Values use the same semantics as ag_light_edit. Pass NULL to use
+ *   defaults (no trim, no fade, gain=1.0).
+ * Returns AG_OK on success, AG_CANCELLED if cancelled. */
+ag_result ag_multitrack_edit(size_t track_count,
+                             const char* const* input_paths,
+                             const long long* trim_start_ms,
+                             const long long* trim_end_ms,
+                             const int* fade_in_ms,
+                             const int* fade_out_ms,
+                             const double* gain,
+                             const char* output_path,
+                             const ag_cancel_token* cancel_token,
+                             ag_progress_callback progress_callback,
+                             void* user_data);
 
 #ifdef __cplusplus
 }
