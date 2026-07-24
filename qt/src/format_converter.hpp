@@ -108,5 +108,6 @@ private:
                       int sampleRate,
                       int channels,
                       const QString& outputDir,
-                      bool keepMetadata);
+                      bool /*keepMetadata*/,
+                      bool volumeNormalize);
 };

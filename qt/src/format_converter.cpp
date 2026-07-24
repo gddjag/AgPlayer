@@ -301,6 +301,8 @@ void FormatConverter::start(const QString& outputFormat,
                             bool volumeNormalize,
                             bool extractAudio)
 {
+    Q_UNUSED(extractAudio)
+
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
@@ -315,13 +317,7 @@ void FormatConverter::start(const QString& outputFormat,
         return;
     }
 
-    // Inform the user about options that are not yet supported by the Core.
-    if (volumeNormalize) {
-        emit warningOccurred(QStringLiteral("Volume normalization is not supported yet; files will be transcoded without normalization."));
-    }
-    if (extractAudio) {
-        emit warningOccurred(QStringLiteral("Extracting audio from video is not supported yet; audio files will be transcoded normally."));
-    }
+    // keepMetadata stripping is not yet supported by the Core; metadata is preserved.
     if (!keepMetadata) {
         emit warningOccurred(QStringLiteral("Metadata stripping is not supported yet; existing metadata will be preserved."));
     }
@@ -363,8 +359,8 @@ void FormatConverter::start(const QString& outputFormat,
         });
 
     QFuture<void> future = QtConcurrent::run(
-        [this, outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata]() {
-            runTranscode(outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata);
+        [this, outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata, volumeNormalize]() {
+            runTranscode(outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata, volumeNormalize);
         });
     watcher->setFuture(future);
 }
@@ -374,7 +370,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    int sampleRate,
                                    int channels,
                                    const QString& outputDir,
-                                   bool /*keepMetadata*/)
+                                   bool /*keepMetadata*/,
+                                   bool volumeNormalize)
 {
     const FormatInfo fi = format_info(outputFormat);
     const QByteArray codecName = QByteArray(fi.codec_name);
@@ -408,13 +405,17 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         const QByteArray inputUtf8 = inputPath.toUtf8();
         const QByteArray outputUtf8 = outputPath.toUtf8();
 
-        const ag_result result = ag_transcode(
+        ag_transcode_options options{};
+        options.volume_normalize = volumeNormalize ? 1 : 0;
+
+        const ag_result result = ag_transcode_ex(
             inputUtf8.constData(),
             outputUtf8.constData(),
             codecName.isEmpty() ? nullptr : codecName.constData(),
             static_cast<long long>(bitRate),
             sampleRate,
             channels,
+            &options,
             token,
             nullptr,
             nullptr);

@@ -18,7 +18,7 @@ Rectangle {
         id: fileDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: [qsTr("Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)")]
+            nameFilters: [qsTr("Audio/Video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma *.mp4 *.mkv *.avi *.mov *.webm)")]
             onAccepted: {
                 converter.loadFiles(files)
                 destroy()
@@ -151,7 +151,9 @@ Rectangle {
                 }
 
                 Text {
-                    text: qsTr("Drop audio files here or click Add Files")
+                    text: extractAudioCheck.checked
+                          ? qsTr("Drop audio/video files here or click Add Files")
+                          : qsTr("Drop audio files here or click Add Files")
                     color: Theme.secondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: 13
@@ -159,7 +161,9 @@ Rectangle {
                 }
 
                 Text {
-                    text: qsTr("Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus")
+                    text: extractAudioCheck.checked
+                          ? qsTr("Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus / MP4 / MKV / AVI / MOV / WebM")
+                          : qsTr("Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus")
                     color: Theme.secondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: 11
