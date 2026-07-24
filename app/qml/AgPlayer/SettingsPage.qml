@@ -1523,6 +1523,21 @@ Popup {
             subtitle: "About"
         }
 
+        MessageDialog {
+            id: updateDialog
+            title: qsTr("检查更新")
+            buttons: MessageDialog.Ok
+            text: ""
+        }
+
+        Connections {
+            target: SettingsController
+            function onUpdateCheckFinished(message, success) {
+                updateDialog.text = message
+                updateDialog.open()
+            }
+        }
+
         SettingCard {
             title: ""
             Layout.fillWidth: true
