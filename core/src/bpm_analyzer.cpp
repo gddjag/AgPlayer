@@ -6,7 +6,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <numeric>
 #include <vector>
 
@@ -102,6 +101,9 @@ ag_result analyze_bpm(const BpmAnalyzeInput& input, BpmAnalyzeOutput* out)
     if (out == nullptr || input.file_path == nullptr || input.file_path[0] == '\0') {
         return AG_INVALID_ARGUMENT;
     }
+    if (input.max_duration_seconds <= 0) {
+        return AG_INVALID_ARGUMENT;
+    }
     *out = {0.0, 0.0};
 
     Decoder decoder;
@@ -172,7 +174,7 @@ ag_result analyze_bpm(const BpmAnalyzeInput& input, BpmAnalyzeOutput* out)
         const double y2 = ac[best_lag + 1];
         const double denom = 2.0 * (2.0 * y1 - y0 - y2);
         if (denom != 0.0) {
-            interpolated_lag += (y0 - y2) / denom;
+            interpolated_lag += (y2 - y0) / denom;
         }
     }
 
