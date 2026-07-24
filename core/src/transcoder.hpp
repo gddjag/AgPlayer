@@ -18,6 +18,7 @@ struct TranscodeConfig {
     long long bit_rate = 0;
     int sample_rate = 0;
     int channels = 0;
+    bool volume_normalize = false;
 };
 
 // Transcode a single audio file. progress_callback receives a fraction in
