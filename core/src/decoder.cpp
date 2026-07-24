@@ -554,11 +554,10 @@ private:
                 static_cast<std::size_t>(output_channels_);
             const std::size_t samples_to_skip =
                 static_cast<std::size_t>(frames_to_skip) * channels;
-            std::move(block.samples.begin() + static_cast<std::ptrdiff_t>(samples_to_skip),
-                      block.samples.end(),
-                      block.samples.begin());
+            block.samples.erase(
+                block.samples.begin(),
+                block.samples.begin() + static_cast<std::ptrdiff_t>(samples_to_skip));
             block.frames -= static_cast<std::size_t>(frames_to_skip);
-            block.samples.resize(block.frames * channels);
             block.timestamp_ms = seek_target_ms_;
             block_start_frame_ = seek_target_frame_;
         }
