@@ -1,3 +1,4 @@
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
@@ -54,6 +55,7 @@ int main(int argc, char* argv[])
     QString qaPlayPath;
     QString qaScreenshotMain;
     QString qaScreenshotMini;
+    QString initialFilePath;
     {
         const QStringList cliArgs = QGuiApplication::arguments();
         for (int i = 1; i < cliArgs.size(); ++i) {
@@ -66,6 +68,8 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-screenshot-mini")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotMini = cliArgs.at(++i);
+            } else if (!arg.startsWith('-') && initialFilePath.isEmpty()) {
+                initialFilePath = arg;
             }
         }
     }
@@ -120,6 +124,27 @@ int main(int argc, char* argv[])
                                     &formatConverter, &pitchShifter,
                                     &speedAdjuster, &lightEditor, &settings);
 
+        QString pendingPlayFilePath;
+
+        auto playFileIfPending = [&]() {
+            if (pendingPlayFilePath.isEmpty()) {
+                return;
+            }
+            const QUrl url = QUrl::fromLocalFile(pendingPlayFilePath);
+            importer.importUrls({url});
+        };
+
+        QObject::connect(&importer, &ImportController::finished, &app,
+                         [&library, &playback, &pendingPlayFilePath]() {
+            if (pendingPlayFilePath.isEmpty()) {
+                return;
+            }
+            const int row = library.indexForLocalFile(pendingPlayFilePath);
+            if (row >= 0) {
+                playback.playRow(row);
+            }
+        });
+
         windows.setShutdownActions({
             [&importer]() { importer.cancel(); },
             [&core]() {
@@ -141,6 +166,16 @@ int main(int argc, char* argv[])
         QQmlApplicationEngine engine;
         engine.addImportPath("qrc:/");
         engine.loadFromModule("AgPlayer", "Main");
+
+        if (!qaPlayPath.isEmpty()) {
+            initialFilePath = qaPlayPath;
+        }
+
+        pendingPlayFilePath = initialFilePath;
+        if (!pendingPlayFilePath.isEmpty() && !QFileInfo::exists(pendingPlayFilePath)) {
+            pendingPlayFilePath.clear();
+        }
+
         if (!engine.rootObjects().isEmpty()) {
             QObject* mainWindow = engine.rootObjects().first();
 
@@ -188,6 +223,8 @@ int main(int argc, char* argv[])
             // The playlist window is a permanent second window in the new UI;
             // show it immediately below the main player window.
             windows.showListWindow();
+
+            playFileIfPending();
 
             // Global hotkeys (Windows RegisterHotKey). Parsed from the settings
             // defaults and re-registered whenever the user changes a shortcut.
@@ -261,39 +298,6 @@ int main(int argc, char* argv[])
                                  }
                              });
 
-            // --qa-play: load + play through the normal production path. The
-            // shared core pointer is the same one the controllers observe, so
-            // no state is faked. For the memory probe the app just stays
-            // running inside app.exec() below. Return values are checked so a
-            // failed load/play is logged instead of silently idling.
-            int qaErrorCode = 0;
-            if (!qaPlayPath.isEmpty()) {
-                const QByteArray utf8Path = qaPlayPath.toUtf8();
-                const ag_result loadResult = ag_player_load(core, utf8Path.constData());
-                if (loadResult != AG_OK) {
-                    RuntimeLog::log(loadResult, QStringLiteral("qa-play"),
-                        QStringLiteral("ag_player_load failed: %1").arg(qaPlayPath));
-                    qWarning("ag_player_load failed (%d) for %s",
-                        static_cast<int>(loadResult), qUtf8Printable(qaPlayPath));
-                    // For screenshot mode, exit non-zero; for --qa-play the app
-                    // must stay running so the memory probe can measure it.
-                    if (!qaScreenshotMain.isEmpty() || !qaScreenshotMini.isEmpty()) {
-                        qaErrorCode = 3;
-                    }
-                } else {
-                    const ag_result playResult = ag_player_play(core);
-                    if (playResult != AG_OK) {
-                        RuntimeLog::log(playResult, QStringLiteral("qa-play"),
-                            QStringLiteral("ag_player_play failed: %1").arg(qaPlayPath));
-                        qWarning("ag_player_play failed (%d) for %s",
-                            static_cast<int>(playResult), qUtf8Printable(qaPlayPath));
-                        if (!qaScreenshotMain.isEmpty() || !qaScreenshotMini.isEmpty()) {
-                            qaErrorCode = 3;
-                        }
-                    }
-                }
-            }
-
             // --qa-screenshot-main / --qa-screenshot-mini: poll for AG_PLAYING,
             // wait 500ms for the waveform to render, grab the window, save the
             // PNG, then quit through the normal shutdown path.
@@ -363,7 +367,7 @@ int main(int argc, char* argv[])
 #endif
             });
 
-            result = (qaErrorCode != 0) ? qaErrorCode : app.exec();
+            result = app.exec();
 
             app.removeNativeEventFilter(&hotkeys);
             hotkeys.unregisterAll();
