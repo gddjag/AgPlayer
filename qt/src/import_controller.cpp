@@ -1,6 +1,7 @@
 #include "import_controller.hpp"
 
 #include "bpm_analyzer.hpp"
+#include "metadata_probe.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>

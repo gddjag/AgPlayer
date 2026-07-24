@@ -112,9 +112,13 @@ int main(int argc, char* argv[])
 
         PlaybackController playback(core, &library);
         SettingsController settings;
-        const bool autoReadBpm = settings.autoReadBpm();
-        ImportController importer(&library, [autoReadBpm](const QString& path) {
-            return probeMetadata(path, autoReadBpm);
+        auto autoReadBpmFlag = std::make_shared<std::atomic_bool>(settings.autoReadBpm());
+        ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
+            return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
+        });
+        QObject::connect(&settings, &SettingsController::autoReadBpmChanged, &app,
+                         [autoReadBpmFlag, &settings]() {
+            autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
         });
         WindowController windows;
         AudioToolsController audioTools;

@@ -28,6 +28,7 @@ private slots:
     void rejectsModelWithDifferentThreadAffinity();
     void writesBpmWhenAutoReadEnabled();
     void leavesBpmZeroWhenAutoReadDisabled();
+    void probeObservesDynamicAnalyzeBpmFlag();
 };
 
 namespace {
@@ -256,6 +257,48 @@ void ImportControllerTest::leavesBpmZeroWhenAutoReadDisabled()
     QVERIFY(finished.wait(5000));
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.tracks().front().bpm, 0.0);
+}
+
+void ImportControllerTest::probeObservesDynamicAnalyzeBpmFlag()
+{
+    QTemporaryFile tempFile(QDir::temp().filePath(QStringLiteral("ag_bpm_dynamic_XXXXXX.wav")));
+    QVERIFY(tempFile.open());
+    tempFile.close();
+
+    QVERIFY(agplayer::test::writeClickTrackWav(tempFile.fileName(), 120, 8));
+
+    LibraryModel model;
+    auto analyzeFlag = std::make_shared<std::atomic_bool>(false);
+    const ProbeFunction probe = [analyzeFlag](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.available = true;
+        if (analyzeFlag->load(std::memory_order_relaxed)) {
+            const BpmAnalyzeResult bpm = analyze_bpm(path);
+            track.bpm = bpm.bpm;
+        }
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(&model, probe);
+
+    {
+        QSignalSpy finished(&importer, &ImportController::finished);
+        importer.importUrls({QUrl::fromLocalFile(tempFile.fileName())});
+        QVERIFY(finished.wait(5000));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.tracks().front().bpm, 0.0);
+    }
+
+    analyzeFlag->store(true, std::memory_order_relaxed);
+    model.replaceAll({});
+
+    {
+        QSignalSpy finished(&importer, &ImportController::finished);
+        importer.importUrls({QUrl::fromLocalFile(tempFile.fileName())});
+        QVERIFY(finished.wait(5000));
+        QCOMPARE(model.rowCount(), 1);
+        QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
+    }
 }
 
 QTEST_GUILESS_MAIN(ImportControllerTest)
