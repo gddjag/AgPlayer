@@ -21,6 +21,7 @@ ApplicationWindow {
     // override this with a fake QtObject to verify shared state without audio.
     property var playback: PlaybackController
     property int positionMs: playback.positionMs
+    property bool lyricsVisible: false
 
     // The filter model is owned by the main window but consumed by the
     // separate ListWindow so filtering state stays in sync.
@@ -69,10 +70,48 @@ ApplicationWindow {
             Layout.minimumHeight: 280
         }
 
+        Rectangle {
+            id: lyricsPanel
+            Layout.fillWidth: true
+            Layout.preferredHeight: lyricsVisible ? 160 : 0
+            visible: lyricsVisible
+            color: Theme.panel
+            clip: true
+
+            Behavior on Layout.preferredHeight {
+                NumberAnimation { duration: 150; easing.type: Easing.InOutQuad }
+            }
+
+            Flickable {
+                anchors.fill: parent
+                anchors.margins: Theme.spacingMd
+                contentWidth: width
+                contentHeight: lyricsText.implicitHeight
+                flickableDirection: Flickable.VerticalFlick
+                ScrollIndicator.vertical: ScrollIndicator {}
+
+                Text {
+                    id: lyricsText
+                    width: parent.width
+                    text: PlaybackController.lyrics.length > 0
+                          ? PlaybackController.lyrics
+                          : qsTr("No lyrics available")
+                    color: Theme.primaryText
+                    font.pixelSize: 14
+                    lineHeight: 1.6
+                    lineHeightMode: Text.ProportionalHeight
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+        }
+
         PlayerControls {
             id: playerControls
             Layout.fillWidth: true
             Layout.preferredHeight: 80
+            onToggleLyrics: mainWindow.lyricsVisible = !mainWindow.lyricsVisible
         }
     }
 

@@ -22,8 +22,9 @@ struct MediaMetadata final {
     std::int64_t duration_ms = 0;
     std::vector<unsigned char> cover;
     std::string cover_mime_type;
-    std::string year;   // from AV_DICT "date"
-    std::string genre;  // from AV_DICT "genre"
+    std::string year;    // from AV_DICT "date"
+    std::string genre;   // from AV_DICT "genre"
+    std::string lyrics;  // from AV_DICT "lyrics" / "LYRICS" / "USLT"
 };
 
 struct DecodedAudioBlock final {

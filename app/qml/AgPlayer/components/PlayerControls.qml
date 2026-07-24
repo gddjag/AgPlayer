@@ -7,6 +7,8 @@ Rectangle {
     id: root
     color: Theme.panel
 
+    signal toggleLyrics()
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingXl
@@ -121,6 +123,30 @@ Rectangle {
             focusPolicy: Qt.StrongFocus
             onClicked: PlaybackController.cycleMode()
             ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+
+            background: Rectangle {
+                color: !parent.enabled ? "transparent"
+                      : parent.pressed ? Theme.cyan
+                      : parent.visualFocus ? Theme.border
+                      : parent.hovered ? Theme.border
+                      : "transparent"
+                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.width: parent.visualFocus ? 2 : 0
+                radius: Theme.radiusSm
+            }
+        }
+
+        ToolButton {
+            objectName: "lyricsButton"
+            icon.source: Theme.icon("music-2-fill")
+            icon.color: Theme.secondaryText
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Toggle lyrics")
+            focusPolicy: Qt.StrongFocus
+            onClicked: root.toggleLyrics()
+            ToolTip.text: qsTr("Lyrics")
             ToolTip.visible: hovered
 
             background: Rectangle {

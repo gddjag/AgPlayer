@@ -106,6 +106,7 @@ ProbeResult probeMetadata(const QString& requestedPath)
     track.title = copiedUtf8(ag_metadata_title(metadata));
     track.artist = copiedUtf8(ag_metadata_artist(metadata));
     track.album = copiedUtf8(ag_metadata_album(metadata));
+    track.lyrics = copiedUtf8(ag_metadata_lyrics(metadata));
     track.format = copiedUtf8(ag_metadata_format(metadata));
     track.sampleRate = ag_metadata_sample_rate(metadata);
     track.bitDepth = ag_metadata_bits_per_sample(metadata);

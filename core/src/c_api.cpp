@@ -391,12 +391,18 @@ const char* ag_metadata_genre(const ag_metadata* metadata)
     return metadata == nullptr ? "" : metadata->value.genre.c_str();
 }
 
+const char* ag_metadata_lyrics(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.lyrics.c_str();
+}
+
 ag_result ag_metadata_write(const char* utf8_path,
                             const char* title,
                             const char* artist,
                             const char* album,
                             const char* year,
                             const char* genre,
+                            const char* lyrics,
                             const unsigned char* cover_data,
                             const size_t cover_size,
                             const char* cover_mime_type)
@@ -412,6 +418,7 @@ ag_result ag_metadata_write(const char* utf8_path,
         if (album != nullptr) update.album = album;
         if (year != nullptr) update.year = year;
         if (genre != nullptr) update.genre = genre;
+        if (lyrics != nullptr) update.lyrics = lyrics;
         update.cover_data = cover_data;
         update.cover_size = cover_size;
         if (cover_mime_type != nullptr) update.cover_mime_type = cover_mime_type;

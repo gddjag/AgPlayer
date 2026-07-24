@@ -102,17 +102,21 @@ const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
                                        const char** mime_type);
 const char* ag_metadata_year(const ag_metadata* metadata);
 const char* ag_metadata_genre(const ag_metadata* metadata);
+const char* ag_metadata_lyrics(const ag_metadata* metadata);
 
 /* Write metadata to an audio file using FFmpeg stream copy (no re-encoding).
  * Fields set to NULL are preserved from the source. cover_data is applied
- * only if non-NULL and cover_size > 0. Writes to a temp file then atomically
- * replaces the original. Returns AG_OK on success, or an error code. */
+ * only if non-NULL and cover_size > 0. lyrics set to NULL is preserved from
+ * the source; pass an empty string to clear existing lyrics. Writes to a temp
+ * file then atomically replaces the original. Returns AG_OK on success, or an
+ * error code. */
 ag_result ag_metadata_write(const char* utf8_path,
                             const char* title,
                             const char* artist,
                             const char* album,
                             const char* year,
                             const char* genre,
+                            const char* lyrics,
                             const unsigned char* cover_data,
                             size_t cover_size,
                             const char* cover_mime_type);

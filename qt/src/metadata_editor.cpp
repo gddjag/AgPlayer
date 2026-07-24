@@ -147,6 +147,7 @@ void MetadataEditor::loadFiles(const QList<QUrl>& urls)
                 entry.album = QString::fromUtf8(ag_metadata_album(md));
                 entry.year = QString::fromUtf8(ag_metadata_year(md));
                 entry.genre = QString::fromUtf8(ag_metadata_genre(md));
+                entry.lyrics = QString::fromUtf8(ag_metadata_lyrics(md));
                 entry.format = QString::fromUtf8(ag_metadata_format(md));
                 entry.durationMs = ag_metadata_duration_ms(md);
                 ag_metadata_destroy(md);
@@ -177,6 +178,7 @@ QVariantMap MetadataEditor::entryAt(int index) const
     map["album"] = e.album;
     map["year"] = e.year;
     map["genre"] = e.genre;
+    map["lyrics"] = e.lyrics;
     map["format"] = e.format;
     map["durationMs"] = e.durationMs;
     map["fileSize"] = e.fileSize;
@@ -241,6 +243,8 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
                     fields.value("year").toString().toStdString();
                 const std::string genre =
                     fields.value("genre").toString().toStdString();
+                const std::string lyrics =
+                    fields.value("lyrics").toString().toStdString();
                 const unsigned char* coverPtr = nullptr;
                 size_t coverSize = 0;
                 const char* mimePtr = nullptr;
@@ -257,6 +261,7 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
                     album.empty() ? nullptr : album.c_str(),
                     year.empty() ? nullptr : year.c_str(),
                     genre.empty() ? nullptr : genre.c_str(),
+                    lyrics.empty() ? nullptr : lyrics.c_str(),
                     coverPtr, coverSize, mimePtr);
                 if (result == AG_OK) {
                     ++success;

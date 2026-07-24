@@ -21,6 +21,7 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(qint64 trackIndex READ trackIndex NOTIFY trackIndexChanged)
     Q_PROPERTY(qint64 trackCount READ trackCount NOTIFY trackCountChanged)
     Q_PROPERTY(QString currentTrackId READ currentTrackId NOTIFY currentTrackIdChanged)
+    Q_PROPERTY(QString lyrics READ lyrics NOTIFY lyricsChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(bool deviceLost READ deviceLost NOTIFY deviceLostChanged)
 
@@ -46,6 +47,7 @@ public:
     qint64 trackIndex() const noexcept;
     qint64 trackCount() const noexcept;
     QString currentTrackId() const;
+    QString lyrics() const;
     QString errorMessage() const;
     bool deviceLost() const noexcept;
 
@@ -78,6 +80,7 @@ signals:
     void trackIndexChanged();
     void trackCountChanged();
     void currentTrackIdChanged();
+    void lyricsChanged();
     void errorMessageChanged();
     void deviceLostChanged();
 
@@ -99,6 +102,7 @@ private:
     qint64 trackIndex_ = -1;
     qint64 trackCount_ = 0;
     QString currentTrackId_;
+    QString lyrics_;
     QString errorMessage_;
     QStringList queueTrackIds_;
     bool deviceLost_ = false;

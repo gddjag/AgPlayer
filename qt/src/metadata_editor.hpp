@@ -17,6 +17,7 @@ struct MetadataEntry {
     QString album;
     QString year;
     QString genre;
+    QString lyrics;
     QString format;
     qint64 durationMs = 0;
     qint64 fileSize = 0;

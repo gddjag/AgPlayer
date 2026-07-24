@@ -23,6 +23,7 @@ struct TrackRecord {
     double bpm = 0.0;
     bool available = false;
     QString importError;
+    QString lyrics;
 };
 
 QString canonicalLibraryPath(const QString& path);
@@ -49,7 +50,8 @@ public:
         RatingRole,
         BpmRole,
         AvailableRole,
-        ImportErrorRole
+        ImportErrorRole,
+        LyricsRole
     };
     Q_ENUM(Role)
 

@@ -97,6 +97,7 @@ PlaybackController::Mode PlaybackController::mode() const noexcept { return mode
 qint64 PlaybackController::trackIndex() const noexcept { return trackIndex_; }
 qint64 PlaybackController::trackCount() const noexcept { return trackCount_; }
 QString PlaybackController::currentTrackId() const { return currentTrackId_; }
+QString PlaybackController::lyrics() const { return lyrics_; }
 QString PlaybackController::errorMessage() const { return errorMessage_; }
 bool PlaybackController::deviceLost() const noexcept { return deviceLost_; }
 
@@ -314,6 +315,20 @@ void PlaybackController::pollSnapshot()
     if (currentTrackId_ != nextTrackId) {
         currentTrackId_ = std::move(nextTrackId);
         emit currentTrackIdChanged();
+
+        QString nextLyrics;
+        if (!currentTrackId_.isEmpty() && library_ != nullptr) {
+            for (const TrackRecord& track : library_->tracks()) {
+                if (track.trackId == currentTrackId_) {
+                    nextLyrics = track.lyrics;
+                    break;
+                }
+            }
+        }
+        if (lyrics_ != nextLyrics) {
+            lyrics_ = std::move(nextLyrics);
+            emit lyricsChanged();
+        }
     }
     if (deviceLost_ != nextDeviceLost) {
         deviceLost_ = nextDeviceLost;

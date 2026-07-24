@@ -103,6 +103,9 @@ ag_result write_metadata(const std::string& utf8_path,
     if (!update.genre.empty()) {
         av_dict_set(&out_ctx->metadata, "genre", update.genre.c_str(), 0);
     }
+    if (!update.lyrics.empty()) {
+        av_dict_set(&out_ctx->metadata, "lyrics", update.lyrics.c_str(), 0);
+    }
 
     // Build temp file path next to the original.
     const std::filesystem::path p(utf8_path);

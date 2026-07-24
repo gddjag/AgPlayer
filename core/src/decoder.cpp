@@ -45,6 +45,18 @@ std::string read_tag(AVDictionary* preferred,
     return entry != nullptr && entry->value != nullptr ? entry->value : "";
 }
 
+std::string read_lyrics(AVDictionary* preferred, AVDictionary* fallback)
+{
+    static constexpr const char* keys[] = {"lyrics", "LYRICS", "USLT"};
+    for (const char* key : keys) {
+        const std::string value = read_tag(preferred, fallback, key);
+        if (!value.empty()) {
+            return value;
+        }
+    }
+    return "";
+}
+
 const char* image_mime_type(const AVCodecID codec_id) noexcept
 {
     switch (codec_id) {
@@ -345,6 +357,8 @@ private:
         metadata_.genre = read_tag(audio_stream.metadata,
                                    format_context_->metadata,
                                    "genre");
+        metadata_.lyrics = read_lyrics(audio_stream.metadata,
+                                       format_context_->metadata);
         metadata_.format = format_context_->iformat != nullptr
                                && format_context_->iformat->name != nullptr
                            ? format_context_->iformat->name

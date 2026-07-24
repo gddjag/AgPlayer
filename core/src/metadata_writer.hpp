@@ -16,6 +16,7 @@ struct MetadataUpdate {
     std::string album;
     std::string year;
     std::string genre;
+    std::string lyrics;
     const unsigned char* cover_data = nullptr;
     std::size_t cover_size = 0;
     std::string cover_mime_type;

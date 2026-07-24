@@ -26,7 +26,8 @@ QJsonObject toJson(const TrackRecord& track)
             {QStringLiteral("rating"), track.rating},
             {QStringLiteral("bpm"), track.bpm},
             {QStringLiteral("available"), track.available},
-            {QStringLiteral("importError"), track.importError}};
+            {QStringLiteral("importError"), track.importError},
+            {QStringLiteral("lyrics"), track.lyrics}};
 }
 
 TrackRecord fromJson(const QJsonObject& object)
@@ -49,6 +50,7 @@ TrackRecord fromJson(const QJsonObject& object)
     track.bpm = object.value(QStringLiteral("bpm")).toDouble();
     track.available = QFileInfo(track.path).isFile();
     track.importError = object.value(QStringLiteral("importError")).toString();
+    track.lyrics = object.value(QStringLiteral("lyrics")).toString();
     return track;
 }
 }

@@ -98,6 +98,8 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.available;
     case ImportErrorRole:
         return track.importError;
+    case LyricsRole:
+        return track.lyrics;
     default:
         return {};
     }
@@ -121,7 +123,8 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {RatingRole, "rating"},
             {BpmRole, "bpm"},
             {AvailableRole, "available"},
-            {ImportErrorRole, "importError"}};
+            {ImportErrorRole, "importError"},
+            {LyricsRole, "lyrics"}};
 }
 
 bool LibraryModel::append(TrackRecord track)
