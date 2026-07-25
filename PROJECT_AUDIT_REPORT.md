@@ -3,7 +3,8 @@
 **检查时间：** 2026-07-25  
 **检查范围：** `d:\ai\TRAE AgPlayer\.worktrees\phase-1-playback`  
 **分支：** `feature/phase-1-playback`  
-**最新提交：** `db48768 fix(qt,app): address review issues - thread-safe progress, QML load guard, cache error logging`
+**最新提交：** `d3a52f5 docs: add comprehensive project audit report`（本轮修改待提交）  
+**工作区状态：** 已清理临时文件，14 个文件含多频段波形分析实现待提交
 
 ---
 
@@ -34,12 +35,12 @@
 ### 3.1 Debug 构建
 - **状态：** 成功
 - **测试：** 33/33 通过
-- **总耗时：** 411.35 秒（含 10,000 首压力测试 385.55 秒）
+- **总耗时：** 412.18 秒（含 10,000 首压力测试 412.16 秒）
 
 ### 3.2 Release 构建
 - **状态：** 成功
 - **测试：** 33/33 通过
-- **总耗时：** 306.55 秒（含 10,000 首压力测试 285.99 秒）
+- **总耗时：** 274.47 秒（含 10,000 首压力测试 274.46 秒）
 
 ### 3.3 压力测试指标
 | 指标 | 数值 |
@@ -55,15 +56,13 @@
 
 ## 四、应用启动验证
 
-- **测试对象：** `build/release/app/AgPlayer.exe`
-- **启动方式：** 无参数直接启动，隐藏窗口
+- **测试对象：** `build/debug/app/AgPlayer.exe` 与 `build/release/app/AgPlayer.exe`
+- **启动方式：** 无参数直接启动，`QT_QPA_PLATFORM=offscreen`
 - **观察结果：**
-  - 5 秒后进程仍在运行，未崩溃
-  - 内存占用约 4.76 MB
+  - Debug / Release 各启动 10 秒，进程均未崩溃
+  - 标准错误无 QML / 插件加载错误输出
   - 进程可被正常终止
 - **结论：** 应用可正常打开并初始化。
-
-> 注：QA 自动截图流程（`--qa-screenshot-main`）需要实际音频回放进入 `AG_PLAYING` 状态。在无可用音频设备的环境中该流程无法自动结束，但不影响应用本身启动能力的判定。
 
 ---
 
@@ -84,6 +83,12 @@
 - **问题：** `WaveformCache::save_v2()` 返回的 `[[nodiscard]] bool` 被 `(void)` 丢弃。
 - **修复：** 检查返回值，失败时通过 `RuntimeLog` 记录 `AG_IO_ERROR` 日志。
 
+### 5.4 多频段波形渲染测试断言不匹配（本轮修复）
+- **文件：** `tests/qt/waveform_item_test.cpp`
+- **问题：** `rendersMultiBandLayers()` 使用 `position = 0`，导致 `computePlayedCount()` 只将第一个点标记为 played；测试却期望所有点均为 played 颜色。
+- **修复：** 将测试中的播放位置改为 `position = duration`，使全部采样点处于 played 状态，从而稳定验证 mix / bass / mid / high 各层颜色。
+- **验证：** 修复后 Debug / Release 的 `waveform_item_test` 均通过，全量回归 33/33 通过。
+
 ---
 
 ## 六、代码审查中发现但无需立即修复的观察项
@@ -91,11 +96,12 @@
 ### 6.1 功能缺口（不影响基础可用性）
 | 缺口 | 说明 |
 |---|---|
-| 多频段波形数据 | `WaveformAnalyzer` 仅生成 mix peaks，未生成 bass/mid/high 分层数据。缓存 v2 格式已支持，但数据源未填充。 |
 | CUE 点管理 | v2 缓存格式支持 CUE，但无 UI 与写入逻辑。 |
 | 波形节拍网格 | 设计稿要求的强拍/弱拍网格未实现。 |
 | 播放预览 | `LightEditPage.qml`、`PitchShiftPage.qml` 中的播放预览按钮为 disabled 占位。 |
 | 人声保护 | Core 实现标记为 experimental，UI 开关存在但效果有限。 |
+
+> 注：多频段波形数据（bass/mid/high）已在 `WaveformAnalyzer` 中实现，并通过 C API / Qt Bridge 传递到 QML 渲染，对应测试与缓存 v2 格式均已验证。
 
 ### 6.2 建议项（后续优化）
 - `core/src/bpm_analyzer.cpp` 使用 O(n²) 自相关；当前 90 秒分析上限下可接受，未来若放宽时长建议改用 FFT。

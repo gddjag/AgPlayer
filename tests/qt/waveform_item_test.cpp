@@ -6,6 +6,7 @@
 #include <QSGGeometryNode>
 #include <QSignalSpy>
 #include <QTest>
+#include <QVariantMap>
 
 #include <cmath>
 #include <limits>
@@ -37,6 +38,9 @@ private slots:
     void downsamplesPeaksToPixelBudget();
     void reusesGeometryWhenPositionChangesWithinBucket();
     void subPixelWidthDoesNotCrash();
+    void setLayersPopulatesLayerProperties();
+    void rendersMultiBandLayers();
+    void fallsBackToFrequencyLayerWhenMixMissing();
 };
 
 namespace {
@@ -48,6 +52,19 @@ QVariantList peaks(std::initializer_list<double> values)
         result.append(value);
     }
     return result;
+}
+
+QVariantMap makeLayers(const QVariantList& mix = {},
+                       const QVariantList& bass = {},
+                       const QVariantList& mid = {},
+                       const QVariantList& high = {})
+{
+    QVariantMap map;
+    map[QStringLiteral("mix")] = mix;
+    map[QStringLiteral("bass")] = bass;
+    map[QStringLiteral("mid")] = mid;
+    map[QStringLiteral("high")] = high;
+    return map;
 }
 
 const QSGGeometry::ColoredPoint2D* vertices(const QSGNode* node)
@@ -311,6 +328,82 @@ void WaveformItemTest::subPixelWidthDoesNotCrash()
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     QCOMPARE(geometryNode->geometry()->vertexCount(), 2);
+    delete node;
+}
+
+void WaveformItemTest::setLayersPopulatesLayerProperties()
+{
+    TestableWaveformItem item;
+    QSignalSpy layersSpy(&item, &WaveformItem::layersChanged);
+    QSignalSpy peaksSpy(&item, &WaveformItem::peaksChanged);
+
+    const QVariantMap input = makeLayers(peaks({0.5, 1.0}), peaks({0.2, 0.8}));
+    item.setLayers(input);
+
+    QCOMPARE(item.layers(), input);
+    QCOMPARE(item.peaks().size(), 0);
+    QCOMPARE(layersSpy.count(), 1);
+    QCOMPARE(peaksSpy.count(), 1);
+}
+
+void WaveformItemTest::rendersMultiBandLayers()
+{
+    TestableWaveformItem item;
+    item.setWidth(100);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setPosition(100);
+
+    const QVariantMap input = makeLayers(
+        peaks({1.0, 1.0}),
+        peaks({0.5, 0.5}),
+        peaks({0.25, 0.25}),
+        peaks({0.125, 0.125}));
+    item.setLayers(input);
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 16);
+
+    const auto* data = vertices(node);
+    // Mix layer uses the reference gradient (all played at end position).
+    compareColor(data[0], 0x00, 0xD4, 0xFF, 0xFF);
+    compareColor(data[2], 0xFF, 0x40, 0x57, 0xFF);
+    // Bass layer: kBassColor.
+    compareColor(data[4], 170, 55, 55, 158);
+    compareColor(data[6], 170, 55, 55, 158);
+    // Mid layer: kMidColor.
+    compareColor(data[8], 55, 140, 55, 148);
+    compareColor(data[10], 55, 140, 55, 148);
+    // High layer: kHighColor.
+    compareColor(data[12], 55, 90, 145, 133);
+    compareColor(data[14], 55, 90, 145, 133);
+
+    delete node;
+}
+
+void WaveformItemTest::fallsBackToFrequencyLayerWhenMixMissing()
+{
+    TestableWaveformItem item;
+    item.setWidth(100);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setPosition(0);
+
+    const QVariantMap input = makeLayers({}, peaks({1.0, 1.0}), peaks({0.5, 0.5}), {});
+    item.setLayers(input);
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
+    // Two layers (bass + mid), two peaks, two vertices per peak.
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 8);
+
+    const auto* data = vertices(node);
+    QCOMPARE(data[0].x, 0.0F);
+    QCOMPARE(data[2].x, 100.0F);
+
     delete node;
 }
 

@@ -21,7 +21,7 @@ namespace {
 
 void test_actual_frame_bucketing_and_channel_combination()
 {
-    agplayer::WaveformBucketizer bucketizer(8U, 3U, 2U);
+    agplayer::WaveformBucketizer bucketizer(8U, 3U, 2U, 48000.0F);
     const std::vector<float> samples{
         0.1F, -0.6F,
         0.2F, 0.1F,
@@ -35,16 +35,22 @@ void test_actual_frame_bucketing_and_channel_combination()
     assert(samples.size() == 16U);
     assert(bucketizer.add(samples, 8U) == AG_OK);
     std::vector<float> peaks;
-    assert(bucketizer.finish(peaks) == AG_OK);
+    std::vector<float> bass;
+    std::vector<float> mid;
+    std::vector<float> high;
+    assert(bucketizer.finish(peaks, bass, mid, high) == AG_OK);
     assert(peaks.size() == 3U);
     assert(std::abs(peaks[0] - 0.75F) < 0.000'001F);
     assert(std::abs(peaks[1] - 1.0F) < 0.000'001F);
     assert(std::abs(peaks[2] - 0.625F) < 0.000'001F);
+    assert(bass.size() == 3U);
+    assert(mid.size() == 3U);
+    assert(high.size() == 3U);
 
-    agplayer::WaveformBucketizer more_points_than_frames(3U, 10U, 1U);
+    agplayer::WaveformBucketizer more_points_than_frames(3U, 10U, 1U, 48000.0F);
     assert(more_points_than_frames.add({0.2F, 0.4F, 0.8F}, 3U)
            == AG_OK);
-    assert(more_points_than_frames.finish(peaks) == AG_OK);
+    assert(more_points_than_frames.finish(peaks, bass, mid, high) == AG_OK);
     assert(peaks.size() == 3U);
     assert(std::abs(peaks[0] - 0.25F) < 0.000'001F);
     assert(std::abs(peaks[1] - 0.5F) < 0.000'001F);
@@ -57,11 +63,17 @@ void test_non_finite_pcm_is_rejected()
              std::numeric_limits<float>::quiet_NaN(),
              std::numeric_limits<float>::infinity(),
          }) {
-        agplayer::WaveformBucketizer bucketizer(1U, 1U, 2U);
+        agplayer::WaveformBucketizer bucketizer(1U, 1U, 2U, 48000.0F);
         assert(bucketizer.add({0.5F, invalid}, 1U) == AG_DECODE_ERROR);
         std::vector<float> peaks{1.0F};
-        assert(bucketizer.finish(peaks) == AG_DECODE_ERROR);
+        std::vector<float> bass{1.0F};
+        std::vector<float> mid{1.0F};
+        std::vector<float> high{1.0F};
+        assert(bucketizer.finish(peaks, bass, mid, high) == AG_DECODE_ERROR);
         assert(peaks.empty());
+        assert(bass.empty());
+        assert(mid.empty());
+        assert(high.empty());
     }
 }
 

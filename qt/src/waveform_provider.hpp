@@ -29,13 +29,13 @@ public:
     Q_INVOKABLE void cancelForTrack(const QString& path);
 
 signals:
-    void waveformReady(const QString& path, const QVariantList& peaks);
+    void waveformReady(const QString& path, const QVariantMap& layers);
     void analysisProgressChanged();
 
 private:
     void onAnalysisFinished();
     void setAnalysisProgress(double progress);
-    QVariantList waveformToVariantList(const ag_waveform* waveform) const;
+    QVariantMap waveformToVariantMap(const ag_waveform* waveform) const;
 
     struct Job {
         QString path;

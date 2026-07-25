@@ -81,7 +81,7 @@ Rectangle {
     function loadWaveform() {
         var path = root.currentTrackValue(LibraryModel.PathRole)
         if (path.length === 0) {
-            waveform.peaks = []
+            waveform.layers = {}
         }
         WaveformProvider.loadForTrack(path)
     }
@@ -291,10 +291,10 @@ Rectangle {
 
             Connections {
                 target: WaveformProvider
-                function onWaveformReady(path, peaks) {
+                function onWaveformReady(path, layers) {
                     var currentPath = root.currentTrackValue(LibraryModel.PathRole)
                     if (path === currentPath) {
-                        waveform.peaks = peaks
+                        waveform.layers = layers
                     }
                 }
             }

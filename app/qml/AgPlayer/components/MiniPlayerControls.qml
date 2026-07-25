@@ -79,6 +79,14 @@ Rectangle {
         return bytes + " B"
     }
 
+    function loadWaveform() {
+        var path = root.currentTrackValue(LibraryModel.PathRole)
+        if (path.length === 0) {
+            waveform.layers = {}
+        }
+        WaveformProvider.loadForTrack(path)
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingMd
@@ -254,10 +262,29 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 28
                 Layout.minimumHeight: 20
+                layers: ({})
                 position: playback.positionMs
                 duration: playback.durationMs
                 clip: true
             }
+
+            Connections {
+                target: playback
+                function onTrackIndexChanged() { root.loadWaveform() }
+                function onCurrentTrackIdChanged() { root.loadWaveform() }
+            }
+
+            Connections {
+                target: WaveformProvider
+                function onWaveformReady(path, layers) {
+                    var currentPath = root.currentTrackValue(LibraryModel.PathRole)
+                    if (path === currentPath) {
+                        waveform.layers = layers
+                    }
+                }
+            }
+
+            Component.onCompleted: root.loadWaveform()
         }
 
         // --- Transport: previous / circular play-pause / next ---

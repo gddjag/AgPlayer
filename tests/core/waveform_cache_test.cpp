@@ -281,7 +281,7 @@ int main(const int argc, char** argv)
         assert(loaded_v2.mix.empty() && loaded_v2.bass.empty());
     }
 
-    // C API layer helpers: analyze produces only the mix layer.
+    // C API layer helpers: analyze produces mix + bass/mid/high layers.
     {
         ag_waveform* waveform = nullptr;
         const ag_result result = ag_waveform_analyze(
@@ -291,11 +291,10 @@ int main(const int argc, char** argv)
         assert(waveform != nullptr);
         assert(ag_waveform_count(waveform) == 8U);
         assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MIX) == 8U);
-        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS) == 0U);
-        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID) == 0U);
-        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH) == 0U);
-        assert(ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, 0U)
-               == 0.0F);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS) == 8U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID) == 8U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH) == 8U);
+        assert(std::isfinite(ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, 0U)));
         assert(ag_waveform_bpm(waveform) == 0.0);
         ag_waveform_destroy(waveform);
     }
@@ -311,7 +310,9 @@ int main(const int argc, char** argv)
         assert(waveform != nullptr);
         assert(ag_waveform_count(waveform) == 16U);
         assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MIX) == 16U);
-        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS) == 0U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS) == 16U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID) == 16U);
+        assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH) == 16U);
         assert(ag_waveform_bpm(waveform) == bpm);
         assert(bpm > 0.0);
         ag_waveform_destroy(waveform);

@@ -46,7 +46,7 @@ void WaveformProviderTest::emptyPathEmitsEmptyPeaks()
     const QList<QVariant> args = spy.takeFirst();
     QCOMPARE(args.size(), 2);
     QCOMPARE(args[0].toString(), QString());
-    QVERIFY(args[1].toList().isEmpty());
+    QVERIFY(args[1].toMap().isEmpty());
     QCOMPARE(provider.analysisProgress(), 1.0);
 }
 
@@ -76,8 +76,12 @@ void WaveformProviderTest::cacheHitEmitsPeaksImmediately()
     const QList<QVariant> args = spy.takeFirst();
     QCOMPARE(args.size(), 2);
     QCOMPARE(args[0].toString(), fixturePath_);
-    const QVariantList peaks = args[1].toList();
-    QVERIFY(!peaks.isEmpty());
+    const QVariantMap layers = args[1].toMap();
+    QVERIFY(!layers.isEmpty());
+    QVERIFY(!layers.value(QStringLiteral("mix")).toList().isEmpty());
+    QVERIFY(!layers.value(QStringLiteral("bass")).toList().isEmpty());
+    QVERIFY(!layers.value(QStringLiteral("mid")).toList().isEmpty());
+    QVERIFY(!layers.value(QStringLiteral("high")).toList().isEmpty());
     QCOMPARE(provider.analysisProgress(), 1.0);
 }
 
@@ -99,13 +103,18 @@ void WaveformProviderTest::analysisEmitsPeaksForFixture()
     const QList<QVariant> args = spy.takeFirst();
     QCOMPARE(args.size(), 2);
     QCOMPARE(args[0].toString(), fixturePath_);
-    const QVariantList peaks = args[1].toList();
-    QVERIFY(!peaks.isEmpty());
-    QVERIFY(std::all_of(peaks.begin(), peaks.end(), [](const QVariant& value) {
+    const QVariantMap layers = args[1].toMap();
+    QVERIFY(!layers.isEmpty());
+    const QVariantList mix = layers.value(QStringLiteral("mix")).toList();
+    QVERIFY(!mix.isEmpty());
+    QVERIFY(std::all_of(mix.begin(), mix.end(), [](const QVariant& value) {
         bool ok = false;
         const double peak = value.toDouble(&ok);
         return ok && std::isfinite(peak) && peak >= 0.0 && peak <= 1.0;
     }));
+    QVERIFY(!layers.value(QStringLiteral("bass")).toList().isEmpty());
+    QVERIFY(!layers.value(QStringLiteral("mid")).toList().isEmpty());
+    QVERIFY(!layers.value(QStringLiteral("high")).toList().isEmpty());
     QCOMPARE(provider.analysisProgress(), 1.0);
 }
 

@@ -11,6 +11,7 @@
 class WaveformItem : public QQuickItem {
     Q_OBJECT
     Q_PROPERTY(QVariantList peaks READ peaks WRITE setPeaks NOTIFY peaksChanged)
+    Q_PROPERTY(QVariantMap layers READ layers WRITE setLayers NOTIFY layersChanged)
     Q_PROPERTY(qreal position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(qreal duration READ duration WRITE setDuration NOTIFY durationChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
@@ -24,6 +25,9 @@ public:
 
     QVariantList peaks() const;
     void setPeaks(const QVariantList& peaks);
+
+    QVariantMap layers() const;
+    void setLayers(const QVariantMap& layers);
 
     qreal position() const;
     void setPosition(qreal position);
@@ -45,6 +49,7 @@ public:
 
 signals:
     void peaksChanged();
+    void layersChanged();
     void positionChanged();
     void durationChanged();
     void waveformColorChanged();
@@ -62,14 +67,25 @@ protected:
     void mouseUngrabEvent() override;
 
 private:
-    struct PeakSnapshot {
+    struct LayerSnapshot {
         std::vector<float> values;
+    };
+
+    struct PeakSnapshot {
+        std::shared_ptr<const LayerSnapshot> mix;
+        std::shared_ptr<const LayerSnapshot> bass;
+        std::shared_ptr<const LayerSnapshot> mid;
+        std::shared_ptr<const LayerSnapshot> high;
         std::uint64_t revision = 0;
     };
 
     void setHoverPosition(qint64 position);
+    void normalizeLayerInput(QVariantList& normalized,
+                             const QVariantList& input,
+                             std::shared_ptr<LayerSnapshot>& snapshot);
 
     QVariantList peaks_;
+    QVariantMap layers_;
     std::shared_ptr<const PeakSnapshot> peakSnapshot_;
     std::uint64_t nextRevision_ = 1;
     qint64 position_ = 0;

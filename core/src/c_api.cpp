@@ -640,16 +640,27 @@ ag_result ag_waveform_analyze(const char* utf8_path,
 
     try {
         std::vector<float> peaks;
+        std::vector<float> bass;
+        std::vector<float> mid;
+        std::vector<float> high;
         const std::atomic_bool* cancelled =
             cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
         const ag_result result = agplayer::WaveformAnalyzer::analyze(
             utf8_path, target_points, cancelled, progress_callback, user_data,
-            peaks);
+            peaks, bass, mid, high);
         if (result != AG_OK) {
             return result;
         }
-        *out_waveform = new (std::nothrow) ag_waveform{std::move(peaks)};
-        return *out_waveform == nullptr ? AG_INTERNAL_ERROR : AG_OK;
+        ag_waveform* waveform = new (std::nothrow) ag_waveform{};
+        if (waveform == nullptr) {
+            return AG_INTERNAL_ERROR;
+        }
+        waveform->peaks = std::move(peaks);
+        waveform->bass_ = std::move(bass);
+        waveform->mid_ = std::move(mid);
+        waveform->high_ = std::move(high);
+        *out_waveform = waveform;
+        return AG_OK;
     } catch (...) {
         return AG_INTERNAL_ERROR;
     }
@@ -749,9 +760,12 @@ ag_result ag_track_analysis(const char* utf8_path,
             cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
 
         std::vector<float> peaks;
+        std::vector<float> bass;
+        std::vector<float> mid;
+        std::vector<float> high;
         ag_result waveform_result = agplayer::WaveformAnalyzer::analyze(
             utf8_path, target_points, cancelled, progress_callback, user_data,
-            peaks);
+            peaks, bass, mid, high);
         if (waveform_result != AG_OK) {
             return waveform_result;
         }
@@ -761,6 +775,9 @@ ag_result ag_track_analysis(const char* utf8_path,
             return AG_INTERNAL_ERROR;
         }
         waveform->peaks = std::move(peaks);
+        waveform->bass_ = std::move(bass);
+        waveform->mid_ = std::move(mid);
+        waveform->high_ = std::move(high);
 
         agplayer::BpmAnalyzeInput bpm_input;
         bpm_input.file_path = utf8_path;

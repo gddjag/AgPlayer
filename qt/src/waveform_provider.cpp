@@ -45,18 +45,29 @@ QVariantList peaksFromVector(const std::vector<float>& peaks)
     return result;
 }
 
-QVariantList peaksFromWaveform(const ag_waveform* waveform)
+QVariantMap layersFromWaveform(const ag_waveform* waveform)
 {
     if (waveform == nullptr) {
         return {};
     }
-    const std::size_t count = ag_waveform_count(waveform);
-    QVariantList result;
-    result.reserve(static_cast<int>(count));
-    for (std::size_t index = 0; index < count; ++index) {
-        result.append(static_cast<double>(ag_waveform_peak(waveform, index)));
-    }
-    return result;
+
+    const auto layerToList = [](const ag_waveform* w,
+                                ag_waveform_layer layer) {
+        const std::size_t count = ag_waveform_layer_count(w, layer);
+        QVariantList result;
+        result.reserve(static_cast<int>(count));
+        for (std::size_t index = 0; index < count; ++index) {
+            result.append(static_cast<double>(ag_waveform_layer_peak(w, layer, index)));
+        }
+        return result;
+    };
+
+    QVariantMap layers;
+    layers[QStringLiteral("mix")] = layerToList(waveform, AG_WAVEFORM_LAYER_MIX);
+    layers[QStringLiteral("bass")] = layerToList(waveform, AG_WAVEFORM_LAYER_BASS);
+    layers[QStringLiteral("mid")] = layerToList(waveform, AG_WAVEFORM_LAYER_MID);
+    layers[QStringLiteral("high")] = layerToList(waveform, AG_WAVEFORM_LAYER_HIGH);
+    return layers;
 }
 
 void saveWaveformCache(const QString& cachePath,
@@ -71,6 +82,18 @@ void saveWaveformCache(const QString& cachePath,
     data.mix.resize(count);
     for (std::size_t index = 0; index < count; ++index) {
         data.mix[index] = ag_waveform_peak(waveform, index);
+    }
+    data.bass.resize(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS));
+    for (std::size_t index = 0; index < data.bass.size(); ++index) {
+        data.bass[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_BASS, index);
+    }
+    data.mid.resize(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID));
+    for (std::size_t index = 0; index < data.mid.size(); ++index) {
+        data.mid[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_MID, index);
+    }
+    data.high.resize(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH));
+    for (std::size_t index = 0; index < data.high.size(); ++index) {
+        data.high[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, index);
     }
     data.bpm = ag_waveform_bpm(waveform);
     if (!agplayer::WaveformCache::save_v2(
@@ -149,7 +172,7 @@ void WaveformProvider::loadForTrack(const QString& path)
     setAnalysisProgress(path.isEmpty() ? 1.0 : 0.0);
 
     if (path.isEmpty()) {
-        emit waveformReady(path, {});
+        emit waveformReady(path, QVariantMap{});
         return;
     }
 
@@ -160,14 +183,21 @@ void WaveformProvider::loadForTrack(const QString& path)
         const std::string cache = cachePath.toStdString();
         agplayer::WaveformCacheData data;
         if (agplayer::WaveformCache::load_v2(cache, source, data)) {
+            QVariantMap layers;
+            layers[QStringLiteral("mix")] = peaksFromVector(data.mix);
+            layers[QStringLiteral("bass")] = peaksFromVector(data.bass);
+            layers[QStringLiteral("mid")] = peaksFromVector(data.mid);
+            layers[QStringLiteral("high")] = peaksFromVector(data.high);
             setAnalysisProgress(1.0);
-            emit waveformReady(path, peaksFromVector(data.mix));
+            emit waveformReady(path, layers);
             return;
         }
         std::vector<float> peaks;
         if (agplayer::WaveformCache::load(cache, source, peaks)) {
+            QVariantMap layers;
+            layers[QStringLiteral("mix")] = peaksFromVector(peaks);
             setAnalysisProgress(1.0);
-            emit waveformReady(path, peaksFromVector(peaks));
+            emit waveformReady(path, layers);
             return;
         }
     }
@@ -268,12 +298,12 @@ void WaveformProvider::onAnalysisFinished()
     }
 
     setAnalysisProgress(1.0);
-    emit waveformReady(currentPath_, waveformToVariantList(job.waveform));
+    emit waveformReady(currentPath_, waveformToVariantMap(job.waveform));
     ag_waveform_destroy(job.waveform);
 }
 
-QVariantList WaveformProvider::waveformToVariantList(
+QVariantMap WaveformProvider::waveformToVariantMap(
     const ag_waveform* waveform) const
 {
-    return peaksFromWaveform(waveform);
+    return layersFromWaveform(waveform);
 }
