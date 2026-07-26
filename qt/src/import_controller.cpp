@@ -1,11 +1,13 @@
 #include "import_controller.hpp"
 
 #include "bpm_analyzer.hpp"
+#include "file_association_controller.hpp"
 #include "metadata_probe.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QSaveFile>
@@ -244,6 +246,29 @@ bool ImportController::busy() const noexcept
 QStringList ImportController::errors() const
 {
     return errors_;
+}
+
+void ImportController::importFolder(const QUrl& folder)
+{
+    const QString directory = folder.toLocalFile();
+    if (directory.isEmpty()) {
+        importUrls({});
+        return;
+    }
+
+    QStringList filters;
+    for (const QString& extension :
+         FileAssociationController::supportedAudioExtensions()) {
+        filters.append(QStringLiteral("*.") + extension);
+    }
+
+    QList<QUrl> urls;
+    QDirIterator files(directory, filters, QDir::Files,
+                       QDirIterator::Subdirectories);
+    while (files.hasNext()) {
+        urls.append(QUrl::fromLocalFile(files.next()));
+    }
+    importUrls(urls);
 }
 
 void ImportController::importUrls(const QList<QUrl>& urls)

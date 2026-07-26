@@ -29,6 +29,7 @@ private slots:
     void writesBpmWhenAutoReadEnabled();
     void leavesBpmZeroWhenAutoReadDisabled();
     void probeObservesDynamicAnalyzeBpmFlag();
+    void importsSupportedAudioRecursivelyFromFolder();
 };
 
 namespace {
@@ -88,6 +89,41 @@ void ImportControllerTest::deduplicatesCanonicalPathsAndContinuesAfterFailure()
     QVERIFY(finished.wait(3000));
     QCOMPARE(probeCalls.load(), 2);
     QCOMPARE(model.rowCount(), 1);
+}
+
+void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir().mkpath(dir.filePath(QStringLiteral("nested"))));
+
+    const QString rootTrack = dir.filePath(QStringLiteral("root.MP3"));
+    const QString nestedTrack = dir.filePath(QStringLiteral("nested/child.flac"));
+    const QString ignoredFile = dir.filePath(QStringLiteral("notes.txt"));
+    createFile(rootTrack);
+    createFile(nestedTrack);
+    createFile(ignoredFile);
+
+    QStringList probedPaths;
+    LibraryModel model;
+    ImportController importer(&model, [&probedPaths](const QString& path) {
+        probedPaths.append(path);
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importFolder(QUrl::fromLocalFile(dir.path()));
+
+    QVERIFY(finished.wait(3000));
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(probedPaths.size(), 2);
+    QVERIFY(probedPaths.contains(canonicalLibraryPath(rootTrack)));
+    QVERIFY(probedPaths.contains(canonicalLibraryPath(nestedTrack)));
+    QVERIFY(!probedPaths.contains(canonicalLibraryPath(ignoredFile)));
 }
 
 void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()

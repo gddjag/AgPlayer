@@ -32,4 +32,20 @@ TestCase {
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
         verify(findChild(mainWindow, "listWindowButton"), "listWindowButton should exist")
     }
+
+    function test_empty_library_shows_startup_actions() {
+        var startup = findChild(mainWindow, "emptyStartup")
+        verify(startup, "empty startup surface should exist")
+        verify(startup.visible, "empty startup surface should be visible")
+        verify(findChild(startup, "openFileButton"), "open file action should exist")
+        verify(findChild(startup, "importFolderButton"), "import folder action should exist")
+        verify(findChild(mainWindow, "waveformModeButton"),
+               "waveform mode action should exist in the bottom control bar")
+        verify(findChild(mainWindow, "audioToolsButton").visible,
+               "audio tools action should be visible in the bottom control bar")
+        verify(findChild(mainWindow, "listWindowButton").visible,
+               "playlist action should be visible in the bottom control bar")
+        verify(findChild(mainWindow, "miniPlayerButton").visible,
+               "mini player action should be visible in the bottom control bar")
+    }
 }

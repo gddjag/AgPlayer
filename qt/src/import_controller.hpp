@@ -38,6 +38,7 @@ public:
     bool busy() const noexcept;
     QStringList errors() const;
     Q_INVOKABLE void importUrls(const QList<QUrl>& urls);
+    Q_INVOKABLE void importFolder(const QUrl& folder);
     void cancel();
 
 signals:

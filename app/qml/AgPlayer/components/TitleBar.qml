@@ -5,7 +5,7 @@ import AgPlayer
 
 Rectangle {
     id: titleBar
-    color: Theme.panel
+    color: "transparent"
 
     property Window window
 
@@ -17,48 +17,7 @@ Rectangle {
         anchors.rightMargin: Theme.spacingSm
         spacing: Theme.spacingMd
 
-        Image {
-            source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-            sourceSize.width: 28
-            sourceSize.height: 28
-            Layout.preferredWidth: 28
-            Layout.preferredHeight: 28
-            fillMode: Image.PreserveAspectFit
-        }
-
-        Text {
-            text: "AgPlayer"
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 15
-            font.weight: Font.Medium
-        }
-
         Item { Layout.fillWidth: true }
-
-        ToolButton {
-            objectName: "audioToolsButton"
-            icon.source: Theme.icon("equalizer-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
-            Accessible.name: "Open audio tools"
-            focusPolicy: Qt.StrongFocus
-            onClicked: WindowController.showAudioTools()
-            ToolTip.text: qsTr("Audio tools")
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
 
         ToolButton {
             objectName: "settingsButton"
@@ -70,56 +29,6 @@ Rectangle {
             focusPolicy: Qt.StrongFocus
             onClicked: titleBar.openSettings()
             ToolTip.text: qsTr("Settings")
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        ToolButton {
-            objectName: "listWindowButton"
-            icon.source: Theme.icon("playlist-2-fill")
-            icon.color: WindowController.listWindowVisible ? Theme.cyan : Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
-            Accessible.name: WindowController.listWindowVisible
-                             ? qsTr("Hide playlist window")
-                             : qsTr("Show playlist window")
-            focusPolicy: Qt.StrongFocus
-            onClicked: WindowController.toggleListWindow()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        ToolButton {
-            objectName: "miniPlayerButton"
-            icon.source: Theme.icon("restore-line")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
-            Accessible.name: "Switch to mini player"
-            focusPolicy: Qt.StrongFocus
-            onClicked: WindowController.showMini()
-            ToolTip.text: "Mini player"
             ToolTip.visible: hovered
 
             background: Rectangle {

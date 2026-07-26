@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: 800
     minimumHeight: 420
     flags: Qt.FramelessWindowHint
-    color: Theme.background
+    color: filterModel.count === 0 ? "#02091B" : Theme.background
     title: "AgPlayer"
 
     // Shared-state surface so the main window and the mini player can bind to
@@ -37,12 +37,25 @@ ApplicationWindow {
             dialog.open()
     }
 
+    function openFolderDialog() {
+        var dialog = folderDialogComponent.createObject(mainWindow)
+        if (dialog)
+            dialog.open()
+    }
+
     Component {
         id: importDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
             nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
             onAccepted: ImportController.importUrls(files)
+        }
+    }
+
+    Component {
+        id: folderDialogComponent
+        FolderDialog {
+            onAccepted: ImportController.importFolder(selectedFolder)
         }
     }
 
@@ -63,18 +76,28 @@ ApplicationWindow {
             objectName: "settingsPage"
         }
 
+        EmptyStartup {
+            id: emptyStartup
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: filterModel.count === 0
+            onOpenFileRequested: mainWindow.openImportDialog()
+            onImportFolderRequested: mainWindow.openFolderDialog()
+        }
+
         PlayerPane {
             id: playerPane
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 280
+            visible: filterModel.count > 0
         }
 
         Rectangle {
             id: lyricsPanel
             Layout.fillWidth: true
             Layout.preferredHeight: lyricsVisible ? 160 : 0
-            visible: lyricsVisible
+            visible: filterModel.count > 0 && lyricsVisible
             color: Theme.panel
             clip: true
 
@@ -109,8 +132,10 @@ ApplicationWindow {
 
         PlayerControls {
             id: playerControls
+            objectName: "playerControls"
             Layout.fillWidth: true
-            Layout.preferredHeight: 80
+            Layout.preferredHeight: filterModel.count === 0 ? 128 : 80
+            emptyMode: filterModel.count === 0
             onToggleLyrics: mainWindow.lyricsVisible = !mainWindow.lyricsVisible
         }
     }
@@ -125,6 +150,15 @@ ApplicationWindow {
             ImportController.importUrls(urls)
             drop.acceptProposedAction()
         }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.color: Theme.border
+        border.width: 1
+        radius: Theme.radiusLg
+        z: 100
     }
 
     Shortcut {

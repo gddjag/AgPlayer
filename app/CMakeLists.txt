@@ -29,6 +29,7 @@ set(ICON_FILES
 )
 
 set(BRAND_FILES
+    ${CMAKE_SOURCE_DIR}/assets/brand/empty-start-waveform.png
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-lockup.png
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
@@ -67,6 +68,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/TrackList.qml
         qml/AgPlayer/components/EmptyLibrary.qml
+        qml/AgPlayer/components/EmptyStartup.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
         qml/AgPlayer/components/SearchFilter.qml
