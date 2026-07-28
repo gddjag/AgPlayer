@@ -13,6 +13,7 @@ Rectangle {
 
     property var editor: MetadataEditor
     property var selectedIndices: [] // tracked locally for "Selected Files" apply
+    property int entriesRevision: 0
 
     function formatDuration(ms) {
         if (ms <= 0) {
@@ -282,7 +283,10 @@ Rectangle {
                                     }
 
                                     Text {
-                                        text: editor.entryAt(index).fileName
+                                        text: {
+                                            page.entriesRevision
+                                            return editor.entryAt(index).fileName
+                                        }
                                         color: Theme.primaryText
                                         font.family: Theme.fontPrimary
                                         font.pixelSize: 12
@@ -1091,12 +1095,15 @@ Rectangle {
                                 Layout.fillHeight: true
                                 Layout.minimumHeight: 0
                                 clip: true
-                                model: editor.renamePreviewEntries(
-                                    prefixField.text,
-                                    suffixField.text,
-                                    autoNumberCheck.checked,
-                                    numberStartSpin.value,
-                                    numberDigitsSpin.value)
+                                model: {
+                                    page.entriesRevision
+                                    return editor.renamePreviewEntries(
+                                        prefixField.text,
+                                        suffixField.text,
+                                        autoNumberCheck.checked,
+                                        numberStartSpin.value,
+                                        numberDigitsSpin.value)
+                                }
                                 delegate: RowLayout {
                                     width: previewList.width
                                     height: 28
@@ -1217,7 +1224,11 @@ Rectangle {
     // Pre-fill form with the first file's metadata when entries are loaded.
     Connections {
         target: editor
+        function onEntriesChanged() {
+            page.entriesRevision += 1
+        }
         function onEntriesLoaded() {
+            page.entriesRevision += 1
             titleField.text = ""
             artistField.text = ""
             albumField.text = ""

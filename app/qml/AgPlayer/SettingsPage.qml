@@ -1568,21 +1568,6 @@ Popup {
             subtitle: qsTr("关于")
         }
 
-        MessageDialog {
-            id: updateDialog
-            title: qsTr("检查更新")
-            buttons: MessageDialog.Ok
-            text: ""
-        }
-
-        Connections {
-            target: SettingsController
-            function onUpdateCheckFinished(message, success) {
-                updateDialog.text = message
-                updateDialog.open()
-            }
-        }
-
         SettingCard {
             title: ""
             Layout.fillWidth: true
@@ -1638,31 +1623,6 @@ Popup {
 
                 ColumnLayout {
                     spacing: Theme.spacingMd
-
-                    Button {
-                        text: qsTr("检查更新")
-                        onClicked: SettingsController.checkForUpdates()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 120
-                            implicitHeight: 36
-                        }
-                    }
 
                     Button {
                         text: qsTr("访问官网")

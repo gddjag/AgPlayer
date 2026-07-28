@@ -45,6 +45,8 @@ private slots:
     void pitchShifterExportsRequestedSampleRate();
     void pitchShifterCancellationReachesNativeWorker();
     void metadataEditorWritesAndRenames();
+    void metadataEditorKeepsEntriesStableWhileBusy();
+    void metadataEditorRenameCannotEscapeSourceDirectory();
 };
 
 void AudioToolsEndToEndTest::
@@ -280,6 +282,65 @@ void AudioToolsEndToEndTest::metadataEditorWritesAndRenames()
     QCOMPARE(renamed.first().first().toInt(), 1);
     QVERIFY(QFileInfo::exists(
         temp.filePath(QStringLiteral("P-007-S.wav"))));
+}
+
+void AudioToolsEndToEndTest::metadataEditorKeepsEntriesStableWhileBusy()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("stable.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 2));
+
+    MetadataEditor editor;
+    QSignalSpy entriesLoaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(input)});
+    QVERIFY(entriesLoaded.wait(30000));
+    QCOMPARE(editor.fileCount(), 1);
+    QVERIFY(QFile::copy(input, temp.filePath(QStringLiteral("safe-stable.wav"))));
+
+    QSignalSpy renamed(&editor, &MetadataEditor::renameApplied);
+    QSignalSpy entriesChanged(&editor, &MetadataEditor::entriesChanged);
+    editor.applyRename(QStringLiteral("safe-"), QString(), false, 1, 1);
+    QVERIFY(editor.busy());
+    editor.clear();
+    QCOMPARE(editor.fileCount(), 1);
+    QVERIFY(renamed.wait(30000));
+    QCOMPARE(entriesChanged.count(), 1);
+
+    const QVariantMap entry = editor.entryAt(0);
+    QCOMPARE(entry.value(QStringLiteral("fileName")).toString(),
+             QStringLiteral("safe-stable_2.wav"));
+    QVERIFY(QFileInfo::exists(
+        temp.filePath(QStringLiteral("safe-stable_2.wav"))));
+    editor.clear();
+    QCOMPARE(editor.fileCount(), 0);
+    QCOMPARE(entriesChanged.count(), 2);
+}
+
+void AudioToolsEndToEndTest::metadataEditorRenameCannotEscapeSourceDirectory()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString sourceDir = temp.filePath(QStringLiteral("source"));
+    QVERIFY(QDir().mkpath(sourceDir));
+    const QString input =
+        QDir(sourceDir).filePath(QStringLiteral("traverse.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 2));
+
+    MetadataEditor editor;
+    QSignalSpy entriesLoaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(input)});
+    QVERIFY(entriesLoaded.wait(30000));
+
+    QSignalSpy renamed(&editor, &MetadataEditor::renameApplied);
+    editor.applyRename(QStringLiteral("../outside-"), QString(), false, 1, 1);
+    QVERIFY(renamed.wait(30000));
+    QCOMPARE(renamed.first().first().toInt(), 1);
+
+    const QFileInfo renamedFile(
+        editor.entryAt(0).value(QStringLiteral("path")).toString());
+    QCOMPARE(renamedFile.absolutePath(), QFileInfo(input).absolutePath());
+    QCOMPARE(renamedFile.fileName(), QStringLiteral(".._outside-traverse.wav"));
 }
 
 QTEST_MAIN(AudioToolsEndToEndTest)

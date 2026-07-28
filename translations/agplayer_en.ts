@@ -913,7 +913,7 @@
 <context>
     <name>MetadataEditor</name>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="+89"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="+91"/>
         <source>Failed to open cover image: %1</source>
         <translation>Failed to open cover image: %1</translation>
     </message>
@@ -1419,14 +1419,6 @@
         <location line="+136"/>
         <source>清空</source>
         <translation>Clear</translation>
-    </message>
-</context>
-<context>
-    <name>SettingsController</name>
-    <message>
-        <location filename="../qt/src/settings_controller.cpp" line="+785"/>
-        <source>当前已是最新版本</source>
-        <translation>Currently the latest version</translation>
     </message>
 </context>
 <context>
@@ -2021,13 +2013,7 @@
         <translation>Clear all caches with one click</translation>
     </message>
     <message>
-        <location line="+40"/>
-        <location line="+70"/>
-        <source>检查更新</source>
-        <translation>Check for updates</translation>
-    </message>
-    <message>
-        <location line="-20"/>
+        <location line="+75"/>
         <source>发布日期: </source>
         <translation>Release date:</translation>
     </message>
@@ -2037,7 +2023,7 @@
         <translation>Lightweight, pure, and made for music.</translation>
     </message>
     <message>
-        <location line="+38"/>
+        <location line="+13"/>
         <source>访问官网</source>
         <translation>Visit official website</translation>
     </message>

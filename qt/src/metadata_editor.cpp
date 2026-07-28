@@ -2,10 +2,33 @@
 
 #include "agplayer/c_api.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QtConcurrent>
+
+#include <memory>
+
+namespace {
+
+QString sanitizedFileName(QString name)
+{
+    const QString invalid = QStringLiteral("<>:\"/\\|?*");
+    for (qsizetype index = 0; index < name.size(); ++index) {
+        const QChar character = name.at(index);
+        if (character.unicode() < 0x20 || invalid.contains(character)) {
+            name[index] = QLatin1Char('_');
+        }
+    }
+    while (name.endsWith(QLatin1Char(' '))
+           || name.endsWith(QLatin1Char('.'))) {
+        name.chop(1);
+    }
+    return name.isEmpty() ? QStringLiteral("_") : name;
+}
+
+} // namespace
 
 MetadataEditor::MetadataEditor(QObject* parent)
     : QObject(parent)
@@ -310,7 +333,7 @@ QString MetadataEditor::computeNewName(const QString& original,
     if (!ext.isEmpty()) {
         name += "." + ext;
     }
-    return name;
+    return sanitizedFileName(name);
 }
 
 QStringList MetadataEditor::previewRename(const QString& prefix,
@@ -372,29 +395,34 @@ void MetadataEditor::applyRename(const QString& prefix,
     cancelFlag_.store(false, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
+    auto updatedEntries =
+        std::make_shared<QList<MetadataEntry>>(entries_);
 
     auto* watcher = new QFutureWatcher<QPair<int, int>>(this);
     operationWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<QPair<int, int>>::finished, this,
-        [this, watcher]() {
+        [this, watcher, updatedEntries]() {
             operationWatcher_.clear();
             const auto result = watcher->result();
+            entries_ = *updatedEntries;
             setBusy(false);
             setProgress(1.0);
+            emit entriesChanged();
             emit renameApplied(result.first, result.second);
             watcher->deleteLater();
         });
 
     watcher->setFuture(QtConcurrent::run(
-        [prefix, suffix, autoNumber, numberStart, numberDigits, this]() {
+        [prefix, suffix, autoNumber, numberStart, numberDigits,
+         updatedEntries, this]() {
             int success = 0;
             int failure = 0;
-            const int total = entries_.size();
+            const int total = updatedEntries->size();
             for (int i = 0; i < total; ++i) {
                 if (cancelFlag_.load(std::memory_order_acquire)) {
                     break;
                 }
-                MetadataEntry& e = entries_[i];
+                MetadataEntry& e = (*updatedEntries)[i];
                 const QString newName = computeNewName(e.fileName, prefix, suffix,
                                                        autoNumber,
                                                        numberStart + i,
@@ -419,9 +447,23 @@ void MetadataEditor::applyRename(const QString& prefix,
                     ++failure;
                     continue;
                 }
+                const QString sourceDirectory =
+                    QDir::cleanPath(QFileInfo(e.path).absolutePath());
+                const QString targetDirectory =
+                    QDir::cleanPath(QFileInfo(finalPath).absolutePath());
+#ifdef Q_OS_WIN
+                constexpr auto pathCaseSensitivity = Qt::CaseInsensitive;
+#else
+                constexpr auto pathCaseSensitivity = Qt::CaseSensitive;
+#endif
+                if (sourceDirectory.compare(targetDirectory,
+                                            pathCaseSensitivity) != 0) {
+                    ++failure;
+                    continue;
+                }
                 if (QFile::rename(e.path, finalPath)) {
                     e.path = finalPath;
-                    e.fileName = newName;
+                    e.fileName = QFileInfo(finalPath).fileName();
                     ++success;
                 } else {
                     ++failure;
@@ -440,7 +482,11 @@ void MetadataEditor::cancel()
 
 void MetadataEditor::clear()
 {
+    if (busy_.load(std::memory_order_acquire)) {
+        return;
+    }
     entries_.clear();
     resetCover();
     emit fileCountChanged();
+    emit entriesChanged();
 }

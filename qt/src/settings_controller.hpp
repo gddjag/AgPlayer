@@ -233,14 +233,12 @@ public:
     Q_INVOKABLE void clearCoverCache();
     Q_INVOKABLE void clearTempFiles();
     Q_INVOKABLE void clearAllCache();
-    Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void openOfficialWebsite();
     Q_INVOKABLE void trimCacheNow();
 
     void onWaveformCacheSaved();
 
 signals:
-    void updateCheckFinished(const QString& message, bool success);
     void autoStartWithWindowsChanged();
     void restoreLastPlaybackOnStartupChanged();
     void showListWindowPanelChanged();

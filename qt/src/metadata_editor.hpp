@@ -80,6 +80,7 @@ signals:
     void busyChanged();
     void fileCountChanged();
     void entriesLoaded();
+    void entriesChanged();
     void coverImageChanged();
     void metadataApplied(int successCount, int failureCount);
     void renameApplied(int successCount, int failureCount);

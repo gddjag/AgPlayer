@@ -780,11 +780,6 @@ void SettingsController::clearAllCache()
     recalculateCacheSize();
 }
 
-void SettingsController::checkForUpdates()
-{
-    emit updateCheckFinished(tr("当前已是最新版本"), true);
-}
-
 void SettingsController::openOfficialWebsite()
 {
     QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/AgPlayer/AgPlayer")));
