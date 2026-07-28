@@ -10,6 +10,8 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -99,6 +101,32 @@ float high_frequency_energy(const std::filesystem::path& path,
         return 0.0f;
     }
     return static_cast<float>(sum / static_cast<double>(count));
+}
+
+std::pair<double, double> edge_energy(const std::filesystem::path& path)
+{
+    agplayer::Decoder decoder;
+    assert(decoder.open(path.string()) == AG_OK);
+    agplayer::DecodedAudioBlock block;
+    std::vector<float> samples;
+    do {
+        assert(decoder.read(block) == AG_OK);
+        samples.insert(samples.end(), block.samples.begin(), block.samples.end());
+    } while (!block.end_of_stream);
+    assert(samples.size() > 2'000U);
+
+    constexpr std::size_t window = 500U;
+    const auto average = [](const auto begin, const auto end) {
+        double sum = 0.0;
+        for (auto it = begin; it != end; ++it) {
+            sum += std::abs(static_cast<double>(*it));
+        }
+        return sum / static_cast<double>(std::distance(begin, end));
+    };
+    return {
+        average(samples.begin(), samples.begin() + window),
+        average(samples.end() - window, samples.end())
+    };
 }
 
 } // namespace
@@ -203,9 +231,44 @@ int main(const int argc, char** argv)
     assert(unprotected_energy >= 0.0f);
     assert(protected_energy < unprotected_energy);
 
+    // Smooth transition applies a short boundary envelope without changing
+    // the pitch/tempo settings.
+    const std::filesystem::path smooth_output =
+        input_path.parent_path() / "pitch-shifter-smooth.wav";
+    const std::filesystem::path abrupt_output =
+        input_path.parent_path() / "pitch-shifter-abrupt.wav";
+    std::filesystem::remove(smooth_output);
+    std::filesystem::remove(abrupt_output);
+
+    agplayer::PitchShiftConfig smooth_config;
+    smooth_config.output_path = smooth_output.string();
+    smooth_config.output_codec_name = "pcm_s16le";
+    smooth_config.pitch_cents = 0;
+    smooth_config.keep_tempo = true;
+    smooth_config.tempo_ratio = 1.0;
+    smooth_config.smooth_transition = true;
+
+    agplayer::PitchShiftConfig abrupt_config = smooth_config;
+    abrupt_config.output_path = abrupt_output.string();
+    abrupt_config.smooth_transition = false;
+
+    error.clear();
+    assert(agplayer::pitch_shift(input_path.string(), smooth_config,
+                                 nullptr, nullptr, error) == AG_OK);
+    error.clear();
+    assert(agplayer::pitch_shift(input_path.string(), abrupt_config,
+                                 nullptr, nullptr, error) == AG_OK);
+
+    const auto smooth_edges = edge_energy(smooth_output);
+    const auto abrupt_edges = edge_energy(abrupt_output);
+    assert(smooth_edges.first < abrupt_edges.first * 0.75);
+    assert(smooth_edges.second < abrupt_edges.second * 0.75);
+
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
     std::filesystem::remove(protected_output);
     std::filesystem::remove(unprotected_output);
+    std::filesystem::remove(smooth_output);
+    std::filesystem::remove(abrupt_output);
     return 0;
 }

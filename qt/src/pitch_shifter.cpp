@@ -188,20 +188,13 @@ void PitchShifter::start(int pitchCents,
 
     auto* watcher = new QFutureWatcher<int>(this);
     connect(watcher, &QFutureWatcher<int>::finished, this,
-        [this, watcher, outputPath, vocalProtection, smoothTransition]() {
+        [this, watcher, outputPath]() {
             watcher->deleteLater();
             const int result = watcher->result();
             setBusy(false);
             if (result == AG_OK) {
                 setProgress(1.0);
-                if (vocalProtection || smoothTransition) {
-                    emit pitchShiftCompletedWithWarnings(
-                        outputPath,
-                        QStringLiteral(
-                            "Vocal protection / smooth transition not supported"));
-                } else {
-                    emit pitchShiftCompleted(outputPath);
-                }
+                emit pitchShiftCompleted(outputPath);
             } else if (result == AG_CANCELLED) {
                 setProgress(0.0);
                 emit errorOccurred(QStringLiteral("Pitch shift cancelled"));

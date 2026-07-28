@@ -504,6 +504,24 @@ ag_result pitch_shift(const std::string& input_path,
         }
     }
 
+    if (config.smooth_transition) {
+        const std::size_t fade_samples = std::min<std::size_t>(
+            static_cast<std::size_t>(std::max(1, enc_sample_rate / 50)),
+            stretched.empty() ? 0U : stretched.front().size() / 2U);
+        const double half_pi = std::acos(-1.0) / 2.0;
+        for (auto& channel : stretched) {
+            for (std::size_t i = 0; i < fade_samples; ++i) {
+                const double phase =
+                    static_cast<double>(i + 1U)
+                    / static_cast<double>(fade_samples);
+                const float gain =
+                    static_cast<float>(std::sin(phase * half_pi));
+                channel[i] *= gain;
+                channel[channel.size() - 1U - i] *= gain;
+            }
+        }
+    }
+
     if (progress_callback) progress_callback(0.7f);
 
     // 5. Set up encoder: same codec as input unless a specific codec is requested
