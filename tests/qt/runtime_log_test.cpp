@@ -15,6 +15,7 @@ class RuntimeLogTest final : public QObject {
 
 private slots:
     void mapResultReturnsChineseUtf8ForKnownErrors();
+    void installCreatesLogFile();
     void mappedCoreErrorLogIncludesAllFields();
     void qtMessageHandlerRoutesThroughRuntimeLog();
     void rotationTriggersAtTwoMegabytesAndKeepsOldBackup();
@@ -61,6 +62,19 @@ void RuntimeLogTest::mapResultReturnsChineseUtf8ForKnownErrors()
 
     const ag_result unknown = static_cast<ag_result>(99);
     QCOMPARE(RuntimeLog::mapResult(unknown).toUtf8(), kUnknownError);
+}
+
+void RuntimeLogTest::installCreatesLogFile()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString logPath = dir.filePath(QStringLiteral("empty.log"));
+
+    RuntimeLog::install(logPath);
+    RuntimeLog::uninstall();
+
+    QVERIFY(QFileInfo::exists(logPath));
+    QCOMPARE(QFileInfo(logPath).size(), 0);
 }
 
 void RuntimeLogTest::mappedCoreErrorLogIncludesAllFields()

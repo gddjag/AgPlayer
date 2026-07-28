@@ -44,7 +44,7 @@ Rectangle {
             fileMode: FileDialog.OpenFiles
             nameFilters: [qsTr("Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)")]
             onAccepted: {
-                editor.loadFiles(files)
+                editor.loadFiles(selectedFiles)
                 destroy()
             }
             onRejected: destroy()
@@ -57,7 +57,7 @@ Rectangle {
             fileMode: FileDialog.OpenFile
             nameFilters: [qsTr("Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")]
             onAccepted: {
-                editor.setCoverImage(file)
+                editor.setCoverImage(selectedFile)
                 destroy()
             }
             onRejected: destroy()
@@ -191,7 +191,8 @@ Rectangle {
                 Rectangle {
                     id: fileListContainer
                     Layout.fillHeight: true
-                    Layout.preferredWidth: parent.width * 0.42
+                    Layout.fillWidth: true
+                    Layout.horizontalStretchFactor: 42
                     color: Theme.panel
                     radius: Theme.radiusSm
                     border.color: Theme.border
@@ -321,6 +322,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillHeight: true
                     Layout.fillWidth: true
+                    Layout.horizontalStretchFactor: 58
                     color: Theme.panel
                     radius: Theme.radiusSm
                     border.color: Theme.border

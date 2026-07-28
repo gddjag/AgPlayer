@@ -20,7 +20,7 @@ Rectangle {
             fileMode: FileDialog.OpenFiles
             nameFilters: [qsTr("Audio/Video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma *.mp4 *.mkv *.avi *.mov *.webm)")]
             onAccepted: {
-                converter.loadFiles(files)
+                converter.loadFiles(selectedFiles)
                 destroy()
             }
             onRejected: destroy()
@@ -31,7 +31,7 @@ Rectangle {
         id: outputDirDialogComponent
         FolderDialog {
             onAccepted: {
-                outputDirField.text = folder.toString().replace(/^file:\/+/, "")
+                outputDirField.text = selectedFolder.toString().replace(/^file:\/+/, "")
                 destroy()
             }
             onRejected: destroy()

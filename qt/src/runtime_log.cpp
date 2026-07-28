@@ -34,6 +34,7 @@ RuntimeLog::RuntimeLog(QString logPath)
     QFileInfo info(logPath_);
     QDir().mkpath(info.absolutePath());
     rotateIfNeeded();
+    std::ofstream(logPath_.toStdString(), std::ios::binary | std::ios::app);
     installed_ = true;
 }
 

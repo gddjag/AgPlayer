@@ -145,7 +145,7 @@ void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
     QVERIFY(track.durationMs > 0);
     QVERIFY(track.fileSize > 0);
     QCOMPARE(track.coverUrl,
-             QUrl(QStringLiteral("qrc:/AgPlayer/assets/brand/logo-mark.png")));
+             QUrl(QStringLiteral("qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png")));
 }
 
 void ImportControllerTest::modelCanBeDestroyedWhileProbeIsBlocked()

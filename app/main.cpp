@@ -54,13 +54,15 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
 
-    RuntimeLog::install();
-
     // Development-only QA arguments. Parsed before ag_player_create so the
     // production player instance is reused (controllers are never bypassed).
+    //   --qa-test-mode              isolate QStandardPaths from user data
+    //   --qa-log <path>             write the runtime log to an explicit path
     //   --qa-play <path>            load + play a file through the normal path
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
+    bool qaTestMode = false;
+    QString qaLogPath;
     QString qaPlayPath;
     QString qaScreenshotMain;
     QString qaScreenshotMini;
@@ -70,7 +72,11 @@ int main(int argc, char* argv[])
         const QStringList cliArgs = QGuiApplication::arguments();
         for (int i = 1; i < cliArgs.size(); ++i) {
             const QString& arg = cliArgs.at(i);
-            if (arg == QStringLiteral("--qa-play") && i + 1 < cliArgs.size()) {
+            if (arg == QStringLiteral("--qa-test-mode")) {
+                qaTestMode = true;
+            } else if (arg == QStringLiteral("--qa-log") && i + 1 < cliArgs.size()) {
+                qaLogPath = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-play") && i + 1 < cliArgs.size()) {
                 qaPlayPath = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-screenshot-main")
                        && i + 1 < cliArgs.size()) {
@@ -86,6 +92,11 @@ int main(int argc, char* argv[])
             }
         }
     }
+
+    if (qaTestMode) {
+        QStandardPaths::setTestModeEnabled(true);
+    }
+    RuntimeLog::install(qaLogPath);
 
     ag_player* core = nullptr;
     if (ag_player_create(&core) != AG_OK) {

@@ -29,7 +29,8 @@ struct ImportCallbackState {
 };
 
 namespace {
-const QUrl kBrandCover(QStringLiteral("qrc:/AgPlayer/assets/brand/logo-mark.png"));
+const QUrl kBrandCover(
+    QStringLiteral("qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"));
 
 QString copiedUtf8(const char* value)
 {

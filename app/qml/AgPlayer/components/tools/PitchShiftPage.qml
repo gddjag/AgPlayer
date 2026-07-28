@@ -67,14 +67,14 @@ Rectangle {
         FileDialog {
             fileMode: FileDialog.OpenFile
             nameFilters: [qsTr("Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)")]
-            onAccepted: shifter.loadFile(files[0])
+            onAccepted: shifter.loadFile(selectedFile)
         }
     }
 
     Component {
         id: outputDirDialogComponent
         FolderDialog {
-            onAccepted: outputDirField.text = folder
+            onAccepted: outputDirField.text = selectedFolder.toString().replace(/^file:\/+/, "")
         }
     }
 
