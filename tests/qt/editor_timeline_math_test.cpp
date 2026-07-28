@@ -8,6 +8,7 @@ class EditorTimelineMathTest final : public QObject {
 private slots:
     void computesBeatGrid();
     void snapsToNearestGridLine();
+    void estimatesFirstBeatOffset();
     void clampsAndNormalizesClipBounds();
 };
 
@@ -24,6 +25,16 @@ void EditorTimelineMathTest::snapsToNearestGridLine()
     QCOMPARE(snapMs(740, 120.0, 4), 500);
     QCOMPARE(snapMs(760, 120.0, 4), 1000);
     QCOMPARE(snapMs(-80, 120.0, 4), 0);
+}
+
+void EditorTimelineMathTest::estimatesFirstBeatOffset()
+{
+    const QVariantList delayedBeat{
+        0.01, 0.02, 0.04, 0.82, 0.20, 0.70, 0.18, 0.65, 0.15
+    };
+    QCOMPARE(estimateFirstBeatOffsetMs(delayedBeat, 8'000, 120.0), 3'000);
+    QCOMPARE(estimateFirstBeatOffsetMs({0.01, 0.01, 0.01}, 2'000, 120.0), 0);
+    QCOMPARE(estimateFirstBeatOffsetMs({}, 2'000, 120.0), 0);
 }
 
 void EditorTimelineMathTest::clampsAndNormalizesClipBounds()

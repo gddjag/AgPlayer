@@ -1,8 +1,11 @@
 #include "speed_adjuster.hpp"
 #include "bpm_analyzer.hpp"
+#include "editor_timeline_math.hpp"
 
 #include <agplayer/c_api.h>
 
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QtConcurrent>
@@ -390,17 +393,25 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
     token_.store(token, std::memory_order_release);
 
     const QString outputPath = computeOutputPath(inputPath_, outputFormat, outputDir, QStringLiteral("bpm"));
+    const qint64 beatOffsetMs = beatAlign_
+        ? estimateFirstBeatOffsetMs(waveformPeaks_, inputDurationMs_, detectedBpm_)
+        : 0;
+    const QFileInfo outputInfo(outputPath);
+    const QString intermediatePath = beatOffsetMs > 0
+        ? outputInfo.dir().filePath(
+            outputInfo.completeBaseName() + QStringLiteral(".agbeat.")
+            + outputInfo.suffix())
+        : outputPath;
     const QString inputPath = inputPath_;
     const double tempoRatio = 1.0 / speedRatio;
     const QByteArray codecName = [&outputFormat]() -> QByteArray {
         const FormatInfo fi = format_info(outputFormat);
         return fi.codec_name != nullptr ? QByteArray(fi.codec_name) : QByteArray();
     }();
-    const bool beatAlign = beatAlign_;
 
     auto* watcher = new QFutureWatcher<int>(this);
     connect(watcher, &QFutureWatcher<int>::finished, this,
-        [this, watcher, outputPath, beatAlign]() {
+        [this, watcher, outputPath]() {
             watcher->deleteLater();
             ag_cancel_token* t = token_.exchange(nullptr,
                 std::memory_order_acq_rel);
@@ -409,12 +420,7 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
             setBusy(false);
             if (result == AG_OK) {
                 setProgress(1.0);
-                if (beatAlign) {
-                    emit warningOccurred(QStringLiteral(
-                        "Exported: %1 (beat align not supported)").arg(outputPath));
-                } else {
-                    emit speedAdjustCompleted(outputPath);
-                }
+                emit speedAdjustCompleted(outputPath);
             } else if (result == AG_CANCELLED) {
                 setProgress(0.0);
                 emit errorOccurred(QStringLiteral("Speed adjust cancelled"));
@@ -424,11 +430,11 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
             }
         });
 
-    auto doAdjust = [this, inputPath, outputPath, tempoRatio, keepPitch, codecName,
-                     token]() -> int
+    auto doAdjust = [this, inputPath, outputPath, intermediatePath, tempoRatio,
+                     keepPitch, codecName, token, beatOffsetMs]() -> int
     {
         const QByteArray inputUtf8 = inputPath.toUtf8();
-        const QByteArray outputUtf8 = outputPath.toUtf8();
+        const QByteArray intermediateUtf8 = intermediatePath.toUtf8();
 
         auto callback = [](float frac, void* userData) {
             auto* self = static_cast<SpeedAdjuster*>(userData);
@@ -445,7 +451,7 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
 
         const ag_result result = ag_pitch_shift_ex(
             inputUtf8.constData(),
-            outputUtf8.constData(),
+            intermediateUtf8.constData(),
             0,                          // pitch_cents = 0
             keepPitch ? 1 : 0,          // keep_tempo maps to keep pitch in UI terms
             tempoRatio,
@@ -455,7 +461,32 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
             callback,
             this);
 
-        return static_cast<int>(result);
+        if (result != AG_OK) {
+            if (beatOffsetMs > 0) {
+                QFile::remove(intermediatePath);
+            }
+            return static_cast<int>(result);
+        }
+        if (beatOffsetMs <= 0) {
+            return static_cast<int>(result);
+        }
+
+        const qint64 alignedOffsetMs = qRound64(
+            static_cast<double>(beatOffsetMs) * tempoRatio);
+        const QByteArray outputUtf8 = outputPath.toUtf8();
+        const ag_result alignResult = ag_light_edit(
+            intermediateUtf8.constData(),
+            outputUtf8.constData(),
+            alignedOffsetMs,
+            0,
+            5,
+            0,
+            1.0,
+            token,
+            nullptr,
+            nullptr);
+        QFile::remove(intermediatePath);
+        return static_cast<int>(alignResult);
     };
 
     QFuture<int> future = QtConcurrent::run(doAdjust);
