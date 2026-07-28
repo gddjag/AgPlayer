@@ -38,6 +38,7 @@ ApplicationWindow {
         id: filterModel
         objectName: "filterModel"
         sourceModel: LibraryModel
+        playlistModel: PlaylistModel
     }
 
     function openImportDialog() {

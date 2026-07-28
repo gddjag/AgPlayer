@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QList>
 #include <QSet>
 #include <QUrl>
@@ -24,6 +25,8 @@ struct TrackRecord {
     bool available = false;
     QString importError;
     QString lyrics;
+    int playCount = 0;
+    qint64 lastPlayedAtMs = 0;
 };
 
 QString canonicalLibraryPath(const QString& path);
@@ -32,6 +35,8 @@ QString trackIdForPath(const QString& path);
 class LibraryModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(int favoriteCount READ favoriteCount NOTIFY favoriteCountChanged)
+    Q_PROPERTY(int historyCount READ historyCount NOTIFY historyCountChanged)
 
 public:
     enum Role {
@@ -52,7 +57,9 @@ public:
         BpmRole,
         AvailableRole,
         ImportErrorRole,
-        LyricsRole
+        LyricsRole,
+        PlayCountRole,
+        LastPlayedAtRole
     };
     Q_ENUM(Role)
 
@@ -71,18 +78,23 @@ public:
     Q_INVOKABLE int indexForTrackId(const QString& trackId) const;
 
     Q_INVOKABLE bool setFavorite(int row, bool favorite);
+    Q_INVOKABLE bool setRating(int row, int rating);
+    bool markPlayed(const QString& trackId, qint64 playedAtMs = 0);
     Q_INVOKABLE void playRow(int row);
     Q_INVOKABLE void flush();
 
     int favoriteCount() const noexcept;
+    int historyCount() const noexcept;
 
 signals:
     void playRequested(int row);
     void flushRequested();
     void favoriteCountChanged();
+    void historyCountChanged();
     void countChanged();
 
 private:
     QList<TrackRecord> tracks_;
     QSet<QString> pathKeys_;
+    QHash<QString, int> trackRows_;
 };

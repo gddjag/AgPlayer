@@ -10,6 +10,7 @@
 #include "metadata_editor.hpp"
 #include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
+#include "playlist_model.hpp"
 #include "settings_controller.hpp"
 #include "speed_adjuster.hpp"
 #include "waveform_item.hpp"
@@ -29,14 +30,19 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  SpeedAdjuster* speedAdjuster,
                                  LightEditor* lightEditor,
                                  SettingsController* settings,
-                                 WaveformProvider* waveformProvider)
+                                 WaveformProvider* waveformProvider,
+                                 PlaylistModel* playlistModel)
 {
+    static PlaylistModel fallbackPlaylistModel;
+    PlaylistModel* const playlists = playlistModel != nullptr
+        ? playlistModel : &fallbackPlaylistModel;
     qmlRegisterSingletonType<AudioPreviewController>(
         "AgPlayer", 1, 0, "AudioPreviewController",
         [](QQmlEngine*, QJSEngine*) -> QObject* {
             return new AudioPreviewController;
         });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer);

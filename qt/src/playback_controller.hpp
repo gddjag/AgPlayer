@@ -105,5 +105,6 @@ private:
     QString lyrics_;
     QString errorMessage_;
     QStringList queueTrackIds_;
+    QString lastHistoryTrackId_;
     bool deviceLost_ = false;
 };

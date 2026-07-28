@@ -286,6 +286,8 @@ void PlaybackControllerTest::libraryRequestsShareQueueAndFavoriteState()
         model.playRow(0);
         QTRY_COMPARE(controller.currentTrackId(), model.tracks().front().trackId);
         QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QTRY_COMPARE(model.tracks().front().playCount, 1);
+        QVERIFY(model.tracks().front().lastPlayedAtMs > 0);
         controller.toggleFavorite();
         QVERIFY(model.tracks().front().favorite);
     }

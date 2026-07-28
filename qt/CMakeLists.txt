@@ -31,6 +31,8 @@ add_library(agplayer_qt STATIC
     src/pitch_shifter.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
+    src/playlist_model.cpp
+    src/playlist_model.hpp
     src/qml_registration.cpp
     src/qml_registration.hpp
     src/runtime_log.cpp

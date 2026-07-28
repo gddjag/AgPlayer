@@ -1,3 +1,4 @@
+#include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -32,6 +33,7 @@
 #include "metadata_editor.hpp"
 #include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
+#include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "runtime_log.hpp"
 #include "settings_controller.hpp"
@@ -124,6 +126,9 @@ int main(int argc, char* argv[])
                 + QStringLiteral("/library.json")
             : qaLibraryPath;
         LibraryStore store(libraryPath);
+        PlaylistModel playlists(QFileInfo(libraryPath).dir().filePath(
+            QStringLiteral("playlists.json")));
+        playlists.load();
         QObject::connect(&library, &LibraryModel::rowsInserted, &store,
             [&store, &library](const QModelIndex&, int, int) {
                 store.requestSave(library.tracks());
@@ -184,7 +189,7 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &pitchShifter,
                                     &speedAdjuster, &lightEditor, &settings,
-                                    &waveformProvider);
+                                    &waveformProvider, &playlists);
 
         QString pendingPlayFilePath;
 
@@ -214,7 +219,10 @@ int main(int argc, char* argv[])
                     ag_player_stop(core);
                 }
             },
-            [&library]() { library.flush(); },
+            [&library, &playlists]() {
+                library.flush();
+                playlists.flush();
+            },
             [&playback, &core]() {
                 playback.setPlayer(nullptr);
                 if (core != nullptr) {

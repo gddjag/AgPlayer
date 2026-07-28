@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QFileInfo>
 
+#include <algorithm>
+
 namespace {
 QString normalizedCanonicalKey(const QString& canonicalPath)
 {
@@ -105,6 +107,10 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.importError;
     case LyricsRole:
         return track.lyrics;
+    case PlayCountRole:
+        return track.playCount;
+    case LastPlayedAtRole:
+        return track.lastPlayedAtMs;
     default:
         return {};
     }
@@ -129,7 +135,9 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {BpmRole, "bpm"},
             {AvailableRole, "available"},
             {ImportErrorRole, "importError"},
-            {LyricsRole, "lyrics"}};
+            {LyricsRole, "lyrics"},
+            {PlayCountRole, "playCount"},
+            {LastPlayedAtRole, "lastPlayedAtMs"}};
 }
 
 bool LibraryModel::append(TrackRecord track)
@@ -144,8 +152,10 @@ bool LibraryModel::append(TrackRecord track)
     }
     const int row = tracks_.size();
     beginInsertRows({}, row, row);
+    const QString trackId = track.trackId;
     tracks_.append(std::move(track));
     pathKeys_.insert(key);
+    trackRows_.insert(trackId, tracks_.size() - 1);
     endInsertRows();
     emit countChanged();
     if (tracks_.back().favorite) {
@@ -160,8 +170,10 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
     beginResetModel();
     tracks_.clear();
     pathKeys_.clear();
+    trackRows_.clear();
     tracks_.reserve(tracks.size());
     pathKeys_.reserve(tracks.size());
+    trackRows_.reserve(tracks.size());
     for (TrackRecord& track : tracks) {
         track.path = canonicalLibraryPath(track.path);
         const QString key = normalizedCanonicalKey(track.path);
@@ -173,12 +185,14 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
         }
         pathKeys_.insert(key);
         tracks_.append(std::move(track));
+        trackRows_.insert(tracks_.back().trackId, tracks_.size() - 1);
     }
     endResetModel();
     if (tracks_.size() != previousCount) {
         emit countChanged();
     }
     emit favoriteCountChanged();
+    emit historyCountChanged();
 }
 
 const QList<TrackRecord>& LibraryModel::tracks() const noexcept
@@ -212,12 +226,7 @@ int LibraryModel::indexForLocalFile(const QString& localFilePath) const
 
 int LibraryModel::indexForTrackId(const QString& trackId) const
 {
-    for (int row = 0; row < tracks_.size(); ++row) {
-        if (tracks_.at(row).trackId == trackId) {
-            return row;
-        }
-    }
-    return -1;
+    return trackRows_.value(trackId, -1);
 }
 
 bool LibraryModel::setFavorite(int row, bool favorite)
@@ -231,6 +240,41 @@ bool LibraryModel::setFavorite(int row, bool favorite)
         const QModelIndex changed = index(row);
         emit dataChanged(changed, changed, {FavoriteRole});
         emit favoriteCountChanged();
+    }
+    return true;
+}
+
+bool LibraryModel::setRating(int row, int rating)
+{
+    if (row < 0 || row >= tracks_.size()) {
+        return false;
+    }
+    const int clamped = std::clamp(rating, 0, 5);
+    TrackRecord& track = tracks_[row];
+    if (track.rating == clamped) {
+        return false;
+    }
+    track.rating = clamped;
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {RatingRole});
+    return true;
+}
+
+bool LibraryModel::markPlayed(const QString& trackId, qint64 playedAtMs)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) {
+        return false;
+    }
+    TrackRecord& track = tracks_[row];
+    const bool firstPlay = track.playCount == 0;
+    ++track.playCount;
+    track.lastPlayedAtMs = playedAtMs > 0
+        ? playedAtMs : QDateTime::currentMSecsSinceEpoch();
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {PlayCountRole, LastPlayedAtRole});
+    if (firstPlay) {
+        emit historyCountChanged();
     }
     return true;
 }
@@ -256,4 +300,11 @@ int LibraryModel::favoriteCount() const noexcept
         }
     }
     return count;
+}
+
+int LibraryModel::historyCount() const noexcept
+{
+    return static_cast<int>(std::count_if(
+        tracks_.cbegin(), tracks_.cend(),
+        [](const TrackRecord& track) { return track.playCount > 0; }));
 }

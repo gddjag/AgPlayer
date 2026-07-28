@@ -9,6 +9,11 @@ class GlobalHotkeyManager final : public QObject, public QAbstractNativeEventFil
     Q_OBJECT
 
 public:
+    enum class Backend {
+        Native,
+        InMemory,
+    };
+
     enum class Action {
         PlayPause,
         Previous,
@@ -19,7 +24,8 @@ public:
     };
     Q_ENUM(Action)
 
-    explicit GlobalHotkeyManager(QObject* parent = nullptr);
+    explicit GlobalHotkeyManager(Backend backend = Backend::Native,
+                                 QObject* parent = nullptr);
     ~GlobalHotkeyManager() override;
 
     // Parse a user-facing string such as "Global + Space" or "Alt + P" and
@@ -55,4 +61,5 @@ private:
     QList<Hotkey> hotkeys_;
     int nextId_ = 1;
     bool enabled_ = true;
+    Backend backend_ = Backend::Native;
 };

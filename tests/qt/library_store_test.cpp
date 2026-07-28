@@ -37,6 +37,8 @@ TrackRecord makeTrack(const QString& path, const QString& title)
     track.favorite = true;
     track.rating = 3;
     track.bpm = 120.0;
+    track.playCount = 7;
+    track.lastPlayedAtMs = Q_INT64_C(1722222222333);
     track.available = true;
     track.importError = QStringLiteral("old warning");
     return track;
@@ -77,6 +79,8 @@ void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()
     QCOMPARE(track.favorite, source.favorite);
     QCOMPARE(track.rating, source.rating);
     QCOMPARE(track.bpm, source.bpm);
+    QCOMPARE(track.playCount, source.playCount);
+    QCOMPARE(track.lastPlayedAtMs, source.lastPlayedAtMs);
     QVERIFY(!track.available);
     QCOMPARE(track.importError, source.importError);
     LibraryModel model;

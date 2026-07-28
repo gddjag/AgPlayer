@@ -17,7 +17,7 @@ private slots:
 
 void GlobalHotkeyManagerTest::emptyOrInvalidShortcutsAreRejected()
 {
-    GlobalHotkeyManager manager;
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
     QVERIFY(!manager.registerShortcut(QString(), GlobalHotkeyManager::Action::PlayPause));
     QVERIFY(!manager.registerShortcut("   ", GlobalHotkeyManager::Action::PlayPause));
     QVERIFY(!manager.registerShortcut("Global + UnknownKey123",
@@ -26,13 +26,13 @@ void GlobalHotkeyManagerTest::emptyOrInvalidShortcutsAreRejected()
 
 void GlobalHotkeyManagerTest::zeroKeyRegistrationIsRejected()
 {
-    GlobalHotkeyManager manager;
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
     QVERIFY(!manager.registerHotkey(0, 0, GlobalHotkeyManager::Action::PlayPause));
 }
 
 void GlobalHotkeyManagerTest::duplicateRegistrationsAreRejected()
 {
-    GlobalHotkeyManager manager;
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
     // Both map to the same raw key on Windows; the second registration should
     // fail because the combination is already registered.
     QVERIFY(manager.registerShortcut("Global + Space",
@@ -43,7 +43,7 @@ void GlobalHotkeyManagerTest::duplicateRegistrationsAreRejected()
 
 void GlobalHotkeyManagerTest::enabledStateCanBeToggled()
 {
-    GlobalHotkeyManager manager;
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
     QVERIFY(manager.registerShortcut("Global + F10",
                                       GlobalHotkeyManager::Action::PlayPause));
     manager.setEnabled(false);
@@ -53,7 +53,7 @@ void GlobalHotkeyManagerTest::enabledStateCanBeToggled()
 
 void GlobalHotkeyManagerTest::parseOnlyCombo()
 {
-    GlobalHotkeyManager manager;
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
     QVERIFY(manager.registerShortcut("Space", GlobalHotkeyManager::Action::PlayPause));
     QVERIFY(manager.registerShortcut("Left", GlobalHotkeyManager::Action::Previous));
     QVERIFY(manager.registerShortcut("Tab", GlobalHotkeyManager::Action::Next));
@@ -61,7 +61,7 @@ void GlobalHotkeyManagerTest::parseOnlyCombo()
 
 void GlobalHotkeyManagerTest::modifierPlusKeyCombo()
 {
-    GlobalHotkeyManager manager;
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
     QVERIFY(manager.registerShortcut("Alt + P", GlobalHotkeyManager::Action::PlayPause));
     QVERIFY(manager.registerShortcut("Ctrl + Shift + F",
                                       GlobalHotkeyManager::Action::PlayPause));

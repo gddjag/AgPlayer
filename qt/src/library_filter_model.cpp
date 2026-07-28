@@ -1,4 +1,5 @@
 #include "library_filter_model.hpp"
+#include "playlist_model.hpp"
 
 #include <QAbstractItemModel>
 
@@ -92,6 +93,12 @@ void LibraryFilterModel::setCategory(const QString& category)
     category_ = category;
     emit categoryChanged();
     invalidateFilter();
+    if (category_ == QStringLiteral("history")) {
+        setSortRole(LibraryModel::LastPlayedAtRole);
+        sort(0, Qt::DescendingOrder);
+    } else {
+        sort(-1);
+    }
 }
 
 int LibraryFilterModel::count() const
@@ -134,6 +141,42 @@ bool LibraryFilterModel::setFavorite(int proxyRow, bool favorite)
     return false;
 }
 
+PlaylistModel* LibraryFilterModel::playlistModel() const noexcept
+{
+    return playlistModel_;
+}
+
+void LibraryFilterModel::setPlaylistModel(PlaylistModel* playlistModel)
+{
+    if (playlistModel_ == playlistModel) {
+        return;
+    }
+    if (playlistModel_ != nullptr) {
+        disconnect(playlistModel_, nullptr, this, nullptr);
+    }
+    playlistModel_ = playlistModel;
+    if (playlistModel_ != nullptr) {
+        connect(playlistModel_, &PlaylistModel::membershipChanged, this,
+                [this] { invalidateFilter(); });
+        connect(playlistModel_, &QAbstractItemModel::rowsRemoved, this,
+                [this] { invalidateFilter(); });
+        connect(playlistModel_, &QAbstractItemModel::modelReset, this,
+                [this] { invalidateFilter(); });
+    }
+    emit playlistModelChanged();
+    invalidateFilter();
+}
+
+bool LibraryFilterModel::setRating(int proxyRow, int rating)
+{
+    const int srcRow = sourceRow(proxyRow);
+    if (srcRow < 0) {
+        return false;
+    }
+    auto* library = qobject_cast<LibraryModel*>(sourceModel());
+    return library != nullptr && library->setRating(srcRow, rating);
+}
+
 bool LibraryFilterModel::filterAcceptsRow(int sourceRow,
                                           const QModelIndex& sourceParent) const
 {
@@ -159,7 +202,33 @@ bool LibraryFilterModel::rowMatchesCategory(int sourceRow) const
         const QModelIndex idx = model->index(sourceRow, 0);
         return model->data(idx, LibraryModel::FavoriteRole).toBool();
     }
-    return true;
+    if (category_ == QStringLiteral("history")) {
+        QAbstractItemModel* model = sourceModel();
+        const QModelIndex idx = model->index(sourceRow, 0);
+        return model->data(idx, LibraryModel::PlayCountRole).toInt() > 0;
+    }
+    if (category_ == QStringLiteral("all")) {
+        return true;
+    }
+    if (playlistModel_ == nullptr) {
+        return false;
+    }
+    QAbstractItemModel* model = sourceModel();
+    const QModelIndex idx = model->index(sourceRow, 0);
+    return playlistModel_->containsTrack(
+        category_, model->data(idx, LibraryModel::TrackIdRole).toString());
+}
+
+bool LibraryFilterModel::lessThan(const QModelIndex& sourceLeft,
+                                  const QModelIndex& sourceRight) const
+{
+    if (category_ == QStringLiteral("history")) {
+        return sourceModel()
+            ->data(sourceLeft, LibraryModel::LastPlayedAtRole).toLongLong()
+            < sourceModel()
+                  ->data(sourceRight, LibraryModel::LastPlayedAtRole).toLongLong();
+    }
+    return sourceLeft.row() < sourceRight.row();
 }
 
 bool LibraryFilterModel::rowMatchesSearch(int sourceRow) const

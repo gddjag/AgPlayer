@@ -298,8 +298,9 @@ bool parseCombo(const QString& combo, uint& outModifiers, uint& outKey)
 
 } // namespace
 
-GlobalHotkeyManager::GlobalHotkeyManager(QObject* parent)
+GlobalHotkeyManager::GlobalHotkeyManager(Backend backend, QObject* parent)
     : QObject(parent)
+    , backend_(backend)
 {
 }
 
@@ -392,6 +393,9 @@ bool GlobalHotkeyManager::nativeEventFilter(const QByteArray& eventType, void* m
 
 bool GlobalHotkeyManager::registerNativeHotkey(const Hotkey& hotkey)
 {
+    if (backend_ == Backend::InMemory) {
+        return true;
+    }
 #ifdef Q_OS_WIN
     HWND hwnd = nullptr; // NULL hwnd registers application-global hotkeys.
     if (!RegisterHotKey(hwnd, hotkey.id, hotkey.modifiers, hotkey.key)) {
@@ -409,6 +413,9 @@ bool GlobalHotkeyManager::registerNativeHotkey(const Hotkey& hotkey)
 
 void GlobalHotkeyManager::unregisterNativeHotkey(int id)
 {
+    if (backend_ == Backend::InMemory) {
+        return;
+    }
 #ifdef Q_OS_WIN
     UnregisterHotKey(nullptr, id);
 #else

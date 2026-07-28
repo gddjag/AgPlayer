@@ -12,11 +12,17 @@ Rectangle {
     property int allCount: 0
     property int favoriteCount: 0
     property int historyCount: 0
-    property int workoutCount: 0
-    property int carCount: 0
-    property int networkCount: 0
+    property var playlistModel: PlaylistModel
+
+    readonly property bool customPlaylistSelected:
+        selectedCategory !== "all"
+        && selectedCategory !== "favorites"
+        && selectedCategory !== "history"
 
     signal categorySelected(string category)
+    signal createPlaylistRequested()
+    signal renamePlaylistRequested(string playlistId)
+    signal removePlaylistRequested(string playlistId)
     signal importRequested()
 
     ColumnLayout {
@@ -24,7 +30,6 @@ Rectangle {
         anchors.margins: Theme.spacingMd
         spacing: Theme.spacingSm
 
-        // Header
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.spacingSm
@@ -42,7 +47,7 @@ Rectangle {
             }
 
             Text {
-                text: qsTr("音乐列表")
+                text: qsTr("播放列表")
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 14
@@ -51,8 +56,8 @@ Rectangle {
             }
 
             ToolButton {
+                Accessible.name: root.expanded ? qsTr("折叠播放列表") : qsTr("展开播放列表")
                 onClicked: root.expanded = !root.expanded
-
                 contentItem: Text {
                     text: root.expanded ? "\u2303" : "\u2304"
                     color: Theme.secondaryText
@@ -60,16 +65,11 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
-
-                background: Rectangle {
-                    color: "transparent"
-                }
+                background: Rectangle { color: "transparent" }
             }
         }
 
-        // Categories
         ColumnLayout {
-            id: categories
             Layout.fillWidth: true
             spacing: 2
             visible: root.expanded
@@ -101,31 +101,36 @@ Rectangle {
                 onClicked: root.categorySelected("history")
             }
 
-            CategoryItem {
-                Layout.fillWidth: true
-                icon: "playlist-2-fill"
-                label: qsTr("健身歌单")
-                count: root.workoutCount
-                selected: root.selectedCategory === "workout"
-                onClicked: root.categorySelected("workout")
+            Repeater {
+                model: root.playlistModel
+                delegate: CategoryItem {
+                    required property string playlistId
+                    required property string name
+                    required property int trackCount
+                    Layout.fillWidth: true
+                    icon: "playlist-2-fill"
+                    label: name
+                    count: trackCount
+                    selected: root.selectedCategory === playlistId
+                    onClicked: root.categorySelected(playlistId)
+                }
             }
+        }
 
-            CategoryItem {
+        RowLayout {
+            Layout.fillWidth: true
+            visible: root.customPlaylistSelected
+            spacing: Theme.spacingSm
+
+            Button {
                 Layout.fillWidth: true
-                icon: "playlist-2-fill"
-                label: qsTr("车载歌单")
-                count: root.carCount
-                selected: root.selectedCategory === "car"
-                onClicked: root.categorySelected("car")
+                text: qsTr("重命名")
+                onClicked: root.renamePlaylistRequested(root.selectedCategory)
             }
-
-            CategoryItem {
+            Button {
                 Layout.fillWidth: true
-                icon: "playlist-2-fill"
-                label: qsTr("网络流行")
-                count: root.networkCount
-                selected: root.selectedCategory === "network"
-                onClicked: root.categorySelected("network")
+                text: qsTr("删除")
+                onClicked: root.removePlaylistRequested(root.selectedCategory)
             }
         }
 
@@ -141,38 +146,32 @@ Rectangle {
 
             Button {
                 Layout.fillWidth: true
-                text: qsTr("歌单")
+                text: qsTr("新建歌单")
                 icon.source: Theme.icon("playlist-2-fill")
                 icon.color: Theme.secondaryText
                 palette.buttonText: Theme.secondaryText
-                onClicked: root.categorySelected("all")
-
+                onClicked: root.createPlaylistRequested()
                 background: Rectangle {
                     color: parent.pressed ? Theme.cyan
-                          : parent.hovered ? Theme.border
-                          : Theme.panel
+                          : parent.hovered ? Theme.border : Theme.panel
                     radius: Theme.radiusSm
                 }
-
             }
 
             Button {
                 id: importButton
                 objectName: "importButton"
                 Layout.fillWidth: true
-                text: qsTr("导入")
+                text: qsTr("导入音乐")
                 icon.source: Theme.icon("folder-open-fill")
                 icon.color: Theme.secondaryText
                 palette.buttonText: Theme.secondaryText
                 onClicked: root.importRequested()
-
                 background: Rectangle {
                     color: parent.pressed ? Theme.cyan
-                          : parent.hovered ? Theme.border
-                          : Theme.panel
+                          : parent.hovered ? Theme.border : Theme.panel
                     radius: Theme.radiusSm
                 }
-
             }
         }
 
@@ -189,7 +188,6 @@ Rectangle {
         property string label
         property int count
         property bool selected: false
-
         signal clicked()
 
         RowLayout {
@@ -198,27 +196,22 @@ Rectangle {
             anchors.rightMargin: Theme.spacingSm
             spacing: Theme.spacingSm
 
-            ToolButton {
+            Image {
+                source: Theme.icon(catRoot.icon)
+                sourceSize.width: 16
+                sourceSize.height: 16
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
-                enabled: false
-                padding: 0
-                icon.source: Theme.icon(catRoot.icon)
-                icon.color: catRoot.selected
-                            ? Theme.primaryText : Theme.secondaryText
-                icon.width: 16
-                icon.height: 16
-                background: null
+                fillMode: Image.PreserveAspectFit
             }
-
             Text {
                 text: catRoot.label
                 color: catRoot.selected ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
                 Layout.fillWidth: true
+                elide: Text.ElideRight
             }
-
             Text {
                 text: catRoot.count
                 color: Theme.secondaryText
@@ -227,9 +220,6 @@ Rectangle {
             }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: catRoot.clicked()
-        }
+        TapHandler { onTapped: catRoot.clicked() }
     }
 }

@@ -9,6 +9,7 @@ class LightEditor;
 class MetadataEditor;
 class PitchShifter;
 class PlaybackController;
+class PlaylistModel;
 class SettingsController;
 class SpeedAdjuster;
 class WaveformProvider;
@@ -29,4 +30,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  SpeedAdjuster* speedAdjuster,
                                  LightEditor* lightEditor,
                                  SettingsController* settings,
-                                 WaveformProvider* waveformProvider = nullptr);
+                                 WaveformProvider* waveformProvider = nullptr,
+                                 PlaylistModel* playlistModel = nullptr);

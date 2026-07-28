@@ -215,7 +215,13 @@ void PlaybackController::playRow(int row)
         return;
     }
     queueTrackIds_ = std::move(trackIds);
-    runCommand(ag_player_play(player_));
+    const ag_result playResult = ag_player_play(player_);
+    runCommand(playResult);
+    if (playResult == AG_OK) {
+        const QString trackId = library_->tracks().at(row).trackId;
+        library_->markPlayed(trackId);
+        lastHistoryTrackId_ = trackId;
+    }
 }
 
 void PlaybackController::toggleFavorite()
@@ -318,17 +324,20 @@ void PlaybackController::pollSnapshot()
 
         QString nextLyrics;
         if (!currentTrackId_.isEmpty() && library_ != nullptr) {
-            for (const TrackRecord& track : library_->tracks()) {
-                if (track.trackId == currentTrackId_) {
-                    nextLyrics = track.lyrics;
-                    break;
-                }
+            const int row = library_->indexForTrackId(currentTrackId_);
+            if (row >= 0) {
+                nextLyrics = library_->tracks().at(row).lyrics;
             }
         }
         if (lyrics_ != nextLyrics) {
             lyrics_ = std::move(nextLyrics);
             emit lyricsChanged();
         }
+    }
+    if (nextState == Playing && !currentTrackId_.isEmpty()
+        && currentTrackId_ != lastHistoryTrackId_ && library_ != nullptr) {
+        library_->markPlayed(currentTrackId_);
+        lastHistoryTrackId_ = currentTrackId_;
     }
     if (deviceLost_ != nextDeviceLost) {
         deviceLost_ = nextDeviceLost;

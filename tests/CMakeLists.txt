@@ -317,7 +317,9 @@ set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
 foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
+    playlist_model_test
     import_controller_test
+    library_filter_model_test
     playback_controller_test
     window_controller_test
     global_hotkey_manager_test
@@ -513,4 +515,21 @@ set_tests_properties(library_stress_test PROPERTIES
     TIMEOUT 600
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(library_model_stress_test
+    stress/library_model_stress_test.cpp
+)
+set_target_properties(library_model_stress_test PROPERTIES AUTOMOC ON)
+target_include_directories(library_model_stress_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(library_model_stress_test PRIVATE agplayer_qt Qt6::Test)
+agplayer_enable_warnings(library_model_stress_test)
+add_test(NAME library_model_stress_test COMMAND library_model_stress_test)
+set_tests_properties(library_model_stress_test PROPERTIES
+    TIMEOUT 30
+    LABELS stress
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )

@@ -22,6 +22,7 @@ Window {
     // Injected dependencies — defaults keep production wiring implicit.
     property var windows: WindowController
     property var filterModel: null
+    property var playlistModel: PlaylistModel
 
     // Internal drag state for custom frameless window movement with
     // continuous magnetic snapping through WindowController.
@@ -50,12 +51,73 @@ Window {
             dialog.open()
     }
 
+    function openRenameDialog(playlistId) {
+        renamePlaylistDialog.playlistId = playlistId
+        renamePlaylistField.text = playlistModel.nameForId(playlistId)
+        renamePlaylistDialog.open()
+        renamePlaylistField.forceActiveFocus()
+        renamePlaylistField.selectAll()
+    }
+
     Component {
         id: importDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
             nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
             onAccepted: ImportController.importUrls(selectedFiles)
+        }
+    }
+
+    Dialog {
+        id: createPlaylistDialog
+        title: qsTr("新建歌单")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onOpened: {
+            createPlaylistField.clear()
+            createPlaylistField.forceActiveFocus()
+        }
+        onAccepted: {
+            var id = playlistModel.createPlaylist(createPlaylistField.text)
+            if (id.length > 0 && filterModel)
+                filterModel.category = id
+        }
+        contentItem: TextField {
+            id: createPlaylistField
+            placeholderText: qsTr("歌单名称")
+        }
+    }
+
+    Dialog {
+        id: renamePlaylistDialog
+        property string playlistId
+        title: qsTr("重命名歌单")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: playlistModel.renamePlaylist(
+                        playlistId, renamePlaylistField.text)
+        contentItem: TextField { id: renamePlaylistField }
+    }
+
+    Dialog {
+        id: removePlaylistDialog
+        property string playlistId
+        title: qsTr("删除歌单")
+        modal: true
+        width: 420
+        anchors.centerIn: parent
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            if (playlistModel.removePlaylist(playlistId) && filterModel)
+                filterModel.category = "all"
+        }
+        contentItem: Label {
+            width: 380
+            text: qsTr("确定删除这个歌单？音乐文件不会被删除。")
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
         }
     }
 
@@ -177,7 +239,7 @@ Window {
 
                     // Left sidebar: categories and filters.
                     Rectangle {
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 260
                         Layout.fillHeight: true
                         color: Theme.background
                         border.color: Theme.border
@@ -191,39 +253,27 @@ Window {
                             SideNavigation {
                                 id: sideNav
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 260
+                                Layout.fillHeight: true
                                 selectedCategory: filterModel ? filterModel.category : "all"
                                 allCount: LibraryModel.count
-                                historyCount: LibraryModel.count
-                                workoutCount: LibraryModel.count
-                                carCount: LibraryModel.count
-                                networkCount: LibraryModel.count
+                                favoriteCount: LibraryModel.favoriteCount
+                                historyCount: LibraryModel.historyCount
+                                playlistModel: listWindow.playlistModel
                                 onCategorySelected: function(category) {
                                     if (filterModel)
                                         filterModel.category = category
                                 }
+                                onCreatePlaylistRequested: createPlaylistDialog.open()
+                                onRenamePlaylistRequested: function(playlistId) {
+                                    listWindow.openRenameDialog(playlistId)
+                                }
+                                onRemovePlaylistRequested: function(playlistId) {
+                                    removePlaylistDialog.playlistId = playlistId
+                                    removePlaylistDialog.open()
+                                }
                                 onImportRequested: listWindow.openImportDialog()
                             }
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 1
-                                color: Theme.border
-                            }
-
-                            SearchFilter {
-                                id: searchFilter
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                searchText: filterModel ? filterModel.searchText : ""
-                                minRating: filterModel ? filterModel.minRating : 0
-                                minBpm: filterModel ? filterModel.minBpm : 0.0
-                                maxBpm: filterModel ? filterModel.maxBpm : 300.0
-                                onSearchTextChanged: if (filterModel) filterModel.searchText = searchText
-                                onMinRatingChanged: if (filterModel) filterModel.minRating = minRating
-                                onMinBpmChanged: if (filterModel) filterModel.minBpm = minBpm
-                                onMaxBpmChanged: if (filterModel) filterModel.maxBpm = maxBpm
-                            }
                         }
                     }
 
@@ -233,23 +283,73 @@ Window {
                         Layout.fillHeight: true
                         color: Theme.background
 
-                        StackLayout {
-                            id: listStack
+                        ColumnLayout {
                             anchors.fill: parent
-                            currentIndex: filterModel && filterModel.count > 0 ? 0 : 1
+                            anchors.margins: Theme.spacingSm
+                            spacing: Theme.spacingSm
 
-                            TrackList {
-                                id: trackList
-                                objectName: "detachedTrackList"
+                            StackLayout {
+                                id: listStack
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                trackModel: filterModel
+                                currentIndex: LibraryModel.count === 0 ? 1
+                                              : filterModel && filterModel.count > 0 ? 0 : 2
+
+                                TrackList {
+                                    id: trackList
+                                    objectName: "detachedTrackList"
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    trackModel: filterModel
+                                    playlistModel: listWindow.playlistModel
+                                    selectedCategory: filterModel ? filterModel.category : "all"
+                                    searchText: filterModel ? filterModel.searchText : ""
+                                }
+
+                                EmptyLibrary {
+                                    id: emptyLibrary
+                                    objectName: "emptyLibrary"
+                                    onImportRequested: listWindow.openImportDialog()
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    spacing: Theme.spacingMd
+
+                                    Item { Layout.fillHeight: true }
+                                    Label {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: qsTr("未找到符合条件的歌曲")
+                                        color: Theme.primaryText
+                                        font.pixelSize: 16
+                                    }
+                                    Button {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: qsTr("一键清空筛选")
+                                        onClicked: searchFilter.clearFilters()
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                }
                             }
 
-                            EmptyLibrary {
-                                id: emptyLibrary
-                                objectName: "emptyLibrary"
-                                onImportRequested: listWindow.openImportDialog()
+                            SearchFilter {
+                                id: searchFilter
+                                objectName: "librarySearchFilter"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: implicitHeight
+                                searchText: filterModel ? filterModel.searchText : ""
+                                minRating: filterModel ? filterModel.minRating : 0
+                                minBpm: filterModel ? filterModel.minBpm : 60
+                                maxBpm: filterModel ? filterModel.maxBpm : 160
+                                onSearchTextChanged: if (filterModel)
+                                                         filterModel.searchText = searchText
+                                onMinRatingChanged: if (filterModel)
+                                                        filterModel.minRating = minRating
+                                onMinBpmChanged: if (filterModel)
+                                                     filterModel.minBpm = minBpm
+                                onMaxBpmChanged: if (filterModel)
+                                                     filterModel.maxBpm = maxBpm
                             }
                         }
                     }

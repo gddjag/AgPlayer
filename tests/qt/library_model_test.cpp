@@ -16,6 +16,7 @@ private slots:
     void replaceAllRebuildsCanonicalIndexForLargeLibrary();
     void countPropertyTracksRows();
     void findsRowByTrackId();
+    void updatesRatingAndPlaybackHistory();
 };
 
 void LibraryModelTest::exposesRolesAndUpdatesFavorite()
@@ -68,6 +69,8 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(roles.value(LibraryModel::BpmRole), QByteArray("bpm"));
     QCOMPARE(roles.value(LibraryModel::AvailableRole), QByteArray("available"));
     QCOMPARE(roles.value(LibraryModel::ImportErrorRole), QByteArray("importError"));
+    QCOMPARE(roles.value(LibraryModel::PlayCountRole), QByteArray("playCount"));
+    QCOMPARE(roles.value(LibraryModel::LastPlayedAtRole), QByteArray("lastPlayedAtMs"));
 
     QSignalSpy changed(&model, &LibraryModel::dataChanged);
     QSignalSpy favoriteCountChanged(&model, &LibraryModel::favoriteCountChanged);
@@ -218,6 +221,31 @@ void LibraryModelTest::findsRowByTrackId()
     QCOMPARE(model.indexForTrackId(QStringLiteral("track-a")), 0);
     QCOMPARE(model.indexForTrackId(QStringLiteral("track-b")), 1);
     QCOMPARE(model.indexForTrackId(QStringLiteral("missing")), -1);
+}
+
+void LibraryModelTest::updatesRatingAndPlaybackHistory()
+{
+    TrackRecord track;
+    track.trackId = QStringLiteral("track-a");
+    track.path = QStringLiteral("C:/music/a.wav");
+    track.rating = 2;
+    LibraryModel model;
+    model.append(track);
+    QSignalSpy changed(&model, &LibraryModel::dataChanged);
+
+    QVERIFY(model.setRating(0, 9));
+    QCOMPARE(model.tracks().front().rating, 5);
+    QVERIFY(!model.setRating(0, 5));
+    QVERIFY(!model.setRating(-1, 3));
+    QVERIFY(model.markPlayed(track.trackId, 123456));
+    QCOMPARE(model.tracks().front().playCount, 1);
+    QCOMPARE(model.tracks().front().lastPlayedAtMs, 123456);
+    QVERIFY(!model.markPlayed(QStringLiteral("missing"), 789));
+    QCOMPARE(changed.count(), 2);
+    QCOMPARE(changed.at(0).at(2).value<QList<int>>(),
+             QList<int>{LibraryModel::RatingRole});
+    QCOMPARE(changed.at(1).at(2).value<QList<int>>(),
+             QList<int>({LibraryModel::PlayCountRole, LibraryModel::LastPlayedAtRole}));
 }
 
 QTEST_GUILESS_MAIN(LibraryModelTest)
