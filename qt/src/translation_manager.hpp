@@ -21,5 +21,6 @@ signals:
 
 private:
     QTranslator translator_;
-    QString language_ = QStringLiteral("zh");
+    QString language_;
+    bool translatorInstalled_ = false;
 };

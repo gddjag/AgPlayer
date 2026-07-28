@@ -186,15 +186,16 @@ ListView {
 
                 Repeater {
                     model: 5
-                    delegate: Image {
+                    delegate: ThemedIcon {
                         required property int index
                         source: index < delegateRoot.rating
                                 ? Theme.icon("star-fill") : Theme.icon("star-line")
+                        tint: index < delegateRoot.rating
+                              ? Theme.ratingGold : Theme.iconSecondary
                         sourceSize.width: 12
                         sourceSize.height: 12
                         Layout.preferredWidth: 14
                         Layout.preferredHeight: 14
-                        fillMode: Image.PreserveAspectFit
                         TapHandler {
                             onTapped: {
                                 var next = index + 1

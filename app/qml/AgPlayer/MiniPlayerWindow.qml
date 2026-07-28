@@ -46,7 +46,7 @@ Window {
         anchors.fill: parent
         anchors.margins: 4
         radius: Theme.radiusLg
-        color: "#0B111B"
+        color: Theme.panel
         border.color: Theme.border
         border.width: 1
 

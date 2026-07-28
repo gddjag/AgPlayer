@@ -1,2373 +1,2426 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US" sourcelanguage="zh_CN">
-    <context>
-        <name>AudioToolsWindow</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+16" />
-            <source>AgPlayer 音频工具</source>
-            <translation>AgPlayer audio tool</translation>
-        </message>
-        <message>
-            <location line="+54" />
-            <source>音频工具</source>
-            <translation>audio tools</translation>
-        </message>
-    </context>
-    <context>
-        <name>ComingSoonPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/ComingSoonPage.qml" line="+38" />
-            <source>Coming Soon</source>
-            <translation>Coming Soon</translation>
-        </message>
-    </context>
-    <context>
-        <name>EmptyLibrary</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/EmptyLibrary.qml" line="+30" />
-            <source>Your library is empty</source>
-            <translation>Your library is empty</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>Drag audio files into the window or click below to import</source>
-            <translation>Drag audio files into the window or click below to import</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <location line="+89" />
-            <source>Import audio</source>
-            <translation>Import audio</translation>
-        </message>
-        <message>
-            <location line="-53" />
-            <source>Importing...</source>
-            <translation>Importing...</translation>
-        </message>
-        <message>
-            <location line="+23" />
-            <source>Some files could not be imported</source>
-            <translation>Some files could not be imported</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>... and %1 more</source>
-            <translation>... and %1 more</translation>
-        </message>
-    </context>
-    <context>
-        <name>EmptyStartup</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/EmptyStartup.qml" line="+26" />
-            <source>开始播放你的音乐</source>
-            <translation>Start playing your music</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>打开或拖拽音频文件到此处开始播放</source>
-            <translation>Open or drag the audio file here to start playing</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>打开文件</source>
-            <translation>open file</translation>
-        </message>
-        <message>
-            <location line="+31" />
-            <source>导入文件夹</source>
-            <translation>Import folder</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>支持 MP3、WAV、FLAC、AAC、OGG、M4A 等音频格式</source>
-            <translation>Supports MP3, WAV, FLAC, AAC, OGG, M4A and other audio formats</translation>
-        </message>
-    </context>
-    <context>
-        <name>FileAssociationController</name>
-        <message>
-            <location filename="../qt/src/file_association_controller.cpp" line="+82" />
-            <source>Cannot determine application path</source>
-            <translation>Cannot determine application path</translation>
-        </message>
-        <message>
-            <location line="+22" />
-            <location line="+22" />
-            <location line="+41" />
-            <source>not supported on this platform</source>
-            <translation>not supported on this platform</translation>
-        </message>
-        <message>
-            <location line="+62" />
-            <source>Failed to create ProgID registry key</source>
-            <translation>Failed to create ProgID registry key</translation>
-        </message>
-        <message>
-            <location line="+20" />
-            <source>Failed to write ProgID registry values</source>
-            <translation>Failed to write ProgID registry values</translation>
-        </message>
-        <message>
-            <location line="+14" />
-            <source>Failed to remove ProgID registry key</source>
-            <translation>Failed to remove ProgID registry key</translation>
-        </message>
-        <message>
-            <location line="+22" />
-            <source>Failed to create extension registry key for .%1</source>
-            <translation>Failed to create extension registry key for .%1</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Failed to write extension registry values for .%1</source>
-            <translation>Failed to write extension registry values for .%1</translation>
-        </message>
-        <message>
-            <location line="+32" />
-            <source>Failed to remove extension registry key for .%1</source>
-            <translation>Failed to remove extension registry key for .%1</translation>
-        </message>
-    </context>
-    <context>
-        <name>FormatConvertPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/FormatConvertPage.qml" line="+21" />
-            <source>Audio/Video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma *.mp4 *.mkv *.avi *.mov *.webm)</source>
-            <translation>Audio/Video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma *.mp4 *.mkv *.avi *.mov *.webm)</translation>
-        </message>
-        <message>
-            <location line="+31" />
-            <source>Format Conversion</source>
-            <translation>Format Conversion</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Add Files</source>
-            <translation>Add Files</translation>
-        </message>
-        <message>
-            <location line="+93" />
-            <source>Drop audio/video files here or click Add Files</source>
-            <translation>Drop audio/video files here or click Add Files</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Drop audio files here or click Add Files</source>
-            <translation>Drop audio files here or click Add Files</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus / MP4 / MKV / AVI / MOV / WebM</source>
-            <translation>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus / MP4 / MKV / AVI / MOV / WebM</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus</source>
-            <translation>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus</translation>
-        </message>
-        <message>
-            <location line="+20" />
-            <source>Conversion List</source>
-            <translation>Conversion List</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Clear List</source>
-            <translation>Clear List</translation>
-        </message>
-        <message>
-            <location line="+40" />
-            <source>File Name</source>
-            <translation>File Name</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>Format</source>
-            <translation>Format</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>Size</source>
-            <translation>Size</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>Duration</source>
-            <translation>Duration</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>Status</source>
-            <translation>Status</translation>
-        </message>
-        <message>
-            <location line="+80" />
-            <source>Error</source>
-            <translation>Error</translation>
-        </message>
-        <message>
-            <location line="+40" />
-            <source>No files in the conversion list</source>
-            <translation>No files in the conversion list</translation>
-        </message>
-        <message>
-            <location line="+30" />
-            <source>Output Format</source>
-            <translation>Output Format</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>MP3</source>
-            <translation>MP3</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>WAV</source>
-            <translation>WAV</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>FLAC</source>
-            <translation>FLAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>AAC</source>
-            <translation>AAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>M4A</source>
-            <translation>M4A</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>OGG</source>
-            <translation>OGG</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Opus</source>
-            <translation>Opus</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Bit Rate</source>
-            <translation>Bit Rate</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <source>%1 kbps</source>
-            <translation>%1 kbps</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Lossless</source>
-            <translation>Lossless</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Sample Rate</source>
-            <translation>Sample Rate</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <location line="+38" />
-            <source>Auto</source>
-            <translation>Auto</translation>
-        </message>
-        <message>
-            <location line="-37" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <source>%1 Hz</source>
-            <translation>%1 Hz</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Channels</source>
-            <translation>Channels</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Mono</source>
-            <translation>Mono</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Stereo</source>
-            <translation>Stereo</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Keep metadata (title / artist / album / cover)</source>
-            <translation>Keep metadata (title / artist / album / cover)</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Volume normalize</source>
-            <translation>Volume normalize</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Extract audio from video</source>
-            <translation>Extract audio from video</translation>
-        </message>
-        <message>
-            <location line="+40" />
-            <source>Output Directory</source>
-            <translation>Output Directory</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Same as source (default)</source>
-            <translation>Same as source (default)</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Browse</source>
-            <translation>Browse</translation>
-        </message>
-        <message>
-            <location line="+27" />
-            <source>Cancel</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>Start Conversion</source>
-            <translation>Start Conversion</translation>
-        </message>
-        <message>
-            <location line="+49" />
-            <source>Transcoding... %1/%2 completed</source>
-            <translation>Transcoding... %1/%2 completed</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>Done: %1 success, %2 failed</source>
-            <translation>Done: %1 success, %2 failed</translation>
-        </message>
-        <message>
-            <location line="+50" />
-            <source>Lossy-to-lossy conversion may cause secondary quality loss.</source>
-            <translation>Lossy-to-lossy conversion may cause secondary quality loss.</translation>
-        </message>
-        <message>
-            <location line="+15" />
-            <source>All %1 files transcoded successfully.</source>
-            <translation>All %1 files transcoded successfully.</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>%1 succeeded, %2 failed.</source>
-            <translation>%1 succeeded, %2 failed.</translation>
-        </message>
-    </context>
-    <context>
-        <name>InfoEditPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/InfoEditPage.qml" line="+45" />
-            <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
-            <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)</source>
-            <translation>Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>Batch Metadata Edit</source>
-            <translation>Batch Metadata Edit</translation>
-        </message>
-        <message>
-            <location line="+84" />
-            <location line="+584" />
-            <source>Drop audio files here or click to add</source>
-            <translation>Drop audio files here or click to add</translation>
-        </message>
-        <message>
-            <location line="-576" />
-            <location line="+584" />
-            <source>Supports MP3 / WAV / FLAC / M4A, etc.</source>
-            <translation>Supports MP3 / WAV / FLAC / M4A, etc.</translation>
-        </message>
-        <message>
-            <location line="-549" />
-            <source>File List</source>
-            <translation>File List</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <location line="+802" />
-            <source>Clear List</source>
-            <translation>Clear List</translation>
-        </message>
-        <message>
-            <location line="-713" />
-            <source>No audio files</source>
-            <translation>No audio files</translation>
-        </message>
-        <message>
-            <location line="+28" />
-            <source>Title</source>
-            <translation>Title</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>e.g., Song Title</source>
-            <translation>e.g., Song Title</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Artist</source>
-            <translation>Artist</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>e.g., Artist Name</source>
-            <translation>e.g., Artist Name</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Album</source>
-            <translation>Album</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>e.g., Album Name</source>
-            <translation>e.g., Album Name</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Cover</source>
-            <translation>Cover</translation>
-        </message>
-        <message>
-            <location line="+54" />
-            <source>Select Image</source>
-            <translation>Select Image</translation>
-        </message>
-        <message>
-            <location line="+26" />
-            <source>Clear Image</source>
-            <translation>Clear Image</translation>
-        </message>
-        <message>
-            <location line="+39" />
-            <source>Apply Range:</source>
-            <translation>Apply Range:</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Apply to Selected Files</source>
-            <translation>Apply to Selected Files</translation>
-        </message>
-        <message>
-            <location line="+35" />
-            <source>Apply to All Files</source>
-            <translation>Apply to All Files</translation>
-        </message>
-        <message>
-            <location line="+36" />
-            <source>No files selected</source>
-            <translation>No files selected</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <location line="+347" />
-            <source>Process</source>
-            <translation>Process</translation>
-        </message>
-        <message>
-            <location line="-297" />
-            <source>Batch Filename Rename</source>
-            <translation>Batch Filename Rename</translation>
-        </message>
-        <message>
-            <location line="+122" />
-            <source>Naming Rule Settings</source>
-            <translation>Naming Rule Settings</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Prefix</source>
-            <translation>Prefix</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Optional prefix</source>
-            <translation>Optional prefix</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Auto Number</source>
-            <translation>Auto Number</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Start</source>
-            <translation>Start</translation>
-        </message>
-        <message>
-            <location line="+32" />
-            <source>Digits</source>
-            <translation>Digits</translation>
-        </message>
-        <message>
-            <location line="+36" />
-            <source>Suffix</source>
-            <translation>Suffix</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Optional suffix</source>
-            <translation>Optional suffix</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Example: %1</source>
-            <translation>Example: %1</translation>
-        </message>
-        <message>
-            <location line="+65" />
-            <source>File Preview</source>
-            <translation>File Preview</translation>
-        </message>
-        <message>
-            <location line="+34" />
-            <source>#</source>
-            <translation>#</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>Original File Name</source>
-            <translation>Original File Name</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>New File Name (Preview)</source>
-            <translation>New File Name (Preview)</translation>
-        </message>
-        <message>
-            <location line="+78" />
-            <source>Processing...</source>
-            <translation>Processing...</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>Done</source>
-            <translation>Done</translation>
-        </message>
-        <message>
-            <location line="+48" />
-            <source>All operations are performed locally; no files are uploaded.</source>
-            <translation>All operations are performed locally; no files are uploaded.</translation>
-        </message>
-    </context>
-    <context>
-        <name>LightEditPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68" />
-            <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
-            <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>添加文件</source>
-            <translation>Add files</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>主轨道：轨道 %1</source>
-            <translation>Main track: track %1</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>目标 BPM</source>
-            <translation>Target BPM</translation>
-        </message>
-        <message>
-            <location line="+29" />
-            <source>保持音高</source>
-            <translation>maintain pitch</translation>
-        </message>
-        <message>
-            <location line="+14" />
-            <source>吸附网格</source>
-            <translation>snap grid</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>1/4 拍</source>
-            <translation>1/4 shot</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>1/2 拍</source>
-            <translation>1/2 shot</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>1 拍</source>
-            <translation>1 shot</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>统一 BPM</source>
-            <translation>Unified BPM</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>BPM + 节拍对齐</source>
-            <translation>BPM + Beat Alignment</translation>
-        </message>
-        <message>
-            <location line="+153" />
-            <source>撤销</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>重做</source>
-            <translation>Redo</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>剪切</source>
-            <translation>cut</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>复制</source>
-            <translation>Copy</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>删除</source>
-            <translation>Delete</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>分割</source>
-            <translation>split</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>合并</source>
-            <translation>merge</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>静音</source>
-            <translation>mute</translation>
-        </message>
-        <message>
-            <location line="+5" />
-            <source>裁剪</source>
-            <translation>Crop</translation>
-        </message>
-        <message>
-            <location line="+60" />
-            <source>导出设置</source>
-            <translation>Export settings</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>输出格式</source>
-            <translation>Output format</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>采样率</source>
-            <translation>Sampling rate</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>声道</source>
-            <translation>vocal tract</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>立体声</source>
-            <translation>Stereo</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>单声道</source>
-            <translation>mono</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>输出目录</source>
-            <translation>Output directory</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>浏览</source>
-            <translation>Browse</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>项目信息</source>
-            <translation>Project information</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>轨道数量：%1 / 6</source>
-            <translation>Number of tracks: %1/6</translation>
-        </message>
-        <message>
-            <location line="+5" />
-            <source>项目时长：%1</source>
-            <translation>Project duration: %1</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>目标 BPM：%1</source>
-            <translation>Target BPM: %1</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>处理中…</source>
-            <translation>Processing…</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>导出音频</source>
-            <translation>Export audio</translation>
-        </message>
-    </context>
-    <context>
-        <name>LightEditor</name>
-        <message>
-            <location filename="../qt/src/light_editor_controller.cpp" line="+435" />
-            <source>Editor is busy</source>
-            <translation>Editor is busy</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <location line="+77" />
-            <source>No input file loaded</source>
-            <translation>No input file loaded</translation>
-        </message>
-        <message>
-            <location line="-59" />
-            <source>BPM analysis failed</source>
-            <translation>BPM analysis failed</translation>
-        </message>
-        <message>
-            <location line="+37" />
-            <source>Failed to create BPM cache directory</source>
-            <translation>Failed to create BPM cache directory</translation>
-        </message>
-        <message>
-            <location line="+53" />
-            <source>BPM alignment failed</source>
-            <translation>BPM alignment failed</translation>
-        </message>
-        <message>
-            <location line="+56" />
-            <source>Reliable BPM was not detected</source>
-            <translation>Reliable BPM was not detected</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Target BPM is outside the supported speed range</source>
-            <translation>Target BPM is outside the supported speed range</translation>
-        </message>
-        <message>
-            <location line="+15" />
-            <source>BPM alignment cancelled</source>
-            <translation>BPM alignment cancelled</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Failed to adjust track BPM</source>
-            <translation>Failed to adjust track BPM</translation>
-        </message>
-        <message>
-            <location line="+51" />
-            <source>No audible tracks to export</source>
-            <translation>No audible tracks to export</translation>
-        </message>
-        <message>
-            <location line="+5" />
-            <source>Invalid export audio settings</source>
-            <translation>Invalid export audio settings</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>Failed to create export directory</source>
-            <translation>Failed to create export directory</translation>
-        </message>
-        <message>
-            <location line="+69" />
-            <source>Export cancelled</source>
-            <translation>Export cancelled</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Export failed (error %1)</source>
-            <translation>Export failed (error %1)</translation>
-        </message>
-    </context>
-    <context>
-        <name>ListWindow</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/ListWindow.qml" line="+19" />
-            <source>AgPlayer Track List</source>
-            <translation>AgPlayer Track List</translation>
-        </message>
-        <message>
-            <location line="+77" />
-            <source>音乐列表</source>
-            <translation>音乐列表</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>Hide playlist window</source>
-            <translation>Hide playlist window</translation>
-        </message>
-    </context>
-    <context>
-        <name>Main</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/Main.qml" line="+132" />
-            <source>No lyrics available</source>
-            <translation>No lyrics available</translation>
-        </message>
-    </context>
-    <context>
-        <name>MetadataEditor</name>
-        <message>
-            <location filename="../qt/src/metadata_editor.cpp" line="+78" />
-            <source>Failed to open cover image: %1</source>
-            <translation>Failed to open cover image: %1</translation>
-        </message>
-        <message>
-            <location line="+5" />
-            <source>Cover image is empty: %1</source>
-            <translation>Cover image is empty: %1</translation>
-        </message>
-    </context>
-    <context>
-        <name>MiniPlayerControls</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+123" />
-            <source>Remove from favorites</source>
-            <translation>Remove from favorites</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Add to favorites</source>
-            <translation>Add to favorites</translation>
-        </message>
-        <message>
-            <location line="+51" />
-            <location line="+9" />
-            <source>No track loaded</source>
-            <translation>No track loaded</translation>
-        </message>
-        <message>
-            <location line="+15" />
-            <source>Unknown artist</source>
-            <translation>Unknown artist</translation>
-        </message>
-        <message>
-            <location line="+98" />
-            <source>Previous track</source>
-            <translation>Previous track</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Previous</source>
-            <translation>Previous</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Pause</source>
-            <translation>Pause</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Play</source>
-            <translation>Play</translation>
-        </message>
-        <message>
-            <location line="+31" />
-            <source>Next track</source>
-            <translation>Next track</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Next</source>
-            <translation>Next</translation>
-        </message>
-        <message>
-            <location line="+36" />
-            <source>Repeat one</source>
-            <translation>Repeat one</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>Shuffle</source>
-            <translation>Shuffle</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>Sequential</source>
-            <translation>Sequential</translation>
-        </message>
-        <message>
-            <location line="+29" />
-            <source>Unmute</source>
-            <translation>Unmute</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>Mute</source>
-            <translation>Mute</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Volume</source>
-            <translation>Volume</translation>
-        </message>
-    </context>
-    <context>
-        <name>MiniPlayerWindow</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+96" />
-            <source>Disable always on top</source>
-            <translation>Disable always on top</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Pin on top</source>
-            <translation>Pin on top</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Restore main window</source>
-            <translation>Restore main window</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Restore</source>
-            <translation>Restore</translation>
-        </message>
-        <message>
-            <location line="+21" />
-            <location line="+3" />
-            <source>Minimize</source>
-            <translation>Minimize</translation>
-        </message>
-        <message>
-            <location line="+21" />
-            <location line="+3" />
-            <source>Close</source>
-            <translation>Close</translation>
-        </message>
-    </context>
-    <context>
-        <name>MultiTrackWaveform</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93" />
-            <location line="+177" />
-            <source>空轨道</source>
-            <translation>empty orbit</translation>
-        </message>
-        <message>
-            <location line="-168" />
-            <source>原始 BPM：</source>
-            <translation>Original BPM:</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>拖入音频文件</source>
-            <translation>Drag in audio files</translation>
-        </message>
-        <message>
-            <location line="+36" />
-            <source>已对齐</source>
-            <translation>Aligned</translation>
-        </message>
-        <message>
-            <location line="+131" />
-            <source>添加或拖入音频文件</source>
-            <translation>Add or drag in audio files</translation>
-        </message>
-    </context>
-    <context>
-        <name>PitchShiftPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/PitchShiftPage.qml" line="+66" />
-            <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
-            <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
-        </message>
-        <message>
-            <location line="+66" />
-            <source>Drop an audio file here or click Browse</source>
-            <translation>Drop an audio file here or click Browse</translation>
-        </message>
-        <message>
-            <location line="+68" />
-            <location line="+3" />
-            <source>Playback preview not supported</source>
-            <translation>Playback preview not supported</translation>
-        </message>
-        <message>
-            <location line="+53" />
-            <location line="+803" />
-            <source>Browse</source>
-            <translation>Browse</translation>
-        </message>
-        <message>
-            <location line="-775" />
-            <source>Clear</source>
-            <translation>Clear</translation>
-        </message>
-        <message>
-            <location line="+48" />
-            <source>Presets</source>
-            <translation>Presets</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Original (0)</source>
-            <translation>Original (0)</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Male +2</source>
-            <translation>Male +2</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Male +4</source>
-            <translation>Male +4</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Female +2</source>
-            <translation>Female +2</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Female +4</source>
-            <translation>Female +4</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Deep -2</source>
-            <translation>Deep -2</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Deep -4</source>
-            <translation>Deep -4</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Custom</source>
-            <translation>Custom</translation>
-        </message>
-        <message>
-            <location line="+51" />
-            <source>Pitch Adjustment</source>
-            <translation>Pitch Adjustment</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Semitone</source>
-            <translation>Semitone</translation>
-        </message>
-        <message>
-            <location line="+151" />
-            <source>Cents</source>
-            <translation>Cents</translation>
-        </message>
-        <message>
-            <location line="+162" />
-            <source>Advanced Options</source>
-            <translation>Advanced Options</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Keep Tempo</source>
-            <translation>Keep Tempo</translation>
-        </message>
-        <message>
-            <location line="+45" />
-            <source>Vocal Protection (Experimental)</source>
-            <translation>Vocal Protection (Experimental)</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Experimental feature; currently not supported</source>
-            <translation>Experimental feature; currently not supported</translation>
-        </message>
-        <message>
-            <location line="+44" />
-            <source>Smooth Transition</source>
-            <translation>Smooth Transition</translation>
-        </message>
-        <message>
-            <location line="+64" />
-            <source>Output Format</source>
-            <translation>Output Format</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Source</source>
-            <translation>Source</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>MP3</source>
-            <translation>MP3</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>WAV</source>
-            <translation>WAV</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>FLAC</source>
-            <translation>FLAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>AAC</source>
-            <translation>AAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>OGG</source>
-            <translation>OGG</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Opus</source>
-            <translation>Opus</translation>
-        </message>
-        <message>
-            <location line="+30" />
-            <source>Sample Rate</source>
-            <translation>Sample Rate</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Auto</source>
-            <translation>Auto</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Start Processing</source>
-            <translation>Start Processing</translation>
-        </message>
-        <message>
-            <location line="+40" />
-            <source>Save Location</source>
-            <translation>Save Location</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Same as source (default)</source>
-            <translation>Same as source (default)</translation>
-        </message>
-        <message>
-            <location line="+38" />
-            <source>Cancel</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location line="+37" />
-            <source>Vocal protection is intended for daily use; avoid processing for professional projects.</source>
-            <translation>Vocal protection is intended for daily use; avoid processing for professional projects.</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>Processing...</source>
-            <translation>Processing...</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Export complete</source>
-            <translation>Export complete</translation>
-        </message>
-        <message>
-            <location line="+63" />
-            <source>Exported: %1</source>
-            <translation>Exported: %1</translation>
-        </message>
-        <message>
-            <location line="+5" />
-            <source>Exported: %1 (%2)</source>
-            <translation>Exported: %1 (%2)</translation>
-        </message>
-    </context>
-    <context>
-        <name>PlayerControls</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="+27" />
-            <source>Hide playlist window</source>
-            <translation>Hide playlist window</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Show playlist window</source>
-            <translation>Show playlist window</translation>
-        </message>
-        <message>
-            <location line="+29" />
-            <source>Open audio tools</source>
-            <translation>Open audio tools</translation>
-        </message>
-        <message>
-            <location line="+15" />
-            <source>Change waveform mode</source>
-            <translation>Change waveform mode</translation>
-        </message>
-        <message>
-            <location line="+15" />
-            <source>Previous track</source>
-            <translation>Previous track</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Previous</source>
-            <translation>Previous</translation>
-        </message>
-        <message>
-            <location line="+26" />
-            <location line="+5" />
-            <source>Pause</source>
-            <translation>Pause</translation>
-        </message>
-        <message>
-            <location line="-4" />
-            <location line="+5" />
-            <source>Play</source>
-            <translation>Play</translation>
-        </message>
-        <message>
-            <location line="+51" />
-            <source>Next track</source>
-            <translation>Next track</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Next</source>
-            <translation>Next</translation>
-        </message>
-        <message>
-            <location line="+35" />
-            <source>Repeat one</source>
-            <translation>Repeat one</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>Shuffle</source>
-            <translation>Shuffle</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>Sequential</source>
-            <translation>Sequential</translation>
-        </message>
-        <message>
-            <location line="+27" />
-            <source>Toggle lyrics</source>
-            <translation>Toggle lyrics</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Lyrics</source>
-            <translation>Lyrics</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Unmute</source>
-            <translation>Unmute</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Mute</source>
-            <translation>Mute</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>Volume</source>
-            <translation>Volume</translation>
-        </message>
-        <message>
-            <location line="+21" />
-            <source>Switch to mini player</source>
-            <translation>Switch to mini player</translation>
-        </message>
-    </context>
-    <context>
-        <name>PlayerPane</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+150" />
-            <source>No track loaded</source>
-            <translation>No track loaded</translation>
-        </message>
-        <message>
-            <location line="+20" />
-            <source>Remove from favorites</source>
-            <translation>Remove from favorites</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Add to favorites</source>
-            <translation>Add to favorites</translation>
-        </message>
-        <message>
-            <location line="+27" />
-            <source>Unknown artist</source>
-            <translation>Unknown artist</translation>
-        </message>
-    </context>
-    <context>
-        <name>SearchFilter</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/SearchFilter.qml" line="+106" />
-            <source>歌名/艺术家/专辑 关键词</source>
-            <translation>歌名/艺术家/专辑 关键词</translation>
-        </message>
-        <message>
-            <location line="+15" />
-            <source>清空</source>
-            <translation>Clear</translation>
-        </message>
-        <message>
-            <location line="+30" />
-            <source>1-5 评分</source>
-            <translation>1-5 rating</translation>
-        </message>
-        <message>
-            <location line="+40" />
-            <source>最低 BPM</source>
-            <translation>Minimum BPM</translation>
-        </message>
-        <message>
-            <location line="+45" />
-            <source>最高 BPM</source>
-            <translation>Max BPM</translation>
-        </message>
-    </context>
-    <context>
-        <name>SettingsController</name>
-        <message>
-            <location filename="../qt/src/settings_controller.cpp" line="+723" />
-            <source>当前已是最新版本</source>
-            <translation>Currently the latest version</translation>
-        </message>
-    </context>
-    <context>
-        <name>SettingsPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="+24" />
-            <location line="+726" />
-            <source>常规</source>
-            <translation>regular</translation>
-        </message>
-        <message>
-            <location line="-725" />
-            <location line="+901" />
-            <source>播放与音频</source>
-            <translation>Playback and audio</translation>
-        </message>
-        <message>
-            <location line="-900" />
-            <location line="+1010" />
-            <source>外观与波形</source>
-            <translation>Appearance and waveform</translation>
-        </message>
-        <message>
-            <location line="-1009" />
-            <location line="+1154" />
-            <source>音频工具预设</source>
-            <translation>Audio tool presets</translation>
-        </message>
-        <message>
-            <location line="-1153" />
-            <location line="+1253" />
-            <source>快捷键设置</source>
-            <translation>Shortcut key settings</translation>
-        </message>
-        <message>
-            <location line="-1252" />
-            <location line="+1328" />
-            <source>缓存与数据</source>
-            <translation>Caching and data</translation>
-        </message>
-        <message>
-            <location line="-1327" />
-            <location line="+1489" />
-            <source>关于</source>
-            <translation>About</translation>
-        </message>
-        <message>
-            <location line="-1451" />
-            <source>确认清空缓存</source>
-            <translation>Confirm to clear cache</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>确定要一键清空全部缓存吗？此操作不可撤销。</source>
-            <translation>Are you sure you want to clear all caches with one click? This action cannot be undone.</translation>
-        </message>
-        <message>
-            <location line="+26" />
-            <source>AgPlayer · 设置</source>
-            <translation>AgPlayer · Settings</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>搜索设置...</source>
-            <translation>Search settings...</translation>
-        </message>
-        <message>
-            <location line="+17" />
-            <source>恢复默认</source>
-            <translation>Restore default</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Close settings</source>
-            <translation>Close settings</translation>
-        </message>
-        <message>
-            <location line="+126" />
-            <source>取消</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location line="+26" />
-            <source>保存更改</source>
-            <translation>Save changes</translation>
-        </message>
-        <message>
-            <location line="+301" />
-            <source>纯色波形</source>
-            <translation>solid color waveform</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>RGB波形</source>
-            <translation>RGB waveform</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>频谱波形</source>
-            <translation>spectrum waveform</translation>
-        </message>
-        <message>
-            <location line="+150" />
-            <source>开机与窗口</source>
-            <translation>Boot and windows</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>开机自动启动</source>
-            <translation>Automatically start at boot</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>启动时自动恢复上次播放进度</source>
-            <translation>Automatically resume the last playback progress when starting</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>双窗口歌单面板</source>
-            <translation>Double window single panel</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>窗口磁吸吸附对齐 (15px 阈值)</source>
-            <translation>Window magnetic adsorption alignment (15px threshold)</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>歌曲列表位置</source>
-            <translation>song list position</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>上</source>
-            <translation>on</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>下</source>
-            <translation>down</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>左</source>
-            <translation>left</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>右</source>
-            <translation>right</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>退出程序行为</source>
-            <translation>Exit program behavior</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>最小化到托盘</source>
-            <translation>Minimize to tray</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>直接关闭</source>
-            <translation>Close directly</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>语言</source>
-            <translation>Language</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>文件关联</source>
-            <translation>file association</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>设为系统默认音频播放器</source>
-            <translation>Set as system default audio player</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>关联格式</source>
-            <translation>Associative format</translation>
-        </message>
-        <message>
-            <location line="+47" />
-            <source>重新绑定文件关联与图标</source>
-            <translation>Rebind file associations and icons</translation>
-        </message>
-        <message>
-            <location line="+44" />
-            <source>音频输出</source>
-            <translation>audio output</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>输出设备</source>
-            <translation>output device</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>自动 / 系统默认设备</source>
-            <translation>Automatic / system default device</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>音频独占模式 (Exclusive Mode/WASAPI/ALSA) (降低延迟，但其他软件静音)</source>
-            <translation>Audio Exclusive Mode (Exclusive Mode/WASAPI/ALSA) (reduces latency, but mutes other software)</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>播放行为</source>
-            <translation>play behavior</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>播放键 RGB 光晕</source>
-            <translation>Play button RGB halo</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>默认播放模式</source>
-            <translation>Default play mode</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>顺序播放</source>
-            <translation>Play sequentially</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>随机播放</source>
-            <translation>shuffle</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>单曲循环</source>
-            <translation>single loop</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>列表循环</source>
-            <translation>List loop</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>开启无间隙播放</source>
-            <translation>Enable gapless playback</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>歌曲切换淡入淡出</source>
-            <translation>Song switch fade in and fade out</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>0ms (关闭)</source>
-            <translation>0ms (off)</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>200ms</source>
-            <translation>200ms</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>500ms</source>
-            <translation>500ms</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>自动匹配采样率</source>
-            <translation>Automatically match sample rate</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>自动读取歌曲 BPM</source>
-            <translation>Automatically read song BPM</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>星级评分</source>
-            <translation>star rating</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>主题样式</source>
-            <translation>theme style</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>主题模式</source>
-            <translation>theme mode</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>深色</source>
-            <translation>Dark</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>浅色</source>
-            <translation>light color</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>跟随系统</source>
-            <translation>Follow the system</translation>
-        </message>
-        <message>
-            <location line="+32" />
-            <source>毛玻璃 / 悬浮特效：开启迷你播放器与悬浮窗口模糊背景</source>
-            <translation>Frosted glass/floating special effects: open the mini player and floating window to blur the background</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>Waveform RGB 波形设置</source>
-            <translation>Waveform RGB waveform settings</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>默认波形模式</source>
-            <translation>Default waveform mode</translation>
-        </message>
-        <message>
-            <location line="+27" />
-            <source>波形渲染密度</source>
-            <translation>Waveform rendering density</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>稀疏</source>
-            <translation>sparse</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>适中（推荐）</source>
-            <translation>Moderate (recommended)</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>精细</source>
-            <translation>Fine</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>波形线条粗细</source>
-            <translation>Wavy line thickness</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>1px</source>
-            <translation>1px</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>1.5px</source>
-            <translation>1.5px</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>2px</source>
-            <translation>2px</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>3px</source>
-            <translation>3px</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>4px</source>
-            <translation>4px</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>6px</source>
-            <translation>6px</translation>
-        </message>
-        <message>
-            <location line="+14" />
-            <source>鼠标悬停波形时显示时间预览胶囊</source>
-            <translation>Show time preview capsule when mouseover waveform</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>通用导出</source>
-            <translation>Universal export</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>默认导出路径</source>
-            <translation>Default export path</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>文件覆盖策略</source>
-            <translation>File overwrite strategy</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>自动重命名 (例: _edited)</source>
-            <translation>Automatic rename (example: _edited)</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>直接覆盖</source>
-            <translation>direct coverage</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>转码与剪辑预设</source>
-            <translation>Transcoding and editing presets</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>默认转码输出格式</source>
-            <translation>Default transcoding output format</translation>
-        </message>
-        <message>
-            <location line="+5" />
-            <source>MP3 / 320kbps / 44.1kHz / Stereo</source>
-            <translation>MP3/320kbps/44.1kHz/Stereo</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>MP3 / 256kbps / 44.1kHz / Stereo</source>
-            <translation>MP3/256kbps/44.1kHz/Stereo</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>MP3 / 192kbps / 44.1kHz / Stereo</source>
-            <translation>MP3/192kbps/44.1kHz/Stereo</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>FLAC / 44.1kHz / Stereo</source>
-            <translation>FLAC/44.1kHz/Stereo</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>WAV / 44.1kHz / Stereo</source>
-            <translation>WAV/44.1kHz/Stereo</translation>
-        </message>
-        <message>
-            <location line="+17" />
-            <source>批量转码时保持原音频元数据</source>
-            <translation>Keep original audio metadata during batch transcoding</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>变调与变速预设</source>
-            <translation>Pitch and speed presets</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>变速时变调行为：保持原音高/语速</source>
-            <translation>Pitch-changing behavior when changing speed: Maintain original pitch/speech speed</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>升降调人声保护</source>
-            <translation>Protection of rising and falling vocals</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>全局快捷键</source>
-            <translation>Global shortcut keys</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>播放 / 暂停</source>
-            <translation>play/pause</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>上一首 / 下一首</source>
-            <translation>Previous song / Next song</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>音量加 / 减</source>
-            <translation>Volume up/down</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>显示 / 隐藏迷你播放器</source>
-            <translation>Show/hide mini player</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>应用内快捷键</source>
-            <translation>In-app shortcut keys</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>快速搜索歌曲</source>
-            <translation>Quickly search for songs</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>快速切换波形模式</source>
-            <translation>Quickly switch waveform modes</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>打开音频工具</source>
-            <translation>Open audio tools</translation>
-        </message>
-        <message>
-            <location line="+61" />
-            <source>路径与自动清理</source>
-            <translation>Paths and automatic cleaning</translation>
-        </message>
-        <message>
-            <location line="+4" />
-            <source>缓存路径</source>
-            <translation>Cache path</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>缓存自动清理（超出上限自动删旧文件，默认开启）</source>
-            <translation>Automatic cache cleaning (automatically delete old files when the upper limit is exceeded, enabled by default)</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>退出自动清理临时转码文件（默认开启）</source>
-            <translation>Exit automatic cleaning of temporary transcoding files (enabled by default)</translation>
-        </message>
-        <message>
-            <location line="+6" />
-            <source>当前缓存</source>
-            <translation>Current cache</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>清理按钮</source>
-            <translation>clean button</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>波形缓存</source>
-            <translation>Waveform buffer</translation>
-        </message>
-        <message>
-            <location line="+23" />
-            <source>封面缓存</source>
-            <translation>cover cache</translation>
-        </message>
-        <message>
-            <location line="+23" />
-            <source>转码临时文件</source>
-            <translation>Transcode temporary files</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>一键清空全部缓存</source>
-            <translation>Clear all caches with one click</translation>
-        </message>
-        <message>
-            <location line="+40" />
-            <location line="+70" />
-            <source>检查更新</source>
-            <translation>Check for updates</translation>
-        </message>
-        <message>
-            <location line="-20" />
-            <source>发布日期: </source>
-            <translation>Release date:</translation>
-        </message>
-        <message>
-            <location line="+7" />
-            <source>轻量、纯粹、为音乐而生。</source>
-            <translation>Lightweight, pure, and made for music.</translation>
-        </message>
-        <message>
-            <location line="+38" />
-            <source>访问官网</source>
-            <translation>Visit official website</translation>
-        </message>
-    </context>
-    <context>
-        <name>SideNavigation</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="+42" />
-            <source>音乐列表</source>
-            <translation>music list</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>所有歌曲</source>
-            <translation>all songs</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>我的收藏</source>
-            <translation>my collection</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>播放历史</source>
-            <translation>Play history</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>健身歌单</source>
-            <translation>Fitness playlist</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>车载歌单</source>
-            <translation>car playlist</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>网络流行</source>
-            <translation>Internet popularity</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>歌单</source>
-            <translation>歌单</translation>
-        </message>
-        <message>
-            <location line="+36" />
-            <source>导入</source>
-            <translation>导入</translation>
-        </message>
-    </context>
-    <context>
-        <name>SpeedAdjustPage</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+18" />
-            <source>Intro</source>
-            <translation>Intro</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Build Up</source>
-            <translation>Build Up</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Drop</source>
-            <translation>Drop</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Breakdown</source>
-            <translation>Breakdown</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Drop 2</source>
-            <translation>Drop 2</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Outro</source>
-            <translation>Outro</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
-            <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
-        </message>
-        <message>
-            <location line="+65" />
-            <source>Drop an audio file here or click Browse</source>
-            <translation>Drop an audio file here or click Browse</translation>
-        </message>
-        <message>
-            <location line="+85" />
-            <location line="+1027" />
-            <source>Browse</source>
-            <translation>Browse</translation>
-        </message>
-        <message>
-            <location line="-999" />
-            <source>Clear</source>
-            <translation>Clear</translation>
-        </message>
-        <message>
-            <location line="+45" />
-            <source>Adjust BPM</source>
-            <translation>Adjust BPM</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Markers are manually added; segment processing is future work.</source>
-            <translation>Markers are manually added; segment processing is future work.</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>+ Add Marker</source>
-            <translation>+ Add Marker</translation>
-        </message>
-        <message>
-            <location line="+2" />
-            <source>Marker</source>
-            <translation>Marker</translation>
-        </message>
-        <message>
-            <location line="+80" />
-            <source>BPM Analysis</source>
-            <translation>BPM Analysis</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Detected BPM</source>
-            <translation>Detected BPM</translation>
-        </message>
-        <message>
-            <location line="+17" />
-            <source>Confidence %1%</source>
-            <translation>Confidence %1%</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>Re-analyze</source>
-            <translation>Re-analyze</translation>
-        </message>
-        <message>
-            <location line="+26" />
-            <source>Half Beat</source>
-            <translation>Half Beat</translation>
-        </message>
-        <message>
-            <location line="+25" />
-            <source>Double Beat</source>
-            <translation>Double Beat</translation>
-        </message>
-        <message>
-            <location line="+43" />
-            <source>Speed Settings</source>
-            <translation>Speed Settings</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Target BPM</source>
-            <translation>Target BPM</translation>
-        </message>
-        <message>
-            <location line="+76" />
-            <source>Speed Percentage</source>
-            <translation>Speed Percentage</translation>
-        </message>
-        <message>
-            <location line="+70" />
-            <source>Keep Pitch</source>
-            <translation>Keep Pitch</translation>
-        </message>
-        <message>
-            <location line="+52" />
-            <source>Beat Align</source>
-            <translation>Beat Align</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Experimental feature; currently not supported</source>
-            <translation>Experimental feature; currently not supported</translation>
-        </message>
-        <message>
-            <location line="+65" />
-            <source>Segments / Markers (Manual)</source>
-            <translation>Segments / Markers (Manual)</translation>
-        </message>
-        <message>
-            <location line="+14" />
-            <source>Name</source>
-            <translation>Name</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>Start Time</source>
-            <translation>Start Time</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>BPM</source>
-            <translation>BPM</translation>
-        </message>
-        <message>
-            <location line="+87" />
-            <source>Preview / Output</source>
-            <translation>Preview / Output</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>Playback preview not supported</source>
-            <translation>Playback preview not supported</translation>
-        </message>
-        <message>
-            <location line="+37" />
-            <source>Preview playback not supported</source>
-            <translation>Preview playback not supported</translation>
-        </message>
-        <message>
-            <location line="+94" />
-            <source>Output Format</source>
-            <translation>Output Format</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>MP3</source>
-            <translation>MP3</translation>
-        </message>
-        <message>
-            <location line="+28" />
-            <source>WAV</source>
-            <translation>WAV</translation>
-        </message>
-        <message>
-            <location line="+28" />
-            <source>FLAC</source>
-            <translation>FLAC</translation>
-        </message>
-        <message>
-            <location line="+30" />
-            <source>Start Processing</source>
-            <translation>Start Processing</translation>
-        </message>
-        <message>
-            <location line="+39" />
-            <source>Save Location</source>
-            <translation>Save Location</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Same as source (default)</source>
-            <translation>Same as source (default)</translation>
-        </message>
-        <message>
-            <location line="+38" />
-            <source>Cancel</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location line="+37" />
-            <source>BPM detection results may vary slightly depending on audio quality.</source>
-            <translation>BPM detection results may vary slightly depending on audio quality.</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>Processing...</source>
-            <translation>Processing...</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Export complete</source>
-            <translation>Export complete</translation>
-        </message>
-        <message>
-            <location line="+63" />
-            <source>Exported: %1</source>
-            <translation>Exported: %1</translation>
-        </message>
-    </context>
-    <context>
-        <name>TitleBar</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/TitleBar.qml" line="+57" />
-            <source>Open settings</source>
-            <translation>Open settings</translation>
-        </message>
-        <message>
-            <location line="+3" />
-            <source>Settings</source>
-            <translation>Settings</translation>
-        </message>
-    </context>
-    <context>
-        <name>ToolSidebar</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25" />
-            <source>格式转换</source>
-            <translation>format conversion</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>轻度剪辑</source>
-            <translation>Lightly edited</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>调整速度</source>
-            <translation>Adjust speed</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>升调降调</source>
-            <translation>rising and falling</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>信息修改</source>
-            <translation>Information modification</translation>
-        </message>
-    </context>
-    <context>
-        <name>TrackList</name>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/TrackList.qml" line="+53" />
-            <source>歌曲</source>
-            <translation>song</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>收藏</source>
-            <translation>Collection</translation>
-        </message>
-        <message>
-            <location line="+9" />
-            <source>艺术家</source>
-            <translation>artist</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>专辑</source>
-            <translation>album</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>评分</source>
-            <translation>Rating</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>BPM</source>
-            <translation>BPM</translation>
-        </message>
-        <message>
-            <location line="+8" />
-            <source>时长</source>
-            <translation>duration</translation>
-        </message>
-        <message>
-            <location line="+55" />
-            <source>Unknown title</source>
-            <translation>Unknown title</translation>
-        </message>
-        <message>
-            <location line="+21" />
-            <source>Remove from favorites</source>
-            <translation>Remove from favorites</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <source>Add to favorites</source>
-            <translation>Add to favorites</translation>
-        </message>
-    </context>
-    <context>
-        <name>AudioPreviewController</name>
-        <message>
-            <source>预览播放器不可用</source>
-            <translation>Preview player is unavailable</translation>
-        </message>
-        <message>
-            <source>预览文件不存在</source>
-            <translation>Preview file does not exist</translation>
-        </message>
-        <message>
-            <source>无法加载预览音频</source>
-            <translation>Unable to load preview audio</translation>
-        </message>
-        <message>
-            <source>无法开始预览播放</source>
-            <translation>Unable to start preview playback</translation>
-        </message>
-    </context>
-    <context>
-        <name>PitchShiftPage</name>
-        <message>
-            <source>播放或暂停原始音频</source>
-            <translation>Play or pause original audio</translation>
-        </message>
-        <message>
-            <source>为人声提供柔和的共振峰补偿</source>
-            <translation>Gentle formant compensation for vocals</translation>
-        </message>
-    </context>
-    <context>
-        <name>SpeedAdjustPage</name>
-        <message>
-            <source>裁去前导偏移，使第一拍从零点开始</source>
-            <translation>Trim the leading offset so the first beat starts at zero</translation>
-        </message>
-        <message>
-            <source>定位预览</source>
-            <translation>Seek preview</translation>
-        </message>
-    </context>
+<context>
+    <name>AudioPreviewController</name>
+    <message>
+        <location filename="../qt/src/audio_preview_controller.cpp" line="+84"/>
+        <source>预览播放器不可用</source>
+        <translation>Preview player is unavailable</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>预览文件不存在</source>
+        <translation>Preview file does not exist</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>无法加载预览音频</source>
+        <translation>Unable to load preview audio</translation>
+    </message>
+    <message>
+        <location line="-26"/>
+        <location line="+31"/>
+        <source>无法开始预览播放</source>
+        <translation>Unable to start preview playback</translation>
+    </message>
+</context>
+<context>
+    <name>AudioToolsWindow</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+16"/>
+        <source>AgPlayer 音频工具</source>
+        <translation>AgPlayer audio tool</translation>
+    </message>
+    <message>
+        <location line="+54"/>
+        <source>音频工具</source>
+        <translation>audio tools</translation>
+    </message>
+</context>
+<context>
+    <name>EmptyLibrary</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/EmptyLibrary.qml" line="+29"/>
+        <source>Your library is empty</source>
+        <translation>Your library is empty</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Drag audio files into the window or click below to import</source>
+        <translation>Drag audio files into the window or click below to import</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Import audio</source>
+        <translation>Import audio</translation>
+    </message>
+</context>
+<context>
+    <name>EmptyStartup</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/EmptyStartup.qml" line="+26"/>
+        <source>开始播放你的音乐</source>
+        <translation>Start playing your music</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>打开或拖拽音频文件到此处开始播放</source>
+        <translation>Open or drag the audio file here to start playing</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>打开文件</source>
+        <translation>open file</translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>导入文件夹</source>
+        <translation>Import folder</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>支持 MP3、WAV、FLAC、AAC、OGG、M4A 等音频格式</source>
+        <translation>Supports MP3, WAV, FLAC, AAC, OGG, M4A and other audio formats</translation>
+    </message>
+</context>
+<context>
+    <name>FileAssociationController</name>
+    <message>
+        <location filename="../qt/src/file_association_controller.cpp" line="+82"/>
+        <source>Cannot determine application path</source>
+        <translation>Cannot determine application path</translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <location line="+22"/>
+        <location line="+41"/>
+        <source>not supported on this platform</source>
+        <translation>not supported on this platform</translation>
+    </message>
+    <message>
+        <location line="+62"/>
+        <source>Failed to create ProgID registry key</source>
+        <translation>Failed to create ProgID registry key</translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Failed to write ProgID registry values</source>
+        <translation>Failed to write ProgID registry values</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Failed to remove ProgID registry key</source>
+        <translation>Failed to remove ProgID registry key</translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <source>Failed to create extension registry key for .%1</source>
+        <translation>Failed to create extension registry key for .%1</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Failed to write extension registry values for .%1</source>
+        <translation>Failed to write extension registry values for .%1</translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>Failed to remove extension registry key for .%1</source>
+        <translation>Failed to remove extension registry key for .%1</translation>
+    </message>
+</context>
+<context>
+    <name>FormatConvertPage</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/FormatConvertPage.qml" line="+21"/>
+        <source>Audio/Video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma *.mp4 *.mkv *.avi *.mov *.webm)</source>
+        <translation>Audio/Video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma *.mp4 *.mkv *.avi *.mov *.webm)</translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>Format Conversion</source>
+        <translation>Format Conversion</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Add Files</source>
+        <translation>Add Files</translation>
+    </message>
+    <message>
+        <location line="+93"/>
+        <source>Drop audio/video files here or click Add Files</source>
+        <translation>Drop audio/video files here or click Add Files</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Drop audio files here or click Add Files</source>
+        <translation>Drop audio files here or click Add Files</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus / MP4 / MKV / AVI / MOV / WebM</source>
+        <translation>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus / MP4 / MKV / AVI / MOV / WebM</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus</source>
+        <translation>Supports MP3 / WAV / FLAC / AAC / M4A / OGG / Opus</translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Conversion List</source>
+        <translation>Conversion List</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Clear List</source>
+        <translation>Clear List</translation>
+    </message>
+    <message>
+        <location line="+40"/>
+        <source>File Name</source>
+        <translation>File Name</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Format</source>
+        <translation>Format</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Size</source>
+        <translation>Size</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Duration</source>
+        <translation>Duration</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Status</source>
+        <translation>Status</translation>
+    </message>
+    <message>
+        <location line="+80"/>
+        <source>Error</source>
+        <translation>Error</translation>
+    </message>
+    <message>
+        <location line="+40"/>
+        <source>No files in the conversion list</source>
+        <translation>No files in the conversion list</translation>
+    </message>
+    <message>
+        <location line="+30"/>
+        <source>Output Format</source>
+        <translation>Output Format</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>MP3</source>
+        <translation>MP3</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>WAV</source>
+        <translation>WAV</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>FLAC</source>
+        <translation>FLAC</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>AAC</source>
+        <translation>AAC</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>M4A</source>
+        <translation>M4A</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>OGG</source>
+        <translation>OGG</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Opus</source>
+        <translation>Opus</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Bit Rate</source>
+        <translation>Bit Rate</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <source>%1 kbps</source>
+        <translation>%1 kbps</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Lossless</source>
+        <translation>Lossless</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Sample Rate</source>
+        <translation>Sample Rate</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <location line="+38"/>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <location line="-37"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Channels</source>
+        <translation>Channels</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Mono</source>
+        <translation>Mono</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Stereo</source>
+        <translation>Stereo</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Keep metadata (title / artist / album / cover)</source>
+        <translation>Keep metadata (title / artist / album / cover)</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Volume normalize</source>
+        <translation>Volume normalize</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Extract audio from video</source>
+        <translation>Extract audio from video</translation>
+    </message>
+    <message>
+        <location line="+40"/>
+        <source>Output Directory</source>
+        <translation>Output Directory</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Same as source (default)</source>
+        <translation>Same as source (default)</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Browse</source>
+        <translation>Browse</translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <source>Cancel</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Start Conversion</source>
+        <translation>Start Conversion</translation>
+    </message>
+    <message>
+        <location line="+49"/>
+        <source>Transcoding... %1/%2 completed</source>
+        <translation>Transcoding... %1/%2 completed</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Done: %1 success, %2 failed</source>
+        <translation>Done: %1 success, %2 failed</translation>
+    </message>
+    <message>
+        <location line="+50"/>
+        <source>Lossy-to-lossy conversion may cause secondary quality loss.</source>
+        <translation>Lossy-to-lossy conversion may cause secondary quality loss.</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>All %1 files transcoded successfully.</source>
+        <translation>All %1 files transcoded successfully.</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>%1 succeeded, %2 failed.</source>
+        <translation>%1 succeeded, %2 failed.</translation>
+    </message>
+</context>
+<context>
+    <name>ImportStatusPanel</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ImportStatusPanel.qml" line="+28"/>
+        <source>Importing...</source>
+        <translation>Importing...</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Some files could not be imported</source>
+        <translation>Some files could not be imported</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>... and %1 more</source>
+        <translation>... and %1 more</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Import audio</source>
+        <translation>Import audio</translation>
+    </message>
+</context>
+<context>
+    <name>InfoEditPage</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/InfoEditPage.qml" line="+45"/>
+        <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+        <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)</source>
+        <translation>Image files (*.png *.jpg *.jpeg *.gif *.bmp *.webp)</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Batch Metadata Edit</source>
+        <translation>Batch Metadata Edit</translation>
+    </message>
+    <message>
+        <location line="+84"/>
+        <location line="+586"/>
+        <source>Drop audio files here or click to add</source>
+        <translation>Drop audio files here or click to add</translation>
+    </message>
+    <message>
+        <location line="-578"/>
+        <location line="+586"/>
+        <source>Supports MP3 / WAV / FLAC / M4A, etc.</source>
+        <translation>Supports MP3 / WAV / FLAC / M4A, etc.</translation>
+    </message>
+    <message>
+        <location line="-550"/>
+        <source>File List</source>
+        <translation>File List</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <location line="+803"/>
+        <source>Clear List</source>
+        <translation>Clear List</translation>
+    </message>
+    <message>
+        <location line="-714"/>
+        <source>No audio files</source>
+        <translation>No audio files</translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>Title</source>
+        <translation>Title</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>e.g., Song Title</source>
+        <translation>e.g., Song Title</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Artist</source>
+        <translation>Artist</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>e.g., Artist Name</source>
+        <translation>e.g., Artist Name</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Album</source>
+        <translation>Album</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>e.g., Album Name</source>
+        <translation>e.g., Album Name</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Cover</source>
+        <translation>Cover</translation>
+    </message>
+    <message>
+        <location line="+54"/>
+        <source>Select Image</source>
+        <translation>Select Image</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <source>Clear Image</source>
+        <translation>Clear Image</translation>
+    </message>
+    <message>
+        <location line="+39"/>
+        <source>Apply Range:</source>
+        <translation>Apply Range:</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Apply to Selected Files</source>
+        <translation>Apply to Selected Files</translation>
+    </message>
+    <message>
+        <location line="+35"/>
+        <source>Apply to All Files</source>
+        <translation>Apply to All Files</translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <source>No files selected</source>
+        <translation>No files selected</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <location line="+347"/>
+        <source>Process</source>
+        <translation>Process</translation>
+    </message>
+    <message>
+        <location line="-297"/>
+        <source>Batch Filename Rename</source>
+        <translation>Batch Filename Rename</translation>
+    </message>
+    <message>
+        <location line="+122"/>
+        <source>Naming Rule Settings</source>
+        <translation>Naming Rule Settings</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Prefix</source>
+        <translation>Prefix</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Optional prefix</source>
+        <translation>Optional prefix</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Auto Number</source>
+        <translation>Auto Number</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Start</source>
+        <translation>Start</translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>Digits</source>
+        <translation>Digits</translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <source>Suffix</source>
+        <translation>Suffix</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Optional suffix</source>
+        <translation>Optional suffix</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Example: %1</source>
+        <translation>Example: %1</translation>
+    </message>
+    <message>
+        <location line="+65"/>
+        <source>File Preview</source>
+        <translation>File Preview</translation>
+    </message>
+    <message>
+        <location line="+34"/>
+        <source>#</source>
+        <translation>#</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Original File Name</source>
+        <translation>Original File Name</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>New File Name (Preview)</source>
+        <translation>New File Name (Preview)</translation>
+    </message>
+    <message>
+        <location line="+78"/>
+        <source>Processing...</source>
+        <translation>Processing...</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Done</source>
+        <translation>Done</translation>
+    </message>
+    <message>
+        <location line="+48"/>
+        <source>All operations are performed locally; no files are uploaded.</source>
+        <translation>All operations are performed locally; no files are uploaded.</translation>
+    </message>
+</context>
+<context>
+    <name>LightEditPage</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68"/>
+        <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+        <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>添加文件</source>
+        <translation>Add files</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>主轨道：轨道 %1</source>
+        <translation>Main track: track %1</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>目标 BPM</source>
+        <translation>Target BPM</translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>保持音高</source>
+        <translation>maintain pitch</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>吸附网格</source>
+        <translation>snap grid</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>1/4 拍</source>
+        <translation>1/4 shot</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>1/2 拍</source>
+        <translation>1/2 shot</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>1 拍</source>
+        <translation>1 shot</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>统一 BPM</source>
+        <translation>Unified BPM</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>BPM + 节拍对齐</source>
+        <translation>BPM + Beat Alignment</translation>
+    </message>
+    <message>
+        <location line="+153"/>
+        <source>撤销</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>重做</source>
+        <translation>Redo</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>剪切</source>
+        <translation>cut</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>复制</source>
+        <translation>Copy</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>删除</source>
+        <translation>Delete</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>分割</source>
+        <translation>split</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>合并</source>
+        <translation>merge</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>静音</source>
+        <translation>mute</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>裁剪</source>
+        <translation>Crop</translation>
+    </message>
+    <message>
+        <location line="+60"/>
+        <source>导出设置</source>
+        <translation>Export settings</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>输出格式</source>
+        <translation>Output format</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>采样率</source>
+        <translation>Sampling rate</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>声道</source>
+        <translation>vocal tract</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>立体声</source>
+        <translation>Stereo</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>单声道</source>
+        <translation>mono</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>输出目录</source>
+        <translation>Output directory</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>浏览</source>
+        <translation>Browse</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>项目信息</source>
+        <translation>Project information</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>轨道数量：%1 / 6</source>
+        <translation>Number of tracks: %1/6</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>项目时长：%1</source>
+        <translation>Project duration: %1</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>目标 BPM：%1</source>
+        <translation>Target BPM: %1</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>处理中…</source>
+        <translation>Processing…</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>导出音频</source>
+        <translation>Export audio</translation>
+    </message>
+</context>
+<context>
+    <name>LightEditor</name>
+    <message>
+        <location filename="../qt/src/light_editor_controller.cpp" line="+450"/>
+        <source>Editor is busy</source>
+        <translation>Editor is busy</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location line="+77"/>
+        <source>No input file loaded</source>
+        <translation>No input file loaded</translation>
+    </message>
+    <message>
+        <location line="-59"/>
+        <source>BPM analysis failed</source>
+        <translation>BPM analysis failed</translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>Failed to create BPM cache directory</source>
+        <translation>Failed to create BPM cache directory</translation>
+    </message>
+    <message>
+        <location line="+53"/>
+        <source>BPM alignment failed</source>
+        <translation>BPM alignment failed</translation>
+    </message>
+    <message>
+        <location line="+56"/>
+        <source>Reliable BPM was not detected</source>
+        <translation>Reliable BPM was not detected</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Target BPM is outside the supported speed range</source>
+        <translation>Target BPM is outside the supported speed range</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>BPM alignment cancelled</source>
+        <translation>BPM alignment cancelled</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Failed to adjust track BPM</source>
+        <translation>Failed to adjust track BPM</translation>
+    </message>
+    <message>
+        <location line="+51"/>
+        <source>No audible tracks to export</source>
+        <translation>No audible tracks to export</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Invalid export audio settings</source>
+        <translation>Invalid export audio settings</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Failed to create export directory</source>
+        <translation>Failed to create export directory</translation>
+    </message>
+    <message>
+        <location line="+70"/>
+        <source>Export cancelled</source>
+        <translation>Export cancelled</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Export failed (error %1)</source>
+        <translation>Export failed (error %1)</translation>
+    </message>
+</context>
+<context>
+    <name>ListWindow</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/ListWindow.qml" line="+20"/>
+        <source>AgPlayer Track List</source>
+        <translation>AgPlayer Track List</translation>
+    </message>
+    <message>
+        <location line="+53"/>
+        <source>新建歌单</source>
+        <translation>New playlist</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>歌单名称</source>
+        <translation>Playlist name</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>重命名歌单</source>
+        <translation>Rename playlist</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>删除歌单</source>
+        <translation>Delete playlist</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>确定删除这个歌单？音乐文件不会被删除。</source>
+        <translation>Delete this playlist? Music files will not be deleted.</translation>
+    </message>
+    <message>
+        <location line="+41"/>
+        <source>音乐列表</source>
+        <translation>音乐列表</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Hide playlist window</source>
+        <translation>Hide playlist window</translation>
+    </message>
+    <message>
+        <location line="+148"/>
+        <source>未找到符合条件的歌曲</source>
+        <translation>No matching tracks found</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>一键清空筛选</source>
+        <translation>Clear all filters</translation>
+    </message>
+</context>
+<context>
+    <name>Main</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/Main.qml" line="+138"/>
+        <source>No lyrics available</source>
+        <translation>No lyrics available</translation>
+    </message>
+</context>
+<context>
+    <name>MetadataEditor</name>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="+78"/>
+        <source>Failed to open cover image: %1</source>
+        <translation>Failed to open cover image: %1</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Cover image is empty: %1</source>
+        <translation>Cover image is empty: %1</translation>
+    </message>
+</context>
+<context>
+    <name>MiniPlayerControls</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+123"/>
+        <source>Remove from favorites</source>
+        <translation>Remove from favorites</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Add to favorites</source>
+        <translation>Add to favorites</translation>
+    </message>
+    <message>
+        <location line="+52"/>
+        <location line="+9"/>
+        <source>No track loaded</source>
+        <translation>No track loaded</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Unknown artist</source>
+        <translation>Unknown artist</translation>
+    </message>
+    <message>
+        <location line="+98"/>
+        <source>Previous track</source>
+        <translation>Previous track</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Previous</source>
+        <translation>Previous</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Play</source>
+        <translation>Play</translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>Next track</source>
+        <translation>Next track</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Next</source>
+        <translation>Next</translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <source>Repeat one</source>
+        <translation>Repeat one</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Shuffle</source>
+        <translation>Shuffle</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Sequential</source>
+        <translation>Sequential</translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>Unmute</source>
+        <translation>Unmute</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Mute</source>
+        <translation>Mute</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Volume</source>
+        <translation>Volume</translation>
+    </message>
+</context>
+<context>
+    <name>MiniPlayerWindow</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+96"/>
+        <source>Disable always on top</source>
+        <translation>Disable always on top</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Pin on top</source>
+        <translation>Pin on top</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Restore main window</source>
+        <translation>Restore main window</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Restore</source>
+        <translation>Restore</translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <location line="+3"/>
+        <source>Minimize</source>
+        <translation>Minimize</translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <location line="+3"/>
+        <source>Close</source>
+        <translation>Close</translation>
+    </message>
+</context>
+<context>
+    <name>MultiTrackWaveform</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93"/>
+        <location line="+177"/>
+        <source>空轨道</source>
+        <translation>empty orbit</translation>
+    </message>
+    <message>
+        <location line="-168"/>
+        <source>原始 BPM：</source>
+        <translation>Original BPM:</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>拖入音频文件</source>
+        <translation>Drag in audio files</translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <source>已对齐</source>
+        <translation>Aligned</translation>
+    </message>
+    <message>
+        <location line="+131"/>
+        <source>添加或拖入音频文件</source>
+        <translation>Add or drag in audio files</translation>
+    </message>
+</context>
+<context>
+    <name>PitchShiftPage</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/PitchShiftPage.qml" line="+69"/>
+        <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+        <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
+    </message>
+    <message>
+        <location line="+66"/>
+        <source>Drop an audio file here or click Browse</source>
+        <translation>Drop an audio file here or click Browse</translation>
+    </message>
+    <message>
+        <location line="+127"/>
+        <location line="+803"/>
+        <source>Browse</source>
+        <translation>Browse</translation>
+    </message>
+    <message>
+        <location line="-775"/>
+        <source>Clear</source>
+        <translation>Clear</translation>
+    </message>
+    <message>
+        <location line="+48"/>
+        <source>Presets</source>
+        <translation>Presets</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Original (0)</source>
+        <translation>Original (0)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Male +2</source>
+        <translation>Male +2</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Male +4</source>
+        <translation>Male +4</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Female +2</source>
+        <translation>Female +2</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Female +4</source>
+        <translation>Female +4</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Deep -2</source>
+        <translation>Deep -2</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Deep -4</source>
+        <translation>Deep -4</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Custom</source>
+        <translation>Custom</translation>
+    </message>
+    <message>
+        <location line="+51"/>
+        <source>Pitch Adjustment</source>
+        <translation>Pitch Adjustment</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Semitone</source>
+        <translation>Semitone</translation>
+    </message>
+    <message>
+        <location line="+151"/>
+        <source>Cents</source>
+        <translation>Cents</translation>
+    </message>
+    <message>
+        <location line="+162"/>
+        <source>Advanced Options</source>
+        <translation>Advanced Options</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Keep Tempo</source>
+        <translation>Keep Tempo</translation>
+    </message>
+    <message>
+        <location line="+45"/>
+        <source>Vocal Protection (Experimental)</source>
+        <translation>Vocal Protection (Experimental)</translation>
+    </message>
+    <message>
+        <location line="+56"/>
+        <source>Smooth Transition</source>
+        <translation>Smooth Transition</translation>
+    </message>
+    <message>
+        <location line="+64"/>
+        <source>Output Format</source>
+        <translation>Output Format</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>MP3</source>
+        <translation>MP3</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>WAV</source>
+        <translation>WAV</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>FLAC</source>
+        <translation>FLAC</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>AAC</source>
+        <translation>AAC</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>OGG</source>
+        <translation>OGG</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Opus</source>
+        <translation>Opus</translation>
+    </message>
+    <message>
+        <location line="+30"/>
+        <source>Sample Rate</source>
+        <translation>Sample Rate</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Start Processing</source>
+        <translation>Start Processing</translation>
+    </message>
+    <message>
+        <location line="+40"/>
+        <source>Save Location</source>
+        <translation>Save Location</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Same as source (default)</source>
+        <translation>Same as source (default)</translation>
+    </message>
+    <message>
+        <location line="+38"/>
+        <source>Cancel</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>Vocal protection is intended for daily use; avoid processing for professional projects.</source>
+        <translation>Vocal protection is intended for daily use; avoid processing for professional projects.</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Processing...</source>
+        <translation>Processing...</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Export complete</source>
+        <translation>Export complete</translation>
+    </message>
+    <message>
+        <location line="+63"/>
+        <source>Exported: %1</source>
+        <translation>Exported: %1</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Exported: %1 (%2)</source>
+        <translation>Exported: %1 (%2)</translation>
+    </message>
+    <message>
+        <location line="-1008"/>
+        <source>播放或暂停原始音频</source>
+        <translation>Play or pause original audio</translation>
+    </message>
+    <message>
+        <location line="+595"/>
+        <source>为人声提供柔和的共振峰补偿</source>
+        <translation>Gentle formant compensation for vocals</translation>
+    </message>
+</context>
+<context>
+    <name>PlayerControls</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="+27"/>
+        <source>Hide playlist window</source>
+        <translation>Hide playlist window</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Show playlist window</source>
+        <translation>Show playlist window</translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>Open audio tools</source>
+        <translation>Open audio tools</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Change waveform mode</source>
+        <translation>Change waveform mode</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Previous track</source>
+        <translation>Previous track</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Previous</source>
+        <translation>Previous</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <location line="+5"/>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <location line="-4"/>
+        <location line="+5"/>
+        <source>Play</source>
+        <translation>Play</translation>
+    </message>
+    <message>
+        <location line="+51"/>
+        <source>Next track</source>
+        <translation>Next track</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Next</source>
+        <translation>Next</translation>
+    </message>
+    <message>
+        <location line="+35"/>
+        <source>Repeat one</source>
+        <translation>Repeat one</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Shuffle</source>
+        <translation>Shuffle</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Sequential</source>
+        <translation>Sequential</translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <source>Toggle lyrics</source>
+        <translation>Toggle lyrics</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Lyrics</source>
+        <translation>Lyrics</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Unmute</source>
+        <translation>Unmute</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Mute</source>
+        <translation>Mute</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Volume</source>
+        <translation>Volume</translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>Switch to mini player</source>
+        <translation>Switch to mini player</translation>
+    </message>
+</context>
+<context>
+    <name>PlayerPane</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+153"/>
+        <source>No track loaded</source>
+        <translation>No track loaded</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Remove from favorites</source>
+        <translation>Remove from favorites</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Add to favorites</source>
+        <translation>Add to favorites</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>Unknown artist</source>
+        <translation>Unknown artist</translation>
+    </message>
+</context>
+<context>
+    <name>SearchFilter</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/SearchFilter.qml" line="+59"/>
+        <source>搜索歌曲、歌手或专辑</source>
+        <translation>Search tracks, artists, or albums</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>评分</source>
+        <translation>Rating</translation>
+    </message>
+    <message>
+        <location line="+136"/>
+        <source>清空</source>
+        <translation>Clear</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsController</name>
+    <message>
+        <location filename="../qt/src/settings_controller.cpp" line="+768"/>
+        <source>当前已是最新版本</source>
+        <translation>Currently the latest version</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="+53"/>
+        <location line="+743"/>
+        <location line="+1"/>
+        <source>常规</source>
+        <translation>General</translation>
+    </message>
+    <message>
+        <location line="-743"/>
+        <location line="+918"/>
+        <source>播放与音频</source>
+        <translation>Playback &amp; Audio</translation>
+    </message>
+    <message>
+        <location line="-918"/>
+        <location line="+919"/>
+        <source>播放</source>
+        <translation>Playback</translation>
+    </message>
+    <message>
+        <location line="-918"/>
+        <location line="+1027"/>
+        <source>外观与波形</source>
+        <translation>Appearance &amp; Waveform</translation>
+    </message>
+    <message>
+        <location line="-1027"/>
+        <location line="+1028"/>
+        <source>外观</source>
+        <translation>Appearance</translation>
+    </message>
+    <message>
+        <location line="-1027"/>
+        <location line="+1171"/>
+        <source>音频工具预设</source>
+        <translation>Audio Tool Presets</translation>
+    </message>
+    <message>
+        <location line="-1171"/>
+        <location line="+1172"/>
+        <source>音频工具</source>
+        <translation>Audio Tools</translation>
+    </message>
+    <message>
+        <location line="-1171"/>
+        <location line="+1270"/>
+        <source>快捷键设置</source>
+        <translation>Keyboard Shortcuts</translation>
+    </message>
+    <message>
+        <location line="-1270"/>
+        <location line="+1271"/>
+        <source>快捷键</source>
+        <translation>Hotkeys</translation>
+    </message>
+    <message>
+        <location line="-1270"/>
+        <location line="+1345"/>
+        <source>缓存与数据</source>
+        <translation>Cache &amp; Data</translation>
+    </message>
+    <message>
+        <location line="-1345"/>
+        <location line="+1346"/>
+        <source>缓存</source>
+        <translation>Cache</translation>
+    </message>
+    <message>
+        <location line="-1345"/>
+        <location line="+1506"/>
+        <location line="+1"/>
+        <source>关于</source>
+        <translation>About</translation>
+    </message>
+    <message>
+        <location line="-1469"/>
+        <source>确认清空缓存</source>
+        <translation>Confirm to clear cache</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>确定要一键清空全部缓存吗？此操作不可撤销。</source>
+        <translation>Are you sure you want to clear all caches with one click? This action cannot be undone.</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <source>AgPlayer · 设置</source>
+        <translation>AgPlayer · Settings</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>搜索设置...</source>
+        <translation>Search settings...</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>恢复默认</source>
+        <translation>Restore Defaults</translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Close settings</source>
+        <translation>Close settings</translation>
+    </message>
+    <message>
+        <location line="+142"/>
+        <source>取消</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <source>保存更改</source>
+        <translation>Save Changes</translation>
+    </message>
+    <message>
+        <location line="+301"/>
+        <source>纯色波形</source>
+        <translation>solid color waveform</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>RGB波形</source>
+        <translation>RGB waveform</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>频谱波形</source>
+        <translation>spectrum waveform</translation>
+    </message>
+    <message>
+        <location line="+150"/>
+        <source>开机与窗口</source>
+        <translation>Startup &amp; Windows</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>开机自动启动</source>
+        <translation>Launch at startup</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>启动时自动恢复上次播放进度</source>
+        <translation>Resume the last playback position on startup</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>双窗口歌单面板</source>
+        <translation>Separate playlist window</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>窗口磁吸吸附对齐 (15px 阈值)</source>
+        <translation>Magnetic window snapping (15px threshold)</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>歌曲列表位置</source>
+        <translation>Playlist window position</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>上</source>
+        <translation>on</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>下</source>
+        <translation>down</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>左</source>
+        <translation>left</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>右</source>
+        <translation>right</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>退出程序行为</source>
+        <translation>Close behavior</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>最小化到托盘</source>
+        <translation>Minimize to tray</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直接关闭</source>
+        <translation>Close directly</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>语言</source>
+        <translation>Language</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>文件关联</source>
+        <translation>File Associations</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>设为系统默认音频播放器</source>
+        <translation>Set as system default audio player</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>关联格式</source>
+        <translation>Associative format</translation>
+    </message>
+    <message>
+        <location line="+47"/>
+        <source>重新绑定文件关联与图标</source>
+        <translation>Rebind file associations and icons</translation>
+    </message>
+    <message>
+        <location line="+44"/>
+        <source>音频输出</source>
+        <translation>audio output</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>输出设备</source>
+        <translation>output device</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>自动 / 系统默认设备</source>
+        <translation>Automatic / system default device</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>音频独占模式 (Exclusive Mode/WASAPI/ALSA) (降低延迟，但其他软件静音)</source>
+        <translation>Audio Exclusive Mode (Exclusive Mode/WASAPI/ALSA) (reduces latency, but mutes other software)</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>播放行为</source>
+        <translation>play behavior</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>播放键 RGB 光晕</source>
+        <translation>Play button RGB halo</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>默认播放模式</source>
+        <translation>Default play mode</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>顺序播放</source>
+        <translation>Play sequentially</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>随机播放</source>
+        <translation>shuffle</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>单曲循环</source>
+        <translation>single loop</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>列表循环</source>
+        <translation>List loop</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>开启无间隙播放</source>
+        <translation>Enable gapless playback</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>歌曲切换淡入淡出</source>
+        <translation>Song switch fade in and fade out</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>0ms (关闭)</source>
+        <translation>0ms (off)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>200ms</source>
+        <translation>200ms</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>500ms</source>
+        <translation>500ms</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>自动匹配采样率</source>
+        <translation>Automatically match sample rate</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>自动读取歌曲 BPM</source>
+        <translation>Automatically read song BPM</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>星级评分</source>
+        <translation>star rating</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>主题样式</source>
+        <translation>theme style</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>主题模式</source>
+        <translation>theme mode</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>深色</source>
+        <translation>Dark</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>浅色</source>
+        <translation>light color</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>跟随系统</source>
+        <translation>Follow the system</translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>毛玻璃 / 悬浮特效：开启迷你播放器与悬浮窗口模糊背景</source>
+        <translation>Frosted glass/floating special effects: open the mini player and floating window to blur the background</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Waveform RGB 波形设置</source>
+        <translation>Waveform RGB waveform settings</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>默认波形模式</source>
+        <translation>Default waveform mode</translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <source>波形渲染密度</source>
+        <translation>Waveform rendering density</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>稀疏</source>
+        <translation>sparse</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>适中（推荐）</source>
+        <translation>Moderate (recommended)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>精细</source>
+        <translation>Fine</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>波形线条粗细</source>
+        <translation>Wavy line thickness</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>1px</source>
+        <translation>1px</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>1.5px</source>
+        <translation>1.5px</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>2px</source>
+        <translation>2px</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>3px</source>
+        <translation>3px</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>4px</source>
+        <translation>4px</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>6px</source>
+        <translation>6px</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>鼠标悬停波形时显示时间预览胶囊</source>
+        <translation>Show time preview capsule when mouseover waveform</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>通用导出</source>
+        <translation>Universal export</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>默认导出路径</source>
+        <translation>Default export path</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>文件覆盖策略</source>
+        <translation>File overwrite strategy</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>自动重命名 (例: _edited)</source>
+        <translation>Automatic rename (example: _edited)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直接覆盖</source>
+        <translation>direct coverage</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>转码与剪辑预设</source>
+        <translation>Transcoding and editing presets</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>默认转码输出格式</source>
+        <translation>Default transcoding output format</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>MP3 / 320kbps / 44.1kHz / Stereo</source>
+        <translation>MP3/320kbps/44.1kHz/Stereo</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>MP3 / 256kbps / 44.1kHz / Stereo</source>
+        <translation>MP3/256kbps/44.1kHz/Stereo</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>MP3 / 192kbps / 44.1kHz / Stereo</source>
+        <translation>MP3/192kbps/44.1kHz/Stereo</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>FLAC / 44.1kHz / Stereo</source>
+        <translation>FLAC/44.1kHz/Stereo</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>WAV / 44.1kHz / Stereo</source>
+        <translation>WAV/44.1kHz/Stereo</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>批量转码时保持原音频元数据</source>
+        <translation>Keep original audio metadata during batch transcoding</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>变调与变速预设</source>
+        <translation>Pitch and speed presets</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>变速时变调行为：保持原音高/语速</source>
+        <translation>Pitch-changing behavior when changing speed: Maintain original pitch/speech speed</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>升降调人声保护</source>
+        <translation>Protection of rising and falling vocals</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>全局快捷键</source>
+        <translation>Global shortcut keys</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>播放 / 暂停</source>
+        <translation>play/pause</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>上一首 / 下一首</source>
+        <translation>Previous song / Next song</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>音量加 / 减</source>
+        <translation>Volume up/down</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>显示 / 隐藏迷你播放器</source>
+        <translation>Show/hide mini player</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>应用内快捷键</source>
+        <translation>In-app shortcut keys</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>快速搜索歌曲</source>
+        <translation>Quickly search for songs</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>快速切换波形模式</source>
+        <translation>Quickly switch waveform modes</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>打开音频工具</source>
+        <translation>Open audio tools</translation>
+    </message>
+    <message>
+        <location line="+61"/>
+        <source>路径与自动清理</source>
+        <translation>Paths and automatic cleaning</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>缓存路径</source>
+        <translation>Cache path</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>缓存自动清理（超出上限自动删旧文件，默认开启）</source>
+        <translation>Automatic cache cleaning (automatically delete old files when the upper limit is exceeded, enabled by default)</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>退出自动清理临时转码文件（默认开启）</source>
+        <translation>Exit automatic cleaning of temporary transcoding files (enabled by default)</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>当前缓存</source>
+        <translation>Current cache</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>清理按钮</source>
+        <translation>clean button</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>波形缓存</source>
+        <translation>Waveform buffer</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>封面缓存</source>
+        <translation>cover cache</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>转码临时文件</source>
+        <translation>Transcode temporary files</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>一键清空全部缓存</source>
+        <translation>Clear all caches with one click</translation>
+    </message>
+    <message>
+        <location line="+40"/>
+        <location line="+70"/>
+        <source>检查更新</source>
+        <translation>Check for updates</translation>
+    </message>
+    <message>
+        <location line="-20"/>
+        <source>发布日期: </source>
+        <translation>Release date:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>轻量、纯粹、为音乐而生。</source>
+        <translation>Lightweight, pure, and made for music.</translation>
+    </message>
+    <message>
+        <location line="+38"/>
+        <source>访问官网</source>
+        <translation>Visit official website</translation>
+    </message>
+</context>
+<context>
+    <name>SideNavigation</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="+50"/>
+        <source>播放列表</source>
+        <translation>Playlists</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>折叠播放列表</source>
+        <translation>Collapse playlists</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>展开播放列表</source>
+        <translation>Expand playlists</translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>所有歌曲</source>
+        <translation>all songs</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>我的收藏</source>
+        <translation>my collection</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>播放历史</source>
+        <translation>Play history</translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>重命名</source>
+        <translation>Rename</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>删除</source>
+        <translation>Delete</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>新建歌单</source>
+        <translation>New playlist</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>导入音乐</source>
+        <translation>Import music</translation>
+    </message>
+</context>
+<context>
+    <name>SpeedAdjustPage</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+21"/>
+        <source>Intro</source>
+        <translation>Intro</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Build Up</source>
+        <translation>Build Up</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Drop</source>
+        <translation>Drop</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Breakdown</source>
+        <translation>Breakdown</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Drop 2</source>
+        <translation>Drop 2</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Outro</source>
+        <translation>Outro</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+        <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
+    </message>
+    <message>
+        <location line="+65"/>
+        <source>Drop an audio file here or click Browse</source>
+        <translation>Drop an audio file here or click Browse</translation>
+    </message>
+    <message>
+        <location line="+85"/>
+        <location line="+1034"/>
+        <source>Browse</source>
+        <translation>Browse</translation>
+    </message>
+    <message>
+        <location line="-1006"/>
+        <source>Clear</source>
+        <translation>Clear</translation>
+    </message>
+    <message>
+        <location line="+45"/>
+        <source>Adjust BPM</source>
+        <translation>Adjust BPM</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Markers are manually added; segment processing is future work.</source>
+        <translation>Markers are manually added; segment processing is future work.</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>+ Add Marker</source>
+        <translation>+ Add Marker</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Marker</source>
+        <translation>Marker</translation>
+    </message>
+    <message>
+        <location line="+80"/>
+        <source>BPM Analysis</source>
+        <translation>BPM Analysis</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Detected BPM</source>
+        <translation>Detected BPM</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>Confidence %1%</source>
+        <translation>Confidence %1%</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Re-analyze</source>
+        <translation>Re-analyze</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <source>Half Beat</source>
+        <translation>Half Beat</translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Double Beat</source>
+        <translation>Double Beat</translation>
+    </message>
+    <message>
+        <location line="+43"/>
+        <source>Speed Settings</source>
+        <translation>Speed Settings</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Target BPM</source>
+        <translation>Target BPM</translation>
+    </message>
+    <message>
+        <location line="+76"/>
+        <source>Speed Percentage</source>
+        <translation>Speed Percentage</translation>
+    </message>
+    <message>
+        <location line="+70"/>
+        <source>Keep Pitch</source>
+        <translation>Keep Pitch</translation>
+    </message>
+    <message>
+        <location line="+52"/>
+        <source>Beat Align</source>
+        <translation>Beat Align</translation>
+    </message>
+    <message>
+        <location line="+77"/>
+        <source>Segments / Markers (Manual)</source>
+        <translation>Segments / Markers (Manual)</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Name</source>
+        <translation>Name</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Start Time</source>
+        <translation>Start Time</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>BPM</source>
+        <translation>BPM</translation>
+    </message>
+    <message>
+        <location line="+87"/>
+        <source>Preview / Output</source>
+        <translation>Preview / Output</translation>
+    </message>
+    <message>
+        <location line="+154"/>
+        <source>Output Format</source>
+        <translation>Output Format</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>MP3</source>
+        <translation>MP3</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>WAV</source>
+        <translation>WAV</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>FLAC</source>
+        <translation>FLAC</translation>
+    </message>
+    <message>
+        <location line="+30"/>
+        <source>Start Processing</source>
+        <translation>Start Processing</translation>
+    </message>
+    <message>
+        <location line="+39"/>
+        <source>Save Location</source>
+        <translation>Save Location</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Same as source (default)</source>
+        <translation>Same as source (default)</translation>
+    </message>
+    <message>
+        <location line="+38"/>
+        <source>Cancel</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>BPM detection results may vary slightly depending on audio quality.</source>
+        <translation>BPM detection results may vary slightly depending on audio quality.</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Processing...</source>
+        <translation>Processing...</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Export complete</source>
+        <translation>Export complete</translation>
+    </message>
+    <message>
+        <location line="+63"/>
+        <source>Exported: %1</source>
+        <translation>Exported: %1</translation>
+    </message>
+    <message>
+        <location line="-640"/>
+        <source>裁去前导偏移，使第一拍从零点开始</source>
+        <translation>Trim the leading offset so the first beat starts at zero</translation>
+    </message>
+    <message>
+        <location line="+241"/>
+        <source>定位预览</source>
+        <translation>Seek preview</translation>
+    </message>
+</context>
+<context>
+    <name>TitleBar</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/TitleBar.qml" line="+57"/>
+        <source>Open settings</source>
+        <translation>Open settings</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Settings</source>
+        <translation>Settings</translation>
+    </message>
+</context>
+<context>
+    <name>ToolSidebar</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25"/>
+        <source>格式转换</source>
+        <translation>format conversion</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>轻度剪辑</source>
+        <translation>Lightly edited</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>调整速度</source>
+        <translation>Adjust speed</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>升调降调</source>
+        <translation>rising and falling</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>信息修改</source>
+        <translation>Information modification</translation>
+    </message>
+</context>
+<context>
+    <name>TrackList</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/TrackList.qml" line="+73"/>
+        <source>歌曲</source>
+        <translation>song</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>收藏</source>
+        <translation>Collection</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>艺术家</source>
+        <translation>artist</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>专辑</source>
+        <translation>album</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>评分</source>
+        <translation>Rating</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>BPM</source>
+        <translation>BPM</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>时长</source>
+        <translation>duration</translation>
+    </message>
+    <message>
+        <location line="+64"/>
+        <source>未知标题</source>
+        <translation>Unknown title</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>取消收藏</source>
+        <translation>Remove from favorites</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>添加收藏</source>
+        <translation>Add to favorites</translation>
+    </message>
+    <message>
+        <location line="+66"/>
+        <source>歌单操作</source>
+        <translation>Playlist actions</translation>
+    </message>
+    <message>
+        <location line="+43"/>
+        <source>从当前歌单移除</source>
+        <translation>Remove from current playlist</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>添加到 %1</source>
+        <translation>Add to %1</translation>
+    </message>
+</context>
 </TS>

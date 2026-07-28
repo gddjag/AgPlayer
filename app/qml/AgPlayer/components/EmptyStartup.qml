@@ -52,10 +52,10 @@ Rectangle {
                 Layout.preferredHeight: 52
                 text: qsTr("打开文件")
                 icon.source: Theme.icon("folder-open-line")
-                icon.color: Theme.accentText
+                icon.color: Theme.onBrandGradientText
                 icon.width: 20
                 icon.height: 20
-                palette.buttonText: Theme.accentText
+                palette.buttonText: Theme.onBrandGradientText
                 font.pixelSize: 16
                 Accessible.name: text
                 focusPolicy: Qt.StrongFocus

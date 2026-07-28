@@ -196,13 +196,13 @@ Rectangle {
             anchors.rightMargin: Theme.spacingSm
             spacing: Theme.spacingSm
 
-            Image {
+            ThemedIcon {
                 source: Theme.icon(catRoot.icon)
+                tint: catRoot.selected ? Theme.iconAccent : Theme.iconSecondary
                 sourceSize.width: 16
                 sourceSize.height: 16
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
-                fillMode: Image.PreserveAspectFit
             }
             Text {
                 text: catRoot.label

@@ -70,6 +70,9 @@ int main(int argc, char* argv[])
     QString qaScreenshotMini;
     QString qaScreenshotTools;
     QString qaScreenshotList;
+    QString qaTheme;
+    QString qaLanguage;
+    bool qaOpenSettings = false;
     QString qaLibraryPath;
     QString qaImportFolder;
     QString initialFilePath;
@@ -95,6 +98,14 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-screenshot-list")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotList = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-theme")
+                       && i + 1 < cliArgs.size()) {
+                qaTheme = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-language")
+                       && i + 1 < cliArgs.size()) {
+                qaLanguage = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-open-settings")) {
+                qaOpenSettings = true;
             } else if (arg == QStringLiteral("--qa-library")
                        && i + 1 < cliArgs.size()) {
                 qaLibraryPath = cliArgs.at(++i);
@@ -153,6 +164,16 @@ int main(int argc, char* argv[])
 
         PlaybackController playback(core, &library);
         SettingsController settings;
+        if (qaTheme == QStringLiteral("dark")) {
+            settings.setThemeMode(0);
+        } else if (qaTheme == QStringLiteral("light")) {
+            settings.setThemeMode(1);
+        } else if (qaTheme == QStringLiteral("system")) {
+            settings.setThemeMode(2);
+        }
+        if (!qaLanguage.isEmpty()) {
+            settings.setLanguage(qaLanguage);
+        }
         TranslationManager translations;
         if (!translations.setLanguage(settings.language())) {
             settings.setLanguage(QStringLiteral("zh"));
@@ -313,6 +334,9 @@ int main(int argc, char* argv[])
             });
             if (library.count() > 0) {
                 windows.showListWindow();
+            }
+            if (qaOpenSettings) {
+                QMetaObject::invokeMethod(mainWindow, "openSettingsPage");
             }
 
             playFileIfPending();

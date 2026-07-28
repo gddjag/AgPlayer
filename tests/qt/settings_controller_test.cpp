@@ -1,10 +1,12 @@
 #include "settings_controller.hpp"
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileDevice>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -20,11 +22,16 @@ private slots:
     void loadCreatesDefaultDirectories();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
+    void editSessionCanCommitOrCancel();
+    void testModeDoesNotTouchStartupRegistry();
 };
 
 void SettingsControllerTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
+    QCoreApplication::setApplicationName(QStringLiteral("AgPlayer-settings-controller-test"));
+    QSettings().clear();
 }
 
 void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
@@ -123,6 +130,76 @@ void SettingsControllerTest::supportsOnlyFourLanguages()
         settings.setLanguage(language);
         QCOMPARE(settings.language(), QStringLiteral("zh"));
     }
+}
+
+void SettingsControllerTest::editSessionCanCommitOrCancel()
+{
+    SettingsController settings;
+    settings.setThemeMode(1);
+    settings.setLanguage(QStringLiteral("en"));
+    QSettings persisted;
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
+    QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
+             QStringLiteral("en"));
+
+    settings.beginEdit();
+    settings.setThemeMode(2);
+    settings.setLanguage(QStringLiteral("th"));
+    persisted.sync();
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
+    QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
+             QStringLiteral("en"));
+    settings.resetToDefaults();
+    persisted.sync();
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
+    QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
+             QStringLiteral("en"));
+    settings.cancelEdit();
+    persisted.sync();
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
+    QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
+             QStringLiteral("en"));
+    QCOMPARE(settings.themeMode(), 1);
+    QCOMPARE(settings.language(), QStringLiteral("en"));
+
+    {
+        SettingsController reloaded;
+        QCOMPARE(reloaded.themeMode(), 1);
+        QCOMPARE(reloaded.language(), QStringLiteral("en"));
+    }
+
+    settings.beginEdit();
+    settings.setThemeMode(2);
+    settings.setLanguage(QStringLiteral("vi"));
+    persisted.sync();
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
+    QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
+             QStringLiteral("en"));
+    settings.commitEdit();
+
+    SettingsController committed;
+    QCOMPARE(committed.themeMode(), 2);
+    QCOMPARE(committed.language(), QStringLiteral("vi"));
+}
+
+void SettingsControllerTest::testModeDoesNotTouchStartupRegistry()
+{
+#ifdef Q_OS_WIN
+    QSettings run(
+        QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        QSettings::NativeFormat);
+    const QVariant before = run.value(QStringLiteral("AgPlayer"));
+
+    SettingsController settings;
+    settings.setAutoStartWithWindows(!settings.autoStartWithWindows());
+    settings.beginEdit();
+    settings.setAutoStartWithWindows(!settings.autoStartWithWindows());
+    settings.rebindFileAssociations();
+    settings.commitEdit();
+
+    run.sync();
+    QCOMPARE(run.value(QStringLiteral("AgPlayer")), before);
+#endif
 }
 
 QTEST_MAIN(SettingsControllerTest)

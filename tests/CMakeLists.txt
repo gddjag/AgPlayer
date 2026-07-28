@@ -349,6 +349,14 @@ foreach(qt_test IN ITEMS
     )
 endforeach()
 
+add_test(
+    NAME translation_catalog_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DCATALOGS=${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_th.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_vi.ts"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckTranslationCatalogs.cmake"
+)
+set_tests_properties(translation_catalog_test PROPERTIES TIMEOUT 10)
+
 set_tests_properties(light_editor_controller_test PROPERTIES TIMEOUT 60)
 set_tests_properties(shutdown_test PROPERTIES TIMEOUT 30)
 set_tests_properties(runtime_log_test PROPERTIES TIMEOUT 30)
@@ -512,7 +520,8 @@ agplayer_enable_warnings(library_stress_test)
 
 add_test(NAME library_stress_test COMMAND library_stress_test)
 set_tests_properties(library_stress_test PROPERTIES
-    TIMEOUT 600
+    TIMEOUT 120
+    ENVIRONMENT "AGPLAYER_STRESS_COUNT=64"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )

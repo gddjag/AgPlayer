@@ -18,16 +18,45 @@ Popup {
 
     property int selectedSection: 0
     property string searchText: ""
+    property bool editResolved: true
+
+    onOpened: {
+        editResolved = false
+        SettingsController.beginEdit()
+    }
+
+    onClosed: {
+        if (!editResolved) {
+            editResolved = true
+            SettingsController.cancelEdit()
+        }
+    }
+
+    function cancelAndClose() {
+        if (!editResolved) {
+            editResolved = true
+            SettingsController.cancelEdit()
+        }
+        root.close()
+    }
+
+    function saveAndClose() {
+        if (!editResolved) {
+            editResolved = true
+            SettingsController.commitEdit()
+        }
+        root.close()
+    }
 
     function sectionList() {
         return [
-            { index: 0, text: qsTr("常规"), subtitle: "General", icon: "\u2699" },
-            { index: 1, text: qsTr("播放与音频"), subtitle: "Playback", icon: "\u25B6" },
-            { index: 2, text: qsTr("外观与波形"), subtitle: "Appearance", icon: "\u223F" },
-            { index: 3, text: qsTr("音频工具预设"), subtitle: "Audio Tools", icon: "\u2692" },
-            { index: 4, text: qsTr("快捷键设置"), subtitle: "Hotkeys", icon: "\u2328" },
-            { index: 5, text: qsTr("缓存与数据"), subtitle: "Cache", icon: "\u2672" },
-            { index: 6, text: qsTr("关于"), subtitle: "About", icon: "\u2139" }
+            { index: 0, text: qsTr("常规"), subtitle: qsTr("常规"), icon: "\u2699" },
+            { index: 1, text: qsTr("播放与音频"), subtitle: qsTr("播放"), icon: "\u25B6" },
+            { index: 2, text: qsTr("外观与波形"), subtitle: qsTr("外观"), icon: "\u223F" },
+            { index: 3, text: qsTr("音频工具预设"), subtitle: qsTr("音频工具"), icon: "\u2692" },
+            { index: 4, text: qsTr("快捷键设置"), subtitle: qsTr("快捷键"), icon: "\u2328" },
+            { index: 5, text: qsTr("缓存与数据"), subtitle: qsTr("缓存"), icon: "\u2672" },
+            { index: 6, text: qsTr("关于"), subtitle: qsTr("关于"), icon: "\u2139" }
         ]
     }
 
@@ -137,7 +166,7 @@ Popup {
 
                 background: Rectangle {
                     color: parent.pressed ? Theme.border
-                          : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                          : parent.hovered ? Theme.hoverSurface
                           : "transparent"
                     border.color: Theme.border
                     border.width: 1
@@ -184,60 +213,62 @@ Popup {
                 Layout.fillHeight: true
                 color: "transparent"
 
-                ColumnLayout {
+                ListView {
+                    id: settingsSectionList
+                    objectName: "settingsSectionList"
                     anchors.fill: parent
                     anchors.margins: Theme.spacingMd
+                    clip: true
                     spacing: Theme.spacingXs
-
-                    Repeater {
-                        model: filteredSections()
-
-                        delegate: Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 42
-                            radius: Theme.radiusSm
-                            color: root.selectedSection === modelData.index
-                                   ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
-                                   : (mouseArea.containsMouse ? Theme.border : "transparent")
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacingMd
-                                anchors.rightMargin: Theme.spacingMd
-                                spacing: Theme.spacingMd
-
-                                Text {
-                                    text: modelData.icon
-                                    color: root.selectedSection === modelData.index
-                                           ? Theme.cyan
-                                           : Theme.secondaryText
-                                    font.pixelSize: 16
-                                    font.family: "Segoe UI Symbol"
-                                    Layout.preferredWidth: 24
-                                    horizontalAlignment: Text.AlignHCenter
-                                }
-
-                                Text {
-                                    text: modelData.text
-                                    color: root.selectedSection === modelData.index
-                                           ? Theme.primaryText
-                                           : Theme.secondaryText
-                                    font.family: Theme.fontPrimary
-                                    font.pixelSize: 14
-                                    Layout.fillWidth: true
-                                }
-                            }
-
-                            MouseArea {
-                                id: mouseArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: root.selectedSection = modelData.index
-                            }
-                        }
+                    model: filteredSections()
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
                     }
 
-                    Item { Layout.fillHeight: true }
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: settingsSectionList.width
+                        height: 42
+                        radius: Theme.radiusSm
+                        color: root.selectedSection === modelData.index
+                               ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
+                               : (mouseArea.containsMouse ? Theme.border : "transparent")
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacingMd
+                            anchors.rightMargin: Theme.spacingMd
+                            spacing: Theme.spacingMd
+
+                            Text {
+                                text: modelData.icon
+                                color: root.selectedSection === modelData.index
+                                       ? Theme.cyan
+                                       : Theme.secondaryText
+                                font.pixelSize: 16
+                                font.family: "Segoe UI Symbol"
+                                Layout.preferredWidth: 24
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            Text {
+                                text: modelData.text
+                                color: root.selectedSection === modelData.index
+                                       ? Theme.primaryText
+                                       : Theme.secondaryText
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        MouseArea {
+                            id: mouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: root.selectedSection = modelData.index
+                        }
+                    }
                 }
             }
 
@@ -248,19 +279,34 @@ Popup {
             }
 
             // Content
-            StackLayout {
-                id: contentStack
+            ScrollView {
+                id: settingsScroll
+                objectName: "settingsScroll"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: root.selectedSection
+                clip: true
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-                GeneralSection {}
-                PlaybackSection {}
-                AppearanceSection {}
-                AudioToolsSection {}
-                HotkeysSection {}
-                CacheSection {}
-                AboutSection {}
+                StackLayout {
+                    id: contentStack
+                    width: settingsScroll.availableWidth
+                    currentIndex: root.selectedSection
+                    implicitHeight: {
+                        const page = children[currentIndex]
+                        return page ? page.implicitHeight + Theme.spacingLg : 0
+                    }
+                    height: Math.max(settingsScroll.availableHeight, implicitHeight)
+
+                    GeneralSection {}
+                    PlaybackSection {}
+                    AppearanceSection {}
+                    AudioToolsSection {}
+                    HotkeysSection {}
+                    CacheSection {}
+                    AboutSection {}
+                }
             }
         }
 
@@ -281,9 +327,10 @@ Popup {
             Item { Layout.fillWidth: true }
 
             Button {
+                objectName: "settingsCancelButton"
                 text: qsTr("取消")
                 focusPolicy: Qt.StrongFocus
-                onClicked: root.close()
+                onClicked: root.cancelAndClose()
 
                 contentItem: Text {
                     text: parent.text
@@ -296,7 +343,7 @@ Popup {
 
                 background: Rectangle {
                     color: parent.pressed ? Theme.border
-                          : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                          : parent.hovered ? Theme.hoverSurface
                           : "transparent"
                     border.color: Theme.border
                     border.width: 1
@@ -307,13 +354,14 @@ Popup {
             }
 
             Button {
+                objectName: "settingsSaveButton"
                 text: qsTr("保存更改")
                 focusPolicy: Qt.StrongFocus
-                onClicked: root.close()
+                onClicked: root.saveAndClose()
 
                 contentItem: Text {
                     text: parent.text
-                    color: "#0A0A0F"
+                    color: Theme.accentText
                     font.family: Theme.fontPrimary
                     font.pixelSize: 14
                     font.weight: Font.Medium
@@ -335,9 +383,9 @@ Popup {
 
     component SettingCard: Rectangle {
         property alias title: titleText.text
-        property alias content: contentContainer.children
+        default property alias content: contentContainer.children
 
-        color: Qt.rgba(1, 1, 1, 0.03)
+        color: Theme.elevated
         radius: Theme.radiusMd
         border.color: Theme.border
         border.width: 1
@@ -542,7 +590,7 @@ Popup {
             Text {
                 anchors.centerIn: parent
                 text: "\u2713"
-                color: "#0A0A0F"
+                color: Theme.accentText
                 font.pixelSize: 11
                 visible: parent.parent.checked
             }
@@ -592,7 +640,7 @@ Popup {
 
             background: Rectangle {
                 color: parent.pressed ? Theme.border
-                      : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                      : parent.hovered ? Theme.hoverSurface
                       : "transparent"
                 radius: Theme.radiusSm
             }
@@ -615,7 +663,7 @@ Popup {
         height: 72
         radius: Theme.radiusSm
         color: selected ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.12)
-                        : Qt.rgba(0, 0, 0, 0.22)
+                        : Theme.background
         border.color: selected ? Theme.cyan : Theme.border
         border.width: 1
 
@@ -633,7 +681,7 @@ Popup {
                     var cy = height / 2
 
                     // Draw subtle center line
-                    ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.08)
+                    ctx.strokeStyle = Theme.border
                     ctx.lineWidth = 1
                     ctx.beginPath()
                     ctx.moveTo(0, cy)
@@ -722,7 +770,7 @@ Popup {
             Text {
                 anchors.centerIn: parent
                 text: "\u2713"
-                color: "#0A0A0F"
+                color: Theme.accentText
                 font.pixelSize: 11
             }
         }
@@ -748,7 +796,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("常规")
-            subtitle: "General"
+            subtitle: qsTr("常规")
         }
 
         GridLayout {
@@ -904,7 +952,7 @@ Popup {
 
                     background: Rectangle {
                         color: parent.pressed ? Theme.border
-                              : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                              : parent.hovered ? Theme.hoverSurface
                               : "transparent"
                         border.color: Theme.border
                         border.width: 1
@@ -924,7 +972,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("播放与音频")
-            subtitle: "Playback & Engine"
+            subtitle: qsTr("播放")
         }
 
         GridLayout {
@@ -1034,7 +1082,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("外观与波形")
-            subtitle: "Appearance & Visualizer"
+            subtitle: qsTr("外观")
         }
 
         GridLayout {
@@ -1068,7 +1116,7 @@ Popup {
 
                                 contentItem: Text {
                                     text: parent.text
-                                    color: parent.checked ? "#0A0A0F" : Theme.primaryText
+                                    color: parent.checked ? Theme.accentText : Theme.primaryText
                                     font.family: Theme.fontPrimary
                                     font.pixelSize: 13
                                     horizontalAlignment: Text.AlignHCenter
@@ -1179,7 +1227,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("音频工具预设")
-            subtitle: "Audio Tools"
+            subtitle: qsTr("音频工具")
         }
 
         GridLayout {
@@ -1279,7 +1327,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("快捷键设置")
-            subtitle: "Hotkeys"
+            subtitle: qsTr("快捷键")
         }
 
         GridLayout {
@@ -1355,7 +1403,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("缓存与数据")
-            subtitle: "Cache & Storage"
+            subtitle: qsTr("缓存")
         }
 
         GridLayout {
@@ -1424,7 +1472,7 @@ Popup {
                         }
                         background: Rectangle {
                             color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : parent.hovered ? Theme.hoverSurface
                                   : "transparent"
                             border.color: Theme.border
                             border.width: 1
@@ -1447,7 +1495,7 @@ Popup {
                         }
                         background: Rectangle {
                             color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : parent.hovered ? Theme.hoverSurface
                                   : "transparent"
                             border.color: Theme.border
                             border.width: 1
@@ -1470,7 +1518,7 @@ Popup {
                         }
                         background: Rectangle {
                             color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : parent.hovered ? Theme.hoverSurface
                                   : "transparent"
                             border.color: Theme.border
                             border.width: 1
@@ -1517,7 +1565,7 @@ Popup {
 
         SectionHeader {
             title: qsTr("关于")
-            subtitle: "About"
+            subtitle: qsTr("关于")
         }
 
         MessageDialog {
@@ -1606,7 +1654,7 @@ Popup {
 
                         background: Rectangle {
                             color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : parent.hovered ? Theme.hoverSurface
                                   : "transparent"
                             border.color: Theme.border
                             border.width: 1
@@ -1631,7 +1679,7 @@ Popup {
 
                         background: Rectangle {
                             color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Qt.rgba(1, 1, 1, 0.05)
+                                  : parent.hovered ? Theme.hoverSurface
                                   : "transparent"
                             border.color: Theme.border
                             border.width: 1

@@ -181,11 +181,31 @@ TestCase {
         verify(!findChild(mainWindow, "settingsPage"),
                "settings page should not increase empty-startup cost")
 
+        SettingsController.themeMode = 1
         findChild(mainWindow, "settingsButton").clicked()
         tryVerify(function() {
             return findChild(mainWindow, "settingsPage") !== null
         })
-        findChild(mainWindow, "settingsPage").close()
+        const page = findChild(mainWindow, "settingsPage")
+        const scroll = findChild(page, "settingsScroll")
+        const sectionList = findChild(page, "settingsSectionList")
+        verify(scroll, "settings content must expose a scroll viewport")
+        verify(sectionList, "settings navigation must expose a scrollable list")
+        verify(scroll.contentHeight > scroll.availableHeight,
+               "settings content must remain reachable in the compact main window")
+        verify(sectionList.contentHeight > sectionList.height,
+               "all settings sections must remain reachable in the compact main window")
+        verify(sectionList.interactive,
+               "settings navigation must accept scrolling to cache and about sections")
+        SettingsController.themeMode = 2
+        page.close()
+        tryCompare(SettingsController, "themeMode", 1)
+
+        page.open()
+        SettingsController.themeMode = 2
+        findChild(page, "settingsSaveButton").clicked()
+        tryCompare(SettingsController, "themeMode", 2)
+        SettingsController.themeMode = 0
     }
 
     function test_theme_mode_updates_surfaces_text_and_icons() {
@@ -199,6 +219,9 @@ TestCase {
         SettingsController.themeMode = 1
         compare(SettingsController.themeMode, 1)
         tryCompare(Theme, "isLight", true)
+        verify(Theme.onBrandGradientText.toString()
+               !== Theme.onCyanText.toString(),
+               "brand gradients and solid cyan controls need separate text colors")
         verify(Theme.background.toString() !== darkBackground,
                "light mode should replace the dark surface")
         verify(Theme.primaryText.toString() !== darkText,

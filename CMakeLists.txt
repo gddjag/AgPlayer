@@ -43,5 +43,7 @@ qt_add_translations(
         ${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts
         ${CMAKE_SOURCE_DIR}/translations/agplayer_th.ts
         ${CMAKE_SOURCE_DIR}/translations/agplayer_vi.ts
+    LUPDATE_OPTIONS
+        -no-obsolete
     RESOURCE_PREFIX "/i18n"
 )

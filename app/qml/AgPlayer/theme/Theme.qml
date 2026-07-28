@@ -38,15 +38,18 @@ QtObject {
                                   : "#00D4FF"
     readonly property color violet: "#7B2FF7"
     readonly property color favoriteRed: "#FF334D"
+    readonly property color ratingGold: "#FFD700"
     readonly property color primaryText: followsSystem
                                          ? systemPalette.windowText
                                          : isLight ? "#17181A" : "#F5F7FA"
     readonly property color secondaryText: followsSystem
                                            ? systemPalette.placeholderText
                                            : isLight ? "#5E6570" : "#9AA4B2"
-    readonly property color accentText: followsSystem
+    readonly property color onCyanText: followsSystem
                                         ? systemPalette.highlightedText
-                                        : "#FFFFFF"
+                                        : "#0A0A0F"
+    readonly property color onBrandGradientText: "#FFFFFF"
+    readonly property color accentText: onCyanText
     readonly property color iconPrimary: primaryText
     readonly property color iconSecondary: secondaryText
     readonly property color iconAccent: cyan

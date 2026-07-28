@@ -4,6 +4,7 @@
 #include <QSettings>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 #include <memory>
 
@@ -224,6 +225,9 @@ public:
     void setCacheSizeLimitMB(int value);
 
     Q_INVOKABLE void resetToDefaults();
+    Q_INVOKABLE void beginEdit();
+    Q_INVOKABLE void commitEdit();
+    Q_INVOKABLE void cancelEdit();
     Q_INVOKABLE void rebindFileAssociations();
     Q_INVOKABLE void clearWaveformCache();
     Q_INVOKABLE void clearCoverCache();
@@ -291,6 +295,10 @@ private:
     void load();
     void saveAll();
     void restoreDefaults();
+    void emitAllChanged();
+    void persistValue(const QString& key, const QVariant& value);
+    void applyAutoStartWithWindows();
+    void applyCommittedEffects();
     void recalculateCacheSize();
     void enforceCacheSizeLimit();
     static qint64 directorySizeBytes(const QString& path);
@@ -300,6 +308,7 @@ private:
     static QString validatedLanguage(const QString& value);
 
     QSettings settings_;
+    bool editActive_ = false;
     std::unique_ptr<FileAssociationController> fileAssociationController_;
 
     void applyFileAssociations();

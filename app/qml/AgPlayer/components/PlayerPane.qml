@@ -218,15 +218,16 @@ Rectangle {
 
                         Repeater {
                             model: 5
-                            delegate: Image {
+                            delegate: ThemedIcon {
                                 source: index < root.currentTrackRating()
                                         ? Theme.icon("star-fill")
                                         : Theme.icon("star-line")
+                                tint: index < root.currentTrackRating()
+                                      ? Theme.ratingGold : Theme.iconSecondary
                                 sourceSize.width: 14
                                 sourceSize.height: 14
                                 Layout.preferredWidth: 15
                                 Layout.preferredHeight: 15
-                                fillMode: Image.PreserveAspectFit
                             }
                         }
                     }
