@@ -1,6 +1,7 @@
 #include "settings_controller.hpp"
 #include "waveform_provider.hpp"
 
+#include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -20,6 +21,7 @@ private slots:
     void emptyPathEmitsEmptyPeaks();
     void cacheHitEmitsPeaksImmediately();
     void analysisEmitsPeaksForFixture();
+    void newerTrackSuppressesStaleAnalysisResult();
 
 private:
     QString fixturePath_;
@@ -57,14 +59,21 @@ void WaveformProviderTest::cacheHitEmitsPeaksImmediately()
     }
 
     QStandardPaths::setTestModeEnabled(true);
+    QTemporaryDir cacheDir;
+    QVERIFY(cacheDir.isValid());
     SettingsController settings;
+    settings.setCacheDirectory(cacheDir.path());
 
     // First pass: analyze and save cache.
     {
         WaveformProvider provider(&settings);
         QSignalSpy spy(&provider, &WaveformProvider::waveformReady);
         provider.loadForTrack(fixturePath_);
-        QVERIFY2(spy.wait(5000), "analysis did not finish in time");
+        if (spy.isEmpty()) {
+            QVERIFY2(spy.wait(5000),
+                     qPrintable(QStringLiteral("analysis did not finish; progress=%1")
+                                    .arg(provider.analysisProgress())));
+        }
     }
 
     // Second pass: must hit cache and emit synchronously.
@@ -92,13 +101,20 @@ void WaveformProviderTest::analysisEmitsPeaksForFixture()
     }
 
     QStandardPaths::setTestModeEnabled(true);
+    QTemporaryDir cacheDir;
+    QVERIFY(cacheDir.isValid());
     SettingsController settings;
+    settings.setCacheDirectory(cacheDir.path());
     WaveformProvider provider(&settings);
     QSignalSpy spy(&provider, &WaveformProvider::waveformReady);
 
     provider.loadForTrack(fixturePath_);
 
-    QVERIFY2(spy.wait(5000), "analysis did not finish in time");
+    if (spy.isEmpty()) {
+        QVERIFY2(spy.wait(5000),
+                 qPrintable(QStringLiteral("analysis did not finish; progress=%1")
+                                .arg(provider.analysisProgress())));
+    }
     QCOMPARE(spy.count(), 1);
     const QList<QVariant> args = spy.takeFirst();
     QCOMPARE(args.size(), 2);
@@ -116,6 +132,36 @@ void WaveformProviderTest::analysisEmitsPeaksForFixture()
     QVERIFY(!layers.value(QStringLiteral("mid")).toList().isEmpty());
     QVERIFY(!layers.value(QStringLiteral("high")).toList().isEmpty());
     QCOMPARE(provider.analysisProgress(), 1.0);
+}
+
+void WaveformProviderTest::newerTrackSuppressesStaleAnalysisResult()
+{
+    if (fixturePath_.isEmpty()) {
+        QSKIP("AGPLAYER_TEST_WAV not set");
+    }
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString firstPath = tempDir.filePath(QStringLiteral("first.wav"));
+    const QString secondPath = tempDir.filePath(QStringLiteral("second.wav"));
+    QVERIFY(QFile::copy(fixturePath_, firstPath));
+    QVERIFY(QFile::copy(fixturePath_, secondPath));
+
+    SettingsController settings;
+    settings.setCacheDirectory(tempDir.filePath(QStringLiteral("cache")));
+    WaveformProvider provider(&settings);
+    QSignalSpy spy(&provider, &WaveformProvider::waveformReady);
+
+    provider.loadForTrack(firstPath);
+    provider.loadForTrack(secondPath);
+
+    if (spy.isEmpty()) {
+        QVERIFY2(spy.wait(5000), "current waveform analysis did not finish");
+    }
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toString(), secondPath);
+    QTest::qWait(100);
+    QCOMPARE(spy.count(), 1);
 }
 
 QTEST_MAIN(WaveformProviderTest)

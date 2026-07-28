@@ -51,6 +51,11 @@ LibraryModel::LibraryModel(QObject* parent)
 {
 }
 
+int LibraryModel::count() const noexcept
+{
+    return tracks_.size();
+}
+
 int LibraryModel::rowCount(const QModelIndex& parent) const
 {
     return parent.isValid() ? 0 : tracks_.size();
@@ -142,6 +147,7 @@ bool LibraryModel::append(TrackRecord track)
     tracks_.append(std::move(track));
     pathKeys_.insert(key);
     endInsertRows();
+    emit countChanged();
     if (tracks_.back().favorite) {
         emit favoriteCountChanged();
     }
@@ -150,6 +156,7 @@ bool LibraryModel::append(TrackRecord track)
 
 void LibraryModel::replaceAll(QList<TrackRecord> tracks)
 {
+    const int previousCount = tracks_.size();
     beginResetModel();
     tracks_.clear();
     pathKeys_.clear();
@@ -168,6 +175,9 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
         tracks_.append(std::move(track));
     }
     endResetModel();
+    if (tracks_.size() != previousCount) {
+        emit countChanged();
+    }
     emit favoriteCountChanged();
 }
 
@@ -195,6 +205,16 @@ int LibraryModel::indexForLocalFile(const QString& localFilePath) const
             if (candidateInfo.canonicalFilePath() == canonicalTarget) {
                 return i;
             }
+        }
+    }
+    return -1;
+}
+
+int LibraryModel::indexForTrackId(const QString& trackId) const
+{
+    for (int row = 0; row < tracks_.size(); ++row) {
+        if (tracks_.at(row).trackId == trackId) {
+            return row;
         }
     }
     return -1;

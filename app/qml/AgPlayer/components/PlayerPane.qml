@@ -6,38 +6,38 @@ import AgPlayer
 Rectangle {
     id: root
     color: Theme.background
+    property var rawWaveformLayers: ({})
+    property int libraryRevision: 0
+
+    function currentRow(): int {
+        return LibraryModel.indexForTrackId(PlaybackController.currentTrackId)
+    }
 
     function currentTrackValue(role): variant {
-        var row = PlaybackController.trackIndex
-        if (row < 0 || row >= LibraryModel.rowCount())
+        var revision = root.libraryRevision
+        var row = root.currentRow()
+        if (row < 0)
             return ""
-        var idx = LibraryModel.index(row, 0)
-        return LibraryModel.data(idx, role)
+        return LibraryModel.data(LibraryModel.index(row, 0), role)
     }
 
     function currentTrackRating(): int {
-        if (typeof LibraryModel.RatingRole === "undefined")
-            return 0
-        var raw = root.currentTrackValue(LibraryModel.RatingRole)
-        var value = parseInt(raw, 10)
-        if (isNaN(value))
-            return 0
-        return Math.max(0, Math.min(5, value))
+        var value = parseInt(root.currentTrackValue(LibraryModel.RatingRole), 10)
+        return isNaN(value) ? 0 : Math.max(0, Math.min(5, value))
     }
 
     function currentTrackFavorite(): bool {
-        var row = PlaybackController.trackIndex
-        if (row < 0 || row >= LibraryModel.rowCount())
-            return false
-        var idx = LibraryModel.index(row, 0)
-        return LibraryModel.data(idx, LibraryModel.FavoriteRole)
+        var revision = root.libraryRevision
+        var row = root.currentRow()
+        return row >= 0
+                && LibraryModel.data(LibraryModel.index(row, 0),
+                                     LibraryModel.FavoriteRole)
     }
 
     function toggleCurrentFavorite() {
-        var row = PlaybackController.trackIndex
-        if (row >= 0 && row < LibraryModel.rowCount()) {
+        var row = root.currentRow()
+        if (row >= 0)
             LibraryModel.setFavorite(row, !root.currentTrackFavorite())
-        }
     }
 
     function formatTime(ms): string {
@@ -62,265 +62,300 @@ Rectangle {
     }
 
     function currentTrackBpm(): string {
-        if (typeof LibraryModel.BpmRole === "undefined")
-            return ""
-        var raw = root.currentTrackValue(LibraryModel.BpmRole)
-        var value = parseFloat(raw)
-        if (isNaN(value) || value <= 0)
-            return ""
-        return Math.round(value) + " BPM"
+        var value = parseFloat(root.currentTrackValue(LibraryModel.BpmRole))
+        return isNaN(value) || value <= 0 ? "" : Math.round(value) + " BPM"
+    }
+
+    function coverUrlText(): string {
+        var url = root.currentTrackValue(LibraryModel.CoverUrlRole)
+        return url ? url.toString() : ""
     }
 
     function coverSource(): string {
-        var url = root.currentTrackValue(LibraryModel.CoverUrlRole)
-        if (url && url !== "")
-            return url
-        return "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+        var url = root.coverUrlText()
+        return url.length > 0
+                ? url
+                : "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+    }
+
+    function applyWaveformMode() {
+        var source = root.rawWaveformLayers || {}
+        if (SettingsController.waveformMode === 2) {
+            waveform.layers = {
+                bass: source.bass || [],
+                mid: source.mid || [],
+                high: source.high || []
+            }
+        } else {
+            waveform.layers = { mix: source.mix || [] }
+        }
     }
 
     function loadWaveform() {
         var path = root.currentTrackValue(LibraryModel.PathRole)
-        if (path.length === 0) {
+        if (!path || path.length === 0) {
+            root.rawWaveformLayers = {}
             waveform.layers = {}
+            return
         }
         WaveformProvider.loadForTrack(path)
     }
 
-    RowLayout {
+    ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacingXl
-        spacing: Theme.spacingXl
+        anchors.leftMargin: Theme.spacingXl
+        anchors.rightMargin: Theme.spacingXl
+        anchors.topMargin: Theme.spacingSm
+        anchors.bottomMargin: Theme.spacingXs
+        spacing: Theme.spacingSm
 
-        Rectangle {
-            Layout.preferredWidth: 220
-            Layout.preferredHeight: 220
-            Layout.alignment: Qt.AlignVCenter
-            color: Theme.panel
-            radius: Theme.radiusLg
-            border.color: Theme.border
-            border.width: 1
-
-            Image {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingMd
-                source: root.coverSource()
-                sourceSize.width: 200
-                sourceSize.height: 200
-                fillMode: Image.PreserveAspectFit
-            }
-        }
-
-        ColumnLayout {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: Theme.spacingMd
+            Layout.preferredHeight: 150
+            spacing: Theme.spacingXl
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
+            Rectangle {
+                objectName: "playerCover"
+                Layout.preferredWidth: 150
+                Layout.preferredHeight: 150
+                color: Theme.panel
+                radius: Theme.radiusMd
+                border.color: Theme.border
+                border.width: 1
+                clip: true
 
-                Text {
-                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("No track loaded")
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 22
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    ToolTip.text: text
-                    ToolTip.visible: titleHover.hovered && text !== qsTr("No track loaded")
-                    ToolTip.delay: 500
-
-                    HoverHandler {
-                        id: titleHover
-                    }
-                }
-
-                ToolButton {
-                    icon.source: root.currentTrackFavorite()
-                                 ? Theme.icon("heart-fill")
-                                 : Theme.icon("heart-line")
-                    icon.color: root.currentTrackFavorite()
-                                ? Theme.favoriteRed
-                                : Theme.secondaryText
-                    icon.width: 20
-                    icon.height: 20
-                    Accessible.name: root.currentTrackFavorite()
-                                     ? qsTr("Remove from favorites")
-                                     : qsTr("Add to favorites")
-                    focusPolicy: Qt.StrongFocus
-                    enabled: PlaybackController.trackIndex >= 0
-                    onClicked: root.toggleCurrentFavorite()
-                    ToolTip.text: Accessible.name
-                    ToolTip.visible: hovered
-
-                    background: Rectangle {
-                        color: !parent.enabled ? "transparent"
-                              : parent.pressed ? Theme.cyan
-                              : parent.visualFocus ? Theme.border
-                              : parent.hovered ? Theme.border
-                              : "transparent"
-                        border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                        border.width: parent.visualFocus ? 2 : 0
-                        radius: Theme.radiusSm
-                    }
+                Image {
+                    objectName: "playerCoverImage"
+                    anchors.fill: parent
+                    anchors.margins: root.coverUrlText().length > 0
+                                     ? 0 : Theme.spacingMd
+                    source: root.coverSource()
+                    sourceSize.width: 180
+                    sourceSize.height: 180
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
                 }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.topMargin: Theme.spacingSm
                 spacing: Theme.spacingSm
 
-                Text {
-                    property string artist: root.currentTrackValue(LibraryModel.ArtistRole)
-                    property string album: root.currentTrackValue(LibraryModel.AlbumRole)
-                    text: {
-                        var parts = []
-                        if (artist && artist.length > 0)
-                            parts.push(artist)
-                        if (album && album.length > 0)
-                            parts.push(album)
-                        if (parts.length === 0)
-                            return qsTr("Unknown artist")
-                        return parts.join("  ·  ")
-                    }
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 14
-                    elide: Text.ElideRight
+                RowLayout {
                     Layout.fillWidth: true
-                    ToolTip.text: text
-                    ToolTip.visible: artistAlbumHover.hovered
-                    ToolTip.delay: 500
+                    spacing: Theme.spacingSm
 
-                    HoverHandler {
-                        id: artistAlbumHover
+                    Text {
+                        objectName: "trackTitle"
+                        text: root.currentTrackValue(LibraryModel.TitleRole)
+                              || qsTr("No track loaded")
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 26
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: parent.width
+                                             - favoriteButton.implicitWidth
+                                             - Theme.spacingSm
+                    }
+
+                    ToolButton {
+                        id: favoriteButton
+                        objectName: "favoriteButton"
+                        flat: true
+                        icon.source: root.currentTrackFavorite()
+                                     ? Theme.icon("heart-fill")
+                                     : Theme.icon("heart-line")
+                        icon.color: root.currentTrackFavorite()
+                                    ? Theme.favoriteRed
+                                    : Theme.secondaryText
+                        icon.width: 22
+                        icon.height: 22
+                        Accessible.name: root.currentTrackFavorite()
+                                         ? qsTr("Remove from favorites")
+                                         : qsTr("Add to favorites")
+                        focusPolicy: Qt.StrongFocus
+                        enabled: root.currentRow() >= 0
+                        onClicked: root.toggleCurrentFavorite()
+                        ToolTip.text: Accessible.name
+                        ToolTip.visible: hovered
+                        background: null
                     }
                 }
 
                 RowLayout {
-                    spacing: 1
-                    Layout.alignment: Qt.AlignVCenter
-                    visible: PlaybackController.trackIndex >= 0
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingMd
+
+                    Text {
+                        objectName: "trackArtistAlbum"
+                        property string artist: root.currentTrackValue(
+                                                    LibraryModel.ArtistRole)
+                        property string album: root.currentTrackValue(
+                                                   LibraryModel.AlbumRole)
+                        text: {
+                            var parts = []
+                            if (artist)
+                                parts.push(artist)
+                            if (album)
+                                parts.push(album)
+                            return parts.length > 0
+                                    ? parts.join("  ·  ")
+                                    : qsTr("Unknown artist")
+                        }
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 14
+                        elide: Text.ElideRight
+                    }
+
+                    RowLayout {
+                        objectName: "trackRating"
+                        spacing: 1
+                        visible: root.currentRow() >= 0
+
+                        Repeater {
+                            model: 5
+                            delegate: Image {
+                                source: index < root.currentTrackRating()
+                                        ? Theme.icon("star-fill")
+                                        : Theme.icon("star-line")
+                                sourceSize.width: 14
+                                sourceSize.height: 14
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 15
+                                fillMode: Image.PreserveAspectFit
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingSm
 
                     Repeater {
-                        model: 5
-                        delegate: Image {
-                            source: index < root.currentTrackRating()
-                                    ? Theme.icon("star-fill")
-                                    : Theme.icon("star-line")
-                            sourceSize.width: 12
-                            sourceSize.height: 12
-                            Layout.preferredWidth: 14
-                            Layout.preferredHeight: 14
-                            fillMode: Image.PreserveAspectFit
-                        }
-                    }
-                }
-            }
-
-            RowLayout {
-                spacing: Theme.spacingSm
-                Layout.fillWidth: true
-
-                Repeater {
-                    model: {
-                        var badges = []
-                        var fmt = root.currentTrackValue(LibraryModel.FormatRole)
-                        if (fmt && fmt.length > 0)
-                            badges.push(fmt.toUpperCase())
-                        var bd = root.currentTrackValue(LibraryModel.BitDepthRole)
-                        if (bd > 0)
-                            badges.push(bd + "-bit")
-                        var sr = root.currentTrackValue(LibraryModel.SampleRateRole)
-                        if (sr > 0)
-                            badges.push((sr / 1000) + " kHz")
-                        var br = root.currentTrackValue(LibraryModel.BitRateRole)
-                        if (br > 0)
-                            badges.push(Math.round(br / 1000) + " kbps")
-                        if (PlaybackController.trackIndex >= 0) {
+                        model: {
+                            var badges = []
+                            var format = root.currentTrackValue(LibraryModel.FormatRole)
+                            if (format)
+                                badges.push(format.toUpperCase())
+                            var depth = root.currentTrackValue(LibraryModel.BitDepthRole)
+                            if (depth > 0)
+                                badges.push(depth + "-bit")
+                            var rate = root.currentTrackValue(LibraryModel.SampleRateRole)
+                            if (rate > 0)
+                                badges.push((rate / 1000) + " kHz")
+                            var bitRate = root.currentTrackValue(LibraryModel.BitRateRole)
+                            if (bitRate > 0)
+                                badges.push(Math.round(bitRate / 1000) + " kbps")
                             var bpm = root.currentTrackBpm()
-                            if (bpm.length > 0)
+                            if (bpm)
                                 badges.push(bpm)
+                            var size = root.currentTrackValue(LibraryModel.FileSizeRole)
+                            if (size > 0)
+                                badges.push(root.formatFileSize(size))
+                            return badges
                         }
-                        var size = root.currentTrackValue(LibraryModel.FileSizeRole)
-                        if (size > 0)
-                            badges.push(root.formatFileSize(size))
-                        return badges
-                    }
 
-                    Rectangle {
-                        color: Theme.panel
-                        border.color: Theme.border
-                        border.width: 1
-                        radius: Theme.radiusSm
-                        implicitWidth: badgeText.implicitWidth + Theme.spacingMd * 2
-                        implicitHeight: badgeText.implicitHeight + Theme.spacingXs * 2
+                        Rectangle {
+                            color: "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: badgeText.implicitWidth
+                                           + Theme.spacingMd * 2
+                            implicitHeight: badgeText.implicitHeight
+                                            + Theme.spacingXs * 2
 
-                        Text {
-                            id: badgeText
-                            anchors.centerIn: parent
-                            text: modelData
-                            color: Theme.secondaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 11
+                            Text {
+                                id: badgeText
+                                anchors.centerIn: parent
+                                text: modelData
+                                color: Theme.secondaryText
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 11
+                            }
                         }
                     }
+
+                    Item { Layout.fillWidth: true }
                 }
 
-                Item { Layout.fillWidth: true }
+                Item { Layout.fillHeight: true }
+            }
+        }
+
+        WaveformItem {
+            id: waveform
+            objectName: "mainWaveform"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 94
+            Layout.minimumHeight: 64
+            position: PlaybackController.positionMs
+            duration: PlaybackController.durationMs
+            analysisProgress: WaveformProvider.analysisProgress
+            clip: true
+            onSeekRequested: positionMs => PlaybackController.seek(positionMs)
+
+            Binding on waveformColor {
+                value: Theme.cyan
+                when: SettingsController.waveformMode === 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 20
+
+            Text {
+                text: root.formatTime(PlaybackController.positionMs)
+                color: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 12
             }
 
-            WaveformItem {
-                id: waveform
-                Layout.fillWidth: true
-                Layout.preferredHeight: 80
-                Layout.minimumHeight: 48
-                position: PlaybackController.positionMs
-                duration: PlaybackController.durationMs
-                analysisProgress: WaveformProvider.analysisProgress
-                clip: true
-            }
+            Item { Layout.fillWidth: true }
 
-            Connections {
-                target: PlaybackController
-                function onTrackIndexChanged() { root.loadWaveform() }
-                function onCurrentTrackIdChanged() { root.loadWaveform() }
-            }
-
-            Connections {
-                target: WaveformProvider
-                function onWaveformReady(path, layers) {
-                    var currentPath = root.currentTrackValue(LibraryModel.PathRole)
-                    if (path === currentPath) {
-                        waveform.layers = layers
-                    }
-                }
-            }
-
-            Component.onCompleted: root.loadWaveform()
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-
-                Text {
-                    text: root.formatTime(PlaybackController.positionMs)
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 12
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Text {
-                    text: root.formatTime(PlaybackController.durationMs)
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 12
-                }
+            Text {
+                text: root.formatTime(PlaybackController.durationMs)
+                color: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 12
             }
         }
     }
+
+    Connections {
+        target: PlaybackController
+        function onCurrentTrackIdChanged() { root.loadWaveform() }
+    }
+
+    Connections {
+        target: LibraryModel
+        function onDataChanged() { ++root.libraryRevision }
+        function onModelReset() { ++root.libraryRevision }
+    }
+
+    Connections {
+        target: WaveformProvider
+        function onWaveformReady(path, layers) {
+            if (path === root.currentTrackValue(LibraryModel.PathRole)) {
+                root.rawWaveformLayers = layers
+                root.applyWaveformMode()
+            }
+        }
+    }
+
+    Connections {
+        target: SettingsController
+        function onWaveformModeChanged() { root.applyWaveformMode() }
+    }
+
+    Component.onCompleted: root.loadWaveform()
 }

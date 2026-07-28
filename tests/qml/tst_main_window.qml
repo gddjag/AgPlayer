@@ -38,7 +38,14 @@ TestCase {
         verify(findChild(mainWindow, "playerCover"), "player cover should exist")
         verify(findChild(mainWindow, "playerCoverImage").source.toString().length > 0,
                "player cover should always have a fallback source")
-        verify(findChild(mainWindow, "trackTitle"), "track title should exist")
+        var trackTitle = findChild(mainWindow, "trackTitle")
+        var favoriteButton = findChild(mainWindow, "favoriteButton")
+        verify(trackTitle, "track title should exist")
+        verify(favoriteButton, "favorite button should exist")
+        verify(favoriteButton.background === null,
+               "favorite button should not render a platform-style square")
+        verify(favoriteButton.x <= trackTitle.x + trackTitle.implicitWidth + 40,
+               "favorite button should remain next to the title")
         verify(findChild(mainWindow, "trackArtistAlbum"), "artist and album should exist")
         verify(findChild(mainWindow, "trackRating"), "track rating should exist")
         verify(findChild(mainWindow, "mainWaveform"), "main waveform should exist")
@@ -81,6 +88,75 @@ TestCase {
         compare(LibraryModel.count, 0)
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return LibraryModel.count === 1 }, 5000)
+    }
+
+    function test_waveform_click_seeks_real_playback_controller() {
+        var waveform = findChild(mainWindow, "mainWaveform")
+        verify(waveform, "main waveform should exist after importing audio")
+
+        PlaybackController.playRow(0)
+        tryVerify(function() {
+            return PlaybackController.durationMs > 0 && waveform.width > 0
+        }, 5000)
+
+        var expected = Math.round(PlaybackController.durationMs * 0.75)
+        mouseClick(waveform, waveform.width * 0.75, waveform.height / 2)
+        tryVerify(function() {
+            return Math.abs(PlaybackController.positionMs - expected) < 150
+        }, 1000)
+    }
+
+    function test_waveform_modes_reuse_analyzed_layers() {
+        var waveform = findChild(mainWindow, "mainWaveform")
+        var previousMode = SettingsController.waveformMode
+        tryVerify(function() {
+            return waveform.layers.mix && waveform.layers.mix.length > 0
+        }, 5000)
+
+        SettingsController.waveformMode = 0
+        tryVerify(function() {
+            return Object.keys(waveform.layers).length === 1
+                    && waveform.layers.mix.length > 0
+        })
+        compare(waveform.waveformColor.toString(), Theme.cyan.toString())
+
+        SettingsController.waveformMode = 1
+        tryVerify(function() {
+            return Object.keys(waveform.layers).length === 1
+                    && waveform.layers.mix.length > 0
+        })
+        verify(waveform.waveformColor.toString() !== Theme.cyan.toString())
+
+        SettingsController.waveformMode = 2
+        tryVerify(function() {
+            return Object.keys(waveform.layers).length === 3
+                    && waveform.layers.bass.length > 0
+                    && waveform.layers.mid.length > 0
+                    && waveform.layers.high.length > 0
+        })
+
+        SettingsController.waveformMode = previousMode
+    }
+
+    function test_z_current_track_metadata_reacts_to_library_changes() {
+        var favoriteButton = findChild(mainWindow, "favoriteButton")
+        verify(favoriteButton, "current-track favorite button should exist")
+        verify(PlaybackController.currentTrackId.length > 0)
+
+        var row = LibraryModel.indexForTrackId(PlaybackController.currentTrackId)
+        verify(row >= 0)
+        LibraryModel.setFavorite(row, false)
+        tryVerify(function() {
+            return favoriteButton.icon.source.toString()
+                    === Theme.icon("heart-line").toString()
+        })
+
+        LibraryModel.setFavorite(row, true)
+        tryVerify(function() {
+            return favoriteButton.icon.source.toString()
+                    === Theme.icon("heart-fill").toString()
+        })
+        LibraryModel.setFavorite(row, false)
     }
 
     function test_empty_startup_uses_compact_reference_structure() {

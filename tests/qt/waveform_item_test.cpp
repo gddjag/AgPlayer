@@ -262,7 +262,8 @@ void WaveformItemTest::downsamplesPeaksToPixelBudget()
     QVERIFY(vertexCount % 2 == 0);
 
     const int renderedPeaks = vertexCount / 2;
-    const int expectedMaxPoints = static_cast<int>(item.width() * 2.0);
+    const int expectedMaxPoints = static_cast<int>(
+        std::ceil(item.width() / 4.0));
     QVERIFY2(renderedPeaks <= expectedMaxPoints,
              qPrintable(QStringLiteral("rendered %1 peaks, budget was %2")
                             .arg(renderedPeaks)

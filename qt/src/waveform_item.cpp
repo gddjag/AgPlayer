@@ -390,7 +390,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     const qreal devicePixelRatio = window() ? window()->devicePixelRatio() : 1.0;
     const std::size_t maxPoints = std::max<std::size_t>(
         1U,
-        static_cast<std::size_t>(std::max(0.0, width() * devicePixelRatio * 2.0)));
+        static_cast<std::size_t>(
+            std::ceil(std::max(0.0, width() * devicePixelRatio / 4.0))));
 
     // Use the mix layer for geometry sizing when available; otherwise use the
     // first present frequency layer so all layers share the same point count.

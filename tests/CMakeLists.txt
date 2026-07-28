@@ -322,6 +322,7 @@ foreach(qt_test IN ITEMS
     window_controller_test
     global_hotkey_manager_test
     waveform_item_test
+    waveform_provider_test
     shutdown_test
     runtime_log_test
     settings_controller_test
@@ -480,10 +481,15 @@ target_include_directories(import_controller_test PRIVATE
 
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
+add_dependencies(waveform_provider_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(playback_controller_test PROPERTIES
+    ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(waveform_provider_test PROPERTIES
+    TIMEOUT 30
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(window_controller_test PROPERTIES

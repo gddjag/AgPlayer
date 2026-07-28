@@ -14,6 +14,8 @@ private slots:
     void trackIdUsesCanonicalPathAndFileIdentity();
     void appendRejectsNormalizedDuplicate();
     void replaceAllRebuildsCanonicalIndexForLargeLibrary();
+    void countPropertyTracksRows();
+    void findsRowByTrackId();
 };
 
 void LibraryModelTest::exposesRolesAndUpdatesFavorite()
@@ -178,6 +180,44 @@ void LibraryModelTest::replaceAllRebuildsCanonicalIndexForLargeLibrary()
     QCOMPARE(model.rowCount(), 1);
     QVERIFY(model.containsPath(replacement.path));
     QVERIFY(!model.containsPath(tracks.front().path));
+}
+
+void LibraryModelTest::countPropertyTracksRows()
+{
+    LibraryModel model;
+    QSignalSpy countChanged(&model, &LibraryModel::countChanged);
+    QCOMPARE(model.count(), 0);
+
+    TrackRecord first;
+    first.path = QStringLiteral("C:/music/count-a.wav");
+    QVERIFY(model.append(first));
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(countChanged.count(), 1);
+
+    QVERIFY(!model.append(first));
+    QCOMPARE(countChanged.count(), 1);
+
+    TrackRecord second;
+    second.path = QStringLiteral("C:/music/count-b.wav");
+    model.replaceAll({first, second});
+    QCOMPARE(model.count(), 2);
+    QCOMPARE(countChanged.count(), 2);
+}
+
+void LibraryModelTest::findsRowByTrackId()
+{
+    TrackRecord first;
+    first.trackId = QStringLiteral("track-a");
+    first.path = QStringLiteral("C:/music/a.wav");
+    TrackRecord second;
+    second.trackId = QStringLiteral("track-b");
+    second.path = QStringLiteral("C:/music/b.wav");
+    LibraryModel model;
+    model.replaceAll({first, second});
+
+    QCOMPARE(model.indexForTrackId(QStringLiteral("track-a")), 0);
+    QCOMPARE(model.indexForTrackId(QStringLiteral("track-b")), 1);
+    QCOMPARE(model.indexForTrackId(QStringLiteral("missing")), -1);
 }
 
 QTEST_GUILESS_MAIN(LibraryModelTest)

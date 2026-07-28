@@ -31,6 +31,7 @@ QString trackIdForPath(const QString& path);
 
 class LibraryModel : public QAbstractListModel {
     Q_OBJECT
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     enum Role {
@@ -57,6 +58,7 @@ public:
 
     explicit LibraryModel(QObject* parent = nullptr);
 
+    int count() const noexcept;
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -66,6 +68,7 @@ public:
     const QList<TrackRecord>& tracks() const noexcept;
     bool containsPath(const QString& path) const;
     int indexForLocalFile(const QString& localFilePath) const;
+    Q_INVOKABLE int indexForTrackId(const QString& trackId) const;
 
     Q_INVOKABLE bool setFavorite(int row, bool favorite);
     Q_INVOKABLE void playRow(int row);
@@ -77,6 +80,7 @@ signals:
     void playRequested(int row);
     void flushRequested();
     void favoriteCountChanged();
+    void countChanged();
 
 private:
     QList<TrackRecord> tracks_;
