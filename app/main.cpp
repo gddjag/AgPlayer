@@ -64,6 +64,7 @@ int main(int argc, char* argv[])
     QString qaPlayPath;
     QString qaScreenshotMain;
     QString qaScreenshotMini;
+    QString qaScreenshotTools;
     QString initialFilePath;
     {
         const QStringList cliArgs = QGuiApplication::arguments();
@@ -77,6 +78,9 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-screenshot-mini")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotMini = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-screenshot-tools")
+                       && i + 1 < cliArgs.size()) {
+                qaScreenshotTools = cliArgs.at(++i);
             } else if (!arg.startsWith('-') && initialFilePath.isEmpty()) {
                 initialFilePath = arg;
             }
@@ -141,6 +145,9 @@ int main(int argc, char* argv[])
         });
         WindowController windows;
         AudioToolsController audioTools;
+        if (!qaScreenshotTools.isEmpty()) {
+            audioTools.selectTool(1);
+        }
         MetadataEditor metadataEditor;
         FormatConverter formatConverter;
         PitchShifter pitchShifter;
@@ -348,18 +355,27 @@ int main(int argc, char* argv[])
             // main surface directly, or wait for playback when a track exists.
             const bool wantScreenshotMain = !qaScreenshotMain.isEmpty();
             const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
+            const bool wantScreenshotTools = !qaScreenshotTools.isEmpty();
             if (wantScreenshotMini && miniWindow != nullptr) {
                 auto* miniWin = qobject_cast<QWindow*>(miniWindow);
                 if (miniWin) {
                     miniWin->show();
                 }
             }
-            if (wantScreenshotMain || wantScreenshotMini) {
+            if (wantScreenshotTools && audioToolsWindow != nullptr) {
+                if (auto* toolsWin = qobject_cast<QWindow*>(audioToolsWindow)) {
+                    toolsWin->show();
+                }
+            }
+            if (wantScreenshotMain || wantScreenshotMini || wantScreenshotTools) {
                 QWindow* const targetWindow = wantScreenshotMain
                     ? qobject_cast<QWindow*>(mainWindow)
-                    : qobject_cast<QWindow*>(miniWindow);
+                    : wantScreenshotMini
+                        ? qobject_cast<QWindow*>(miniWindow)
+                        : qobject_cast<QWindow*>(audioToolsWindow);
                 const QString screenshotPath = wantScreenshotMain
-                    ? qaScreenshotMain : qaScreenshotMini;
+                    ? qaScreenshotMain
+                    : wantScreenshotMini ? qaScreenshotMini : qaScreenshotTools;
 
                 const auto captureWindow = [targetWindow, screenshotPath]() {
                     targetWindow->setVisible(true);
@@ -373,7 +389,7 @@ int main(int argc, char* argv[])
                     QCoreApplication::quit();
                 };
 
-                if (wantScreenshotMain && library.count() == 0) {
+                if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
                     QTimer::singleShot(1500, captureWindow);
                 } else {
                     auto attempts = std::make_shared<int>(0);

@@ -4,9 +4,14 @@
     <context>
         <name>AudioToolsWindow</name>
         <message>
-            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+20" />
-            <source>AgPlayer Audio Tools</source>
+            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+16" />
+            <source>AgPlayer 音频工具</source>
             <translation>เครื่องมือเสียง AgPlayer</translation>
+        </message>
+        <message>
+            <location line="+54" />
+            <source>音频工具</source>
+            <translation>เครื่องมือเสียง</translation>
         </message>
     </context>
     <context>
@@ -572,281 +577,174 @@
     <context>
         <name>LightEditPage</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+87" />
-            <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68" />
+            <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
             <translation>ไฟล์เสียง (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
         </message>
         <message>
             <location line="+33" />
-            <source>Add File</source>
+            <source>添加文件</source>
             <translation>เพิ่มไฟล์</translation>
         </message>
         <message>
-            <location line="+26" />
-            <source>Clear</source>
-            <translation>ชัดเจน</translation>
+            <location line="+11" />
+            <source>主轨道：轨道 %1</source>
+            <translation>แทร็กหลัก: แทร็ก %1</translation>
         </message>
         <message>
-            <location line="+31" />
-            <source>No audio file loaded</source>
-            <translation>ไม่ได้โหลดไฟล์เสียง</translation>
-        </message>
-        <message>
-            <location line="+75" />
-            <location line="+27" />
-            <location line="+27" />
-            <source>Playback preview not supported</source>
-            <translation>ไม่รองรับการแสดงตัวอย่างการเล่น</translation>
-        </message>
-        <message>
-            <location line="+32" />
-            <source>Volume control not supported</source>
-            <translation>ไม่รองรับการควบคุมระดับเสียง</translation>
-        </message>
-        <message>
-            <location line="+83" />
-            <source>Drop audio file here</source>
-            <translation>วางไฟล์เสียงที่นี่</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>Zoom In</source>
-            <translation>ซูมเข้า</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Zoom Out</source>
-            <translation>ซูมออก</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Fit</source>
-            <translation>พอดี</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>All</source>
-            <translation>ทั้งหมด</translation>
-        </message>
-        <message>
-            <location line="+135" />
-            <source>Undo</source>
-            <translation>เลิกทำ</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <source>Not supported</source>
-            <translation>ไม่รองรับ</translation>
-        </message>
-        <message>
-            <location line="-6" />
-            <source>Redo</source>
-            <translation>ทำซ้ำ</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Cut</source>
-            <translation>ตัด</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Copy</source>
-            <translation>คัดลอก</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Paste</source>
-            <translation>วาง</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Delete</source>
-            <translation>ลบ</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Split</source>
-            <translation>แยก</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Merge</source>
-            <translation>ผสาน</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <location line="+64" />
-            <source>Fade In</source>
-            <translation>จางหายไป</translation>
-        </message>
-        <message>
-            <location line="-80" />
-            <source>Apply 1000 ms fade in</source>
-            <translation>ใช้ 1,000 ms เฟดอิน</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <location line="+99" />
-            <source>Fade Out</source>
-            <translation>จางหายไป</translation>
-        </message>
-        <message>
-            <location line="-115" />
-            <source>Apply 1000 ms fade out</source>
-            <translation>ใช้ 1,000 ms จางหายไป</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <source>Mute</source>
-            <translation>ปิดเสียง</translation>
-        </message>
-        <message>
-            <location line="-16" />
-            <source>Set gain to silence</source>
-            <translation>ตั้งค่าเกนเป็นความเงียบ</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <source>Crop</source>
-            <translation>ครอบตัด</translation>
-        </message>
-        <message>
-            <location line="-16" />
-            <source>Crop selection to playhead</source>
-            <translation>การเลือกครอบตัดไปที่ส่วนหัวของตัวควบคุมการเล่น</translation>
-        </message>
-        <message>
-            <location line="+102" />
-            <location line="+36" />
-            <source>ms</source>
-            <translation>นางสาว</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Gain</source>
-            <translation>ได้รับ</translation>
-        </message>
-        <message>
-            <location line="+70" />
-            <source>Export Settings</source>
-            <translation>การตั้งค่าการส่งออก</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>Output Format</source>
-            <translation>รูปแบบเอาต์พุต</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Source</source>
-            <translation>แหล่งที่มา</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>MP3</source>
-            <translation>เอ็มพี3</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>WAV</source>
-            <translation>WAV</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>FLAC</source>
-            <translation>แฟลค</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>AAC</source>
-            <translation>เอเอซี</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>OGG</source>
-            <translation>โอจีจี</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Opus</source>
-            <translation>บทประพันธ์</translation>
+            <location line="+6" />
+            <source>目标 BPM</source>
+            <translation>เป้าหมาย BPM</translation>
         </message>
         <message>
             <location line="+29" />
-            <source>Sample Rate</source>
-            <translation>อัตราตัวอย่าง</translation>
+            <source>保持音高</source>
+            <translation>รักษาระดับเสียง</translation>
+        </message>
+        <message>
+            <location line="+12" />
+            <source>吸附网格</source>
+            <translation>สแนปกริด</translation>
         </message>
         <message>
             <location line="+10" />
-            <location line="+43" />
-            <source>Auto</source>
-            <translation>อัตโนมัติ</translation>
+            <source>1/4 拍</source>
+            <translation>1/4 ช็อต</translation>
         </message>
         <message>
-            <location line="-10" />
-            <source>Channels</source>
-            <translation>ช่อง</translation>
+            <location line="+0" />
+            <source>1/2 拍</source>
+            <translation>1/2 ช็อต</translation>
         </message>
         <message>
-            <location line="+11" />
-            <source>Mono</source>
+            <location line="+0" />
+            <source>1 拍</source>
+            <translation>1 นัด</translation>
+        </message>
+        <message>
+            <location line="+10" />
+            <source>统一 BPM</source>
+            <translation>BPM แบบครบวงจร</translation>
+        </message>
+        <message>
+            <location line="+10" />
+            <source>BPM + 节拍对齐</source>
+            <translation>BPM + การจัดแนวจังหวะ</translation>
+        </message>
+        <message>
+            <location line="+155" />
+            <source>撤销</source>
+            <translation>ยกเลิก</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>重做</source>
+            <translation>ทำซ้ำ</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>剪切</source>
+            <translation>ตัด</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>复制</source>
+            <translation>คัดลอก</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>删除</source>
+            <translation>ลบ</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>分割</source>
+            <translation>แยก</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>合并</source>
+            <translation>ผสาน</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>静音</source>
+            <translation>ปิดเสียง</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>裁剪</source>
+            <translation>ครอบตัด</translation>
+        </message>
+        <message>
+            <location line="+60" />
+            <source>导出设置</source>
+            <translation>การตั้งค่าการส่งออก</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>输出格式</source>
+            <translation>รูปแบบเอาต์พุต</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>采样率</source>
+            <translation>อัตราการสุ่มตัวอย่าง</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>声道</source>
+            <translation>ทางเดินเสียง</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>立体声</source>
+            <translation>สเตอริโอ</translation>
+        </message>
+        <message>
+            <location line="+0" />
+            <source>单声道</source>
             <translation>โมโน</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Stereo</source>
-            <translation>สเตอริโอ</translation>
+            <source>输出目录</source>
+            <translation>ไดเร็กทอรีเอาต์พุต</translation>
         </message>
         <message>
-            <location line="+33" />
-            <source>Output Directory</source>
-            <translation>ไดเร็กทอรีเอาท์พุต</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Same as source (default)</source>
-            <translation>เช่นเดียวกับแหล่งที่มา (ค่าเริ่มต้น)</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Browse</source>
+            <location line="+8" />
+            <source>浏览</source>
             <translation>เรียกดู</translation>
         </message>
         <message>
-            <location line="+27" />
-            <source>Cancel</source>
-            <translation>ยกเลิก</translation>
-        </message>
-        <message>
             <location line="+24" />
-            <source>Export</source>
-            <translation>ส่งออก</translation>
+            <source>项目信息</source>
+            <translation>ข้อมูลโครงการ</translation>
         </message>
         <message>
-            <location line="+50" />
-            <source>Processing...</source>
+            <location line="+2" />
+            <source>轨道数量：%1 / 6</source>
+            <translation>จำนวนแทร็ก: %1/6</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>项目时长：%1</source>
+            <translation>ระยะเวลาโครงการ: %1</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <source>目标 BPM：%1</source>
+            <translation>เป้าหมาย BPM: %1</translation>
+        </message>
+        <message>
+            <location line="+7" />
+            <source>处理中…</source>
             <translation>กำลังประมวลผล...</translation>
         </message>
         <message>
             <location line="+0" />
-            <source>Export complete</source>
-            <translation>ส่งออกเสร็จสมบูรณ์</translation>
-        </message>
-        <message>
-            <location line="+66" />
-            <source>Exported: %1</source>
-            <translation>ส่งออก: %1</translation>
+            <source>导出音频</source>
+            <translation>ส่งออกเสียง</translation>
         </message>
     </context>
     <context>
@@ -1010,10 +908,30 @@
     <context>
         <name>MultiTrackWaveform</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+104" />
-            <location line="+117" />
-            <source>Empty track</source>
-            <translation>เส้นทางที่ว่างเปล่า</translation>
+            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93" />
+            <location line="+177" />
+            <source>空轨道</source>
+            <translation>วงโคจรที่ว่างเปล่า</translation>
+        </message>
+        <message>
+            <location line="-168" />
+            <source>原始 BPM：</source>
+            <translation>BPM ดั้งเดิม:</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>拖入音频文件</source>
+            <translation>ลากไฟล์เสียงเข้ามา</translation>
+        </message>
+        <message>
+            <location line="+36" />
+            <source>已对齐</source>
+            <translation>จัดตำแหน่ง</translation>
+        </message>
+        <message>
+            <location line="+131" />
+            <source>添加或拖入音频文件</source>
+            <translation>เพิ่มหรือลากไฟล์เสียง</translation>
         </message>
     </context>
     <context>
@@ -2259,39 +2177,29 @@
     <context>
         <name>ToolSidebar</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+41" />
-            <source>Format Convert</source>
-            <translation>แปลงรูปแบบ</translation>
+            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25" />
+            <source>格式转换</source>
+            <translation>การแปลงรูปแบบ</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Light Edit</source>
-            <translation>แก้ไขแสง</translation>
+            <source>轻度剪辑</source>
+            <translation>แก้ไขเบาๆ</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Speed Adjust</source>
+            <source>调整速度</source>
             <translation>ปรับความเร็ว</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Pitch Shift</source>
-            <translation>การเปลี่ยนแปลงระดับเสียง</translation>
+            <source>升调降调</source>
+            <translation>ขึ้นๆ ลงๆ</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Info Edit</source>
-            <translation>แก้ไขข้อมูล</translation>
-        </message>
-        <message>
-            <location line="+57" />
-            <source>Minimize</source>
-            <translation>ย่อเล็กสุด</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Close</source>
-            <translation>ปิด</translation>
+            <source>信息修改</source>
+            <translation>การปรับเปลี่ยนข้อมูล</translation>
         </message>
     </context>
     <context>

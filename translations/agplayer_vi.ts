@@ -4,9 +4,14 @@
     <context>
         <name>AudioToolsWindow</name>
         <message>
-            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+20" />
-            <source>AgPlayer Audio Tools</source>
+            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+16" />
+            <source>AgPlayer 音频工具</source>
             <translation>Công cụ âm thanh AgPlayer</translation>
+        </message>
+        <message>
+            <location line="+54" />
+            <source>音频工具</source>
+            <translation>công cụ âm thanh</translation>
         </message>
     </context>
     <context>
@@ -572,281 +577,174 @@
     <context>
         <name>LightEditPage</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+87" />
-            <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68" />
+            <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
             <translation>Tệp âm thanh (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
         </message>
         <message>
             <location line="+33" />
-            <source>Add File</source>
+            <source>添加文件</source>
             <translation>Thêm tập tin</translation>
         </message>
         <message>
-            <location line="+26" />
-            <source>Clear</source>
-            <translation>Xóa</translation>
+            <location line="+11" />
+            <source>主轨道：轨道 %1</source>
+            <translation>Bài hát chính: bài hát %1</translation>
         </message>
         <message>
-            <location line="+31" />
-            <source>No audio file loaded</source>
-            <translation>Không có tập tin âm thanh nào được tải</translation>
-        </message>
-        <message>
-            <location line="+75" />
-            <location line="+27" />
-            <location line="+27" />
-            <source>Playback preview not supported</source>
-            <translation>Xem trước phát lại không được hỗ trợ</translation>
-        </message>
-        <message>
-            <location line="+32" />
-            <source>Volume control not supported</source>
-            <translation>Điều khiển âm lượng không được hỗ trợ</translation>
-        </message>
-        <message>
-            <location line="+83" />
-            <source>Drop audio file here</source>
-            <translation>Thả tập tin âm thanh ở đây</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>Zoom In</source>
-            <translation>Phóng to</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Zoom Out</source>
-            <translation>Thu nhỏ</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Fit</source>
-            <translation>Phù hợp</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>All</source>
-            <translation>Tất cả</translation>
-        </message>
-        <message>
-            <location line="+135" />
-            <source>Undo</source>
-            <translation>Hoàn tác</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <source>Not supported</source>
-            <translation>Không được hỗ trợ</translation>
-        </message>
-        <message>
-            <location line="-6" />
-            <source>Redo</source>
-            <translation>Làm lại</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Cut</source>
-            <translation>Cắt</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Copy</source>
-            <translation>Sao chép</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Paste</source>
-            <translation>Dán</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Delete</source>
-            <translation>Xóa</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Split</source>
-            <translation>Tách</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Merge</source>
-            <translation>Hợp nhất</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <location line="+64" />
-            <source>Fade In</source>
-            <translation>Làm mờ dần</translation>
-        </message>
-        <message>
-            <location line="-80" />
-            <source>Apply 1000 ms fade in</source>
-            <translation>Áp dụng độ mờ dần 1000 ms</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <location line="+99" />
-            <source>Fade Out</source>
-            <translation>mờ dần</translation>
-        </message>
-        <message>
-            <location line="-115" />
-            <source>Apply 1000 ms fade out</source>
-            <translation>Áp dụng 1000 ms mờ dần</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <source>Mute</source>
-            <translation>Tắt tiếng</translation>
-        </message>
-        <message>
-            <location line="-16" />
-            <source>Set gain to silence</source>
-            <translation>Đặt mức tăng thành im lặng</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <source>Crop</source>
-            <translation>Cắt</translation>
-        </message>
-        <message>
-            <location line="-16" />
-            <source>Crop selection to playhead</source>
-            <translation>Cắt lựa chọn thành đầu phát</translation>
-        </message>
-        <message>
-            <location line="+102" />
-            <location line="+36" />
-            <source>ms</source>
-            <translation>cô</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Gain</source>
-            <translation>Đạt được</translation>
-        </message>
-        <message>
-            <location line="+70" />
-            <source>Export Settings</source>
-            <translation>Xuất cài đặt</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>Output Format</source>
-            <translation>Định dạng đầu ra</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Source</source>
-            <translation>Nguồn</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>MP3</source>
-            <translation>MP3</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>WAV</source>
-            <translation>WAV</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>FLAC</source>
-            <translation>FLAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>AAC</source>
-            <translation>AAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>OGG</source>
-            <translation>OGG</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Opus</source>
-            <translation>tác phẩm</translation>
+            <location line="+6" />
+            <source>目标 BPM</source>
+            <translation>BPM mục tiêu</translation>
         </message>
         <message>
             <location line="+29" />
-            <source>Sample Rate</source>
-            <translation>Tỷ lệ mẫu</translation>
+            <source>保持音高</source>
+            <translation>duy trì cao độ</translation>
+        </message>
+        <message>
+            <location line="+12" />
+            <source>吸附网格</source>
+            <translation>lưới chụp nhanh</translation>
         </message>
         <message>
             <location line="+10" />
-            <location line="+43" />
-            <source>Auto</source>
-            <translation>Tự động</translation>
-        </message>
-        <message>
-            <location line="-10" />
-            <source>Channels</source>
-            <translation>Kênh</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Mono</source>
-            <translation>Đơn sắc</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Stereo</source>
-            <translation>Âm thanh nổi</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Output Directory</source>
-            <translation>Thư mục đầu ra</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Same as source (default)</source>
-            <translation>Giống như nguồn (mặc định)</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Browse</source>
-            <translation>Duyệt qua</translation>
-        </message>
-        <message>
-            <location line="+27" />
-            <source>Cancel</source>
-            <translation>Hủy bỏ</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Export</source>
-            <translation>Xuất khẩu</translation>
-        </message>
-        <message>
-            <location line="+50" />
-            <source>Processing...</source>
-            <translation>Đang xử lý...</translation>
+            <source>1/4 拍</source>
+            <translation>cú đánh 1/4</translation>
         </message>
         <message>
             <location line="+0" />
-            <source>Export complete</source>
-            <translation>Xuất hoàn tất</translation>
+            <source>1/2 拍</source>
+            <translation>1/2 cú đánh</translation>
         </message>
         <message>
-            <location line="+66" />
-            <source>Exported: %1</source>
-            <translation>Đã xuất: %1</translation>
+            <location line="+0" />
+            <source>1 拍</source>
+            <translation>1 phát</translation>
+        </message>
+        <message>
+            <location line="+10" />
+            <source>统一 BPM</source>
+            <translation>BPM hợp nhất</translation>
+        </message>
+        <message>
+            <location line="+10" />
+            <source>BPM + 节拍对齐</source>
+            <translation>BPM + Căn chỉnh nhịp</translation>
+        </message>
+        <message>
+            <location line="+155" />
+            <source>撤销</source>
+            <translation>Hủy bỏ</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>重做</source>
+            <translation>Làm lại</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>剪切</source>
+            <translation>cắt</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>复制</source>
+            <translation>Sao chép</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>删除</source>
+            <translation>Xóa</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>分割</source>
+            <translation>chia đôi</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>合并</source>
+            <translation>hợp nhất</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>静音</source>
+            <translation>tắt tiếng</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>裁剪</source>
+            <translation>Cắt</translation>
+        </message>
+        <message>
+            <location line="+60" />
+            <source>导出设置</source>
+            <translation>Xuất cài đặt</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>输出格式</source>
+            <translation>định dạng đầu ra</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>采样率</source>
+            <translation>Tốc độ lấy mẫu</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>声道</source>
+            <translation>giọng hát</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>立体声</source>
+            <translation>Âm thanh nổi</translation>
+        </message>
+        <message>
+            <location line="+0" />
+            <source>单声道</source>
+            <translation>đơn sắc</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>输出目录</source>
+            <translation>Thư mục đầu ra</translation>
+        </message>
+        <message>
+            <location line="+8" />
+            <source>浏览</source>
+            <translation>Duyệt qua</translation>
+        </message>
+        <message>
+            <location line="+24" />
+            <source>项目信息</source>
+            <translation>Thông tin dự án</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>轨道数量：%1 / 6</source>
+            <translation>Số lượng bài hát: %1/6</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>项目时长：%1</source>
+            <translation>Thời gian dự án: %1</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <source>目标 BPM：%1</source>
+            <translation>BPM mục tiêu: %1</translation>
+        </message>
+        <message>
+            <location line="+7" />
+            <source>处理中…</source>
+            <translation>Đang xử lý…</translation>
+        </message>
+        <message>
+            <location line="+0" />
+            <source>导出音频</source>
+            <translation>Xuất âm thanh</translation>
         </message>
     </context>
     <context>
@@ -1010,10 +908,30 @@
     <context>
         <name>MultiTrackWaveform</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+104" />
-            <location line="+117" />
-            <source>Empty track</source>
-            <translation>Bài hát trống</translation>
+            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93" />
+            <location line="+177" />
+            <source>空轨道</source>
+            <translation>quỹ đạo trống</translation>
+        </message>
+        <message>
+            <location line="-168" />
+            <source>原始 BPM：</source>
+            <translation>BPM gốc:</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>拖入音频文件</source>
+            <translation>Kéo tập tin âm thanh vào</translation>
+        </message>
+        <message>
+            <location line="+36" />
+            <source>已对齐</source>
+            <translation>Căn chỉnh</translation>
+        </message>
+        <message>
+            <location line="+131" />
+            <source>添加或拖入音频文件</source>
+            <translation>Thêm hoặc kéo vào tệp âm thanh</translation>
         </message>
     </context>
     <context>
@@ -2259,39 +2177,29 @@
     <context>
         <name>ToolSidebar</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+41" />
-            <source>Format Convert</source>
-            <translation>Chuyển đổi định dạng</translation>
+            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25" />
+            <source>格式转换</source>
+            <translation>chuyển đổi định dạng</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Light Edit</source>
-            <translation>Ánh sáng Chỉnh sửa</translation>
+            <source>轻度剪辑</source>
+            <translation>Chỉnh sửa nhẹ</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Speed Adjust</source>
+            <source>调整速度</source>
             <translation>Điều chỉnh tốc độ</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Pitch Shift</source>
-            <translation>Thay đổi cao độ</translation>
+            <source>升调降调</source>
+            <translation>tăng và giảm</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Info Edit</source>
-            <translation>Chỉnh sửa thông tin</translation>
-        </message>
-        <message>
-            <location line="+57" />
-            <source>Minimize</source>
-            <translation>Giảm thiểu</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Close</source>
-            <translation>Đóng</translation>
+            <source>信息修改</source>
+            <translation>Sửa đổi thông tin</translation>
         </message>
     </context>
     <context>

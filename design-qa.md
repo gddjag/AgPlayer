@@ -40,3 +40,18 @@
 - 深色/浅色/跟随系统 × 四语言的完整截图矩阵在最终集成阶段复验。
 
 final result: passed
+
+## 2026-07-28 — Light editor timeline
+
+- Reference: `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频工具 剪辑.png`
+- Runtime capture: `build/qa/light-editor-dark-1536x1024.png`
+- Side-by-side comparison: `build/qa/light-editor-comparison-1536x1024.png`
+- Viewport: `1536 × 1024`
+- P0: 0
+- P1: 0
+- P2: 0
+- P3: empty-state capture naturally omits the three loaded reference waveforms; all six lanes remain scrollable.
+- Interaction checks: target BPM, snap grid, unified/aligned BPM controls, six lanes, drag/trim signals, wheel zoom.
+- Automated result: `qml_light_editor_test` passed.
+
+Final result: passed.

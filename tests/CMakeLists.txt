@@ -436,6 +436,31 @@ set_tests_properties(qml_error_states_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(qml_light_editor_test
+    qt/qml_light_editor_test_main.cpp
+)
+set_target_properties(qml_light_editor_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_light_editor_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+target_link_libraries(qml_light_editor_test PRIVATE
+    agplayer_app_qml
+    agplayer_app_qmlplugin
+    Qt6::QuickTest
+)
+target_compile_definitions(qml_light_editor_test PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+)
+agplayer_enable_warnings(qml_light_editor_test)
+add_test(NAME qml_light_editor_test COMMAND qml_light_editor_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_light_editor.qml)
+set_tests_properties(qml_light_editor_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 target_include_directories(import_controller_test PRIVATE
     "${CMAKE_SOURCE_DIR}/tests/core"
 )

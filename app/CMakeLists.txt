@@ -1,18 +1,32 @@
 set(CMAKE_AUTOMOC ON)
 
 set(ICON_FILES
+    ${CMAKE_SOURCE_DIR}/assets/icons/add-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-back-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/file-copy-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/folder-add-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-exit-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/information-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/list-unordered.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/merge-cells-horizontal.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/music-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
@@ -22,14 +36,19 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/speed-up-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/time-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/voiceprint-line.svg
 )

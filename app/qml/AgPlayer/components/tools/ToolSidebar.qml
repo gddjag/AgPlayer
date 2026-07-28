@@ -3,82 +3,81 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
-// Left navigation sidebar for the AudioToolsWindow. Shows the app logo at the
-// top, 5 tool entries below, and window controls (minimize/close) at the
-// bottom. The current tool is highlighted; clicking an entry emits
-// toolSelected(index) so the parent can update AudioToolsController.
 Rectangle {
     id: sidebar
     color: Theme.panel
-    implicitWidth: 240
+    implicitWidth: 180
+    radius: Theme.radiusSm
+    border.color: Theme.border
+    border.width: 1
 
-    property int currentTool: 4
+    property int currentTool: 1
     property Window window
-
     signal toolSelected(int index)
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacingSm
-        spacing: Theme.spacingXs
+        anchors.topMargin: 12
+        spacing: 4
 
-        // Logo at top
-        Image {
-            source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-            sourceSize.width: 32
-            sourceSize.height: 32
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Theme.spacingMd
-            Layout.bottomMargin: Theme.spacingLg
-            fillMode: Image.PreserveAspectFit
-        }
-
-        // 5 tool entries
         Repeater {
             model: [
-                { name: qsTr("Format Convert"), icon: "music-2-fill" },
-                { name: qsTr("Light Edit"), icon: "music-2-fill" },
-                { name: qsTr("Speed Adjust"), icon: "music-2-fill" },
-                { name: qsTr("Pitch Shift"), icon: "music-2-fill" },
-                { name: qsTr("Info Edit"), icon: "music-2-fill" }
+                { name: qsTr("格式转换"), icon: "equalizer-line" },
+                { name: qsTr("轻度剪辑"), icon: "scissors-cut-line" },
+                { name: qsTr("调整速度"), icon: "speed-up-line" },
+                { name: qsTr("升调降调"), icon: "music-2-line" },
+                { name: qsTr("信息修改"), icon: "information-line" }
             ]
 
-            delegate: Button {
+            Button {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 48
+                Layout.leftMargin: 0
+                Layout.rightMargin: 10
+                Layout.preferredHeight: 62
                 flat: true
                 checked: sidebar.currentTool === index
                 focusPolicy: Qt.StrongFocus
 
                 contentItem: RowLayout {
-                    spacing: Theme.spacingSm
+                    spacing: 12
 
-                    Image {
-                        source: Theme.icon(modelData.icon)
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                        opacity: checked ? 1.0 : 0.7
+                    ToolButton {
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        enabled: false
+                        flat: true
+                        icon.source: Theme.icon(modelData.icon)
+                        icon.color: checked ? Theme.cyan : Theme.iconSecondary
+                        icon.width: 24
+                        icon.height: 24
+                        opacity: checked ? 1.0 : 0.78
                     }
 
                     Text {
                         text: modelData.name
-                        color: checked ? Theme.cyan : Theme.secondaryText
+                        color: checked ? Theme.primaryText : Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 13
-                        font.weight: checked ? Font.Medium : Font.Normal
+                        font.pixelSize: 15
+                        font.weight: checked ? Font.DemiBold : Font.Normal
                         Layout.fillWidth: true
                     }
                 }
 
                 background: Rectangle {
-                    color: checked ? Theme.border
-                                  : (parent.hovered ? Qt.rgba(1, 1, 1, 0.04)
-                                                    : "transparent")
+                    color: checked ? Qt.rgba(0.05, 0.35, 0.95, 0.26)
+                                   : (parent.hovered ? Theme.hoverSurface : "transparent")
+                    border.color: checked ? Theme.cyan : "transparent"
+                    border.width: checked ? 1 : 0
                     radius: Theme.radiusSm
+
+                    Rectangle {
+                        visible: parent.parent.checked
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 3
+                        color: Theme.cyan
+                    }
                 }
 
                 onClicked: sidebar.toolSelected(index)
@@ -86,33 +85,5 @@ Rectangle {
         }
 
         Item { Layout.fillHeight: true }
-
-        // Window controls at bottom
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacingXs
-
-            ToolButton {
-                icon.source: Theme.icon("subtract-line")
-                icon.color: Theme.secondaryText
-                icon.width: 16
-                icon.height: 16
-                focusPolicy: Qt.StrongFocus
-                onClicked: if (sidebar.window) sidebar.window.showMinimized()
-                ToolTip.text: qsTr("Minimize")
-                ToolTip.visible: hovered
-            }
-
-            ToolButton {
-                icon.source: Theme.icon("close-fill")
-                icon.color: Theme.secondaryText
-                icon.width: 16
-                icon.height: 16
-                focusPolicy: Qt.StrongFocus
-                onClicked: WindowController.hideAudioTools()
-                ToolTip.text: qsTr("Close")
-                ToolTip.visible: hovered
-            }
-        }
     }
 }

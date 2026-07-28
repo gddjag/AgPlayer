@@ -4,9 +4,14 @@
     <context>
         <name>AudioToolsWindow</name>
         <message>
-            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+20" />
-            <source>AgPlayer Audio Tools</source>
-            <translation>AgPlayer Audio Tools</translation>
+            <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="+16" />
+            <source>AgPlayer 音频工具</source>
+            <translation>AgPlayer audio tool</translation>
+        </message>
+        <message>
+            <location line="+54" />
+            <source>音频工具</source>
+            <translation>audio tools</translation>
         </message>
     </context>
     <context>
@@ -572,281 +577,174 @@
     <context>
         <name>LightEditPage</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+87" />
-            <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
+            <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68" />
+            <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
             <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
         </message>
         <message>
             <location line="+33" />
-            <source>Add File</source>
-            <translation>Add File</translation>
+            <source>添加文件</source>
+            <translation>Add files</translation>
         </message>
         <message>
-            <location line="+26" />
-            <source>Clear</source>
-            <translation>Clear</translation>
+            <location line="+11" />
+            <source>主轨道：轨道 %1</source>
+            <translation>Main track: track %1</translation>
         </message>
         <message>
-            <location line="+31" />
-            <source>No audio file loaded</source>
-            <translation>No audio file loaded</translation>
-        </message>
-        <message>
-            <location line="+75" />
-            <location line="+27" />
-            <location line="+27" />
-            <source>Playback preview not supported</source>
-            <translation>Playback preview not supported</translation>
-        </message>
-        <message>
-            <location line="+32" />
-            <source>Volume control not supported</source>
-            <translation>Volume control not supported</translation>
-        </message>
-        <message>
-            <location line="+83" />
-            <source>Drop audio file here</source>
-            <translation>Drop audio file here</translation>
-        </message>
-        <message>
-            <location line="+19" />
-            <source>Zoom In</source>
-            <translation>Zoom In</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Zoom Out</source>
-            <translation>Zoom Out</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Fit</source>
-            <translation>Fit</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>All</source>
-            <translation>All</translation>
-        </message>
-        <message>
-            <location line="+135" />
-            <source>Undo</source>
-            <translation>Undo</translation>
-        </message>
-        <message>
-            <location line="+0" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <location line="+1" />
-            <source>Not supported</source>
-            <translation>Not supported</translation>
-        </message>
-        <message>
-            <location line="-6" />
-            <source>Redo</source>
-            <translation>Redo</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Cut</source>
-            <translation>Cut</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Copy</source>
-            <translation>Copy</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Paste</source>
-            <translation>Paste</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Delete</source>
-            <translation>Delete</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Split</source>
-            <translation>Split</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Merge</source>
-            <translation>Merge</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <location line="+64" />
-            <source>Fade In</source>
-            <translation>Fade In</translation>
-        </message>
-        <message>
-            <location line="-80" />
-            <source>Apply 1000 ms fade in</source>
-            <translation>Apply 1000 ms fade in</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <location line="+99" />
-            <source>Fade Out</source>
-            <translation>Fade Out</translation>
-        </message>
-        <message>
-            <location line="-115" />
-            <source>Apply 1000 ms fade out</source>
-            <translation>Apply 1000 ms fade out</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <source>Mute</source>
-            <translation>Mute</translation>
-        </message>
-        <message>
-            <location line="-16" />
-            <source>Set gain to silence</source>
-            <translation>Set gain to silence</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <location line="+16" />
-            <source>Crop</source>
-            <translation>Crop</translation>
-        </message>
-        <message>
-            <location line="-16" />
-            <source>Crop selection to playhead</source>
-            <translation>Crop selection to playhead</translation>
-        </message>
-        <message>
-            <location line="+102" />
-            <location line="+36" />
-            <source>ms</source>
-            <translation>ms</translation>
-        </message>
-        <message>
-            <location line="+12" />
-            <source>Gain</source>
-            <translation>Gain</translation>
-        </message>
-        <message>
-            <location line="+70" />
-            <source>Export Settings</source>
-            <translation>Export Settings</translation>
-        </message>
-        <message>
-            <location line="+16" />
-            <source>Output Format</source>
-            <translation>Output Format</translation>
-        </message>
-        <message>
-            <location line="+10" />
-            <source>Source</source>
-            <translation>Source</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>MP3</source>
-            <translation>MP3</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>WAV</source>
-            <translation>WAV</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>FLAC</source>
-            <translation>FLAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>AAC</source>
-            <translation>AAC</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>OGG</source>
-            <translation>OGG</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Opus</source>
-            <translation>Opus</translation>
+            <location line="+6" />
+            <source>目标 BPM</source>
+            <translation>Target BPM</translation>
         </message>
         <message>
             <location line="+29" />
-            <source>Sample Rate</source>
-            <translation>Sample Rate</translation>
+            <source>保持音高</source>
+            <translation>maintain pitch</translation>
+        </message>
+        <message>
+            <location line="+12" />
+            <source>吸附网格</source>
+            <translation>snap grid</translation>
         </message>
         <message>
             <location line="+10" />
-            <location line="+43" />
-            <source>Auto</source>
-            <translation>Auto</translation>
-        </message>
-        <message>
-            <location line="-10" />
-            <source>Channels</source>
-            <translation>Channels</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Mono</source>
-            <translation>Mono</translation>
-        </message>
-        <message>
-            <location line="+1" />
-            <source>Stereo</source>
-            <translation>Stereo</translation>
-        </message>
-        <message>
-            <location line="+33" />
-            <source>Output Directory</source>
-            <translation>Output Directory</translation>
-        </message>
-        <message>
-            <location line="+13" />
-            <source>Same as source (default)</source>
-            <translation>Same as source (default)</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Browse</source>
-            <translation>Browse</translation>
-        </message>
-        <message>
-            <location line="+27" />
-            <source>Cancel</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location line="+24" />
-            <source>Export</source>
-            <translation>Export</translation>
-        </message>
-        <message>
-            <location line="+50" />
-            <source>Processing...</source>
-            <translation>Processing...</translation>
+            <source>1/4 拍</source>
+            <translation>1/4 shot</translation>
         </message>
         <message>
             <location line="+0" />
-            <source>Export complete</source>
-            <translation>Export complete</translation>
+            <source>1/2 拍</source>
+            <translation>1/2 shot</translation>
         </message>
         <message>
-            <location line="+66" />
-            <source>Exported: %1</source>
-            <translation>Exported: %1</translation>
+            <location line="+0" />
+            <source>1 拍</source>
+            <translation>1 shot</translation>
+        </message>
+        <message>
+            <location line="+10" />
+            <source>统一 BPM</source>
+            <translation>Unified BPM</translation>
+        </message>
+        <message>
+            <location line="+10" />
+            <source>BPM + 节拍对齐</source>
+            <translation>BPM + Beat Alignment</translation>
+        </message>
+        <message>
+            <location line="+155" />
+            <source>撤销</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>重做</source>
+            <translation>Redo</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>剪切</source>
+            <translation>cut</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>复制</source>
+            <translation>Copy</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>删除</source>
+            <translation>Delete</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>分割</source>
+            <translation>split</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>合并</source>
+            <translation>merge</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>静音</source>
+            <translation>mute</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>裁剪</source>
+            <translation>Crop</translation>
+        </message>
+        <message>
+            <location line="+60" />
+            <source>导出设置</source>
+            <translation>Export settings</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>输出格式</source>
+            <translation>Output format</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>采样率</source>
+            <translation>Sampling rate</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>声道</source>
+            <translation>vocal tract</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>立体声</source>
+            <translation>Stereo</translation>
+        </message>
+        <message>
+            <location line="+0" />
+            <source>单声道</source>
+            <translation>mono</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>输出目录</source>
+            <translation>Output directory</translation>
+        </message>
+        <message>
+            <location line="+8" />
+            <source>浏览</source>
+            <translation>Browse</translation>
+        </message>
+        <message>
+            <location line="+24" />
+            <source>项目信息</source>
+            <translation>Project information</translation>
+        </message>
+        <message>
+            <location line="+2" />
+            <source>轨道数量：%1 / 6</source>
+            <translation>Number of tracks: %1/6</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>项目时长：%1</source>
+            <translation>Project duration: %1</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <source>目标 BPM：%1</source>
+            <translation>Target BPM: %1</translation>
+        </message>
+        <message>
+            <location line="+7" />
+            <source>处理中…</source>
+            <translation>Processing…</translation>
+        </message>
+        <message>
+            <location line="+0" />
+            <source>导出音频</source>
+            <translation>Export audio</translation>
         </message>
     </context>
     <context>
@@ -1010,10 +908,30 @@
     <context>
         <name>MultiTrackWaveform</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+104" />
-            <location line="+117" />
-            <source>Empty track</source>
-            <translation>Empty track</translation>
+            <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93" />
+            <location line="+177" />
+            <source>空轨道</source>
+            <translation>empty orbit</translation>
+        </message>
+        <message>
+            <location line="-168" />
+            <source>原始 BPM：</source>
+            <translation>Original BPM:</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>拖入音频文件</source>
+            <translation>Drag in audio files</translation>
+        </message>
+        <message>
+            <location line="+36" />
+            <source>已对齐</source>
+            <translation>Aligned</translation>
+        </message>
+        <message>
+            <location line="+131" />
+            <source>添加或拖入音频文件</source>
+            <translation>Add or drag in audio files</translation>
         </message>
     </context>
     <context>
@@ -2259,39 +2177,29 @@
     <context>
         <name>ToolSidebar</name>
         <message>
-            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+41" />
-            <source>Format Convert</source>
-            <translation>Format Convert</translation>
+            <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25" />
+            <source>格式转换</source>
+            <translation>format conversion</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Light Edit</source>
-            <translation>Light Edit</translation>
+            <source>轻度剪辑</source>
+            <translation>Lightly edited</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Speed Adjust</source>
-            <translation>Speed Adjust</translation>
+            <source>调整速度</source>
+            <translation>Adjust speed</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Pitch Shift</source>
-            <translation>Pitch Shift</translation>
+            <source>升调降调</source>
+            <translation>rising and falling</translation>
         </message>
         <message>
             <location line="+1" />
-            <source>Info Edit</source>
-            <translation>Info Edit</translation>
-        </message>
-        <message>
-            <location line="+57" />
-            <source>Minimize</source>
-            <translation>Minimize</translation>
-        </message>
-        <message>
-            <location line="+11" />
-            <source>Close</source>
-            <translation>Close</translation>
+            <source>信息修改</source>
+            <translation>Information modification</translation>
         </message>
     </context>
     <context>

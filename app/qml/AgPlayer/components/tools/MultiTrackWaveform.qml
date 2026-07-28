@@ -3,251 +3,282 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
-// Multi-track waveform lane: track header, optional time ruler, and waveform.
-// This component is reusable for an active audio track and for empty slots.
 Rectangle {
     id: root
-
-    color: Theme.panel
-    radius: Theme.radiusSm
-    border.color: root.isSelected ? Theme.cyan : Theme.border
-    border.width: root.isSelected ? 2 : 1
-    height: 78
-    Layout.fillWidth: true
+    objectName: "trackLane"
 
     property int trackIndex: 0
-    property string trackName: ""
-    property int trackDurationMs: 0
-    property var trackPeaks: []
-    property color trackColor: Theme.cyan
-    property bool isActive: false
-    property bool isSelected: false
-    property bool showTimeRuler: false
+    property var track: ({})
+    property color trackColor: Theme.waveformRed
+    property real pixelsPerMs: 0.035
     property real zoomScale: 1.0
     property int viewportOffsetMs: 0
     property int playheadMs: 0
-    property bool hasFile: false
+    property bool selected: false
 
     signal trackClicked()
+    signal clipMoveRequested(int trackIndex, int timelineStartMs)
+    signal clipTrimRequested(int trackIndex, int inMs, int outMs)
     signal seekRequested(int positionMs)
 
-    readonly property real pixelsPerMs: 0.03
+    readonly property bool hasFile: !!track.hasFile
+    readonly property bool locked: !!track.locked
+    readonly property int sourceDurationMs: track.durationMs || 0
+    readonly property int clipInMs: track.inMs || 0
+    readonly property int clipOutMs: track.outMs || sourceDurationMs
+    readonly property int clipDurationMs: Math.max(0, clipOutMs - clipInMs)
 
-    function formatTime(ms) {
-        if (ms <= 0) return "00:00"
-        const totalSec = Math.floor(ms / 1000)
-        const m = Math.floor(totalSec / 60)
-        const s = totalSec % 60
-        return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
-    }
+    width: parent ? parent.width : 1000
+    height: 88
+    color: selected ? Qt.rgba(trackColor.r, trackColor.g, trackColor.b, 0.06)
+                    : Theme.panel
+    border.width: selected ? 1 : 0
+    border.color: selected ? trackColor : "transparent"
+    radius: Theme.radiusSm
 
     function timeToX(ms) {
-        return (ms - root.viewportOffsetMs) * root.pixelsPerMs * root.zoomScale
+        return (ms - viewportOffsetMs) * pixelsPerMs * zoomScale
     }
 
     function xToTime(x) {
-        return Math.round(x / (root.pixelsPerMs * root.zoomScale) + root.viewportOffsetMs)
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        onClicked: root.trackClicked()
+        return Math.round(x / (pixelsPerMs * zoomScale) + viewportOffsetMs)
     }
 
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        // Track header: number, icon, name, duration.
         Rectangle {
-            Layout.preferredWidth: 170
+            Layout.preferredWidth: 214
             Layout.fillHeight: true
-            color: root.isActive
-                   ? Qt.rgba(root.trackColor.r, root.trackColor.g, root.trackColor.b, 0.12)
-                   : "transparent"
+            color: Theme.elevated
             radius: Theme.radiusSm
+            border.width: 1
+            border.color: Theme.border
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 3
+                radius: 2
+                color: root.trackColor
+            }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: Theme.spacingSm
-                spacing: Theme.spacingSm
+                anchors.leftMargin: 12
+                anchors.rightMargin: 10
+                spacing: 8
 
-                Rectangle {
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    radius: 12
-                    color: root.trackColor
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.trackIndex + 1
-                        color: Theme.background
-                        font.pixelSize: 11
-                        font.family: Theme.fontPrimary
-                        font.weight: Font.Medium
-                    }
+                CheckBox {
+                    checked: root.hasFile
+                    enabled: root.hasFile
+                    focusPolicy: Qt.NoFocus
                 }
 
                 Text {
-                    text: "\u266A"
-                    color: root.hasFile ? root.trackColor : Theme.secondaryText
-                    font.pixelSize: 18
-                    font.family: Theme.fontFallback
-                    visible: root.hasFile
+                    text: root.trackIndex + 1
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 13
                 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 2
+                    spacing: 3
 
                     Text {
-                        text: root.hasFile ? root.trackName : qsTr("Empty track")
+                        Layout.fillWidth: true
+                        text: root.hasFile ? (root.track.name || "") : qsTr("空轨道")
                         color: root.hasFile ? Theme.primaryText : Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 12
-                        font.weight: Font.Medium
                         elide: Text.ElideRight
-                        Layout.fillWidth: true
                     }
 
                     Text {
-                        text: root.hasFile ? root.formatTime(root.trackDurationMs) : ""
+                        text: root.hasFile
+                              ? qsTr("原始 BPM：") + Math.round(root.track.originalBpm || 0)
+                              : qsTr("拖入音频文件")
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 10
+                    }
+
+                    RowLayout {
                         visible: root.hasFile
+                        spacing: 4
+
+                        Button {
+                            text: "M"
+                            checkable: true
+                            checked: !!root.track.muted
+                            implicitWidth: 26
+                            implicitHeight: 22
+                            onClicked: LightEditor.setTrackMuted(root.trackIndex, checked)
+                        }
+                        Button {
+                            text: "S"
+                            checkable: true
+                            checked: !!root.track.solo
+                            implicitWidth: 26
+                            implicitHeight: 22
+                            onClicked: LightEditor.setTrackSolo(root.trackIndex, checked)
+                        }
+                        ToolButton {
+                            implicitWidth: 26
+                            implicitHeight: 22
+                            icon.source: Theme.icon(root.locked ? "lock-line" : "lock-unlock-line")
+                            icon.color: root.locked ? root.trackColor : Theme.iconSecondary
+                            onClicked: LightEditor.setTrackLocked(root.trackIndex, !root.locked)
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignRight
+                            text: root.track.aligned ? qsTr("已对齐") : ""
+                            color: Theme.waveformGreen
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 10
+                        }
                     }
                 }
             }
+
+            TapHandler {
+                onTapped: root.trackClicked()
+            }
         }
 
-        // Waveform viewport.
         Item {
-            id: waveformArea
+            id: waveformViewport
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
 
-            ColumnLayout {
+            Canvas {
                 anchors.fill: parent
-                spacing: 0
-
-                // Shared time ruler, visible only on the first track.
-                Rectangle {
-                    id: rulerContainer
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.showTimeRuler ? 22 : 0
-                    visible: root.showTimeRuler
-                    color: "transparent"
-                    clip: true
-
-                    Canvas {
-                        id: timeRuler
-                        anchors.fill: parent
-
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            ctx.fillStyle = Theme.secondaryText
-                            ctx.strokeStyle = Theme.border
-                            ctx.lineWidth = 1
-                            ctx.font = "10px '" + Theme.fontFallback + "'"
-
-                            const pps = root.pixelsPerMs * root.zoomScale
-                            if (pps <= 0) return
-
-                            const msPerPixel = 1.0 / pps
-                            let intervalMs = 1000
-                            if (msPerPixel > 5000) intervalMs = 60000
-                            else if (msPerPixel > 2000) intervalMs = 30000
-                            else if (msPerPixel > 500) intervalMs = 10000
-                            else if (msPerPixel > 100) intervalMs = 5000
-                            else intervalMs = 1000
-
-                            const endMs = root.viewportOffsetMs + (width / pps)
-                            const startMs = Math.floor(root.viewportOffsetMs / intervalMs) * intervalMs
-
-                            for (let t = startMs; t <= endMs; t += intervalMs) {
-                                const x = (t - root.viewportOffsetMs) * pps
-                                ctx.beginPath()
-                                ctx.moveTo(x, height - 4)
-                                ctx.lineTo(x, height)
-                                ctx.stroke()
-
-                                const totalSec = Math.floor(t / 1000)
-                                const m = Math.floor(totalSec / 60)
-                                const s = totalSec % 60
-                                const label = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
-                                ctx.fillText(label, x + 3, height - 6)
-                            }
-                        }
-
-                        onWidthChanged: requestPaint()
-                        onHeightChanged: requestPaint()
-                        Connections {
-                            target: root
-                            function onZoomScaleChanged() { timeRuler.requestPaint() }
-                            function onViewportOffsetMsChanged() { timeRuler.requestPaint() }
-                        }
+                opacity: 0.32
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.strokeStyle = Theme.border
+                    ctx.lineWidth = 1
+                    for (let x = 0; x < width; x += 44) {
+                        ctx.beginPath()
+                        ctx.moveTo(x, 0)
+                        ctx.lineTo(x, height)
+                        ctx.stroke()
                     }
                 }
+            }
 
-                // Waveform content and playhead.
-                Item {
-                    id: waveformContainer
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
+            Rectangle {
+                id: clipBody
+                objectName: "clipBody"
+                visible: root.hasFile
+                x: root.timeToX(root.track.timelineStartMs || 0)
+                y: 8
+                width: Math.max(40, root.clipDurationMs * root.pixelsPerMs * root.zoomScale)
+                height: parent.height - 16
+                color: Qt.rgba(root.trackColor.r, root.trackColor.g, root.trackColor.b, 0.08)
+                border.color: root.trackColor
+                border.width: 1
+                radius: 3
 
-                    WaveformItem {
-                        id: waveform
-                        height: parent.height
-                        width: root.hasFile && root.trackDurationMs > 0
-                               ? root.trackDurationMs * root.pixelsPerMs * root.zoomScale
-                               : parent.width
-                        x: root.hasFile && root.trackDurationMs > 0
-                           ? -root.viewportOffsetMs * root.pixelsPerMs * root.zoomScale
-                           : 0
-                        peaks: root.trackPeaks
-                        position: root.playheadMs
-                        duration: root.trackDurationMs
-                        waveformColor: root.trackColor
-                        visible: root.hasFile
-                        enabled: root.hasFile
+                WaveformItem {
+                    anchors.fill: parent
+                    anchors.margins: 5
+                    peaks: root.track.peaks || []
+                    position: Math.max(0, root.playheadMs - (root.track.timelineStartMs || 0)
+                                          + root.clipInMs)
+                    duration: root.sourceDurationMs
+                    waveformColor: root.trackColor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: !root.locked
+                    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                    drag.target: clipBody
+                    drag.axis: Drag.XAxis
+                    drag.minimumX: 0
+                    onPressed: root.trackClicked()
+                    onReleased: {
+                        root.clipMoveRequested(root.trackIndex, root.xToTime(clipBody.x))
+                        clipBody.x = Qt.binding(function() {
+                            return root.timeToX(root.track.timelineStartMs || 0)
+                        })
                     }
+                    onDoubleClicked: root.seekRequested(root.xToTime(mouse.x + clipBody.x))
+                }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: qsTr("Empty track")
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 12
-                        visible: !root.hasFile
-                    }
-
-                    // Playhead indicator.
-                    Rectangle {
-                        x: root.timeToX(root.playheadMs)
-                        y: 0
-                        width: 2
-                        height: parent.height
-                        color: Theme.primaryText
-                        visible: root.hasFile
-                                 && root.playheadMs >= root.viewportOffsetMs
-                                 && x >= -1 && x <= parent.width
-                    }
+                Rectangle {
+                    id: leftHandle
+                    width: 8
+                    height: parent.height
+                    anchors.left: parent.left
+                    color: Theme.primaryText
+                    radius: 3
 
                     MouseArea {
                         anchors.fill: parent
-                        enabled: root.hasFile
-                        onPressed: function(mouse) {
-                            root.seekRequested(root.xToTime(mouse.x))
-                        }
-                        onPositionChanged: function(mouse) {
-                            if (pressed) root.seekRequested(root.xToTime(mouse.x))
+                        anchors.margins: -5
+                        enabled: !root.locked
+                        cursorShape: Qt.SizeHorCursor
+                        property real pressX: 0
+                        onPressed: pressX = mouse.x
+                        onReleased: {
+                            const deltaMs = Math.round((mouse.x - pressX)
+                                / (root.pixelsPerMs * root.zoomScale))
+                            root.clipTrimRequested(root.trackIndex,
+                                                   root.clipInMs + deltaMs,
+                                                   root.clipOutMs)
                         }
                     }
                 }
+
+                Rectangle {
+                    id: rightHandle
+                    width: 8
+                    height: parent.height
+                    anchors.right: parent.right
+                    color: Theme.primaryText
+                    radius: 3
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -5
+                        enabled: !root.locked
+                        cursorShape: Qt.SizeHorCursor
+                        property real pressX: 0
+                        onPressed: pressX = mouse.x
+                        onReleased: {
+                            const deltaMs = Math.round((mouse.x - pressX)
+                                / (root.pixelsPerMs * root.zoomScale))
+                            root.clipTrimRequested(root.trackIndex,
+                                                   root.clipInMs,
+                                                   root.clipOutMs + deltaMs)
+                        }
+                    }
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: !root.hasFile
+                text: root.trackIndex === 0 ? qsTr("添加或拖入音频文件") : qsTr("空轨道")
+                color: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 11
+            }
+
+            Rectangle {
+                x: root.timeToX(root.playheadMs)
+                width: 1
+                height: parent.height
+                color: Theme.cyan
+                visible: x >= 0 && x <= parent.width
             }
         }
     }
