@@ -32,6 +32,8 @@ add_library(agplayer_qt STATIC
     src/runtime_log.cpp
     src/settings_controller.cpp
     src/settings_controller.hpp
+    src/translation_manager.cpp
+    src/translation_manager.hpp
     src/runtime_log.hpp
     src/speed_adjuster.cpp
     src/speed_adjuster.hpp

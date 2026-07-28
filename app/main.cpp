@@ -36,6 +36,7 @@
 #include "runtime_log.hpp"
 #include "settings_controller.hpp"
 #include "speed_adjuster.hpp"
+#include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -118,6 +119,17 @@ int main(int argc, char* argv[])
 
         PlaybackController playback(core, &library);
         SettingsController settings;
+        TranslationManager translations;
+        if (!translations.setLanguage(settings.language())) {
+            settings.setLanguage(QStringLiteral("zh"));
+        }
+        QObject::connect(&settings, &SettingsController::languageChanged, &app,
+                         [&settings, &translations]() {
+            if (!translations.setLanguage(settings.language())
+                && settings.language() != QStringLiteral("zh")) {
+                settings.setLanguage(QStringLiteral("zh"));
+            }
+        });
         WaveformProvider waveformProvider(&settings);
         auto autoReadBpmFlag = std::make_shared<std::atomic_bool>(settings.autoReadBpm());
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
@@ -181,6 +193,8 @@ int main(int argc, char* argv[])
         });
 
         QQmlApplicationEngine engine;
+        QObject::connect(&translations, &TranslationManager::languageChanged,
+                         &engine, &QQmlApplicationEngine::retranslate);
         engine.addImportPath("qrc:/");
         engine.loadFromModule("AgPlayer", "Main");
 

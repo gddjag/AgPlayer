@@ -19,6 +19,7 @@ private slots:
     void defaultExportDirectoryUsesStandardPaths();
     void loadCreatesDefaultDirectories();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
+    void supportsOnlyFourLanguages();
 };
 
 void SettingsControllerTest::initTestCase()
@@ -95,6 +96,33 @@ void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()
     QCOMPARE(args.at(1).toInt(), 1);
 
     QDir(cacheDir).removeRecursively();
+}
+
+void SettingsControllerTest::supportsOnlyFourLanguages()
+{
+    SettingsController settings;
+
+    const QStringList supported = {
+        QStringLiteral("zh"),
+        QStringLiteral("en"),
+        QStringLiteral("th"),
+        QStringLiteral("vi"),
+    };
+    for (const QString& language : supported) {
+        settings.setLanguage(language);
+        QCOMPARE(settings.language(), language);
+    }
+
+    const QStringList unsupported = {
+        QStringLiteral("ko"),
+        QStringLiteral("my"),
+        QStringLiteral("lo"),
+        QStringLiteral("fr"),
+    };
+    for (const QString& language : unsupported) {
+        settings.setLanguage(language);
+        QCOMPARE(settings.language(), QStringLiteral("zh"));
+    }
 }
 
 QTEST_MAIN(SettingsControllerTest)

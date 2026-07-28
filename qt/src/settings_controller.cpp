@@ -1023,8 +1023,7 @@ QString SettingsController::defaultExportDir()
 QString SettingsController::validatedLanguage(const QString& value)
 {
     static const QStringList supported = {QStringLiteral("zh"), QStringLiteral("en"),
-        QStringLiteral("ko"), QStringLiteral("th"), QStringLiteral("my"),
-        QStringLiteral("vi"), QStringLiteral("lo")};
+        QStringLiteral("th"), QStringLiteral("vi")};
     const QString lower = value.toLower();
     if (supported.contains(lower)) {
         return lower;

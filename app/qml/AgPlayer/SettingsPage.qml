@@ -818,16 +818,13 @@ Popup {
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: qsTr("中文"), value: "zh" },
-                            { text: qsTr("English"), value: "en" },
-                            { text: qsTr("\uD55C\uAD6D\uC5B4"), value: "ko" },
-                            { text: qsTr("\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22"), value: "th" },
-                            { text: qsTr("\u1019\u103C\u1014\u103A\u1019\u102C\u1004\u102F"), value: "my" },
-                            { text: qsTr("Ti\u1EBFng Vi\u1EC7t"), value: "vi" },
-                            { text: qsTr("\u0E25\u0EB2\u0EA7"), value: "lo" }
+                            { text: "中文", value: "zh" },
+                            { text: "English", value: "en" },
+                            { text: "\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", value: "th" },
+                            { text: "Ti\u1EBFng Vi\u1EC7t", value: "vi" }
                         ]
                         currentIndex: {
-                            const values = ["zh", "en", "ko", "th", "my", "vi", "lo"]
+                            const values = ["zh", "en", "th", "vi"]
                             return values.indexOf(SettingsController.language)
                         }
                         onActivated: SettingsController.language = currentValue

@@ -24,6 +24,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     Concurrent
     Test
     QuickTest
+    LinguistTools
 )
 find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)
@@ -33,3 +34,14 @@ add_subdirectory(qt)
 add_subdirectory(app)
 add_subdirectory(tools)
 add_subdirectory(tests)
+
+qt_add_translations(
+    TARGETS AgPlayer translation_manager_test
+    SOURCE_TARGETS agplayer_app_qml agplayer_qt AgPlayer
+    TS_FILES
+        ${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts
+        ${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts
+        ${CMAKE_SOURCE_DIR}/translations/agplayer_th.ts
+        ${CMAKE_SOURCE_DIR}/translations/agplayer_vi.ts
+    RESOURCE_PREFIX "/i18n"
+)
