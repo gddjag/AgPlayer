@@ -21,6 +21,7 @@ private slots:
     void validatesBpmAndTrackSwitches();
     void analyzesAndUnifiesBpm();
     void exportsTimelineAndFiltersTracks();
+    void exportsAllSupportedFormats();
     void reportsTrackAnalysisErrors();
 };
 
@@ -185,6 +186,49 @@ void LightEditorControllerTest::exportsTimelineAndFiltersTracks()
     ag_metadata_destroy(metadata);
     QVERIFY(duration >= 2400);
     QVERIFY(duration < 2800);
+}
+
+void LightEditorControllerTest::exportsAllSupportedFormats()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString path = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(path, 120, 2));
+
+    for (const QString& format : {QStringLiteral("wav"), QStringLiteral("mp3"),
+                                 QStringLiteral("flac")}) {
+        LightEditor editor;
+        editor.loadFileToTrack(0, QUrl::fromLocalFile(path));
+
+        QSignalSpy completed(&editor, &LightEditor::lightEditCompleted);
+        editor.exportProject(temp.path(), format, 16000, 1);
+        QVERIFY2(completed.wait(30000), qPrintable(format));
+
+        const QString outputPath = completed.first().first().toString();
+        QVERIFY2(QFileInfo::exists(outputPath), qPrintable(outputPath));
+        ag_metadata* metadata = nullptr;
+        QCOMPARE(ag_metadata_open(outputPath.toUtf8().constData(), &metadata), AG_OK);
+        QVERIFY(metadata != nullptr);
+        QCOMPARE(ag_metadata_sample_rate(metadata), 16000);
+        QCOMPARE(ag_metadata_channels(metadata), 1);
+        QVERIFY(ag_metadata_duration_ms(metadata) >= 1900);
+        ag_metadata_destroy(metadata);
+
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        config.buffer_frames = 4096;
+        ag_player* player = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+        QVERIFY(player != nullptr);
+        QCOMPARE(ag_player_load(player, outputPath.toUtf8().constData()), AG_OK);
+        QCOMPARE(ag_player_play(player), AG_OK);
+        QTest::qWait(50);
+        ag_playback_snapshot snapshot{};
+        QCOMPARE(ag_player_snapshot(player, &snapshot), AG_OK);
+        QCOMPARE(snapshot.state, AG_PLAYING);
+        QVERIFY(snapshot.position_ms > 0);
+        ag_player_destroy(player);
+    }
 }
 
 void LightEditorControllerTest::reportsTrackAnalysisErrors()

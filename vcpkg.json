@@ -9,6 +9,7 @@
       "features": [
         "avcodec",
         "avformat",
+        "mp3lame",
         "swresample"
       ]
     },

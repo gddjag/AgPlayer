@@ -1,57 +1,51 @@
 # AgPlayer 设计验收
 
-## 当前验收：空白启动页
+日期：2026-07-28
+环境：Windows 11、Qt 6.7、100% 缩放
 
-- 日期：2026-07-28
+## 空白启动页
+
 - 参考图：`C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\空白启动页.png`
-- 参考窗口裁切：`build/qa/empty-startup-reference-1228x424.png`
-- 实现截图：`build/qa/empty-startup-dark-1228x424.png`
-- 并排对比：`build/qa/empty-startup-comparison-1228x424.png`
-- 视口：参考与实现均为 1228×424
-- 系统：Windows 11，Qt 6.7，100% 缩放
+- 参考裁切：`build/qa/empty-startup-reference-1228x424.png`
+- 最新实现：`build/qa/theme-language-matrix/main-zh-dark.png`
+- 并排对比：`build/qa/startup-latest-comparison.jpg`
+- 视口：参考与实现均为 1228 × 424
+- 状态：空媒体库、未播放
 
-## 对照结果
+对照结果：
 
-| 项目 | 结果 |
-|---|---|
-| 窗口比例与圆角边框 | 通过 |
-| 左上品牌与右上窗口控制 | 通过 |
-| 标题、说明、两个导入按钮 | 通过 |
-| 支持格式提示 | 通过 |
-| 底部控制分布 | 通过 |
-| 普通状态图标透明背景 | 通过 |
-| 播放按钮渐变与光晕 | 通过 |
-| 深色语义颜色 | 通过 |
-| P0 阻断问题 | 0 |
-| P1 主要问题 | 0 |
-| P2 可见问题 | 0 |
+- 窗口比例、圆角边框、品牌区、窗口控制：通过
+- 标题、说明、导入按钮、格式提示：通过
+- 底部控制区分布、透明图标、RGB 播放按钮：通过
+- 深色、浅色、跟随系统语义色与图标：通过
+- P0/P1/P2：0
+- P3：参考图展示背景纹理，程序使用稳定主题表面；不影响布局、可读性或交互。
 
-## 自动验证
+## 轻度剪辑
 
-- `qml_main_window_test`：通过。
-- 空白页默认尺寸断言：1228×424。
-- 空白启动状态和底部控制状态：通过。
-- 深色、浅色、跟随系统的语义颜色测试：通过。
-- QA 截图进程：退出码 0。
+- 参考图：`C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频工具 剪辑.png`
+- 参考裁切：`build/qa/light-editor-reference-1536x1024.png`
+- 最新实现：`build/qa/theme-language-matrix/tools-zh-dark.png`
+- 并排对比：`build/qa/editor-latest-comparison.jpg`
+- 视口：1536 × 1024
+- 状态：六条空轨、默认 BPM 128、1/4 拍吸附
 
-## 后续 P3
+对照结果：
 
-- 参考图使用带轻微纹理的展示背景，实现使用稳定的纯色主题表面；不影响布局、可读性或交互。
-- 深色/浅色/跟随系统 × 四语言的完整截图矩阵在最终集成阶段复验。
+- 左侧工具导航、顶部 BPM/吸附控制、六轨时间线：通过
+- 拖动、裁剪、吸附、滚轮缩放、静音/独奏/锁定：通过
+- 统一 BPM、保持音高、节拍对齐、导出设置：通过
+- 空状态自然不显示参考图中的三条已载入波形；轨道结构与滚动行为完整。
+- P0/P1/P2：0
+
+## 四语言 × 三主题矩阵
+
+- 启动页矩阵：`build/qa/theme-language-matrix/main-matrix-contact-sheet.jpg`
+- 剪辑页矩阵：`build/qa/theme-language-matrix/tools-matrix-contact-sheet.jpg`
+- 语言：中文、英文、泰语、越南语
+- 主题：深色、浅色、跟随系统
+- 截图：24/24 成功；尺寸分别稳定为 1228 × 424、1536 × 1024
+- 未发现裁切、重叠、溢出、不可读图标或错误主题色。
+- 跟随系统在当前 Windows 深色外观下正确呈现系统暗色语义。
 
 final result: passed
-
-## 2026-07-28 — Light editor timeline
-
-- Reference: `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频工具 剪辑.png`
-- Runtime capture: `build/qa/light-editor-dark-1536x1024.png`
-- Side-by-side comparison: `build/qa/light-editor-comparison-1536x1024.png`
-- Viewport: `1536 × 1024`
-- P0: 0
-- P1: 0
-- P2: 0
-- P3: empty-state capture naturally omits the three loaded reference waveforms; all six lanes remain scrollable.
-- Interaction checks: target BPM, snap grid, unified/aligned BPM controls, six lanes, drag/trim signals, wheel zoom.
-- Automated result: `qml_light_editor_test` passed.
-
-Final result: passed.

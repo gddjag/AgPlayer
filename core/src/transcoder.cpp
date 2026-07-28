@@ -3,8 +3,10 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/audio_fifo.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/opt.h>
+#include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
 }
 
@@ -500,9 +502,93 @@ ag_result run_transcode_pass(const std::string& input_path,
         error = "Failed to allocate packet/frame";
         return AG_INTERNAL_ERROR;
     }
+    AVAudioFifo* audio_fifo = av_audio_fifo_alloc(
+        enc.ctx->sample_fmt, enc.ctx->ch_layout.nb_channels, 1);
+    if (audio_fifo == nullptr) {
+        av_packet_free(&in_pkt);
+        av_frame_free(&in_frame);
+        av_frame_free(&flt_frame);
+        av_frame_free(&out_frame);
+        av_audio_fifo_free(audio_fifo);
+        swr_free(&in_to_flt_swr);
+        error = "Failed to allocate audio FIFO";
+        return AG_INTERNAL_ERROR;
+    }
 
     bool failed = false;
     int64_t out_pts = 0;
+
+    auto encode_fifo = [&](bool drain) -> bool {
+        const int frame_size = enc.ctx->frame_size;
+        while (true) {
+            const int available = av_audio_fifo_size(audio_fifo);
+            if (available <= 0) {
+                return true;
+            }
+            if (frame_size > 0 && available < frame_size && !drain) {
+                return true;
+            }
+
+            int frame_samples = frame_size > 0 ? frame_size : available;
+            if (drain && available < frame_samples
+                && (enc.codec->capabilities & AV_CODEC_CAP_SMALL_LAST_FRAME)) {
+                frame_samples = available;
+            }
+            const int read_samples = std::min(available, frame_samples);
+
+            av_frame_unref(out_frame);
+            out_frame->format = enc.ctx->sample_fmt;
+            out_frame->sample_rate = enc.ctx->sample_rate;
+            av_channel_layout_copy(&out_frame->ch_layout, &enc.ctx->ch_layout);
+            out_frame->nb_samples = frame_samples;
+            out_frame->pts = out_pts;
+            if (av_frame_get_buffer(out_frame, 0) < 0) {
+                error = "Failed to allocate encoder frame buffer";
+                return false;
+            }
+            if (av_audio_fifo_read(
+                    audio_fifo,
+                    reinterpret_cast<void**>(out_frame->extended_data),
+                    read_samples)
+                != read_samples) {
+                error = "Failed to read encoder audio FIFO";
+                return false;
+            }
+            if (read_samples < frame_samples
+                && av_samples_set_silence(
+                       out_frame->extended_data, read_samples,
+                       frame_samples - read_samples,
+                       enc.ctx->ch_layout.nb_channels,
+                       enc.ctx->sample_fmt)
+                    < 0) {
+                error = "Failed to pad final encoder frame";
+                return false;
+            }
+            out_pts += frame_samples;
+            if (!encode_frame(enc.ctx, enc.fmt_ctx, out_frame, error)) {
+                return false;
+            }
+        }
+    };
+
+    auto queue_converted = [&](AVFrame* frame, int samples) -> bool {
+        if (samples <= 0) {
+            return true;
+        }
+        const int required = av_audio_fifo_size(audio_fifo) + samples;
+        if (av_audio_fifo_realloc(audio_fifo, required) < 0) {
+            error = "Failed to grow encoder audio FIFO";
+            return false;
+        }
+        if (av_audio_fifo_write(
+                audio_fifo, reinterpret_cast<void**>(frame->extended_data),
+                samples)
+            != samples) {
+            error = "Failed to write encoder audio FIFO";
+            return false;
+        }
+        return encode_fifo(false);
+    };
 
     // Convert a decoded frame to the encoder's input format and encode it.
     // In the gain path this means input -> FLTP -> gain -> output.
@@ -564,7 +650,6 @@ ag_result run_transcode_pass(const std::string& input_path,
         out_frame->sample_rate = enc.ctx->sample_rate;
         av_channel_layout_copy(&out_frame->ch_layout, &enc.ctx->ch_layout);
         out_frame->nb_samples = out_samples;
-        out_frame->pts = out_pts;
         if (av_frame_get_buffer(out_frame, 0) < 0) {
             error = "Failed to allocate output frame buffer";
             return false;
@@ -579,9 +664,7 @@ ag_result run_transcode_pass(const std::string& input_path,
             return false;
         }
         out_frame->nb_samples = converted;
-        out_pts += converted;
-
-        if (!encode_frame(enc.ctx, enc.fmt_ctx, out_frame, error)) {
+        if (!queue_converted(out_frame, converted)) {
             av_frame_unref(out_frame);
             return false;
         }
@@ -752,9 +835,7 @@ ag_result run_transcode_pass(const std::string& input_path,
                 break;
             }
             out_frame->nb_samples = converted;
-            out_pts += converted;
-
-            if (!encode_frame(enc.ctx, enc.fmt_ctx, out_frame, error)) {
+            if (!queue_converted(out_frame, converted)) {
                 av_frame_unref(out_frame);
                 failed = true;
                 break;
@@ -762,52 +843,51 @@ ag_result run_transcode_pass(const std::string& input_path,
             av_frame_unref(out_frame);
         }
 
-        // Drain encoder resampler.
-        while (!failed) {
-            const int pending = swr_get_out_samples(enc.swr, 0);
-            if (pending < 0) {
-                error = "swr_get_out_samples (drain encoder) failed";
-                failed = true;
-                break;
-            }
-            if (pending == 0) break;
+    }
 
-            av_frame_unref(out_frame);
-            out_frame->format = enc.ctx->sample_fmt;
-            out_frame->sample_rate = enc.ctx->sample_rate;
-            av_channel_layout_copy(&out_frame->ch_layout, &enc.ctx->ch_layout);
-            out_frame->nb_samples = pending;
-            out_frame->pts = out_pts;
-            if (av_frame_get_buffer(out_frame, 0) < 0) {
-                error = "Failed to allocate output drain frame buffer";
-                failed = true;
-                break;
-            }
-
-            const int got = swr_convert(enc.swr,
-                out_frame->data, pending, nullptr, 0);
-            if (got < 0) {
-                av_frame_unref(out_frame);
-                error = "swr_convert (drain encoder) failed";
-                failed = true;
-                break;
-            }
-            if (got == 0) break;
-            out_frame->nb_samples = got;
-            out_pts += got;
-
-            if (!encode_frame(enc.ctx, enc.fmt_ctx, out_frame, error)) {
-                av_frame_unref(out_frame);
-                failed = true;
-                break;
-            }
-            av_frame_unref(out_frame);
+    // Drain the final resampler for both gain and no-gain paths.
+    while (!failed) {
+        const int pending = swr_get_out_samples(enc.swr, 0);
+        if (pending < 0) {
+            error = "swr_get_out_samples (drain encoder) failed";
+            failed = true;
+            break;
         }
+        if (pending == 0) break;
+
+        av_frame_unref(out_frame);
+        out_frame->format = enc.ctx->sample_fmt;
+        out_frame->sample_rate = enc.ctx->sample_rate;
+        av_channel_layout_copy(&out_frame->ch_layout, &enc.ctx->ch_layout);
+        out_frame->nb_samples = pending;
+        if (av_frame_get_buffer(out_frame, 0) < 0) {
+            error = "Failed to allocate output drain frame buffer";
+            failed = true;
+            break;
+        }
+
+        const int got = swr_convert(
+            enc.swr, out_frame->data, pending, nullptr, 0);
+        if (got < 0) {
+            av_frame_unref(out_frame);
+            error = "swr_convert (drain encoder) failed";
+            failed = true;
+            break;
+        }
+        if (got == 0) break;
+        out_frame->nb_samples = got;
+        if (!queue_converted(out_frame, got)) {
+            av_frame_unref(out_frame);
+            failed = true;
+            break;
+        }
+        av_frame_unref(out_frame);
     }
 
     // Flush encoder.
     if (!failed) {
-        if (!encode_frame(enc.ctx, enc.fmt_ctx, nullptr, error)) {
+        if (!encode_fifo(true)
+            || !encode_frame(enc.ctx, enc.fmt_ctx, nullptr, error)) {
             failed = true;
         }
     }
@@ -816,6 +896,7 @@ ag_result run_transcode_pass(const std::string& input_path,
     av_frame_free(&in_frame);
     av_frame_free(&flt_frame);
     av_frame_free(&out_frame);
+    av_audio_fifo_free(audio_fifo);
     swr_free(&in_to_flt_swr);
 
     if (progress_callback && !failed) {

@@ -21,6 +21,21 @@ namespace {
 
 constexpr double kReliableBpmConfidence = 50.0;
 
+QByteArray codecForFormat(const QString& format)
+{
+    const QString normalized = format.toLower();
+    if (normalized == QStringLiteral("mp3")) {
+        return QByteArrayLiteral("libmp3lame");
+    }
+    if (normalized == QStringLiteral("wav")) {
+        return QByteArrayLiteral("pcm_s16le");
+    }
+    if (normalized == QStringLiteral("flac")) {
+        return QByteArrayLiteral("flac");
+    }
+    return {};
+}
+
 struct AnalyzeResult {
     int status = AG_INTERNAL_ERROR;
     ag_bpm_result bpm{};
@@ -728,6 +743,7 @@ void LightEditor::exportProject(const QString& outputDir,
     const QString outputPath = computeOutputPath(
         firstSource, outputDir, outputFormat.toLower(),
         static_cast<int>(included.size()));
+    const QByteArray codecName = codecForFormat(outputFormat);
     const QString mixPath = outputPath + QStringLiteral(".agmix-")
         + QUuid::createUuid().toString(QUuid::WithoutBraces)
         + QStringLiteral(".wav");
@@ -767,7 +783,7 @@ void LightEditor::exportProject(const QString& outputDir,
     watcher->setFuture(QtConcurrent::run(
         [this, pathBytes, timelineStarts, trimStarts, trimEnds, fadeIns,
          fadeOuts, gains, outputPath, mixPath, outputSampleRate,
-         outputChannels, token]() {
+         outputChannels, codecName, token]() {
             std::vector<const char*> inputPaths;
             inputPaths.reserve(pathBytes.size());
             for (const QByteArray& path : pathBytes) {
@@ -803,7 +819,8 @@ void LightEditor::exportProject(const QString& outputDir,
 
             ProgressContext transcodeProgress{this, 0.7, 0.3};
             const ag_result transcodeResult = ag_transcode(
-                mixUtf8.constData(), outputUtf8.constData(), nullptr, 0,
+                mixUtf8.constData(), outputUtf8.constData(),
+                codecName.isEmpty() ? nullptr : codecName.constData(), 0,
                 outputSampleRate, outputChannels, token, callback,
                 &transcodeProgress);
             QFile::remove(mixPath);

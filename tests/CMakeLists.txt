@@ -335,6 +335,7 @@ foreach(qt_test IN ITEMS
     )
 endforeach()
 
+set_tests_properties(light_editor_controller_test PROPERTIES TIMEOUT 60)
 set_tests_properties(shutdown_test PROPERTIES TIMEOUT 30)
 set_tests_properties(runtime_log_test PROPERTIES TIMEOUT 30)
 
