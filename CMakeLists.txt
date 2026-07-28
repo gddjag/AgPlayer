@@ -25,6 +25,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     Test
     QuickTest
     LinguistTools
+    Widgets
 )
 find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)

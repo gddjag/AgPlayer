@@ -12,6 +12,10 @@ ApplicationWindow {
     height: 424
     minimumWidth: 800
     minimumHeight: 360
+    onClosing: function(close) {
+        close.accepted = false
+        WindowController.requestClose()
+    }
     flags: Qt.FramelessWindowHint
     color: Theme.background
     title: "AgPlayer"

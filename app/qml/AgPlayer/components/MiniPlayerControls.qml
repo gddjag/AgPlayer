@@ -24,8 +24,12 @@ Rectangle {
     property alias muteButton: muteButton
     property alias volumeSlider: volumeSlider
 
+    function currentRow(): int {
+        return LibraryModel.indexForTrackId(playback.currentTrackId)
+    }
+
     function currentTrackValue(role): variant {
-        var row = playback.trackIndex
+        var row = root.currentRow()
         if (row < 0 || row >= LibraryModel.rowCount())
             return ""
         var idx = LibraryModel.index(row, 0)
@@ -33,7 +37,7 @@ Rectangle {
     }
 
     function currentTrackFavorite(): bool {
-        var row = playback.trackIndex
+        var row = root.currentRow()
         if (row < 0 || row >= LibraryModel.rowCount())
             return false
         var idx = LibraryModel.index(row, 0)
@@ -123,7 +127,7 @@ Rectangle {
                              ? qsTr("Remove from favorites")
                              : qsTr("Add to favorites")
             focusPolicy: Qt.StrongFocus
-            enabled: playback.trackIndex >= 0
+            enabled: root.currentRow() >= 0
             onClicked: playback.toggleFavorite()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
@@ -154,7 +158,7 @@ Rectangle {
                 RowLayout {
                     spacing: 1
                     Layout.alignment: Qt.AlignVCenter
-                    visible: playback.trackIndex >= 0
+                    visible: root.currentRow() >= 0
 
                     Repeater {
                         model: 5
@@ -227,7 +231,7 @@ Rectangle {
                         var br = root.currentTrackValue(LibraryModel.BitRateRole)
                         if (br > 0)
                             badges.push(Math.round(br / 1000) + " kbps")
-                        if (playback.trackIndex >= 0) {
+                        if (root.currentRow() >= 0) {
                             var bpm = root.currentTrackBpm()
                             if (bpm.length > 0)
                                 badges.push(bpm)

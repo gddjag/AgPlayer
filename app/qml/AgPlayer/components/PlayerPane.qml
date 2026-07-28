@@ -144,6 +144,7 @@ Rectangle {
                 spacing: Theme.spacingSm
 
                 RowLayout {
+                    id: titleRow
                     Layout.fillWidth: true
                     spacing: Theme.spacingSm
 
@@ -156,9 +157,12 @@ Rectangle {
                         font.pixelSize: 26
                         font.weight: Font.DemiBold
                         elide: Text.ElideRight
-                        Layout.maximumWidth: parent.width
-                                             - favoriteButton.implicitWidth
-                                             - Theme.spacingSm
+                        Layout.preferredWidth: Math.min(implicitWidth,
+                                                        Math.max(0,
+                                                                 titleRow.width
+                                                                 - favoriteButton.implicitWidth
+                                                                 - titleRow.spacing))
+                        Layout.maximumWidth: Layout.preferredWidth
                     }
 
                     ToolButton {

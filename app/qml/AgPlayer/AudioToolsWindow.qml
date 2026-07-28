@@ -14,6 +14,10 @@ Window {
     flags: Qt.FramelessWindowHint
     color: Theme.background
     title: qsTr("AgPlayer 音频工具")
+    onClosing: function(close) {
+        close.accepted = false
+        WindowController.hideAudioTools()
+    }
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
     palette.base: Theme.elevated

@@ -62,10 +62,11 @@ TestCase {
         property bool alwaysOnTop: false
         property bool mainVisible: false
         property bool miniVisible: true
+        property int closeCalls: 0
         function setAlwaysOnTop(value) { alwaysOnTop = value }
         function showMain() { mainVisible = true; miniVisible = false }
         function showMini() { miniVisible = true; mainVisible = false }
-        function requestClose() {}
+        function requestClose() { closeCalls += 1 }
     }
 
     function initTestCase() {
@@ -104,5 +105,13 @@ TestCase {
         mouseClick(miniPlayer.restoreButton)
         compare(windowController.mainVisible, true, "restore button should call windows.showMain() -> mainVisible=true")
         compare(windowController.miniVisible, false, "restore button should call windows.showMain() -> miniVisible=false")
+    }
+
+    function test_native_close_routes_through_window_controller() {
+        miniPlayer.visible = true
+        var before = windowController.closeCalls
+        miniPlayer.close()
+        tryCompare(windowController, "closeCalls", before + 1)
+        verify(miniPlayer.visible, "close event should be rejected until controller decides")
     }
 }

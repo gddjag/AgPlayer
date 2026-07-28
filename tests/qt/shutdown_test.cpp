@@ -20,6 +20,7 @@
 #include <QThread>
 
 #include <memory>
+#include <utility>
 
 class ShutdownTest final : public QObject {
     Q_OBJECT
@@ -68,23 +69,23 @@ public:
                 store_.flush();
             });
 
-        windows_.setShutdownActions({
-            [this] { importer_.cancel(); },
-            [this] {
+        WindowController::ShutdownActions actions;
+        actions.cancelWaveform = [this] { importer_.cancel(); };
+        actions.stopPlayback = [this] {
                 if (core_ != nullptr) {
                     ag_player_stop(core_);
                 }
-            },
-            [this] { library_.flush(); },
-            [this] {
-                playback_->setPlayer(nullptr);
-                if (core_ != nullptr) {
-                    ag_player_destroy(core_);
-                    core_ = nullptr;
-                }
-            },
-            [] { QCoreApplication::quit(); }
-        });
+            };
+        actions.flushLibrary = [this] { library_.flush(); };
+        actions.releaseCore = [this] {
+            playback_->setPlayer(nullptr);
+            if (core_ != nullptr) {
+                ag_player_destroy(core_);
+                core_ = nullptr;
+            }
+        };
+        actions.quitApplication = [] { QCoreApplication::quit(); };
+        windows_.setShutdownActions(std::move(actions));
     }
 
     ~Harness()

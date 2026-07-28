@@ -71,10 +71,10 @@ ListView {
 
             HeaderText { text: "#"; Layout.preferredWidth: 40 }
             HeaderText { text: qsTr("歌曲"); Layout.fillWidth: true; Layout.minimumWidth: 160 }
-            HeaderText { text: qsTr("收藏"); Layout.preferredWidth: 48 }
-            HeaderText { text: qsTr("艺术家"); Layout.preferredWidth: 120 }
-            HeaderText { text: qsTr("专辑"); Layout.preferredWidth: 140 }
-            HeaderText { text: qsTr("评分"); Layout.preferredWidth: 80 }
+            HeaderText { text: qsTr("收藏"); Layout.preferredWidth: 72 }
+            HeaderText { text: qsTr("艺术家"); Layout.preferredWidth: 100 }
+            HeaderText { text: qsTr("专辑"); Layout.preferredWidth: 110 }
+            HeaderText { text: qsTr("评分"); Layout.preferredWidth: 88 }
             HeaderText { text: qsTr("BPM"); Layout.preferredWidth: 56 }
             HeaderText {
                 text: qsTr("时长")
@@ -160,7 +160,7 @@ ListView {
                 Accessible.name: delegateRoot.favorite
                                  ? qsTr("取消收藏") : qsTr("添加收藏")
                 focusPolicy: Qt.TabFocus
-                Layout.preferredWidth: 48
+                Layout.preferredWidth: 72
                 onClicked: if (root.trackModel && root.trackModel.setFavorite)
                                root.trackModel.setFavorite(
                                    delegateRoot.index, !delegateRoot.favorite)
@@ -171,18 +171,18 @@ ListView {
                 text: root.highlighted(delegateRoot.artist)
                 textFormat: Text.RichText
                 trackAvailable: delegateRoot.available
-                Layout.preferredWidth: 120
+                Layout.preferredWidth: 100
             }
             BodyText {
                 text: root.highlighted(delegateRoot.album)
                 textFormat: Text.RichText
                 trackAvailable: delegateRoot.available
-                Layout.preferredWidth: 140
+                Layout.preferredWidth: 110
             }
 
             RowLayout {
                 spacing: 1
-                Layout.preferredWidth: 80
+                Layout.preferredWidth: 88
 
                 Repeater {
                     model: 5

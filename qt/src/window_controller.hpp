@@ -2,6 +2,8 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QSettings>
+#include <QTimer>
 
 #include <functional>
 
@@ -13,6 +15,13 @@ class WindowController final : public QObject {
     Q_PROPERTY(bool miniVisible READ miniVisible NOTIFY miniVisibleChanged)
     Q_PROPERTY(bool audioToolsVisible READ audioToolsVisible NOTIFY audioToolsVisibleChanged)
     Q_PROPERTY(bool alwaysOnTop READ alwaysOnTop WRITE setAlwaysOnTop NOTIFY alwaysOnTopChanged)
+    Q_PROPERTY(bool magneticSnapEnabled READ magneticSnapEnabled WRITE setMagneticSnapEnabled
+                   NOTIFY magneticSnapEnabledChanged)
+    Q_PROPERTY(int preferredDockEdge READ preferredDockEdge WRITE setPreferredDockEdge
+                   NOTIFY preferredDockEdgeChanged)
+    Q_PROPERTY(QString listDockEdge READ listDockEdge NOTIFY listDockEdgeChanged)
+    Q_PROPERTY(int closeBehavior READ closeBehavior WRITE setCloseBehavior
+                   NOTIFY closeBehaviorChanged)
     Q_PROPERTY(bool listWindowVisible READ listWindowVisible NOTIFY listWindowVisibleChanged)
     Q_PROPERTY(bool listWindowDetached READ listWindowDetached WRITE setListWindowDetached NOTIFY
                    listWindowDetachedChanged)
@@ -29,6 +38,7 @@ public:
         std::function<void()> stopPlayback;
         std::function<void()> flushLibrary;
         std::function<void()> releaseCore;
+        std::function<void()> minimizeToTray;
         std::function<void()> quitApplication;
     };
 
@@ -40,6 +50,10 @@ public:
     bool miniVisible() const noexcept;
     bool audioToolsVisible() const noexcept;
     bool alwaysOnTop() const noexcept;
+    bool magneticSnapEnabled() const noexcept;
+    int preferredDockEdge() const noexcept;
+    QString listDockEdge() const;
+    int closeBehavior() const noexcept;
     bool listWindowVisible() const noexcept;
     bool listWindowDetached() const noexcept;
     int listWindowX() const noexcept;
@@ -53,6 +67,10 @@ public:
     void setMainReady(bool ready) noexcept;
     void setMiniReady(bool ready) noexcept;
     void setShutdownActions(ShutdownActions actions);
+    void setMagneticSnapEnabled(bool enabled);
+    void setPreferredDockEdge(int edge);
+    void setCloseBehavior(int behavior);
+    void setListWindowPanelAllowed(bool allowed);
     void setListWindowDetached(bool detached);
     void setListWindowX(int x) noexcept;
     void setListWindowY(int y) noexcept;
@@ -64,6 +82,7 @@ public:
     Q_INVOKABLE void showAudioTools();
     Q_INVOKABLE void hideAudioTools();
     Q_INVOKABLE void requestClose();
+    Q_INVOKABLE void requestExit();
     Q_INVOKABLE void setAlwaysOnTop(bool alwaysOnTop);
     Q_INVOKABLE void showListWindow();
     Q_INVOKABLE void hideListWindow();
@@ -78,6 +97,10 @@ signals:
     void miniVisibleChanged();
     void audioToolsVisibleChanged();
     void alwaysOnTopChanged();
+    void magneticSnapEnabledChanged();
+    void preferredDockEdgeChanged();
+    void listDockEdgeChanged();
+    void closeBehaviorChanged();
     void listWindowVisibleChanged();
     void listWindowDetachedChanged();
     void listWindowXChanged();
@@ -85,6 +108,9 @@ signals:
     void listWindowWidthChanged();
     void listWindowHeightChanged();
     void searchRequested();
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     enum class PendingView { None, Main, Mini };
@@ -94,6 +120,17 @@ private:
     void applyAudioToolsVisible(bool visible);
     void applyListWindowVisible(bool visible);
     void applyListWindowDetached(bool detached);
+    void shutdown();
+    bool shouldShowListWindow() const;
+    void repositionDockedListWindow();
+    void setListDockEdge(const QString& edge);
+    QString snapEdgeForPosition(int x, int y) const;
+    void loadPersistedWindowState();
+    void restoreGeometry(QWindow* window, const QString& key);
+    void persistGeometry(QWindow* window, const QString& key);
+    void scheduleWindowStateSync();
+    void flushWindowState();
+    static QString edgeForPreference(int edge);
     void updateListWindowPosition();
     QPoint computeSnappedPosition(int x, int y) const;
     QPoint computeSnapForEdge(const QString& direction) const;
@@ -103,19 +140,30 @@ private:
     QPointer<QWindow> listWindow_;
     QPointer<QWindow> audioToolsWindow_;
     ShutdownActions shutdownActions_;
+    QSettings settings_;
+    QTimer windowStateSyncTimer_;
     bool mainVisible_ = true;
     bool miniVisible_ = false;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
+    bool magneticSnapEnabled_ = true;
+    int preferredDockEdge_ = 1;
+    QString listDockEdge_ = QStringLiteral("bottom");
+    int closeBehavior_ = 0;
     bool mainReady_ = true;
     bool miniReady_ = true;
     bool shutdownRequested_ = false;
     bool listWindowVisible_ = false;
-    bool listWindowDetached_ = true;
+    bool listWindowRequestedVisible_ = false;
+    bool listWindowPanelAllowed_ = true;
+    bool listWindowDetached_ = false;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
     int listWindowWidth_ = 1000;
     int listWindowHeight_ = 420;
     bool listWindowGeometryInitialized_ = false;
+    bool updatingWindowGeometry_ = false;
+    bool preferredDockEdgeInitialized_ = false;
+    bool hasPersistedDockEdge_ = false;
     PendingView pendingView_ = PendingView::None;
 };

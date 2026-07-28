@@ -22,6 +22,10 @@ Window {
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: "AgPlayer Mini"
+    onClosing: function(close) {
+        close.accepted = false
+        windows.requestClose()
+    }
 
     // Injected dependencies — defaults keep production wiring implicit.
     property var playback: PlaybackController

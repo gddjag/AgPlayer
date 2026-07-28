@@ -11,13 +11,17 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1040
+    width: 1220
     height: 560
-    minimumWidth: 720
+    minimumWidth: 1100
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: Theme.background
     title: qsTr("AgPlayer Track List")
+    onClosing: function(close) {
+        close.accepted = false
+        windows.hideListWindow()
+    }
 
     // Injected dependencies — defaults keep production wiring implicit.
     property var windows: WindowController
@@ -29,13 +33,6 @@ Window {
     property point dragStartMouse
     property point dragStartWindow
     property bool dragActive: false
-
-    // Keep the controller informed of the current geometry so it can
-    // persist / expose position and size to other UI surfaces.
-    onXChanged: if (windows) windows.listWindowX = x
-    onYChanged: if (windows) windows.listWindowY = y
-    onWidthChanged: if (windows) windows.listWindowWidth = width
-    onHeightChanged: if (windows) windows.listWindowHeight = height
 
     Connections {
         target: windows
@@ -194,11 +191,12 @@ Window {
                 // Drag the frameless window from the title bar. The controller
                 // applies magnetic snapping while the drag is in progress.
                 MouseArea {
+                    id: dragArea
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     z: -1
                     onPressed: function(mouse) {
-                        dragStartMouse = Qt.point(mouse.x, mouse.y)
+                        dragStartMouse = dragArea.mapToGlobal(mouse.x, mouse.y)
                         dragStartWindow = Qt.point(listWindow.x, listWindow.y)
                         dragActive = true
                     }
@@ -206,22 +204,13 @@ Window {
                         if (!dragActive)
                             return
 
-                        var currentMouse = Qt.point(mouse.x, mouse.y)
-                        var screenMouse = Qt.point(
-                            dragStartWindow.x + currentMouse.x,
-                            dragStartWindow.y + currentMouse.y)
-                        var newX = dragStartWindow.x + (currentMouse.x - dragStartMouse.x)
-                        var newY = dragStartWindow.y + (currentMouse.y - dragStartMouse.y)
+                        var currentMouse = dragArea.mapToGlobal(mouse.x, mouse.y)
+                        var newX = dragStartWindow.x
+                                   + (currentMouse.x - dragStartMouse.x)
+                        var newY = dragStartWindow.y
+                                   + (currentMouse.y - dragStartMouse.y)
 
                         windows.moveListWindow(newX, newY)
-
-                        // Re-anchor the drag origin to the actual (possibly
-                        // snapped) window position so the next move event stays
-                        // relative to the mouse cursor.
-                        dragStartWindow = Qt.point(listWindow.x, listWindow.y)
-                        dragStartMouse = Qt.point(
-                            screenMouse.x - listWindow.x,
-                            screenMouse.y - listWindow.y)
                     }
                     onReleased: dragActive = false
                 }

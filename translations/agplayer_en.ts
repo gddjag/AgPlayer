@@ -33,7 +33,7 @@
         <translation>AgPlayer audio tool</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+58"/>
         <source>音频工具</source>
         <translation>audio tools</translation>
     </message>
@@ -852,7 +852,7 @@
         <translation>AgPlayer Track List</translation>
     </message>
     <message>
-        <location line="+53"/>
+        <location line="+50"/>
         <source>新建歌单</source>
         <translation>New playlist</translation>
     </message>
@@ -887,7 +887,7 @@
         <translation>Hide playlist window</translation>
     </message>
     <message>
-        <location line="+148"/>
+        <location line="+140"/>
         <source>未找到符合条件的歌曲</source>
         <translation>No matching tracks found</translation>
     </message>
@@ -900,7 +900,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../app/qml/AgPlayer/Main.qml" line="+138"/>
+        <location filename="../app/qml/AgPlayer/Main.qml" line="+142"/>
         <source>No lyrics available</source>
         <translation>No lyrics available</translation>
     </message>
@@ -921,7 +921,7 @@
 <context>
     <name>MiniPlayerControls</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+123"/>
+        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+127"/>
         <source>Remove from favorites</source>
         <translation>Remove from favorites</translation>
     </message>
@@ -1005,7 +1005,7 @@
 <context>
     <name>MiniPlayerWindow</name>
     <message>
-        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+96"/>
+        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+100"/>
         <source>Disable always on top</source>
         <translation>Disable always on top</translation>
     </message>
@@ -1419,7 +1419,7 @@
 <context>
     <name>SettingsController</name>
     <message>
-        <location filename="../qt/src/settings_controller.cpp" line="+768"/>
+        <location filename="../qt/src/settings_controller.cpp" line="+785"/>
         <source>当前已是最新版本</source>
         <translation>Currently the latest version</translation>
     </message>
@@ -1428,80 +1428,80 @@
     <name>SettingsPage</name>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="+53"/>
-        <location line="+743"/>
+        <location line="+745"/>
         <location line="+1"/>
         <source>常规</source>
         <translation>General</translation>
     </message>
     <message>
-        <location line="-743"/>
-        <location line="+918"/>
+        <location line="-745"/>
+        <location line="+920"/>
         <source>播放与音频</source>
         <translation>Playback &amp; Audio</translation>
     </message>
     <message>
-        <location line="-918"/>
-        <location line="+919"/>
+        <location line="-920"/>
+        <location line="+921"/>
         <source>播放</source>
         <translation>Playback</translation>
     </message>
     <message>
-        <location line="-918"/>
-        <location line="+1027"/>
+        <location line="-920"/>
+        <location line="+1029"/>
         <source>外观与波形</source>
         <translation>Appearance &amp; Waveform</translation>
     </message>
     <message>
-        <location line="-1027"/>
-        <location line="+1028"/>
+        <location line="-1029"/>
+        <location line="+1030"/>
         <source>外观</source>
         <translation>Appearance</translation>
     </message>
     <message>
-        <location line="-1027"/>
-        <location line="+1171"/>
+        <location line="-1029"/>
+        <location line="+1173"/>
         <source>音频工具预设</source>
         <translation>Audio Tool Presets</translation>
     </message>
     <message>
-        <location line="-1171"/>
-        <location line="+1172"/>
+        <location line="-1173"/>
+        <location line="+1174"/>
         <source>音频工具</source>
         <translation>Audio Tools</translation>
     </message>
     <message>
-        <location line="-1171"/>
-        <location line="+1270"/>
+        <location line="-1173"/>
+        <location line="+1272"/>
         <source>快捷键设置</source>
         <translation>Keyboard Shortcuts</translation>
     </message>
     <message>
-        <location line="-1270"/>
-        <location line="+1271"/>
+        <location line="-1272"/>
+        <location line="+1273"/>
         <source>快捷键</source>
         <translation>Hotkeys</translation>
     </message>
     <message>
-        <location line="-1270"/>
-        <location line="+1345"/>
+        <location line="-1272"/>
+        <location line="+1347"/>
         <source>缓存与数据</source>
         <translation>Cache &amp; Data</translation>
     </message>
     <message>
-        <location line="-1345"/>
-        <location line="+1346"/>
+        <location line="-1347"/>
+        <location line="+1348"/>
         <source>缓存</source>
         <translation>Cache</translation>
     </message>
     <message>
-        <location line="-1345"/>
-        <location line="+1506"/>
+        <location line="-1347"/>
+        <location line="+1508"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>About</translation>
     </message>
     <message>
-        <location line="-1469"/>
+        <location line="-1471"/>
         <source>确认清空缓存</source>
         <translation>Confirm to clear cache</translation>
     </message>
@@ -1531,7 +1531,7 @@
         <translation>Close settings</translation>
     </message>
     <message>
-        <location line="+142"/>
+        <location line="+144"/>
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
@@ -2312,6 +2312,24 @@
         <location line="+241"/>
         <source>定位预览</source>
         <translation>Seek preview</translation>
+    </message>
+</context>
+<context>
+    <name>SystemTray</name>
+    <message>
+        <location filename="../app/main.cpp" line="+266"/>
+        <source>Show AgPlayer</source>
+        <translation>Show AgPlayer</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Exit</source>
+        <translation>Exit</translation>
+    </message>
+    <message>
+        <location line="+62"/>
+        <source>AgPlayer is still running</source>
+        <translation>AgPlayer is still running</translation>
     </message>
 </context>
 <context>

@@ -1,13 +1,17 @@
+#include <QAction>
+#include <QApplication>
 #include <QDir>
 #include <QFileInfo>
-#include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QImage>
+#include <QMenu>
 #include <QQuickWindow>
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QSystemTrayIcon>
 #include <QTimer>
 #include <QWindow>
 #include <QtPlugin>
@@ -16,6 +20,7 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 #ifdef Q_OS_WIN
 #define WIN32_LEAN_AND_MEAN
@@ -52,7 +57,7 @@ int main(int argc, char* argv[])
     // keeps those visuals supported and consistent on Windows/macOS while
     // Theme.qml still follows the host system palette when requested.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
 
@@ -196,6 +201,25 @@ int main(int argc, char* argv[])
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
         });
         WindowController windows;
+        windows.setMagneticSnapEnabled(settings.windowMagneticSnap());
+        windows.setPreferredDockEdge(settings.listWindowPosition());
+        windows.setCloseBehavior(settings.closeBehavior());
+        windows.setListWindowPanelAllowed(
+            library.count() > 0 && settings.showListWindowPanel());
+
+        QObject::connect(&settings, &SettingsController::windowMagneticSnapChanged,
+                         &windows, [&settings, &windows]() {
+            windows.setMagneticSnapEnabled(settings.windowMagneticSnap());
+        });
+        QObject::connect(&settings, &SettingsController::listWindowPositionChanged,
+                         &windows, [&settings, &windows]() {
+            windows.setPreferredDockEdge(settings.listWindowPosition());
+        });
+        QObject::connect(&settings, &SettingsController::closeBehaviorChanged,
+                         &windows, [&settings, &windows]() {
+            windows.setCloseBehavior(settings.closeBehavior());
+        });
+
         AudioToolsController audioTools;
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(1);
@@ -233,26 +257,82 @@ int main(int argc, char* argv[])
             }
         });
 
-        windows.setShutdownActions({
-            [&importer]() { importer.cancel(); },
-            [&core]() {
+        QSystemTrayIcon tray(QIcon(
+            QStringLiteral(":/qt/qml/AgPlayer/assets/brand/logo-mark.png")), &app);
+        QMenu trayMenu;
+        QAction trayShowAction;
+        QAction trayExitAction;
+        const auto updateTrayText = [&]() {
+            trayShowAction.setText(QCoreApplication::translate(
+                "SystemTray", "Show AgPlayer"));
+            trayExitAction.setText(QCoreApplication::translate(
+                "SystemTray", "Exit"));
+            tray.setToolTip(QStringLiteral("AgPlayer"));
+        };
+        updateTrayText();
+        trayMenu.addAction(&trayShowAction);
+        trayMenu.addSeparator();
+        trayMenu.addAction(&trayExitAction);
+        tray.setContextMenu(&trayMenu);
+
+        QObject::connect(&translations, &TranslationManager::languageChanged,
+                         &app, updateTrayText);
+        QObject::connect(&trayShowAction, &QAction::triggered,
+                         &windows, [&windows, &tray]() {
+            windows.showMain();
+            tray.hide();
+        });
+        QObject::connect(&trayExitAction, &QAction::triggered,
+                         &windows, &WindowController::requestExit);
+        QObject::connect(&tray, &QSystemTrayIcon::activated, &windows,
+                         [&windows, &tray](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger
+                || reason == QSystemTrayIcon::DoubleClick) {
+                windows.showMain();
+                tray.hide();
+            }
+        });
+        QObject::connect(&windows, &WindowController::mainVisibleChanged,
+                         &app, [&windows, &tray]() {
+            if (windows.mainVisible()) {
+                tray.hide();
+            }
+        });
+        QObject::connect(&windows, &WindowController::miniVisibleChanged,
+                         &app, [&windows, &tray]() {
+            if (windows.miniVisible()) {
+                tray.hide();
+            }
+        });
+
+        WindowController::ShutdownActions shutdownActions;
+        shutdownActions.cancelWaveform = [&importer]() { importer.cancel(); };
+        shutdownActions.stopPlayback = [&core]() {
                 if (core != nullptr) {
                     ag_player_stop(core);
                 }
-            },
-            [&library, &playlists]() {
-                library.flush();
-                playlists.flush();
-            },
-            [&playback, &core]() {
-                playback.setPlayer(nullptr);
-                if (core != nullptr) {
-                    ag_player_destroy(core);
-                    core = nullptr;
-                }
-            },
-            []() { QCoreApplication::quit(); }
-        });
+            };
+        shutdownActions.flushLibrary = [&library, &playlists]() {
+            library.flush();
+            playlists.flush();
+        };
+        shutdownActions.releaseCore = [&playback, &core]() {
+            playback.setPlayer(nullptr);
+            if (core != nullptr) {
+                ag_player_destroy(core);
+                core = nullptr;
+            }
+        };
+        if (QSystemTrayIcon::isSystemTrayAvailable() && !qaTestMode) {
+            shutdownActions.minimizeToTray = [&tray]() {
+                tray.show();
+                tray.showMessage(QStringLiteral("AgPlayer"),
+                                 QCoreApplication::translate(
+                                     "SystemTray", "AgPlayer is still running"));
+            };
+        }
+        shutdownActions.quitApplication = []() { QCoreApplication::quit(); };
+        windows.setShutdownActions(std::move(shutdownActions));
 
         QQmlApplicationEngine engine;
         QObject::connect(&translations, &TranslationManager::languageChanged,
@@ -325,16 +405,15 @@ int main(int argc, char* argv[])
             windows.setAudioToolsWindow(qobject_cast<QWindow*>(audioToolsWindow));
 
             QObject::connect(&library, &LibraryModel::countChanged, &app,
-                             [&library, &windows]() {
-                if (library.count() > 0) {
-                    windows.showListWindow();
-                } else {
-                    windows.hideListWindow();
-                }
+                             [&library, &settings, &windows]() {
+                windows.setListWindowPanelAllowed(
+                    library.count() > 0 && settings.showListWindowPanel());
             });
-            if (library.count() > 0) {
-                windows.showListWindow();
-            }
+            QObject::connect(&settings, &SettingsController::showListWindowPanelChanged,
+                             &app, [&library, &settings, &windows]() {
+                windows.setListWindowPanelAllowed(
+                    library.count() > 0 && settings.showListWindowPanel());
+            });
             if (qaOpenSettings) {
                 QMetaObject::invokeMethod(mainWindow, "openSettingsPage");
             }
