@@ -406,7 +406,7 @@ Popup {
 
     component SettingRow: RowLayout {
         property alias label: labelText.text
-        property alias content: contentContainer.children
+        default property alias content: contentContainer.children
 
         Layout.fillWidth: true
         Layout.preferredHeight: 40

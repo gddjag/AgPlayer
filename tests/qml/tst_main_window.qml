@@ -16,6 +16,10 @@ TestCase {
         wait(50)
     }
 
+    function init() {
+        failOnWarning(/.?/)
+    }
+
     function cleanupTestCase() {
         mainWindow = null
     }
