@@ -22,6 +22,7 @@ class SpeedAdjuster final : public QObject {
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString inputFileName READ inputFileName NOTIFY inputFileChanged)
+    Q_PROPERTY(QUrl inputUrl READ inputUrl NOTIFY inputFileChanged)
     Q_PROPERTY(bool hasInput READ hasInput NOTIFY inputFileChanged)
     Q_PROPERTY(int inputDurationMs READ inputDurationMs NOTIFY inputFileChanged)
     Q_PROPERTY(QVariantList waveformPeaks READ waveformPeaks NOTIFY waveformPeaksChanged)
@@ -41,6 +42,7 @@ public:
     double progress() const noexcept;
     bool busy() const noexcept;
     QString inputFileName() const noexcept;
+    QUrl inputUrl() const;
     bool hasInput() const noexcept;
     int inputDurationMs() const noexcept;
     QVariantList waveformPeaks() const noexcept;

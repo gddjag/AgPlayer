@@ -2329,4 +2329,45 @@
             <translation>Thêm vào mục yêu thích</translation>
         </message>
     </context>
+    <context>
+        <name>AudioPreviewController</name>
+        <message>
+            <source>预览播放器不可用</source>
+            <translation>Trình phát xem trước không khả dụng</translation>
+        </message>
+        <message>
+            <source>预览文件不存在</source>
+            <translation>Tệp xem trước không tồn tại</translation>
+        </message>
+        <message>
+            <source>无法加载预览音频</source>
+            <translation>Không thể tải âm thanh xem trước</translation>
+        </message>
+        <message>
+            <source>无法开始预览播放</source>
+            <translation>Không thể bắt đầu phát xem trước</translation>
+        </message>
+    </context>
+    <context>
+        <name>PitchShiftPage</name>
+        <message>
+            <source>播放或暂停原始音频</source>
+            <translation>Phát hoặc tạm dừng âm thanh gốc</translation>
+        </message>
+        <message>
+            <source>为人声提供柔和的共振峰补偿</source>
+            <translation>Bù formant nhẹ nhàng cho giọng hát</translation>
+        </message>
+    </context>
+    <context>
+        <name>SpeedAdjustPage</name>
+        <message>
+            <source>裁去前导偏移，使第一拍从零点开始</source>
+            <translation>Cắt độ lệch đầu để nhịp đầu tiên bắt đầu tại mốc 0</translation>
+        </message>
+        <message>
+            <source>定位预览</source>
+            <translation>Tua bản xem trước</translation>
+        </message>
+    </context>
 </TS>

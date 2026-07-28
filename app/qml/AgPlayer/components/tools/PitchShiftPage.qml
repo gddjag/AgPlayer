@@ -175,7 +175,8 @@ Rectangle {
                     }
                 }
 
-                // Playback preview (not supported)
+                // Playback preview uses its own player and never interrupts
+                // the main playback queue.
                 Rectangle {
                     Layout.preferredWidth: 40
                     Layout.preferredHeight: 40
@@ -185,11 +186,11 @@ Rectangle {
                     border.color: shifter.hasInput ? Theme.border : "transparent"
                     border.width: 1
                     visible: shifter.hasInput
-                    opacity: 0.5
+                    opacity: 1.0
 
                     Text {
                         anchors.centerIn: parent
-                        text: "\u25B6"
+                        text: AudioPreviewController.playing ? "\u23F8" : "\u25B6"
                         color: Theme.primaryText
                         font.pixelSize: 18
                     }
@@ -197,10 +198,10 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: statusText.text = qsTr("Playback preview not supported")
+                        onClicked: AudioPreviewController.toggle(shifter.inputUrl)
                     }
 
-                    ToolTip.text: qsTr("Playback preview not supported")
+                    ToolTip.text: qsTr("播放或暂停原始音频")
                     ToolTip.visible: previewHover.hovered
                     ToolTip.delay: 500
 
@@ -795,7 +796,7 @@ Rectangle {
                                 font.pixelSize: 12
                                 font.family: Theme.fontFallback
 
-                                ToolTip.text: qsTr("Experimental feature; currently not supported")
+                                ToolTip.text: qsTr("为人声提供柔和的共振峰补偿")
                                 ToolTip.visible: infoHover.hovered
                                 ToolTip.delay: 500
 
@@ -1212,6 +1213,15 @@ Rectangle {
             statusText.color = Theme.cyan
             statusTimer.restart()
         }
+        function onErrorOccurred(message) {
+            statusText.text = message
+            statusText.color = Theme.favoriteRed
+            statusTimer.restart()
+        }
+    }
+
+    Connections {
+        target: AudioPreviewController
         function onErrorOccurred(message) {
             statusText.text = message
             statusText.color = Theme.favoriteRed

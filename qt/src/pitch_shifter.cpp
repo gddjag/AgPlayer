@@ -57,6 +57,11 @@ QString PitchShifter::inputFileName() const noexcept
     return inputFileName_;
 }
 
+QUrl PitchShifter::inputUrl() const
+{
+    return QUrl::fromLocalFile(inputPath_);
+}
+
 bool PitchShifter::hasInput() const noexcept
 {
     return !inputPath_.isEmpty();

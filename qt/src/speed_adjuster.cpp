@@ -66,6 +66,11 @@ QString SpeedAdjuster::inputFileName() const noexcept
     return inputFileName_;
 }
 
+QUrl SpeedAdjuster::inputUrl() const
+{
+    return QUrl::fromLocalFile(inputPath_);
+}
+
 bool SpeedAdjuster::hasInput() const noexcept
 {
     return !inputPath_.isEmpty();

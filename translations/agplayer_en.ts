@@ -2329,4 +2329,45 @@
             <translation>Add to favorites</translation>
         </message>
     </context>
+    <context>
+        <name>AudioPreviewController</name>
+        <message>
+            <source>预览播放器不可用</source>
+            <translation>Preview player is unavailable</translation>
+        </message>
+        <message>
+            <source>预览文件不存在</source>
+            <translation>Preview file does not exist</translation>
+        </message>
+        <message>
+            <source>无法加载预览音频</source>
+            <translation>Unable to load preview audio</translation>
+        </message>
+        <message>
+            <source>无法开始预览播放</source>
+            <translation>Unable to start preview playback</translation>
+        </message>
+    </context>
+    <context>
+        <name>PitchShiftPage</name>
+        <message>
+            <source>播放或暂停原始音频</source>
+            <translation>Play or pause original audio</translation>
+        </message>
+        <message>
+            <source>为人声提供柔和的共振峰补偿</source>
+            <translation>Gentle formant compensation for vocals</translation>
+        </message>
+    </context>
+    <context>
+        <name>SpeedAdjustPage</name>
+        <message>
+            <source>裁去前导偏移，使第一拍从零点开始</source>
+            <translation>Trim the leading offset so the first beat starts at zero</translation>
+        </message>
+        <message>
+            <source>定位预览</source>
+            <translation>Seek preview</translation>
+        </message>
+    </context>
 </TS>

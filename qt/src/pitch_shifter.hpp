@@ -17,6 +17,7 @@ class PitchShifter final : public QObject {
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString inputFileName READ inputFileName NOTIFY inputFileChanged)
+    Q_PROPERTY(QUrl inputUrl READ inputUrl NOTIFY inputFileChanged)
     Q_PROPERTY(bool hasInput READ hasInput NOTIFY inputFileChanged)
     Q_PROPERTY(QString inputFormat READ inputFormat NOTIFY inputFileChanged)
     Q_PROPERTY(int inputSampleRate READ inputSampleRate NOTIFY inputFileChanged)
@@ -29,6 +30,7 @@ public:
     double progress() const noexcept;
     bool busy() const noexcept;
     QString inputFileName() const noexcept;
+    QUrl inputUrl() const;
     bool hasInput() const noexcept;
     QString inputFormat() const noexcept;
     int inputSampleRate() const noexcept;

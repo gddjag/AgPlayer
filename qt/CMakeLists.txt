@@ -1,4 +1,6 @@
 add_library(agplayer_qt STATIC
+    src/audio_preview_controller.cpp
+    src/audio_preview_controller.hpp
     src/file_association_controller.cpp
     src/file_association_controller.hpp
     src/editor_timeline_math.cpp

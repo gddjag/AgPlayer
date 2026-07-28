@@ -316,6 +316,7 @@ foreach(qt_test IN ITEMS
     runtime_log_test
     settings_controller_test
     translation_manager_test
+    audio_preview_controller_test
     editor_timeline_math_test
     light_editor_controller_test
     file_association_controller_test

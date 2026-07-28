@@ -736,7 +736,7 @@ Rectangle {
                                 font.pixelSize: 12
                                 font.family: Theme.fontFallback
 
-                                ToolTip.text: qsTr("Experimental feature; currently not supported")
+                                ToolTip.text: qsTr("裁去前导偏移，使第一拍从零点开始")
                                 ToolTip.visible: beatInfoHover.hovered
                                 ToolTip.delay: 500
 
@@ -934,7 +934,7 @@ Rectangle {
                         Layout.preferredWidth: 40
                         Layout.preferredHeight: 40
                         enabled: adjuster.hasInput && !adjuster.busy
-                        onClicked: statusText.text = qsTr("Playback preview not supported")
+                        onClicked: AudioPreviewController.toggle(adjuster.inputUrl)
 
                         background: Rectangle {
                             color: parent.pressed ? Theme.violet
@@ -946,7 +946,7 @@ Rectangle {
                         }
 
                         contentItem: Text {
-                            text: "\u25B6"
+                            text: AudioPreviewController.playing ? "\u23F8" : "\u25B6"
                             color: Theme.primaryText
                             font.pixelSize: 18
                             font.family: Theme.fontFallback
@@ -956,7 +956,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: "0:00.000"
+                        text: page.formatTimeMs(AudioPreviewController.positionMs)
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 12
@@ -968,10 +968,12 @@ Rectangle {
                         Layout.fillWidth: true
                         from: 0
                         to: Math.max(1, adjuster.inputDurationMs)
-                        value: 0
-                        enabled: false
+                        value: AudioPreviewController.positionMs
+                        enabled: adjuster.hasInput
+                                 && AudioPreviewController.hasSource
+                        onMoved: AudioPreviewController.seek(value)
 
-                        ToolTip.text: qsTr("Preview playback not supported")
+                        ToolTip.text: qsTr("定位预览")
                         ToolTip.visible: previewHover.hovered
                         ToolTip.delay: 500
 
@@ -1025,8 +1027,9 @@ Rectangle {
                         Layout.preferredWidth: 100
                         from: 0
                         to: 100
-                        value: 80
-                        enabled: false
+                        value: AudioPreviewController.volume * 100
+                        enabled: adjuster.hasInput
+                        onMoved: AudioPreviewController.volume = value / 100
 
                         background: Rectangle {
                             x: parent.leftPadding
@@ -1378,6 +1381,15 @@ Rectangle {
             statusText.color = "#FFC107"
             statusTimer.restart()
         }
+        function onErrorOccurred(message) {
+            statusText.text = message
+            statusText.color = Theme.favoriteRed
+            statusTimer.restart()
+        }
+    }
+
+    Connections {
+        target: AudioPreviewController
         function onErrorOccurred(message) {
             statusText.text = message
             statusText.color = Theme.favoriteRed

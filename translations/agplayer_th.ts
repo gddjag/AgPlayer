@@ -2329,4 +2329,45 @@
             <translation>เพิ่มในรายการโปรด</translation>
         </message>
     </context>
+    <context>
+        <name>AudioPreviewController</name>
+        <message>
+            <source>预览播放器不可用</source>
+            <translation>เครื่องเล่นตัวอย่างไม่พร้อมใช้งาน</translation>
+        </message>
+        <message>
+            <source>预览文件不存在</source>
+            <translation>ไม่พบไฟล์ตัวอย่าง</translation>
+        </message>
+        <message>
+            <source>无法加载预览音频</source>
+            <translation>ไม่สามารถโหลดเสียงตัวอย่างได้</translation>
+        </message>
+        <message>
+            <source>无法开始预览播放</source>
+            <translation>ไม่สามารถเริ่มเล่นตัวอย่างได้</translation>
+        </message>
+    </context>
+    <context>
+        <name>PitchShiftPage</name>
+        <message>
+            <source>播放或暂停原始音频</source>
+            <translation>เล่นหรือหยุดเสียงต้นฉบับชั่วคราว</translation>
+        </message>
+        <message>
+            <source>为人声提供柔和的共振峰补偿</source>
+            <translation>ชดเชยฟอร์แมนต์เสียงร้องอย่างนุ่มนวล</translation>
+        </message>
+    </context>
+    <context>
+        <name>SpeedAdjustPage</name>
+        <message>
+            <source>裁去前导偏移，使第一拍从零点开始</source>
+            <translation>ตัดช่วงหน่วงด้านหน้าเพื่อให้จังหวะแรกเริ่มที่ศูนย์</translation>
+        </message>
+        <message>
+            <source>定位预览</source>
+            <translation>เลื่อนตำแหน่งตัวอย่าง</translation>
+        </message>
+    </context>
 </TS>

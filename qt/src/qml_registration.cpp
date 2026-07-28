@@ -1,5 +1,6 @@
 #include "qml_registration.hpp"
 
+#include "audio_preview_controller.hpp"
 #include "audio_tools_controller.hpp"
 #include "format_converter.hpp"
 #include "import_controller.hpp"
@@ -30,6 +31,11 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider)
 {
+    qmlRegisterSingletonType<AudioPreviewController>(
+        "AgPlayer", 1, 0, "AudioPreviewController",
+        [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new AudioPreviewController;
+        });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
