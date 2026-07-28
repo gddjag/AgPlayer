@@ -15,6 +15,7 @@ private slots:
     void playsWithoutTouchingTheMainPlayer();
     void rejectsMissingFiles();
     void clearsOldStateWhenNewSourceCannotLoad();
+    void stopsCurrentPreviewWhenNewSourceIsMissing();
 };
 
 void AudioPreviewControllerTest::playsWithoutTouchingTheMainPlayer()
@@ -87,6 +88,29 @@ void AudioPreviewControllerTest::clearsOldStateWhenNewSourceCannotLoad()
     QVERIFY(!preview.playing());
     QCOMPARE(preview.positionMs(), 0);
     QCOMPARE(preview.durationMs(), 0);
+}
+
+void AudioPreviewControllerTest::stopsCurrentPreviewWhenNewSourceIsMissing()
+{
+    const QString fixture =
+        QCoreApplication::applicationDirPath()
+        + QStringLiteral("/fixtures/sine-440hz.wav");
+    QVERIFY2(QFileInfo::exists(fixture), qPrintable(fixture));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    preview.play(QUrl::fromLocalFile(fixture));
+    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
+    QVERIFY(preview.pollTimer_.isActive());
+
+    preview.play(QUrl::fromLocalFile(
+        QCoreApplication::applicationDirPath()
+        + QStringLiteral("/fixtures/missing.wav")));
+
+    ag_playback_snapshot snapshot{};
+    QCOMPARE(ag_player_snapshot(preview.player_, &snapshot), AG_OK);
+    QCOMPARE(snapshot.state, AG_STOPPED);
+    QVERIFY(!preview.pollTimer_.isActive());
+    QVERIFY(!preview.hasSource());
 }
 
 QTEST_MAIN(AudioPreviewControllerTest)

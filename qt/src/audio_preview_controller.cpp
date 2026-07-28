@@ -68,7 +68,7 @@ void AudioPreviewController::toggle(const QUrl& source)
             pollTimer_.start();
             pollSnapshot();
         } else {
-            clearSourceState();
+            stopPlaybackAndClear();
             setError(tr("无法开始预览播放"));
         }
         return;
@@ -80,26 +80,26 @@ void AudioPreviewController::play(const QUrl& source)
 {
     const QString path = source.toLocalFile();
     if (player_ == nullptr) {
-        clearSourceState();
+        stopPlaybackAndClear();
         setError(tr("预览播放器不可用"));
         return;
     }
     if (path.isEmpty() || !QFileInfo::exists(path)) {
-        clearSourceState();
+        stopPlaybackAndClear();
         setError(tr("预览文件不存在"));
         return;
     }
 
-    pollTimer_.stop();
-    ag_player_stop(player_);
-    clearSourceState();
+    stopPlaybackAndClear();
     const QByteArray utf8 = path.toUtf8();
     const ag_result loadResult = ag_player_load(player_, utf8.constData());
     if (loadResult != AG_OK) {
+        stopPlaybackAndClear();
         setError(tr("无法加载预览音频"));
         return;
     }
     if (ag_player_play(player_) != AG_OK) {
+        stopPlaybackAndClear();
         setError(tr("无法开始预览播放"));
         return;
     }
@@ -124,11 +124,7 @@ void AudioPreviewController::pause()
 
 void AudioPreviewController::stop()
 {
-    pollTimer_.stop();
-    if (player_ != nullptr) {
-        ag_player_stop(player_);
-    }
-    clearSourceState();
+    stopPlaybackAndClear();
 }
 
 void AudioPreviewController::seek(const qint64 positionMs)
@@ -167,6 +163,15 @@ bool AudioPreviewController::isCurrentSource(const QUrl& source) const
     }
     return QFileInfo(sourcePath_).canonicalFilePath()
         == QFileInfo(candidate).canonicalFilePath();
+}
+
+void AudioPreviewController::stopPlaybackAndClear()
+{
+    pollTimer_.stop();
+    if (player_ != nullptr) {
+        ag_player_stop(player_);
+    }
+    clearSourceState();
 }
 
 void AudioPreviewController::clearSourceState()

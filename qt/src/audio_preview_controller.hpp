@@ -44,6 +44,8 @@ signals:
     void errorOccurred(const QString& message);
 
 private:
+    friend class AudioPreviewControllerTest;
+
     ag_player* player_ = nullptr;
     QTimer pollTimer_;
     QString sourcePath_;
@@ -52,6 +54,7 @@ private:
     qint64 durationMs_ = 0;
     double volume_ = 0.8;
 
+    void stopPlaybackAndClear();
     void clearSourceState();
     void pollSnapshot();
     void setError(const QString& message);
