@@ -77,14 +77,17 @@ Rectangle {
             anchors.fill: parent
             visible: !root.expanded
 
-            Image {
+            ToolButton {
                 anchors.centerIn: parent
-                source: Theme.icon("equalizer-fill")
-                sourceSize.width: 20
-                sourceSize.height: 20
                 width: 20
                 height: 20
-                fillMode: Image.PreserveAspectFit
+                enabled: false
+                padding: 0
+                icon.source: Theme.icon("equalizer-fill")
+                icon.color: Theme.secondaryText
+                icon.width: 20
+                icon.height: 20
+                background: null
             }
         }
 

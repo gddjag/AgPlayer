@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -192,12 +193,11 @@ Window {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 260
                                 selectedCategory: filterModel ? filterModel.category : "all"
-                                allCount: LibraryModel.rowCount
-                                favoriteCount: LibraryModel.favoriteCount
-                                historyCount: LibraryModel.rowCount
-                                workoutCount: LibraryModel.rowCount
-                                carCount: LibraryModel.rowCount
-                                networkCount: LibraryModel.rowCount
+                                allCount: LibraryModel.count
+                                historyCount: LibraryModel.count
+                                workoutCount: LibraryModel.count
+                                carCount: LibraryModel.count
+                                networkCount: LibraryModel.count
                                 onCategorySelected: function(category) {
                                     if (filterModel)
                                         filterModel.category = category
@@ -241,7 +241,8 @@ Window {
                             TrackList {
                                 id: trackList
                                 objectName: "detachedTrackList"
-                                anchors.fill: parent
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
                                 trackModel: filterModel
                             }
 

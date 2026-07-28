@@ -67,6 +67,9 @@ int main(int argc, char* argv[])
     QString qaScreenshotMain;
     QString qaScreenshotMini;
     QString qaScreenshotTools;
+    QString qaScreenshotList;
+    QString qaLibraryPath;
+    QString qaImportFolder;
     QString initialFilePath;
     {
         const QStringList cliArgs = QGuiApplication::arguments();
@@ -87,6 +90,15 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-screenshot-tools")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotTools = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-screenshot-list")
+                       && i + 1 < cliArgs.size()) {
+                qaScreenshotList = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-library")
+                       && i + 1 < cliArgs.size()) {
+                qaLibraryPath = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-import-folder")
+                       && i + 1 < cliArgs.size()) {
+                qaImportFolder = cliArgs.at(++i);
             } else if (!arg.startsWith('-') && initialFilePath.isEmpty()) {
                 initialFilePath = arg;
             }
@@ -107,8 +119,10 @@ int main(int argc, char* argv[])
     int result = 1;
     {
         LibraryModel library;
-        const QString libraryPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-            + QStringLiteral("/library.json");
+        const QString libraryPath = qaLibraryPath.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                + QStringLiteral("/library.json")
+            : qaLibraryPath;
         LibraryStore store(libraryPath);
         QObject::connect(&library, &LibraryModel::rowsInserted, &store,
             [&store, &library](const QModelIndex&, int, int) {
@@ -146,7 +160,8 @@ int main(int argc, char* argv[])
             }
         });
         WaveformProvider waveformProvider(&settings);
-        auto autoReadBpmFlag = std::make_shared<std::atomic_bool>(settings.autoReadBpm());
+        auto autoReadBpmFlag = std::make_shared<std::atomic_bool>(
+            settings.autoReadBpm() && qaImportFolder.isEmpty());
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
         });
@@ -258,6 +273,10 @@ int main(int argc, char* argv[])
             // instance owned by Main.qml so filtering state stays in sync.
             QObject* filterModel = mainWindow->findChild<QObject*>(
                 QStringLiteral("filterModel"));
+            if (filterModel != nullptr && !qaScreenshotList.isEmpty()) {
+                filterModel->setProperty("minBpm", 0.0);
+                filterModel->setProperty("maxBpm", 300.0);
+            }
             QQmlComponent listComponent(&engine);
             listComponent.loadFromModule("AgPlayer", "ListWindow");
             QObject* listWindow = nullptr;
@@ -289,6 +308,9 @@ int main(int argc, char* argv[])
             }
 
             playFileIfPending();
+            if (!qaImportFolder.isEmpty()) {
+                importer.importFolder(QUrl::fromLocalFile(qaImportFolder));
+            }
 
             // Global hotkeys (Windows RegisterHotKey). Parsed from the settings
             // defaults and re-registered whenever the user changes a shortcut.
@@ -297,6 +319,9 @@ int main(int argc, char* argv[])
 
             auto registerGlobalHotkeys = [&]() {
                 hotkeys.unregisterAll();
+                if (qaTestMode) {
+                    return;
+                }
 
                 const auto registerCombo = [&](const QString& combo,
                                                GlobalHotkeyManager::Action action) {
@@ -367,6 +392,7 @@ int main(int argc, char* argv[])
             const bool wantScreenshotMain = !qaScreenshotMain.isEmpty();
             const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
             const bool wantScreenshotTools = !qaScreenshotTools.isEmpty();
+            const bool wantScreenshotList = !qaScreenshotList.isEmpty();
             if (wantScreenshotMini && miniWindow != nullptr) {
                 auto* miniWin = qobject_cast<QWindow*>(miniWindow);
                 if (miniWin) {
@@ -378,30 +404,68 @@ int main(int argc, char* argv[])
                     toolsWin->show();
                 }
             }
-            if (wantScreenshotMain || wantScreenshotMini || wantScreenshotTools) {
+            if (wantScreenshotList && listWindow != nullptr) {
+                if (auto* listWin = qobject_cast<QWindow*>(listWindow)) {
+                    listWin->show();
+                }
+            }
+            if (wantScreenshotMain || wantScreenshotMini
+                || wantScreenshotTools || wantScreenshotList) {
                 QWindow* const targetWindow = wantScreenshotMain
                     ? qobject_cast<QWindow*>(mainWindow)
                     : wantScreenshotMini
                         ? qobject_cast<QWindow*>(miniWindow)
-                        : qobject_cast<QWindow*>(audioToolsWindow);
+                        : wantScreenshotTools
+                            ? qobject_cast<QWindow*>(audioToolsWindow)
+                            : qobject_cast<QWindow*>(listWindow);
                 const QString screenshotPath = wantScreenshotMain
                     ? qaScreenshotMain
-                    : wantScreenshotMini ? qaScreenshotMini : qaScreenshotTools;
+                    : wantScreenshotMini
+                        ? qaScreenshotMini
+                        : wantScreenshotTools
+                            ? qaScreenshotTools : qaScreenshotList;
 
                 const auto captureWindow = [targetWindow, screenshotPath]() {
+                    if (targetWindow == nullptr) {
+                        qWarning("QA screenshot target window was not created");
+                        QCoreApplication::quit();
+                        return;
+                    }
                     targetWindow->setVisible(true);
                     targetWindow->requestActivate();
                     auto* const quickWin = qobject_cast<QQuickWindow*>(targetWindow);
                     if (quickWin != nullptr) {
                         quickWin->update();
                         QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
-                        quickWin->grabWindow().save(screenshotPath);
+                        const QImage screenshot = quickWin->grabWindow();
+                        if (screenshot.isNull()) {
+                            qWarning("QA screenshot capture returned an empty image");
+                        } else if (!screenshot.save(screenshotPath)) {
+                            qWarning("QA screenshot could not be saved");
+                        }
+                    } else {
+                        qWarning("QA screenshot target is not a QQuickWindow");
                     }
                     QCoreApplication::quit();
                 };
 
                 if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
                     QTimer::singleShot(1500, captureWindow);
+                } else if (wantScreenshotList) {
+                    auto attempts = std::make_shared<int>(0);
+                    auto pollFunc = std::make_shared<std::function<void()>>();
+                    *pollFunc = [&importer, &library, attempts, pollFunc, captureWindow]() {
+                        if (!importer.busy() && library.count() > 0) {
+                            QTimer::singleShot(1500, captureWindow);
+                            return;
+                        }
+                        if (++(*attempts) > 400) { // 20s timeout at 50ms polls
+                            QCoreApplication::quit();
+                            return;
+                        }
+                        QTimer::singleShot(50, *pollFunc);
+                    };
+                    QTimer::singleShot(50, *pollFunc);
                 } else {
                     auto attempts = std::make_shared<int>(0);
                     auto pollFunc = std::make_shared<std::function<void()>>();

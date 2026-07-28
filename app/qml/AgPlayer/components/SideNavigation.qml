@@ -29,13 +29,16 @@ Rectangle {
             Layout.fillWidth: true
             spacing: Theme.spacingSm
 
-            Image {
-                source: Theme.icon("music-2-fill")
-                sourceSize.width: 18
-                sourceSize.height: 18
+            ToolButton {
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
-                fillMode: Image.PreserveAspectFit
+                enabled: false
+                padding: 0
+                icon.source: Theme.icon("music-2-fill")
+                icon.color: Theme.secondaryText
+                icon.width: 18
+                icon.height: 18
+                background: null
             }
 
             Text {
@@ -48,13 +51,15 @@ Rectangle {
             }
 
             ToolButton {
-                icon.source: root.expanded
-                             ? Theme.icon("arrow-up-s-line")
-                             : Theme.icon("arrow-down-s-line")
-                icon.color: Theme.secondaryText
-                icon.width: 14
-                icon.height: 14
                 onClicked: root.expanded = !root.expanded
+
+                contentItem: Text {
+                    text: root.expanded ? "\u2303" : "\u2304"
+                    color: Theme.secondaryText
+                    font.pixelSize: 16
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
 
                 background: Rectangle {
                     color: "transparent"
@@ -139,6 +144,7 @@ Rectangle {
                 text: qsTr("歌单")
                 icon.source: Theme.icon("playlist-2-fill")
                 icon.color: Theme.secondaryText
+                palette.buttonText: Theme.secondaryText
                 onClicked: root.categorySelected("all")
 
                 background: Rectangle {
@@ -148,24 +154,6 @@ Rectangle {
                     radius: Theme.radiusSm
                 }
 
-                contentItem: RowLayout {
-                    spacing: Theme.spacingSm
-                    Image {
-                        source: parent.parent.icon.source
-                        sourceSize.width: 14
-                        sourceSize.height: 14
-                        Layout.preferredWidth: 14
-                        Layout.preferredHeight: 14
-                        fillMode: Image.PreserveAspectFit
-                    }
-                    Text {
-                        text: parent.parent.text
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 12
-                        Layout.fillWidth: true
-                    }
-                }
             }
 
             Button {
@@ -175,6 +163,7 @@ Rectangle {
                 text: qsTr("导入")
                 icon.source: Theme.icon("folder-open-fill")
                 icon.color: Theme.secondaryText
+                palette.buttonText: Theme.secondaryText
                 onClicked: root.importRequested()
 
                 background: Rectangle {
@@ -184,24 +173,6 @@ Rectangle {
                     radius: Theme.radiusSm
                 }
 
-                contentItem: RowLayout {
-                    spacing: Theme.spacingSm
-                    Image {
-                        source: parent.parent.icon.source
-                        sourceSize.width: 14
-                        sourceSize.height: 14
-                        Layout.preferredWidth: 14
-                        Layout.preferredHeight: 14
-                        fillMode: Image.PreserveAspectFit
-                    }
-                    Text {
-                        text: parent.parent.text
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 12
-                        Layout.fillWidth: true
-                    }
-                }
             }
         }
 
@@ -227,13 +198,17 @@ Rectangle {
             anchors.rightMargin: Theme.spacingSm
             spacing: Theme.spacingSm
 
-            Image {
-                source: Theme.icon(catRoot.icon)
-                sourceSize.width: 16
-                sourceSize.height: 16
+            ToolButton {
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
-                fillMode: Image.PreserveAspectFit
+                enabled: false
+                padding: 0
+                icon.source: Theme.icon(catRoot.icon)
+                icon.color: catRoot.selected
+                            ? Theme.primaryText : Theme.secondaryText
+                icon.width: 16
+                icon.height: 16
+                background: null
             }
 
             Text {
