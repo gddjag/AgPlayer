@@ -5,26 +5,24 @@ import AgPlayer
 
 Rectangle {
     id: root
-    color: root.emptyMode ? "#02091B" : Theme.background
+    color: Theme.background
     property bool emptyMode: false
-    readonly property real wideGap: emptyMode
-                                    ? Math.max(0, Math.min(55, (width - 1100) / 8))
-                                    : 0
-
     signal toggleLyrics()
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.spacingXl
-        anchors.rightMargin: Theme.spacingXl
+        anchors.bottomMargin: root.emptyMode ? 24 : 0
+        anchors.leftMargin: root.emptyMode ? 24 : Theme.spacingXl
+        anchors.rightMargin: root.emptyMode ? 32 : Theme.spacingXl
         spacing: Theme.spacingLg
 
         ToolButton {
             objectName: "listWindowButton"
-            icon.source: Theme.icon("playlist-2-fill")
-            icon.color: WindowController.listWindowVisible ? Theme.cyan : Theme.primaryText
-            icon.width: 24
-            icon.height: 24
+            flat: true
+            icon.source: Theme.icon("list-unordered")
+            icon.color: WindowController.listWindowVisible ? Theme.iconAccent : Theme.iconPrimary
+            icon.width: 32
+            icon.height: 32
             Accessible.name: WindowController.listWindowVisible
                              ? qsTr("Hide playlist window")
                              : qsTr("Show playlist window")
@@ -32,51 +30,60 @@ Rectangle {
             onClicked: WindowController.toggleListWindow()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-        }
-
-        Item {
-            Layout.preferredWidth: Math.min(166, root.width * 0.12)
+            background: null
         }
 
         Item { Layout.fillWidth: true }
 
+        Item {
+            Layout.preferredWidth: root.emptyMode
+                                   ? 702
+                                   : 900
+            Layout.fillHeight: true
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: root.emptyMode
+                     ? 59.6667
+                     : Theme.spacingMd
+
         ToolButton {
             objectName: "audioToolsButton"
-            icon.source: Theme.icon("equalizer-fill")
-            icon.color: Theme.primaryText
-            icon.width: 24
-            icon.height: 24
+            flat: true
+            icon.source: Theme.icon("briefcase-4-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 34
+            icon.height: 34
             Accessible.name: qsTr("Open audio tools")
             focusPolicy: Qt.StrongFocus
             onClicked: WindowController.showAudioTools()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
+            background: null
         }
-
-        Item { Layout.preferredWidth: root.wideGap }
 
         ToolButton {
             objectName: "waveformModeButton"
-            icon.source: Theme.icon("music-2-fill")
-            icon.color: Theme.cyan
-            icon.width: 24
-            icon.height: 24
+            flat: true
+            icon.source: Theme.icon("voiceprint-line")
+            icon.color: Theme.iconAccent
+            icon.width: 34
+            icon.height: 34
             Accessible.name: qsTr("Change waveform mode")
             focusPolicy: Qt.StrongFocus
             onClicked: SettingsController.setWaveformMode(
                            (SettingsController.waveformMode + 1) % 3)
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
+            background: null
         }
-
-        Item { Layout.preferredWidth: root.wideGap }
 
         ToolButton {
             objectName: "previousButton"
             icon.source: Theme.icon("skip-back-fill")
-            icon.color: Theme.primaryText
-            icon.width: 22
-            icon.height: 22
+            icon.color: Theme.iconPrimary
+            icon.width: 30
+            icon.height: 30
             Accessible.name: qsTr("Previous track")
             focusPolicy: Qt.StrongFocus
             onClicked: PlaybackController.previous()
@@ -95,18 +102,16 @@ Rectangle {
             }
         }
 
-        Item { Layout.preferredWidth: root.wideGap }
-
         ToolButton {
             objectName: "playPauseButton"
             icon.source: PlaybackController.state === PlaybackController.Playing
                          ? Theme.icon("pause-fill")
                          : Theme.icon("play-fill")
-            icon.color: Theme.primaryText
+            icon.color: Theme.iconPrimary
             icon.width: 34
             icon.height: 34
-            Layout.preferredWidth: root.emptyMode ? 88 : 72
-            Layout.preferredHeight: root.emptyMode ? 88 : 72
+            Layout.preferredWidth: root.emptyMode ? 104 : 72
+            Layout.preferredHeight: root.emptyMode ? 104 : 72
             Accessible.name: PlaybackController.state === PlaybackController.Playing
                              ? qsTr("Pause")
                              : qsTr("Play")
@@ -118,33 +123,53 @@ Rectangle {
             ToolTip.visible: hovered
 
             background: Rectangle {
-                color: Theme.panel
-                border.color: parent.pressed ? Theme.waveformMagenta
-                                             : parent.hovered ? Theme.waveformViolet
-                                                              : Theme.cyan
-                border.width: 2
+                color: "transparent"
                 radius: width / 2
 
                 Rectangle {
                     anchors.fill: parent
+                    anchors.margins: -10
+                    opacity: 0.06
+                    color: Theme.cyan
+                    radius: width / 2
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -5
+                    opacity: 0.12
+                    color: Theme.waveformViolet
+                    radius: width / 2
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: Theme.waveformBlue }
+                        GradientStop { position: 1.0; color: Theme.waveformMagenta }
+                    }
+                    radius: width / 2
+                }
+
+                Rectangle {
+                    anchors.fill: parent
                     anchors.margins: 6
-                    color: "transparent"
+                    color: Theme.panel
                     border.color: Theme.waveformViolet
                     border.width: 1
                     radius: width / 2
-                    opacity: 0.75
                 }
             }
         }
 
-        Item { Layout.preferredWidth: root.wideGap }
-
         ToolButton {
             objectName: "nextButton"
             icon.source: Theme.icon("skip-forward-fill")
-            icon.color: Theme.primaryText
-            icon.width: 22
-            icon.height: 22
+            icon.color: Theme.iconPrimary
+            icon.width: 30
+            icon.height: 30
             Accessible.name: qsTr("Next track")
             focusPolicy: Qt.StrongFocus
             onClicked: PlaybackController.next()
@@ -163,8 +188,6 @@ Rectangle {
             }
         }
 
-        Item { Layout.preferredWidth: root.wideGap }
-
         ToolButton {
             objectName: "modeButton"
             icon.source: {
@@ -178,10 +201,10 @@ Rectangle {
                 }
             }
             icon.color: PlaybackController.mode === PlaybackController.Sequential
-                        ? Theme.secondaryText
-                        : Theme.cyan
-            icon.width: 20
-            icon.height: 20
+                        ? Theme.iconSecondary
+                        : Theme.iconAccent
+            icon.width: 30
+            icon.height: 30
             Accessible.name: {
                 switch (PlaybackController.mode) {
                 case PlaybackController.RepeatOne:
@@ -213,9 +236,9 @@ Rectangle {
             objectName: "lyricsButton"
             visible: false
             icon.source: Theme.icon("music-2-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 20
-            icon.height: 20
+            icon.color: Theme.iconSecondary
+            icon.width: 30
+            icon.height: 30
             Accessible.name: qsTr("Toggle lyrics")
             focusPolicy: Qt.StrongFocus
             onClicked: root.toggleLyrics()
@@ -234,16 +257,14 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: true }
-
         ToolButton {
             objectName: "muteButton"
             icon.source: PlaybackController.muted
                          ? Theme.icon("volume-mute-fill")
                          : Theme.icon("volume-up-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 20
-            icon.height: 20
+            icon.color: Theme.iconSecondary
+            icon.width: root.emptyMode ? 30 : 20
+            icon.height: root.emptyMode ? 30 : 20
             Accessible.name: PlaybackController.muted
                              ? qsTr("Unmute")
                              : qsTr("Mute")
@@ -266,6 +287,7 @@ Rectangle {
 
         Slider {
             objectName: "volumeSlider"
+            visible: !root.emptyMode
             from: 0
             to: 1
             onMoved: PlaybackController.setVolume(value)
@@ -279,19 +301,24 @@ Rectangle {
             }
         }
 
-        Item { Layout.preferredWidth: root.wideGap }
+        }
+        }
+
+        Item { Layout.fillWidth: true }
 
         ToolButton {
             objectName: "miniPlayerButton"
-            icon.source: Theme.icon("restore-line")
-            icon.color: Theme.primaryText
-            icon.width: 24
-            icon.height: 24
+            flat: true
+            icon.source: Theme.icon("picture-in-picture-2-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 30
+            icon.height: 30
             Accessible.name: qsTr("Switch to mini player")
             focusPolicy: Qt.StrongFocus
             onClicked: WindowController.showMini()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
+            background: null
         }
     }
 }

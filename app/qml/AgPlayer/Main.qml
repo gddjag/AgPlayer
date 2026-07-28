@@ -8,12 +8,12 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 1040
-    height: 520
+    width: 1228
+    height: 424
     minimumWidth: 800
-    minimumHeight: 420
+    minimumHeight: 360
     flags: Qt.FramelessWindowHint
-    color: filterModel.count === 0 ? "#02091B" : Theme.background
+    color: Theme.background
     title: "AgPlayer"
 
     // Shared-state surface so the main window and the mini player can bind to
@@ -22,6 +22,15 @@ ApplicationWindow {
     property var playback: PlaybackController
     property int positionMs: playback.positionMs
     property bool lyricsVisible: false
+
+    Component.onCompleted: Theme.mode = SettingsController.themeMode
+
+    Connections {
+        target: SettingsController
+        function onThemeModeChanged() {
+            Theme.mode = SettingsController.themeMode
+        }
+    }
 
     // The filter model is owned by the main window but consumed by the
     // separate ListWindow so filtering state stays in sync.
@@ -41,6 +50,12 @@ ApplicationWindow {
         var dialog = folderDialogComponent.createObject(mainWindow)
         if (dialog)
             dialog.open()
+    }
+
+    function openSettingsPage() {
+        settingsPageLoader.active = true
+        if (settingsPageLoader.item)
+            settingsPageLoader.item.open()
     }
 
     Component {
@@ -66,21 +81,17 @@ ApplicationWindow {
         TitleBar {
             id: titleBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 48
+            Layout.preferredHeight: 40
             window: mainWindow
-            onOpenSettings: settingsPage.open()
-        }
-
-        SettingsPage {
-            id: settingsPage
-            objectName: "settingsPage"
+            showBrand: LibraryModel.count === 0
+            onOpenSettings: mainWindow.openSettingsPage()
         }
 
         EmptyStartup {
             id: emptyStartup
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: filterModel.count === 0
+            visible: LibraryModel.count === 0
             onOpenFileRequested: mainWindow.openImportDialog()
             onImportFolderRequested: mainWindow.openFolderDialog()
         }
@@ -89,15 +100,15 @@ ApplicationWindow {
             id: playerPane
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: 280
-            visible: filterModel.count > 0
+            Layout.minimumHeight: 260
+            visible: LibraryModel.count > 0
         }
 
         Rectangle {
             id: lyricsPanel
             Layout.fillWidth: true
             Layout.preferredHeight: lyricsVisible ? 160 : 0
-            visible: filterModel.count > 0 && lyricsVisible
+            visible: LibraryModel.count > 0 && lyricsVisible
             color: Theme.panel
             clip: true
 
@@ -134,8 +145,8 @@ ApplicationWindow {
             id: playerControls
             objectName: "playerControls"
             Layout.fillWidth: true
-            Layout.preferredHeight: filterModel.count === 0 ? 128 : 80
-            emptyMode: filterModel.count === 0
+            Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 72
+            emptyMode: LibraryModel.count === 0
             onToggleLyrics: mainWindow.lyricsVisible = !mainWindow.lyricsVisible
         }
     }
@@ -149,6 +160,16 @@ ApplicationWindow {
             }
             ImportController.importUrls(urls)
             drop.acceptProposedAction()
+        }
+    }
+
+    Loader {
+        id: settingsPageLoader
+        active: false
+        sourceComponent: Component {
+            SettingsPage {
+                objectName: "settingsPage"
+            }
         }
     }
 

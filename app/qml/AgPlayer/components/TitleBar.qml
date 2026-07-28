@@ -8,23 +8,52 @@ Rectangle {
     color: "transparent"
 
     property Window window
+    property bool showBrand: false
 
     signal openSettings()
 
     RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: Theme.spacingLg
-        anchors.rightMargin: Theme.spacingSm
-        spacing: Theme.spacingMd
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: 10
+        height: parent.height
+        anchors.leftMargin: 32
+        anchors.rightMargin: 24
+        spacing: 20
+
+        RowLayout {
+            objectName: "titleBrand"
+            visible: titleBar.showBrand
+            spacing: Theme.spacingXs
+
+            Image {
+                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                sourceSize.width: 30
+                sourceSize.height: 30
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                text: "AgPlayer"
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                font.italic: true
+            }
+        }
 
         Item { Layout.fillWidth: true }
 
         ToolButton {
             objectName: "settingsButton"
             icon.source: Theme.icon("settings-3-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
+            icon.color: Theme.iconSecondary
+            icon.width: 20
+            icon.height: 20
             Accessible.name: qsTr("Open settings")
             focusPolicy: Qt.StrongFocus
             onClicked: titleBar.openSettings()
@@ -46,9 +75,9 @@ Rectangle {
         ToolButton {
             objectName: "minimizeButton"
             icon.source: Theme.icon("subtract-line")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
+            icon.color: Theme.iconSecondary
+            icon.width: 20
+            icon.height: 20
             Accessible.name: "Minimize"
             focusPolicy: Qt.StrongFocus
             onClicked: window.showMinimized()
@@ -71,10 +100,10 @@ Rectangle {
             objectName: "maximizeButton"
             icon.source: window.visibility === Window.Maximized
                        ? Theme.icon("fullscreen-exit-fill")
-                       : Theme.icon("fullscreen-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
+                       : Theme.icon("checkbox-blank-line")
+            icon.color: Theme.iconSecondary
+            icon.width: 20
+            icon.height: 20
             Accessible.name: window.visibility === Window.Maximized ? "Restore" : "Maximize"
             focusPolicy: Qt.StrongFocus
             onClicked: {
@@ -101,9 +130,9 @@ Rectangle {
         ToolButton {
             objectName: "closeButton"
             icon.source: Theme.icon("close-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
+            icon.color: Theme.iconSecondary
+            icon.width: 20
+            icon.height: 20
             Accessible.name: "Close"
             focusPolicy: Qt.StrongFocus
             onClicked: WindowController.requestClose()

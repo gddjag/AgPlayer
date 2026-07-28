@@ -4,6 +4,7 @@
 #include <QQmlComponent>
 #include <QImage>
 #include <QQuickWindow>
+#include <QQuickStyle>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTimer>
@@ -44,6 +45,10 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
 
 int main(int argc, char* argv[])
 {
+    // The application supplies its own control visuals. A non-native style
+    // keeps those visuals supported and consistent on Windows/macOS while
+    // Theme.qml still follows the host system palette when requested.
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
@@ -239,9 +244,17 @@ int main(int argc, char* argv[])
             windows.setListWindow(qobject_cast<QWindow*>(listWindow));
             windows.setAudioToolsWindow(qobject_cast<QWindow*>(audioToolsWindow));
 
-            // The playlist window is a permanent second window in the new UI;
-            // show it immediately below the main player window.
-            windows.showListWindow();
+            QObject::connect(&library, &LibraryModel::countChanged, &app,
+                             [&library, &windows]() {
+                if (library.count() > 0) {
+                    windows.showListWindow();
+                } else {
+                    windows.hideListWindow();
+                }
+            });
+            if (library.count() > 0) {
+                windows.showListWindow();
+            }
 
             playFileIfPending();
 
@@ -317,9 +330,8 @@ int main(int argc, char* argv[])
                                  }
                              });
 
-            // --qa-screenshot-main / --qa-screenshot-mini: poll for AG_PLAYING,
-            // wait 500ms for the waveform to render, grab the window, save the
-            // PNG, then quit through the normal shutdown path.
+            // --qa-screenshot-main / --qa-screenshot-mini: capture the empty
+            // main surface directly, or wait for playback when a track exists.
             const bool wantScreenshotMain = !qaScreenshotMain.isEmpty();
             const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
             if (wantScreenshotMini && miniWindow != nullptr) {
@@ -335,39 +347,39 @@ int main(int argc, char* argv[])
                 const QString screenshotPath = wantScreenshotMain
                     ? qaScreenshotMain : qaScreenshotMini;
 
-                auto attempts = std::make_shared<int>(0);
-                auto pollFunc = std::make_shared<std::function<void()>>();
-                *pollFunc = [core, targetWindow, screenshotPath,
-                             attempts, pollFunc]() {
-                    ag_playback_snapshot snapshot{};
-                    ag_player_snapshot(core, &snapshot);
-                    if (snapshot.state == AG_PLAYING) {
-                        // Ensure the window is visible and rendered before grabbing
-                        targetWindow->setVisible(true);
-                        targetWindow->requestActivate();
-                        QTimer::singleShot(1500, [targetWindow, screenshotPath]() {
-                            auto* const quickWin =
-                                qobject_cast<QQuickWindow*>(targetWindow);
-                            if (quickWin != nullptr) {
-                                quickWin->update();
-                                // Process events to let the scene graph render
-                                QCoreApplication::processEvents(
-                                    QEventLoop::AllEvents, 500);
-                                quickWin->grabWindow().save(screenshotPath);
-                            }
-                            QCoreApplication::quit();
-                        });
-                        return;
+                const auto captureWindow = [targetWindow, screenshotPath]() {
+                    targetWindow->setVisible(true);
+                    targetWindow->requestActivate();
+                    auto* const quickWin = qobject_cast<QQuickWindow*>(targetWindow);
+                    if (quickWin != nullptr) {
+                        quickWin->update();
+                        QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
+                        quickWin->grabWindow().save(screenshotPath);
                     }
-                    if (++(*attempts) > 200) { // 10s timeout at 50ms polls
-                        QCoreApplication::quit();
-                        return;
-                    }
-                    QTimer::singleShot(50, *pollFunc);
+                    QCoreApplication::quit();
                 };
-                QTimer::singleShot(50, *pollFunc);
-            }
 
+                if (wantScreenshotMain && library.count() == 0) {
+                    QTimer::singleShot(1500, captureWindow);
+                } else {
+                    auto attempts = std::make_shared<int>(0);
+                    auto pollFunc = std::make_shared<std::function<void()>>();
+                    *pollFunc = [core, attempts, pollFunc, captureWindow]() {
+                        ag_playback_snapshot snapshot{};
+                        ag_player_snapshot(core, &snapshot);
+                        if (snapshot.state == AG_PLAYING) {
+                            QTimer::singleShot(1500, captureWindow);
+                            return;
+                        }
+                        if (++(*attempts) > 200) { // 10s timeout at 50ms polls
+                            QCoreApplication::quit();
+                            return;
+                        }
+                        QTimer::singleShot(50, *pollFunc);
+                    };
+                    QTimer::singleShot(50, *pollFunc);
+                }
+            }
             // Trim the working set a few seconds after startup. During launch
             // the OS faults in many pages for DLL init, relocation, and one-time
             // setup that are not touched again during steady-state playback.

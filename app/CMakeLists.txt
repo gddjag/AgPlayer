@@ -1,16 +1,21 @@
 set(CMAKE_AUTOMOC ON)
 
 set(ICON_FILES
+    ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-exit-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/list-unordered.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg
@@ -26,10 +31,10 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/voiceprint-line.svg
 )
 
 set(BRAND_FILES
-    ${CMAKE_SOURCE_DIR}/assets/brand/empty-start-waveform.png
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-lockup.png
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )

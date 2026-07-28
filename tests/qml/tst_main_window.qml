@@ -31,6 +31,13 @@ TestCase {
         verify(findChild(mainWindow, "settingsButton"), "settingsButton should exist in Phase 2 settings task")
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
         verify(findChild(mainWindow, "listWindowButton"), "listWindowButton should exist")
+        verify(findChild(mainWindow, "playerCover"), "player cover should exist")
+        verify(findChild(mainWindow, "playerCoverImage").source.toString().length > 0,
+               "player cover should always have a fallback source")
+        verify(findChild(mainWindow, "trackTitle"), "track title should exist")
+        verify(findChild(mainWindow, "trackArtistAlbum"), "artist and album should exist")
+        verify(findChild(mainWindow, "trackRating"), "track rating should exist")
+        verify(findChild(mainWindow, "mainWaveform"), "main waveform should exist")
     }
 
     function test_empty_library_shows_startup_actions() {
@@ -47,5 +54,60 @@ TestCase {
                "playlist action should be visible in the bottom control bar")
         verify(findChild(mainWindow, "miniPlayerButton").visible,
                "mini player action should be visible in the bottom control bar")
+    }
+
+    function test_empty_startup_uses_compact_reference_structure() {
+        compare(mainWindow.width, 1228)
+        compare(mainWindow.height, 424)
+
+        var startup = findChild(mainWindow, "emptyStartup")
+        var controls = findChild(mainWindow, "playerControls")
+        verify(startup.visible)
+        verify(controls.emptyMode)
+        verify(findChild(mainWindow, "titleBrand").visible,
+               "brand should be visible in the empty title bar")
+        verify(findChild(startup, "startupTitle"),
+               "compact startup title should exist")
+        verify(findChild(startup, "startupActionArea"),
+               "compact startup actions should exist")
+        verify(!findChild(startup, "startupHeroArtwork"),
+               "the superseded hero artwork should not exist")
+    }
+
+    function test_settings_page_is_lazy_until_requested() {
+        verify(!findChild(mainWindow, "settingsPage"),
+               "settings page should not increase empty-startup cost")
+
+        findChild(mainWindow, "settingsButton").clicked()
+        tryVerify(function() {
+            return findChild(mainWindow, "settingsPage") !== null
+        })
+        findChild(mainWindow, "settingsPage").close()
+    }
+
+    function test_theme_mode_updates_surfaces_text_and_icons() {
+        var previousMode = SettingsController.themeMode
+
+        SettingsController.themeMode = 0
+        tryCompare(Theme, "isLight", false)
+        var darkBackground = Theme.background.toString()
+        var darkText = Theme.primaryText.toString()
+
+        SettingsController.themeMode = 1
+        compare(SettingsController.themeMode, 1)
+        tryCompare(Theme, "isLight", true)
+        verify(Theme.background.toString() !== darkBackground,
+               "light mode should replace the dark surface")
+        verify(Theme.primaryText.toString() !== darkText,
+               "light mode should replace the dark text color")
+        compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
+                Theme.iconSecondary.toString())
+
+        SettingsController.themeMode = 2
+        tryCompare(Theme, "followsSystem", true)
+        compare(Theme.background.toString(),
+                Theme.systemPalette.window.toString())
+
+        SettingsController.themeMode = previousMode
     }
 }

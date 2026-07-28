@@ -12,45 +12,28 @@ Rectangle {
     signal importFolderRequested()
 
     ColumnLayout {
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: 20
+        id: startupActionArea
+        objectName: "startupActionArea"
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: Theme.spacingXs
         width: Math.min(parent.width - 48, 640)
-        spacing: Theme.spacingMd
-
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 180
-            Layout.bottomMargin: 40
-
-            Image {
-                anchors.fill: parent
-                source: "qrc:/qt/qml/AgPlayer/assets/brand/empty-start-waveform.png"
-                fillMode: Image.PreserveAspectCrop
-                smooth: true
-                opacity: 1.0
-            }
-
-            Image {
-                anchors.centerIn: parent
-                width: 132
-                height: 132
-                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-            }
-        }
+        spacing: Theme.spacingSm
 
         Text {
+            objectName: "startupTitle"
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("开始播放你的音乐")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 28
             font.weight: Font.Medium
+            font.letterSpacing: 3
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 6
             text: qsTr("打开或拖拽音频文件到此处开始播放")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
@@ -59,25 +42,29 @@ Rectangle {
 
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Theme.spacingSm
-            spacing: Theme.spacingMd
+            Layout.topMargin: 22
+            spacing: 20
 
             Button {
                 id: openFileButton
                 objectName: "openFileButton"
+                Layout.preferredWidth: 190
+                Layout.preferredHeight: 52
                 text: qsTr("打开文件")
-                icon.source: Theme.icon("folder-open-fill")
-                icon.color: Theme.primaryText
-                palette.buttonText: Theme.primaryText
+                icon.source: Theme.icon("folder-open-line")
+                icon.color: Theme.accentText
+                icon.width: 20
+                icon.height: 20
+                palette.buttonText: Theme.accentText
+                font.pixelSize: 16
                 Accessible.name: text
                 focusPolicy: Qt.StrongFocus
                 onClicked: root.openFileRequested()
 
                 background: Rectangle {
-                    implicitWidth: 190
-                    implicitHeight: 52
                     color: parent.pressed ? Theme.violet
-                                           : parent.hovered ? Theme.violet : Theme.cyan
+                                          : parent.hovered ? Qt.lighter(Theme.violet, 1.08)
+                                                           : Theme.cyan
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
                         GradientStop { position: 0.0; color: Theme.waveformBlue }
@@ -87,40 +74,42 @@ Rectangle {
                     border.width: parent.visualFocus ? 2 : 1
                     radius: Theme.radiusSm
                 }
-
             }
 
             Button {
                 id: importFolderButton
                 objectName: "importFolderButton"
+                Layout.preferredWidth: 190
+                Layout.preferredHeight: 52
                 text: qsTr("导入文件夹")
-                icon.source: Theme.icon("folder-open-fill")
-                icon.color: Theme.primaryText
+                icon.source: Theme.icon("folder-open-line")
+                icon.color: Theme.iconPrimary
+                icon.width: 20
+                icon.height: 20
                 palette.buttonText: Theme.primaryText
+                font.pixelSize: 16
                 Accessible.name: text
                 focusPolicy: Qt.StrongFocus
                 onClicked: root.importFolderRequested()
 
                 background: Rectangle {
-                    implicitWidth: 190
-                    implicitHeight: 52
-                    color: parent.pressed ? Theme.panel
-                                           : parent.hovered ? Theme.border : "transparent"
+                    color: parent.pressed || parent.hovered
+                           ? Theme.hoverSurface
+                           : Theme.isLight ? Theme.panel : "transparent"
                     border.color: parent.visualFocus ? Theme.cyan : Theme.border
                     border.width: parent.visualFocus ? 2 : 1
                     radius: Theme.radiusSm
                 }
-
             }
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Theme.spacingXs
+            Layout.topMargin: Theme.spacingLg
             text: qsTr("支持 MP3、WAV、FLAC、AAC、OGG、M4A 等音频格式")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 12
+            font.pixelSize: 13
         }
     }
 }
