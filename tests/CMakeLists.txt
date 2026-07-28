@@ -42,13 +42,18 @@ agplayer_enable_warnings(c_api_lifecycle_test)
 
 add_test(NAME c_api_lifecycle_test COMMAND c_api_lifecycle_test)
 
+set(DECODER_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
+set(SINE_WAV_FIXTURE "${DECODER_FIXTURE_DIR}/sine-440hz.wav")
+set(FORMAT_FIXTURE_DIR "${DECODER_FIXTURE_DIR}/formats")
+
 add_executable(format_matrix_test
     core/format_matrix_test.cpp
 )
 set_target_properties(format_matrix_test PROPERTIES AUTOMOC ON)
 target_link_libraries(format_matrix_test PRIVATE agplayer_core Qt6::Test)
 target_compile_definitions(format_matrix_test PRIVATE
-    AGPLAYER_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/generated"
+    AGPLAYER_FIXTURES_DIR="${FORMAT_FIXTURE_DIR}"
+    AGPLAYER_SOURCE_WAV="${SINE_WAV_FIXTURE}"
 )
 agplayer_enable_warnings(format_matrix_test)
 add_test(NAME format_matrix_test COMMAND format_matrix_test)
@@ -91,8 +96,6 @@ add_executable(fixture_generator
 )
 agplayer_enable_warnings(fixture_generator)
 
-set(DECODER_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
-set(SINE_WAV_FIXTURE "${DECODER_FIXTURE_DIR}/sine-440hz.wav")
 set(GAPLESS_A_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-a.wav")
 set(GAPLESS_B_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-b.wav")
 add_custom_command(
@@ -103,6 +106,7 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(decoder_fixture DEPENDS "${SINE_WAV_FIXTURE}")
+add_dependencies(format_matrix_test decoder_fixture)
 
 add_custom_command(
     OUTPUT "${GAPLESS_A_FIXTURE}" "${GAPLESS_B_FIXTURE}"

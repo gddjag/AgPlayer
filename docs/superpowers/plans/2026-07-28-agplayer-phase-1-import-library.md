@@ -13,7 +13,7 @@ waveform changes.
 
 **Files**
 
-- Add: `tests/tools/format_fixture_generator.cpp`
+- Modify: `core/src/transcoder.cpp`
 - Modify: `tests/CMakeLists.txt`
 - Modify: `tests/core/format_matrix_test.cpp`
 
@@ -21,13 +21,13 @@ waveform changes.
 
 1. Change `format_matrix_test` so a missing fixture directory or file fails
    instead of silently skipping; run it and record the red result.
-2. Add one small generator that calls the existing public `ag_transcode` API to
-   create MP3, FLAC, AAC, M4A, OGG, Opus, and WMA from the generated WAV.
-3. Add a CMake custom target that creates all eight fixtures under the build
-   tree and make `format_matrix_test` depend on it.
+2. Generate MP3, FLAC, AAC, M4A, OGG, Opus, and WMA in the test setup through
+   the existing public `ag_transcode` API; do not add another executable.
+3. Make `format_matrix_test` depend on the deterministic WAV fixture and write
+   all generated formats under the build tree.
 4. Build and run only `format_matrix_test`; require eight real data rows to
    decode, play through the null backend, advance, and seek.
-5. Commit only the generator, test, and CMake wiring.
+5. Commit only the shared encoder compatibility fix, test, and CMake wiring.
 
 ## Task 2: Production import and restart smoke
 

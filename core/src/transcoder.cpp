@@ -42,6 +42,36 @@ AVSampleFormat pick_sample_fmt(const AVCodec* codec)
     return AV_SAMPLE_FMT_FLTP;
 }
 
+int pick_sample_rate(const AVCodecContext* context,
+                     const AVCodec* codec,
+                     int requested_rate)
+{
+    const void* supported_configs = nullptr;
+    int supported_count = 0;
+    if (avcodec_get_supported_config(
+            context, codec, AV_CODEC_CONFIG_SAMPLE_RATE, 0,
+            &supported_configs, &supported_count) < 0
+        || supported_configs == nullptr
+        || supported_count <= 0) {
+        return requested_rate;
+    }
+
+    const auto* supported_rates =
+        static_cast<const int*>(supported_configs);
+    int best_rate = supported_rates[0];
+    for (int index = 0; index < supported_count; ++index) {
+        const int candidate = supported_rates[index];
+        if (candidate == requested_rate) {
+            return requested_rate;
+        }
+        if (std::abs(candidate - requested_rate)
+            < std::abs(best_rate - requested_rate)) {
+            best_rate = candidate;
+        }
+    }
+    return best_rate;
+}
+
 // Map a channel count to a default mono/stereo layout. For >2 channels we
 // let av_channel_layout_default build the layout.
 void build_channel_layout(AVChannelLayout& layout, int channels)
@@ -167,12 +197,17 @@ ag_result open_encoder(const std::string& output_path,
         error = "Failed to allocate encoder context";
         return AG_INTERNAL_ERROR;
     }
+    if ((enc.codec->capabilities & AV_CODEC_CAP_EXPERIMENTAL) != 0) {
+        enc.ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+    }
 
     // Determine output parameters.
     const int out_channels = config.channels > 0
         ? config.channels : d.ctx->ch_layout.nb_channels;
-    const int out_sample_rate = config.sample_rate > 0
+    const int requested_sample_rate = config.sample_rate > 0
         ? config.sample_rate : d.ctx->sample_rate;
+    const int out_sample_rate = pick_sample_rate(
+        enc.ctx, enc.codec, requested_sample_rate);
 
     enc.ctx->sample_fmt = pick_sample_fmt(enc.codec);
     enc.ctx->sample_rate = out_sample_rate;

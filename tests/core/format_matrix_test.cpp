@@ -1,15 +1,14 @@
 // format_matrix_test: validates that every required Phase 1 audio format opens,
 // decodes, seeks, and progresses through the public C ABI with the null backend.
 //
-// Fixtures live under tests/fixtures/generated/ (gitignored) and are generated
-// by the FFmpeg CLI. The fixture directory is communicated through the
-// AGPLAYER_FIXTURES_DIR preprocessor define. When the directory is absent the
-// test is skipped via QSKIP so CI without fixtures does not fail.
+// Fixtures are generated from the deterministic WAV through the same public
+// transcode API used by the product. No external FFmpeg executable is needed.
 
 #include <agplayer/c_api.h>
 
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QTest>
 
@@ -21,6 +20,7 @@ class FormatMatrixTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void openDecodeSeek_data();
     void openDecodeSeek();
 };
@@ -30,17 +30,18 @@ namespace {
 struct FormatEntry {
     const char* extension;
     const char* fileName;
+    const char* codecName;
 };
 
 constexpr std::array<FormatEntry, 8> kFormats{{
-    {"wav",  "source.wav"},
-    {"mp3",  "sample.mp3"},
-    {"flac", "sample.flac"},
-    {"aac",  "sample.aac"},
-    {"m4a",  "sample.m4a"},
-    {"ogg",  "sample.ogg"},
-    {"opus", "sample.opus"},
-    {"wma",  "sample.wma"},
+    {"wav",  "source.wav", nullptr},
+    {"mp3",  "sample.mp3", "libmp3lame"},
+    {"flac", "sample.flac", "flac"},
+    {"aac",  "sample.aac", "aac"},
+    {"m4a",  "sample.m4a", "aac"},
+    {"ogg",  "sample.ogg", "vorbis"},
+    {"opus", "sample.opus", "opus"},
+    {"wma",  "sample.wma", "wmav2"},
 }};
 
 QString resolveFixturesDir()
@@ -52,7 +53,45 @@ QString resolveFixturesDir()
 #endif
 }
 
+QString resolveSourceWav()
+{
+#ifdef AGPLAYER_SOURCE_WAV
+    return QString::fromUtf8(AGPLAYER_SOURCE_WAV);
+#else
+    return QString();
+#endif
+}
+
 } // namespace
+
+void FormatMatrixTest::initTestCase()
+{
+    const QString fixturesDir = resolveFixturesDir();
+    const QString sourceWav = resolveSourceWav();
+    QVERIFY2(!fixturesDir.isEmpty(), "AGPLAYER_FIXTURES_DIR is required.");
+    QVERIFY2(QFileInfo::exists(sourceWav), "The generated WAV source is missing.");
+    QVERIFY(QDir().mkpath(fixturesDir));
+
+    for (const auto& entry : kFormats) {
+        const QString outputPath = QDir(fixturesDir).filePath(
+            QString::fromLatin1(entry.fileName));
+        QFile::remove(outputPath);
+        if (entry.codecName == nullptr) {
+            QVERIFY2(QFile::copy(sourceWav, outputPath),
+                     qPrintable(QStringLiteral("Failed to copy %1").arg(outputPath)));
+            continue;
+        }
+
+        const QByteArray inputUtf8 = sourceWav.toUtf8();
+        const QByteArray outputUtf8 = outputPath.toUtf8();
+        const ag_result result = ag_transcode(
+            inputUtf8.constData(), outputUtf8.constData(), entry.codecName,
+            192000, 44100, 2, nullptr, nullptr, nullptr);
+        QCOMPARE(result, AG_OK);
+        QVERIFY2(QFileInfo(outputPath).size() > 0,
+                 qPrintable(QStringLiteral("Empty fixture: %1").arg(outputPath)));
+    }
+}
 
 void FormatMatrixTest::openDecodeSeek_data()
 {
@@ -61,7 +100,7 @@ void FormatMatrixTest::openDecodeSeek_data()
 
     const QString fixturesDir = resolveFixturesDir();
     if (fixturesDir.isEmpty() || !QDir(fixturesDir).exists()) {
-        return;
+        QFAIL("Required format fixture directory is missing.");
     }
 
     for (const auto& entry : kFormats) {
@@ -76,7 +115,7 @@ void FormatMatrixTest::openDecodeSeek()
 {
     const QString fixturesDir = resolveFixturesDir();
     if (fixturesDir.isEmpty() || !QDir(fixturesDir).exists()) {
-        QSKIP("Fixture directory not found; generate fixtures with FFmpeg first.");
+        QFAIL("Required format fixture directory is missing.");
     }
 
     QFETCH(QString, extension);
