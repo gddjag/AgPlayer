@@ -7,6 +7,11 @@ TestCase {
     name: "ErrorStates"
     when: windowShown
 
+    Component {
+        id: importStatusComponent
+        ImportStatusPanel {}
+    }
+
     function initTestCase() {
         verify(typeof testHarness !== "undefined", "testHarness context property should exist")
         verify(typeof PlaybackController !== "undefined", "PlaybackController singleton should exist")
@@ -25,6 +30,29 @@ TestCase {
         compare(PlaybackController.deviceLost, false, "deviceLost should start false")
         verify(typeof PlaybackController.retryDevice === "function",
                "retryDevice should be callable from QML")
+    }
+
+    function test_importStatusPanelShowsBusyAndErrorStates() {
+        var fakeController = Qt.createQmlObject(
+            "import QtQuick; QtObject {" +
+            " property bool busy: true;" +
+            " property real progress: 0.5;" +
+            " property var errors: []" +
+            "}", testCase)
+        var panel = importStatusComponent.createObject(testCase, {
+            controller: fakeController
+        })
+        verify(panel)
+        verify(panel.active)
+        verify(panel.showingProgress)
+
+        fakeController.busy = false
+        fakeController.errors = ["bad audio"]
+        verify(panel.active)
+        verify(panel.showingErrors)
+
+        panel.destroy()
+        fakeController.destroy()
     }
 
     function test_deviceLossSurfacesInPlaybackController() {

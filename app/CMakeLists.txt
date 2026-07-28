@@ -93,6 +93,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/TrackList.qml
         qml/AgPlayer/components/EmptyLibrary.qml
         qml/AgPlayer/components/EmptyStartup.qml
+        qml/AgPlayer/components/ImportStatusPanel.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
         qml/AgPlayer/components/SearchFilter.qml

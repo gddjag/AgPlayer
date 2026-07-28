@@ -60,6 +60,21 @@ TestCase {
                "mini player action should be visible in the bottom control bar")
     }
 
+    function test_failed_import_surfaces_status_in_main() {
+        var status = findChild(mainWindow, "importStatusPanel")
+        verify(status, "main window should expose shared import status")
+
+        mainWindow.importFiles([Qt.resolvedUrl("file:///agplayer-missing-test.wav")])
+        tryVerify(function() {
+            return !ImportController.busy && ImportController.errors.length > 0
+        }, 3000)
+
+        verify(status.active, "import errors should activate the status panel")
+        verify(status.visible, "import errors should be visible in the main window")
+        verify(!findChild(mainWindow, "emptyStartup").visible,
+               "startup actions should not cover import errors")
+    }
+
     function test_import_files_reaches_real_controller() {
         verify(testAudioUrl.toString().length > 0,
                "generated audio fixture should be available")

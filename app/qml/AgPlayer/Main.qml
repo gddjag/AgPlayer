@@ -93,9 +93,10 @@ ApplicationWindow {
 
         EmptyStartup {
             id: emptyStartup
+            objectName: "emptyStartup"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: LibraryModel.count === 0
+            visible: LibraryModel.count === 0 && !importStatus.active
             onOpenFileRequested: mainWindow.openImportDialog()
             onImportFolderRequested: mainWindow.openFolderDialog()
         }
@@ -165,6 +166,15 @@ ApplicationWindow {
             ImportController.importUrls(urls)
             drop.acceptProposedAction()
         }
+    }
+
+    ImportStatusPanel {
+        id: importStatus
+        objectName: "importStatusPanel"
+        anchors.fill: parent
+        anchors.topMargin: 40
+        z: 90
+        onRetryRequested: mainWindow.openImportDialog()
     }
 
     Loader {
