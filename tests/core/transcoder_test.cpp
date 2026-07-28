@@ -6,12 +6,57 @@
 
 #include <cmath>
 #include <cassert>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 
 namespace {
+
+void append_u32_le(std::string& bytes, const std::uint32_t value)
+{
+    for (int shift = 0; shift < 32; shift += 8) {
+        bytes.push_back(static_cast<char>((value >> shift) & 0xffU));
+    }
+}
+
+void append_riff_info(const std::filesystem::path& path)
+{
+    std::string payload("INFO", 4);
+    const auto append_tag = [&payload](const char id[4],
+                                       const std::string& value) {
+        payload.append(id, 4);
+        const std::uint32_t size =
+            static_cast<std::uint32_t>(value.size() + 1U);
+        append_u32_le(payload, size);
+        payload.append(value);
+        payload.push_back('\0');
+        if ((size & 1U) != 0U) {
+            payload.push_back('\0');
+        }
+    };
+    append_tag("INAM", "Policy Title");
+    append_tag("IART", "Policy Artist");
+
+    std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+    assert(file);
+    file.seekp(0, std::ios::end);
+    file.write("LIST", 4);
+    std::string size_bytes;
+    append_u32_le(size_bytes, static_cast<std::uint32_t>(payload.size()));
+    file.write(size_bytes.data(), static_cast<std::streamsize>(size_bytes.size()));
+    file.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+    file.flush();
+
+    const std::uint32_t riff_size =
+        static_cast<std::uint32_t>(std::filesystem::file_size(path) - 8U);
+    size_bytes.clear();
+    append_u32_le(size_bytes, riff_size);
+    file.seekp(4, std::ios::beg);
+    file.write(size_bytes.data(), static_cast<std::streamsize>(size_bytes.size()));
+    assert(file);
+}
 
 std::filesystem::path make_corrupt_adpcm_wav(const std::filesystem::path& source)
 {
@@ -142,6 +187,66 @@ int main(const int argc, char** argv)
     assert(normalized_peak <= input_peak * 1.01f);
     std::filesystem::remove(normalize_output);
 
+    // Metadata policy: keep_metadata copies tags; false strips them.
+    const std::filesystem::path tagged_input =
+        input_path.parent_path() / "transcoder-tagged.wav";
+    std::filesystem::remove(tagged_input);
+    std::filesystem::copy_file(input_path, tagged_input);
+    append_riff_info(tagged_input);
+
+    const auto transcode_with_metadata_policy =
+        [&](const char* file_name, const bool keep_metadata) {
+            const std::filesystem::path output =
+                input_path.parent_path() / file_name;
+            std::filesystem::remove(output);
+            agplayer::TranscodeConfig config;
+            config.output_path = output.string();
+            config.codec_name = "pcm_s16le";
+            config.keep_metadata = keep_metadata;
+            error.clear();
+            const ag_result transcode_result =
+                agplayer::transcode(tagged_input.string(), config,
+                                    nullptr, nullptr, error);
+            if (transcode_result != AG_OK) {
+                std::cerr << "metadata policy transcode failed: "
+                          << transcode_result << " " << error << "\n";
+            }
+            assert(transcode_result == AG_OK);
+            {
+                agplayer::Decoder decoder;
+                const ag_result open_result = decoder.open(output.string());
+                if (open_result != AG_OK) {
+                    std::cerr << "metadata policy output open failed: "
+                              << open_result << "\n";
+                }
+                assert(open_result == AG_OK);
+                const agplayer::MediaMetadata metadata = decoder.metadata();
+                if (keep_metadata) {
+                    if (metadata.title != "Policy Title"
+                        || metadata.artist != "Policy Artist") {
+                        std::cerr << "metadata was not preserved: title='"
+                                  << metadata.title << "' artist='"
+                                  << metadata.artist << "'\n";
+                    }
+                    assert(metadata.title == "Policy Title");
+                    assert(metadata.artist == "Policy Artist");
+                } else {
+                    if (!metadata.title.empty() || !metadata.artist.empty()) {
+                        std::cerr << "metadata was not stripped: title='"
+                                  << metadata.title << "' artist='"
+                                  << metadata.artist << "'\n";
+                    }
+                    assert(metadata.title.empty());
+                    assert(metadata.artist.empty());
+                }
+            }
+            std::filesystem::remove(output);
+        };
+
+    transcode_with_metadata_policy("transcoder-meta-stripped.wav", false);
+    transcode_with_metadata_policy("transcoder-meta-kept.wav", true);
+
+    std::filesystem::remove(tagged_input);
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
     return 0;

@@ -183,6 +183,7 @@ ag_result ag_pitch_shift(const char* input_path,
 /* Extended options for ag_transcode_ex. Set unused fields to 0/NULL. */
 typedef struct ag_transcode_options {
     int volume_normalize;    /* 1 = normalize peak to -1 dBFS before encoding */
+    int keep_metadata;       /* 1 = copy input container and audio-stream tags */
 } ag_transcode_options;
 
 /* Transcode with extended options. Behaves like ag_transcode when options is

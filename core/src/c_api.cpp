@@ -481,6 +481,7 @@ ag_result ag_transcode_ex(const char* input_path,
         config.channels = channels;
         if (options != nullptr) {
             config.volume_normalize = options->volume_normalize != 0;
+            config.keep_metadata = options->keep_metadata != 0;
         }
 
         const std::atomic_bool* cancelled =

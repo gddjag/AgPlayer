@@ -430,6 +430,10 @@ ag_result run_transcode_pass(const std::string& input_path,
                      error);
     if (r != AG_OK) return r;
 
+    if (config.keep_metadata) {
+        av_dict_copy(&enc.fmt_ctx->metadata, dec.fmt_ctx->metadata, 0);
+    }
+
     // Open output file.
     if (!(enc.fmt_ctx->oformat->flags & AVFMT_NOFILE)) {
         if (avio_open(&enc.fmt_ctx->pb, config.output_path.c_str(),

@@ -317,11 +317,6 @@ void FormatConverter::start(const QString& outputFormat,
         return;
     }
 
-    // keepMetadata stripping is not yet supported by the Core; metadata is preserved.
-    if (!keepMetadata) {
-        emit warningOccurred(QStringLiteral("Metadata stripping is not supported yet; existing metadata will be preserved."));
-    }
-
     cancelFlag_.store(false, std::memory_order_release);
     currentToken_.store(nullptr, std::memory_order_release);
     setBusy(true);
@@ -370,7 +365,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    int sampleRate,
                                    int channels,
                                    const QString& outputDir,
-                                   bool /*keepMetadata*/,
+                                   bool keepMetadata,
                                    bool volumeNormalize)
 {
     const FormatInfo fi = format_info(outputFormat);
@@ -407,6 +402,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
 
         ag_transcode_options options{};
         options.volume_normalize = volumeNormalize ? 1 : 0;
+        options.keep_metadata = keepMetadata ? 1 : 0;
 
         const ag_result result = ag_transcode_ex(
             inputUtf8.constData(),
