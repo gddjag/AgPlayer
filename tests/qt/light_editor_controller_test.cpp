@@ -18,6 +18,7 @@ private slots:
     void exposesSixTracks();
     void movesSnapsLocksAndRestoresClips();
     void trimsToSafeSourceBounds();
+    void editsSelectedClipsWithClipboardSplitMergeAndCrop();
     void validatesBpmAndTrackSwitches();
     void analyzesAndUnifiesBpm();
     void exportsTimelineAndFiltersTracks();
@@ -57,7 +58,11 @@ void LightEditorControllerTest::movesSnapsLocksAndRestoresClips()
     editor.setTrackLocked(0, true);
     tracksSpy.clear();
     QVERIFY(!editor.moveClip(0, 1000));
+    QVERIFY(!editor.cutSelectedClip());
+    QVERIFY(!editor.deleteSelectedClip());
     QCOMPARE(tracksSpy.count(), 0);
+    QVERIFY(!editor.tracks().at(0).toMap()
+                 .value(QStringLiteral("path")).toString().isEmpty());
     QCOMPARE(editor.tracks().at(0).toMap().value(QStringLiteral("timelineStartMs")).toLongLong(),
              500);
 
@@ -96,6 +101,58 @@ void LightEditorControllerTest::trimsToSafeSourceBounds()
     QVERIFY(outMs <= duration);
     QVERIFY(inMs >= 0);
     QVERIFY(outMs - inMs >= 200);
+}
+
+void LightEditorControllerTest::editsSelectedClipsWithClipboardSplitMergeAndCrop()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString path = temp.filePath(QStringLiteral("edit.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(path, 120, 3));
+
+    LightEditor editor;
+    editor.setSnapEnabled(false);
+    editor.loadFileToTrack(0, QUrl::fromLocalFile(path));
+    QVERIFY(editor.moveClip(0, 1000));
+    QVERIFY(editor.trimClip(0, 200, 2800));
+
+    QVERIFY(editor.copySelectedClip());
+    QVERIFY(editor.hasClipboard());
+    editor.setSelectedTrack(1);
+    QVERIFY(editor.pasteClip());
+    QVariantMap pasted = editor.tracks().at(1).toMap();
+    QCOMPARE(pasted.value(QStringLiteral("name")).toString(),
+             QFileInfo(path).fileName());
+    QCOMPARE(pasted.value(QStringLiteral("timelineStartMs")).toLongLong(), 1000);
+    QCOMPARE(pasted.value(QStringLiteral("inMs")).toLongLong(), 200);
+    QCOMPARE(pasted.value(QStringLiteral("outMs")).toLongLong(), 2800);
+
+    QVERIFY(editor.cutSelectedClip());
+    QVERIFY(!editor.tracks().at(1).toMap().value(QStringLiteral("hasFile")).toBool());
+    editor.undo();
+    QVERIFY(editor.tracks().at(1).toMap().value(QStringLiteral("hasFile")).toBool());
+    editor.redo();
+    QVERIFY(!editor.tracks().at(1).toMap().value(QStringLiteral("hasFile")).toBool());
+
+    editor.setSelectedTrack(0);
+    QVERIFY(editor.splitSelectedClip(2000));
+    const QVariantMap first = editor.tracks().at(0).toMap();
+    const QVariantMap second = editor.tracks().at(1).toMap();
+    QCOMPARE(first.value(QStringLiteral("outMs")).toLongLong(), 1200);
+    QCOMPARE(second.value(QStringLiteral("inMs")).toLongLong(), 1200);
+    QCOMPARE(second.value(QStringLiteral("timelineStartMs")).toLongLong(), 2000);
+
+    editor.setSelectedTrack(0);
+    QVERIFY(editor.mergeSelectedClip());
+    QCOMPARE(editor.tracks().at(0).toMap()
+                 .value(QStringLiteral("outMs")).toLongLong(), 2800);
+    QVERIFY(!editor.tracks().at(1).toMap().value(QStringLiteral("hasFile")).toBool());
+
+    QVERIFY(editor.cropSelectedClip(2200));
+    QCOMPARE(editor.tracks().at(0).toMap()
+                 .value(QStringLiteral("outMs")).toLongLong(), 1400);
+    QVERIFY(editor.deleteSelectedClip());
+    QVERIFY(!editor.tracks().at(0).toMap().value(QStringLiteral("hasFile")).toBool());
 }
 
 void LightEditorControllerTest::validatesBpmAndTrackSwitches()

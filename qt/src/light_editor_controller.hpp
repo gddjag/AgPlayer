@@ -11,6 +11,7 @@
 #include <QPointer>
 
 #include <atomic>
+#include <optional>
 #include <vector>
 
 template <typename T>
@@ -43,6 +44,7 @@ class LightEditor final : public QObject {
     Q_PROPERTY(bool keepPitch READ keepPitch WRITE setKeepPitch NOTIFY keepPitchChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoStateChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoStateChanged)
+    Q_PROPERTY(bool hasClipboard READ hasClipboard NOTIFY clipboardChanged)
 
 public:
     explicit LightEditor(QObject* parent = nullptr);
@@ -73,6 +75,7 @@ public:
     void setKeepPitch(bool value);
     bool canUndo() const noexcept;
     bool canRedo() const noexcept;
+    bool hasClipboard() const noexcept;
 
     Q_INVOKABLE void loadFile(const QUrl& url);
     Q_INVOKABLE void loadFileToTrack(int trackIndex, const QUrl& url);
@@ -87,6 +90,13 @@ public:
     Q_INVOKABLE void clearTrack(int trackIndex);
     Q_INVOKABLE bool moveClip(int trackIndex, qint64 timelineStartMs);
     Q_INVOKABLE bool trimClip(int trackIndex, qint64 inMs, qint64 outMs);
+    Q_INVOKABLE bool copySelectedClip();
+    Q_INVOKABLE bool cutSelectedClip();
+    Q_INVOKABLE bool pasteClip();
+    Q_INVOKABLE bool deleteSelectedClip();
+    Q_INVOKABLE bool splitSelectedClip(qint64 projectPositionMs);
+    Q_INVOKABLE bool mergeSelectedClip();
+    Q_INVOKABLE bool cropSelectedClip(qint64 projectPositionMs);
     Q_INVOKABLE void setTrackMuted(int trackIndex, bool value);
     Q_INVOKABLE void setTrackSolo(int trackIndex, bool value);
     Q_INVOKABLE void setTrackLocked(int trackIndex, bool value);
@@ -112,6 +122,7 @@ signals:
     void snapEnabledChanged();
     void keepPitchChanged();
     void undoStateChanged();
+    void clipboardChanged();
     void trackError(int trackIndex, const QString& message);
 
 private:
@@ -147,6 +158,7 @@ private:
     std::vector<Track> tracks_;
     std::vector<EditorState> undoStack_;
     std::vector<EditorState> redoStack_;
+    std::optional<Track> clipboard_;
     int selectedTrack_ = 0;
     double targetBpm_ = 128.0;
     bool snapEnabled_ = true;

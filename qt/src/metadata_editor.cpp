@@ -12,6 +12,17 @@ MetadataEditor::MetadataEditor(QObject* parent)
 {
 }
 
+MetadataEditor::~MetadataEditor()
+{
+    cancel();
+    if (loadWatcher_ != nullptr) {
+        loadWatcher_->future().waitForFinished();
+    }
+    if (operationWatcher_ != nullptr) {
+        operationWatcher_->future().waitForFinished();
+    }
+}
+
 double MetadataEditor::progress() const noexcept
 {
     return progress_.load(std::memory_order_acquire);
@@ -118,8 +129,10 @@ void MetadataEditor::loadFiles(const QList<QUrl>& urls)
     setProgress(0.0);
 
     auto* watcher = new QFutureWatcher<QList<MetadataEntry>>(this);
+    loadWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<QList<MetadataEntry>>::finished, this,
         [this, watcher]() {
+            loadWatcher_.clear();
             entries_ = watcher->result();
             setBusy(false);
             setProgress(1.0);
@@ -205,8 +218,10 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
     }
 
     auto* watcher = new QFutureWatcher<QPair<int, int>>(this);
+    operationWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<QPair<int, int>>::finished, this,
         [this, watcher]() {
+            operationWatcher_.clear();
             const auto result = watcher->result();
             setBusy(false);
             setProgress(1.0);
@@ -359,8 +374,10 @@ void MetadataEditor::applyRename(const QString& prefix,
     setProgress(0.0);
 
     auto* watcher = new QFutureWatcher<QPair<int, int>>(this);
+    operationWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<QPair<int, int>>::finished, this,
         [this, watcher]() {
+            operationWatcher_.clear();
             const auto result = watcher->result();
             setBusy(false);
             setProgress(1.0);

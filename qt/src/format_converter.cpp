@@ -2,10 +2,17 @@
 
 #include <agplayer/c_api.h>
 
+#include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QSet>
+#include <QThread>
+#include <QThreadPool>
+#include <QVector>
 #include <QtConcurrent>
+
+#include <algorithm>
+#include <numeric>
 
 namespace {
 
@@ -34,11 +41,29 @@ FormatInfo format_info(const QString& format)
     return {"libmp3lame", "mp3"};
 }
 
+bool is_video_file(const QString& path)
+{
+    static const QSet<QString> extensions = {
+        QStringLiteral("mp4"), QStringLiteral("mkv"),
+        QStringLiteral("avi"), QStringLiteral("mov"),
+        QStringLiteral("webm")
+    };
+    return extensions.contains(QFileInfo(path).suffix().toLower());
+}
+
 } // namespace
 
 FormatConverter::FormatConverter(QObject* parent)
     : QObject(parent)
 {
+}
+
+FormatConverter::~FormatConverter()
+{
+    cancel();
+    if (watcher_ != nullptr) {
+        watcher_->future().waitForFinished();
+    }
 }
 
 double FormatConverter::progress() const noexcept
@@ -269,7 +294,8 @@ QString FormatConverter::formatDuration(qint64 ms) const
 
 QString FormatConverter::computeOutputPath(const QString& inputPath,
                                            const QString& outputFormat,
-                                           const QString& outputDir) const
+                                           const QString& outputDir,
+                                           const QSet<QString>& reservedPaths) const
 {
     const QFileInfo info(inputPath);
     const FormatInfo fi = format_info(outputFormat);
@@ -283,7 +309,9 @@ QString FormatConverter::computeOutputPath(const QString& inputPath,
     QString candidate = dir + QStringLiteral("/") + baseName
                         + QStringLiteral(".") + QString::fromLatin1(fi.extension);
     int counter = 1;
-    while (QFileInfo::exists(candidate)) {
+    while (QFileInfo::exists(candidate)
+           || reservedPaths.contains(
+               QDir::cleanPath(candidate).toCaseFolded())) {
         candidate = dir + QStringLiteral("/") + baseName
                     + QStringLiteral("_") + QString::number(counter)
                     + QStringLiteral(".") + QString::fromLatin1(fi.extension);
@@ -301,8 +329,6 @@ void FormatConverter::start(const QString& outputFormat,
                             bool volumeNormalize,
                             bool extractAudio)
 {
-    Q_UNUSED(extractAudio)
-
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
@@ -316,9 +342,12 @@ void FormatConverter::start(const QString& outputFormat,
         emit errorOccurred(QStringLiteral("No files to transcode"));
         return;
     }
+    if (!outputDir.isEmpty() && !QDir().mkpath(outputDir)) {
+        emit errorOccurred(QStringLiteral("Failed to create output directory"));
+        return;
+    }
 
     cancelFlag_.store(false, std::memory_order_release);
-    currentToken_.store(nullptr, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
     setCompletedCount(0);
@@ -335,12 +364,11 @@ void FormatConverter::start(const QString& outputFormat,
     emit filesChanged();
 
     auto* watcher = new QFutureWatcher<void>(this);
+    watcher_ = watcher;
     connect(watcher, &QFutureWatcher<void>::finished, this,
         [this, watcher]() {
             watcher->deleteLater();
-            ag_cancel_token* t = currentToken_.exchange(nullptr,
-                std::memory_order_acq_rel);
-            if (t) ag_cancel_token_destroy(t);
+            watcher_.clear();
             const int success = completedCount_.load(std::memory_order_acquire)
                                 - failedCount_.load(std::memory_order_acquire);
             const int failure = failedCount_.load(std::memory_order_acquire);
@@ -354,8 +382,11 @@ void FormatConverter::start(const QString& outputFormat,
         });
 
     QFuture<void> future = QtConcurrent::run(
-        [this, outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata, volumeNormalize]() {
-            runTranscode(outputFormat, bitRate, sampleRate, channels, outputDir, keepMetadata, volumeNormalize);
+        [this, outputFormat, bitRate, sampleRate, channels, outputDir,
+         keepMetadata, volumeNormalize, extractAudio]() {
+            runTranscode(outputFormat, bitRate, sampleRate, channels,
+                         outputDir, keepMetadata, volumeNormalize,
+                         extractAudio);
         });
     watcher->setFuture(future);
 }
@@ -366,37 +397,75 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    int channels,
                                    const QString& outputDir,
                                    bool keepMetadata,
-                                   bool volumeNormalize)
+                                   bool volumeNormalize,
+                                   bool extractAudio)
 {
     const FormatInfo fi = format_info(outputFormat);
     const QByteArray codecName = QByteArray(fi.codec_name);
 
-    int totalJobs = 0;
+    QVector<QString> inputPaths;
     {
         QMutexLocker lock(&mutex_);
-        totalJobs = static_cast<int>(entries_.size());
+        inputPaths.reserve(entries_.size());
+        for (const FileEntry& entry : entries_) {
+            inputPaths.push_back(entry.path);
+        }
     }
 
-    for (int i = 0; i < totalJobs; ++i) {
+    const int totalJobs = static_cast<int>(inputPaths.size());
+    QVector<QString> outputPaths;
+    outputPaths.reserve(totalJobs);
+    QSet<QString> reservedPaths;
+    for (const QString& inputPath : inputPaths) {
+        const QString outputPath = computeOutputPath(
+            inputPath, outputFormat, outputDir, reservedPaths);
+        outputPaths.push_back(outputPath);
+        reservedPaths.insert(QDir::cleanPath(outputPath).toCaseFolded());
+    }
+
+    QVector<int> jobs(totalJobs);
+    std::iota(jobs.begin(), jobs.end(), 0);
+    QThreadPool pool;
+    pool.setMaxThreadCount(std::clamp(QThread::idealThreadCount(), 1, 4));
+
+    QtConcurrent::blockingMap(&pool, jobs, [&](int i) {
+        if (i >= inputPaths.size()) {
+            return;
+        }
+        const auto completeFailure = [this, i, totalJobs](
+                                         const QString& error) {
+            setEntryError(i, error);
+            setEntryStatus(i, FileStatus::Error);
+            failedCount_.fetch_add(1, std::memory_order_acq_rel);
+            emit failedCountChanged();
+            const int completed =
+                completedCount_.fetch_add(1, std::memory_order_acq_rel) + 1;
+            if (totalJobs > 0) {
+                setProgress(static_cast<double>(completed) / totalJobs);
+            }
+        };
         if (cancelFlag_.load(std::memory_order_acquire)) {
-            break;
+            completeFailure(QStringLiteral("Cancelled"));
+            return;
         }
 
-        QString inputPath;
-        QString outputPath;
-        {
-            QMutexLocker lock(&mutex_);
-            if (i >= entries_.size()) {
-                break;
-            }
-            inputPath = entries_[i].path;
-        }
-        outputPath = computeOutputPath(inputPath, outputFormat, outputDir);
+        const QString& inputPath = inputPaths.at(i);
+        const QString& outputPath = outputPaths.at(i);
 
         setEntryStatus(i, FileStatus::Converting);
-
+        if (is_video_file(inputPath) && !extractAudio) {
+            completeFailure(QStringLiteral(
+                "Video input requires Extract audio from video"));
+            return;
+        }
         ag_cancel_token* token = ag_cancel_token_create();
-        currentToken_.store(token, std::memory_order_release);
+        {
+            QMutexLocker lock(&tokenMutex_);
+            activeTokens_.insert(token);
+        }
+        if (cancelFlag_.load(std::memory_order_acquire)) {
+            ag_cancel_token_cancel(token);
+        }
         const QByteArray inputUtf8 = inputPath.toUtf8();
         const QByteArray outputUtf8 = outputPath.toUtf8();
 
@@ -416,40 +485,38 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             nullptr,
             nullptr);
 
-        currentToken_.store(nullptr, std::memory_order_release);
+        {
+            QMutexLocker lock(&tokenMutex_);
+            activeTokens_.remove(token);
+        }
         ag_cancel_token_destroy(token);
 
         if (cancelFlag_.load(std::memory_order_acquire)) {
-            setEntryError(i, QStringLiteral("Cancelled"));
-            setEntryStatus(i, FileStatus::Error);
-            failedCount_.fetch_add(1, std::memory_order_acq_rel);
-            emit failedCountChanged();
+            completeFailure(QStringLiteral("Cancelled"));
+            return;
         } else if (result == AG_OK) {
             setEntryStatus(i, FileStatus::Done);
         } else if (result == AG_CANCELLED) {
-            setEntryError(i, QStringLiteral("Cancelled"));
-            setEntryStatus(i, FileStatus::Error);
-            failedCount_.fetch_add(1, std::memory_order_acq_rel);
-            emit failedCountChanged();
+            completeFailure(QStringLiteral("Cancelled"));
+            return;
         } else {
-            setEntryError(i, QStringLiteral("Transcode failed (error %1)").arg(result));
-            setEntryStatus(i, FileStatus::Error);
-            failedCount_.fetch_add(1, std::memory_order_acq_rel);
-            emit failedCountChanged();
+            completeFailure(
+                QStringLiteral("Transcode failed (error %1)").arg(result));
+            return;
         }
 
         const int completed = completedCount_.fetch_add(1, std::memory_order_acq_rel) + 1;
         if (totalJobs > 0) {
             setProgress(static_cast<double>(completed) / totalJobs);
         }
-    }
+    });
 }
 
 void FormatConverter::cancel()
 {
     cancelFlag_.store(true, std::memory_order_release);
-    ag_cancel_token* t = currentToken_.load(std::memory_order_acquire);
-    if (t) {
-        ag_cancel_token_cancel(t);
+    QMutexLocker lock(&tokenMutex_);
+    for (ag_cancel_token* token : activeTokens_) {
+        ag_cancel_token_cancel(token);
     }
 }

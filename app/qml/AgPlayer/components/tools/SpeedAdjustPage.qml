@@ -1353,7 +1353,6 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillHeight: true }
     }
 
     // Status message overlay

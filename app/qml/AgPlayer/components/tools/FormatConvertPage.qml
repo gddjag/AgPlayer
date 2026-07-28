@@ -7,7 +7,7 @@ import AgPlayer
 // Format Convert tool page: batch transcode audio files to a target format.
 // Supports drag-drop import, output format/bit-rate/sample-rate/channel
 // selection, keep-metadata/volume-normalize/extract-audio options, output
-// directory choice and sequential background processing with status tracking.
+// directory choice and bounded parallel background processing with status tracking.
 Rectangle {
     id: page
     color: Theme.background
@@ -142,12 +142,14 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: Theme.spacingSm
 
-                Image {
+                ThemedIcon {
                     Layout.alignment: Qt.AlignHCenter
                     source: Theme.icon("folder-open-fill")
+                    tint: Theme.iconAccent
                     sourceSize.width: 32
                     sourceSize.height: 32
-                    fillMode: Image.PreserveAspectFit
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
                 }
 
                 Text {
@@ -305,12 +307,13 @@ Rectangle {
                                 anchors.fill: parent
                                 spacing: Theme.spacingSm
 
-                                Image {
+                                ThemedIcon {
                                     source: Theme.icon("music-2-fill")
+                                    tint: Theme.iconSecondary
                                     sourceSize.width: 16
                                     sourceSize.height: 16
-                                    fillMode: Image.PreserveAspectFit
                                     Layout.preferredWidth: 36
+                                    Layout.preferredHeight: 16
                                     Layout.alignment: Qt.AlignHCenter
                                 }
 
@@ -646,6 +649,7 @@ Rectangle {
             CheckBox {
                 id: extractAudioCheck
                 text: qsTr("Extract audio from video")
+                checked: true
 
                 indicator: Rectangle {
                     implicitWidth: 16

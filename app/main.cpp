@@ -68,12 +68,14 @@ int main(int argc, char* argv[])
     //   --qa-play <path>            load + play a file through the normal path
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
+    //   --qa-tool <0..4>             choose the audio-tool screenshot page
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
     QString qaScreenshotMain;
     QString qaScreenshotMini;
     QString qaScreenshotTools;
+    int qaTool = 1;
     QString qaScreenshotList;
     QString qaTheme;
     QString qaLanguage;
@@ -100,6 +102,13 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-screenshot-tools")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotTools = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-tool")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int requestedTool = cliArgs.at(++i).toInt(&ok);
+                if (ok && requestedTool >= 0 && requestedTool <= 4) {
+                    qaTool = requestedTool;
+                }
             } else if (arg == QStringLiteral("--qa-screenshot-list")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotList = cliArgs.at(++i);
@@ -222,7 +231,7 @@ int main(int argc, char* argv[])
 
         AudioToolsController audioTools;
         if (!qaScreenshotTools.isEmpty()) {
-            audioTools.selectTool(1);
+            audioTools.selectTool(qaTool);
         }
         MetadataEditor metadataEditor;
         FormatConverter formatConverter;

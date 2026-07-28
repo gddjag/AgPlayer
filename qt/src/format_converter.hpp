@@ -5,14 +5,19 @@
 #include <QList>
 #include <QMutex>
 #include <QObject>
+#include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
 
 #include <atomic>
 
+template <typename T>
+class QFutureWatcher;
+
 // FormatConverter: batch audio transcoder. Manages a list of input files and
-// transcodes them sequentially in a background thread. Each file exposes its
+// transcodes them with bounded parallelism. Each file exposes its
 // format, size, duration and status so the QML table can display progress.
 class FormatConverter final : public QObject {
     Q_OBJECT
@@ -25,6 +30,7 @@ class FormatConverter final : public QObject {
 
 public:
     explicit FormatConverter(QObject* parent = nullptr);
+    ~FormatConverter() override;
 
     double progress() const noexcept;
     bool busy() const noexcept;
@@ -88,7 +94,9 @@ private:
     std::atomic<bool> busy_{false};
     std::atomic<int> completedCount_{0};
     std::atomic<int> failedCount_{0};
-    std::atomic<ag_cancel_token*> currentToken_{nullptr};
+    QMutex tokenMutex_;
+    QSet<ag_cancel_token*> activeTokens_;
+    QPointer<QFutureWatcher<void>> watcher_;
 
     void setBusy(bool value);
     void setProgress(double value);
@@ -100,14 +108,16 @@ private:
     // Generate a non-colliding output path for the given source and format.
     QString computeOutputPath(const QString& inputPath,
                               const QString& outputFormat,
-                              const QString& outputDir) const;
+                              const QString& outputDir,
+                              const QSet<QString>& reservedPaths) const;
 
-    // Sequential transcode worker. Runs in a background thread.
+    // Bounded parallel transcode worker. Runs in a background thread.
     void runTranscode(const QString& outputFormat,
                       int bitRate,
                       int sampleRate,
                       int channels,
                       const QString& outputDir,
-                      bool /*keepMetadata*/,
-                      bool volumeNormalize);
+                      bool keepMetadata,
+                      bool volumeNormalize,
+                      bool extractAudio);
 };

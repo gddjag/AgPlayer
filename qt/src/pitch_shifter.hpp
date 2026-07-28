@@ -1,11 +1,17 @@
 #pragma once
 
+#include <agplayer/c_api.h>
+
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
 
 #include <atomic>
+
+template <typename T>
+class QFutureWatcher;
 
 // PitchShifter: QML singleton for pitch shifting audio files.
 // Supports pitch shift in cents (-1200..1200), semitone/cents editing,
@@ -26,6 +32,7 @@ class PitchShifter final : public QObject {
 
 public:
     explicit PitchShifter(QObject* parent = nullptr);
+    ~PitchShifter() override;
 
     double progress() const noexcept;
     bool busy() const noexcept;
@@ -66,9 +73,10 @@ private:
     int inputSampleRate_ = 0;
     int inputDurationMs_ = 0;
     QVariantList waveformPeaks_;
-    std::atomic<bool> cancelFlag_{false};
     std::atomic<double> progress_{0.0};
     std::atomic<bool> busy_{false};
+    std::atomic<ag_cancel_token*> token_{nullptr};
+    QPointer<QFutureWatcher<int>> watcher_;
 
     void setBusy(bool value);
     void setProgress(double value);

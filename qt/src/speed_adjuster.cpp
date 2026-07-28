@@ -46,9 +46,15 @@ SpeedAdjuster::SpeedAdjuster(QObject* parent)
 
 SpeedAdjuster::~SpeedAdjuster()
 {
-    // If a background task is still running, the token is owned by the task
-    // lambda and destroyed there. Just ensure we don't dangle.
-    token_.store(nullptr, std::memory_order_release);
+    cancel();
+    if (watcher_ != nullptr) {
+        watcher_->future().waitForFinished();
+    }
+    ag_cancel_token* token =
+        token_.exchange(nullptr, std::memory_order_acq_rel);
+    if (token != nullptr) {
+        ag_cancel_token_destroy(token);
+    }
 }
 
 double SpeedAdjuster::progress() const noexcept
@@ -316,9 +322,11 @@ void SpeedAdjuster::start(double speedRatio, const QString& outputDir)
     const double tempoRatio = 1.0 / speedRatio;
 
     auto* watcher = new QFutureWatcher<int>(this);
+    watcher_ = watcher;
     connect(watcher, &QFutureWatcher<int>::finished, this,
         [this, watcher, outputPath]() {
             watcher->deleteLater();
+            watcher_.clear();
             ag_cancel_token* t = token_.exchange(nullptr,
                 std::memory_order_acq_rel);
             if (t) ag_cancel_token_destroy(t);
@@ -415,9 +423,11 @@ void SpeedAdjuster::startBpmAdjust(double targetBpm,
     }();
 
     auto* watcher = new QFutureWatcher<int>(this);
+    watcher_ = watcher;
     connect(watcher, &QFutureWatcher<int>::finished, this,
         [this, watcher, outputPath]() {
             watcher->deleteLater();
+            watcher_.clear();
             ag_cancel_token* t = token_.exchange(nullptr,
                 std::memory_order_acq_rel);
             if (t) ag_cancel_token_destroy(t);

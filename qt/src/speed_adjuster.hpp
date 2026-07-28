@@ -3,11 +3,15 @@
 #include <agplayer/c_api.h>
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
 
 #include <atomic>
+
+template <typename T>
+class QFutureWatcher;
 
 // SpeedAdjuster: QML singleton for changing audio playback speed while
 // preserving pitch. Internally delegates to ag_pitch_shift with pitch_cents=0
@@ -106,6 +110,7 @@ private:
     // Cancel token is created in start() (main thread) and used by the
     // background task. cancel() flips the flag on the token pointer.
     std::atomic<ag_cancel_token*> token_{nullptr};
+    QPointer<QFutureWatcher<int>> watcher_;
 
     void setBusy(bool value);
     void setProgress(double value);

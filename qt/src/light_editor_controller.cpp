@@ -268,6 +268,11 @@ bool LightEditor::canRedo() const noexcept
     return !redoStack_.empty();
 }
 
+bool LightEditor::hasClipboard() const noexcept
+{
+    return clipboard_.has_value();
+}
+
 const LightEditor::Track& LightEditor::currentTrack() const
 {
     return tracks_[selectedTrack_];
@@ -934,6 +939,181 @@ bool LightEditor::trimClip(int trackIndex, qint64 inMs, qint64 outMs)
         emit inputFileChanged();
     }
     return true;
+}
+
+bool LightEditor::copySelectedClip()
+{
+    if (busy_.load(std::memory_order_acquire)
+        || !isValidTrackIndex(selectedTrack_)) {
+        return false;
+    }
+    const Track& track = tracks_[selectedTrack_];
+    if (track.path.isEmpty()) {
+        return false;
+    }
+    clipboard_ = track;
+    emit clipboardChanged();
+    return true;
+}
+
+bool LightEditor::cutSelectedClip()
+{
+    if (busy_.load(std::memory_order_acquire)
+        || !isValidTrackIndex(selectedTrack_)
+        || tracks_[selectedTrack_].locked) {
+        return false;
+    }
+    if (!copySelectedClip()) {
+        return false;
+    }
+    pushUndoState();
+    tracks_[selectedTrack_] = Track();
+    emitEditorStateChanged();
+    return true;
+}
+
+bool LightEditor::pasteClip()
+{
+    if (busy_.load(std::memory_order_acquire) || !clipboard_.has_value()) {
+        return false;
+    }
+
+    int destination = selectedTrack_;
+    if (!isValidTrackIndex(destination) || !tracks_[destination].path.isEmpty()) {
+        const auto empty = std::find_if(
+            tracks_.begin(), tracks_.end(),
+            [](const Track& track) { return track.path.isEmpty(); });
+        if (empty == tracks_.end()) {
+            return false;
+        }
+        destination = static_cast<int>(std::distance(tracks_.begin(), empty));
+    }
+
+    pushUndoState();
+    tracks_[destination] = *clipboard_;
+    selectedTrack_ = destination;
+    emitEditorStateChanged();
+    return true;
+}
+
+bool LightEditor::deleteSelectedClip()
+{
+    if (busy_.load(std::memory_order_acquire)
+        || !isValidTrackIndex(selectedTrack_)
+        || tracks_[selectedTrack_].path.isEmpty()
+        || tracks_[selectedTrack_].locked) {
+        return false;
+    }
+    pushUndoState();
+    tracks_[selectedTrack_] = Track();
+    emitEditorStateChanged();
+    return true;
+}
+
+bool LightEditor::splitSelectedClip(qint64 projectPositionMs)
+{
+    if (busy_.load(std::memory_order_acquire)
+        || !isValidTrackIndex(selectedTrack_)) {
+        return false;
+    }
+    Track& first = tracks_[selectedTrack_];
+    if (first.path.isEmpty() || first.locked) {
+        return false;
+    }
+    const qint64 sourcePosition =
+        first.inMs + projectPositionMs - first.timelineStartMs;
+    if (sourcePosition - first.inMs < 200
+        || first.outMs - sourcePosition < 200) {
+        return false;
+    }
+    const auto empty = std::find_if(
+        tracks_.begin(), tracks_.end(),
+        [](const Track& track) { return track.path.isEmpty(); });
+    if (empty == tracks_.end()) {
+        return false;
+    }
+    const int destination =
+        static_cast<int>(std::distance(tracks_.begin(), empty));
+
+    pushUndoState();
+    Track second = first;
+    first.outMs = sourcePosition;
+    second.inMs = sourcePosition;
+    second.timelineStartMs = projectPositionMs;
+    tracks_[destination] = std::move(second);
+    emit tracksChanged();
+    emit inputFileChanged();
+    return true;
+}
+
+bool LightEditor::mergeSelectedClip()
+{
+    if (busy_.load(std::memory_order_acquire)
+        || !isValidTrackIndex(selectedTrack_)) {
+        return false;
+    }
+    Track& selected = tracks_[selectedTrack_];
+    if (selected.path.isEmpty() || selected.locked) {
+        return false;
+    }
+
+    int neighborIndex = -1;
+    bool selectedFirst = false;
+    for (int index = 0; index < kTrackCount; ++index) {
+        if (index == selectedTrack_) {
+            continue;
+        }
+        const Track& candidate = tracks_[index];
+        if (candidate.path != selected.path || candidate.locked) {
+            continue;
+        }
+        const qint64 selectedEnd = selected.timelineStartMs
+            + selected.outMs - selected.inMs;
+        const qint64 candidateEnd = candidate.timelineStartMs
+            + candidate.outMs - candidate.inMs;
+        if (selectedEnd == candidate.timelineStartMs
+            && selected.outMs == candidate.inMs) {
+            neighborIndex = index;
+            selectedFirst = true;
+            break;
+        }
+        if (candidateEnd == selected.timelineStartMs
+            && candidate.outMs == selected.inMs) {
+            neighborIndex = index;
+            selectedFirst = false;
+            break;
+        }
+    }
+    if (neighborIndex < 0) {
+        return false;
+    }
+
+    pushUndoState();
+    const Track neighbor = tracks_[neighborIndex];
+    if (selectedFirst) {
+        selected.outMs = neighbor.outMs;
+    } else {
+        selected.timelineStartMs = neighbor.timelineStartMs;
+        selected.inMs = neighbor.inMs;
+    }
+    tracks_[neighborIndex] = Track();
+    emit tracksChanged();
+    emit inputFileChanged();
+    return true;
+}
+
+bool LightEditor::cropSelectedClip(qint64 projectPositionMs)
+{
+    if (!isValidTrackIndex(selectedTrack_)) {
+        return false;
+    }
+    const Track& track = tracks_[selectedTrack_];
+    if (track.path.isEmpty()) {
+        return false;
+    }
+    const qint64 sourcePosition =
+        track.inMs + projectPositionMs - track.timelineStartMs;
+    return trimClip(selectedTrack_, track.inMs, sourcePosition);
 }
 
 void LightEditor::setTrackMuted(int trackIndex, bool value)

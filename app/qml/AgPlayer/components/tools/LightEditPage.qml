@@ -16,6 +16,16 @@ Rectangle {
     property bool keepPitch: editor.keepPitch
     property real pixelsPerMs: 0.0035
     property int selectedTrack: editor.selectedTrack
+    readonly property var selectedTrackData:
+        editor.tracks.length > editor.selectedTrack
+        ? editor.tracks[editor.selectedTrack] : ({})
+    readonly property bool selectedHasFile: !!selectedTrackData.hasFile
+    readonly property string selectedTrackUrl:
+        selectedHasFile
+        ? "file:///" + selectedTrackData.path.replace(/\\/g, "/") : ""
+    readonly property bool previewIsCurrent:
+        selectedHasFile
+        && AudioPreviewController.isCurrentSource(selectedTrackUrl)
 
     readonly property var trackColors: [
         Theme.waveformRed,
@@ -339,30 +349,33 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { text: qsTr("撤销"), icon: "arrow-go-back-line", enabled: editor.canUndo,
+                        { name: "undoEditButton", text: qsTr("撤销"), icon: "arrow-go-back-line", enabled: editor.canUndo,
                           action: function() { editor.undo() } },
-                        { text: qsTr("重做"), icon: "arrow-go-forward-line", enabled: editor.canRedo,
+                        { name: "redoEditButton", text: qsTr("重做"), icon: "arrow-go-forward-line", enabled: editor.canRedo,
                           action: function() { editor.redo() } },
-                        { text: qsTr("剪切"), icon: "scissors-cut-line", enabled: false,
-                          action: function() {} },
-                        { text: qsTr("复制"), icon: "file-copy-line", enabled: false,
-                          action: function() {} },
-                        { text: qsTr("删除"), icon: "delete-bin-line", enabled: false,
-                          action: function() {} },
-                        { text: qsTr("分割"), icon: "split-cells-horizontal", enabled: false,
-                          action: function() {} },
-                        { text: qsTr("合并"), icon: "merge-cells-horizontal", enabled: false,
-                          action: function() {} },
-                        { text: qsTr("静音"), icon: "volume-mute-line", enabled: true,
+                        { name: "cutClipButton", text: qsTr("剪切"), icon: "scissors-cut-line", enabled: page.selectedHasFile,
+                          action: function() { editor.cutSelectedClip() } },
+                        { name: "copyClipButton", text: qsTr("复制"), icon: "file-copy-line", enabled: page.selectedHasFile,
+                          action: function() { editor.copySelectedClip() } },
+                        { name: "pasteClipButton", text: qsTr("粘贴"), icon: "file-copy-line", enabled: editor.hasClipboard,
+                          action: function() { editor.pasteClip() } },
+                        { name: "deleteClipButton", text: qsTr("删除"), icon: "delete-bin-line", enabled: page.selectedHasFile,
+                          action: function() { editor.deleteSelectedClip() } },
+                        { name: "splitClipButton", text: qsTr("分割"), icon: "split-cells-horizontal", enabled: page.selectedHasFile,
+                          action: function() { editor.splitSelectedClip(page.playheadMs) } },
+                        { name: "mergeClipButton", text: qsTr("合并"), icon: "merge-cells-horizontal", enabled: page.selectedHasFile,
+                          action: function() { editor.mergeSelectedClip() } },
+                        { name: "muteClipButton", text: qsTr("静音"), icon: "volume-mute-line", enabled: page.selectedHasFile,
                           action: function() {
                               const track = editor.tracks[editor.selectedTrack]
                               editor.setTrackMuted(editor.selectedTrack, !track.muted)
                           } },
-                        { text: qsTr("裁剪"), icon: "crop-line", enabled: false,
-                          action: function() {} }
+                        { name: "cropClipButton", text: qsTr("裁剪"), icon: "crop-line", enabled: page.selectedHasFile,
+                          action: function() { editor.cropSelectedClip(page.playheadMs) } }
                     ]
 
                     ToolButton {
+                        objectName: modelData.name
                         enabled: modelData.enabled && !editor.busy
                         implicitWidth: 62
                         implicitHeight: 60
@@ -379,14 +392,27 @@ Rectangle {
                 Item { Layout.fillWidth: true }
 
                 ToolButton {
-                    icon.source: Theme.icon("volume-up-fill")
+                    objectName: "lightPreviewButton"
+                    enabled: page.selectedHasFile
+                    icon.source: Theme.icon(page.previewIsCurrent
+                                            && AudioPreviewController.playing
+                                            ? "pause-fill" : "play-fill")
                     icon.color: Theme.iconPrimary
+                    onClicked: {
+                        const wasCurrent = page.previewIsCurrent
+                        AudioPreviewController.toggle(page.selectedTrackUrl)
+                        if (!wasCurrent && page.selectedTrackData.inMs > 0)
+                            AudioPreviewController.seek(page.selectedTrackData.inMs)
+                    }
                 }
                 Slider {
+                    objectName: "lightPreviewVolume"
                     Layout.preferredWidth: 160
                     from: 0
                     to: 1
-                    value: 0.68
+                    value: AudioPreviewController.volume
+                    enabled: page.selectedHasFile
+                    onMoved: AudioPreviewController.volume = value
                 }
                 Text {
                     text: page.formatTime(page.playheadMs) + " / "
@@ -507,6 +533,22 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    Connections {
+        target: AudioPreviewController
+
+        function onStateChanged() {
+            if (!page.previewIsCurrent)
+                return
+            const track = page.selectedTrackData
+            page.playheadMs = track.timelineStartMs
+                              + Math.max(0, AudioPreviewController.positionMs
+                                           - track.inMs)
+            if (AudioPreviewController.playing
+                    && AudioPreviewController.positionMs >= track.outMs)
+                AudioPreviewController.pause()
         }
     }
 }

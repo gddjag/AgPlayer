@@ -147,7 +147,7 @@
         <translation>添加文件</translation>
     </message>
     <message>
-        <location line="+93"/>
+        <location line="+95"/>
         <source>Drop audio/video files here or click Add Files</source>
         <translation>将音频/视频文件拖到此处，或点击“添加文件”</translation>
     </message>
@@ -202,7 +202,7 @@
         <translation>状态</translation>
     </message>
     <message>
-        <location line="+80"/>
+        <location line="+81"/>
         <source>Error</source>
         <translation>错误</translation>
     </message>
@@ -322,7 +322,7 @@
         <translation>从视频中提取音频</translation>
     </message>
     <message>
-        <location line="+40"/>
+        <location line="+41"/>
         <source>Output Directory</source>
         <translation>输出目录</translation>
     </message>
@@ -414,29 +414,29 @@
     </message>
     <message>
         <location line="+84"/>
-        <location line="+586"/>
+        <location line="+590"/>
         <source>Drop audio files here or click to add</source>
         <translation>将音频文件拖到此处，或点击添加</translation>
     </message>
     <message>
-        <location line="-578"/>
-        <location line="+586"/>
+        <location line="-582"/>
+        <location line="+590"/>
         <source>Supports MP3 / WAV / FLAC / M4A, etc.</source>
         <translation>支持 MP3 / WAV / FLAC / M4A 等格式</translation>
     </message>
     <message>
-        <location line="-550"/>
+        <location line="-554"/>
         <source>File List</source>
         <translation>文件列表</translation>
     </message>
     <message>
         <location line="+10"/>
-        <location line="+803"/>
+        <location line="+819"/>
         <source>Clear List</source>
         <translation>清空列表</translation>
     </message>
     <message>
-        <location line="-714"/>
+        <location line="-730"/>
         <source>No audio files</source>
         <translation>没有音频文件</translation>
     </message>
@@ -476,7 +476,7 @@
         <translation>封面</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+56"/>
         <source>Select Image</source>
         <translation>选择图片</translation>
     </message>
@@ -507,22 +507,22 @@
     </message>
     <message>
         <location line="+11"/>
-        <location line="+347"/>
+        <location line="+359"/>
         <source>Process</source>
         <translation>处理</translation>
     </message>
     <message>
-        <location line="-297"/>
+        <location line="-307"/>
         <source>Batch Filename Rename</source>
         <translation>批量重命名文件</translation>
     </message>
     <message>
-        <location line="+122"/>
+        <location line="+125"/>
         <source>Naming Rule Settings</source>
         <translation>命名规则设置</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+12"/>
         <source>Prefix</source>
         <translation>前缀</translation>
     </message>
@@ -532,7 +532,7 @@
         <translation>可选前缀</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+38"/>
         <source>Auto Number</source>
         <translation>自动编号</translation>
     </message>
@@ -547,7 +547,7 @@
         <translation>位数</translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+38"/>
         <source>Suffix</source>
         <translation>后缀</translation>
     </message>
@@ -562,7 +562,7 @@
         <translation>示例：%1</translation>
     </message>
     <message>
-        <location line="+65"/>
+        <location line="+66"/>
         <source>File Preview</source>
         <translation>文件预览</translation>
     </message>
@@ -582,7 +582,7 @@
         <translation>新文件名（预览）</translation>
     </message>
     <message>
-        <location line="+78"/>
+        <location line="+79"/>
         <source>Processing...</source>
         <translation>正在处理...</translation>
     </message>
@@ -600,7 +600,7 @@
 <context>
     <name>LightEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68"/>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+78"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -676,6 +676,11 @@
     </message>
     <message>
         <location line="+2"/>
+        <source>粘贴</source>
+        <translation>粘贴</translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>删除</source>
         <translation>删除</translation>
     </message>
@@ -700,7 +705,7 @@
         <translation>裁剪</translation>
     </message>
     <message>
-        <location line="+60"/>
+        <location line="+74"/>
         <source>导出设置</source>
         <translation>导出设置</translation>
     </message>
@@ -773,7 +778,7 @@
 <context>
     <name>LightEditor</name>
     <message>
-        <location filename="../qt/src/light_editor_controller.cpp" line="+450"/>
+        <location filename="../qt/src/light_editor_controller.cpp" line="+455"/>
         <source>Editor is busy</source>
         <translation>编辑器正忙</translation>
     </message>
@@ -908,7 +913,7 @@
 <context>
     <name>MetadataEditor</name>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="+78"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="+89"/>
         <source>Failed to open cover image: %1</source>
         <translation>打开封面图片失败：%1</translation>
     </message>
@@ -1265,7 +1270,7 @@
         <translation>导出完成</translation>
     </message>
     <message>
-        <location line="+63"/>
+        <location line="+62"/>
         <source>Exported: %1</source>
         <translation>已导出：%1</translation>
     </message>
@@ -1378,12 +1383,12 @@
 <context>
     <name>PlayerPane</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+153"/>
+        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+154"/>
         <source>No track loaded</source>
         <translation>未加载歌曲</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+27"/>
         <source>Remove from favorites</source>
         <translation>取消收藏</translation>
     </message>
@@ -2309,7 +2314,7 @@
         <translation>导出完成</translation>
     </message>
     <message>
-        <location line="+63"/>
+        <location line="+62"/>
         <source>Exported: %1</source>
         <translation>已导出：%1</translation>
     </message>
@@ -2317,7 +2322,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+266"/>
+        <location filename="../app/main.cpp" line="+275"/>
         <source>Show AgPlayer</source>
         <translation>显示 AgPlayer</translation>
     </message>

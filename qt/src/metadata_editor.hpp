@@ -2,12 +2,17 @@
 
 #include <QList>
 #include <QObject>
+#include <QPair>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
 #include <QVariantMap>
 
 #include <atomic>
+
+template <typename T>
+class QFutureWatcher;
 
 struct MetadataEntry {
     QString path;
@@ -34,6 +39,7 @@ class MetadataEditor final : public QObject {
 
 public:
     explicit MetadataEditor(QObject* parent = nullptr);
+    ~MetadataEditor() override;
 
     double progress() const noexcept;
     bool busy() const noexcept;
@@ -84,6 +90,8 @@ private:
     std::atomic<bool> cancelFlag_{false};
     std::atomic<double> progress_{0.0};
     std::atomic<bool> busy_{false};
+    QPointer<QFutureWatcher<QList<MetadataEntry>>> loadWatcher_;
+    QPointer<QFutureWatcher<QPair<int, int>>> operationWatcher_;
 
     QString coverPath_;
     QByteArray coverData_;

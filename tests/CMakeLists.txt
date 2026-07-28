@@ -332,6 +332,7 @@ foreach(qt_test IN ITEMS
     audio_preview_controller_test
     editor_timeline_math_test
     light_editor_controller_test
+    audio_tools_end_to_end_test
     file_association_controller_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -358,6 +359,7 @@ add_test(
 set_tests_properties(translation_catalog_test PROPERTIES TIMEOUT 10)
 
 set_tests_properties(light_editor_controller_test PROPERTIES TIMEOUT 60)
+set_tests_properties(audio_tools_end_to_end_test PROPERTIES TIMEOUT 120)
 set_tests_properties(shutdown_test PROPERTIES TIMEOUT 30)
 set_tests_properties(runtime_log_test PROPERTIES TIMEOUT 30)
 

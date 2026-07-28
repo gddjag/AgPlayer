@@ -434,11 +434,13 @@ Rectangle {
                                     visible: editor.coverImage === ""
                                     spacing: Theme.spacingXs
 
-                                    Text {
-                                        text: "\uD83D\uDBC4"
-                                        color: Theme.secondaryText
-                                        font.family: Theme.fontPrimary
-                                        font.pixelSize: 28
+                                    ThemedIcon {
+                                        source: Theme.icon("music-2-line")
+                                        tint: Theme.iconSecondary
+                                        sourceSize.width: 28
+                                        sourceSize.height: 28
+                                        Layout.preferredWidth: 28
+                                        Layout.preferredHeight: 28
                                         Layout.alignment: Qt.AlignHCenter
                                     }
 
@@ -659,6 +661,8 @@ Rectangle {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 300
+            Layout.minimumHeight: 260
+            Layout.maximumHeight: 300
             spacing: Theme.spacingMd
 
             RowLayout {
@@ -771,6 +775,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.minimumHeight: 0
                 color: Theme.panel
                 radius: Theme.radiusSm
                 border.color: Theme.border
@@ -784,8 +789,10 @@ Rectangle {
                     // Rename controls
                     ColumnLayout {
                         Layout.fillHeight: true
-                        Layout.preferredWidth: parent.width * 0.45
-                        spacing: Theme.spacingMd
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        Layout.horizontalStretchFactor: 46
+                        spacing: Theme.spacingSm
 
                         Text {
                             text: qsTr("Naming Rule Settings")
@@ -796,6 +803,7 @@ Rectangle {
                         }
 
                         RowLayout {
+                            Layout.fillWidth: true
                             spacing: Theme.spacingSm
 
                             Label {
@@ -820,6 +828,11 @@ Rectangle {
                                     border.width: 1
                                 }
                             }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacingSm
 
                             CheckBox {
                                 id: autoNumberCheck
@@ -896,6 +909,7 @@ Rectangle {
 
                             SpinBox {
                                 id: numberDigitsSpin
+                                Layout.preferredWidth: 92
                                 from: 1
                                 to: 5
                                 value: 2
@@ -920,6 +934,7 @@ Rectangle {
                         }
 
                         RowLayout {
+                            Layout.fillWidth: true
                             spacing: Theme.spacingSm
 
                             Label {
@@ -957,7 +972,6 @@ Rectangle {
                                 font.pixelSize: 12
                             }
 
-                            Item { Layout.fillWidth: true }
                         }
 
                         Item { Layout.fillHeight: true }
@@ -996,6 +1010,8 @@ Rectangle {
                     Rectangle {
                         Layout.fillHeight: true
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        Layout.horizontalStretchFactor: 54
                         color: Theme.background
                         radius: Theme.radiusSm
                         border.color: Theme.border
@@ -1069,57 +1085,58 @@ Rectangle {
                                 }
                             }
 
-                            ScrollView {
+                            ListView {
+                                id: previewList
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
+                                Layout.minimumHeight: 0
+                                clip: true
+                                model: editor.renamePreviewEntries(
+                                    prefixField.text,
+                                    suffixField.text,
+                                    autoNumberCheck.checked,
+                                    numberStartSpin.value,
+                                    numberDigitsSpin.value)
+                                delegate: RowLayout {
+                                    width: previewList.width
+                                    height: 28
+                                    spacing: Theme.spacingSm
 
-                                ListView {
-                                    id: previewList
-                                    clip: true
-                                    model: editor.renamePreviewEntries(
-                                        prefixField.text,
-                                        suffixField.text,
-                                        autoNumberCheck.checked,
-                                        numberStartSpin.value,
-                                        numberDigitsSpin.value)
-                                    delegate: RowLayout {
-                                        width: previewList.width
-                                        height: 28
-                                        spacing: Theme.spacingSm
-
-                                        Text {
-                                            text: (index + 1) + "."
-                                            color: Theme.secondaryText
-                                            font.family: Theme.fontPrimary
-                                            font.pixelSize: 11
-                                            Layout.preferredWidth: 28
-                                        }
-
-                                        Text {
-                                            text: modelData.original
-                                            color: Theme.primaryText
-                                            font.family: Theme.fontPrimary
-                                            font.pixelSize: 11
-                                            elide: Text.ElideMiddle
-                                            Layout.fillWidth: true
-                                        }
-
-                                        Text {
-                                            text: "\u2192"
-                                            color: Theme.secondaryText
-                                            font.family: Theme.fontPrimary
-                                            font.pixelSize: 11
-                                        }
-
-                                        Text {
-                                            text: modelData.preview
-                                            color: Theme.primaryText
-                                            font.family: Theme.fontPrimary
-                                            font.pixelSize: 11
-                                            elide: Text.ElideMiddle
-                                            Layout.fillWidth: true
-                                        }
+                                    Text {
+                                        text: (index + 1) + "."
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 11
+                                        Layout.preferredWidth: 28
                                     }
+
+                                    Text {
+                                        text: modelData.original
+                                        color: Theme.primaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 11
+                                        elide: Text.ElideMiddle
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: "\u2192"
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 11
+                                    }
+
+                                    Text {
+                                        text: modelData.preview
+                                        color: Theme.primaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 11
+                                        elide: Text.ElideMiddle
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                                ScrollBar.vertical: ScrollBar {
+                                    policy: ScrollBar.AsNeeded
                                 }
                             }
                         }

@@ -147,7 +147,7 @@
         <translation>Thêm tập tin</translation>
     </message>
     <message>
-        <location line="+93"/>
+        <location line="+95"/>
         <source>Drop audio/video files here or click Add Files</source>
         <translation>Thả tệp âm thanh/video vào đây hoặc nhấp vào Thêm tệp</translation>
     </message>
@@ -202,7 +202,7 @@
         <translation>Trạng thái</translation>
     </message>
     <message>
-        <location line="+80"/>
+        <location line="+81"/>
         <source>Error</source>
         <translation>Lỗi</translation>
     </message>
@@ -322,7 +322,7 @@
         <translation>Trích xuất âm thanh từ video</translation>
     </message>
     <message>
-        <location line="+40"/>
+        <location line="+41"/>
         <source>Output Directory</source>
         <translation>Thư mục đầu ra</translation>
     </message>
@@ -414,29 +414,29 @@
     </message>
     <message>
         <location line="+84"/>
-        <location line="+586"/>
+        <location line="+590"/>
         <source>Drop audio files here or click to add</source>
         <translation>Thả tập tin âm thanh vào đây hoặc bấm vào để thêm</translation>
     </message>
     <message>
-        <location line="-578"/>
-        <location line="+586"/>
+        <location line="-582"/>
+        <location line="+590"/>
         <source>Supports MP3 / WAV / FLAC / M4A, etc.</source>
         <translation>Hỗ trợ MP3 / WAV / FLAC / M4A, v.v.</translation>
     </message>
     <message>
-        <location line="-550"/>
+        <location line="-554"/>
         <source>File List</source>
         <translation>Danh sách tập tin</translation>
     </message>
     <message>
         <location line="+10"/>
-        <location line="+803"/>
+        <location line="+819"/>
         <source>Clear List</source>
         <translation>Xóa danh sách</translation>
     </message>
     <message>
-        <location line="-714"/>
+        <location line="-730"/>
         <source>No audio files</source>
         <translation>Không có tập tin âm thanh</translation>
     </message>
@@ -476,7 +476,7 @@
         <translation>Bìa</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+56"/>
         <source>Select Image</source>
         <translation>Chọn hình ảnh</translation>
     </message>
@@ -507,22 +507,22 @@
     </message>
     <message>
         <location line="+11"/>
-        <location line="+347"/>
+        <location line="+359"/>
         <source>Process</source>
         <translation>Quy trình</translation>
     </message>
     <message>
-        <location line="-297"/>
+        <location line="-307"/>
         <source>Batch Filename Rename</source>
         <translation>Đổi tên tập tin hàng loạt</translation>
     </message>
     <message>
-        <location line="+122"/>
+        <location line="+125"/>
         <source>Naming Rule Settings</source>
         <translation>Cài đặt quy tắc đặt tên</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+12"/>
         <source>Prefix</source>
         <translation>Tiền tố</translation>
     </message>
@@ -532,7 +532,7 @@
         <translation>Tiền tố tùy chọn</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+38"/>
         <source>Auto Number</source>
         <translation>Số tự động</translation>
     </message>
@@ -547,7 +547,7 @@
         <translation>chữ số</translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+38"/>
         <source>Suffix</source>
         <translation>Hậu tố</translation>
     </message>
@@ -562,7 +562,7 @@
         <translation>Ví dụ: %1</translation>
     </message>
     <message>
-        <location line="+65"/>
+        <location line="+66"/>
         <source>File Preview</source>
         <translation>Xem trước tệp</translation>
     </message>
@@ -582,7 +582,7 @@
         <translation>Tên tệp mới (Xem trước)</translation>
     </message>
     <message>
-        <location line="+78"/>
+        <location line="+79"/>
         <source>Processing...</source>
         <translation>Đang xử lý...</translation>
     </message>
@@ -600,7 +600,7 @@
 <context>
     <name>LightEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+68"/>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+78"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>Tệp âm thanh (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -676,6 +676,11 @@
     </message>
     <message>
         <location line="+2"/>
+        <source>粘贴</source>
+        <translation>Dán</translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>删除</source>
         <translation>Xóa</translation>
     </message>
@@ -700,7 +705,7 @@
         <translation>Cắt</translation>
     </message>
     <message>
-        <location line="+60"/>
+        <location line="+74"/>
         <source>导出设置</source>
         <translation>Xuất cài đặt</translation>
     </message>
@@ -773,7 +778,7 @@
 <context>
     <name>LightEditor</name>
     <message>
-        <location filename="../qt/src/light_editor_controller.cpp" line="+450"/>
+        <location filename="../qt/src/light_editor_controller.cpp" line="+455"/>
         <source>Editor is busy</source>
         <translation>Biên tập viên đang bận</translation>
     </message>
@@ -908,7 +913,7 @@
 <context>
     <name>MetadataEditor</name>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="+78"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="+89"/>
         <source>Failed to open cover image: %1</source>
         <translation>Không mở được ảnh bìa: %1</translation>
     </message>
@@ -1255,7 +1260,7 @@
         <translation>Xuất hoàn tất</translation>
     </message>
     <message>
-        <location line="+63"/>
+        <location line="+62"/>
         <source>Exported: %1</source>
         <translation>Đã xuất: %1</translation>
     </message>
@@ -1265,7 +1270,7 @@
         <translation>Đã xuất: %1 (%2)</translation>
     </message>
     <message>
-        <location line="-1008"/>
+        <location line="-1007"/>
         <source>播放或暂停原始音频</source>
         <translation>Phát hoặc tạm dừng âm thanh gốc</translation>
     </message>
@@ -1378,12 +1383,12 @@
 <context>
     <name>PlayerPane</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+153"/>
+        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+154"/>
         <source>No track loaded</source>
         <translation>Không có bản nhạc nào được tải</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+27"/>
         <source>Remove from favorites</source>
         <translation>Xóa khỏi mục yêu thích</translation>
     </message>
@@ -2299,12 +2304,12 @@
         <translation>Xuất hoàn tất</translation>
     </message>
     <message>
-        <location line="+63"/>
+        <location line="+62"/>
         <source>Exported: %1</source>
         <translation>Đã xuất: %1</translation>
     </message>
     <message>
-        <location line="-640"/>
+        <location line="-639"/>
         <source>裁去前导偏移，使第一拍从零点开始</source>
         <translation>Cắt độ lệch đầu để nhịp đầu tiên bắt đầu tại mốc 0</translation>
     </message>
@@ -2317,7 +2322,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+266"/>
+        <location filename="../app/main.cpp" line="+275"/>
         <source>Show AgPlayer</source>
         <translation>Hiện AgPlayer</translation>
     </message>

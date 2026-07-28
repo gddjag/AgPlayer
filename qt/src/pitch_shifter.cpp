@@ -42,6 +42,19 @@ PitchShifter::PitchShifter(QObject* parent)
 {
 }
 
+PitchShifter::~PitchShifter()
+{
+    cancel();
+    if (watcher_ != nullptr) {
+        watcher_->future().waitForFinished();
+    }
+    ag_cancel_token* token =
+        token_.exchange(nullptr, std::memory_order_acq_rel);
+    if (token != nullptr) {
+        ag_cancel_token_destroy(token);
+    }
+}
+
 double PitchShifter::progress() const noexcept
 {
     return progress_.load(std::memory_order_acquire);
@@ -180,7 +193,6 @@ void PitchShifter::start(int pitchCents,
         return;
     }
 
-    cancelFlag_.store(false, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
 
@@ -191,10 +203,20 @@ void PitchShifter::start(int pitchCents,
         ? QByteArray(fi.codec_name)
         : QByteArray();
 
+    ag_cancel_token* token = ag_cancel_token_create();
+    token_.store(token, std::memory_order_release);
+
     auto* watcher = new QFutureWatcher<int>(this);
+    watcher_ = watcher;
     connect(watcher, &QFutureWatcher<int>::finished, this,
         [this, watcher, outputPath]() {
             watcher->deleteLater();
+            watcher_.clear();
+            ag_cancel_token* token =
+                token_.exchange(nullptr, std::memory_order_acq_rel);
+            if (token != nullptr) {
+                ag_cancel_token_destroy(token);
+            }
             const int result = watcher->result();
             setBusy(false);
             if (result == AG_OK) {
@@ -210,10 +232,10 @@ void PitchShifter::start(int pitchCents,
         });
 
     auto doShift = [this, inputPath, outputPath, pitchCents, keepTempo, tempoRatio,
-                    codecName, outputSampleRate, vocalProtection, smoothTransition]()
+                    codecName, outputSampleRate, vocalProtection,
+                    smoothTransition, token]()
         -> int
     {
-        ag_cancel_token* token = ag_cancel_token_create();
         const QByteArray inputUtf8 = inputPath.toUtf8();
         const QByteArray outputUtf8 = outputPath.toUtf8();
 
@@ -242,7 +264,6 @@ void PitchShifter::start(int pitchCents,
             callback,
             this);
 
-        ag_cancel_token_destroy(token);
         return static_cast<int>(result);
     };
 
@@ -252,7 +273,10 @@ void PitchShifter::start(int pitchCents,
 
 void PitchShifter::cancel()
 {
-    cancelFlag_.store(true, std::memory_order_release);
+    ag_cancel_token* token = token_.load(std::memory_order_acquire);
+    if (token != nullptr) {
+        ag_cancel_token_cancel(token);
+    }
 }
 
 void PitchShifter::clear()

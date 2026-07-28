@@ -51,6 +51,18 @@ TestCase {
         verify(findChild(page, "outputSampleRateBox"))
         verify(findChild(page, "outputChannelBox"))
         verify(findChild(page, "exportAudioButton"))
+        verify(findChild(page, "cutClipButton"))
+        verify(findChild(page, "copyClipButton"))
+        verify(findChild(page, "pasteClipButton"))
+        verify(findChild(page, "deleteClipButton"))
+        verify(findChild(page, "splitClipButton"))
+        verify(findChild(page, "mergeClipButton"))
+        verify(findChild(page, "cropClipButton"))
+        verify(findChild(page, "lightPreviewButton"))
+        verify(findChild(page, "lightPreviewVolume"))
+
+        compare(findChild(page, "cutClipButton").enabled, false)
+        compare(findChild(page, "pasteClipButton").enabled, false)
 
         const lanes = []
         collectByObjectName(page, "trackLane", lanes)
