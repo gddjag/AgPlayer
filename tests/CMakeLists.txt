@@ -317,6 +317,7 @@ foreach(qt_test IN ITEMS
     settings_controller_test
     translation_manager_test
     editor_timeline_math_test
+    light_editor_controller_test
     file_association_controller_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")

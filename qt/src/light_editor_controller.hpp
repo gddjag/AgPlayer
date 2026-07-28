@@ -37,6 +37,11 @@ class LightEditor final : public QObject {
     Q_PROPERTY(QVariantList trackNames READ trackNames NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList trackHasFiles READ trackHasFiles NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList trackPeaks READ trackPeaks NOTIFY tracksChanged)
+    Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
+    Q_PROPERTY(double targetBpm READ targetBpm WRITE setTargetBpm NOTIFY targetBpmChanged)
+    Q_PROPERTY(bool snapEnabled READ snapEnabled WRITE setSnapEnabled NOTIFY snapEnabledChanged)
+    Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoStateChanged)
+    Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoStateChanged)
 
 public:
     explicit LightEditor(QObject* parent = nullptr);
@@ -58,6 +63,13 @@ public:
     QVariantList trackNames() const noexcept;
     QVariantList trackHasFiles() const noexcept;
     QVariantList trackPeaks() const noexcept;
+    QVariantList tracks() const noexcept;
+    double targetBpm() const noexcept;
+    void setTargetBpm(double value);
+    bool snapEnabled() const noexcept;
+    void setSnapEnabled(bool value);
+    bool canUndo() const noexcept;
+    bool canRedo() const noexcept;
 
     Q_INVOKABLE void loadFile(const QUrl& url);
     Q_INVOKABLE void loadFileToTrack(int trackIndex, const QUrl& url);
@@ -70,6 +82,13 @@ public:
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void clear();
     Q_INVOKABLE void clearTrack(int trackIndex);
+    Q_INVOKABLE bool moveClip(int trackIndex, qint64 timelineStartMs);
+    Q_INVOKABLE bool trimClip(int trackIndex, qint64 inMs, qint64 outMs);
+    Q_INVOKABLE void setTrackMuted(int trackIndex, bool value);
+    Q_INVOKABLE void setTrackSolo(int trackIndex, bool value);
+    Q_INVOKABLE void setTrackLocked(int trackIndex, bool value);
+    Q_INVOKABLE void undo();
+    Q_INVOKABLE void redo();
 
 signals:
     void progressChanged();
@@ -80,21 +99,48 @@ signals:
     void errorOccurred(const QString& message);
     void selectedTrackChanged();
     void tracksChanged();
+    void targetBpmChanged();
+    void snapEnabledChanged();
+    void undoStateChanged();
 
 private:
     struct Track {
         QString path;
+        QString renderPath;
         QString name;
         QString format;
         qint64 durationMs = 0;
+        qint64 timelineStartMs = 0;
+        qint64 inMs = 0;
+        qint64 outMs = 0;
+        int fadeInMs = 0;
+        int fadeOutMs = 0;
+        double gain = 1.0;
+        double originalBpm = 0.0;
+        double bpmConfidence = 0.0;
+        double speedRatio = 1.0;
+        bool muted = false;
+        bool solo = false;
+        bool locked = false;
+        bool aligned = false;
         int sampleRate = 0;
         int channels = 0;
         QVariantList peaks;
     };
 
+    struct EditorState {
+        std::vector<Track> tracks;
+        int selectedTrack = 0;
+    };
+
     std::vector<Track> tracks_;
+    std::vector<EditorState> undoStack_;
+    std::vector<EditorState> redoStack_;
     int selectedTrack_ = 0;
-    static constexpr int kTrackCount = 4;
+    double targetBpm_ = 128.0;
+    bool snapEnabled_ = true;
+    static constexpr int kTrackCount = 6;
+    static constexpr int kMaximumUndoStates = 100;
 
     std::atomic<bool> busy_{false};
     std::atomic<double> progress_{0.0};
@@ -106,6 +152,9 @@ private:
     Track& currentTrack();
     bool isValidTrackIndex(int index) const noexcept;
     void loadPathIntoTrack(const QString& path, int trackIndex);
+    void pushUndoState();
+    void restoreState(EditorState state);
+    void emitEditorStateChanged();
 
     void setBusy(bool value);
     void setProgress(double value);

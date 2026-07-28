@@ -1,10 +1,15 @@
 #include "light_editor_controller.hpp"
 
+#include "editor_timeline_math.hpp"
+
 #include <agplayer/c_api.h>
 
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QVariantMap>
 #include <QtConcurrent>
+
+#include <algorithm>
 
 LightEditor::LightEditor(QObject* parent)
     : QObject(parent)
@@ -122,6 +127,77 @@ QVariantList LightEditor::trackPeaks() const noexcept
     return list;
 }
 
+QVariantList LightEditor::tracks() const noexcept
+{
+    QVariantList list;
+    list.reserve(kTrackCount);
+    for (const auto& track : tracks_) {
+        QVariantMap value;
+        value.insert(QStringLiteral("path"), track.path);
+        value.insert(QStringLiteral("renderPath"), track.renderPath);
+        value.insert(QStringLiteral("name"), track.name);
+        value.insert(QStringLiteral("format"), track.format);
+        value.insert(QStringLiteral("durationMs"), track.durationMs);
+        value.insert(QStringLiteral("timelineStartMs"), track.timelineStartMs);
+        value.insert(QStringLiteral("inMs"), track.inMs);
+        value.insert(QStringLiteral("outMs"), track.outMs);
+        value.insert(QStringLiteral("fadeInMs"), track.fadeInMs);
+        value.insert(QStringLiteral("fadeOutMs"), track.fadeOutMs);
+        value.insert(QStringLiteral("gain"), track.gain);
+        value.insert(QStringLiteral("originalBpm"), track.originalBpm);
+        value.insert(QStringLiteral("bpmConfidence"), track.bpmConfidence);
+        value.insert(QStringLiteral("speedRatio"), track.speedRatio);
+        value.insert(QStringLiteral("muted"), track.muted);
+        value.insert(QStringLiteral("solo"), track.solo);
+        value.insert(QStringLiteral("locked"), track.locked);
+        value.insert(QStringLiteral("aligned"), track.aligned);
+        value.insert(QStringLiteral("sampleRate"), track.sampleRate);
+        value.insert(QStringLiteral("channels"), track.channels);
+        value.insert(QStringLiteral("peaks"), track.peaks);
+        value.insert(QStringLiteral("hasFile"), !track.path.isEmpty());
+        list.append(value);
+    }
+    return list;
+}
+
+double LightEditor::targetBpm() const noexcept
+{
+    return targetBpm_;
+}
+
+void LightEditor::setTargetBpm(double value)
+{
+    if (value < 40.0 || value > 240.0 || qFuzzyCompare(value, targetBpm_)) {
+        return;
+    }
+    targetBpm_ = value;
+    emit targetBpmChanged();
+}
+
+bool LightEditor::snapEnabled() const noexcept
+{
+    return snapEnabled_;
+}
+
+void LightEditor::setSnapEnabled(bool value)
+{
+    if (value == snapEnabled_) {
+        return;
+    }
+    snapEnabled_ = value;
+    emit snapEnabledChanged();
+}
+
+bool LightEditor::canUndo() const noexcept
+{
+    return !undoStack_.empty();
+}
+
+bool LightEditor::canRedo() const noexcept
+{
+    return !redoStack_.empty();
+}
+
 const LightEditor::Track& LightEditor::currentTrack() const
 {
     return tracks_[selectedTrack_];
@@ -149,6 +225,32 @@ void LightEditor::setProgress(double value)
     emit progressChanged();
 }
 
+void LightEditor::pushUndoState()
+{
+    if (static_cast<int>(undoStack_.size()) >= kMaximumUndoStates) {
+        undoStack_.erase(undoStack_.begin());
+    }
+    undoStack_.push_back(EditorState{tracks_, selectedTrack_});
+    redoStack_.clear();
+    emit undoStateChanged();
+}
+
+void LightEditor::restoreState(EditorState state)
+{
+    tracks_ = std::move(state.tracks);
+    selectedTrack_ = state.selectedTrack;
+    emitEditorStateChanged();
+}
+
+void LightEditor::emitEditorStateChanged()
+{
+    emit tracksChanged();
+    emit selectedTrackChanged();
+    emit inputFileChanged();
+    emit waveformPeaksChanged();
+    emit undoStateChanged();
+}
+
 void LightEditor::loadPathIntoTrack(const QString& path, int trackIndex)
 {
     if (!isValidTrackIndex(trackIndex)) {
@@ -157,9 +259,23 @@ void LightEditor::loadPathIntoTrack(const QString& path, int trackIndex)
 
     Track& track = tracks_[trackIndex];
     track.path = path;
+    track.renderPath.clear();
     track.name = QFileInfo(path).fileName();
     track.format.clear();
     track.durationMs = 0;
+    track.timelineStartMs = 0;
+    track.inMs = 0;
+    track.outMs = 0;
+    track.fadeInMs = 0;
+    track.fadeOutMs = 0;
+    track.gain = 1.0;
+    track.originalBpm = 0.0;
+    track.bpmConfidence = 0.0;
+    track.speedRatio = 1.0;
+    track.muted = false;
+    track.solo = false;
+    track.locked = false;
+    track.aligned = false;
     track.sampleRate = 0;
     track.channels = 0;
     track.peaks.clear();
@@ -176,6 +292,7 @@ void LightEditor::loadPathIntoTrack(const QString& path, int trackIndex)
         track.sampleRate = ag_metadata_sample_rate(meta);
         track.channels = ag_metadata_channels(meta);
         track.durationMs = ag_metadata_duration_ms(meta);
+        track.outMs = track.durationMs;
         ag_metadata_destroy(meta);
     }
 
@@ -197,6 +314,7 @@ void LightEditor::loadFile(const QUrl& url)
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
+    pushUndoState();
     loadPathIntoTrack(url.toLocalFile(), selectedTrack_);
     emit tracksChanged();
     emit inputFileChanged();
@@ -212,6 +330,7 @@ void LightEditor::loadFileToTrack(int trackIndex, const QUrl& url)
         emit errorOccurred(QStringLiteral("Invalid track index"));
         return;
     }
+    pushUndoState();
     loadPathIntoTrack(url.toLocalFile(), trackIndex);
     emit tracksChanged();
     if (trackIndex == selectedTrack_) {
@@ -391,6 +510,7 @@ void LightEditor::clear()
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
+    pushUndoState();
     for (auto& track : tracks_) {
         track = Track();
     }
@@ -411,10 +531,112 @@ void LightEditor::clearTrack(int trackIndex)
         emit errorOccurred(QStringLiteral("Invalid track index"));
         return;
     }
+    pushUndoState();
     tracks_[trackIndex] = Track();
     emit tracksChanged();
     if (trackIndex == selectedTrack_) {
         emit inputFileChanged();
         emit waveformPeaksChanged();
     }
+}
+
+bool LightEditor::moveClip(int trackIndex, qint64 timelineStartMs)
+{
+    if (!isValidTrackIndex(trackIndex)) {
+        return false;
+    }
+    Track& track = tracks_[trackIndex];
+    if (track.path.isEmpty() || track.locked) {
+        return false;
+    }
+
+    const qint64 start = snapEnabled_
+        ? snapMs(timelineStartMs, targetBpm_, 4)
+        : std::max<qint64>(0, timelineStartMs);
+    if (start == track.timelineStartMs) {
+        return true;
+    }
+
+    pushUndoState();
+    track.timelineStartMs = start;
+    emit tracksChanged();
+    return true;
+}
+
+bool LightEditor::trimClip(int trackIndex, qint64 inMs, qint64 outMs)
+{
+    if (!isValidTrackIndex(trackIndex)) {
+        return false;
+    }
+    Track& track = tracks_[trackIndex];
+    if (track.path.isEmpty() || track.locked) {
+        return false;
+    }
+
+    const ClipBounds bounds = normalizeClip(
+        ClipBounds{track.timelineStartMs, inMs, outMs}, track.durationMs);
+    if (bounds.inMs == track.inMs && bounds.outMs == track.outMs) {
+        return true;
+    }
+
+    pushUndoState();
+    track.inMs = bounds.inMs;
+    track.outMs = bounds.outMs;
+    emit tracksChanged();
+    if (trackIndex == selectedTrack_) {
+        emit inputFileChanged();
+    }
+    return true;
+}
+
+void LightEditor::setTrackMuted(int trackIndex, bool value)
+{
+    if (!isValidTrackIndex(trackIndex) || tracks_[trackIndex].muted == value) {
+        return;
+    }
+    pushUndoState();
+    tracks_[trackIndex].muted = value;
+    emit tracksChanged();
+}
+
+void LightEditor::setTrackSolo(int trackIndex, bool value)
+{
+    if (!isValidTrackIndex(trackIndex) || tracks_[trackIndex].solo == value) {
+        return;
+    }
+    pushUndoState();
+    tracks_[trackIndex].solo = value;
+    emit tracksChanged();
+}
+
+void LightEditor::setTrackLocked(int trackIndex, bool value)
+{
+    if (!isValidTrackIndex(trackIndex) || tracks_[trackIndex].locked == value) {
+        return;
+    }
+    pushUndoState();
+    tracks_[trackIndex].locked = value;
+    emit tracksChanged();
+}
+
+void LightEditor::undo()
+{
+    if (undoStack_.empty()) {
+        return;
+    }
+    redoStack_.push_back(EditorState{tracks_, selectedTrack_});
+    EditorState previous = std::move(undoStack_.back());
+    undoStack_.pop_back();
+    restoreState(std::move(previous));
+}
+
+void LightEditor::redo()
+{
+    if (redoStack_.empty()) {
+        return;
+    }
+    undoStack_.push_back(EditorState{tracks_, selectedTrack_});
+    EditorState next = std::move(redoStack_.back());
+    redoStack_.pop_back();
+    restoreState(std::move(next));
 }
