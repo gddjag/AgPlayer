@@ -46,6 +46,10 @@ ApplicationWindow {
             dialog.open()
     }
 
+    function importFiles(urls) {
+        ImportController.importUrls(urls)
+    }
+
     function openFolderDialog() {
         var dialog = folderDialogComponent.createObject(mainWindow)
         if (dialog)
@@ -63,7 +67,7 @@ ApplicationWindow {
         FileDialog {
             fileMode: FileDialog.OpenFiles
             nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
-            onAccepted: ImportController.importUrls(files)
+            onAccepted: mainWindow.importFiles(selectedFiles)
         }
     }
 

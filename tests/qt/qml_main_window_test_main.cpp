@@ -19,6 +19,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QStandardPaths>
+#include <QUrl>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
 
@@ -74,6 +75,10 @@ public slots:
     void qmlEngineAvailable(QQmlEngine* engine)
     {
         engine->addImportPath("qrc:/");
+        const QString fixture =
+            QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
+        engine->rootContext()->setContextProperty(
+            "testAudioUrl", QUrl::fromLocalFile(fixture));
 
         component_ = std::make_unique<QQmlComponent>(engine);
         component_->loadFromModule("AgPlayer", "Main");

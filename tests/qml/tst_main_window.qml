@@ -56,6 +56,14 @@ TestCase {
                "mini player action should be visible in the bottom control bar")
     }
 
+    function test_import_files_reaches_real_controller() {
+        verify(testAudioUrl.toString().length > 0,
+               "generated audio fixture should be available")
+        compare(LibraryModel.count, 0)
+        mainWindow.importFiles([testAudioUrl])
+        tryVerify(function() { return LibraryModel.count === 1 }, 5000)
+    }
+
     function test_empty_startup_uses_compact_reference_structure() {
         compare(mainWindow.width, 1228)
         compare(mainWindow.height, 424)
