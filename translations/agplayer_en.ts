@@ -602,7 +602,7 @@
             <translation>maintain pitch</translation>
         </message>
         <message>
-            <location line="+12" />
+            <location line="+14" />
             <source>吸附网格</source>
             <translation>snap grid</translation>
         </message>
@@ -627,12 +627,12 @@
             <translation>Unified BPM</translation>
         </message>
         <message>
-            <location line="+10" />
+            <location line="+8" />
             <source>BPM + 节拍对齐</source>
             <translation>BPM + Beat Alignment</translation>
         </message>
         <message>
-            <location line="+155" />
+            <location line="+153" />
             <source>撤销</source>
             <translation>Cancel</translation>
         </message>
@@ -687,17 +687,17 @@
             <translation>Output format</translation>
         </message>
         <message>
-            <location line="+2" />
+            <location line="+8" />
             <source>采样率</source>
             <translation>Sampling rate</translation>
         </message>
         <message>
-            <location line="+2" />
+            <location line="+7" />
             <source>声道</source>
             <translation>vocal tract</translation>
         </message>
         <message>
-            <location line="+1" />
+            <location line="+4" />
             <source>立体声</source>
             <translation>Stereo</translation>
         </message>
@@ -707,7 +707,7 @@
             <translation>mono</translation>
         </message>
         <message>
-            <location line="+1" />
+            <location line="+3" />
             <source>输出目录</source>
             <translation>Output directory</translation>
         </message>
@@ -745,6 +745,80 @@
             <location line="+0" />
             <source>导出音频</source>
             <translation>Export audio</translation>
+        </message>
+    </context>
+    <context>
+        <name>LightEditor</name>
+        <message>
+            <location filename="../qt/src/light_editor_controller.cpp" line="+435" />
+            <source>Editor is busy</source>
+            <translation>Editor is busy</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <location line="+77" />
+            <source>No input file loaded</source>
+            <translation>No input file loaded</translation>
+        </message>
+        <message>
+            <location line="-59" />
+            <source>BPM analysis failed</source>
+            <translation>BPM analysis failed</translation>
+        </message>
+        <message>
+            <location line="+37" />
+            <source>Failed to create BPM cache directory</source>
+            <translation>Failed to create BPM cache directory</translation>
+        </message>
+        <message>
+            <location line="+53" />
+            <source>BPM alignment failed</source>
+            <translation>BPM alignment failed</translation>
+        </message>
+        <message>
+            <location line="+56" />
+            <source>Reliable BPM was not detected</source>
+            <translation>Reliable BPM was not detected</translation>
+        </message>
+        <message>
+            <location line="+12" />
+            <source>Target BPM is outside the supported speed range</source>
+            <translation>Target BPM is outside the supported speed range</translation>
+        </message>
+        <message>
+            <location line="+15" />
+            <source>BPM alignment cancelled</source>
+            <translation>BPM alignment cancelled</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>Failed to adjust track BPM</source>
+            <translation>Failed to adjust track BPM</translation>
+        </message>
+        <message>
+            <location line="+51" />
+            <source>No audible tracks to export</source>
+            <translation>No audible tracks to export</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>Invalid export audio settings</source>
+            <translation>Invalid export audio settings</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <source>Failed to create export directory</source>
+            <translation>Failed to create export directory</translation>
+        </message>
+        <message>
+            <location line="+69" />
+            <source>Export cancelled</source>
+            <translation>Export cancelled</translation>
+        </message>
+        <message>
+            <location line="+3" />
+            <source>Export failed (error %1)</source>
+            <translation>Export failed (error %1)</translation>
         </message>
     </context>
     <context>

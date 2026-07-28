@@ -12,6 +12,7 @@ namespace agplayer {
 struct MultiTrackEditConfig {
     struct Track {
         std::string input_path;
+        long long timeline_start_ms = 0;
         long long trim_start_ms = 0;
         long long trim_end_ms = 0;
         int fade_in_ms = 0;

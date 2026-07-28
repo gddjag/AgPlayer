@@ -2,10 +2,14 @@
 
 #include "../core/bpm_fixture.hpp"
 
+#include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QVariantMap>
+
+#include <cmath>
 
 class LightEditorControllerTest final : public QObject {
     Q_OBJECT
@@ -15,6 +19,9 @@ private slots:
     void movesSnapsLocksAndRestoresClips();
     void trimsToSafeSourceBounds();
     void validatesBpmAndTrackSwitches();
+    void analyzesAndUnifiesBpm();
+    void exportsTimelineAndFiltersTracks();
+    void reportsTrackAnalysisErrors();
 };
 
 void LightEditorControllerTest::exposesSixTracks()
@@ -108,6 +115,85 @@ void LightEditorControllerTest::validatesBpmAndTrackSwitches()
     QVERIFY(track.value(QStringLiteral("muted")).toBool());
     QVERIFY(track.value(QStringLiteral("solo")).toBool());
     QVERIFY(track.value(QStringLiteral("locked")).toBool());
+}
+
+void LightEditorControllerTest::analyzesAndUnifiesBpm()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString path = temp.filePath(QStringLiteral("bpm-90.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(path, 90, 10));
+
+    LightEditor editor;
+    editor.loadFileToTrack(0, QUrl::fromLocalFile(path));
+    editor.setSnapEnabled(false);
+    QVERIFY(editor.moveClip(0, 740));
+
+    editor.analyzeTrackBpm(0);
+    QTRY_VERIFY_WITH_TIMEOUT(!editor.busy(), 30000);
+    QVariantMap track = editor.tracks().at(0).toMap();
+    QVERIFY(std::abs(track.value(QStringLiteral("originalBpm")).toDouble()
+                     - 90.0) < 1.0);
+    QVERIFY(track.value(QStringLiteral("bpmConfidence")).toDouble() > 80.0);
+
+    editor.setTargetBpm(120.0);
+    editor.setKeepPitch(true);
+    editor.unifyBpm(true);
+    QTRY_VERIFY_WITH_TIMEOUT(!editor.busy(), 30000);
+
+    track = editor.tracks().at(0).toMap();
+    QVERIFY(std::abs(track.value(QStringLiteral("speedRatio")).toDouble()
+                     - (120.0 / 90.0)) < 0.02);
+    QVERIFY(track.value(QStringLiteral("aligned")).toBool());
+    QCOMPARE(track.value(QStringLiteral("timelineStartMs")).toLongLong(), 500);
+    const QString renderPath =
+        track.value(QStringLiteral("renderPath")).toString();
+    QVERIFY(!renderPath.isEmpty());
+    QVERIFY(QFileInfo::exists(renderPath));
+    QFile::remove(renderPath);
+}
+
+void LightEditorControllerTest::exportsTimelineAndFiltersTracks()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString path = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(path, 120, 2));
+
+    LightEditor editor;
+    editor.setSnapEnabled(false);
+    for (int index = 0; index < 3; ++index) {
+        editor.loadFileToTrack(index, QUrl::fromLocalFile(path));
+    }
+    QVERIFY(editor.moveClip(1, 1000));
+    QVERIFY(editor.moveClip(2, 500));
+    editor.setTrackMuted(1, true);
+    editor.setTrackSolo(2, true);
+
+    QSignalSpy completed(&editor, &LightEditor::lightEditCompleted);
+    editor.exportProject(temp.path(), QStringLiteral("wav"), 44100, 2);
+    QVERIFY(completed.wait(30000));
+    QCOMPARE(completed.count(), 1);
+
+    const QString outputPath = completed.first().first().toString();
+    ag_metadata* metadata = nullptr;
+    QCOMPARE(ag_metadata_open(outputPath.toUtf8().constData(), &metadata), AG_OK);
+    QVERIFY(metadata != nullptr);
+    const qint64 duration = ag_metadata_duration_ms(metadata);
+    QCOMPARE(ag_metadata_sample_rate(metadata), 44100);
+    QCOMPARE(ag_metadata_channels(metadata), 2);
+    ag_metadata_destroy(metadata);
+    QVERIFY(duration >= 2400);
+    QVERIFY(duration < 2800);
+}
+
+void LightEditorControllerTest::reportsTrackAnalysisErrors()
+{
+    LightEditor editor;
+    QSignalSpy errorSpy(&editor, &LightEditor::trackError);
+    editor.analyzeTrackBpm(5);
+    QCOMPARE(errorSpy.count(), 1);
+    QCOMPARE(errorSpy.first().first().toInt(), 5);
 }
 
 QTEST_MAIN(LightEditorControllerTest)

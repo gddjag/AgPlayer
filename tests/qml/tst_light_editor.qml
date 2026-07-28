@@ -46,6 +46,11 @@ TestCase {
         verify(findChild(page, "snapGridBox"))
         verify(findChild(page, "unifyBpmButton"))
         verify(findChild(page, "alignBpmButton"))
+        verify(findChild(page, "keepPitchSwitch"))
+        verify(findChild(page, "outputFormatBox"))
+        verify(findChild(page, "outputSampleRateBox"))
+        verify(findChild(page, "outputChannelBox"))
+        verify(findChild(page, "exportAudioButton"))
 
         const lanes = []
         collectByObjectName(page, "trackLane", lanes)

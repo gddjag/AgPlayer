@@ -40,6 +40,7 @@ class LightEditor final : public QObject {
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
     Q_PROPERTY(double targetBpm READ targetBpm WRITE setTargetBpm NOTIFY targetBpmChanged)
     Q_PROPERTY(bool snapEnabled READ snapEnabled WRITE setSnapEnabled NOTIFY snapEnabledChanged)
+    Q_PROPERTY(bool keepPitch READ keepPitch WRITE setKeepPitch NOTIFY keepPitchChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoStateChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoStateChanged)
 
@@ -68,6 +69,8 @@ public:
     void setTargetBpm(double value);
     bool snapEnabled() const noexcept;
     void setSnapEnabled(bool value);
+    bool keepPitch() const noexcept;
+    void setKeepPitch(bool value);
     bool canUndo() const noexcept;
     bool canRedo() const noexcept;
 
@@ -87,6 +90,12 @@ public:
     Q_INVOKABLE void setTrackMuted(int trackIndex, bool value);
     Q_INVOKABLE void setTrackSolo(int trackIndex, bool value);
     Q_INVOKABLE void setTrackLocked(int trackIndex, bool value);
+    Q_INVOKABLE void analyzeTrackBpm(int trackIndex);
+    Q_INVOKABLE void unifyBpm(bool alignBeats);
+    Q_INVOKABLE void exportProject(const QString& outputDir,
+                                   const QString& outputFormat,
+                                   int outputSampleRate,
+                                   int outputChannels);
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -101,7 +110,9 @@ signals:
     void tracksChanged();
     void targetBpmChanged();
     void snapEnabledChanged();
+    void keepPitchChanged();
     void undoStateChanged();
+    void trackError(int trackIndex, const QString& message);
 
 private:
     struct Track {
@@ -139,6 +150,7 @@ private:
     int selectedTrack_ = 0;
     double targetBpm_ = 128.0;
     bool snapEnabled_ = true;
+    bool keepPitch_ = true;
     static constexpr int kTrackCount = 6;
     static constexpr int kMaximumUndoStates = 100;
 

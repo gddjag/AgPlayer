@@ -268,13 +268,29 @@ typedef struct ag_bpm_result {
 ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out);
 
 /* Multi-track non-destructive edit: mix multiple audio files with optional
- * per-track trim/fade/gain, and render to output_path.
+ * per-track timeline offset/trim/fade/gain, and render to output_path.
  * track_count: number of tracks.
  * input_paths: array of UTF-8 input paths. NULL or empty string = silent track.
+ * timeline_start_ms: per-track offset on the output timeline. Pass NULL for 0.
  * trim_start_ms / trim_end_ms / fade_in_ms / fade_out_ms / gain: per-track
  *   arrays. Values use the same semantics as ag_light_edit. Pass NULL to use
  *   defaults (no trim, no fade, gain=1.0).
  * Returns AG_OK on success, AG_CANCELLED if cancelled. */
+ag_result ag_multitrack_edit_ex(size_t track_count,
+                                const char* const* input_paths,
+                                const long long* timeline_start_ms,
+                                const long long* trim_start_ms,
+                                const long long* trim_end_ms,
+                                const int* fade_in_ms,
+                                const int* fade_out_ms,
+                                const double* gain,
+                                const char* output_path,
+                                const ag_cancel_token* cancel_token,
+                                ag_progress_callback progress_callback,
+                                void* user_data);
+
+/* Backwards-compatible wrapper. Calls ag_multitrack_edit_ex with all timeline
+ * offsets set to zero. */
 ag_result ag_multitrack_edit(size_t track_count,
                              const char* const* input_paths,
                              const long long* trim_start_ms,

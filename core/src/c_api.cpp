@@ -826,17 +826,18 @@ ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out)
     });
 }
 
-ag_result ag_multitrack_edit(const size_t track_count,
-                             const char* const* input_paths,
-                             const long long* trim_start_ms,
-                             const long long* trim_end_ms,
-                             const int* fade_in_ms,
-                             const int* fade_out_ms,
-                             const double* gain,
-                             const char* output_path,
-                             const ag_cancel_token* cancel_token,
-                             const ag_progress_callback progress_callback,
-                             void* const user_data)
+ag_result ag_multitrack_edit_ex(const size_t track_count,
+                                const char* const* input_paths,
+                                const long long* timeline_start_ms,
+                                const long long* trim_start_ms,
+                                const long long* trim_end_ms,
+                                const int* fade_in_ms,
+                                const int* fade_out_ms,
+                                const double* gain,
+                                const char* output_path,
+                                const ag_cancel_token* cancel_token,
+                                const ag_progress_callback progress_callback,
+                                void* const user_data)
 {
     if (track_count == 0 || output_path == nullptr || output_path[0] == '\0') {
         return AG_INVALID_ARGUMENT;
@@ -850,6 +851,9 @@ ag_result ag_multitrack_edit(const size_t track_count,
             agplayer::MultiTrackEditConfig::Track track;
             if (input_paths != nullptr && input_paths[i] != nullptr) {
                 track.input_path = input_paths[i];
+            }
+            if (timeline_start_ms != nullptr) {
+                track.timeline_start_ms = timeline_start_ms[i];
             }
             if (trim_start_ms != nullptr) track.trim_start_ms = trim_start_ms[i];
             if (trim_end_ms != nullptr) track.trim_end_ms = trim_end_ms[i];
@@ -875,4 +879,22 @@ ag_result ag_multitrack_edit(const size_t track_count,
     } catch (...) {
         return AG_INTERNAL_ERROR;
     }
+}
+
+ag_result ag_multitrack_edit(const size_t track_count,
+                             const char* const* input_paths,
+                             const long long* trim_start_ms,
+                             const long long* trim_end_ms,
+                             const int* fade_in_ms,
+                             const int* fade_out_ms,
+                             const double* gain,
+                             const char* output_path,
+                             const ag_cancel_token* cancel_token,
+                             const ag_progress_callback progress_callback,
+                             void* const user_data)
+{
+    return ag_multitrack_edit_ex(
+        track_count, input_paths, nullptr, trim_start_ms, trim_end_ms,
+        fade_in_ms, fade_out_ms, gain, output_path, cancel_token,
+        progress_callback, user_data);
 }

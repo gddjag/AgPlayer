@@ -556,11 +556,13 @@ ag_result render_track_to_temp(const std::string& input_path,
 
 struct TempTrackInfo {
     std::filesystem::path path;
+    int64_t start_sample = 0;
     int64_t sample_count = 0;
 };
 
 struct TempFileReader {
     std::ifstream file;
+    int64_t start_sample = 0;
     int64_t sample_count = 0;
     int channels = 0;
 };
@@ -601,6 +603,10 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
         }
         if (track.trim_start_ms < 0 || track.trim_end_ms < 0) {
             error = "Trim duration cannot be negative";
+            return AG_INVALID_ARGUMENT;
+        }
+        if (track.timeline_start_ms < 0) {
+            error = "Timeline start cannot be negative";
             return AG_INVALID_ARGUMENT;
         }
     }
@@ -656,6 +662,8 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
 
         TempTrackInfo info;
         info.path = temp_path;
+        info.start_sample = config.tracks[i].timeline_start_ms
+                            * static_cast<int64_t>(master_sample_rate) / 1000;
         ag_result r = render_track_to_temp(
             config.tracks[i].input_path,
             master_sample_rate,
@@ -685,7 +693,8 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
 
     int64_t max_samples = 0;
     for (const auto& info : track_infos) {
-        max_samples = std::max(max_samples, info.sample_count);
+        max_samples = std::max(max_samples,
+                               info.start_sample + info.sample_count);
     }
 
     if (max_samples == 0) {
@@ -738,6 +747,7 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
                     readers.reserve(track_infos.size());
                     for (const auto& info : track_infos) {
                         TempFileReader reader;
+                        reader.start_sample = info.start_sample;
                         reader.sample_count = info.sample_count;
                         reader.channels = channels;
                         if (info.sample_count > 0 && !info.path.empty()) {
@@ -774,18 +784,28 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
                         }
 
                         for (auto& reader : readers) {
+                            const int64_t frame_end =
+                                encoded_samples + samples_this_frame;
+                            const int64_t track_end =
+                                reader.start_sample + reader.sample_count;
                             if (!reader.file.is_open()
-                                || reader.sample_count <= encoded_samples) {
+                                || frame_end <= reader.start_sample
+                                || encoded_samples >= track_end) {
                                 continue;
                             }
+                            const int64_t source_offset = std::max<int64_t>(
+                                0, encoded_samples - reader.start_sample);
+                            const int destination_offset = static_cast<int>(
+                                std::max<int64_t>(
+                                    0, reader.start_sample - encoded_samples));
                             const int64_t readable = std::min<int64_t>(
-                                samples_this_frame,
-                                reader.sample_count - encoded_samples);
+                                samples_this_frame - destination_offset,
+                                reader.sample_count - source_offset);
                             const std::streamsize bytes =
                                 static_cast<std::streamsize>(
                                     readable * reader.channels * sizeof(float));
                             reader.file.seekg(static_cast<std::streamoff>(
-                                encoded_samples * reader.channels
+                                source_offset * reader.channels
                                 * sizeof(float)));
                             reader.file.read(
                                 reinterpret_cast<char*>(interleaved.data()),
@@ -799,7 +819,7 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
                                 float* dst = reinterpret_cast<float*>(
                                     flt_frame->data[ch]);
                                 for (int i = 0; i < readable; ++i) {
-                                    dst[i] += interleaved[
+                                    dst[destination_offset + i] += interleaved[
                                         static_cast<size_t>(i) * channels + ch];
                                 }
                             }

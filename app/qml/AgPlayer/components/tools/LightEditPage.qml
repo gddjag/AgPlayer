@@ -13,7 +13,7 @@ Rectangle {
     property real zoomScale: 1.0
     property int viewportOffsetMs: 0
     property int playheadMs: 0
-    property bool keepPitch: true
+    property bool keepPitch: editor.keepPitch
     property real pixelsPerMs: 0.0035
     property int selectedTrack: editor.selectedTrack
 
@@ -151,8 +151,10 @@ Rectangle {
                 }
 
                 Switch {
+                    id: keepPitchSwitch
+                    objectName: "keepPitchSwitch"
                     checked: page.keepPitch
-                    onToggled: page.keepPitch = checked
+                    onToggled: editor.keepPitch = checked
                 }
 
                 Text {
@@ -177,10 +179,8 @@ Rectangle {
                     id: unifyBpmButton
                     objectName: "unifyBpmButton"
                     text: qsTr("统一 BPM")
-                    onClicked: {
-                        if (typeof editor.unifyBpm === "function")
-                            editor.unifyBpm(page.keepPitch)
-                    }
+                    enabled: !editor.busy
+                    onClicked: editor.unifyBpm(false)
                 }
 
                 Button {
@@ -188,10 +188,8 @@ Rectangle {
                     objectName: "alignBpmButton"
                     text: qsTr("BPM + 节拍对齐")
                     highlighted: true
-                    onClicked: {
-                        if (typeof editor.alignToBeatGrid === "function")
-                            editor.alignToBeatGrid(page.keepPitch)
-                    }
+                    enabled: !editor.busy
+                    onClicked: editor.unifyBpm(true)
                 }
             }
         }
@@ -422,11 +420,27 @@ Rectangle {
 
                     Text { text: qsTr("导出设置"); color: Theme.primaryText; font.pixelSize: 14; Layout.columnSpan: 6 }
                     Text { text: qsTr("输出格式"); color: Theme.secondaryText }
-                    ComboBox { model: ["MP3", "WAV", "FLAC"]; currentIndex: 0; Layout.preferredWidth: 150 }
+                    ComboBox {
+                        id: outputFormatBox
+                        objectName: "outputFormatBox"
+                        model: ["MP3", "WAV", "FLAC"]
+                        currentIndex: 0
+                        Layout.preferredWidth: 150
+                    }
                     Text { text: qsTr("采样率"); color: Theme.secondaryText }
-                    ComboBox { model: ["44,100 Hz", "48,000 Hz", "96,000 Hz"]; Layout.preferredWidth: 160 }
+                    ComboBox {
+                        id: outputSampleRateBox
+                        objectName: "outputSampleRateBox"
+                        model: ["44,100 Hz", "48,000 Hz", "96,000 Hz"]
+                        Layout.preferredWidth: 160
+                    }
                     Text { text: qsTr("声道"); color: Theme.secondaryText }
-                    ComboBox { model: [qsTr("立体声"), qsTr("单声道")]; Layout.preferredWidth: 130 }
+                    ComboBox {
+                        id: outputChannelBox
+                        objectName: "outputChannelBox"
+                        model: [qsTr("立体声"), qsTr("单声道")]
+                        Layout.preferredWidth: 130
+                    }
                     Text { text: qsTr("输出目录"); color: Theme.secondaryText }
                     TextField {
                         id: outputDirectory
@@ -480,13 +494,15 @@ Rectangle {
                         text: editor.busy ? qsTr("处理中…") : qsTr("导出音频")
                         icon.source: Theme.icon("download-line")
                         highlighted: true
-                        enabled: editor.tracks.some(function(track) { return track.hasFile })
+                        enabled: !editor.busy && editor.tracks.some(
+                            function(track) { return track.hasFile })
                         onClicked: {
-                            const selected = editor.tracks[editor.selectedTrack]
-                            editor.start(selected.inMs || 0, selected.outMs || 0,
-                                         selected.fadeInMs || 0, selected.fadeOutMs || 0,
-                                         selected.gain || 1.0, outputDirectory.text,
-                                         "mp3", 44100, 2)
+                            const rates = [44100, 48000, 96000]
+                            editor.exportProject(
+                                outputDirectory.text,
+                                outputFormatBox.currentText.toLowerCase(),
+                                rates[outputSampleRateBox.currentIndex],
+                                outputChannelBox.currentIndex === 0 ? 2 : 1)
                         }
                     }
                 }

@@ -4,12 +4,53 @@
 
 #include <agplayer/c_api.h>
 
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QStandardPaths>
+#include <QUuid>
 #include <QVariantMap>
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <cmath>
+#include <memory>
+
+namespace {
+
+constexpr double kReliableBpmConfidence = 50.0;
+
+struct AnalyzeResult {
+    int status = AG_INTERNAL_ERROR;
+    ag_bpm_result bpm{};
+};
+
+struct BpmJob {
+    int trackIndex = -1;
+    QString inputPath;
+    QString outputPath;
+    double originalBpm = 0.0;
+    double confidence = 0.0;
+};
+
+struct BpmJobResult {
+    int trackIndex = -1;
+    QString inputPath;
+    QString outputPath;
+    double originalBpm = 0.0;
+    double confidence = 0.0;
+    double speedRatio = 1.0;
+};
+
+struct BpmBatchResult {
+    int status = AG_INTERNAL_ERROR;
+    int failureIndex = -1;
+    QString message;
+    std::vector<BpmJobResult> tracks;
+};
+
+} // namespace
 
 LightEditor::LightEditor(QObject* parent)
     : QObject(parent)
@@ -186,6 +227,20 @@ void LightEditor::setSnapEnabled(bool value)
     }
     snapEnabled_ = value;
     emit snapEnabledChanged();
+}
+
+bool LightEditor::keepPitch() const noexcept
+{
+    return keepPitch_;
+}
+
+void LightEditor::setKeepPitch(bool value)
+{
+    if (value == keepPitch_) {
+        return;
+    }
+    keepPitch_ = value;
+    emit keepPitchChanged();
 }
 
 bool LightEditor::canUndo() const noexcept
@@ -374,64 +429,319 @@ QString LightEditor::computeOutputPath(const QString& firstInputPath,
     return candidate;
 }
 
-void LightEditor::start(qint64 trimStartMs, qint64 trimEndMs,
-                        int fadeInMs, int fadeOutMs, double gain,
-                        const QString& outputDir,
-                        const QString& outputFormat,
-                        int outputSampleRate,
-                        int outputChannels)
+void LightEditor::analyzeTrackBpm(int trackIndex)
+{
+    if (busy_.load(std::memory_order_acquire)) {
+        emit trackError(trackIndex, tr("Editor is busy"));
+        return;
+    }
+    if (!isValidTrackIndex(trackIndex) || tracks_[trackIndex].path.isEmpty()) {
+        emit trackError(trackIndex, tr("No input file loaded"));
+        return;
+    }
+
+    const QString inputPath = tracks_[trackIndex].path;
+    auto result = std::make_shared<AnalyzeResult>();
+    setBusy(true);
+    setProgress(0.0);
+
+    auto* watcher = new QFutureWatcher<int>(this);
+    watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<int>::finished, this,
+        [this, watcher, result, trackIndex, inputPath]() {
+            watcher->deleteLater();
+            watcher_.clear();
+            setBusy(false);
+            if (result->status != AG_OK) {
+                setProgress(0.0);
+                const QString message = tr("BPM analysis failed");
+                emit trackError(trackIndex, message);
+                emit errorOccurred(message);
+                return;
+            }
+
+            Track& track = tracks_[trackIndex];
+            if (track.path != inputPath) {
+                return;
+            }
+            track.originalBpm = result->bpm.bpm;
+            track.bpmConfidence = result->bpm.confidence;
+            track.aligned = false;
+            setProgress(1.0);
+            emit tracksChanged();
+        });
+
+    watcher->setFuture(QtConcurrent::run([result, inputPath]() {
+        const QByteArray path = inputPath.toUtf8();
+        result->status = ag_bpm_analyze(path.constData(), &result->bpm);
+        return result->status;
+    }));
+}
+
+void LightEditor::unifyBpm(bool alignBeats)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
 
-    std::vector<int> loadedIndices;
-    loadedIndices.reserve(kTrackCount);
-    for (int i = 0; i < kTrackCount; ++i) {
-        if (!tracks_[i].path.isEmpty()) {
-            loadedIndices.push_back(i);
-        }
+    QString cacheRoot =
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (cacheRoot.isEmpty()) {
+        cacheRoot = QDir::tempPath();
     }
-
-    if (loadedIndices.empty()) {
-        emit errorOccurred(QStringLiteral("No input file loaded"));
+    cacheRoot = QDir(cacheRoot).filePath(QStringLiteral("light-editor"));
+    if (!QDir().mkpath(cacheRoot)) {
+        emit errorOccurred(tr("Failed to create BPM cache directory"));
         return;
     }
 
-    // ag_multitrack_edit determines the output container from the file extension
-    // and does not currently expose sample-rate or channel conversion. These
-    // parameters are accepted for forward compatibility with the export UI.
-    Q_UNUSED(outputSampleRate)
-    Q_UNUSED(outputChannels)
+    std::vector<BpmJob> jobs;
+    for (int index = 0; index < kTrackCount; ++index) {
+        const Track& track = tracks_[index];
+        if (track.path.isEmpty()) {
+            continue;
+        }
+        BpmJob job;
+        job.trackIndex = index;
+        job.inputPath = track.path;
+        job.outputPath = QDir(cacheRoot).filePath(
+            QUuid::createUuid().toString(QUuid::WithoutBraces)
+            + QStringLiteral(".wav"));
+        job.originalBpm = track.originalBpm;
+        job.confidence = track.bpmConfidence;
+        jobs.push_back(std::move(job));
+    }
 
+    if (jobs.empty()) {
+        emit errorOccurred(tr("No input file loaded"));
+        return;
+    }
+
+    const double targetBpm = targetBpm_;
+    const bool keepPitch = keepPitch_;
+    auto result = std::make_shared<BpmBatchResult>();
+    ag_cancel_token* token = ag_cancel_token_create();
+    token_.store(token, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
 
-    ag_cancel_token* token = ag_cancel_token_create();
-    token_.store(token, std::memory_order_release);
+    auto* watcher = new QFutureWatcher<int>(this);
+    watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<int>::finished, this,
+        [this, watcher, result, alignBeats]() {
+            watcher->deleteLater();
+            watcher_.clear();
+            ag_cancel_token* t = nullptr;
+            {
+                QMutexLocker lock(&tokenMutex_);
+                t = token_.exchange(nullptr, std::memory_order_acq_rel);
+            }
+            if (t != nullptr) {
+                ag_cancel_token_destroy(t);
+            }
+            setBusy(false);
 
-    const QString firstPath = tracks_[loadedIndices.front()].path;
-    const int loadedCount = static_cast<int>(loadedIndices.size());
-    const QString outputPath = computeOutputPath(firstPath, outputDir,
-                                                 outputFormat, loadedCount);
+            if (result->status != AG_OK) {
+                setProgress(0.0);
+                const QString message = result->message.isEmpty()
+                    ? tr("BPM alignment failed")
+                    : result->message;
+                if (result->failureIndex >= 0) {
+                    emit trackError(result->failureIndex, message);
+                }
+                emit errorOccurred(message);
+                return;
+            }
 
-    std::vector<QByteArray> pathBytes;
-    pathBytes.reserve(loadedCount);
-    for (int index : loadedIndices) {
-        pathBytes.push_back(tracks_[index].path.toUtf8());
+            pushUndoState();
+            for (const BpmJobResult& item : result->tracks) {
+                Track& track = tracks_[item.trackIndex];
+                if (track.path != item.inputPath) {
+                    continue;
+                }
+                track.originalBpm = item.originalBpm;
+                track.bpmConfidence = item.confidence;
+                track.speedRatio = item.speedRatio;
+                track.renderPath = item.outputPath;
+                track.inMs = qRound64(track.inMs / item.speedRatio);
+                track.outMs = qRound64(track.outMs / item.speedRatio);
+                track.durationMs = qRound64(
+                    track.durationMs / item.speedRatio);
+                if (alignBeats) {
+                    track.timelineStartMs =
+                        snapMs(track.timelineStartMs, targetBpm_, 4);
+                }
+                track.aligned = true;
+            }
+            setProgress(1.0);
+            emit tracksChanged();
+            emit inputFileChanged();
+        });
+
+    watcher->setFuture(QtConcurrent::run(
+        [this, jobs, result, targetBpm, keepPitch, token]() {
+            std::vector<QString> createdFiles;
+            result->tracks.reserve(jobs.size());
+            for (size_t index = 0; index < jobs.size(); ++index) {
+                if (token == nullptr) {
+                    result->status = AG_INTERNAL_ERROR;
+                    break;
+                }
+
+                BpmJob job = jobs[index];
+                if (job.originalBpm < 40.0 || job.originalBpm > 240.0
+                    || job.confidence < kReliableBpmConfidence) {
+                    ag_bpm_result bpm{};
+                    const QByteArray inputPath = job.inputPath.toUtf8();
+                    const ag_result analysis =
+                        ag_bpm_analyze(inputPath.constData(), &bpm);
+                    if (analysis != AG_OK
+                        || bpm.confidence < kReliableBpmConfidence) {
+                        result->status = analysis == AG_OK
+                            ? AG_DECODE_ERROR : analysis;
+                        result->failureIndex = job.trackIndex;
+                        result->message = tr("Reliable BPM was not detected");
+                        break;
+                    }
+                    job.originalBpm = bpm.bpm;
+                    job.confidence = bpm.confidence;
+                }
+
+                const double speedRatio = targetBpm / job.originalBpm;
+                if (speedRatio < 0.5 || speedRatio > 2.0) {
+                    result->status = AG_INVALID_ARGUMENT;
+                    result->failureIndex = job.trackIndex;
+                    result->message =
+                        tr("Target BPM is outside the supported speed range");
+                    break;
+                }
+
+                const QByteArray inputPath = job.inputPath.toUtf8();
+                const QByteArray outputPath = job.outputPath.toUtf8();
+                ag_pitch_shift_options options{};
+                const ag_result shift = ag_pitch_shift_ex(
+                    inputPath.constData(), outputPath.constData(), 0,
+                    keepPitch ? 1 : 0, 1.0 / speedRatio, "pcm_s16le",
+                    &options, token, nullptr, nullptr);
+                if (shift != AG_OK) {
+                    result->status = shift;
+                    result->failureIndex = job.trackIndex;
+                    result->message = shift == AG_CANCELLED
+                        ? tr("BPM alignment cancelled")
+                        : tr("Failed to adjust track BPM");
+                    break;
+                }
+
+                createdFiles.push_back(job.outputPath);
+                result->tracks.push_back(BpmJobResult{
+                    job.trackIndex, job.inputPath, job.outputPath,
+                    job.originalBpm, job.confidence, speedRatio});
+                progress_.store(
+                    static_cast<double>(index + 1)
+                        / static_cast<double>(jobs.size()),
+                    std::memory_order_release);
+                QMetaObject::invokeMethod(
+                    this, &LightEditor::progressChanged, Qt::QueuedConnection);
+            }
+
+            if (result->tracks.size() == jobs.size()) {
+                result->status = AG_OK;
+            } else {
+                for (const QString& path : createdFiles) {
+                    QFile::remove(path);
+                }
+                result->tracks.clear();
+            }
+            return result->status;
+        }));
+}
+
+void LightEditor::exportProject(const QString& outputDir,
+                                const QString& outputFormat,
+                                int outputSampleRate,
+                                int outputChannels)
+{
+    if (busy_.load(std::memory_order_acquire)) {
+        return;
     }
 
-    std::vector<long long> trimStarts(loadedCount, trimStartMs);
-    std::vector<long long> trimEnds(loadedCount, trimEndMs);
-    std::vector<int> fadeIns(loadedCount, fadeInMs);
-    std::vector<int> fadeOuts(loadedCount, fadeOutMs);
-    std::vector<double> gains(loadedCount, gain);
+    const bool hasSolo = std::any_of(
+        tracks_.begin(), tracks_.end(), [](const Track& track) {
+            return !track.path.isEmpty() && !track.muted && track.solo;
+        });
+    std::vector<int> included;
+    for (int index = 0; index < kTrackCount; ++index) {
+        const Track& track = tracks_[index];
+        if (track.path.isEmpty() || track.muted
+            || (hasSolo && !track.solo)) {
+            continue;
+        }
+        included.push_back(index);
+    }
+    if (included.empty()) {
+        emit errorOccurred(tr("No audible tracks to export"));
+        return;
+    }
+
+    if (outputSampleRate < 0 || outputChannels < 0 || outputChannels > 2) {
+        emit errorOccurred(tr("Invalid export audio settings"));
+        return;
+    }
+    if (!outputDir.isEmpty() && !QDir().mkpath(outputDir)) {
+        emit errorOccurred(tr("Failed to create export directory"));
+        return;
+    }
+
+    std::vector<QByteArray> pathBytes;
+    std::vector<long long> timelineStarts;
+    std::vector<long long> trimStarts;
+    std::vector<long long> trimEnds;
+    std::vector<int> fadeIns;
+    std::vector<int> fadeOuts;
+    std::vector<double> gains;
+    pathBytes.reserve(included.size());
+    timelineStarts.reserve(included.size());
+    trimStarts.reserve(included.size());
+    trimEnds.reserve(included.size());
+    fadeIns.reserve(included.size());
+    fadeOuts.reserve(included.size());
+    gains.reserve(included.size());
+
+    QString firstSource;
+    for (int index : included) {
+        const Track& track = tracks_[index];
+        const QString source =
+            !track.renderPath.isEmpty() && QFileInfo::exists(track.renderPath)
+            ? track.renderPath : track.path;
+        if (firstSource.isEmpty()) {
+            firstSource = source;
+        }
+        pathBytes.push_back(source.toUtf8());
+        timelineStarts.push_back(track.timelineStartMs);
+        trimStarts.push_back(track.inMs);
+        trimEnds.push_back(track.outMs);
+        fadeIns.push_back(track.fadeInMs);
+        fadeOuts.push_back(track.fadeOutMs);
+        gains.push_back(track.gain);
+    }
+
+    const QString outputPath = computeOutputPath(
+        firstSource, outputDir, outputFormat.toLower(),
+        static_cast<int>(included.size()));
+    const QString mixPath = outputPath + QStringLiteral(".agmix-")
+        + QUuid::createUuid().toString(QUuid::WithoutBraces)
+        + QStringLiteral(".wav");
+    ag_cancel_token* token = ag_cancel_token_create();
+    token_.store(token, std::memory_order_release);
+    setBusy(true);
+    setProgress(0.0);
 
     auto* watcher = new QFutureWatcher<int>(this);
     watcher_ = watcher;
     connect(watcher, &QFutureWatcher<int>::finished, this,
         [this, watcher, outputPath]() {
-            watcher_->deleteLater();
+            watcher->deleteLater();
+            watcher_.clear();
             ag_cancel_token* t = nullptr;
             {
                 QMutexLocker lock(&tokenMutex_);
@@ -447,53 +757,73 @@ void LightEditor::start(qint64 trimStartMs, qint64 trimEndMs,
                 emit lightEditCompleted(outputPath);
             } else if (result == AG_CANCELLED) {
                 setProgress(0.0);
-                emit errorOccurred(QStringLiteral("Light edit cancelled"));
+                emit errorOccurred(tr("Export cancelled"));
             } else {
                 emit errorOccurred(
-                    QStringLiteral("Light edit failed (error %1)").arg(result));
+                    tr("Export failed (error %1)").arg(result));
             }
         });
 
-    auto doEdit = [pathBytes, trimStarts, trimEnds, fadeIns, fadeOuts, gains,
-                   outputPath, token, this]() -> int
-    {
-        std::vector<const char*> inputPaths;
-        inputPaths.reserve(pathBytes.size());
-        for (const auto& bytes : pathBytes) {
-            inputPaths.push_back(bytes.constData());
-        }
-
-        const QByteArray outputUtf8 = outputPath.toUtf8();
-
-        auto callback = [](float frac, void* userData) {
-            auto* self = static_cast<LightEditor*>(userData);
-            if (self) {
-                self->progress_.store(frac, std::memory_order_release);
-                // Queue the signal emission back to the main thread; the C
-                // progress callback runs on the worker thread.
+    watcher->setFuture(QtConcurrent::run(
+        [this, pathBytes, timelineStarts, trimStarts, trimEnds, fadeIns,
+         fadeOuts, gains, outputPath, mixPath, outputSampleRate,
+         outputChannels, token]() {
+            std::vector<const char*> inputPaths;
+            inputPaths.reserve(pathBytes.size());
+            for (const QByteArray& path : pathBytes) {
+                inputPaths.push_back(path.constData());
+            }
+            const QByteArray outputUtf8 = outputPath.toUtf8();
+            const QByteArray mixUtf8 = mixPath.toUtf8();
+            struct ProgressContext {
+                LightEditor* self;
+                double base;
+                double span;
+            };
+            auto callback = [](float value, void* userData) {
+                auto* context = static_cast<ProgressContext*>(userData);
+                auto* self = context->self;
+                self->progress_.store(
+                    context->base + context->span * value,
+                    std::memory_order_release);
                 QMetaObject::invokeMethod(
                     self, &LightEditor::progressChanged, Qt::QueuedConnection);
+            };
+
+            ProgressContext mixProgress{this, 0.0, 0.7};
+            const ag_result mixResult = ag_multitrack_edit_ex(
+                inputPaths.size(), inputPaths.data(), timelineStarts.data(),
+                trimStarts.data(), trimEnds.data(), fadeIns.data(),
+                fadeOuts.data(), gains.data(), mixUtf8.constData(), token,
+                callback, &mixProgress);
+            if (mixResult != AG_OK) {
+                QFile::remove(mixPath);
+                return static_cast<int>(mixResult);
             }
-        };
 
-        const ag_result result = ag_multitrack_edit(
-            inputPaths.size(),
-            inputPaths.data(),
-            trimStarts.data(),
-            trimEnds.data(),
-            fadeIns.data(),
-            fadeOuts.data(),
-            gains.data(),
-            outputUtf8.constData(),
-            token,
-            callback,
-            this);
+            ProgressContext transcodeProgress{this, 0.7, 0.3};
+            const ag_result transcodeResult = ag_transcode(
+                mixUtf8.constData(), outputUtf8.constData(), nullptr, 0,
+                outputSampleRate, outputChannels, token, callback,
+                &transcodeProgress);
+            QFile::remove(mixPath);
+            return static_cast<int>(transcodeResult);
+        }));
+}
 
-        return static_cast<int>(result);
-    };
-
-    QFuture<int> future = QtConcurrent::run(doEdit);
-    watcher->setFuture(future);
+void LightEditor::start(qint64 trimStartMs, qint64 trimEndMs,
+                        int fadeInMs, int fadeOutMs, double gain,
+                        const QString& outputDir,
+                        const QString& outputFormat,
+                        int outputSampleRate,
+                        int outputChannels)
+{
+    Q_UNUSED(trimStartMs)
+    Q_UNUSED(trimEndMs)
+    Q_UNUSED(fadeInMs)
+    Q_UNUSED(fadeOutMs)
+    Q_UNUSED(gain)
+    exportProject(outputDir, outputFormat, outputSampleRate, outputChannels);
 }
 
 void LightEditor::cancel()

@@ -602,7 +602,7 @@
             <translation>duy trì cao độ</translation>
         </message>
         <message>
-            <location line="+12" />
+            <location line="+14" />
             <source>吸附网格</source>
             <translation>lưới chụp nhanh</translation>
         </message>
@@ -627,12 +627,12 @@
             <translation>BPM hợp nhất</translation>
         </message>
         <message>
-            <location line="+10" />
+            <location line="+8" />
             <source>BPM + 节拍对齐</source>
             <translation>BPM + Căn chỉnh nhịp</translation>
         </message>
         <message>
-            <location line="+155" />
+            <location line="+153" />
             <source>撤销</source>
             <translation>Hủy bỏ</translation>
         </message>
@@ -687,17 +687,17 @@
             <translation>định dạng đầu ra</translation>
         </message>
         <message>
-            <location line="+2" />
+            <location line="+8" />
             <source>采样率</source>
             <translation>Tốc độ lấy mẫu</translation>
         </message>
         <message>
-            <location line="+2" />
+            <location line="+7" />
             <source>声道</source>
             <translation>giọng hát</translation>
         </message>
         <message>
-            <location line="+1" />
+            <location line="+4" />
             <source>立体声</source>
             <translation>Âm thanh nổi</translation>
         </message>
@@ -707,7 +707,7 @@
             <translation>đơn sắc</translation>
         </message>
         <message>
-            <location line="+1" />
+            <location line="+3" />
             <source>输出目录</source>
             <translation>Thư mục đầu ra</translation>
         </message>
@@ -745,6 +745,80 @@
             <location line="+0" />
             <source>导出音频</source>
             <translation>Xuất âm thanh</translation>
+        </message>
+    </context>
+    <context>
+        <name>LightEditor</name>
+        <message>
+            <location filename="../qt/src/light_editor_controller.cpp" line="+435" />
+            <source>Editor is busy</source>
+            <translation>Biên tập viên đang bận</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <location line="+77" />
+            <source>No input file loaded</source>
+            <translation>Không có tập tin đầu vào nào được tải</translation>
+        </message>
+        <message>
+            <location line="-59" />
+            <source>BPM analysis failed</source>
+            <translation>Phân tích BPM không thành công</translation>
+        </message>
+        <message>
+            <location line="+37" />
+            <source>Failed to create BPM cache directory</source>
+            <translation>Không tạo được thư mục bộ đệm BPM</translation>
+        </message>
+        <message>
+            <location line="+53" />
+            <source>BPM alignment failed</source>
+            <translation>Căn chỉnh BPM không thành công</translation>
+        </message>
+        <message>
+            <location line="+56" />
+            <source>Reliable BPM was not detected</source>
+            <translation>BPM đáng tin cậy không được phát hiện</translation>
+        </message>
+        <message>
+            <location line="+12" />
+            <source>Target BPM is outside the supported speed range</source>
+            <translation>BPM mục tiêu nằm ngoài phạm vi tốc độ được hỗ trợ</translation>
+        </message>
+        <message>
+            <location line="+15" />
+            <source>BPM alignment cancelled</source>
+            <translation>Căn chỉnh BPM đã bị hủy</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>Failed to adjust track BPM</source>
+            <translation>Không thể điều chỉnh BPM của bản nhạc</translation>
+        </message>
+        <message>
+            <location line="+51" />
+            <source>No audible tracks to export</source>
+            <translation>Không có bản âm thanh nào để xuất</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>Invalid export audio settings</source>
+            <translation>Cài đặt âm thanh xuất không hợp lệ</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <source>Failed to create export directory</source>
+            <translation>Không tạo được thư mục xuất</translation>
+        </message>
+        <message>
+            <location line="+69" />
+            <source>Export cancelled</source>
+            <translation>Đã hủy xuất</translation>
+        </message>
+        <message>
+            <location line="+3" />
+            <source>Export failed (error %1)</source>
+            <translation>Xuất không thành công (lỗi %1)</translation>
         </message>
     </context>
     <context>

@@ -602,7 +602,7 @@
             <translation>รักษาระดับเสียง</translation>
         </message>
         <message>
-            <location line="+12" />
+            <location line="+14" />
             <source>吸附网格</source>
             <translation>สแนปกริด</translation>
         </message>
@@ -627,12 +627,12 @@
             <translation>BPM แบบครบวงจร</translation>
         </message>
         <message>
-            <location line="+10" />
+            <location line="+8" />
             <source>BPM + 节拍对齐</source>
             <translation>BPM + การจัดแนวจังหวะ</translation>
         </message>
         <message>
-            <location line="+155" />
+            <location line="+153" />
             <source>撤销</source>
             <translation>ยกเลิก</translation>
         </message>
@@ -687,17 +687,17 @@
             <translation>รูปแบบเอาต์พุต</translation>
         </message>
         <message>
-            <location line="+2" />
+            <location line="+8" />
             <source>采样率</source>
             <translation>อัตราการสุ่มตัวอย่าง</translation>
         </message>
         <message>
-            <location line="+2" />
+            <location line="+7" />
             <source>声道</source>
             <translation>ทางเดินเสียง</translation>
         </message>
         <message>
-            <location line="+1" />
+            <location line="+4" />
             <source>立体声</source>
             <translation>สเตอริโอ</translation>
         </message>
@@ -707,7 +707,7 @@
             <translation>โมโน</translation>
         </message>
         <message>
-            <location line="+1" />
+            <location line="+3" />
             <source>输出目录</source>
             <translation>ไดเร็กทอรีเอาต์พุต</translation>
         </message>
@@ -745,6 +745,80 @@
             <location line="+0" />
             <source>导出音频</source>
             <translation>ส่งออกเสียง</translation>
+        </message>
+    </context>
+    <context>
+        <name>LightEditor</name>
+        <message>
+            <location filename="../qt/src/light_editor_controller.cpp" line="+435" />
+            <source>Editor is busy</source>
+            <translation>บรรณาธิการไม่ว่าง</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <location line="+77" />
+            <source>No input file loaded</source>
+            <translation>ไม่ได้โหลดไฟล์อินพุต</translation>
+        </message>
+        <message>
+            <location line="-59" />
+            <source>BPM analysis failed</source>
+            <translation>การวิเคราะห์ BPM ล้มเหลว</translation>
+        </message>
+        <message>
+            <location line="+37" />
+            <source>Failed to create BPM cache directory</source>
+            <translation>ไม่สามารถสร้างไดเรกทอรีแคช BPM</translation>
+        </message>
+        <message>
+            <location line="+53" />
+            <source>BPM alignment failed</source>
+            <translation>การจัดตำแหน่ง BPM ล้มเหลว</translation>
+        </message>
+        <message>
+            <location line="+56" />
+            <source>Reliable BPM was not detected</source>
+            <translation>ตรวจไม่พบ BPM ที่เชื่อถือได้</translation>
+        </message>
+        <message>
+            <location line="+12" />
+            <source>Target BPM is outside the supported speed range</source>
+            <translation>BPM เป้าหมายอยู่นอกช่วงความเร็วที่รองรับ</translation>
+        </message>
+        <message>
+            <location line="+15" />
+            <source>BPM alignment cancelled</source>
+            <translation>การจัดตำแหน่ง BPM ถูกยกเลิก</translation>
+        </message>
+        <message>
+            <location line="+1" />
+            <source>Failed to adjust track BPM</source>
+            <translation>ปรับ BPM ของแทร็กไม่สำเร็จ</translation>
+        </message>
+        <message>
+            <location line="+51" />
+            <source>No audible tracks to export</source>
+            <translation>ไม่มีแทร็กเสียงที่จะส่งออก</translation>
+        </message>
+        <message>
+            <location line="+5" />
+            <source>Invalid export audio settings</source>
+            <translation>การตั้งค่าเสียงการส่งออกไม่ถูกต้อง</translation>
+        </message>
+        <message>
+            <location line="+4" />
+            <source>Failed to create export directory</source>
+            <translation>ไม่สามารถสร้างไดเรกทอรีการส่งออก</translation>
+        </message>
+        <message>
+            <location line="+69" />
+            <source>Export cancelled</source>
+            <translation>ยกเลิกการส่งออกแล้ว</translation>
+        </message>
+        <message>
+            <location line="+3" />
+            <source>Export failed (error %1)</source>
+            <translation>การส่งออกล้มเหลว (ข้อผิดพลาด %1)</translation>
         </message>
     </context>
     <context>
