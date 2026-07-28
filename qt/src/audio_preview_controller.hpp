@@ -34,6 +34,7 @@ public:
     Q_INVOKABLE void pause();
     Q_INVOKABLE void stop();
     Q_INVOKABLE void seek(qint64 positionMs);
+    Q_INVOKABLE bool isCurrentSource(const QUrl& source) const;
     void setVolume(double value);
 
 signals:
@@ -51,6 +52,7 @@ private:
     qint64 durationMs_ = 0;
     double volume_ = 0.8;
 
+    void clearSourceState();
     void pollSnapshot();
     void setError(const QString& message);
 };

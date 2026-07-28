@@ -1,8 +1,10 @@
 #include "audio_preview_controller.hpp"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 
@@ -12,6 +14,7 @@ class AudioPreviewControllerTest final : public QObject {
 private slots:
     void playsWithoutTouchingTheMainPlayer();
     void rejectsMissingFiles();
+    void clearsOldStateWhenNewSourceCannotLoad();
 };
 
 void AudioPreviewControllerTest::playsWithoutTouchingTheMainPlayer()
@@ -29,6 +32,7 @@ void AudioPreviewControllerTest::playsWithoutTouchingTheMainPlayer()
     QTRY_VERIFY_WITH_TIMEOUT(preview.hasSource(), 2'000);
     QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
     QVERIFY(preview.durationMs() > 0);
+    QVERIFY(preview.isCurrentSource(QUrl::fromLocalFile(fixture)));
     QCOMPARE(QFileInfo(preview.sourcePath()).canonicalFilePath(),
              QFileInfo(fixture).canonicalFilePath());
 
@@ -53,6 +57,36 @@ void AudioPreviewControllerTest::rejectsMissingFiles()
         + QStringLiteral("/fixtures/missing.wav")));
     QCOMPARE(errors.count(), 1);
     QVERIFY(!preview.hasSource());
+}
+
+void AudioPreviewControllerTest::clearsOldStateWhenNewSourceCannotLoad()
+{
+    const QString fixture =
+        QCoreApplication::applicationDirPath()
+        + QStringLiteral("/fixtures/sine-440hz.wav");
+    QVERIFY2(QFileInfo::exists(fixture), qPrintable(fixture));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    preview.play(QUrl::fromLocalFile(fixture));
+    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
+    QVERIFY(preview.hasSource());
+
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString corruptPath = temp.filePath(QStringLiteral("corrupt.wav"));
+    QFile corrupt(corruptPath);
+    QVERIFY(corrupt.open(QIODevice::WriteOnly));
+    QCOMPARE(corrupt.write("not audio"), 9);
+    corrupt.close();
+
+    QSignalSpy errors(&preview, &AudioPreviewController::errorOccurred);
+    preview.play(QUrl::fromLocalFile(corruptPath));
+    QCOMPARE(errors.count(), 1);
+    QVERIFY(!preview.hasSource());
+    QVERIFY(!preview.isCurrentSource(QUrl::fromLocalFile(corruptPath)));
+    QVERIFY(!preview.playing());
+    QCOMPARE(preview.positionMs(), 0);
+    QCOMPARE(preview.durationMs(), 0);
 }
 
 QTEST_MAIN(AudioPreviewControllerTest)

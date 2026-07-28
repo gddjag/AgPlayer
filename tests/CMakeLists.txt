@@ -187,7 +187,13 @@ add_dependencies(transcoder_test decoder_fixture)
 target_include_directories(transcoder_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
-target_link_libraries(transcoder_test PRIVATE agplayer_core)
+target_include_directories(transcoder_test SYSTEM PRIVATE
+    "${FFMPEG_INCLUDE_DIRS}"
+)
+target_link_libraries(transcoder_test PRIVATE
+    agplayer_core
+    ${FFMPEG_LIBRARIES}
+)
 
 agplayer_enable_warnings(transcoder_test)
 

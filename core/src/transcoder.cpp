@@ -432,6 +432,10 @@ ag_result run_transcode_pass(const std::string& input_path,
 
     if (config.keep_metadata) {
         av_dict_copy(&enc.fmt_ctx->metadata, dec.fmt_ctx->metadata, 0);
+        av_dict_copy(
+            &enc.stream->metadata,
+            dec.fmt_ctx->streams[dec.stream_index]->metadata,
+            0);
     }
 
     // Open output file.

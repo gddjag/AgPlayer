@@ -9,6 +9,9 @@ import AgPlayer
 // Layout matches the design reference "音频工具 升降调.png".
 Rectangle {
     id: page
+    readonly property bool previewIsCurrent:
+        AudioPreviewController.sourcePath.length > 0
+        && AudioPreviewController.isCurrentSource(shifter.inputUrl)
     color: Theme.background
 
     property var shifter: PitchShifter
@@ -190,7 +193,9 @@ Rectangle {
 
                     Text {
                         anchors.centerIn: parent
-                        text: AudioPreviewController.playing ? "\u23F8" : "\u25B6"
+                        text: page.previewIsCurrent
+                              && AudioPreviewController.playing
+                              ? "\u23F8" : "\u25B6"
                         color: Theme.primaryText
                         font.pixelSize: 18
                     }

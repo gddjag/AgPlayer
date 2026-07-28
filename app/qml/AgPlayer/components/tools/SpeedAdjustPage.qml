@@ -9,6 +9,9 @@ import AgPlayer
 // keep_tempo=true, tempo_ratio=detected_bpm/target_bpm).
 Rectangle {
     id: page
+    readonly property bool previewIsCurrent:
+        AudioPreviewController.sourcePath.length > 0
+        && AudioPreviewController.isCurrentSource(adjuster.inputUrl)
     color: Theme.background
 
     property var adjuster: SpeedAdjuster
@@ -946,7 +949,9 @@ Rectangle {
                         }
 
                         contentItem: Text {
-                            text: AudioPreviewController.playing ? "\u23F8" : "\u25B6"
+                            text: page.previewIsCurrent
+                                  && AudioPreviewController.playing
+                                  ? "\u23F8" : "\u25B6"
                             color: Theme.primaryText
                             font.pixelSize: 18
                             font.family: Theme.fontFallback
@@ -956,7 +961,9 @@ Rectangle {
                     }
 
                     Text {
-                        text: page.formatTimeMs(AudioPreviewController.positionMs)
+                        text: page.formatTimeMs(
+                                  page.previewIsCurrent
+                                  ? AudioPreviewController.positionMs : 0)
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 12
@@ -968,9 +975,9 @@ Rectangle {
                         Layout.fillWidth: true
                         from: 0
                         to: Math.max(1, adjuster.inputDurationMs)
-                        value: AudioPreviewController.positionMs
-                        enabled: adjuster.hasInput
-                                 && AudioPreviewController.hasSource
+                        value: page.previewIsCurrent
+                               ? AudioPreviewController.positionMs : 0
+                        enabled: page.previewIsCurrent
                         onMoved: AudioPreviewController.seek(value)
 
                         ToolTip.text: qsTr("定位预览")

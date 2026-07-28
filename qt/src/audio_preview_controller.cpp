@@ -61,15 +61,15 @@ QString AudioPreviewController::sourcePath() const
 
 void AudioPreviewController::toggle(const QUrl& source)
 {
-    const QString path = source.toLocalFile();
-    if (hasSource()
-        && QFileInfo(sourcePath_).canonicalFilePath()
-            == QFileInfo(path).canonicalFilePath()) {
+    if (isCurrentSource(source)) {
         if (playing_) {
             pause();
         } else if (player_ != nullptr && ag_player_play(player_) == AG_OK) {
             pollTimer_.start();
             pollSnapshot();
+        } else {
+            clearSourceState();
+            setError(tr("无法开始预览播放"));
         }
         return;
     }
@@ -80,15 +80,19 @@ void AudioPreviewController::play(const QUrl& source)
 {
     const QString path = source.toLocalFile();
     if (player_ == nullptr) {
+        clearSourceState();
         setError(tr("预览播放器不可用"));
         return;
     }
     if (path.isEmpty() || !QFileInfo::exists(path)) {
+        clearSourceState();
         setError(tr("预览文件不存在"));
         return;
     }
 
+    pollTimer_.stop();
     ag_player_stop(player_);
+    clearSourceState();
     const QByteArray utf8 = path.toUtf8();
     const ag_result loadResult = ag_player_load(player_, utf8.constData());
     if (loadResult != AG_OK) {
@@ -124,15 +128,7 @@ void AudioPreviewController::stop()
     if (player_ != nullptr) {
         ag_player_stop(player_);
     }
-    const bool hadSource = hasSource();
-    sourcePath_.clear();
-    playing_ = false;
-    positionMs_ = 0;
-    durationMs_ = 0;
-    if (hadSource) {
-        emit sourceChanged();
-    }
-    emit stateChanged();
+    clearSourceState();
 }
 
 void AudioPreviewController::seek(const qint64 positionMs)
@@ -160,6 +156,36 @@ void AudioPreviewController::setVolume(const double value)
     emit volumeChanged();
 }
 
+bool AudioPreviewController::isCurrentSource(const QUrl& source) const
+{
+    if (!hasSource()) {
+        return false;
+    }
+    const QString candidate = source.toLocalFile();
+    if (candidate.isEmpty()) {
+        return false;
+    }
+    return QFileInfo(sourcePath_).canonicalFilePath()
+        == QFileInfo(candidate).canonicalFilePath();
+}
+
+void AudioPreviewController::clearSourceState()
+{
+    const bool sourceWasSet = hasSource();
+    const bool stateWasSet =
+        playing_ || positionMs_ != 0 || durationMs_ != 0;
+    sourcePath_.clear();
+    playing_ = false;
+    positionMs_ = 0;
+    durationMs_ = 0;
+    if (sourceWasSet) {
+        emit sourceChanged();
+    }
+    if (stateWasSet) {
+        emit stateChanged();
+    }
+}
+
 void AudioPreviewController::pollSnapshot()
 {
     if (player_ == nullptr || !hasSource()) {
@@ -180,6 +206,9 @@ void AudioPreviewController::pollSnapshot()
     playing_ = nextPlaying;
     positionMs_ = nextPosition;
     durationMs_ = nextDuration;
+    if (!nextPlaying) {
+        pollTimer_.stop();
+    }
     emit stateChanged();
 }
 

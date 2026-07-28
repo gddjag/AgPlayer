@@ -11,6 +11,11 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
+
+extern "C" {
+#include <libavformat/avformat.h>
+}
 
 namespace {
 
@@ -95,6 +100,84 @@ float scan_peak(const std::filesystem::path& path)
         }
     } while (!block.end_of_stream);
     return peak;
+}
+
+std::filesystem::path make_stream_tagged_matroska(
+    const std::filesystem::path& source)
+{
+    const std::filesystem::path dest =
+        source.parent_path() / "transcoder-stream-tagged.mka";
+    std::filesystem::remove(dest);
+
+    AVFormatContext* input = nullptr;
+    assert(avformat_open_input(&input, source.string().c_str(), nullptr, nullptr)
+           >= 0);
+    assert(avformat_find_stream_info(input, nullptr) >= 0);
+    const int input_index =
+        av_find_best_stream(input, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    assert(input_index >= 0);
+
+    AVFormatContext* output = nullptr;
+    assert(avformat_alloc_output_context2(
+               &output, nullptr, "matroska", dest.string().c_str())
+           >= 0);
+    assert(output != nullptr);
+    AVStream* output_stream = avformat_new_stream(output, nullptr);
+    assert(output_stream != nullptr);
+    AVStream* input_stream = input->streams[input_index];
+    assert(avcodec_parameters_copy(
+               output_stream->codecpar, input_stream->codecpar)
+           >= 0);
+    output_stream->time_base = input_stream->time_base;
+    assert(av_dict_set(&output_stream->metadata, "title",
+                       "Stream Policy Title", 0)
+           >= 0);
+    assert(av_dict_set(&output_stream->metadata, "language", "eng", 0) >= 0);
+
+    assert(avio_open(&output->pb, dest.string().c_str(), AVIO_FLAG_WRITE) >= 0);
+    assert(avformat_write_header(output, nullptr) >= 0);
+
+    AVPacket* packet = av_packet_alloc();
+    assert(packet != nullptr);
+    while (av_read_frame(input, packet) >= 0) {
+        if (packet->stream_index == input_index) {
+            av_packet_rescale_ts(packet, input_stream->time_base,
+                                 output_stream->time_base);
+            packet->stream_index = output_stream->index;
+            packet->pos = -1;
+            assert(av_interleaved_write_frame(output, packet) >= 0);
+        }
+        av_packet_unref(packet);
+    }
+    av_packet_free(&packet);
+    assert(av_write_trailer(output) >= 0);
+    avio_closep(&output->pb);
+    avformat_free_context(output);
+    avformat_close_input(&input);
+    assert(std::filesystem::exists(dest));
+    return dest;
+}
+
+std::pair<std::string, std::string> read_audio_stream_tags(
+    const std::filesystem::path& path)
+{
+    AVFormatContext* input = nullptr;
+    assert(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr)
+           >= 0);
+    assert(avformat_find_stream_info(input, nullptr) >= 0);
+    const int stream_index =
+        av_find_best_stream(input, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    assert(stream_index >= 0);
+    const AVDictionary* tags = input->streams[stream_index]->metadata;
+    const AVDictionaryEntry* title =
+        av_dict_get(tags, "title", nullptr, 0);
+    const AVDictionaryEntry* language =
+        av_dict_get(tags, "language", nullptr, 0);
+    const std::pair<std::string, std::string> result{
+        title != nullptr ? title->value : "",
+        language != nullptr ? language->value : ""};
+    avformat_close_input(&input);
+    return result;
 }
 
 } // namespace
@@ -246,6 +329,41 @@ int main(const int argc, char** argv)
     transcode_with_metadata_policy("transcoder-meta-stripped.wav", false);
     transcode_with_metadata_policy("transcoder-meta-kept.wav", true);
 
+    // Audio-stream tags follow the same policy as container-level tags.
+    const std::filesystem::path stream_tagged_input =
+        make_stream_tagged_matroska(input_path);
+    const auto transcode_stream_tags =
+        [&](const char* file_name, const bool keep_metadata) {
+            const std::filesystem::path output =
+                input_path.parent_path() / file_name;
+            std::filesystem::remove(output);
+            agplayer::TranscodeConfig config;
+            config.output_path = output.string();
+            config.codec_name = "pcm_s16le";
+            config.keep_metadata = keep_metadata;
+            error.clear();
+            const ag_result transcode_result =
+                agplayer::transcode(stream_tagged_input.string(), config,
+                                    nullptr, nullptr, error);
+            if (transcode_result != AG_OK) {
+                std::cerr << "stream metadata transcode failed: "
+                          << transcode_result << " " << error << "\n";
+            }
+            assert(transcode_result == AG_OK);
+            const auto [title, language] = read_audio_stream_tags(output);
+            if (keep_metadata) {
+                assert(title == "Stream Policy Title");
+                assert(language == "eng");
+            } else {
+                assert(title.empty());
+                assert(language.empty());
+            }
+            std::filesystem::remove(output);
+        };
+    transcode_stream_tags("transcoder-stream-stripped.mka", false);
+    transcode_stream_tags("transcoder-stream-kept.mka", true);
+
+    std::filesystem::remove(stream_tagged_input);
     std::filesystem::remove(tagged_input);
     std::filesystem::remove(happy_output);
     std::filesystem::remove(corrupt_path);
