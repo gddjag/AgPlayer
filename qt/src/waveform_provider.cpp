@@ -9,10 +9,20 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <vector>
 
 namespace {
+
+std::filesystem::path filesystemPath(const QString& path)
+{
+#ifdef Q_OS_WIN
+    return std::filesystem::path(path.toStdWString());
+#else
+    return std::filesystem::u8path(path.toUtf8().constData());
+#endif
+}
 
 ag_waveform_aggregation aggregationForSettings(
     const SettingsController* settings) noexcept
@@ -37,7 +47,7 @@ QString cacheFilePathFor(SettingsController* settings,
         return {};
     }
     const std::string key =
-        agplayer::WaveformCache::key_for(sourcePath.toStdString());
+        agplayer::WaveformCache::key_for(filesystemPath(sourcePath));
     if (key.empty()) {
         return {};
     }
@@ -113,7 +123,7 @@ void saveWaveformCache(const QString& cachePath,
     }
     data.bpm = ag_waveform_bpm(waveform);
     if (!agplayer::WaveformCache::save_v2(
-            cachePath.toStdString(), sourcePath.toStdString(), data)) {
+            filesystemPath(cachePath), filesystemPath(sourcePath), data)) {
         RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Waveform"),
             QStringLiteral("Failed to save waveform cache for %1")
                 .arg(sourcePath));
@@ -197,8 +207,8 @@ void WaveformProvider::loadForTrack(const QString& path)
     const QString cachePath =
         cacheFilePathFor(settings_, path, currentAggregation_);
     if (!cachePath.isEmpty()) {
-        const std::string source = path.toStdString();
-        const std::string cache = cachePath.toStdString();
+        const std::filesystem::path source = filesystemPath(path);
+        const std::filesystem::path cache = filesystemPath(cachePath);
         agplayer::WaveformCacheData data;
         if (agplayer::WaveformCache::load_v2(cache, source, data)) {
             QVariantMap layers;
@@ -226,7 +236,7 @@ void WaveformProvider::loadForTrack(const QString& path)
     ag_cancel_token* cancelToken = ag_cancel_token_create();
     activeCancelToken_ = cancelToken;
 
-    const std::string source = path.toStdString();
+    const std::string source = path.toUtf8().toStdString();
     constexpr std::size_t targetPoints = 2000;
 
     watcher_ = new QFutureWatcher<Job>(this);

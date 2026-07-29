@@ -22,6 +22,7 @@ private slots:
     void emptyPathEmitsEmptyPeaks();
     void cacheHitEmitsPeaksImmediately();
     void analysisEmitsPeaksForFixture();
+    void unicodePathAnalyzesAndCaches();
     void aggregationChangeUsesSeparateCache();
     void newerTrackSuppressesStaleAnalysisResult();
 
@@ -134,6 +135,41 @@ void WaveformProviderTest::analysisEmitsPeaksForFixture()
     QVERIFY(!layers.value(QStringLiteral("mid")).toList().isEmpty());
     QVERIFY(!layers.value(QStringLiteral("high")).toList().isEmpty());
     QCOMPARE(provider.analysisProgress(), 1.0);
+}
+
+void WaveformProviderTest::unicodePathAnalyzesAndCaches()
+{
+    if (fixturePath_.isEmpty()) {
+        QSKIP("AGPLAYER_TEST_WAV not set");
+    }
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString sourceDir =
+        tempDir.filePath(QStringLiteral("中文音乐"));
+    QVERIFY(QDir().mkpath(sourceDir));
+    const QString sourcePath =
+        QDir(sourceDir).filePath(QStringLiteral("测试歌曲.wav"));
+    QVERIFY(QFile::copy(fixturePath_, sourcePath));
+
+    SettingsController settings;
+    const QString cacheDir =
+        tempDir.filePath(QStringLiteral("中文缓存"));
+    settings.setCacheDirectory(cacheDir);
+    WaveformProvider provider(&settings);
+    QSignalSpy spy(&provider, &WaveformProvider::waveformReady);
+
+    provider.loadForTrack(sourcePath);
+
+    if (spy.isEmpty()) {
+        QVERIFY2(spy.wait(5000), "Unicode-path waveform analysis did not finish");
+    }
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toString(), sourcePath);
+    QVERIFY(!spy.at(0).at(1).toMap()
+                 .value(QStringLiteral("mix")).toList().isEmpty());
+    QCOMPARE(QDir(cacheDir).entryList(
+                 {QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
 }
 
 void WaveformProviderTest::aggregationChangeUsesSeparateCache()
