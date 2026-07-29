@@ -65,6 +65,7 @@ public:
     void set_muted(bool muted) noexcept;
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
     void render(float* output, std::size_t requested_frames) noexcept;
+    ag_result spectrum(float* bins, std::size_t bin_count) noexcept;
     [[nodiscard]] std::size_t buffered_frames() const noexcept;
     [[nodiscard]] bool device_lost() const noexcept;
     ag_result retry_device() noexcept;

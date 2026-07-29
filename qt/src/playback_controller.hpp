@@ -6,6 +6,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 
 struct ag_player;
 class LibraryModel;
@@ -30,6 +31,7 @@ class PlaybackController final : public QObject {
                    NOTIFY outputDevicesChanged)
     Q_PROPERTY(bool exclusiveModeActive READ exclusiveModeActive
                    NOTIFY exclusiveModeActiveChanged)
+    Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
 
 public:
     static constexpr int PollIntervalMs = 34;
@@ -59,6 +61,7 @@ public:
     QStringList outputDevices() const;
     QStringList outputDeviceIds() const;
     bool exclusiveModeActive() const noexcept;
+    QVariantList spectrum() const;
 
     void setLibraryModel(LibraryModel* library);
     void setPlayer(ag_player* player);
@@ -101,9 +104,11 @@ signals:
     void deviceLostChanged();
     void outputDevicesChanged();
     void exclusiveModeActiveChanged();
+    void spectrumChanged();
 
 private:
     void pollSnapshot();
+    void pollSpectrum();
     bool prepareRow(int row);
     void setErrorMessage(QString message);
     void runCommand(int result);
@@ -129,4 +134,5 @@ private:
     QStringList outputDevices_;
     QStringList outputDeviceIds_;
     bool exclusiveModeActive_ = false;
+    QVariantList spectrum_;
 };

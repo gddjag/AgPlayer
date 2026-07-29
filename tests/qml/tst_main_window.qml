@@ -106,14 +106,14 @@ TestCase {
         }, 1000)
     }
 
-    function test_waveform_modes_reuse_analyzed_layers() {
+    function test_waveform_modes_use_offline_waveform_and_live_spectrum() {
         var waveform = findChild(mainWindow, "mainWaveform")
         var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 0
         tryVerify(function() {
             return waveform.layers.mix && waveform.layers.mix.length > 0
         }, 5000)
 
-        SettingsController.waveformMode = 0
         tryVerify(function() {
             return Object.keys(waveform.layers).length === 1
                     && waveform.layers.mix.length > 0
@@ -131,12 +131,17 @@ TestCase {
         })
         compare(waveform.visualMode, 1)
 
+        PlaybackController.play()
         SettingsController.waveformMode = 2
         tryVerify(function() {
-            return waveform.visualMode === 2
-                    && Object.keys(waveform.layers).length === 1
-                    && waveform.layers.mix.length > 0
-        })
+            if (waveform.visualMode !== 2 || waveform.peaks.length !== 64)
+                return false
+            for (var index = 0; index < waveform.peaks.length; ++index) {
+                if (waveform.peaks[index] > 0.05)
+                    return true
+            }
+            return false
+        }, 2000)
 
         SettingsController.waveformMode = previousMode
     }

@@ -8,6 +8,9 @@
 #include <QByteArray>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
 #include <limits>
 #include <vector>
 
@@ -84,6 +87,7 @@ PlaybackController::PlaybackController(ag_player* player,
                                        QObject* parent)
     : QObject(parent), player_(player)
 {
+    spectrum_.fill(0.0F, 64);
     setLibraryModel(library);
     pollTimer_.setInterval(PollIntervalMs);
     pollTimer_.setTimerType(Qt::PreciseTimer);
@@ -110,6 +114,11 @@ QStringList PlaybackController::outputDeviceIds() const { return outputDeviceIds
 bool PlaybackController::exclusiveModeActive() const noexcept
 {
     return exclusiveModeActive_;
+}
+
+QVariantList PlaybackController::spectrum() const
+{
+    return spectrum_;
 }
 
 void PlaybackController::setLibraryModel(LibraryModel* library)
@@ -503,6 +512,35 @@ void PlaybackController::pollSnapshot()
         setErrorMessage(detail.isEmpty() ? RuntimeLog::mapResult(AG_INTERNAL_ERROR) : detail);
     } else {
         setErrorMessage(QString());
+    }
+    pollSpectrum();
+}
+
+void PlaybackController::pollSpectrum()
+{
+    if (player_ == nullptr) {
+        return;
+    }
+    std::array<float, 64U> bins{};
+    if (ag_player_spectrum(player_, bins.data(), bins.size()) != AG_OK) {
+        return;
+    }
+
+    bool changed = spectrum_.size() != static_cast<qsizetype>(bins.size());
+    QVariantList next;
+    next.reserve(static_cast<qsizetype>(bins.size()));
+    for (std::size_t index = 0U; index < bins.size(); ++index) {
+        next.append(bins[index]);
+        if (!changed
+            && std::abs(spectrum_.at(static_cast<qsizetype>(index)).toFloat()
+                        - bins[index])
+                   > 0.002F) {
+            changed = true;
+        }
+    }
+    if (changed) {
+        spectrum_ = std::move(next);
+        emit spectrumChanged();
     }
 }
 

@@ -87,6 +87,13 @@ EngineSnapshot CoreContext::snapshot() const noexcept
     return audio_engine_.snapshot();
 }
 
+ag_result CoreContext::spectrum(float* bins,
+                                const std::size_t bin_count) noexcept
+{
+    return record(audio_engine_.spectrum(bins, bin_count),
+                  "spectrum snapshot failed");
+}
+
 bool CoreContext::device_lost() const noexcept
 {
     return audio_engine_.device_lost();

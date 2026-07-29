@@ -20,6 +20,7 @@ private slots:
     void commandsReflectOnlyCoreSnapshots();
     void outputDevicesAreEnumeratedAndApplied();
     void snapshotSignalsEmitOnlyForChangesAtBoundedFrequency();
+    void liveSpectrumIsPublishedAtBoundedFrequency();
     void unavailableRowsAreExcludedFromQueueIndices();
     void loadsRowWithoutStartingPlayback();
     void nullCoreReportsStableErrors();
@@ -195,6 +196,33 @@ void PlaybackControllerTest::snapshotSignalsEmitOnlyForChangesAtBoundedFrequency
         QCOMPARE(volumeChanged.count(), 1);
         QTest::qWait(PlaybackController::PollIntervalMs * 3);
         QCOMPARE(volumeChanged.count(), 1);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::liveSpectrumIsPublishedAtBoundedFrequency()
+{
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QSignalSpy spectrumChanged(&controller,
+                                   &PlaybackController::spectrumChanged);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        controller.play();
+        const auto hasEnergy = [&controller] {
+            const QVariantList values = controller.spectrum();
+            return std::any_of(
+                values.cbegin(), values.cend(),
+                [](const QVariant& value) { return value.toFloat() > 0.05F; });
+        };
+        QTRY_VERIFY(hasEnergy());
+        const int before = spectrumChanged.count();
+        QTest::qWait(200);
+        QVERIFY(spectrumChanged.count() - before <= 7);
     }
     ag_player_destroy(core);
 }

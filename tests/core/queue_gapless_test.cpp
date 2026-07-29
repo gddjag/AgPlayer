@@ -134,6 +134,22 @@ int main(const int argc, char** argv)
 
     const std::size_t boundary = sample_rate * channels;
     AG_CHECK(std::abs(captured[boundary] - captured[boundary - channels]) < 0.05F);
+    std::array<float, 64U> spectrum{};
+    AG_CHECK(engine.spectrum(spectrum.data(), spectrum.size()) == AG_OK);
+    const auto dominant = std::max_element(spectrum.begin(), spectrum.end());
+    const auto dominant_index =
+        static_cast<std::size_t>(std::distance(spectrum.begin(), dominant));
+    AG_CHECK(dominant_index >= 4U && dominant_index <= 6U);
+    AG_CHECK(*dominant > 0.25F);
+    const auto spectrum_benchmark_start = std::chrono::steady_clock::now();
+    for (int iteration = 0; iteration < 500; ++iteration) {
+        AG_CHECK(engine.spectrum(spectrum.data(), spectrum.size()) == AG_OK);
+    }
+    const auto spectrum_benchmark_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - spectrum_benchmark_start)
+            .count();
+    AG_CHECK(spectrum_benchmark_ms < 250);
     (void)boundary;
     const agplayer::EngineSnapshot internal_snapshot = engine.snapshot();
     AG_CHECK(internal_snapshot.track_index == 1U);

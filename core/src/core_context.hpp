@@ -28,6 +28,7 @@ public:
     ag_result set_volume(float volume) noexcept;
     void set_muted(bool muted) noexcept;
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
+    ag_result spectrum(float* bins, std::size_t bin_count) noexcept;
     [[nodiscard]] bool device_lost() const noexcept;
     ag_result retry_device() noexcept;
     void simulate_device_loss() noexcept;

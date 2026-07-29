@@ -84,6 +84,11 @@ ag_result ag_player_set_volume(ag_player* player, float volume);
 ag_result ag_player_set_muted(ag_player* player, int muted);
 ag_result ag_player_snapshot(const ag_player* player,
                              ag_playback_snapshot* snapshot);
+/* Copies a real-time FFT snapshot from the audible PCM stream.
+ * bin_count must be between 1 and 256. Bins are normalized to 0..1. */
+ag_result ag_player_spectrum(ag_player* player,
+                             float* bins,
+                             size_t bin_count);
 ag_result ag_player_retry_device(ag_player* player);
 int ag_player_device_lost(const ag_player* player);
 ag_result ag_player_simulate_device_loss(ag_player* player);

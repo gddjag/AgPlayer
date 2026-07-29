@@ -79,6 +79,10 @@ Rectangle {
     }
 
     function applyWaveformMode() {
+        if (SettingsController.waveformMode === 2) {
+            waveform.peaks = PlaybackController.spectrum
+            return
+        }
         var source = root.rawWaveformLayers || {}
         waveform.layers = { mix: source.mix || [] }
     }
@@ -342,6 +346,10 @@ Rectangle {
     Connections {
         target: PlaybackController
         function onCurrentTrackIdChanged() { root.loadWaveform() }
+        function onSpectrumChanged() {
+            if (SettingsController.waveformMode === 2)
+                waveform.peaks = PlaybackController.spectrum
+        }
     }
 
     Connections {

@@ -12,9 +12,11 @@
 #include <miniaudio.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <complex>
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
@@ -35,6 +37,47 @@ static_assert(std::atomic<PlaybackMode>::is_always_lock_free);
 static_assert(std::atomic<ag_result>::is_always_lock_free);
 
 namespace {
+
+constexpr std::size_t spectrum_fft_size = 512U;
+constexpr std::size_t spectrum_tap_capacity = 8'192U;
+constexpr std::size_t spectrum_max_bins = spectrum_fft_size / 2U;
+constexpr float spectrum_pi = 3.14159265358979323846F;
+
+void fft(std::array<std::complex<float>, spectrum_fft_size>& values) noexcept
+{
+    for (std::size_t index = 1U, reversed = 0U;
+         index < spectrum_fft_size; ++index) {
+        std::size_t bit = spectrum_fft_size >> 1U;
+        while ((reversed & bit) != 0U) {
+            reversed ^= bit;
+            bit >>= 1U;
+        }
+        reversed ^= bit;
+        if (index < reversed) {
+            std::swap(values[index], values[reversed]);
+        }
+    }
+
+    for (std::size_t length = 2U; length <= spectrum_fft_size;
+         length <<= 1U) {
+        const float angle =
+            -2.0F * spectrum_pi / static_cast<float>(length);
+        const std::complex<float> step(std::cos(angle), std::sin(angle));
+        for (std::size_t offset = 0U; offset < spectrum_fft_size;
+             offset += length) {
+            std::complex<float> phase(1.0F, 0.0F);
+            const std::size_t half = length / 2U;
+            for (std::size_t index = 0U; index < half; ++index) {
+                const std::complex<float> even = values[offset + index];
+                const std::complex<float> odd =
+                    values[offset + index + half] * phase;
+                values[offset + index] = even + odd;
+                values[offset + index + half] = even - odd;
+                phase *= step;
+            }
+        }
+    }
+}
 
 std::string encode_device_id(std::string prefix,
                              const void* data,
@@ -558,6 +601,7 @@ public:
                     gain * transition_gain;
             }
         }
+        tap_spectrum(output, frames, channels);
         std::fill(output + frames * channels,
                   output + requested_frames * channels,
                   0.0F);
@@ -683,6 +727,67 @@ public:
         } catch (...) {
             return {};
         }
+    }
+
+    ag_result spectrum(float* bins, const std::size_t bin_count) noexcept
+    {
+        if (bins == nullptr || bin_count == 0U
+            || bin_count > spectrum_max_bins) {
+            return AG_INVALID_ARGUMENT;
+        }
+
+        std::array<float, spectrum_fft_size> drained{};
+        for (;;) {
+            const std::size_t frames =
+                spectrum_tap_.read(drained.data(), drained.size());
+            if (frames == 0U) {
+                break;
+            }
+            for (std::size_t index = 0U; index < frames; ++index) {
+                spectrum_history_[spectrum_history_write_] = drained[index];
+                spectrum_history_write_ =
+                    (spectrum_history_write_ + 1U) % spectrum_fft_size;
+                spectrum_history_filled_ =
+                    (std::min)(spectrum_history_filled_ + 1U,
+                               spectrum_fft_size);
+            }
+        }
+
+        std::array<std::complex<float>, spectrum_fft_size> values{};
+        const std::size_t missing =
+            spectrum_fft_size - spectrum_history_filled_;
+        for (std::size_t index = 0U; index < spectrum_history_filled_;
+             ++index) {
+            const std::size_t history_index =
+                (spectrum_history_write_ + missing + index)
+                % spectrum_fft_size;
+            const float phase =
+                2.0F * spectrum_pi * static_cast<float>(missing + index)
+                / static_cast<float>(spectrum_fft_size - 1U);
+            const float window = 0.5F - 0.5F * std::cos(phase);
+            values[missing + index] =
+                std::complex<float>(spectrum_history_[history_index] * window,
+                                    0.0F);
+        }
+        fft(values);
+
+        const bool playing =
+            state_.load(std::memory_order_acquire) == EngineState::Playing;
+        for (std::size_t index = 0U; index < bin_count; ++index) {
+            const float magnitude =
+                4.0F * std::abs(values[index + 1U])
+                / static_cast<float>(spectrum_fft_size);
+            const float normalized = std::clamp(
+                std::log1p(magnitude * 12.0F) / std::log(13.0F),
+                0.0F, 1.0F);
+            const float target = playing ? normalized : 0.0F;
+            const float factor =
+                target > spectrum_smoothed_[index] ? 0.25F : 0.82F;
+            spectrum_smoothed_[index] =
+                target + (spectrum_smoothed_[index] - target) * factor;
+            bins[index] = spectrum_smoothed_[index];
+        }
+        return AG_OK;
     }
 
     ag_result set_output_device(std::string utf8_id,
@@ -1465,12 +1570,42 @@ private:
         return result;
     }
 
+    void tap_spectrum(const float* output,
+                      const std::size_t frames,
+                      const std::size_t channels) noexcept
+    {
+        if (output == nullptr || frames == 0U || channels == 0U) {
+            return;
+        }
+        std::array<float, spectrum_fft_size> mono{};
+        std::size_t offset = 0U;
+        while (offset < frames) {
+            const std::size_t count =
+                (std::min)(mono.size(), frames - offset);
+            for (std::size_t frame = 0U; frame < count; ++frame) {
+                float sum = 0.0F;
+                for (std::size_t channel = 0U; channel < channels;
+                     ++channel) {
+                    sum += output[(offset + frame) * channels + channel];
+                }
+                mono[frame] = sum / static_cast<float>(channels);
+            }
+            (void)spectrum_tap_.write(mono.data(), count);
+            offset += count;
+        }
+    }
+
     AudioBackend backend_;
     static constexpr std::int64_t no_pending_boundary = -1;
     static constexpr std::int64_t publishing_boundary = -2;
     std::size_t buffer_frames_;
     Decoder decoder_;
     std::unique_ptr<PcmRingBuffer> ring_buffer_;
+    PcmRingBuffer spectrum_tap_{spectrum_tap_capacity, 1U};
+    std::array<float, spectrum_fft_size> spectrum_history_{};
+    std::array<float, spectrum_max_bins> spectrum_smoothed_{};
+    std::size_t spectrum_history_write_ = 0U;
+    std::size_t spectrum_history_filled_ = 0U;
     ma_context context_{};
     ma_device device_{};
     std::atomic<bool> context_initialized_{false};
@@ -1590,6 +1725,12 @@ void AudioEngine::render(float* output,
                          const std::size_t requested_frames) noexcept
 {
     impl_->render(output, requested_frames);
+}
+
+ag_result AudioEngine::spectrum(float* bins,
+                                const std::size_t bin_count) noexcept
+{
+    return impl_->spectrum(bins, bin_count);
 }
 
 std::size_t AudioEngine::buffered_frames() const noexcept

@@ -284,6 +284,17 @@ ag_result ag_player_snapshot(const ag_player* player,
     });
 }
 
+ag_result ag_player_spectrum(ag_player* player,
+                             float* bins,
+                             const size_t bin_count)
+{
+    if (player == nullptr || bins == nullptr || bin_count == 0U) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result(
+        [&] { return player->context.spectrum(bins, bin_count); });
+}
+
 ag_result ag_player_retry_device(ag_player* player)
 {
     return player == nullptr

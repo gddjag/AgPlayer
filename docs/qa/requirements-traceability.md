@@ -18,7 +18,7 @@
 | Qt 6 / QML + C++17 | 顶层 CMake、`app/`、`qt/`、`core/` | 已验证 |
 | miniaudio 音频输出 + FFmpeg 解码/转码 | `core/src/audio_engine.cpp`、`decoder.cpp`、`transcoder.cpp` 及核心测试 | 已验证 |
 | SoundTouch 变速/变调 | 当前使用自研 OLA：`core/src/pitch_shifter.cpp`；构建未引入 SoundTouch | 未实现 |
-| kissfft 频段/频谱分析 | 构建未引入 kissfft；当前频段数据由离线分析器生成 | 未实现 |
+| kissfft 频段/频谱分析 | 未引入指定依赖；已用轻量固定 512 点 radix-2 FFT 完成实时频谱，精确依赖要求仍有偏差 | 未实现 |
 | C++ 核心与 Qt 解耦、稳定 C 接口 | `core/` 无 Qt 依赖；`core/include/agplayer/c_api.h`；C API 测试 | 已验证 |
 | HarmonyOS NAPI 边界 | 当前只有标准 C API，无 NAPI/ArkUI 工程 | 非Windows MVP |
 | 编译零错误、零警告 | Debug/Release `/W4 /WX` 已构建；CTest 44/44 的 Phase 8 记录 | 已验证 |
@@ -65,7 +65,7 @@
 |---|---|---|
 | C++ `QQuickItem` + QSGGeometryNode GPU 波形 | `WaveformItem::updatePaintNode()` 与波形测试 | 已验证 |
 | 纯色、RGB 渐变波形 | 透明自适应画布；纯色默认白色/#ffdd00；RGB 默认青蓝→蓝紫→玫红；颜色、底色/进度反转与 UI 矩阵 | 已验证 |
-| 动态频谱波形 | 当前第三模式是整文件预分析的 bass/mid/high 静态层，无实时 PCM tap/FFT | 未实现 |
+| 动态频谱波形 | 可听 PCM 无锁采样、512 点 FFT、64 bin、约 29 FPS 节流；核心频率/预算测试、Qt 频率测试与 QML 实时绑定通过 | 已验证 |
 | 离线三频段波形 | `WaveformAnalyzer` 两遍离线分析；细条随机 RGB、中心高两侧低；`WaveformItem` 复用三层数据 | 已验证 |
 | 进度跟踪、Hover 时间、拖拽/点击 Seek | `WaveformItem`、`PlayerPane.qml` 与 QML/控制器测试 | 已验证 |
 | 波形缩略预览胶囊 | 未找到与原始交互描述等价的独立缩略预览实现 | 未实现 |
@@ -114,8 +114,7 @@
 
 1. 为全部可见控件建立“操作→副作用”测试。
 2. 为手动切歌补齐异步淡出切换状态机。
-3. 实现实时 PCM tap + FFT 动态频谱，不再把离线三频段波形称为动态频谱。
-4. 实现后台曲库加载、`fetchMore()` 分页和真实 QML 帧时间门禁。
-5. 对全局快捷键、开机启动、托盘和文件关联执行真实 Windows 集成/人工验收。
-6. 增加 100+ 文件、选择子集、冲突与部分失败的批量信息修改测试。
-7. macOS、Linux、HarmonyOS 进入各自阶段后再声明跨平台完成。
+3. 实现后台曲库加载、`fetchMore()` 分页和真实 QML 帧时间门禁。
+4. 对全局快捷键、开机启动、托盘和文件关联执行真实 Windows 集成/人工验收。
+5. 增加 100+ 文件、选择子集、冲突与部分失败的批量信息修改测试。
+6. macOS、Linux、HarmonyOS 进入各自阶段后再声明跨平台完成。

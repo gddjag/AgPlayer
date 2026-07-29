@@ -14,6 +14,7 @@ Rectangle {
 
     property var playback: PlaybackController
     property var windows: WindowController
+    property var rawWaveformLayers: ({})
 
     // Aliases exposed so MiniPlayerWindow (and tests) can reach in by name.
     property alias playPauseButton: playPauseButton
@@ -93,10 +94,20 @@ Rectangle {
         return bytes + " B"
     }
 
+    function applyWaveformMode() {
+        if (SettingsController.waveformMode === 2) {
+            waveform.peaks = playback.spectrum
+            return
+        }
+        waveform.layers = rawWaveformLayers
+    }
+
     function loadWaveform() {
         var path = root.currentTrackValue(LibraryModel.PathRole)
         if (path.length === 0) {
-            waveform.layers = {}
+            rawWaveformLayers = {}
+            applyWaveformMode()
+            return
         }
         WaveformProvider.loadForTrack(path)
     }
@@ -303,6 +314,10 @@ Rectangle {
                 target: playback
                 function onTrackIndexChanged() { root.loadWaveform() }
                 function onCurrentTrackIdChanged() { root.loadWaveform() }
+                function onSpectrumChanged() {
+                    if (SettingsController.waveformMode === 2)
+                        waveform.peaks = playback.spectrum
+                }
             }
 
             Connections {
@@ -310,8 +325,16 @@ Rectangle {
                 function onWaveformReady(path, layers) {
                     var currentPath = root.currentTrackValue(LibraryModel.PathRole)
                     if (path === currentPath) {
-                        waveform.layers = layers
+                        root.rawWaveformLayers = layers
+                        root.applyWaveformMode()
                     }
+                }
+            }
+
+            Connections {
+                target: SettingsController
+                function onWaveformModeChanged() {
+                    root.applyWaveformMode()
                 }
             }
 
