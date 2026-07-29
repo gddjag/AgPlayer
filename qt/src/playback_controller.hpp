@@ -24,6 +24,12 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(QString lyrics READ lyrics NOTIFY lyricsChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(bool deviceLost READ deviceLost NOTIFY deviceLostChanged)
+    Q_PROPERTY(QStringList outputDevices READ outputDevices
+                   NOTIFY outputDevicesChanged)
+    Q_PROPERTY(QStringList outputDeviceIds READ outputDeviceIds
+                   NOTIFY outputDevicesChanged)
+    Q_PROPERTY(bool exclusiveModeActive READ exclusiveModeActive
+                   NOTIFY exclusiveModeActiveChanged)
 
 public:
     static constexpr int PollIntervalMs = 34;
@@ -50,9 +56,12 @@ public:
     QString lyrics() const;
     QString errorMessage() const;
     bool deviceLost() const noexcept;
+    QStringList outputDevices() const;
+    QStringList outputDeviceIds() const;
+    bool exclusiveModeActive() const noexcept;
 
     void setLibraryModel(LibraryModel* library);
-    void setPlayer(ag_player* player) noexcept;
+    void setPlayer(ag_player* player);
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -71,6 +80,9 @@ public:
     Q_INVOKABLE void toggleFavorite();
     Q_INVOKABLE void toggleFavorite(int row);
     Q_INVOKABLE void retryDevice();
+    Q_INVOKABLE void refreshOutputDevices();
+    Q_INVOKABLE bool setOutputDevice(const QString& deviceId,
+                                     bool exclusive);
 
 signals:
     void stateChanged();
@@ -85,6 +97,8 @@ signals:
     void lyricsChanged();
     void errorMessageChanged();
     void deviceLostChanged();
+    void outputDevicesChanged();
+    void exclusiveModeActiveChanged();
 
 private:
     void pollSnapshot();
@@ -110,4 +124,7 @@ private:
     QStringList queueTrackIds_;
     QString lastHistoryTrackId_;
     bool deviceLost_ = false;
+    QStringList outputDevices_;
+    QStringList outputDeviceIds_;
+    bool exclusiveModeActive_ = false;
 };

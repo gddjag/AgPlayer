@@ -238,7 +238,7 @@ Rectangle {
 
         ToolButton {
             objectName: "lyricsButton"
-            visible: false
+            visible: !root.emptyMode
             icon.source: Theme.icon("music-2-fill")
             icon.color: Theme.iconSecondary
             icon.width: 30

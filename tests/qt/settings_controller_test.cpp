@@ -18,9 +18,11 @@ class SettingsControllerTest final : public QObject {
 private slots:
     void initTestCase();
     void defaultCacheDirectoryUsesStandardPaths();
-    void defaultExportDirectoryUsesStandardPaths();
+    void defaultOutputDirectoryUsesStandardPaths();
     void loadCreatesDefaultDirectories();
+    void migratesLegacyDefaultExportDirectory();
     void migratesLegacyPlaybackModes();
+    void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
     void editSessionCanCommitOrCancel();
@@ -44,10 +46,10 @@ void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
             || cacheDir.endsWith(QStringLiteral("\\waveform")));
 }
 
-void SettingsControllerTest::defaultExportDirectoryUsesStandardPaths()
+void SettingsControllerTest::defaultOutputDirectoryUsesStandardPaths()
 {
     SettingsController settings;
-    const QString exportDir = settings.defaultExportDirectory();
+    const QString exportDir = settings.defaultOutputDirectory();
     QVERIFY(!exportDir.contains(QStringLiteral("D:\\Music")));
     QVERIFY(exportDir.contains(QStringLiteral("AgPlayer_Export")));
 }
@@ -56,11 +58,31 @@ void SettingsControllerTest::loadCreatesDefaultDirectories()
 {
     SettingsController settings;
     const QString cacheDir = settings.cacheDirectory();
-    const QString exportDir = settings.defaultExportDirectory();
+    const QString exportDir = settings.defaultOutputDirectory();
     QVERIFY(!cacheDir.isEmpty());
     QVERIFY(!exportDir.isEmpty());
     QVERIFY(QDir(cacheDir).exists());
     QVERIFY(QDir(exportDir).exists());
+}
+
+void SettingsControllerTest::migratesLegacyDefaultExportDirectory()
+{
+    QSettings persisted;
+    persisted.clear();
+    const QString legacyPath =
+        QDir::tempPath() + QStringLiteral("/AgPlayer_legacy_export");
+    persisted.setValue(QStringLiteral("general/defaultExportDirectory"),
+                       legacyPath);
+
+    SettingsController settings;
+    QCOMPARE(settings.defaultOutputDirectory(), legacyPath);
+    QCOMPARE(
+        persisted.value(QStringLiteral("audioTools/defaultOutputDirectory"))
+            .toString(),
+        legacyPath);
+    QVERIFY(!persisted.contains(
+        QStringLiteral("general/defaultExportDirectory")));
+    persisted.clear();
 }
 
 void SettingsControllerTest::migratesLegacyPlaybackModes()
@@ -94,6 +116,26 @@ void SettingsControllerTest::migratesLegacyPlaybackModes()
         SettingsController settings;
         QCOMPARE(settings.defaultPlaybackMode(), 1);
     }
+    persisted.clear();
+}
+
+void SettingsControllerTest::playbackDeviceSettingsPersistAndMigrateDefaultLabel()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(
+        QStringLiteral("playback/outputDevice"),
+        QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907"));
+    {
+        SettingsController settings;
+        QCOMPARE(settings.outputDevice(), QString());
+        QCOMPARE(settings.exclusiveMode(), false);
+        settings.setOutputDevice(QStringLiteral("Test Device"));
+        settings.setExclusiveMode(true);
+    }
+    SettingsController reloaded;
+    QCOMPARE(reloaded.outputDevice(), QStringLiteral("Test Device"));
+    QCOMPARE(reloaded.exclusiveMode(), true);
     persisted.clear();
 }
 

@@ -37,6 +37,11 @@ struct EngineSnapshot {
     PlaybackMode mode = PlaybackMode::Sequential;
 };
 
+struct OutputDevice {
+    std::string id;
+    std::string name;
+};
+
 class AudioEngine final {
 public:
     AudioEngine(AudioBackend backend, std::size_t buffer_frames);
@@ -63,6 +68,10 @@ public:
     [[nodiscard]] bool device_lost() const noexcept;
     ag_result retry_device() noexcept;
     void simulate_device_loss() noexcept;
+    [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept;
+    ag_result set_output_device(std::string utf8_id,
+                                bool exclusive) noexcept;
+    [[nodiscard]] bool exclusive_mode_active() const noexcept;
 
 private:
     class Impl;

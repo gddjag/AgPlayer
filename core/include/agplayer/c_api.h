@@ -86,6 +86,30 @@ ag_result ag_player_snapshot(const ag_player* player,
 ag_result ag_player_retry_device(ag_player* player);
 int ag_player_device_lost(const ag_player* player);
 ag_result ag_player_simulate_device_loss(ag_player* player);
+/* Refreshes the output-device snapshot used by the info/id/name accessors. */
+ag_result ag_player_output_device_count(ag_player* player, size_t* count);
+ag_result ag_player_output_device_info(ag_player* player,
+                                       size_t index,
+                                       char* id_buffer,
+                                       size_t id_capacity,
+                                       size_t* id_required,
+                                       char* name_buffer,
+                                       size_t name_capacity,
+                                       size_t* name_required);
+ag_result ag_player_output_device_id(ag_player* player,
+                                     size_t index,
+                                     char* buffer,
+                                     size_t capacity,
+                                     size_t* required);
+ag_result ag_player_output_device_name(ag_player* player,
+                                       size_t index,
+                                       char* buffer,
+                                       size_t capacity,
+                                       size_t* required);
+ag_result ag_player_set_output_device(ag_player* player,
+                                      const char* utf8_id,
+                                      int exclusive);
+int ag_player_exclusive_mode_active(const ag_player* player);
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata);
 void ag_metadata_destroy(ag_metadata* metadata);

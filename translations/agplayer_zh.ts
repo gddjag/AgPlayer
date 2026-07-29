@@ -307,7 +307,7 @@
         <translation>立体声</translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+35"/>
         <source>Keep metadata (title / artist / album / cover)</source>
         <translation>保留元数据（标题 / 艺术家 / 专辑 / 封面）</translation>
     </message>
@@ -317,7 +317,7 @@
         <translation>音量标准化</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+34"/>
         <source>Extract audio from video</source>
         <translation>从视频中提取音频</translation>
     </message>
@@ -600,7 +600,7 @@
 <context>
     <name>LightEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+80"/>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+87"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -926,7 +926,7 @@
 <context>
     <name>MiniPlayerControls</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+127"/>
+        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+137"/>
         <source>Remove from favorites</source>
         <translation>取消收藏</translation>
     </message>
@@ -1442,73 +1442,73 @@
     </message>
     <message>
         <location line="-745"/>
-        <location line="+920"/>
+        <location line="+933"/>
         <source>播放与音频</source>
         <translation>播放与音频</translation>
     </message>
     <message>
-        <location line="-920"/>
-        <location line="+921"/>
+        <location line="-933"/>
+        <location line="+934"/>
         <source>播放</source>
         <translation>播放</translation>
     </message>
     <message>
-        <location line="-920"/>
-        <location line="+1005"/>
+        <location line="-933"/>
+        <location line="+1047"/>
         <source>外观与波形</source>
         <translation>外观与波形</translation>
     </message>
     <message>
-        <location line="-1005"/>
-        <location line="+1006"/>
+        <location line="-1047"/>
+        <location line="+1048"/>
         <source>外观</source>
         <translation>外观</translation>
     </message>
     <message>
-        <location line="-1005"/>
-        <location line="+1149"/>
+        <location line="-1047"/>
+        <location line="+1191"/>
         <source>音频工具预设</source>
         <translation>音频工具预设</translation>
     </message>
     <message>
-        <location line="-1149"/>
-        <location line="+1150"/>
+        <location line="-1191"/>
+        <location line="+1192"/>
         <source>音频工具</source>
         <translation>音频工具</translation>
     </message>
     <message>
-        <location line="-1149"/>
-        <location line="+1248"/>
+        <location line="-1191"/>
+        <location line="+1290"/>
         <source>快捷键设置</source>
         <translation>快捷键设置</translation>
     </message>
     <message>
-        <location line="-1248"/>
-        <location line="+1249"/>
+        <location line="-1290"/>
+        <location line="+1291"/>
         <source>快捷键</source>
         <translation>快捷键</translation>
     </message>
     <message>
-        <location line="-1248"/>
-        <location line="+1356"/>
+        <location line="-1290"/>
+        <location line="+1398"/>
         <source>缓存与数据</source>
         <translation>缓存与数据</translation>
     </message>
     <message>
-        <location line="-1356"/>
-        <location line="+1357"/>
+        <location line="-1398"/>
+        <location line="+1399"/>
         <source>缓存</source>
         <translation>缓存</translation>
     </message>
     <message>
-        <location line="-1356"/>
-        <location line="+1517"/>
+        <location line="-1398"/>
+        <location line="+1559"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location line="-1480"/>
+        <location line="-1522"/>
         <source>确认清空缓存</source>
         <translation>确认清空缓存</translation>
     </message>
@@ -1643,17 +1643,17 @@
         <translation>设为系统默认音频播放器</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+10"/>
         <source>关联格式</source>
         <translation>关联格式</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="+55"/>
         <source>重新绑定文件关联与图标</source>
         <translation>重新绑定文件关联与图标</translation>
     </message>
     <message>
-        <location line="+44"/>
+        <location line="+45"/>
         <source>音频输出</source>
         <translation>音频输出</translation>
     </message>
@@ -1663,12 +1663,22 @@
         <translation>输出设备</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+6"/>
         <source>自动 / 系统默认设备</source>
         <translation>自动 / 系统默认设备</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+23"/>
+        <source>独占模式</source>
+        <translation>独占模式</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>独占不可用，当前使用共享模式</source>
+        <translation>独占不可用，当前使用共享模式</translation>
+    </message>
+    <message>
+        <location line="+8"/>
         <source>播放行为</source>
         <translation>播放行为</translation>
     </message>
@@ -2059,7 +2069,7 @@
 <context>
     <name>SpeedAdjustPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+23"/>
+        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+30"/>
         <source>Intro</source>
         <translation>前奏</translation>
     </message>
@@ -2283,7 +2293,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+307"/>
+        <location filename="../app/main.cpp" line="+334"/>
         <source>Show AgPlayer</source>
         <translation>显示 AgPlayer</translation>
     </message>

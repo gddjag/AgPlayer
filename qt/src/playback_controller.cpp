@@ -88,6 +88,7 @@ PlaybackController::PlaybackController(ag_player* player,
     pollTimer_.setInterval(PollIntervalMs);
     pollTimer_.setTimerType(Qt::PreciseTimer);
     connect(&pollTimer_, &QTimer::timeout, this, &PlaybackController::pollSnapshot);
+    refreshOutputDevices();
     pollSnapshot();
     pollTimer_.start();
 }
@@ -104,6 +105,12 @@ QString PlaybackController::currentTrackId() const { return currentTrackId_; }
 QString PlaybackController::lyrics() const { return lyrics_; }
 QString PlaybackController::errorMessage() const { return errorMessage_; }
 bool PlaybackController::deviceLost() const noexcept { return deviceLost_; }
+QStringList PlaybackController::outputDevices() const { return outputDevices_; }
+QStringList PlaybackController::outputDeviceIds() const { return outputDeviceIds_; }
+bool PlaybackController::exclusiveModeActive() const noexcept
+{
+    return exclusiveModeActive_;
+}
 
 void PlaybackController::setLibraryModel(LibraryModel* library)
 {
@@ -115,9 +122,10 @@ void PlaybackController::setLibraryModel(LibraryModel* library)
     }
 }
 
-void PlaybackController::setPlayer(ag_player* player) noexcept
+void PlaybackController::setPlayer(ag_player* player)
 {
     player_ = player;
+    refreshOutputDevices();
 }
 
 void PlaybackController::play()
@@ -298,6 +306,77 @@ void PlaybackController::retryDevice()
     pollSnapshot();
 }
 
+void PlaybackController::refreshOutputDevices()
+{
+    QStringList devices;
+    QStringList ids;
+    if (player_ != nullptr) {
+        size_t count = 0U;
+        if (ag_player_output_device_count(player_, &count) != AG_OK) {
+            setErrorMessage(playerError(player_));
+            return;
+        }
+        devices.reserve(static_cast<qsizetype>(count));
+        ids.reserve(static_cast<qsizetype>(count));
+        for (size_t index = 0U; index < count; ++index) {
+            size_t idRequired = 0U;
+            size_t required = 0U;
+            if (ag_player_output_device_id(
+                    player_, index, nullptr, 0U, &idRequired)
+                    != AG_OK
+                || idRequired <= 1U
+                || ag_player_output_device_name(
+                    player_, index, nullptr, 0U, &required)
+                    != AG_OK
+                || required <= 1U) {
+                continue;
+            }
+            QByteArray id(static_cast<qsizetype>(idRequired), '\0');
+            QByteArray name(static_cast<qsizetype>(required), '\0');
+            if (ag_player_output_device_id(
+                    player_, index, id.data(),
+                    static_cast<size_t>(id.size()), &idRequired)
+                    == AG_OK
+                && ag_player_output_device_name(
+                    player_, index, name.data(),
+                    static_cast<size_t>(name.size()), &required)
+                    == AG_OK) {
+                devices.append(QString::fromUtf8(name.constData()));
+                ids.append(QString::fromUtf8(id.constData()));
+            }
+        }
+    }
+    if (devices != outputDevices_ || ids != outputDeviceIds_) {
+        outputDevices_ = devices;
+        outputDeviceIds_ = ids;
+        emit outputDevicesChanged();
+    }
+}
+
+bool PlaybackController::setOutputDevice(const QString& deviceId,
+                                         const bool exclusive)
+{
+    if (player_ == nullptr) {
+        setErrorMessage(QStringLiteral("Playback core is unavailable"));
+        return false;
+    }
+    const QByteArray utf8Id = deviceId.toUtf8();
+    const ag_result result =
+        ag_player_set_output_device(player_, utf8Id.constData(),
+                                    exclusive ? 1 : 0);
+    if (result != AG_OK) {
+        runCommand(result);
+        return false;
+    }
+    const bool active = ag_player_exclusive_mode_active(player_) != 0;
+    if (active != exclusiveModeActive_) {
+        exclusiveModeActive_ = active;
+        emit exclusiveModeActiveChanged();
+    }
+    setErrorMessage({});
+    return true;
+}
+
 void PlaybackController::pollSnapshot()
 {
     if (player_ == nullptr) {
@@ -310,6 +389,12 @@ void PlaybackController::pollSnapshot()
                         QStringLiteral("snapshot failed"));
         setErrorMessage(playerError(player_));
         return;
+    }
+    const bool activeExclusive =
+        ag_player_exclusive_mode_active(player_) != 0;
+    if (activeExclusive != exclusiveModeActive_) {
+        exclusiveModeActive_ = activeExclusive;
+        emit exclusiveModeActiveChanged();
     }
 
     const State nextState = toState(snapshot.state);

@@ -307,7 +307,7 @@
         <translation>Âm thanh nổi</translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+35"/>
         <source>Keep metadata (title / artist / album / cover)</source>
         <translation>Giữ siêu dữ liệu (tiêu đề/nghệ sĩ/album/bìa)</translation>
     </message>
@@ -317,7 +317,7 @@
         <translation>Bình thường hóa âm lượng</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+34"/>
         <source>Extract audio from video</source>
         <translation>Trích xuất âm thanh từ video</translation>
     </message>
@@ -600,7 +600,7 @@
 <context>
     <name>LightEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+80"/>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+87"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>Tệp âm thanh (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -926,7 +926,7 @@
 <context>
     <name>MiniPlayerControls</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+127"/>
+        <location filename="../app/qml/AgPlayer/components/MiniPlayerControls.qml" line="+137"/>
         <source>Remove from favorites</source>
         <translation>Xóa khỏi mục yêu thích</translation>
     </message>
@@ -1442,73 +1442,73 @@
     </message>
     <message>
         <location line="-745"/>
-        <location line="+920"/>
+        <location line="+933"/>
         <source>播放与音频</source>
         <translation>Phát lại &amp; Âm thanh</translation>
     </message>
     <message>
-        <location line="-920"/>
-        <location line="+921"/>
+        <location line="-933"/>
+        <location line="+934"/>
         <source>播放</source>
         <translation>Phát</translation>
     </message>
     <message>
-        <location line="-920"/>
-        <location line="+1005"/>
+        <location line="-933"/>
+        <location line="+1047"/>
         <source>外观与波形</source>
         <translation>Giao diện &amp; Dạng sóng</translation>
     </message>
     <message>
-        <location line="-1005"/>
-        <location line="+1006"/>
+        <location line="-1047"/>
+        <location line="+1048"/>
         <source>外观</source>
         <translation>Giao diện</translation>
     </message>
     <message>
-        <location line="-1005"/>
-        <location line="+1149"/>
+        <location line="-1047"/>
+        <location line="+1191"/>
         <source>音频工具预设</source>
         <translation>Cài đặt sẵn công cụ âm thanh</translation>
     </message>
     <message>
-        <location line="-1149"/>
-        <location line="+1150"/>
+        <location line="-1191"/>
+        <location line="+1192"/>
         <source>音频工具</source>
         <translation>Công cụ âm thanh</translation>
     </message>
     <message>
-        <location line="-1149"/>
-        <location line="+1248"/>
+        <location line="-1191"/>
+        <location line="+1290"/>
         <source>快捷键设置</source>
         <translation>Phím tắt</translation>
     </message>
     <message>
-        <location line="-1248"/>
-        <location line="+1249"/>
+        <location line="-1290"/>
+        <location line="+1291"/>
         <source>快捷键</source>
         <translation>Phím tắt</translation>
     </message>
     <message>
-        <location line="-1248"/>
-        <location line="+1356"/>
+        <location line="-1290"/>
+        <location line="+1398"/>
         <source>缓存与数据</source>
         <translation>Bộ nhớ đệm &amp; Dữ liệu</translation>
     </message>
     <message>
-        <location line="-1356"/>
-        <location line="+1357"/>
+        <location line="-1398"/>
+        <location line="+1399"/>
         <source>缓存</source>
         <translation>Bộ nhớ đệm</translation>
     </message>
     <message>
-        <location line="-1356"/>
-        <location line="+1517"/>
+        <location line="-1398"/>
+        <location line="+1559"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>Giới thiệu</translation>
     </message>
     <message>
-        <location line="-1480"/>
+        <location line="-1522"/>
         <source>确认清空缓存</source>
         <translation>Xác nhận xóa bộ nhớ đệm</translation>
     </message>
@@ -1643,17 +1643,17 @@
         <translation>Đặt làm trình phát âm thanh mặc định của hệ thống</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+10"/>
         <source>关联格式</source>
         <translation>Định dạng được liên kết</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="+55"/>
         <source>重新绑定文件关联与图标</source>
         <translation>Rebind các liên kết tập tin và biểu tượng</translation>
     </message>
     <message>
-        <location line="+44"/>
+        <location line="+45"/>
         <source>音频输出</source>
         <translation>đầu ra âm thanh</translation>
     </message>
@@ -1663,12 +1663,22 @@
         <translation>thiết bị đầu ra</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+6"/>
         <source>自动 / 系统默认设备</source>
         <translation>Thiết bị mặc định tự động/hệ thống</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+23"/>
+        <source>独占模式</source>
+        <translation>Chế độ độc quyền</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>独占不可用，当前使用共享模式</source>
+        <translation>Không thể dùng chế độ độc quyền; đang dùng chế độ chia sẻ</translation>
+    </message>
+    <message>
+        <location line="+8"/>
         <source>播放行为</source>
         <translation>hành vi chơi</translation>
     </message>
@@ -2059,7 +2069,7 @@
 <context>
     <name>SpeedAdjustPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+23"/>
+        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+30"/>
         <source>Intro</source>
         <translation>giới thiệu</translation>
     </message>
@@ -2283,7 +2293,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+307"/>
+        <location filename="../app/main.cpp" line="+334"/>
         <source>Show AgPlayer</source>
         <translation>Hiện AgPlayer</translation>
     </message>

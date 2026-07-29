@@ -31,5 +31,58 @@ int main()
     assert(std::strcmp(message.data(), "") == 0);
 
     ag_player_destroy(player);
+
+    const ag_player_config null_config{AG_AUDIO_BACKEND_NULL, 0U};
+    ag_player* null_player = nullptr;
+    assert(ag_player_create_with_config(&null_config, &null_player) == AG_OK);
+    std::size_t device_count = 0U;
+    assert(ag_player_output_device_count(null_player, &device_count) == AG_OK);
+    assert(device_count >= 1U);
+    assert(ag_player_output_device_count(null_player, nullptr)
+           == AG_INVALID_ARGUMENT);
+    std::size_t id_required = 0U;
+    assert(ag_player_output_device_id(
+               null_player, 0U, nullptr, 0U, &id_required)
+           == AG_OK);
+    assert(id_required > 1U);
+    std::array<char, 512> device_id{};
+    assert(id_required <= device_id.size());
+    assert(ag_player_output_device_id(
+               null_player, 0U, device_id.data(), device_id.size(),
+               &id_required)
+           == AG_OK);
+    assert(device_id.front() != '\0');
+    assert(ag_player_output_device_name(
+               null_player, device_count, nullptr, 0U, &required)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_output_device_name(
+               null_player, 0U, nullptr, 0U, &required)
+           == AG_OK);
+    assert(required > 1U);
+    std::array<char, 256> device_name{};
+    assert(required <= device_name.size());
+    assert(ag_player_output_device_name(
+               null_player, 0U, device_name.data(), device_name.size(),
+               &required)
+           == AG_OK);
+    assert(device_name.front() != '\0');
+    std::array<char, 512> snapshot_id{};
+    std::array<char, 256> snapshot_name{};
+    std::size_t snapshot_id_required = 0U;
+    std::size_t snapshot_name_required = 0U;
+    assert(ag_player_output_device_info(
+               null_player, 0U,
+               snapshot_id.data(), snapshot_id.size(),
+               &snapshot_id_required,
+               snapshot_name.data(), snapshot_name.size(),
+               &snapshot_name_required)
+           == AG_OK);
+    assert(std::strcmp(snapshot_id.data(), device_id.data()) == 0);
+    assert(std::strcmp(snapshot_name.data(), device_name.data()) == 0);
+    assert(ag_player_set_output_device(
+               null_player, device_id.data(), 0)
+           == AG_OK);
+    assert(ag_player_set_output_device(null_player, "", 0) == AG_OK);
+    ag_player_destroy(null_player);
     ag_player_destroy(nullptr);
 }

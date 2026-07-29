@@ -103,6 +103,24 @@ void CoreContext::simulate_device_loss() noexcept
     last_error_ = "device lost";
 }
 
+std::vector<OutputDevice> CoreContext::output_devices() noexcept
+{
+    return audio_engine_.output_devices();
+}
+
+ag_result CoreContext::set_output_device(std::string utf8_id,
+                                         const bool exclusive) noexcept
+{
+    return record(
+        audio_engine_.set_output_device(std::move(utf8_id), exclusive),
+        "output device change failed");
+}
+
+bool CoreContext::exclusive_mode_active() const noexcept
+{
+    return audio_engine_.exclusive_mode_active();
+}
+
 ag_result CoreContext::record(const ag_result result,
                               const char* operation) noexcept
 {

@@ -18,6 +18,7 @@ class PlaybackControllerTest final : public QObject {
 
 private slots:
     void commandsReflectOnlyCoreSnapshots();
+    void outputDevicesAreEnumeratedAndApplied();
     void snapshotSignalsEmitOnlyForChangesAtBoundedFrequency();
     void unavailableRowsAreExcludedFromQueueIndices();
     void loadsRowWithoutStartingPlayback();
@@ -26,6 +27,33 @@ private slots:
     void libraryRequestsShareQueueAndFavoriteState();
     void playbackControllerIsAnAgPlayerQmlSingleton();
 };
+
+void PlaybackControllerTest::outputDevicesAreEnumeratedAndApplied()
+{
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QVERIFY(!controller.outputDevices().isEmpty());
+        QCOMPARE(controller.outputDevices().size(),
+                 controller.outputDeviceIds().size());
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(controller.setOutputDevice(
+            controller.outputDeviceIds().first(), false));
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(controller.setOutputDevice(QString(), false));
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(!controller.setOutputDevice(
+            QStringLiteral("missing-output-device"), false));
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+    ag_player_destroy(core);
+}
 
 void PlaybackControllerTest::commandsReflectOnlyCoreSnapshots()
 {

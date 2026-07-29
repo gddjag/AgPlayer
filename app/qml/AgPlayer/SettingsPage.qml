@@ -981,6 +981,7 @@ Popup {
 
     component PlaybackSection: ColumnLayout {
         spacing: Theme.spacingSm
+        Component.onCompleted: PlaybackController.refreshOutputDevices()
 
         SectionHeader {
             title: qsTr("播放与音频")
@@ -995,15 +996,26 @@ Popup {
 
             SettingCard {
                 title: qsTr("音频输出")
-                Layout.preferredHeight: 120
+                Layout.preferredHeight: 170
 
                 SettingRow {
                     label: qsTr("输出设备")
                     SettingCombo {
+                        objectName: "outputDeviceCombo"
                         anchors.verticalCenter: parent.verticalCenter
-                        valueModel: [
-                            { text: qsTr("自动 / 系统默认设备"), value: "\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907" }
-                        ]
+                        valueModel: {
+                            let options = [
+                                { text: qsTr("自动 / 系统默认设备"), value: "" }
+                            ]
+                            for (let i = 0;
+                                 i < PlaybackController.outputDevices.length;
+                                 ++i) {
+                                let name = PlaybackController.outputDevices[i]
+                                let id = PlaybackController.outputDeviceIds[i]
+                                options.push({ text: name, value: id })
+                            }
+                            return options
+                        }
                         currentIndex: {
                             for (let i = 0; i < valueModel.length; ++i) {
                                 if (valueModel[i].value === SettingsController.outputDevice) return i
@@ -1014,6 +1026,24 @@ Popup {
                     }
                 }
 
+                SettingSwitch {
+                    objectName: "exclusiveModeSwitch"
+                    text: qsTr("独占模式")
+                    checked: SettingsController.exclusiveMode
+                    onToggled: SettingsController.exclusiveMode = checked
+                }
+
+                Label {
+                    objectName: "exclusiveFallbackLabel"
+                    visible: SettingsController.exclusiveMode
+                             && PlaybackController.state
+                                !== PlaybackController.Stopped
+                             && !PlaybackController.exclusiveModeActive
+                    text: qsTr("独占不可用，当前使用共享模式")
+                    color: Theme.ratingGold
+                    font.pixelSize: 12
+                    Layout.leftMargin: Theme.spacingMd
+                }
             }
 
             SettingCard {

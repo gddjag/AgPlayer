@@ -180,6 +180,33 @@ int main(int argc, char* argv[])
 
         PlaybackController playback(core, &library);
         SettingsController settings;
+        const auto applyOutputDevice = [&settings, &playback]() {
+            const QString requested = settings.outputDevice();
+            if (!requested.isEmpty()
+                && !playback.outputDeviceIds().contains(requested)) {
+                const qsizetype legacyIndex =
+                    playback.outputDevices().indexOf(requested);
+                if (legacyIndex >= 0
+                    && legacyIndex < playback.outputDeviceIds().size()) {
+                    settings.setOutputDevice(
+                        playback.outputDeviceIds().at(legacyIndex));
+                    return;
+                }
+            }
+            if (playback.setOutputDevice(settings.outputDevice(),
+                                         settings.exclusiveMode())) {
+                return;
+            }
+            // A temporarily unavailable endpoint or exclusive session must
+            // not erase the user's saved preference. Use a shared default
+            // device for this run; the preference will be retried next time.
+            playback.setOutputDevice(QString(), false);
+        };
+        applyOutputDevice();
+        QObject::connect(&settings, &SettingsController::outputDeviceChanged,
+                         &app, applyOutputDevice);
+        QObject::connect(&settings, &SettingsController::exclusiveModeChanged,
+                         &app, applyOutputDevice);
         playback.setMode(static_cast<PlaybackController::Mode>(
             settings.defaultPlaybackMode()));
         QObject::connect(&settings, &SettingsController::defaultPlaybackModeChanged,

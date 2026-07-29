@@ -90,6 +90,18 @@ TestCase {
         tryVerify(function() { return LibraryModel.count === 1 }, 5000)
     }
 
+    function test_lyrics_button_is_visible_and_toggles_panel() {
+        var lyricsButton = findChild(mainWindow, "lyricsButton")
+        verify(lyricsButton, "lyrics button should exist")
+        verify(lyricsButton.visible,
+               "lyrics button should be visible when a track is available")
+        compare(mainWindow.lyricsVisible, false)
+        lyricsButton.clicked()
+        tryCompare(mainWindow, "lyricsVisible", true)
+        lyricsButton.clicked()
+        tryCompare(mainWindow, "lyricsVisible", false)
+    }
+
     function test_waveform_click_seeks_real_playback_controller() {
         var waveform = findChild(mainWindow, "mainWaveform")
         verify(waveform, "main waveform should exist after importing audio")
@@ -213,6 +225,35 @@ TestCase {
         findChild(page, "settingsSaveButton").clicked()
         tryCompare(SettingsController, "themeMode", 2)
         SettingsController.themeMode = 0
+    }
+
+    function test_settings_z_output_device_controls_are_real() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page, "settings page should already be loaded")
+        page.open()
+        page.selectedSection = 1
+        wait(50)
+        var combo = findChild(page, "outputDeviceCombo")
+        var exclusive = findChild(page, "exclusiveModeSwitch")
+        var fallback = findChild(page, "exclusiveFallbackLabel")
+        verify(combo, "output device combo should exist")
+        verify(exclusive, "exclusive mode control should exist")
+        verify(fallback, "exclusive fallback status should exist")
+        verify(combo.valueModel.length
+               === PlaybackController.outputDevices.length + 1,
+               "device combo should expose system default plus enumerated devices")
+        if (PlaybackController.outputDeviceIds.length > 0) {
+            compare(combo.valueModel[1].value,
+                    PlaybackController.outputDeviceIds[0])
+        }
+
+        SettingsController.exclusiveMode = false
+        verify(exclusive.visible, "exclusive mode control should be visible")
+        mouseClick(exclusive, exclusive.width / 2, exclusive.height / 2)
+        tryCompare(SettingsController, "exclusiveMode", true)
+        mouseClick(exclusive, exclusive.width / 2, exclusive.height / 2)
+        tryCompare(SettingsController, "exclusiveMode", false)
+        page.close()
     }
 
     function test_theme_mode_updates_surfaces_text_and_icons() {

@@ -100,6 +100,22 @@ int main(const int argc, char** argv)
         assert(retry_result == AG_OK);
         const int lost2 = ag_player_device_lost(player);
         assert(lost2 == 0);
+        assert(ag_player_seek(player, 0) == AG_OK);
+        assert(ag_player_play(player) == AG_OK);
+        std::this_thread::sleep_for(std::chrono::milliseconds(120));
+        assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+        assert(snapshot.state == AG_PLAYING);
+        assert(snapshot.position_ms > 0);
+
+        assert(ag_player_simulate_device_loss(player) == AG_OK);
+        assert(ag_player_device_lost(player) == 1);
+        assert(ag_player_set_output_device(player, "", 0) == AG_OK);
+        assert(ag_player_device_lost(player) == 0);
+        assert(ag_player_seek(player, 0) == AG_OK);
+        assert(ag_player_play(player) == AG_OK);
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+        assert(snapshot.position_ms > 0);
 
         ag_player_destroy(player);
     }

@@ -32,12 +32,12 @@ class SettingsController final : public QObject {
                    NOTIFY setAsDefaultPlayerChanged)
     Q_PROPERTY(QStringList fileAssociations READ fileAssociations WRITE setFileAssociations
                    NOTIFY fileAssociationsChanged)
-    Q_PROPERTY(QString defaultExportDirectory READ defaultExportDirectory
-                   WRITE setDefaultExportDirectory NOTIFY defaultExportDirectoryChanged)
 
     // Playback & Engine
     Q_PROPERTY(QString outputDevice READ outputDevice WRITE setOutputDevice
                    NOTIFY outputDeviceChanged)
+    Q_PROPERTY(bool exclusiveMode READ exclusiveMode WRITE setExclusiveMode
+                   NOTIFY exclusiveModeChanged)
     Q_PROPERTY(bool playButtonRgbGlow READ playButtonRgbGlow WRITE setPlayButtonRgbGlow
                    NOTIFY playButtonRgbGlowChanged)
     Q_PROPERTY(int defaultPlaybackMode READ defaultPlaybackMode WRITE setDefaultPlaybackMode
@@ -113,10 +113,10 @@ public:
     QString language() const;
     bool setAsDefaultPlayer() const noexcept;
     QStringList fileAssociations() const;
-    QString defaultExportDirectory() const;
 
     // Playback & Engine getters
     QString outputDevice() const;
+    bool exclusiveMode() const noexcept;
     bool playButtonRgbGlow() const noexcept;
     int defaultPlaybackMode() const noexcept;
     bool autoReadBpm() const noexcept;
@@ -168,10 +168,10 @@ public:
     void setLanguage(const QString& value);
     void setSetAsDefaultPlayer(bool value);
     void setFileAssociations(const QStringList& value);
-    void setDefaultExportDirectory(const QString& value);
 
     // Playback & Engine setters
     void setOutputDevice(const QString& value);
+    void setExclusiveMode(bool value);
     void setPlayButtonRgbGlow(bool value);
     void setDefaultPlaybackMode(int value);
     void setAutoReadBpm(bool value);
@@ -232,9 +232,9 @@ signals:
     void languageChanged();
     void setAsDefaultPlayerChanged();
     void fileAssociationsChanged();
-    void defaultExportDirectoryChanged();
 
     void outputDeviceChanged();
+    void exclusiveModeChanged();
     void playButtonRgbGlowChanged();
     void defaultPlaybackModeChanged();
     void autoReadBpmChanged();
@@ -303,10 +303,10 @@ private:
     QStringList fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
         QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
         QStringLiteral("ogg")};
-    QString defaultExportDirectory_;
 
     // Playback & Engine
-    QString outputDevice_ = QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907");
+    QString outputDevice_;
+    bool exclusiveMode_ = false;
     bool playButtonRgbGlow_ = true;
     int defaultPlaybackMode_ = 3;
     bool autoReadBpm_ = true;

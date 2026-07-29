@@ -31,6 +31,10 @@ public:
     [[nodiscard]] bool device_lost() const noexcept;
     ag_result retry_device() noexcept;
     void simulate_device_loss() noexcept;
+    [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept;
+    ag_result set_output_device(std::string utf8_id,
+                                bool exclusive) noexcept;
+    [[nodiscard]] bool exclusive_mode_active() const noexcept;
 
 private:
     ag_result record(ag_result result, const char* operation) noexcept;

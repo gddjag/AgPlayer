@@ -50,10 +50,10 @@ int SettingsController::closeBehavior() const noexcept { return closeBehavior_; 
 QString SettingsController::language() const { return language_; }
 bool SettingsController::setAsDefaultPlayer() const noexcept { return setAsDefaultPlayer_; }
 QStringList SettingsController::fileAssociations() const { return fileAssociations_; }
-QString SettingsController::defaultExportDirectory() const { return defaultExportDirectory_; }
 
 // Playback & Engine getters
 QString SettingsController::outputDevice() const { return outputDevice_; }
+bool SettingsController::exclusiveMode() const noexcept { return exclusiveMode_; }
 bool SettingsController::playButtonRgbGlow() const noexcept { return playButtonRgbGlow_; }
 int SettingsController::defaultPlaybackMode() const noexcept { return defaultPlaybackMode_; }
 bool SettingsController::autoReadBpm() const noexcept { return autoReadBpm_; }
@@ -203,16 +203,6 @@ void SettingsController::setFileAssociations(const QStringList& value)
     emit fileAssociationsChanged();
 }
 
-void SettingsController::setDefaultExportDirectory(const QString& value)
-{
-    if (defaultExportDirectory_ == value) {
-        return;
-    }
-    defaultExportDirectory_ = value;
-    persistValue(QStringLiteral("general/defaultExportDirectory"), value);
-    emit defaultExportDirectoryChanged();
-}
-
 // Playback & Engine setters
 void SettingsController::setOutputDevice(const QString& value)
 {
@@ -222,6 +212,16 @@ void SettingsController::setOutputDevice(const QString& value)
     outputDevice_ = value;
     persistValue(QStringLiteral("playback/outputDevice"), value);
     emit outputDeviceChanged();
+}
+
+void SettingsController::setExclusiveMode(const bool value)
+{
+    if (exclusiveMode_ == value) {
+        return;
+    }
+    exclusiveMode_ = value;
+    persistValue(QStringLiteral("playback/exclusiveMode"), value);
+    emit exclusiveModeChanged();
 }
 
 void SettingsController::setPlayButtonRgbGlow(bool value)
@@ -607,9 +607,9 @@ void SettingsController::emitAllChanged()
     emit languageChanged();
     emit setAsDefaultPlayerChanged();
     emit fileAssociationsChanged();
-    emit defaultExportDirectoryChanged();
 
     emit outputDeviceChanged();
+    emit exclusiveModeChanged();
     emit playButtonRgbGlowChanged();
     emit defaultPlaybackModeChanged();
     emit autoReadBpmChanged();
@@ -768,6 +768,7 @@ void SettingsController::load()
 {
     restoreDefaults();
 
+    QString legacyDefaultExportDirectory;
     settings_.beginGroup(QStringLiteral("general"));
     autoStartWithWindows_ = settings_.value(QStringLiteral("autoStartWithWindows"), autoStartWithWindows_).toBool();
     restoreLastPlaybackOnStartup_ = settings_.value(QStringLiteral("restoreLastPlaybackOnStartup"), restoreLastPlaybackOnStartup_).toBool();
@@ -778,18 +779,23 @@ void SettingsController::load()
     language_ = validatedLanguage(settings_.value(QStringLiteral("language"), language_).toString());
     setAsDefaultPlayer_ = settings_.value(QStringLiteral("setAsDefaultPlayer"), setAsDefaultPlayer_).toBool();
     fileAssociations_ = settings_.value(QStringLiteral("fileAssociations"), fileAssociations_).toStringList();
-    defaultExportDirectory_ = settings_.value(QStringLiteral("defaultExportDirectory"), QString()).toString();
-    if (defaultExportDirectory_.isEmpty()) {
-        defaultExportDirectory_ = defaultExportDir();
-        if (!QDir().mkpath(defaultExportDirectory_)) {
-            RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
-                QStringLiteral("Failed to create default export directory: ") + defaultExportDirectory_);
-        }
+    legacyDefaultExportDirectory =
+        settings_.value(QStringLiteral("defaultExportDirectory")).toString();
+    if (!legacyDefaultExportDirectory.isEmpty()) {
+        settings_.remove(QStringLiteral("defaultExportDirectory"));
     }
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("playback"));
-    outputDevice_ = settings_.value(QStringLiteral("outputDevice"), outputDevice_).toString();
+    outputDevice_ =
+        settings_.value(QStringLiteral("outputDevice"), outputDevice_).toString();
+    if (outputDevice_
+        == QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907")) {
+        outputDevice_.clear();
+        settings_.setValue(QStringLiteral("outputDevice"), outputDevice_);
+    }
+    exclusiveMode_ =
+        settings_.value(QStringLiteral("exclusiveMode"), exclusiveMode_).toBool();
     playButtonRgbGlow_ = settings_.value(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_).toBool();
     const bool hasStoredPlaybackMode =
         settings_.contains(QStringLiteral("defaultPlaybackMode"));
@@ -820,7 +826,26 @@ void SettingsController::load()
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("audioTools"));
-    defaultOutputDirectory_ = settings_.value(QStringLiteral("defaultOutputDirectory"), defaultOutputDirectory_).toString();
+    const bool hasDefaultOutputDirectory =
+        settings_.contains(QStringLiteral("defaultOutputDirectory"));
+    defaultOutputDirectory_ =
+        settings_
+            .value(QStringLiteral("defaultOutputDirectory"),
+                   legacyDefaultExportDirectory.isEmpty()
+                       ? defaultOutputDirectory_
+                       : legacyDefaultExportDirectory)
+            .toString();
+    if (!hasDefaultOutputDirectory
+        && !legacyDefaultExportDirectory.isEmpty()) {
+        settings_.setValue(QStringLiteral("defaultOutputDirectory"),
+                           defaultOutputDirectory_);
+    }
+    if (!QDir().mkpath(defaultOutputDirectory_)) {
+        RuntimeLog::log(
+            AG_IO_ERROR, QStringLiteral("Settings"),
+            QStringLiteral("Failed to create default output directory: ")
+                + defaultOutputDirectory_);
+    }
     overwritePolicy_ = settings_.value(QStringLiteral("overwritePolicy"), overwritePolicy_).toInt();
     defaultTranscodeFormat_ = settings_.value(QStringLiteral("defaultTranscodeFormat"), defaultTranscodeFormat_).toString();
     preserveMetadata_ = settings_.value(QStringLiteral("preserveMetadata"), preserveMetadata_).toBool();
@@ -889,11 +914,11 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("language"), language_);
     persistValue(QStringLiteral("setAsDefaultPlayer"), setAsDefaultPlayer_);
     persistValue(QStringLiteral("fileAssociations"), fileAssociations_);
-    persistValue(QStringLiteral("defaultExportDirectory"), defaultExportDirectory_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("playback"));
     persistValue(QStringLiteral("outputDevice"), outputDevice_);
+    persistValue(QStringLiteral("exclusiveMode"), exclusiveMode_);
     persistValue(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_);
     persistValue(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_);
     persistValue(QStringLiteral("modeSchemaVersion"), 2);
@@ -950,9 +975,8 @@ void SettingsController::restoreDefaults()
     fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
         QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
         QStringLiteral("ogg")};
-    defaultExportDirectory_ = defaultExportDir();
-
-    outputDevice_ = QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907");
+    outputDevice_.clear();
+    exclusiveMode_ = false;
     playButtonRgbGlow_ = true;
     defaultPlaybackMode_ = 3;
     autoReadBpm_ = true;

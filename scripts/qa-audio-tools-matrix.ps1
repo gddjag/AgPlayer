@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "qa-runtime.ps1")
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $buildRoot = (Resolve-Path (Join-Path $repoRoot $BuildDirectory)).Path
 $appPath = Join-Path $buildRoot "app/AgPlayer.exe"
@@ -22,17 +23,8 @@ if (-not (Test-Path -LiteralPath $cachePath)) {
     throw "CMake cache not found: $cachePath"
 }
 
-$prefixLine = Select-String -LiteralPath $cachePath `
-    -Pattern "^CMAKE_PREFIX_PATH:[^=]*=(.+)$" | Select-Object -First 1
-if ($null -eq $prefixLine) {
-    throw "CMAKE_PREFIX_PATH was not found in $cachePath"
-}
-$qtPrefix = $prefixLine.Matches[0].Groups[1].Value
-$runtimePaths = @(
-    (Join-Path $qtPrefix "bin"),
-    (Join-Path $buildRoot "vcpkg_installed/x64-windows/debug/bin"),
-    (Join-Path $buildRoot "vcpkg_installed/x64-windows/bin")
-) | Where-Object { Test-Path -LiteralPath $_ }
+$runtimePaths = Get-AgPlayerRuntimePaths `
+    -BuildRoot $buildRoot -CachePath $cachePath
 
 $generalKey = "HKCU:\Software\AgPlayer\AgPlayer\general"
 $appearanceKey = "HKCU:\Software\AgPlayer\AgPlayer\appearance"

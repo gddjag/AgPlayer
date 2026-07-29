@@ -33,6 +33,62 @@ static_assert(std::atomic<EngineState>::is_always_lock_free);
 static_assert(std::atomic<PlaybackMode>::is_always_lock_free);
 static_assert(std::atomic<ag_result>::is_always_lock_free);
 
+namespace {
+
+std::string encode_device_id(std::string prefix,
+                             const void* data,
+                             const std::size_t size)
+{
+    static constexpr char hex[] = "0123456789abcdef";
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    std::string result(std::move(prefix));
+    result.reserve(result.size() + size * 2U);
+    for (std::size_t index = 0U; index < size; ++index) {
+        result.push_back(hex[bytes[index] >> 4U]);
+        result.push_back(hex[bytes[index] & 0x0FU]);
+    }
+    return result;
+}
+
+std::string device_id_token(const ma_backend backend,
+                            const ma_device_id& id)
+{
+    if (backend == ma_backend_wasapi) {
+        std::size_t length = 0U;
+        while (length < sizeof(id.wasapi) / sizeof(id.wasapi[0])
+               && id.wasapi[length] != 0) {
+            ++length;
+        }
+        return encode_device_id(
+            "wasapi:", id.wasapi,
+            length * sizeof(id.wasapi[0]));
+    }
+    if (backend == ma_backend_dsound) {
+        return encode_device_id("dsound:", id.dsound, sizeof(id.dsound));
+    }
+    if (backend == ma_backend_winmm) {
+        return encode_device_id("winmm:", &id.winmm, sizeof(id.winmm));
+    }
+    if (backend == ma_backend_null) {
+        return encode_device_id(
+            "null:", &id.nullbackend, sizeof(id.nullbackend));
+    }
+    if (backend == ma_backend_alsa) {
+        return std::string("alsa:") + id.alsa;
+    }
+    if (backend == ma_backend_pulseaudio) {
+        return std::string("pulse:") + id.pulse;
+    }
+    if (backend == ma_backend_coreaudio) {
+        return std::string("coreaudio:") + id.coreaudio;
+    }
+    return encode_device_id(
+        "backend:" + std::to_string(static_cast<int>(backend)) + ":",
+        &id, sizeof(id));
+}
+
+} // namespace
+
 class AudioEngine::Impl final {
 public:
     Impl(const AudioBackend backend, const std::size_t buffer_frames)
@@ -502,14 +558,143 @@ public:
         device_lost_.store(false, std::memory_order_release);
         terminal_error_.store(AG_OK, std::memory_order_release);
         state_.store(EngineState::Paused, std::memory_order_release);
+        seek_cv_.notify_all();
         return AG_OK;
     }
 
     void simulate_device_loss() noexcept
     {
         device_lost_.store(true, std::memory_order_release);
+        terminal_error_.store(AG_DEVICE_ERROR,
+                              std::memory_order_release);
         stop_output();
-        state_.store(EngineState::Paused, std::memory_order_release);
+        state_.store(EngineState::Error, std::memory_order_release);
+    }
+
+    [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept
+    {
+        if (backend_ == AudioBackend::Manual) {
+            return {};
+        }
+        try {
+            if (initialize_context() != AG_OK) {
+                return {};
+            }
+            ma_device_info* devices = nullptr;
+            ma_uint32 count = 0U;
+            if (ma_context_get_devices(
+                    &context_, &devices, &count, nullptr, nullptr)
+                != MA_SUCCESS) {
+                return {};
+            }
+            std::vector<OutputDevice> result;
+            result.reserve(static_cast<std::size_t>(count));
+            for (ma_uint32 index = 0U; index < count; ++index) {
+                if (devices[index].name[0] != '\0') {
+                    result.push_back(
+                        {device_id_token(context_.backend,
+                                         devices[index].id),
+                         devices[index].name});
+                }
+            }
+            return result;
+        } catch (...) {
+            return {};
+        }
+    }
+
+    ag_result set_output_device(std::string utf8_id,
+                                const bool exclusive) noexcept
+    {
+        if (backend_ == AudioBackend::Manual) {
+            return utf8_id.empty() && !exclusive ? AG_OK
+                                                  : AG_INVALID_ARGUMENT;
+        }
+        try {
+            if (!utf8_id.empty()) {
+                const std::vector<OutputDevice> devices = output_devices();
+                const auto found = std::find_if(
+                    devices.begin(), devices.end(),
+                    [&utf8_id](const OutputDevice& device) {
+                        return device.id == utf8_id;
+                    });
+                if (found == devices.end()) {
+                    return AG_INVALID_ARGUMENT;
+                }
+            }
+            if (selected_device_id_ == utf8_id
+                && exclusive_mode_ == exclusive
+                && (!loaded_ || device_initialized_)
+                && !device_lost_.load(std::memory_order_acquire)) {
+                return AG_OK;
+            }
+
+            const std::string previous_id = selected_device_id_;
+            const bool previous_exclusive = exclusive_mode_;
+            const EngineState previous_state =
+                state_.load(std::memory_order_acquire);
+            const bool resume = previous_state == EngineState::Playing;
+            const bool recovering =
+                device_lost_.load(std::memory_order_acquire);
+
+            if (device_initialized_) {
+                if (stop_output() != AG_OK && !recovering) {
+                    return AG_DEVICE_ERROR;
+                }
+                ma_device_uninit(&device_);
+                device_initialized_ = false;
+            }
+
+            selected_device_id_ = std::move(utf8_id);
+            exclusive_mode_ = exclusive;
+            if (!loaded_) {
+                return AG_OK;
+            }
+
+            const ag_result result = initialize_device();
+            if (result == AG_OK) {
+                device_lost_.store(false, std::memory_order_release);
+                if (previous_state != EngineState::Error || recovering) {
+                    terminal_error_.store(AG_OK,
+                                          std::memory_order_release);
+                }
+                if (previous_state == EngineState::Error && recovering) {
+                    state_.store(loaded_ ? EngineState::Paused
+                                         : EngineState::Stopped,
+                                 std::memory_order_release);
+                }
+                seek_cv_.notify_all();
+                if (!resume || start_output() == AG_OK) {
+                    return AG_OK;
+                }
+            }
+
+            if (device_initialized_) {
+                ma_device_uninit(&device_);
+                device_initialized_ = false;
+            }
+            selected_device_id_ = previous_id;
+            exclusive_mode_ = previous_exclusive;
+            if (initialize_device() == AG_OK) {
+                device_lost_.store(false, std::memory_order_release);
+                seek_cv_.notify_all();
+                if (!resume || start_output() == AG_OK) {
+                    return AG_DEVICE_ERROR;
+                }
+            }
+            device_lost_.store(true, std::memory_order_release);
+            terminal_error_.store(AG_DEVICE_ERROR,
+                                  std::memory_order_release);
+            state_.store(EngineState::Error, std::memory_order_release);
+            return AG_DEVICE_ERROR;
+        } catch (...) {
+            return AG_INTERNAL_ERROR;
+        }
+    }
+
+    [[nodiscard]] bool exclusive_mode_active() const noexcept
+    {
+        return device_initialized_ && active_exclusive_mode_;
     }
 
 private:
@@ -538,11 +723,10 @@ private:
         // (device unplugged, exclusive-mode takeover, etc.).
         if (notification->type == ma_device_notification_type_interruption_began) {
             self->device_lost_.store(true, std::memory_order_release);
-            EngineState expected = EngineState::Playing;
-            self->state_.compare_exchange_strong(expected,
-                                                 EngineState::Paused,
-                                                 std::memory_order_acq_rel,
-                                                 std::memory_order_acquire);
+            self->terminal_error_.store(AG_DEVICE_ERROR,
+                                        std::memory_order_release);
+            self->state_.store(EngineState::Error,
+                               std::memory_order_release);
         }
     }
 
@@ -569,34 +753,77 @@ private:
         return ma_device_stop(&device_) == MA_SUCCESS ? AG_OK : AG_DEVICE_ERROR;
     }
 
+    ag_result initialize_context() noexcept
+    {
+        if (backend_ == AudioBackend::Manual) {
+            return AG_OK;
+        }
+        if (context_initialized_) {
+            return AG_OK;
+        }
+        ma_result result = MA_SUCCESS;
+        if (backend_ == AudioBackend::Null) {
+            const ma_backend backend = ma_backend_null;
+            result = ma_context_init(&backend, 1U, nullptr, &context_);
+        } else {
+            result = ma_context_init(nullptr, 0U, nullptr, &context_);
+        }
+        if (result != MA_SUCCESS) {
+            return AG_DEVICE_ERROR;
+        }
+        context_initialized_ = true;
+        return AG_OK;
+    }
+
     ag_result initialize_device() noexcept
     {
         if (backend_ == AudioBackend::Manual) {
             return AG_OK;
         }
-
-        if (!context_initialized_) {
-            ma_result result = MA_SUCCESS;
-            if (backend_ == AudioBackend::Null) {
-                const ma_backend backend = ma_backend_null;
-                result = ma_context_init(&backend, 1U, nullptr, &context_);
-            } else {
-                result = ma_context_init(nullptr, 0U, nullptr, &context_);
-            }
-            if (result != MA_SUCCESS) {
-                return AG_DEVICE_ERROR;
-            }
-            context_initialized_ = true;
+        if (initialize_context() != AG_OK) {
+            return AG_DEVICE_ERROR;
         }
 
+        ma_device_id selected_id{};
+        const ma_device_id* selected_id_ptr = nullptr;
+        if (!selected_device_id_.empty()) {
+            ma_device_info* devices = nullptr;
+            ma_uint32 count = 0U;
+            if (ma_context_get_devices(
+                    &context_, &devices, &count, nullptr, nullptr)
+                != MA_SUCCESS) {
+                return AG_DEVICE_ERROR;
+            }
+            for (ma_uint32 index = 0U; index < count; ++index) {
+                if (selected_device_id_
+                    == device_id_token(context_.backend,
+                                       devices[index].id)) {
+                    selected_id = devices[index].id;
+                    selected_id_ptr = &selected_id;
+                    break;
+                }
+            }
+            if (selected_id_ptr == nullptr) {
+                return AG_DEVICE_ERROR;
+            }
+        }
         ma_device_config config = ma_device_config_init(ma_device_type_playback);
+        config.playback.pDeviceID = selected_id_ptr;
         config.playback.format = ma_format_f32;
         config.playback.channels = static_cast<ma_uint32>(channels_);
         config.sampleRate = static_cast<ma_uint32>(sample_rate_);
         config.dataCallback = data_callback;
         config.notificationCallback = notification_callback;
         config.pUserData = this;
-        const ma_result result = ma_device_init(&context_, &config, &device_);
+        config.playback.shareMode =
+            exclusive_mode_ ? ma_share_mode_exclusive : ma_share_mode_shared;
+        ma_result result = ma_device_init(&context_, &config, &device_);
+        active_exclusive_mode_ = exclusive_mode_ && result == MA_SUCCESS;
+        if (result != MA_SUCCESS && exclusive_mode_) {
+            config.playback.shareMode = ma_share_mode_shared;
+            result = ma_device_init(&context_, &config, &device_);
+            active_exclusive_mode_ = false;
+        }
         if (result != MA_SUCCESS) {
             ma_context_uninit(&context_);
             context_initialized_ = false;
@@ -655,7 +882,14 @@ private:
             std::size_t frame_offset = 0U;
             while (!stop_decode_.load(std::memory_order_acquire)) {
                 if (device_lost_.load(std::memory_order_acquire)) {
-                    return;
+                    std::unique_lock<std::mutex> lock(seek_mutex_);
+                    seek_cv_.wait(lock, [this] {
+                        return !device_lost_.load(
+                                   std::memory_order_acquire)
+                               || stop_decode_.load(
+                                   std::memory_order_acquire);
+                    });
+                    continue;
                 }
                 // Handle a pending seek request from the main thread. The
                 // decode thread owns the decoder and timeline, so performing
@@ -982,6 +1216,9 @@ private:
     bool context_initialized_ = false;
     bool device_initialized_ = false;
     bool loaded_ = false;
+    std::string selected_device_id_;
+    bool exclusive_mode_ = false;
+    bool active_exclusive_mode_ = false;
     int sample_rate_ = 0;
     int channels_ = 0;
     std::atomic<std::int64_t> duration_ms_{0};
@@ -1108,6 +1345,22 @@ ag_result AudioEngine::retry_device() noexcept
 void AudioEngine::simulate_device_loss() noexcept
 {
     impl_->simulate_device_loss();
+}
+
+std::vector<OutputDevice> AudioEngine::output_devices() noexcept
+{
+    return impl_->output_devices();
+}
+
+ag_result AudioEngine::set_output_device(std::string utf8_id,
+                                         const bool exclusive) noexcept
+{
+    return impl_->set_output_device(std::move(utf8_id), exclusive);
+}
+
+bool AudioEngine::exclusive_mode_active() const noexcept
+{
+    return impl_->exclusive_mode_active();
 }
 
 } // namespace agplayer

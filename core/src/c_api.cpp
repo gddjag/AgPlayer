@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstring>
 #include <functional>
+#include <mutex>
 #include <new>
 #include <string>
 #include <utility>
@@ -72,6 +73,8 @@ struct ag_player {
     }
 
     agplayer::CoreContext context;
+    std::mutex output_device_mutex;
+    std::vector<agplayer::OutputDevice> output_device_snapshot;
 };
 
 struct ag_metadata {
@@ -298,6 +301,137 @@ ag_result ag_player_simulate_device_loss(ag_player* player)
         return AG_INVALID_ARGUMENT;
     }
     return guard_result([&] { player->context.simulate_device_loss(); return AG_OK; });
+}
+
+ag_result ag_player_output_device_count(ag_player* player, size_t* count)
+{
+    if (player == nullptr || count == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const std::lock_guard<std::mutex> lock(
+            player->output_device_mutex);
+        player->output_device_snapshot =
+            player->context.output_devices();
+        *count = player->output_device_snapshot.size();
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_output_device_info(ag_player* player,
+                                       const size_t index,
+                                       char* id_buffer,
+                                       const size_t id_capacity,
+                                       size_t* id_required,
+                                       char* name_buffer,
+                                       const size_t name_capacity,
+                                       size_t* name_required)
+{
+    if (player == nullptr || id_required == nullptr
+        || name_required == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const std::lock_guard<std::mutex> lock(
+            player->output_device_mutex);
+        if (index >= player->output_device_snapshot.size()) {
+            return AG_INVALID_ARGUMENT;
+        }
+        const agplayer::OutputDevice& device =
+            player->output_device_snapshot[index];
+        *id_required = device.id.size() + 1U;
+        *name_required = device.name.size() + 1U;
+        if (id_capacity == 0U && name_capacity == 0U) {
+            return AG_OK;
+        }
+        if (id_buffer == nullptr || name_buffer == nullptr
+            || id_capacity < *id_required
+            || name_capacity < *name_required) {
+            return AG_INVALID_ARGUMENT;
+        }
+        std::memcpy(id_buffer, device.id.c_str(), *id_required);
+        std::memcpy(name_buffer, device.name.c_str(), *name_required);
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_output_device_id(ag_player* player,
+                                     const size_t index,
+                                     char* buffer,
+                                     const size_t capacity,
+                                     size_t* required)
+{
+    if (player == nullptr || required == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const std::lock_guard<std::mutex> lock(
+            player->output_device_mutex);
+        if (index >= player->output_device_snapshot.size()) {
+            return AG_INVALID_ARGUMENT;
+        }
+        const std::string& id =
+            player->output_device_snapshot[index].id;
+        *required = id.size() + 1U;
+        if (capacity == 0U) {
+            return AG_OK;
+        }
+        if (buffer == nullptr || capacity < *required) {
+            return AG_INVALID_ARGUMENT;
+        }
+        std::memcpy(buffer, id.c_str(), *required);
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_output_device_name(ag_player* player,
+                                       const size_t index,
+                                       char* buffer,
+                                       const size_t capacity,
+                                       size_t* required)
+{
+    if (player == nullptr || required == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const std::lock_guard<std::mutex> lock(
+            player->output_device_mutex);
+        if (index >= player->output_device_snapshot.size()) {
+            return AG_INVALID_ARGUMENT;
+        }
+        const std::string& name =
+            player->output_device_snapshot[index].name;
+        *required = name.size() + 1U;
+        if (capacity == 0U) {
+            return AG_OK;
+        }
+        if (buffer == nullptr || capacity < *required) {
+            return AG_INVALID_ARGUMENT;
+        }
+        std::memcpy(buffer, name.c_str(), *required);
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_set_output_device(ag_player* player,
+                                      const char* utf8_id,
+                                      const int exclusive)
+{
+    if (player == nullptr || utf8_id == nullptr
+        || (exclusive != 0 && exclusive != 1)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        return player->context.set_output_device(
+            std::string(utf8_id), exclusive != 0);
+    });
+}
+
+int ag_player_exclusive_mode_active(const ag_player* player)
+{
+    return player != nullptr && player->context.exclusive_mode_active()
+               ? 1
+               : 0;
 }
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)
