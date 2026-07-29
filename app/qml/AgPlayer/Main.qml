@@ -27,7 +27,9 @@ ApplicationWindow {
     property int positionMs: playback.positionMs
     property bool lyricsVisible: false
 
-    Component.onCompleted: Theme.mode = SettingsController.themeMode
+    Component.onCompleted: {
+        Theme.mode = SettingsController.themeMode
+    }
 
     Connections {
         target: SettingsController
@@ -202,8 +204,21 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: StandardKey.Find
+        sequence: SettingsController.hkSearch
         context: Qt.ApplicationShortcut
         onActivated: WindowController.activateSearch()
+    }
+
+    Shortcut {
+        sequence: SettingsController.hkWaveformMode
+        context: Qt.ApplicationShortcut
+        onActivated: SettingsController.setWaveformMode(
+                         (SettingsController.waveformMode + 1) % 3)
+    }
+
+    Shortcut {
+        sequence: SettingsController.hkAudioTools
+        context: Qt.ApplicationShortcut
+        onActivated: WindowController.showAudioTools()
     }
 }

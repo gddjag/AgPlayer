@@ -19,6 +19,8 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(qint64 hoverPosition READ hoverPosition NOTIFY hoverPositionChanged)
     Q_PROPERTY(double analysisProgress READ analysisProgress WRITE setAnalysisProgress
                    NOTIFY analysisProgressChanged)
+    Q_PROPERTY(int density READ density WRITE setDensity NOTIFY densityChanged)
+    Q_PROPERTY(qreal lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged)
 
 public:
     explicit WaveformItem(QQuickItem* parent = nullptr);
@@ -43,6 +45,12 @@ public:
     double analysisProgress() const;
     void setAnalysisProgress(double progress);
 
+    int density() const;
+    void setDensity(int density);
+
+    qreal lineWidth() const;
+    void setLineWidth(qreal width);
+
     Q_INVOKABLE qint64 timeForX(qreal x) const;
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
@@ -55,6 +63,8 @@ signals:
     void waveformColorChanged();
     void hoverPositionChanged();
     void analysisProgressChanged();
+    void densityChanged();
+    void lineWidthChanged();
     void seekRequested(qint64 position);
 
 protected:
@@ -93,5 +103,7 @@ private:
     QColor waveformColor_;
     qint64 hoverPosition_ = -1;
     double analysisProgress_ = 0.0;
+    int density_ = 1;
+    qreal lineWidth_ = 2.0;
     bool pointerPressed_ = false;
 };

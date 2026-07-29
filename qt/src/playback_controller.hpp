@@ -31,7 +31,7 @@ public:
     enum State { Stopped, Loading, Playing, Paused, Error };
     Q_ENUM(State)
 
-    enum Mode { Sequential, RepeatOne, Shuffle };
+    enum Mode { Sequential, RepeatOne, Shuffle, RepeatAll };
     Q_ENUM(Mode)
 
     explicit PlaybackController(ag_player* player = nullptr,
@@ -64,7 +64,9 @@ public:
     Q_INVOKABLE void volumeUp(float step = 0.05F);
     Q_INVOKABLE void volumeDown(float step = 0.05F);
     Q_INVOKABLE void toggleMuted();
+    Q_INVOKABLE void setMode(Mode mode);
     Q_INVOKABLE void cycleMode();
+    Q_INVOKABLE void loadRow(int row);
     Q_INVOKABLE void playRow(int row);
     Q_INVOKABLE void toggleFavorite();
     Q_INVOKABLE void toggleFavorite(int row);
@@ -86,6 +88,7 @@ signals:
 
 private:
     void pollSnapshot();
+    bool prepareRow(int row);
     void setErrorMessage(QString message);
     void runCommand(int result);
 

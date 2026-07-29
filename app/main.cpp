@@ -9,6 +9,7 @@
 #include <QMenu>
 #include <QQuickWindow>
 #include <QQuickStyle>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QSystemTrayIcon>
@@ -18,6 +19,7 @@
 
 #include <agplayer/c_api.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -178,6 +180,26 @@ int main(int argc, char* argv[])
 
         PlaybackController playback(core, &library);
         SettingsController settings;
+        playback.setMode(static_cast<PlaybackController::Mode>(
+            settings.defaultPlaybackMode()));
+        QObject::connect(&settings, &SettingsController::defaultPlaybackModeChanged,
+                         &playback, [&settings, &playback]() {
+            playback.setMode(static_cast<PlaybackController::Mode>(
+                settings.defaultPlaybackMode()));
+        });
+        QSettings sessionState;
+        sessionState.beginGroup(QStringLiteral("session"));
+        const QString restoredTrackId =
+            sessionState.value(QStringLiteral("trackId")).toString();
+        const qint64 restoredPositionMs =
+            sessionState.value(QStringLiteral("positionMs"), 0).toLongLong();
+        sessionState.endGroup();
+        const bool hasExplicitStartupMedia =
+            !initialFilePath.isEmpty() || !qaPlayPath.isEmpty()
+            || !qaImportFolder.isEmpty();
+        const int restoredRow =
+            settings.restoreLastPlaybackOnStartup() && !hasExplicitStartupMedia
+                ? library.indexForTrackId(restoredTrackId) : -1;
         if (qaTheme == QStringLiteral("dark")) {
             settings.setThemeMode(0);
         } else if (qaTheme == QStringLiteral("light")) {
@@ -238,6 +260,16 @@ int main(int argc, char* argv[])
         PitchShifter pitchShifter;
         SpeedAdjuster speedAdjuster;
         LightEditor lightEditor;
+        const auto applyOverwritePolicy = [&]() {
+            const bool overwrite = settings.overwritePolicy() == 1;
+            formatConverter.setOverwriteExisting(overwrite);
+            pitchShifter.setOverwriteExisting(overwrite);
+            speedAdjuster.setOverwriteExisting(overwrite);
+            lightEditor.setOverwriteExisting(overwrite);
+        };
+        applyOverwritePolicy();
+        QObject::connect(&settings, &SettingsController::overwritePolicyChanged,
+                         &app, applyOverwritePolicy);
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,
@@ -321,9 +353,21 @@ int main(int argc, char* argv[])
                     ag_player_stop(core);
                 }
             };
-        shutdownActions.flushLibrary = [&library, &playlists]() {
+        shutdownActions.flushLibrary =
+            [&library, &playlists, &settings, &playback]() {
             library.flush();
             playlists.flush();
+            QSettings session;
+            session.beginGroup(QStringLiteral("session"));
+            session.setValue(QStringLiteral("trackId"),
+                             playback.currentTrackId());
+            session.setValue(QStringLiteral("positionMs"),
+                             playback.positionMs());
+            session.endGroup();
+            session.sync();
+            if (settings.cleanTempOnExit()) {
+                settings.clearTempFiles();
+            }
         };
         shutdownActions.releaseCore = [&playback, &core]() {
             playback.setPlayer(nullptr);
@@ -430,6 +474,9 @@ int main(int argc, char* argv[])
             playFileIfPending();
             if (!qaImportFolder.isEmpty()) {
                 importer.importFolder(QUrl::fromLocalFile(qaImportFolder));
+            } else if (pendingPlayFilePath.isEmpty() && restoredRow >= 0) {
+                playback.loadRow(restoredRow);
+                playback.seek(std::max<qint64>(0, restoredPositionMs));
             }
 
             // Global hotkeys (Windows RegisterHotKey). Parsed from the settings

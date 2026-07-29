@@ -281,7 +281,7 @@ QString SpeedAdjuster::computeOutputPath(const QString& inputPath,
     QString candidate = dir + QStringLiteral("/") + baseName
                         + QStringLiteral("_") + suffix + QStringLiteral(".") + ext;
     int counter = 1;
-    while (QFileInfo::exists(candidate)) {
+    while (!overwriteExisting_ && QFileInfo::exists(candidate)) {
         candidate = dir + QStringLiteral("/") + baseName
                     + QStringLiteral("_") + suffix + QStringLiteral("_")
                     + QString::number(counter) + QStringLiteral(".") + ext;

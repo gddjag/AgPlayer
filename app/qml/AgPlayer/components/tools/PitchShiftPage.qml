@@ -753,7 +753,7 @@ Rectangle {
 
                         Switch {
                             id: keepTempoSwitch
-                            checked: true
+                            checked: SettingsController.keepPitchWhileSpeedChange
                             enabled: !shifter.busy
 
                             indicator: Rectangle {
@@ -813,7 +813,7 @@ Rectangle {
 
                         Switch {
                             id: vocalProtectionSwitch
-                            checked: false
+                            checked: SettingsController.vocalProtection
                             enabled: !shifter.busy
 
                             indicator: Rectangle {
@@ -1048,6 +1048,7 @@ Rectangle {
                     TextField {
                         id: outputDirField
                         Layout.fillWidth: true
+                        text: SettingsController.defaultOutputDirectory
                         color: Theme.primaryText
                         font.pixelSize: 12
                         font.family: Theme.fontPrimary

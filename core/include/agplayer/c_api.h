@@ -39,7 +39,8 @@ typedef enum ag_playback_state {
 typedef enum ag_playback_mode {
     AG_MODE_SEQUENTIAL = 0,
     AG_MODE_REPEAT_ONE = 1,
-    AG_MODE_SHUFFLE = 2
+    AG_MODE_SHUFFLE = 2,
+    AG_MODE_REPEAT_ALL = 3
 } ag_playback_mode;
 
 typedef struct ag_player_config {

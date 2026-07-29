@@ -38,6 +38,7 @@ public:
     int completedCount() const noexcept;
     int failedCount() const noexcept;
     QVariantList files() const;
+    void setOverwriteExisting(bool value) noexcept { overwriteExisting_ = value; }
 
     Q_INVOKABLE void loadFiles(const QList<QUrl>& urls);
     Q_INVOKABLE QString entryAt(int index) const;
@@ -97,6 +98,7 @@ private:
     QMutex tokenMutex_;
     QSet<ag_cancel_token*> activeTokens_;
     QPointer<QFutureWatcher<void>> watcher_;
+    bool overwriteExisting_ = false;
 
     void setBusy(bool value);
     void setProgress(double value);
@@ -109,7 +111,8 @@ private:
     QString computeOutputPath(const QString& inputPath,
                               const QString& outputFormat,
                               const QString& outputDir,
-                              const QSet<QString>& reservedPaths) const;
+                              const QSet<QString>& reservedPaths,
+                              bool overwriteExisting) const;
 
     // Bounded parallel transcode worker. Runs in a background thread.
     void runTranscode(const QString& outputFormat,
@@ -119,5 +122,6 @@ private:
                       const QString& outputDir,
                       bool keepMetadata,
                       bool volumeNormalize,
-                      bool extractAudio);
+                      bool extractAudio,
+                      bool overwriteExisting);
 };

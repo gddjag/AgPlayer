@@ -129,7 +129,7 @@ Rectangle {
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: -10
-                    opacity: 0.06
+                    opacity: SettingsController.playButtonRgbGlow ? 0.06 : 0
                     color: Theme.cyan
                     radius: width / 2
                 }
@@ -137,7 +137,7 @@ Rectangle {
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: -5
-                    opacity: 0.12
+                    opacity: SettingsController.playButtonRgbGlow ? 0.12 : 0
                     color: Theme.waveformViolet
                     radius: width / 2
                 }
@@ -196,6 +196,8 @@ Rectangle {
                     return Theme.icon("repeat-one-fill")
                 case PlaybackController.Shuffle:
                     return Theme.icon("shuffle-fill")
+                case PlaybackController.RepeatAll:
+                    return Theme.icon("repeat-fill")
                 default:
                     return Theme.icon("repeat-fill")
                 }
@@ -211,6 +213,8 @@ Rectangle {
                     return qsTr("Repeat one")
                 case PlaybackController.Shuffle:
                     return qsTr("Shuffle")
+                case PlaybackController.RepeatAll:
+                    return qsTr("Repeat all")
                 default:
                     return qsTr("Sequential")
                 }

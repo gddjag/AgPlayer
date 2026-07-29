@@ -361,7 +361,8 @@ public:
     {
         if (mode != PlaybackMode::Sequential
             && mode != PlaybackMode::RepeatOne
-            && mode != PlaybackMode::Shuffle) {
+            && mode != PlaybackMode::Shuffle
+            && mode != PlaybackMode::RepeatAll) {
             return AG_INVALID_ARGUMENT;
         }
         session_.set_mode(mode);

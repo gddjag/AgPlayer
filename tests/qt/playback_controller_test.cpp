@@ -20,6 +20,7 @@ private slots:
     void commandsReflectOnlyCoreSnapshots();
     void snapshotSignalsEmitOnlyForChangesAtBoundedFrequency();
     void unavailableRowsAreExcludedFromQueueIndices();
+    void loadsRowWithoutStartingPlayback();
     void nullCoreReportsStableErrors();
     void survivesLibraryModelDestruction();
     void libraryRequestsShareQueueAndFavoriteState();
@@ -120,6 +121,10 @@ void PlaybackControllerTest::commandsReflectOnlyCoreSnapshots()
         QCOMPARE(controller.mode(), PlaybackController::Sequential);
         QTRY_COMPARE(controller.mode(), PlaybackController::RepeatOne);
         QCOMPARE(modeChanged.count(), 1);
+
+        controller.setMode(PlaybackController::RepeatAll);
+        QTRY_COMPARE(controller.mode(), PlaybackController::RepeatAll);
+        QCOMPARE(modeChanged.count(), 2);
     }
     ag_player_destroy(core);
 }
@@ -233,6 +238,39 @@ void PlaybackControllerTest::unavailableRowsAreExcludedFromQueueIndices()
         QCOMPARE(countChanged.count(), 1);
         QCOMPARE(indexChanged.count(), 3);
         QCOMPARE(trackIdChanged.count(), 3);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::loadsRowWithoutStartingPlayback()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("restore-track");
+    track.path = fixture;
+    track.available = true;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.trackIndex(), 0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("restore-track"));
+        QCOMPARE(controller.state(), PlaybackController::Stopped);
+
+        controller.seek(750);
+        QTRY_VERIFY(qAbs(controller.positionMs() - 750) <= 2);
+        QCOMPARE(controller.state(), PlaybackController::Stopped);
+
+        QTRY_VERIFY(controller.durationMs() > 0);
+        controller.seek(controller.durationMs() + 10'000);
+        QTRY_COMPARE(controller.positionMs(), controller.durationMs());
+        QCOMPARE(controller.errorMessage(), QString());
     }
     ag_player_destroy(core);
 }

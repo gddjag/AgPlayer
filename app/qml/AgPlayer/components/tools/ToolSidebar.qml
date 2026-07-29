@@ -6,7 +6,7 @@ import AgPlayer
 Rectangle {
     id: sidebar
     color: Theme.panel
-    implicitWidth: 180
+    implicitWidth: 200
     radius: Theme.radiusSm
     border.color: Theme.border
     border.width: 1

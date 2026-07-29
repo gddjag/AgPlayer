@@ -56,6 +56,8 @@ ag_playback_mode to_c_mode(const agplayer::PlaybackMode mode) noexcept
         return AG_MODE_REPEAT_ONE;
     case agplayer::PlaybackMode::Shuffle:
         return AG_MODE_SHUFFLE;
+    case agplayer::PlaybackMode::RepeatAll:
+        return AG_MODE_REPEAT_ALL;
     }
     return AG_MODE_SEQUENTIAL;
 }
@@ -226,13 +228,15 @@ ag_result ag_player_set_mode(ag_player* player, const ag_playback_mode mode)
 {
     if (player == nullptr
         || (mode != AG_MODE_SEQUENTIAL && mode != AG_MODE_REPEAT_ONE
-            && mode != AG_MODE_SHUFFLE)) {
+            && mode != AG_MODE_SHUFFLE && mode != AG_MODE_REPEAT_ALL)) {
         return AG_INVALID_ARGUMENT;
     }
     const agplayer::PlaybackMode value = mode == AG_MODE_REPEAT_ONE
                                              ? agplayer::PlaybackMode::RepeatOne
                                          : mode == AG_MODE_SHUFFLE
                                              ? agplayer::PlaybackMode::Shuffle
+                                         : mode == AG_MODE_REPEAT_ALL
+                                             ? agplayer::PlaybackMode::RepeatAll
                                              : agplayer::PlaybackMode::Sequential;
     return guard_result([&] { return player->context.set_mode(value); });
 }

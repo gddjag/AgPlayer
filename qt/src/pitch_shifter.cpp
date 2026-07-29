@@ -169,7 +169,7 @@ QString PitchShifter::computeOutputPath(const QString& inputPath,
     QString candidate = dir + QStringLiteral("/") + baseName
                         + QStringLiteral("_pitched.") + ext;
     int counter = 1;
-    while (QFileInfo::exists(candidate)) {
+    while (!overwriteExisting_ && QFileInfo::exists(candidate)) {
         candidate = dir + QStringLiteral("/") + baseName
                     + QStringLiteral("_pitched_") + QString::number(counter)
                     + QStringLiteral(".") + ext;

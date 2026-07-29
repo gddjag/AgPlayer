@@ -50,7 +50,9 @@ Window {
         anchors.fill: parent
         anchors.margins: 4
         radius: Theme.radiusLg
-        color: Theme.panel
+        color: SettingsController.glassEffect
+               ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 0.88)
+               : Theme.panel
         border.color: Theme.border
         border.width: 1
 

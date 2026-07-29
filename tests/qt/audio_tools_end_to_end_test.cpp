@@ -10,9 +10,12 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QSignalSpy>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThreadPool>
 #include <QVariantMap>
 
 #include <cmath>
@@ -40,6 +43,7 @@ class AudioToolsEndToEndTest final : public QObject {
 private slots:
     void formatConverterExportsPreservesMetadataAndAvoidsCollisions();
     void formatConverterReservesParallelOutputNames();
+    void formatConverterOverwritePolicyReusesSafeTargets();
     void formatConverterCancellationFinalizesQueuedEntries();
     void speedAdjusterAnalyzesAlignsAndExports();
     void pitchShifterExportsRequestedSampleRate();
@@ -144,6 +148,63 @@ void AudioToolsEndToEndTest::formatConverterReservesParallelOutputNames()
     QCOMPARE(outputs.size(), 2);
     verifyAudioFile(outputs.at(0).absoluteFilePath(), 44100);
     verifyAudioFile(outputs.at(1).absoluteFilePath(), 44100);
+}
+
+void AudioToolsEndToEndTest::formatConverterOverwritePolicyReusesSafeTargets()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+    const QString outputDir = temp.filePath(QStringLiteral("converted"));
+    QVERIFY(QDir().mkpath(outputDir));
+    const QString target =
+        QDir(outputDir).filePath(QStringLiteral("source.flac"));
+    QFile stale(target);
+    QVERIFY(stale.open(QIODevice::WriteOnly));
+    QCOMPARE(stale.write("stale"), 5);
+    stale.close();
+
+    FormatConverter converter;
+    converter.setOverwriteExisting(true);
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+
+    QThreadPool* globalPool = QThreadPool::globalInstance();
+    const int previousMaxThreads = globalPool->maxThreadCount();
+    const auto restoreThreadCount = qScopeGuard([globalPool,
+                                                  previousMaxThreads] {
+        globalPool->setMaxThreadCount(previousMaxThreads);
+    });
+    globalPool->setMaxThreadCount(1);
+    QSemaphore workerStarted;
+    QSemaphore releaseWorker;
+    globalPool->start([&workerStarted, &releaseWorker] {
+        workerStarted.release();
+        releaseWorker.acquire();
+    });
+    QVERIFY(workerStarted.tryAcquire(1, 5000));
+
+    converter.start(QStringLiteral("flac"), 0, 44100, 2, outputDir,
+                    false, false, false);
+    converter.setOverwriteExisting(false);
+    releaseWorker.release();
+    QVERIFY(completed.wait(30000));
+    QCOMPARE(completed.first().first().toInt(), 1);
+    verifyAudioFile(target, 44100);
+    QVERIFY(!QFileInfo::exists(
+        QDir(outputDir).filePath(QStringLiteral("source_1.flac"))));
+
+    FormatConverter sameFormat;
+    sameFormat.setOverwriteExisting(true);
+    sameFormat.loadFiles({QUrl::fromLocalFile(input)});
+    QSignalSpy sameCompleted(
+        &sameFormat, &FormatConverter::transcodeCompleted);
+    sameFormat.start(QStringLiteral("wav"), 0, 44100, 2, QString(),
+                     false, false, false);
+    QVERIFY(sameCompleted.wait(30000));
+    verifyAudioFile(input);
+    verifyAudioFile(temp.filePath(QStringLiteral("source_1.wav")), 44100);
 }
 
 void AudioToolsEndToEndTest::

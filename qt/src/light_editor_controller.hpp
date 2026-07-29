@@ -76,6 +76,7 @@ public:
     bool canUndo() const noexcept;
     bool canRedo() const noexcept;
     bool hasClipboard() const noexcept;
+    void setOverwriteExisting(bool value) noexcept { overwriteExisting_ = value; }
 
     Q_INVOKABLE void loadFile(const QUrl& url);
     Q_INVOKABLE void loadFileToTrack(int trackIndex, const QUrl& url);
@@ -171,6 +172,7 @@ private:
     std::atomic<ag_cancel_token*> token_{nullptr};
     QMutex tokenMutex_;
     QPointer<QFutureWatcher<int>> watcher_;
+    bool overwriteExisting_ = false;
 
     const Track& currentTrack() const;
     Track& currentTrack();

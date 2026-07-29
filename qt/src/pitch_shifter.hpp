@@ -43,6 +43,7 @@ public:
     int inputSampleRate() const noexcept;
     int inputDurationMs() const noexcept;
     QVariantList waveformPeaks() const noexcept;
+    void setOverwriteExisting(bool value) noexcept { overwriteExisting_ = value; }
 
     Q_INVOKABLE void loadFile(const QUrl& url);
     Q_INVOKABLE void start(int pitchCents,
@@ -77,6 +78,7 @@ private:
     std::atomic<bool> busy_{false};
     std::atomic<ag_cancel_token*> token_{nullptr};
     QPointer<QFutureWatcher<int>> watcher_;
+    bool overwriteExisting_ = false;
 
     void setBusy(bool value);
     void setProgress(double value);

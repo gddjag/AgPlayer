@@ -20,6 +20,7 @@ private slots:
     void defaultCacheDirectoryUsesStandardPaths();
     void defaultExportDirectoryUsesStandardPaths();
     void loadCreatesDefaultDirectories();
+    void migratesLegacyPlaybackModes();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
     void editSessionCanCommitOrCancel();
@@ -60,6 +61,40 @@ void SettingsControllerTest::loadCreatesDefaultDirectories()
     QVERIFY(!exportDir.isEmpty());
     QVERIFY(QDir(cacheDir).exists());
     QVERIFY(QDir(exportDir).exists());
+}
+
+void SettingsControllerTest::migratesLegacyPlaybackModes()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("playback/defaultPlaybackMode"), 1);
+
+    {
+        SettingsController settings;
+        QCOMPARE(settings.defaultPlaybackMode(), 2);
+    }
+    QCOMPARE(
+        persisted.value(QStringLiteral("playback/defaultPlaybackMode")).toInt(),
+        2);
+    QCOMPARE(
+        persisted.value(QStringLiteral("playback/modeSchemaVersion")).toInt(),
+        2);
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("playback/defaultPlaybackMode"), 2);
+    {
+        SettingsController settings;
+        QCOMPARE(settings.defaultPlaybackMode(), 1);
+    }
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("playback/defaultPlaybackMode"), 1);
+    persisted.setValue(QStringLiteral("playback/modeSchemaVersion"), 2);
+    {
+        SettingsController settings;
+        QCOMPARE(settings.defaultPlaybackMode(), 1);
+    }
+    persisted.clear();
 }
 
 void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()

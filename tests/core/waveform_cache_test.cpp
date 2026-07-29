@@ -22,6 +22,12 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 namespace {
 
 std::filesystem::path temporary_path_for(const std::filesystem::path& path)
@@ -183,6 +189,27 @@ int main(const int argc, char** argv)
     assert(agplayer::WaveformCache::save(bad_magic, source_path, peaks));
     assert(agplayer::WaveformCache::load(bad_magic, source_path, loaded));
     assert(loaded == peaks);
+
+#ifdef _WIN32
+    // Windows scanners and indexers can briefly hold the old cache without
+    // FILE_SHARE_DELETE. A save must survive that bounded sharing violation.
+    const std::filesystem::path locked_cache =
+        case_dir / "temporarily-locked.agwf";
+    assert(robust_copy_file(cache_path, locked_cache));
+    const HANDLE locked_handle =
+        CreateFileW(locked_cache.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    assert(locked_handle != INVALID_HANDLE_VALUE);
+    std::thread unlocker([locked_handle]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        assert(CloseHandle(locked_handle) != FALSE);
+    });
+    assert(agplayer::WaveformCache::save(locked_cache, source_path, peaks));
+    unlocker.join();
+    assert(agplayer::WaveformCache::load(locked_cache, source_path, loaded));
+    assert(loaded == peaks);
+#endif
 
     const std::filesystem::path bad_version = case_dir / "bad-version.agwf";
     assert(robust_copy_file(cache_path, bad_version));

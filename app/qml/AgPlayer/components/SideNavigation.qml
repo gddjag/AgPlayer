@@ -140,7 +140,7 @@ Rectangle {
             color: Theme.border
         }
 
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             spacing: Theme.spacingSm
 

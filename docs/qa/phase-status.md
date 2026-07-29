@@ -2,44 +2,49 @@
 
 日期：2026-07-29
 分支：`codex/revised-ui`
-当前阶段：Phase 7 — 可靠性、性能、安全与轻量化
+当前阶段：Phase 8 — 最终集成与 Windows MVP 自动化验收
 
-## 本阶段已完成
+## 本阶段完成
 
-- Debug、Release 均通过 `/W4 /WX` 编译门禁和全部 44 项测试。
-- 10,000 首完整原生波形/缓存压力验证完成：10,000/10,000 成功、0 失败。
-- 10,000 行曲库搜索、排序和随机访问通过；Release 定位延迟 P95 为 0.0319 ms。
-- Release 生产程序连续 6 次完成启动、真实文件播放、截图和有序退出。
-- 安全排查未发现后台联网、遥测、内嵌凭证、命令/外部进程执行或私人邮箱地址。
-- 删除了固定返回“已是最新版”的伪更新入口，保持纯离线行为真实可验证。
-- 元数据批量重命名改为后台私有快照，避免清空列表与工作线程并发访问；冲突后文件名状态同步正确。
-- 中文、英文、泰语、越南语目录均为 462 条完成翻译，0 条未完成。
+- 设置项已逐项连接运行时；删除独占模式、交叉淡化等当前无法兑现的伪设置。
+- 顺序、随机、单曲循环、列表循环已贯通 C API、核心引擎、Qt 与 QML。
+- 格式转换、调速、升降调、轻度剪辑均执行安全覆盖策略，禁止覆盖输入源。
+- 格式转换的“保留元数据”与“从视频提取音频”已分离；后台任务在启动时冻结覆盖策略，消除并发读写。
+- 旧版随机/单曲循环数值已迁移到新枚举；调速与轻度剪辑在设置变化时实时同步“保留音高”。
+- 波形密度、粗细、Hover、主题与发光效果均由设置实时驱动。
+- 中文、英文、泰语、越南语各 457 条完成翻译，未完成 0，非中文目录汉字残留 0。
+- 四语言 × 深浅主题 × 10 页面最终 UI 矩阵 80/80 通过，缺图 0，运行时告警 0。
+- Windows 波形缓存原子替换加入有限重试；回归测试修复前稳定失败，修复后连续 100 次通过。
 
-## 本轮验证
+## 最终自动化证据
 
-- Debug CTest：44/44，通过耗时 45.80 秒。
-- Release CTest：44/44，通过耗时 24.35 秒；最终修复后的定向回归继续通过。
-- 10,000 首压力：307.409 秒、缓存 8.47 MiB、峰值工作集 15.78 MiB。
-- 定位基准：100/100 成功，中位 0.0179 ms，P95 0.0319 ms。
-- 元数据并发回归测试修复前异常退出，修复后通过。
-- 批量重命名路径逃逸、冲突名刷新和清空预览均有回归覆盖；独立复核无剩余 Critical/Important。
-- 最终 Release 生产冒烟通过，截图 45,152 字节，运行日志无警告/错误。
-- 四语言目录完整性测试通过；`git diff --check` 通过。
+- Debug `/W4 /WX` 构建通过；CTest 44/44，17.52 秒。
+- Release `/W4 /WX` 构建通过；CTest 44/44，5.90 秒。
+- Release 播放冒烟通过：真实 WAV 打开、播放、截图和有序退出，日志无警告。
+- 8 格式曲库冒烟通过：导入、持久化、重启恢复 8/8。
+- 10,000 行曲库搜索、排序和随机访问压力测试通过。
+- 10,000 首原生波形/缓存压力：10,000/10,000、0 失败、306.307 秒、缓存 8.47 MiB、峰值工作集 16.04 MiB。
+- Seek 基准：100/100、0 失败、中位 0.0142 ms、P95 0.0222 ms，低于 20 ms 门限。
+- 隐私扫描未发现网络客户端、遥测、统计、SMTP、私有邮箱或外部进程执行；仅保留用户点击后由系统浏览器打开的项目官网链接。
+- 未部署的 Release `AgPlayer.exe` 为 3.38 MiB；未执行运行库部署或安装包封装。
 
-复现命令：
+## 结论
+
+Windows MVP 的软件实现与本机可自动化门禁已完成。发布仍需以下人工/平台门禁，不将其误报为已完成：
+
+- 真实声卡/扬声器的可听播放、Seek、切歌、音量与静音验收。
+- Windows 多声卡、蓝牙断连/重连和设备热插拔验收。
+- macOS、Linux、HarmonyOS 的构建、音频后端、文件关联与分发验证。
+- EXE/安装器、DMG、AppImage 打包；仅在用户单独下达打包指令后执行。
+
+复现：
 
 ```powershell
-cmake --build build/msvc-debug --parallel 4
-ctest --test-dir build/msvc-debug -C Debug --output-on-failure
-git diff --check
+cmake --build build/msvc-debug --config Debug --parallel
+ctest --test-dir build/msvc-debug -C Debug --parallel 8 --output-on-failure
+cmake --build build/msvc-release --config Release --parallel
+ctest --test-dir build/msvc-release -C Release --parallel 8 --output-on-failure
+scripts\qa-main-smoke.ps1 -BuildDirectory build/msvc-release
+scripts\qa-library-smoke.ps1 -BuildDirectory build/msvc-release
+scripts\qa-final-ui-matrix.ps1 -BuildDirectory build/msvc-release
 ```
-
-## 尚未完成
-
-- 四语言 × 深浅主题全链路截图矩阵及最终发布准备将在 Phase 8 完成。
-- 真实声卡/扬声器的可听人工验收仍需用户在场确认。
-- 未封装 EXE；仅在全部阶段完成并收到用户明确指令后打包。
-
-## 下一阶段
-
-Phase 8：最终集成、视觉矩阵、需求追踪和发布前验收（不打包）。

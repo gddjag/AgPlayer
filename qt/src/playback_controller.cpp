@@ -38,6 +38,8 @@ PlaybackController::Mode toMode(ag_playback_mode mode)
         return PlaybackController::RepeatOne;
     case AG_MODE_SHUFFLE:
         return PlaybackController::Shuffle;
+    case AG_MODE_REPEAT_ALL:
+        return PlaybackController::RepeatAll;
     }
     return PlaybackController::Sequential;
 }
@@ -51,6 +53,8 @@ ag_playback_mode toCoreMode(PlaybackController::Mode mode)
         return AG_MODE_REPEAT_ONE;
     case PlaybackController::Shuffle:
         return AG_MODE_SHUFFLE;
+    case PlaybackController::RepeatAll:
+        return AG_MODE_REPEAT_ALL;
     }
     return AG_MODE_SEQUENTIAL;
 }
@@ -137,7 +141,20 @@ void PlaybackController::togglePlayback()
 
 void PlaybackController::seek(qint64 positionMs)
 {
-    runCommand(player_ != nullptr ? ag_player_seek(player_, positionMs) : AG_INVALID_ARGUMENT);
+    if (player_ == nullptr) {
+        runCommand(AG_INVALID_ARGUMENT);
+        return;
+    }
+
+    ag_playback_snapshot snapshot{};
+    const ag_result snapshotResult = ag_player_snapshot(player_, &snapshot);
+    if (snapshotResult != AG_OK) {
+        runCommand(snapshotResult);
+        return;
+    }
+    const qint64 durationMs = std::max<qint64>(0, snapshot.duration_ms);
+    runCommand(ag_player_seek(
+        player_, std::clamp(positionMs, qint64{0}, durationMs)));
 }
 
 void PlaybackController::next()
@@ -175,16 +192,23 @@ void PlaybackController::toggleMuted()
 
 void PlaybackController::cycleMode()
 {
-    const auto nextMode = static_cast<Mode>((static_cast<int>(mode_) + 1) % 3);
-    runCommand(player_ != nullptr ? ag_player_set_mode(player_, toCoreMode(nextMode))
+    setMode(static_cast<Mode>((static_cast<int>(mode_) + 1) % 4));
+}
+
+void PlaybackController::setMode(Mode mode)
+{
+    if (mode < Sequential || mode > RepeatAll) {
+        return;
+    }
+    runCommand(player_ != nullptr ? ag_player_set_mode(player_, toCoreMode(mode))
                                   : AG_INVALID_ARGUMENT);
 }
 
-void PlaybackController::playRow(int row)
+bool PlaybackController::prepareRow(int row)
 {
     if (player_ == nullptr || library_ == nullptr || row < 0 ||
         row >= library_->tracks().size() || !library_->tracks().at(row).available) {
-        return;
+        return false;
     }
 
     std::vector<QByteArray> utf8Paths;
@@ -212,9 +236,22 @@ void PlaybackController::playRow(int row)
         ag_player_set_queue(player_, paths.data(), paths.size(), requestedIndex);
     if (queueResult != AG_OK) {
         runCommand(queueResult);
-        return;
+        return false;
     }
     queueTrackIds_ = std::move(trackIds);
+    return true;
+}
+
+void PlaybackController::loadRow(int row)
+{
+    prepareRow(row);
+}
+
+void PlaybackController::playRow(int row)
+{
+    if (!prepareRow(row)) {
+        return;
+    }
     const ag_result playResult = ag_player_play(player_);
     runCommand(playResult);
     if (playResult == AG_OK) {

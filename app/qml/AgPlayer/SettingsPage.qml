@@ -9,8 +9,8 @@ Popup {
 
     parent: Overlay.overlay
     anchors.centerIn: parent
-    width: Math.min(1000, parent.width - 80)
-    height: Math.min(760, parent.height - 80)
+    width: Math.min(1180, parent.width - 24)
+    height: Math.min(760, parent.height - 24)
     modal: true
     dim: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -209,7 +209,7 @@ Popup {
 
             // Sidebar
             Rectangle {
-                Layout.preferredWidth: 180
+                Layout.preferredWidth: 260
                 Layout.fillHeight: true
                 color: "transparent"
 
@@ -228,7 +228,7 @@ Popup {
                     delegate: Rectangle {
                         required property var modelData
                         width: settingsSectionList.width
-                        height: 42
+                        height: 32
                         radius: Theme.radiusSm
                         color: root.selectedSection === modelData.index
                                ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
@@ -600,7 +600,7 @@ Popup {
             text: parent.text
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 12
+            font.pixelSize: 11
             leftPadding: parent.indicator.width + parent.spacing
             verticalAlignment: Text.AlignVCenter
         }
@@ -890,11 +890,22 @@ Popup {
                     onToggled: SettingsController.setAsDefaultPlayer = checked
                 }
 
-                SettingRow {
-                    label: qsTr("关联格式")
-                    RowLayout {
-                        anchors.fill: parent
-                        spacing: Theme.spacingMd
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingXs
+
+                    Text {
+                        text: qsTr("关联格式")
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 14
+                    }
+
+                    Flow {
+                        objectName: "fileAssociationFlow"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 24
+                        spacing: Theme.spacingXs
 
                         FileAssociationCheck {
                             text: "MP3"
@@ -929,6 +940,7 @@ Popup {
                         }
 
                         FileAssociationCheck {
+                            objectName: "oggAssociationCheck"
                             text: "OGG"
                             extPrimary: "ogg"
                             checked: SettingsController.fileAssociations.indexOf("ogg") >= 0
@@ -983,7 +995,7 @@ Popup {
 
             SettingCard {
                 title: qsTr("音频输出")
-                Layout.preferredHeight: 180
+                Layout.preferredHeight: 120
 
                 SettingRow {
                     label: qsTr("输出设备")
@@ -1002,16 +1014,11 @@ Popup {
                     }
                 }
 
-                SettingSwitch {
-                    text: qsTr("音频独占模式 (Exclusive Mode/WASAPI/ALSA) (降低延迟，但其他软件静音)")
-                    checked: SettingsController.audioExclusiveMode
-                    onToggled: SettingsController.audioExclusiveMode = checked
-                }
             }
 
             SettingCard {
                 title: qsTr("播放行为")
-                Layout.preferredHeight: 260
+                Layout.preferredHeight: 210
 
                 SettingSwitch {
                     text: qsTr("播放键 RGB 光晕")
@@ -1024,40 +1031,21 @@ Popup {
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: qsTr("顺序播放"), value: 0 },
-                            { text: qsTr("随机播放"), value: 1 },
-                            { text: qsTr("单曲循环"), value: 2 },
-                            { text: qsTr("列表循环"), value: 3 }
+                            { text: qsTr("顺序播放"), value: PlaybackController.Sequential },
+                            { text: qsTr("随机播放"), value: PlaybackController.Shuffle },
+                            { text: qsTr("单曲循环"), value: PlaybackController.RepeatOne },
+                            { text: qsTr("列表循环"), value: PlaybackController.RepeatAll }
                         ]
-                        currentIndex: SettingsController.defaultPlaybackMode
+                        currentIndex: {
+                            for (let i = 0; i < valueModel.length; ++i) {
+                                if (valueModel[i].value === SettingsController.defaultPlaybackMode) {
+                                    return i
+                                }
+                            }
+                            return 0
+                        }
                         onActivated: SettingsController.defaultPlaybackMode = currentValue
                     }
-                }
-
-                SettingSwitch {
-                    text: qsTr("开启无间隙播放")
-                    checked: SettingsController.gaplessPlayback
-                    onToggled: SettingsController.gaplessPlayback = checked
-                }
-
-                SettingRow {
-                    label: qsTr("歌曲切换淡入淡出")
-                    SettingCombo {
-                        anchors.verticalCenter: parent.verticalCenter
-                        valueModel: [
-                            { text: qsTr("0ms (关闭)"), value: 0 },
-                            { text: qsTr("200ms"), value: 1 },
-                            { text: qsTr("500ms"), value: 2 }
-                        ]
-                        currentIndex: SettingsController.crossfadeMs
-                        onActivated: SettingsController.crossfadeMs = currentValue
-                    }
-                }
-
-                SettingSwitch {
-                    text: qsTr("自动匹配采样率")
-                    checked: SettingsController.autoMatchSampleRate
-                    onToggled: SettingsController.autoMatchSampleRate = checked
                 }
 
                 SettingSwitch {
@@ -1340,19 +1328,47 @@ Popup {
                 title: qsTr("全局快捷键")
                 Layout.preferredHeight: 220
 
-                HotkeyRow { label: qsTr("播放 / 暂停"); value: SettingsController.hkPlayPause }
-                HotkeyRow { label: qsTr("上一首 / 下一首"); value: SettingsController.hkPrevNext }
-                HotkeyRow { label: qsTr("音量加 / 减"); value: SettingsController.hkVolumeUpDown }
-                HotkeyRow { label: qsTr("显示 / 隐藏迷你播放器"); value: SettingsController.hkToggleMiniPlayer }
+                HotkeyRow {
+                    label: qsTr("播放 / 暂停")
+                    value: SettingsController.hkPlayPause
+                    onCommitted: text => SettingsController.hkPlayPause = text
+                }
+                HotkeyRow {
+                    label: qsTr("上一首 / 下一首")
+                    value: SettingsController.hkPrevNext
+                    onCommitted: text => SettingsController.hkPrevNext = text
+                }
+                HotkeyRow {
+                    label: qsTr("音量加 / 减")
+                    value: SettingsController.hkVolumeUpDown
+                    onCommitted: text => SettingsController.hkVolumeUpDown = text
+                }
+                HotkeyRow {
+                    label: qsTr("显示 / 隐藏迷你播放器")
+                    value: SettingsController.hkToggleMiniPlayer
+                    onCommitted: text => SettingsController.hkToggleMiniPlayer = text
+                }
             }
 
             SettingCard {
                 title: qsTr("应用内快捷键")
                 Layout.preferredHeight: 220
 
-                HotkeyRow { label: qsTr("快速搜索歌曲"); value: SettingsController.hkSearch }
-                HotkeyRow { label: qsTr("快速切换波形模式"); value: SettingsController.hkWaveformMode }
-                HotkeyRow { label: qsTr("打开音频工具"); value: SettingsController.hkAudioTools }
+                HotkeyRow {
+                    label: qsTr("快速搜索歌曲")
+                    value: SettingsController.hkSearch
+                    onCommitted: text => SettingsController.hkSearch = text
+                }
+                HotkeyRow {
+                    label: qsTr("快速切换波形模式")
+                    value: SettingsController.hkWaveformMode
+                    onCommitted: text => SettingsController.hkWaveformMode = text
+                }
+                HotkeyRow {
+                    label: qsTr("打开音频工具")
+                    value: SettingsController.hkAudioTools
+                    onCommitted: text => SettingsController.hkAudioTools = text
+                }
             }
         }
 
@@ -1361,7 +1377,8 @@ Popup {
 
     component HotkeyRow: RowLayout {
         property alias label: labelText.text
-        property alias value: valueText.text
+        property string value
+        signal committed(string text)
 
         Layout.fillWidth: true
         Layout.preferredHeight: 36
@@ -1384,16 +1401,20 @@ Popup {
             border.color: Theme.border
             border.width: 1
 
-            Text {
+            TextField {
                 id: valueText
                 anchors.fill: parent
                 anchors.leftMargin: Theme.spacingMd
                 anchors.rightMargin: Theme.spacingMd
+                text: parent.parent.value
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
+                selectByMouse: true
+                background: null
+                onEditingFinished: parent.parent.committed(text.trim())
             }
         }
     }

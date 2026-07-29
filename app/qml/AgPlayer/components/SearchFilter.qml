@@ -72,12 +72,15 @@ Rectangle {
 
         Label {
             text: qsTr("评分")
+            visible: SettingsController.autoReadRating
             color: Theme.secondaryText
             font.pixelSize: 12
         }
 
         RowLayout {
             spacing: 1
+            visible: SettingsController.autoReadRating
+            onVisibleChanged: if (!visible) root.minRating = 0
             Repeater {
                 model: 5
                 delegate: ThemedIcon {

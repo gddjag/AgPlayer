@@ -440,7 +440,7 @@ QString LightEditor::computeOutputPath(const QString& firstInputPath,
     QString candidate = dir + QStringLiteral("/") + baseName + suffix
                         + QStringLiteral(".") + ext;
     int counter = 1;
-    while (QFileInfo::exists(candidate)) {
+    while (!overwriteExisting_ && QFileInfo::exists(candidate)) {
         candidate = dir + QStringLiteral("/") + baseName + suffix
                     + QStringLiteral("_") + QString::number(counter)
                     + QStringLiteral(".") + ext;

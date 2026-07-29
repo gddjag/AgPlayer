@@ -74,6 +74,9 @@ std::size_t PlaybackSession::next_index_from(const std::size_t current) const
         }
         return candidate;
     }
+    if (mode == PlaybackMode::RepeatAll) {
+        return (current + 1U) % paths_.size();
+    }
     return current + 1U < paths_.size() ? current + 1U : npos;
 }
 
@@ -83,8 +86,12 @@ std::size_t PlaybackSession::previous_index() const noexcept
         return npos;
     }
     const std::size_t current = index_.load(std::memory_order_acquire);
-    if (mode_.load(std::memory_order_acquire) == PlaybackMode::RepeatOne) {
+    const PlaybackMode mode = mode_.load(std::memory_order_acquire);
+    if (mode == PlaybackMode::RepeatOne) {
         return current;
+    }
+    if (mode == PlaybackMode::RepeatAll) {
+        return current > 0U ? current - 1U : paths_.size() - 1U;
     }
     return current > 0U ? current - 1U : npos;
 }

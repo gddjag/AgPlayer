@@ -218,7 +218,8 @@ Rectangle {
                     RowLayout {
                         objectName: "trackRating"
                         spacing: 1
-                        visible: root.currentRow() >= 0
+                        visible: SettingsController.autoReadRating
+                                 && root.currentRow() >= 0
 
                         Repeater {
                             model: 5
@@ -304,8 +305,13 @@ Rectangle {
             position: PlaybackController.positionMs
             duration: PlaybackController.durationMs
             analysisProgress: WaveformProvider.analysisProgress
+            density: SettingsController.waveformDensity
+            lineWidth: SettingsController.waveformThickness
             clip: true
             onSeekRequested: positionMs => PlaybackController.seek(positionMs)
+            ToolTip.visible: SettingsController.waveformHoverTimePreview
+                             && hoverPosition >= 0
+            ToolTip.text: root.formatTime(hoverPosition)
 
             Binding on waveformColor {
                 value: Theme.cyan

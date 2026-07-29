@@ -25,6 +25,22 @@ TestCase {
         }
     }
 
+    Component {
+        id: formatPageComponent
+        FormatConvertPage {
+            width: 1350
+            height: 900
+        }
+    }
+
+    Component {
+        id: speedPageComponent
+        SpeedAdjustPage {
+            width: 1350
+            height: 900
+        }
+    }
+
     property var page
 
     function init() {
@@ -81,5 +97,33 @@ TestCase {
         verify(toolsWindow)
         compare(toolsWindow.width, 1536)
         compare(toolsWindow.height, 1024)
+    }
+
+    function test_formatConverterOptionsUseIndependentDefaults() {
+        SettingsController.preserveMetadata = false
+        const formatPage = createTemporaryObject(formatPageComponent, testCase)
+        verify(formatPage)
+        const keepMetadata = findChild(formatPage, "keepMetadataCheck")
+        const extractAudio = findChild(formatPage, "extractAudioCheck")
+        verify(keepMetadata)
+        verify(extractAudio)
+        compare(keepMetadata.checked, false)
+        compare(extractAudio.checked, false)
+        SettingsController.preserveMetadata = true
+        tryCompare(keepMetadata, "checked", true)
+        compare(extractAudio.checked, false)
+    }
+
+    function test_keepPitchSettingUpdatesOpenToolPages() {
+        const speedPage = createTemporaryObject(speedPageComponent, testCase)
+        verify(speedPage)
+
+        SettingsController.keepPitchWhileSpeedChange = false
+        tryCompare(LightEditor, "keepPitch", false)
+        tryCompare(SpeedAdjuster, "keepPitch", false)
+
+        SettingsController.keepPitchWhileSpeedChange = true
+        tryCompare(LightEditor, "keepPitch", true)
+        tryCompare(SpeedAdjuster, "keepPitch", true)
     }
 }

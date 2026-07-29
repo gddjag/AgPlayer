@@ -192,9 +192,23 @@ bool atomic_replace(const std::filesystem::path& from,
                     const std::filesystem::path& to) noexcept
 {
 #ifdef _WIN32
-    return MoveFileExW(from.c_str(), to.c_str(),
-                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
-           != FALSE;
+    constexpr int max_attempts = 6;
+    for (int attempt = 0; attempt < max_attempts; ++attempt) {
+        if (MoveFileExW(from.c_str(), to.c_str(),
+                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
+            != FALSE) {
+            return true;
+        }
+        const DWORD error = GetLastError();
+        if (error != ERROR_ACCESS_DENIED && error != ERROR_SHARING_VIOLATION
+            && error != ERROR_LOCK_VIOLATION) {
+            return false;
+        }
+        if (attempt + 1 < max_attempts) {
+            Sleep(10);
+        }
+    }
+    return false;
 #else
     std::error_code error;
     std::filesystem::rename(from, to, error);

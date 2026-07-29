@@ -252,7 +252,7 @@
         <translation>บทประพันธ์</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+33"/>
         <source>Bit Rate</source>
         <translation>อัตราบิต</translation>
     </message>
@@ -272,18 +272,18 @@
         <translation>ไม่มีการสูญเสีย</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+33"/>
         <source>Sample Rate</source>
         <translation>อัตราตัวอย่าง</translation>
     </message>
     <message>
         <location line="+9"/>
-        <location line="+38"/>
+        <location line="+45"/>
         <source>Auto</source>
         <translation>อัตโนมัติ</translation>
     </message>
     <message>
-        <location line="-37"/>
+        <location line="-44"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -292,7 +292,7 @@
         <translation>%1 เฮิร์ตซ์</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+31"/>
         <source>Channels</source>
         <translation>ช่อง</translation>
     </message>
@@ -307,7 +307,7 @@
         <translation>สเตอริโอ</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+34"/>
         <source>Keep metadata (title / artist / album / cover)</source>
         <translation>เก็บข้อมูลเมตา (ชื่อ / ศิลปิน / อัลบั้ม / ปก)</translation>
     </message>
@@ -327,7 +327,7 @@
         <translation>ไดเร็กทอรีเอาท์พุต</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+13"/>
         <source>Same as source (default)</source>
         <translation>เช่นเดียวกับแหล่งที่มา (ค่าเริ่มต้น)</translation>
     </message>
@@ -398,7 +398,7 @@
 <context>
     <name>InfoEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/InfoEditPage.qml" line="+45"/>
+        <location filename="../app/qml/AgPlayer/components/tools/InfoEditPage.qml" line="+46"/>
         <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>ไฟล์เสียง (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -414,24 +414,24 @@
     </message>
     <message>
         <location line="+84"/>
-        <location line="+590"/>
+        <location line="+593"/>
         <source>Drop audio files here or click to add</source>
         <translation>วางไฟล์เสียงที่นี่หรือคลิกเพื่อเพิ่ม</translation>
     </message>
     <message>
-        <location line="-582"/>
-        <location line="+590"/>
+        <location line="-585"/>
+        <location line="+593"/>
         <source>Supports MP3 / WAV / FLAC / M4A, etc.</source>
         <translation>รองรับ MP3 / WAV / FLAC / M4A ฯลฯ</translation>
     </message>
     <message>
-        <location line="-554"/>
+        <location line="-557"/>
         <source>File List</source>
         <translation>รายการไฟล์</translation>
     </message>
     <message>
         <location line="+10"/>
-        <location line="+819"/>
+        <location line="+822"/>
         <source>Clear List</source>
         <translation>ล้างรายการ</translation>
     </message>
@@ -582,7 +582,7 @@
         <translation>ชื่อไฟล์ใหม่ (ตัวอย่าง)</translation>
     </message>
     <message>
-        <location line="+79"/>
+        <location line="+82"/>
         <source>Processing...</source>
         <translation>กำลังประมวลผล...</translation>
     </message>
@@ -600,7 +600,7 @@
 <context>
     <name>LightEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+78"/>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+80"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>ไฟล์เสียง (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -622,32 +622,32 @@
     <message>
         <location line="+29"/>
         <source>保持音高</source>
-        <translation>รักษาระดับเสียง</translation>
+        <translation>คงระดับเสียง</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>吸附网格</source>
-        <translation>สแนปกริด</translation>
+        <translation>สแนปเข้ากริด</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>1/4 拍</source>
-        <translation>1/4 ช็อต</translation>
+        <translation>¼ จังหวะ</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>1/2 拍</source>
-        <translation>1/2 ช็อต</translation>
+        <translation>½ จังหวะ</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>1 拍</source>
-        <translation>1 นัด</translation>
+        <translation>1 จังหวะ</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>统一 BPM</source>
-        <translation>BPM แบบครบวงจร</translation>
+        <translation>ปรับ BPM ให้เท่ากัน</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -657,7 +657,7 @@
     <message>
         <location line="+153"/>
         <source>撤销</source>
-        <translation>ยกเลิก</translation>
+        <translation>เลิกทำ</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -692,7 +692,7 @@
     <message>
         <location line="+2"/>
         <source>合并</source>
-        <translation>ผสาน</translation>
+        <translation>รวม</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -722,7 +722,7 @@
     <message>
         <location line="+7"/>
         <source>声道</source>
-        <translation>ทางเดินเสียง</translation>
+        <translation>ช่องสัญญาณ</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -884,7 +884,7 @@
     <message>
         <location line="+41"/>
         <source>音乐列表</source>
-        <translation>音乐列表</translation>
+        <translation>รายการเพลง</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -905,7 +905,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../app/qml/AgPlayer/Main.qml" line="+142"/>
+        <location filename="../app/qml/AgPlayer/Main.qml" line="+144"/>
         <source>No lyrics available</source>
         <translation>ไม่มีเนื้อเพลง</translation>
     </message>
@@ -913,7 +913,7 @@
 <context>
     <name>MetadataEditor</name>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="+91"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="+112"/>
         <source>Failed to open cover image: %1</source>
         <translation>ไม่สามารถเปิดภาพหน้าปก: %1</translation>
     </message>
@@ -936,7 +936,7 @@
         <translation>เพิ่มในรายการโปรด</translation>
     </message>
     <message>
-        <location line="+52"/>
+        <location line="+53"/>
         <location line="+9"/>
         <source>No track loaded</source>
         <translation>ไม่มีการโหลดแทร็ก</translation>
@@ -947,7 +947,7 @@
         <translation>ศิลปินที่ไม่รู้จัก</translation>
     </message>
     <message>
-        <location line="+98"/>
+        <location line="+103"/>
         <source>Previous track</source>
         <translation>เพลงก่อนหน้า</translation>
     </message>
@@ -988,6 +988,11 @@
     </message>
     <message>
         <location line="+2"/>
+        <source>Repeat all</source>
+        <translation>เล่นซ้ำทั้งหมด</translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>Sequential</source>
         <translation>ตามลำดับ</translation>
     </message>
@@ -1010,7 +1015,7 @@
 <context>
     <name>MiniPlayerWindow</name>
     <message>
-        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+100"/>
+        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+102"/>
         <source>Disable always on top</source>
         <translation>ปิดการใช้งานอยู่ด้านบนเสมอ</translation>
     </message>
@@ -1048,7 +1053,7 @@
         <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93"/>
         <location line="+177"/>
         <source>空轨道</source>
-        <translation>วงโคจรที่ว่างเปล่า</translation>
+        <translation>แทร็กว่าง</translation>
     </message>
     <message>
         <location line="-168"/>
@@ -1085,12 +1090,12 @@
     </message>
     <message>
         <location line="+127"/>
-        <location line="+803"/>
+        <location line="+804"/>
         <source>Browse</source>
         <translation>เรียกดู</translation>
     </message>
     <message>
-        <location line="-775"/>
+        <location line="-776"/>
         <source>Clear</source>
         <translation>ชัดเจน</translation>
     </message>
@@ -1235,7 +1240,7 @@
         <translation>บันทึกตำแหน่ง</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>Same as source (default)</source>
         <translation>เช่นเดียวกับแหล่งที่มา (ค่าเริ่มต้น)</translation>
     </message>
@@ -1270,7 +1275,7 @@
         <translation>ส่งออกแล้ว: %1 (%2)</translation>
     </message>
     <message>
-        <location line="-1007"/>
+        <location line="-1008"/>
         <source>播放或暂停原始音频</source>
         <translation>เล่นหรือหยุดเสียงต้นฉบับชั่วคราว</translation>
     </message>
@@ -1335,7 +1340,7 @@
         <translation>ถัดไป</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+37"/>
         <source>Repeat one</source>
         <translation>ทำซ้ำหนึ่ง</translation>
     </message>
@@ -1343,6 +1348,11 @@
         <location line="+2"/>
         <source>Shuffle</source>
         <translation>สับเปลี่ยน</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Repeat all</source>
+        <translation>เล่นซ้ำทั้งหมด</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -1416,7 +1426,7 @@
         <translation>คะแนน</translation>
     </message>
     <message>
-        <location line="+136"/>
+        <location line="+139"/>
         <source>清空</source>
         <translation>ชัดเจน</translation>
     </message>
@@ -1444,61 +1454,61 @@
     </message>
     <message>
         <location line="-920"/>
-        <location line="+1029"/>
+        <location line="+1005"/>
         <source>外观与波形</source>
         <translation>รูปลักษณ์และรูปคลื่น</translation>
     </message>
     <message>
-        <location line="-1029"/>
-        <location line="+1030"/>
+        <location line="-1005"/>
+        <location line="+1006"/>
         <source>外观</source>
         <translation>รูปลักษณ์</translation>
     </message>
     <message>
-        <location line="-1029"/>
-        <location line="+1173"/>
+        <location line="-1005"/>
+        <location line="+1149"/>
         <source>音频工具预设</source>
         <translation>ค่าตั้งล่วงหน้าเครื่องมือเสียง</translation>
     </message>
     <message>
-        <location line="-1173"/>
-        <location line="+1174"/>
+        <location line="-1149"/>
+        <location line="+1150"/>
         <source>音频工具</source>
         <translation>เครื่องมือเสียง</translation>
     </message>
     <message>
-        <location line="-1173"/>
-        <location line="+1272"/>
+        <location line="-1149"/>
+        <location line="+1248"/>
         <source>快捷键设置</source>
         <translation>การตั้งค่าแป้นพิมพ์ลัด</translation>
     </message>
     <message>
-        <location line="-1272"/>
-        <location line="+1273"/>
+        <location line="-1248"/>
+        <location line="+1249"/>
         <source>快捷键</source>
         <translation>ปุ่มลัด</translation>
     </message>
     <message>
-        <location line="-1272"/>
-        <location line="+1347"/>
+        <location line="-1248"/>
+        <location line="+1356"/>
         <source>缓存与数据</source>
         <translation>แคชและข้อมูล</translation>
     </message>
     <message>
-        <location line="-1347"/>
-        <location line="+1348"/>
+        <location line="-1356"/>
+        <location line="+1357"/>
         <source>缓存</source>
         <translation>แคช</translation>
     </message>
     <message>
-        <location line="-1347"/>
-        <location line="+1508"/>
+        <location line="-1356"/>
+        <location line="+1517"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>เกี่ยวกับ</translation>
     </message>
     <message>
-        <location line="-1471"/>
+        <location line="-1480"/>
         <source>确认清空缓存</source>
         <translation>ยืนยันการล้างแคช</translation>
     </message>
@@ -1600,7 +1610,7 @@
     <message>
         <location line="+1"/>
         <source>右</source>
-        <translation>ถูกต้อง</translation>
+        <translation>ขวา</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -1635,7 +1645,7 @@
     <message>
         <location line="+6"/>
         <source>关联格式</source>
-        <translation>รูปแบบการเชื่อมโยง</translation>
+        <translation>รูปแบบไฟล์ที่เชื่อมโยง</translation>
     </message>
     <message>
         <location line="+47"/>
@@ -1658,12 +1668,7 @@
         <translation>อัตโนมัติ / อุปกรณ์เริ่มต้นระบบ</translation>
     </message>
     <message>
-        <location line="+13"/>
-        <source>音频独占模式 (Exclusive Mode/WASAPI/ALSA) (降低延迟，但其他软件静音)</source>
-        <translation>โหมดพิเศษเฉพาะเสียง (โหมดพิเศษ/WASAPI/ALSA) (ลดเวลาแฝง แต่ปิดเสียงซอฟต์แวร์อื่น)</translation>
-    </message>
-    <message>
-        <location line="+7"/>
+        <location line="+15"/>
         <source>播放行为</source>
         <translation>พฤติกรรมการเล่น</translation>
     </message>
@@ -1690,7 +1695,7 @@
     <message>
         <location line="+1"/>
         <source>单曲循环</source>
-        <translation>วงเดียว</translation>
+        <translation>เล่นซ้ำเพลงเดียว</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -1698,37 +1703,7 @@
         <translation>วนรายการ</translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>开启无间隙播放</source>
-        <translation>เปิดใช้งานการเล่นแบบไม่มีช่องว่าง</translation>
-    </message>
-    <message>
-        <location line="+6"/>
-        <source>歌曲切换淡入淡出</source>
-        <translation>สวิตช์เพลงจางเข้าและจางหายไป</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>0ms (关闭)</source>
-        <translation>0ms (ปิด)</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>200ms</source>
-        <translation>200ms</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>500ms</source>
-        <translation>500ms</translation>
-    </message>
-    <message>
-        <location line="+8"/>
-        <source>自动匹配采样率</source>
-        <translation>จับคู่อัตราตัวอย่างโดยอัตโนมัติ</translation>
-    </message>
-    <message>
-        <location line="+6"/>
+        <location line="+15"/>
         <source>自动读取歌曲 BPM</source>
         <translation>อ่านเพลง BPM โดยอัตโนมัติ</translation>
     </message>
@@ -1800,7 +1775,7 @@
     <message>
         <location line="+8"/>
         <source>波形线条粗细</source>
-        <translation>ความหนาของเส้นหยัก</translation>
+        <translation>ความหนาเส้นคลื่น</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -1860,7 +1835,7 @@
     <message>
         <location line="+1"/>
         <source>直接覆盖</source>
-        <translation>ความคุ้มครองโดยตรง</translation>
+        <translation>เขียนทับไฟล์เดิม</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -1915,7 +1890,7 @@
     <message>
         <location line="+6"/>
         <source>升降调人声保护</source>
-        <translation>ป้องกันเสียงร้องขึ้นและลง</translation>
+        <translation>ปกป้องเสียงร้องเมื่อปรับระดับเสียง</translation>
     </message>
     <message>
         <location line="+25"/>
@@ -1923,47 +1898,47 @@
         <translation>ปุ่มลัดส่วนกลาง</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>播放 / 暂停</source>
         <translation>เล่น/หยุดชั่วคราว</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>上一首 / 下一首</source>
         <translation>เพลงก่อนหน้า/เพลงถัดไป</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>音量加 / 减</source>
         <translation>เพิ่ม/ลดระดับเสียง</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>显示 / 隐藏迷你播放器</source>
         <translation>แสดง/ซ่อนเครื่องเล่นขนาดเล็ก</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+7"/>
         <source>应用内快捷键</source>
         <translation>ปุ่มลัดในแอป</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>快速搜索歌曲</source>
         <translation>ค้นหาเพลงอย่างรวดเร็ว</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>快速切换波形模式</source>
         <translation>สลับโหมดรูปคลื่นอย่างรวดเร็ว</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>打开音频工具</source>
         <translation>เปิดเครื่องมือเสียง</translation>
     </message>
     <message>
-        <location line="+61"/>
+        <location line="+69"/>
         <source>路径与自动清理</source>
         <translation>เส้นทางและการทำความสะอาดอัตโนมัติ</translation>
     </message>
@@ -1990,7 +1965,7 @@
     <message>
         <location line="+13"/>
         <source>清理按钮</source>
-        <translation>ปุ่มทำความสะอาด</translation>
+        <translation>การล้างข้อมูล</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -2084,7 +2059,7 @@
 <context>
     <name>SpeedAdjustPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+21"/>
+        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+23"/>
         <source>Intro</source>
         <translation>บทนำ</translation>
     </message>
@@ -2125,12 +2100,12 @@
     </message>
     <message>
         <location line="+85"/>
-        <location line="+1034"/>
+        <location line="+1035"/>
         <source>Browse</source>
         <translation>เรียกดู</translation>
     </message>
     <message>
-        <location line="-1006"/>
+        <location line="-1007"/>
         <source>Clear</source>
         <translation>ชัดเจน</translation>
     </message>
@@ -2265,7 +2240,7 @@
         <translation>บันทึกตำแหน่ง</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>Same as source (default)</source>
         <translation>เช่นเดียวกับแหล่งที่มา (ค่าเริ่มต้น)</translation>
     </message>
@@ -2295,7 +2270,7 @@
         <translation>ส่งออก: %1</translation>
     </message>
     <message>
-        <location line="-639"/>
+        <location line="-640"/>
         <source>裁去前导偏移，使第一拍从零点开始</source>
         <translation>ตัดช่วงหน่วงด้านหน้าเพื่อให้จังหวะแรกเริ่มที่ศูนย์</translation>
     </message>
@@ -2308,7 +2283,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+275"/>
+        <location filename="../app/main.cpp" line="+307"/>
         <source>Show AgPlayer</source>
         <translation>แสดง AgPlayer</translation>
     </message>
@@ -2318,7 +2293,7 @@
         <translation>ออก</translation>
     </message>
     <message>
-        <location line="+62"/>
+        <location line="+74"/>
         <source>AgPlayer is still running</source>
         <translation>AgPlayer ยังคงทำงานอยู่เบื้องหลัง</translation>
     </message>
@@ -2341,12 +2316,12 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25"/>
         <source>格式转换</source>
-        <translation>การแปลงรูปแบบ</translation>
+        <translation>แปลงรูปแบบ</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>轻度剪辑</source>
-        <translation>แก้ไขเบาๆ</translation>
+        <translation>ตัดต่อเบื้องต้น</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -2356,12 +2331,12 @@
     <message>
         <location line="+1"/>
         <source>升调降调</source>
-        <translation>ขึ้นๆ ลงๆ</translation>
+        <translation>ปรับระดับเสียง</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>信息修改</source>
-        <translation>การปรับเปลี่ยนข้อมูล</translation>
+        <translation>แก้ไขข้อมูล</translation>
     </message>
 </context>
 <context>
@@ -2417,7 +2392,7 @@
         <translation>เพิ่มในรายการโปรด</translation>
     </message>
     <message>
-        <location line="+66"/>
+        <location line="+67"/>
         <source>歌单操作</source>
         <translation>การทำงานกับเพลย์ลิสต์</translation>
     </message>

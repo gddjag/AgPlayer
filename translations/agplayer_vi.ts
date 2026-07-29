@@ -252,7 +252,7 @@
         <translation>tác phẩm</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+33"/>
         <source>Bit Rate</source>
         <translation>Tốc độ bit</translation>
     </message>
@@ -272,18 +272,18 @@
         <translation>không mất dữ liệu</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+33"/>
         <source>Sample Rate</source>
         <translation>Tỷ lệ mẫu</translation>
     </message>
     <message>
         <location line="+9"/>
-        <location line="+38"/>
+        <location line="+45"/>
         <source>Auto</source>
         <translation>Tự động</translation>
     </message>
     <message>
-        <location line="-37"/>
+        <location line="-44"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -292,7 +292,7 @@
         <translation>%1 Hz</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+31"/>
         <source>Channels</source>
         <translation>Kênh</translation>
     </message>
@@ -307,7 +307,7 @@
         <translation>Âm thanh nổi</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+34"/>
         <source>Keep metadata (title / artist / album / cover)</source>
         <translation>Giữ siêu dữ liệu (tiêu đề/nghệ sĩ/album/bìa)</translation>
     </message>
@@ -327,7 +327,7 @@
         <translation>Thư mục đầu ra</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+13"/>
         <source>Same as source (default)</source>
         <translation>Giống như nguồn (mặc định)</translation>
     </message>
@@ -398,7 +398,7 @@
 <context>
     <name>InfoEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/InfoEditPage.qml" line="+45"/>
+        <location filename="../app/qml/AgPlayer/components/tools/InfoEditPage.qml" line="+46"/>
         <source>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>Tệp âm thanh (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -414,24 +414,24 @@
     </message>
     <message>
         <location line="+84"/>
-        <location line="+590"/>
+        <location line="+593"/>
         <source>Drop audio files here or click to add</source>
         <translation>Thả tập tin âm thanh vào đây hoặc bấm vào để thêm</translation>
     </message>
     <message>
-        <location line="-582"/>
-        <location line="+590"/>
+        <location line="-585"/>
+        <location line="+593"/>
         <source>Supports MP3 / WAV / FLAC / M4A, etc.</source>
         <translation>Hỗ trợ MP3 / WAV / FLAC / M4A, v.v.</translation>
     </message>
     <message>
-        <location line="-554"/>
+        <location line="-557"/>
         <source>File List</source>
         <translation>Danh sách tập tin</translation>
     </message>
     <message>
         <location line="+10"/>
-        <location line="+819"/>
+        <location line="+822"/>
         <source>Clear List</source>
         <translation>Xóa danh sách</translation>
     </message>
@@ -582,7 +582,7 @@
         <translation>Tên tệp mới (Xem trước)</translation>
     </message>
     <message>
-        <location line="+79"/>
+        <location line="+82"/>
         <source>Processing...</source>
         <translation>Đang xử lý...</translation>
     </message>
@@ -600,7 +600,7 @@
 <context>
     <name>LightEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+78"/>
+        <location filename="../app/qml/AgPlayer/components/tools/LightEditPage.qml" line="+80"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>Tệp âm thanh (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
@@ -612,7 +612,7 @@
     <message>
         <location line="+11"/>
         <source>主轨道：轨道 %1</source>
-        <translation>Bài hát chính: bài hát %1</translation>
+        <translation>Track chính: Track %1</translation>
     </message>
     <message>
         <location line="+6"/>
@@ -622,32 +622,32 @@
     <message>
         <location line="+29"/>
         <source>保持音高</source>
-        <translation>duy trì cao độ</translation>
+        <translation>Giữ cao độ</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>吸附网格</source>
-        <translation>lưới chụp nhanh</translation>
+        <translation>Bám lưới</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>1/4 拍</source>
-        <translation>cú đánh 1/4</translation>
+        <translation>¼ nhịp</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>1/2 拍</source>
-        <translation>1/2 cú đánh</translation>
+        <translation>½ nhịp</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>1 拍</source>
-        <translation>1 phát</translation>
+        <translation>1 nhịp</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>统一 BPM</source>
-        <translation>BPM hợp nhất</translation>
+        <translation>Đồng bộ BPM</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -657,7 +657,7 @@
     <message>
         <location line="+153"/>
         <source>撤销</source>
-        <translation>Hủy bỏ</translation>
+        <translation>Hoàn tác</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -687,12 +687,12 @@
     <message>
         <location line="+2"/>
         <source>分割</source>
-        <translation>chia đôi</translation>
+        <translation>Tách</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>合并</source>
-        <translation>hợp nhất</translation>
+        <translation>Ghép</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -722,7 +722,7 @@
     <message>
         <location line="+7"/>
         <source>声道</source>
-        <translation>giọng hát</translation>
+        <translation>Kênh</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -732,7 +732,7 @@
     <message>
         <location line="+0"/>
         <source>单声道</source>
-        <translation>đơn sắc</translation>
+        <translation>Mono</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -884,7 +884,7 @@
     <message>
         <location line="+41"/>
         <source>音乐列表</source>
-        <translation>音乐列表</translation>
+        <translation>Danh sách nhạc</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -905,7 +905,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../app/qml/AgPlayer/Main.qml" line="+142"/>
+        <location filename="../app/qml/AgPlayer/Main.qml" line="+144"/>
         <source>No lyrics available</source>
         <translation>Không có lời bài hát nào</translation>
     </message>
@@ -913,7 +913,7 @@
 <context>
     <name>MetadataEditor</name>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="+91"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="+112"/>
         <source>Failed to open cover image: %1</source>
         <translation>Không mở được ảnh bìa: %1</translation>
     </message>
@@ -936,7 +936,7 @@
         <translation>Thêm vào mục yêu thích</translation>
     </message>
     <message>
-        <location line="+52"/>
+        <location line="+53"/>
         <location line="+9"/>
         <source>No track loaded</source>
         <translation>Không có bản nhạc nào được tải</translation>
@@ -947,7 +947,7 @@
         <translation>Nghệ sĩ vô danh</translation>
     </message>
     <message>
-        <location line="+98"/>
+        <location line="+103"/>
         <source>Previous track</source>
         <translation>Bản nhạc trước</translation>
     </message>
@@ -988,6 +988,11 @@
     </message>
     <message>
         <location line="+2"/>
+        <source>Repeat all</source>
+        <translation>Lặp lại tất cả</translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>Sequential</source>
         <translation>tuần tự</translation>
     </message>
@@ -1010,7 +1015,7 @@
 <context>
     <name>MiniPlayerWindow</name>
     <message>
-        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+100"/>
+        <location filename="../app/qml/AgPlayer/MiniPlayerWindow.qml" line="+102"/>
         <source>Disable always on top</source>
         <translation>Tắt luôn ở trên cùng</translation>
     </message>
@@ -1048,7 +1053,7 @@
         <location filename="../app/qml/AgPlayer/components/tools/MultiTrackWaveform.qml" line="+93"/>
         <location line="+177"/>
         <source>空轨道</source>
-        <translation>quỹ đạo trống</translation>
+        <translation>Track trống</translation>
     </message>
     <message>
         <location line="-168"/>
@@ -1085,12 +1090,12 @@
     </message>
     <message>
         <location line="+127"/>
-        <location line="+803"/>
+        <location line="+804"/>
         <source>Browse</source>
         <translation>Duyệt qua</translation>
     </message>
     <message>
-        <location line="-775"/>
+        <location line="-776"/>
         <source>Clear</source>
         <translation>Xóa</translation>
     </message>
@@ -1235,7 +1240,7 @@
         <translation>Lưu vị trí</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>Same as source (default)</source>
         <translation>Giống như nguồn (mặc định)</translation>
     </message>
@@ -1270,7 +1275,7 @@
         <translation>Đã xuất: %1 (%2)</translation>
     </message>
     <message>
-        <location line="-1007"/>
+        <location line="-1008"/>
         <source>播放或暂停原始音频</source>
         <translation>Phát hoặc tạm dừng âm thanh gốc</translation>
     </message>
@@ -1335,7 +1340,7 @@
         <translation>Tiếp theo</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+37"/>
         <source>Repeat one</source>
         <translation>Lặp lại một</translation>
     </message>
@@ -1343,6 +1348,11 @@
         <location line="+2"/>
         <source>Shuffle</source>
         <translation>Trộn bài</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Repeat all</source>
+        <translation>Lặp lại tất cả</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -1416,7 +1426,7 @@
         <translation>Xếp hạng</translation>
     </message>
     <message>
-        <location line="+136"/>
+        <location line="+139"/>
         <source>清空</source>
         <translation>Xóa</translation>
     </message>
@@ -1444,61 +1454,61 @@
     </message>
     <message>
         <location line="-920"/>
-        <location line="+1029"/>
+        <location line="+1005"/>
         <source>外观与波形</source>
         <translation>Giao diện &amp; Dạng sóng</translation>
     </message>
     <message>
-        <location line="-1029"/>
-        <location line="+1030"/>
+        <location line="-1005"/>
+        <location line="+1006"/>
         <source>外观</source>
         <translation>Giao diện</translation>
     </message>
     <message>
-        <location line="-1029"/>
-        <location line="+1173"/>
+        <location line="-1005"/>
+        <location line="+1149"/>
         <source>音频工具预设</source>
         <translation>Cài đặt sẵn công cụ âm thanh</translation>
     </message>
     <message>
-        <location line="-1173"/>
-        <location line="+1174"/>
+        <location line="-1149"/>
+        <location line="+1150"/>
         <source>音频工具</source>
         <translation>Công cụ âm thanh</translation>
     </message>
     <message>
-        <location line="-1173"/>
-        <location line="+1272"/>
+        <location line="-1149"/>
+        <location line="+1248"/>
         <source>快捷键设置</source>
         <translation>Phím tắt</translation>
     </message>
     <message>
-        <location line="-1272"/>
-        <location line="+1273"/>
+        <location line="-1248"/>
+        <location line="+1249"/>
         <source>快捷键</source>
         <translation>Phím tắt</translation>
     </message>
     <message>
-        <location line="-1272"/>
-        <location line="+1347"/>
+        <location line="-1248"/>
+        <location line="+1356"/>
         <source>缓存与数据</source>
         <translation>Bộ nhớ đệm &amp; Dữ liệu</translation>
     </message>
     <message>
-        <location line="-1347"/>
-        <location line="+1348"/>
+        <location line="-1356"/>
+        <location line="+1357"/>
         <source>缓存</source>
         <translation>Bộ nhớ đệm</translation>
     </message>
     <message>
-        <location line="-1347"/>
-        <location line="+1508"/>
+        <location line="-1356"/>
+        <location line="+1517"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>Giới thiệu</translation>
     </message>
     <message>
-        <location line="-1471"/>
+        <location line="-1480"/>
         <source>确认清空缓存</source>
         <translation>Xác nhận xóa bộ nhớ đệm</translation>
     </message>
@@ -1600,7 +1610,7 @@
     <message>
         <location line="+1"/>
         <source>右</source>
-        <translation>đúng</translation>
+        <translation>phải</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -1635,7 +1645,7 @@
     <message>
         <location line="+6"/>
         <source>关联格式</source>
-        <translation>Định dạng liên kết</translation>
+        <translation>Định dạng được liên kết</translation>
     </message>
     <message>
         <location line="+47"/>
@@ -1658,12 +1668,7 @@
         <translation>Thiết bị mặc định tự động/hệ thống</translation>
     </message>
     <message>
-        <location line="+13"/>
-        <source>音频独占模式 (Exclusive Mode/WASAPI/ALSA) (降低延迟，但其他软件静音)</source>
-        <translation>Chế độ dành riêng cho âm thanh (Chế độ độc quyền/WASAPI/ALSA) (giảm độ trễ nhưng tắt tiếng phần mềm khác)</translation>
-    </message>
-    <message>
-        <location line="+7"/>
+        <location line="+15"/>
         <source>播放行为</source>
         <translation>hành vi chơi</translation>
     </message>
@@ -1690,7 +1695,7 @@
     <message>
         <location line="+1"/>
         <source>单曲循环</source>
-        <translation>vòng lặp đơn</translation>
+        <translation>Lặp lại một bài</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -1698,37 +1703,7 @@
         <translation>Vòng lặp danh sách</translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>开启无间隙播放</source>
-        <translation>Cho phép phát lại liền mạch</translation>
-    </message>
-    <message>
-        <location line="+6"/>
-        <source>歌曲切换淡入淡出</source>
-        <translation>Chuyển đổi bài hát mờ dần và mờ dần</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>0ms (关闭)</source>
-        <translation>0ms (tắt)</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>200ms</source>
-        <translation>200 mili giây</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>500ms</source>
-        <translation>500 mili giây</translation>
-    </message>
-    <message>
-        <location line="+8"/>
-        <source>自动匹配采样率</source>
-        <translation>Tự động khớp với tốc độ mẫu</translation>
-    </message>
-    <message>
-        <location line="+6"/>
+        <location line="+15"/>
         <source>自动读取歌曲 BPM</source>
         <translation>Tự động đọc bài hát BPM</translation>
     </message>
@@ -1800,7 +1775,7 @@
     <message>
         <location line="+8"/>
         <source>波形线条粗细</source>
-        <translation>Độ dày đường lượn sóng</translation>
+        <translation>Độ dày đường sóng</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -1860,7 +1835,7 @@
     <message>
         <location line="+1"/>
         <source>直接覆盖</source>
-        <translation>bảo hiểm trực tiếp</translation>
+        <translation>Ghi đè tệp hiện có</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -1915,7 +1890,7 @@
     <message>
         <location line="+6"/>
         <source>升降调人声保护</source>
-        <translation>Bảo vệ giọng hát lên xuống</translation>
+        <translation>Bảo vệ giọng hát khi đổi cao độ</translation>
     </message>
     <message>
         <location line="+25"/>
@@ -1923,47 +1898,47 @@
         <translation>Phím tắt chung</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>播放 / 暂停</source>
         <translation>phát/tạm dừng</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>上一首 / 下一首</source>
         <translation>Bài hát trước/Bài hát tiếp theo</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>音量加 / 减</source>
         <translation>Tăng/giảm âm lượng</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>显示 / 隐藏迷你播放器</source>
         <translation>Hiển thị/ẩn trình phát mini</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+7"/>
         <source>应用内快捷键</source>
         <translation>Phím tắt trong ứng dụng</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>快速搜索歌曲</source>
         <translation>Tìm kiếm bài hát nhanh chóng</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>快速切换波形模式</source>
         <translation>Chuyển đổi nhanh các chế độ dạng sóng</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+5"/>
         <source>打开音频工具</source>
         <translation>Mở công cụ âm thanh</translation>
     </message>
     <message>
-        <location line="+61"/>
+        <location line="+69"/>
         <source>路径与自动清理</source>
         <translation>Đường dẫn và làm sạch tự động</translation>
     </message>
@@ -1990,7 +1965,7 @@
     <message>
         <location line="+13"/>
         <source>清理按钮</source>
-        <translation>nút sạch</translation>
+        <translation>Tác vụ dọn dẹp</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -2084,7 +2059,7 @@
 <context>
     <name>SpeedAdjustPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+21"/>
+        <location filename="../app/qml/AgPlayer/components/tools/SpeedAdjustPage.qml" line="+23"/>
         <source>Intro</source>
         <translation>giới thiệu</translation>
     </message>
@@ -2125,12 +2100,12 @@
     </message>
     <message>
         <location line="+85"/>
-        <location line="+1034"/>
+        <location line="+1035"/>
         <source>Browse</source>
         <translation>Duyệt qua</translation>
     </message>
     <message>
-        <location line="-1006"/>
+        <location line="-1007"/>
         <source>Clear</source>
         <translation>Xóa</translation>
     </message>
@@ -2265,7 +2240,7 @@
         <translation>Lưu vị trí</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>Same as source (default)</source>
         <translation>Giống như nguồn (mặc định)</translation>
     </message>
@@ -2295,7 +2270,7 @@
         <translation>Đã xuất: %1</translation>
     </message>
     <message>
-        <location line="-639"/>
+        <location line="-640"/>
         <source>裁去前导偏移，使第一拍从零点开始</source>
         <translation>Cắt độ lệch đầu để nhịp đầu tiên bắt đầu tại mốc 0</translation>
     </message>
@@ -2308,7 +2283,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+275"/>
+        <location filename="../app/main.cpp" line="+307"/>
         <source>Show AgPlayer</source>
         <translation>Hiện AgPlayer</translation>
     </message>
@@ -2318,7 +2293,7 @@
         <translation>Thoát</translation>
     </message>
     <message>
-        <location line="+62"/>
+        <location line="+74"/>
         <source>AgPlayer is still running</source>
         <translation>AgPlayer vẫn đang chạy trong nền</translation>
     </message>
@@ -2341,12 +2316,12 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="+25"/>
         <source>格式转换</source>
-        <translation>chuyển đổi định dạng</translation>
+        <translation>Chuyển đổi định dạng</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>轻度剪辑</source>
-        <translation>Chỉnh sửa nhẹ</translation>
+        <translation>Chỉnh sửa cơ bản</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -2356,12 +2331,12 @@
     <message>
         <location line="+1"/>
         <source>升调降调</source>
-        <translation>tăng và giảm</translation>
+        <translation>Điều chỉnh cao độ</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>信息修改</source>
-        <translation>Sửa đổi thông tin</translation>
+        <translation>Chỉnh sửa thông tin</translation>
     </message>
 </context>
 <context>
@@ -2417,7 +2392,7 @@
         <translation>Thêm vào mục yêu thích</translation>
     </message>
     <message>
-        <location line="+66"/>
+        <location line="+67"/>
         <source>歌单操作</source>
         <translation>Thao tác danh sách phát</translation>
     </message>

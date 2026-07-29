@@ -182,7 +182,8 @@ ListView {
 
             RowLayout {
                 spacing: 1
-                Layout.preferredWidth: 88
+                visible: SettingsController.autoReadRating
+                Layout.preferredWidth: visible ? 88 : 0
 
                 Repeater {
                     model: 5

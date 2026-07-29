@@ -41,6 +41,7 @@ private slots:
     void setLayersPopulatesLayerProperties();
     void rendersMultiBandLayers();
     void fallsBackToFrequencyLayerWhenMixMissing();
+    void densityAndLineWidthAffectRenderedGeometry();
 };
 
 namespace {
@@ -104,6 +105,38 @@ void WaveformItemTest::mapsPointerToClampedTime()
     QCOMPARE(item.timeForX(100), 0);
 }
 
+void WaveformItemTest::densityAndLineWidthAffectRenderedGeometry()
+{
+    TestableWaveformItem item;
+    item.setWidth(80);
+    item.setHeight(40);
+    QVariantList values;
+    for (int i = 0; i < 100; ++i) {
+        values.append(0.5);
+    }
+    item.setPeaks(values);
+
+    item.setDensity(0);
+    item.setLineWidth(3.0);
+    QSGNode* sparseNode = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(sparseNode != nullptr);
+    auto* sparseGeometry = static_cast<QSGGeometryNode*>(sparseNode)->geometry();
+    QCOMPARE(sparseGeometry->vertexCount(), 60);
+    QCOMPARE(sparseGeometry->lineWidth(), 1.0F);
+
+    item.setDensity(2);
+    QSGNode* fineNode = item.updatePaintNode(sparseNode, nullptr);
+    QCOMPARE(fineNode, sparseNode);
+    auto* fineGeometry = static_cast<QSGGeometryNode*>(fineNode)->geometry();
+    QCOMPARE(fineGeometry->vertexCount(), 240);
+
+    item.setDensity(99);
+    item.setLineWidth(99.0);
+    QCOMPARE(item.density(), 2);
+    QCOMPARE(item.lineWidth(), 6.0);
+    delete fineNode;
+}
+
 void WaveformItemTest::buildsCenteredFiniteNormalizedLinePairs()
 {
     TestableWaveformItem item;
@@ -118,7 +151,7 @@ void WaveformItemTest::buildsCenteredFiniteNormalizedLinePairs()
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     QCOMPARE(geometryNode->geometry()->drawingMode(), QSGGeometry::DrawLines);
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 8);
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 16);
     QVERIFY(geometryNode->material() != nullptr);
     QVERIFY(geometryNode->firstChild() == nullptr);
 
@@ -167,12 +200,12 @@ void WaveformItemTest::reusesNodeAndUpdatesGeometryAfterResize()
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    QCOMPARE(vertices(node)[2].x, 100.0F);
+    QCOMPARE(vertices(node)[6].x, 100.0F);
 
     item.setWidth(240);
     QSGNode* resizedNode = item.updatePaintNode(node, nullptr);
     QCOMPARE(resizedNode, node);
-    QCOMPARE(vertices(resizedNode)[2].x, 240.0F);
+    QCOMPARE(vertices(resizedNode)[6].x, 240.0F);
 
     item.setPosition(10);
     item.setDuration(20);
@@ -261,7 +294,8 @@ void WaveformItemTest::downsamplesPeaksToPixelBudget()
     const int vertexCount = geometryNode->geometry()->vertexCount();
     QVERIFY(vertexCount % 2 == 0);
 
-    const int renderedPeaks = vertexCount / 2;
+    const int renderedPeaks = vertexCount
+                              / (2 * static_cast<int>(std::ceil(item.lineWidth())));
     const int expectedMaxPoints = static_cast<int>(
         std::ceil(item.width() / 4.0));
     QVERIFY2(renderedPeaks <= expectedMaxPoints,
@@ -328,7 +362,7 @@ void WaveformItemTest::subPixelWidthDoesNotCrash()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 2);
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
     delete node;
 }
 
@@ -365,21 +399,21 @@ void WaveformItemTest::rendersMultiBandLayers()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 16);
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 32);
 
     const auto* data = vertices(node);
     // Mix layer uses the reference gradient (all played at end position).
     compareColor(data[0], 0x00, 0xD4, 0xFF, 0xFF);
     compareColor(data[2], 0xFF, 0x40, 0x57, 0xFF);
     // Bass layer: kBassColor.
-    compareColor(data[4], 170, 55, 55, 158);
-    compareColor(data[6], 170, 55, 55, 158);
+    compareColor(data[8], 170, 55, 55, 158);
+    compareColor(data[10], 170, 55, 55, 158);
     // Mid layer: kMidColor.
-    compareColor(data[8], 55, 140, 55, 148);
-    compareColor(data[10], 55, 140, 55, 148);
+    compareColor(data[16], 55, 140, 55, 148);
+    compareColor(data[18], 55, 140, 55, 148);
     // High layer: kHighColor.
-    compareColor(data[12], 55, 90, 145, 133);
-    compareColor(data[14], 55, 90, 145, 133);
+    compareColor(data[24], 55, 90, 145, 133);
+    compareColor(data[26], 55, 90, 145, 133);
 
     delete node;
 }
@@ -398,12 +432,12 @@ void WaveformItemTest::fallsBackToFrequencyLayerWhenMixMissing()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
-    // Two layers (bass + mid), two peaks, two vertices per peak.
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 8);
+    // Two layers, two peaks, two vertices and two 1 px copies per peak.
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 16);
 
     const auto* data = vertices(node);
     QCOMPARE(data[0].x, 0.0F);
-    QCOMPARE(data[2].x, 100.0F);
+    QCOMPARE(data[6].x, 100.0F);
 
     delete node;
 }

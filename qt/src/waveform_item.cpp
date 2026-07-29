@@ -80,57 +80,65 @@ std::size_t computePlayedCount(std::size_t peakCount, qint64 position, qint64 du
 void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                            std::size_t peakCount,
                            std::size_t playedCount,
-                           const QColor& waveformColor)
+                           const QColor& waveformColor,
+                           std::size_t strokeCopies)
 {
-    for (std::size_t index = 0; index < peakCount; ++index) {
-        const double normalizedX = peakCount == 1U
-                                       ? 0.5
-                                       : static_cast<double>(index)
-                                             / static_cast<double>(peakCount - 1U);
-        const auto alpha = static_cast<unsigned char>(
-            index < playedCount ? 255 : WaveformItem::unplayedAlpha());
+    for (std::size_t copy = 0; copy < strokeCopies; ++copy) {
+        for (std::size_t index = 0; index < peakCount; ++index) {
+            const double normalizedX = peakCount == 1U
+                                           ? 0.5
+                                           : static_cast<double>(index)
+                                                 / static_cast<double>(peakCount - 1U);
+            const auto alpha = static_cast<unsigned char>(
+                index < playedCount ? 255 : WaveformItem::unplayedAlpha());
 
-        unsigned char red = 0;
-        unsigned char green = 0;
-        unsigned char blue = 0;
-        if (waveformColor.isValid()) {
-            red = static_cast<unsigned char>(waveformColor.red());
-            green = static_cast<unsigned char>(waveformColor.green());
-            blue = static_cast<unsigned char>(waveformColor.blue());
-        } else {
-            const Rgb color = gradientColor(normalizedX);
-            red = static_cast<unsigned char>(color.red);
-            green = static_cast<unsigned char>(color.green);
-            blue = static_cast<unsigned char>(color.blue);
+            unsigned char red = 0;
+            unsigned char green = 0;
+            unsigned char blue = 0;
+            if (waveformColor.isValid()) {
+                red = static_cast<unsigned char>(waveformColor.red());
+                green = static_cast<unsigned char>(waveformColor.green());
+                blue = static_cast<unsigned char>(waveformColor.blue());
+            } else {
+                const Rgb color = gradientColor(normalizedX);
+                red = static_cast<unsigned char>(color.red);
+                green = static_cast<unsigned char>(color.green);
+                blue = static_cast<unsigned char>(color.blue);
+            }
+
+            const std::size_t vertex = (copy * peakCount + index) * 2U;
+            vertices[vertex].r = red;
+            vertices[vertex].g = green;
+            vertices[vertex].b = blue;
+            vertices[vertex].a = alpha;
+            vertices[vertex + 1U].r = red;
+            vertices[vertex + 1U].g = green;
+            vertices[vertex + 1U].b = blue;
+            vertices[vertex + 1U].a = alpha;
         }
-
-        vertices[index * 2U].r = red;
-        vertices[index * 2U].g = green;
-        vertices[index * 2U].b = blue;
-        vertices[index * 2U].a = alpha;
-        vertices[index * 2U + 1U].r = red;
-        vertices[index * 2U + 1U].g = green;
-        vertices[index * 2U + 1U].b = blue;
-        vertices[index * 2U + 1U].a = alpha;
     }
 }
 
 void updateLayerVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                              std::size_t peakCount,
                              std::size_t playedCount,
-                             const LayerColor& color)
+                             const LayerColor& color,
+                             std::size_t strokeCopies)
 {
-    for (std::size_t index = 0; index < peakCount; ++index) {
-        const auto alpha = static_cast<unsigned char>(
-            index < playedCount ? color.playedAlpha : color.unplayedAlpha);
-        vertices[index * 2U].r = color.red;
-        vertices[index * 2U].g = color.green;
-        vertices[index * 2U].b = color.blue;
-        vertices[index * 2U].a = alpha;
-        vertices[index * 2U + 1U].r = color.red;
-        vertices[index * 2U + 1U].g = color.green;
-        vertices[index * 2U + 1U].b = color.blue;
-        vertices[index * 2U + 1U].a = alpha;
+    for (std::size_t copy = 0; copy < strokeCopies; ++copy) {
+        for (std::size_t index = 0; index < peakCount; ++index) {
+            const auto alpha = static_cast<unsigned char>(
+                index < playedCount ? color.playedAlpha : color.unplayedAlpha);
+            const std::size_t vertex = (copy * peakCount + index) * 2U;
+            vertices[vertex].r = color.red;
+            vertices[vertex].g = color.green;
+            vertices[vertex].b = color.blue;
+            vertices[vertex].a = alpha;
+            vertices[vertex + 1U].r = color.red;
+            vertices[vertex + 1U].g = color.green;
+            vertices[vertex + 1U].b = color.blue;
+            vertices[vertex + 1U].a = alpha;
+        }
     }
 }
 
@@ -152,6 +160,8 @@ public:
     qreal width_ = -1.0;
     qreal height_ = -1.0;
     qreal devicePixelRatio_ = -1.0;
+    int density_ = -1;
+    qreal lineWidth_ = -1.0;
     qint64 position_ = -1;
     qint64 duration_ = -1;
     QColor waveformColor_;
@@ -346,6 +356,39 @@ void WaveformItem::setAnalysisProgress(double progress)
     emit analysisProgressChanged();
 }
 
+int WaveformItem::density() const
+{
+    return density_;
+}
+
+void WaveformItem::setDensity(int density)
+{
+    const int clamped = std::clamp(density, 0, 2);
+    if (clamped == density_) {
+        return;
+    }
+    density_ = clamped;
+    emit densityChanged();
+    update();
+}
+
+qreal WaveformItem::lineWidth() const
+{
+    return lineWidth_;
+}
+
+void WaveformItem::setLineWidth(qreal width)
+{
+    const qreal finite = std::isfinite(width) ? width : 1.0;
+    const qreal clamped = std::clamp(finite, qreal{1.0}, qreal{6.0});
+    if (qFuzzyCompare(clamped, lineWidth_)) {
+        return;
+    }
+    lineWidth_ = clamped;
+    emit lineWidthChanged();
+    update();
+}
+
 qint64 WaveformItem::timeForX(qreal x) const
 {
     if (width() <= 0.0 || duration_ <= 0 || !std::isfinite(x)) {
@@ -388,10 +431,12 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     const qreal devicePixelRatio = window() ? window()->devicePixelRatio() : 1.0;
+    constexpr std::array<qreal, 3> densityDivisors{8.0, 4.0, 2.0};
     const std::size_t maxPoints = std::max<std::size_t>(
         1U,
         static_cast<std::size_t>(
-            std::ceil(std::max(0.0, width() * devicePixelRatio / 4.0))));
+            std::ceil(std::max(
+                0.0, width() * devicePixelRatio / densityDivisors[density_]))));
 
     // Use the mix layer for geometry sizing when available; otherwise use the
     // first present frequency layer so all layers share the same point count.
@@ -418,12 +463,19 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || !qFuzzyCompare(node->width_, width())
                                  || !qFuzzyCompare(node->height_, height())
                                  || !qFuzzyCompare(node->devicePixelRatio_, devicePixelRatio)
+                                 || node->density_ != density_
+                                 || !qFuzzyCompare(node->lineWidth_, lineWidth_)
                                  || node->layerMask_ != layerMask;
 
     if (geometryChanged) {
+        // Wide GPU lines are unsupported by several Qt RHI backends. Render
+        // adjacent 1 px lines instead so thickness works without warnings.
+        node->geometry_.setLineWidth(1.0F);
+        const std::size_t strokeCopies = static_cast<std::size_t>(
+            std::max(1.0, std::ceil(lineWidth_)));
         const std::size_t activeLayers =
             (hasMix ? 1U : 0U) + (hasBass ? 1U : 0U) + (hasMid ? 1U : 0U) + (hasHigh ? 1U : 0U);
-        const auto vertexCount = peakCount * 2U * activeLayers;
+        const auto vertexCount = peakCount * 2U * activeLayers * strokeCopies;
         if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
             delete node;
             return nullptr;
@@ -483,44 +535,51 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             if (values.empty()) {
                 return;
             }
-            for (std::size_t index = 0U; index < peakCount; ++index) {
-                const double normalizedX = peakCount == 1U
-                                               ? 0.5
-                                               : static_cast<double>(index)
-                                                     / static_cast<double>(peakCount - 1U);
-                const float x = static_cast<float>(normalizedX * width());
-                const float amplitude = values[index] * center;
+            for (std::size_t copy = 0U; copy < strokeCopies; ++copy) {
+                const qreal offset = static_cast<qreal>(copy)
+                                     - static_cast<qreal>(strokeCopies - 1U) * 0.5;
+                for (std::size_t index = 0U; index < peakCount; ++index) {
+                    const double normalizedX = peakCount == 1U
+                                                   ? 0.5
+                                                   : static_cast<double>(index)
+                                                         / static_cast<double>(peakCount - 1U);
+                    const float x = static_cast<float>(std::clamp(
+                        normalizedX * width() + offset, 0.0, width()));
+                    const float amplitude = values[index] * center;
 
-                unsigned char red = 0;
-                unsigned char green = 0;
-                unsigned char blue = 0;
-                unsigned char playedAlpha = 255;
-                unsigned char unplayedAlpha = WaveformItem::unplayedAlpha();
-                if (color != nullptr) {
-                    red = color->red;
-                    green = color->green;
-                    blue = color->blue;
-                    playedAlpha = color->playedAlpha;
-                    unplayedAlpha = color->unplayedAlpha;
-                } else if (waveformColor_.isValid()) {
-                    red = static_cast<unsigned char>(waveformColor_.red());
-                    green = static_cast<unsigned char>(waveformColor_.green());
-                    blue = static_cast<unsigned char>(waveformColor_.blue());
-                } else {
-                    const Rgb c = gradientColor(normalizedX);
-                    red = static_cast<unsigned char>(c.red);
-                    green = static_cast<unsigned char>(c.green);
-                    blue = static_cast<unsigned char>(c.blue);
+                    unsigned char red = 0;
+                    unsigned char green = 0;
+                    unsigned char blue = 0;
+                    unsigned char playedAlpha = 255;
+                    unsigned char unplayedAlpha = WaveformItem::unplayedAlpha();
+                    if (color != nullptr) {
+                        red = color->red;
+                        green = color->green;
+                        blue = color->blue;
+                        playedAlpha = color->playedAlpha;
+                        unplayedAlpha = color->unplayedAlpha;
+                    } else if (waveformColor_.isValid()) {
+                        red = static_cast<unsigned char>(waveformColor_.red());
+                        green = static_cast<unsigned char>(waveformColor_.green());
+                        blue = static_cast<unsigned char>(waveformColor_.blue());
+                    } else {
+                        const Rgb c = gradientColor(normalizedX);
+                        red = static_cast<unsigned char>(c.red);
+                        green = static_cast<unsigned char>(c.green);
+                        blue = static_cast<unsigned char>(c.blue);
+                    }
+                    const auto alpha = static_cast<unsigned char>(
+                        index < playedCount ? playedAlpha : unplayedAlpha);
+                    const std::size_t vertex =
+                        vertexOffset + (copy * peakCount + index) * 2U;
+
+                    vertices[vertex].set(
+                        x, center - amplitude, red, green, blue, alpha);
+                    vertices[vertex + 1U].set(
+                        x, center + amplitude, red, green, blue, alpha);
                 }
-                const auto alpha = static_cast<unsigned char>(
-                    index < playedCount ? playedAlpha : unplayedAlpha);
-
-                vertices[vertexOffset + index * 2U].set(
-                    x, center - amplitude, red, green, blue, alpha);
-                vertices[vertexOffset + index * 2U + 1U].set(
-                    x, center + amplitude, red, green, blue, alpha);
             }
-            vertexOffset += peakCount * 2U;
+            vertexOffset += peakCount * 2U * strokeCopies;
         };
 
         writeLayer(mixValues, nullptr);
@@ -532,6 +591,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node->width_ = width();
         node->height_ = height();
         node->devicePixelRatio_ = devicePixelRatio;
+        node->density_ = density_;
+        node->lineWidth_ = lineWidth_;
         node->position_ = position_;
         node->duration_ = duration_;
         node->waveformColor_ = waveformColor_;
@@ -550,26 +611,32 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
+    const std::size_t strokeCopies = static_cast<std::size_t>(
+        std::max(1.0, std::ceil(node->lineWidth_)));
     std::size_t vertexOffset = 0U;
     if (hasMix) {
         updateMixVertexColors(
-            vertices + vertexOffset, peakCount, newPlayedCount, waveformColor_);
-        vertexOffset += peakCount * 2U;
+            vertices + vertexOffset, peakCount, newPlayedCount, waveformColor_,
+            strokeCopies);
+        vertexOffset += peakCount * 2U * strokeCopies;
     }
     if (hasBass) {
         updateLayerVertexColors(
-            vertices + vertexOffset, peakCount, newPlayedCount, kBassColor);
-        vertexOffset += peakCount * 2U;
+            vertices + vertexOffset, peakCount, newPlayedCount, kBassColor,
+            strokeCopies);
+        vertexOffset += peakCount * 2U * strokeCopies;
     }
     if (hasMid) {
         updateLayerVertexColors(
-            vertices + vertexOffset, peakCount, newPlayedCount, kMidColor);
-        vertexOffset += peakCount * 2U;
+            vertices + vertexOffset, peakCount, newPlayedCount, kMidColor,
+            strokeCopies);
+        vertexOffset += peakCount * 2U * strokeCopies;
     }
     if (hasHigh) {
         updateLayerVertexColors(
-            vertices + vertexOffset, peakCount, newPlayedCount, kHighColor);
-        vertexOffset += peakCount * 2U;
+            vertices + vertexOffset, peakCount, newPlayedCount, kHighColor,
+            strokeCopies);
+        vertexOffset += peakCount * 2U * strokeCopies;
     }
 
     node->position_ = position_;

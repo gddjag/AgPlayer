@@ -30,6 +30,12 @@ int main()
     session.set_mode(agplayer::PlaybackMode::Shuffle);
     assert(session.next_index() == 2);
 
+    session.set_index(2);
+    session.set_mode(agplayer::PlaybackMode::RepeatAll);
+    assert(session.next_index() == 0);
+    session.set_index(0);
+    assert(session.previous_index() == 2);
+
     session.set_index(1);
     assert(session.index() == 1);
     assert(session.current_path() == "b");

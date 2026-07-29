@@ -24,6 +24,16 @@ Rectangle {
     property alias muteButton: muteButton
     property alias volumeSlider: volumeSlider
 
+    function formatTime(ms): string {
+        if (ms <= 0)
+            return "00:00"
+        var totalSec = Math.floor(ms / 1000)
+        var min = Math.floor(totalSec / 60)
+        var sec = totalSec % 60
+        return (min < 10 ? "0" : "") + min + ":"
+                + (sec < 10 ? "0" : "") + sec
+    }
+
     function currentRow(): int {
         return LibraryModel.indexForTrackId(playback.currentTrackId)
     }
@@ -158,7 +168,8 @@ Rectangle {
                 RowLayout {
                     spacing: 1
                     Layout.alignment: Qt.AlignVCenter
-                    visible: root.currentRow() >= 0
+                    visible: SettingsController.autoReadRating
+                             && root.currentRow() >= 0
 
                     Repeater {
                         model: 5
@@ -270,7 +281,12 @@ Rectangle {
                 layers: ({})
                 position: playback.positionMs
                 duration: playback.durationMs
+                density: SettingsController.waveformDensity
+                lineWidth: SettingsController.waveformThickness
                 clip: true
+                ToolTip.visible: SettingsController.waveformHoverTimePreview
+                                 && hoverPosition >= 0
+                ToolTip.text: root.formatTime(hoverPosition)
             }
 
             Connections {
@@ -400,6 +416,8 @@ Rectangle {
                     return qsTr("Repeat one")
                 case PlaybackController.Shuffle:
                     return qsTr("Shuffle")
+                case PlaybackController.RepeatAll:
+                    return qsTr("Repeat all")
                 default:
                     return qsTr("Sequential")
                 }

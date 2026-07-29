@@ -54,12 +54,8 @@ QString SettingsController::defaultExportDirectory() const { return defaultExpor
 
 // Playback & Engine getters
 QString SettingsController::outputDevice() const { return outputDevice_; }
-bool SettingsController::audioExclusiveMode() const noexcept { return audioExclusiveMode_; }
 bool SettingsController::playButtonRgbGlow() const noexcept { return playButtonRgbGlow_; }
 int SettingsController::defaultPlaybackMode() const noexcept { return defaultPlaybackMode_; }
-bool SettingsController::gaplessPlayback() const noexcept { return gaplessPlayback_; }
-int SettingsController::crossfadeMs() const noexcept { return crossfadeMs_; }
-bool SettingsController::autoMatchSampleRate() const noexcept { return autoMatchSampleRate_; }
 bool SettingsController::autoReadBpm() const noexcept { return autoReadBpm_; }
 bool SettingsController::autoReadRating() const noexcept { return autoReadRating_; }
 
@@ -228,16 +224,6 @@ void SettingsController::setOutputDevice(const QString& value)
     emit outputDeviceChanged();
 }
 
-void SettingsController::setAudioExclusiveMode(bool value)
-{
-    if (audioExclusiveMode_ == value) {
-        return;
-    }
-    audioExclusiveMode_ = value;
-    persistValue(QStringLiteral("playback/audioExclusiveMode"), value);
-    emit audioExclusiveModeChanged();
-}
-
 void SettingsController::setPlayButtonRgbGlow(bool value)
 {
     if (playButtonRgbGlow_ == value) {
@@ -256,38 +242,8 @@ void SettingsController::setDefaultPlaybackMode(int value)
     }
     defaultPlaybackMode_ = value;
     persistValue(QStringLiteral("playback/defaultPlaybackMode"), value);
+    persistValue(QStringLiteral("playback/modeSchemaVersion"), 2);
     emit defaultPlaybackModeChanged();
-}
-
-void SettingsController::setGaplessPlayback(bool value)
-{
-    if (gaplessPlayback_ == value) {
-        return;
-    }
-    gaplessPlayback_ = value;
-    persistValue(QStringLiteral("playback/gaplessPlayback"), value);
-    emit gaplessPlaybackChanged();
-}
-
-void SettingsController::setCrossfadeMs(int value)
-{
-    value = clampValue(value, 0, 2);
-    if (crossfadeMs_ == value) {
-        return;
-    }
-    crossfadeMs_ = value;
-    persistValue(QStringLiteral("playback/crossfadeMs"), value);
-    emit crossfadeMsChanged();
-}
-
-void SettingsController::setAutoMatchSampleRate(bool value)
-{
-    if (autoMatchSampleRate_ == value) {
-        return;
-    }
-    autoMatchSampleRate_ = value;
-    persistValue(QStringLiteral("playback/autoMatchSampleRate"), value);
-    emit autoMatchSampleRateChanged();
 }
 
 void SettingsController::setAutoReadBpm(bool value)
@@ -654,12 +610,8 @@ void SettingsController::emitAllChanged()
     emit defaultExportDirectoryChanged();
 
     emit outputDeviceChanged();
-    emit audioExclusiveModeChanged();
     emit playButtonRgbGlowChanged();
     emit defaultPlaybackModeChanged();
-    emit gaplessPlaybackChanged();
-    emit crossfadeMsChanged();
-    emit autoMatchSampleRateChanged();
     emit autoReadBpmChanged();
     emit autoReadRatingChanged();
 
@@ -838,12 +790,22 @@ void SettingsController::load()
 
     settings_.beginGroup(QStringLiteral("playback"));
     outputDevice_ = settings_.value(QStringLiteral("outputDevice"), outputDevice_).toString();
-    audioExclusiveMode_ = settings_.value(QStringLiteral("audioExclusiveMode"), audioExclusiveMode_).toBool();
     playButtonRgbGlow_ = settings_.value(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_).toBool();
+    const bool hasStoredPlaybackMode =
+        settings_.contains(QStringLiteral("defaultPlaybackMode"));
+    const int playbackModeSchema =
+        settings_.value(QStringLiteral("modeSchemaVersion"), 1).toInt();
     defaultPlaybackMode_ = settings_.value(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_).toInt();
-    gaplessPlayback_ = settings_.value(QStringLiteral("gaplessPlayback"), gaplessPlayback_).toBool();
-    crossfadeMs_ = settings_.value(QStringLiteral("crossfadeMs"), crossfadeMs_).toInt();
-    autoMatchSampleRate_ = settings_.value(QStringLiteral("autoMatchSampleRate"), autoMatchSampleRate_).toBool();
+    if (hasStoredPlaybackMode && playbackModeSchema < 2) {
+        if (defaultPlaybackMode_ == 1) {
+            defaultPlaybackMode_ = 2;
+        } else if (defaultPlaybackMode_ == 2) {
+            defaultPlaybackMode_ = 1;
+        }
+        settings_.setValue(QStringLiteral("defaultPlaybackMode"),
+                           defaultPlaybackMode_);
+        settings_.setValue(QStringLiteral("modeSchemaVersion"), 2);
+    }
     autoReadBpm_ = settings_.value(QStringLiteral("autoReadBpm"), autoReadBpm_).toBool();
     autoReadRating_ = settings_.value(QStringLiteral("autoReadRating"), autoReadRating_).toBool();
     settings_.endGroup();
@@ -894,7 +856,6 @@ void SettingsController::load()
     listWindowPosition_ = clampValue(listWindowPosition_, 0, 3);
     closeBehavior_ = clampValue(closeBehavior_, 0, 1);
     defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
-    crossfadeMs_ = clampValue(crossfadeMs_, 0, 2);
     themeMode_ = clampValue(themeMode_, 0, 2);
     waveformMode_ = clampValue(waveformMode_, 0, 2);
     waveformDensity_ = clampValue(waveformDensity_, 0, 2);
@@ -933,12 +894,9 @@ void SettingsController::saveAll()
 
     settings_.beginGroup(QStringLiteral("playback"));
     persistValue(QStringLiteral("outputDevice"), outputDevice_);
-    persistValue(QStringLiteral("audioExclusiveMode"), audioExclusiveMode_);
     persistValue(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_);
     persistValue(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_);
-    persistValue(QStringLiteral("gaplessPlayback"), gaplessPlayback_);
-    persistValue(QStringLiteral("crossfadeMs"), crossfadeMs_);
-    persistValue(QStringLiteral("autoMatchSampleRate"), autoMatchSampleRate_);
+    persistValue(QStringLiteral("modeSchemaVersion"), 2);
     persistValue(QStringLiteral("autoReadBpm"), autoReadBpm_);
     persistValue(QStringLiteral("autoReadRating"), autoReadRating_);
     settings_.endGroup();
@@ -995,12 +953,8 @@ void SettingsController::restoreDefaults()
     defaultExportDirectory_ = defaultExportDir();
 
     outputDevice_ = QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907");
-    audioExclusiveMode_ = false;
     playButtonRgbGlow_ = true;
     defaultPlaybackMode_ = 3;
-    gaplessPlayback_ = true;
-    crossfadeMs_ = 0;
-    autoMatchSampleRate_ = true;
     autoReadBpm_ = true;
     autoReadRating_ = true;
 

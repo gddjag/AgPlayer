@@ -19,7 +19,8 @@ enum class PlaybackState {
 enum class PlaybackMode {
     Sequential,
     RepeatOne,
-    Shuffle
+    Shuffle,
+    RepeatAll
 };
 
 class PlaybackSession final {

@@ -295,7 +295,8 @@ QString FormatConverter::formatDuration(qint64 ms) const
 QString FormatConverter::computeOutputPath(const QString& inputPath,
                                            const QString& outputFormat,
                                            const QString& outputDir,
-                                           const QSet<QString>& reservedPaths) const
+                                           const QSet<QString>& reservedPaths,
+                                           bool overwriteExisting) const
 {
     const QFileInfo info(inputPath);
     const FormatInfo fi = format_info(outputFormat);
@@ -309,7 +310,9 @@ QString FormatConverter::computeOutputPath(const QString& inputPath,
     QString candidate = dir + QStringLiteral("/") + baseName
                         + QStringLiteral(".") + QString::fromLatin1(fi.extension);
     int counter = 1;
-    while (QFileInfo::exists(candidate)
+    while ((!overwriteExisting && QFileInfo::exists(candidate))
+           || QDir::cleanPath(candidate).compare(
+                  QDir::cleanPath(inputPath), Qt::CaseInsensitive) == 0
            || reservedPaths.contains(
                QDir::cleanPath(candidate).toCaseFolded())) {
         candidate = dir + QStringLiteral("/") + baseName
@@ -363,6 +366,7 @@ void FormatConverter::start(const QString& outputFormat,
     }
     emit filesChanged();
 
+    const bool overwriteExisting = overwriteExisting_;
     auto* watcher = new QFutureWatcher<void>(this);
     watcher_ = watcher;
     connect(watcher, &QFutureWatcher<void>::finished, this,
@@ -383,10 +387,10 @@ void FormatConverter::start(const QString& outputFormat,
 
     QFuture<void> future = QtConcurrent::run(
         [this, outputFormat, bitRate, sampleRate, channels, outputDir,
-         keepMetadata, volumeNormalize, extractAudio]() {
+         keepMetadata, volumeNormalize, extractAudio, overwriteExisting]() {
             runTranscode(outputFormat, bitRate, sampleRate, channels,
                          outputDir, keepMetadata, volumeNormalize,
-                         extractAudio);
+                         extractAudio, overwriteExisting);
         });
     watcher->setFuture(future);
 }
@@ -398,7 +402,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    const QString& outputDir,
                                    bool keepMetadata,
                                    bool volumeNormalize,
-                                   bool extractAudio)
+                                   bool extractAudio,
+                                   bool overwriteExisting)
 {
     const FormatInfo fi = format_info(outputFormat);
     const QByteArray codecName = QByteArray(fi.codec_name);
@@ -418,7 +423,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
     QSet<QString> reservedPaths;
     for (const QString& inputPath : inputPaths) {
         const QString outputPath = computeOutputPath(
-            inputPath, outputFormat, outputDir, reservedPaths);
+            inputPath, outputFormat, outputDir, reservedPaths,
+            overwriteExisting);
         outputPaths.push_back(outputPath);
         reservedPaths.insert(QDir::cleanPath(outputPath).toCaseFolded());
     }

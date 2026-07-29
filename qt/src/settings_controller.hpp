@@ -38,18 +38,10 @@ class SettingsController final : public QObject {
     // Playback & Engine
     Q_PROPERTY(QString outputDevice READ outputDevice WRITE setOutputDevice
                    NOTIFY outputDeviceChanged)
-    Q_PROPERTY(bool audioExclusiveMode READ audioExclusiveMode WRITE setAudioExclusiveMode
-                   NOTIFY audioExclusiveModeChanged)
     Q_PROPERTY(bool playButtonRgbGlow READ playButtonRgbGlow WRITE setPlayButtonRgbGlow
                    NOTIFY playButtonRgbGlowChanged)
     Q_PROPERTY(int defaultPlaybackMode READ defaultPlaybackMode WRITE setDefaultPlaybackMode
                    NOTIFY defaultPlaybackModeChanged)
-    Q_PROPERTY(bool gaplessPlayback READ gaplessPlayback WRITE setGaplessPlayback
-                   NOTIFY gaplessPlaybackChanged)
-    Q_PROPERTY(int crossfadeMs READ crossfadeMs WRITE setCrossfadeMs
-                   NOTIFY crossfadeMsChanged)
-    Q_PROPERTY(bool autoMatchSampleRate READ autoMatchSampleRate WRITE setAutoMatchSampleRate
-                   NOTIFY autoMatchSampleRateChanged)
     Q_PROPERTY(bool autoReadBpm READ autoReadBpm WRITE setAutoReadBpm NOTIFY autoReadBpmChanged)
     Q_PROPERTY(bool autoReadRating READ autoReadRating WRITE setAutoReadRating
                    NOTIFY autoReadRatingChanged)
@@ -125,12 +117,8 @@ public:
 
     // Playback & Engine getters
     QString outputDevice() const;
-    bool audioExclusiveMode() const noexcept;
     bool playButtonRgbGlow() const noexcept;
     int defaultPlaybackMode() const noexcept;
-    bool gaplessPlayback() const noexcept;
-    int crossfadeMs() const noexcept;
-    bool autoMatchSampleRate() const noexcept;
     bool autoReadBpm() const noexcept;
     bool autoReadRating() const noexcept;
 
@@ -184,12 +172,8 @@ public:
 
     // Playback & Engine setters
     void setOutputDevice(const QString& value);
-    void setAudioExclusiveMode(bool value);
     void setPlayButtonRgbGlow(bool value);
     void setDefaultPlaybackMode(int value);
-    void setGaplessPlayback(bool value);
-    void setCrossfadeMs(int value);
-    void setAutoMatchSampleRate(bool value);
     void setAutoReadBpm(bool value);
     void setAutoReadRating(bool value);
 
@@ -251,12 +235,8 @@ signals:
     void defaultExportDirectoryChanged();
 
     void outputDeviceChanged();
-    void audioExclusiveModeChanged();
     void playButtonRgbGlowChanged();
     void defaultPlaybackModeChanged();
-    void gaplessPlaybackChanged();
-    void crossfadeMsChanged();
-    void autoMatchSampleRateChanged();
     void autoReadBpmChanged();
     void autoReadRatingChanged();
 
@@ -327,12 +307,8 @@ private:
 
     // Playback & Engine
     QString outputDevice_ = QStringLiteral("\u81EA\u52A8 / \u7CFB\u7EDF\u9ED8\u8BA4\u8BBE\u5907");
-    bool audioExclusiveMode_ = false;
     bool playButtonRgbGlow_ = true;
     int defaultPlaybackMode_ = 3;
-    bool gaplessPlayback_ = true;
-    int crossfadeMs_ = 0;
-    bool autoMatchSampleRate_ = true;
     bool autoReadBpm_ = true;
     bool autoReadRating_ = true;
 

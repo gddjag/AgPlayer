@@ -15,6 +15,15 @@ Rectangle {
     color: Theme.background
 
     property var adjuster: SpeedAdjuster
+    Component.onCompleted: adjuster.keepPitch =
+                               SettingsController.keepPitchWhileSpeedChange
+
+    Connections {
+        target: SettingsController
+        function onKeepPitchWhileSpeedChangeChanged() {
+            adjuster.keepPitch = SettingsController.keepPitchWhileSpeedChange
+        }
+    }
 
     // Default segment labels shown in the reference design.
     property var defaultSegments: [
@@ -1218,6 +1227,7 @@ Rectangle {
                     TextField {
                         id: outputDirField
                         Layout.fillWidth: true
+                        text: SettingsController.defaultOutputDirectory
                         color: Theme.primaryText
                         font.pixelSize: 12
                         font.family: Theme.fontPrimary

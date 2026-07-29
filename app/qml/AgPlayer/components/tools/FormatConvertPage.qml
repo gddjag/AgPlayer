@@ -441,7 +441,16 @@ Rectangle {
                     ]
                     textRole: "label"
                     valueRole: "key"
-                    currentIndex: 0
+                    currentIndex: {
+                        const value = SettingsController.defaultTranscodeFormat.toLowerCase()
+                        if (value.startsWith("wav")) return 1
+                        if (value.startsWith("flac")) return 2
+                        if (value.startsWith("aac")) return 3
+                        if (value.startsWith("m4a")) return 4
+                        if (value.startsWith("ogg")) return 5
+                        if (value.startsWith("opus")) return 6
+                        return 0
+                    }
 
                     contentItem: Text {
                         text: formatCombo.currentText
@@ -480,7 +489,16 @@ Rectangle {
                     ]
                     textRole: "label"
                     valueRole: "value"
-                    currentIndex: 5
+                    currentIndex: {
+                        const value = SettingsController.defaultTranscodeFormat
+                        if (value.includes("64kbps")) return 0
+                        if (value.includes("96kbps")) return 1
+                        if (value.includes("128kbps")) return 2
+                        if (value.includes("192kbps")) return 3
+                        if (value.includes("256kbps")) return 4
+                        if (value.toLowerCase().includes("lossless")) return 6
+                        return 5
+                    }
 
                     contentItem: Text {
                         text: bitRateCombo.currentText
@@ -518,7 +536,14 @@ Rectangle {
                     ]
                     textRole: "label"
                     valueRole: "value"
-                    currentIndex: 1
+                    currentIndex: {
+                        const value = SettingsController.defaultTranscodeFormat
+                        if (value.includes("48kHz")) return 2
+                        if (value.includes("22.05kHz")) return 3
+                        if (value.includes("16kHz")) return 4
+                        if (value.includes("8kHz")) return 5
+                        return 1
+                    }
 
                     contentItem: Text {
                         text: sampleRateCombo.currentText
@@ -553,7 +578,8 @@ Rectangle {
                     ]
                     textRole: "label"
                     valueRole: "value"
-                    currentIndex: 2
+                    currentIndex: SettingsController.defaultTranscodeFormat
+                                  .toLowerCase().includes("mono") ? 1 : 2
 
                     contentItem: Text {
                         text: channelsCombo.currentText
@@ -581,7 +607,8 @@ Rectangle {
 
             CheckBox {
                 id: keepMetadataCheck
-                checked: true
+                objectName: "keepMetadataCheck"
+                checked: SettingsController.preserveMetadata
                 text: qsTr("Keep metadata (title / artist / album / cover)")
 
                 indicator: Rectangle {
@@ -648,8 +675,9 @@ Rectangle {
 
             CheckBox {
                 id: extractAudioCheck
+                objectName: "extractAudioCheck"
                 text: qsTr("Extract audio from video")
-                checked: true
+                checked: false
 
                 indicator: Rectangle {
                     implicitWidth: 16
@@ -698,6 +726,7 @@ Rectangle {
             TextField {
                 id: outputDirField
                 Layout.fillWidth: true
+                text: SettingsController.defaultOutputDirectory
                 color: Theme.primaryText
                 font.pixelSize: 12
                 font.family: Theme.fontPrimary

@@ -193,10 +193,17 @@ TestCase {
         verify(sectionList, "settings navigation must expose a scrollable list")
         verify(scroll.contentHeight > scroll.availableHeight,
                "settings content must remain reachable in the compact main window")
-        verify(sectionList.contentHeight > sectionList.height,
-               "all settings sections must remain reachable in the compact main window")
-        verify(sectionList.interactive,
-               "settings navigation must accept scrolling to cache and about sections")
+        compare(sectionList.count, 7,
+                "all settings sections must be present")
+        verify(sectionList.contentHeight <= sectionList.height
+               || sectionList.interactive,
+               "settings sections must either fit or remain scrollable")
+        const associationFlow = findChild(page, "fileAssociationFlow")
+        const oggAssociation = findChild(page, "oggAssociationCheck")
+        verify(associationFlow, "file associations must expose their layout")
+        verify(oggAssociation, "the final OGG association must be reachable")
+        verify(oggAssociation.x + oggAssociation.width <= associationFlow.width + 0.5,
+               "all file associations must fit without horizontal clipping")
         SettingsController.themeMode = 2
         page.close()
         tryCompare(SettingsController, "themeMode", 1)

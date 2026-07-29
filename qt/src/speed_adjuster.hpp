@@ -61,6 +61,7 @@ public:
     bool beatAlign() const noexcept;
     void setBeatAlign(bool value);
     QVariantList markers() const noexcept;
+    void setOverwriteExisting(bool value) noexcept { overwriteExisting_ = value; }
 
     Q_INVOKABLE void loadFile(const QUrl& url);
     Q_INVOKABLE void start(double speedRatio, const QString& outputDir);
@@ -111,6 +112,7 @@ private:
     // background task. cancel() flips the flag on the token pointer.
     std::atomic<ag_cancel_token*> token_{nullptr};
     QPointer<QFutureWatcher<int>> watcher_;
+    bool overwriteExisting_ = false;
 
     void setBusy(bool value);
     void setProgress(double value);

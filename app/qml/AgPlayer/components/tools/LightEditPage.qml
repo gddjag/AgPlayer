@@ -26,6 +26,15 @@ Rectangle {
     readonly property bool previewIsCurrent:
         selectedHasFile
         && AudioPreviewController.isCurrentSource(selectedTrackUrl)
+    Component.onCompleted: editor.keepPitch =
+                               SettingsController.keepPitchWhileSpeedChange
+
+    Connections {
+        target: SettingsController
+        function onKeepPitchWhileSpeedChangeChanged() {
+            editor.keepPitch = SettingsController.keepPitchWhileSpeedChange
+        }
+    }
 
     readonly property var trackColors: [
         Theme.waveformRed,
