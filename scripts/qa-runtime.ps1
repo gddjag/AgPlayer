@@ -36,3 +36,36 @@ function Get-AgPlayerRuntimePaths {
         (Join-Path $BuildRoot "vcpkg_installed/x64-windows/bin")
     ) | Where-Object { Test-Path -LiteralPath $_ }
 }
+
+function Start-AgPlayerProcess {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$BuildRoot,
+        [Parameter(Mandatory = $true)][string]$CachePath,
+        [Parameter(Mandatory = $true)][string]$AppPath,
+        [string[]]$ArgumentList = @(),
+        [switch]$Wait
+    )
+
+    $runtimePaths = Get-AgPlayerRuntimePaths `
+        -BuildRoot $BuildRoot -CachePath $CachePath
+    $originalPath = $env:Path
+    try {
+        $env:Path = ($runtimePaths -join ";") + ";" + $originalPath
+        $startParameters = @{
+            FilePath = $AppPath
+            PassThru = $true
+        }
+        if ($ArgumentList.Count -gt 0) {
+            $startParameters.ArgumentList = $ArgumentList
+        }
+        $process = Start-Process @startParameters
+        if ($Wait) {
+            $process.WaitForExit()
+        }
+        return $process
+    }
+    finally {
+        $env:Path = $originalPath
+    }
+}

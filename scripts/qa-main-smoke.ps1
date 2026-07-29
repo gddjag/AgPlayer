@@ -17,53 +17,45 @@ foreach ($requiredPath in @($appPath, $fixturePath, $cachePath)) {
     }
 }
 
-$runtimePaths = Get-AgPlayerRuntimePaths `
-    -BuildRoot $buildRoot -CachePath $cachePath
-
 $smokeRoot = Join-Path ([System.IO.Path]::GetTempPath()) `
     ("agplayer-main-smoke-" + [Guid]::NewGuid().ToString("N"))
 $screenshotPath = Join-Path $smokeRoot "main.png"
 $logPath = Join-Path $smokeRoot "agplayer.log"
-$originalPath = $env:Path
-
 New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
 
-try {
-    $env:Path = ($runtimePaths -join ";") + ";" + $originalPath
-    $process = Start-Process -FilePath $appPath `
-        -ArgumentList @(
+$process = Start-AgPlayerProcess `
+    -BuildRoot $buildRoot `
+    -CachePath $cachePath `
+    -AppPath $appPath `
+    -ArgumentList @(
             "--qa-test-mode",
             "--qa-log", $logPath,
             "--qa-play", $fixturePath,
             "--qa-screenshot-main", $screenshotPath
         ) `
-        -Wait -PassThru
+    -Wait
 
-    if ($process.ExitCode -ne 0) {
-        throw "AgPlayer smoke test exited with code $($process.ExitCode)"
-    }
-    if (-not (Test-Path -LiteralPath $screenshotPath) -or
-        (Get-Item -LiteralPath $screenshotPath).Length -lt 10000) {
-        throw "Main-window screenshot was not created: $screenshotPath"
-    }
-    if (-not (Test-Path -LiteralPath $logPath)) {
-        throw "Explicit QA log was not created: $logPath"
-    }
-
-    $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $logPath
-    if ($logText -match "\[(WARN|ERROR|FATAL)\]") {
-        throw "Runtime warnings or errors were recorded:`n$logText"
-    }
-
-    [pscustomobject]@{
-        Executable = $appPath
-        Fixture = $fixturePath
-        Screenshot = $screenshotPath
-        ScreenshotBytes = (Get-Item -LiteralPath $screenshotPath).Length
-        Log = $logPath
-        Result = "PASS"
-    }
+if ($process.ExitCode -ne 0) {
+    throw "AgPlayer smoke test exited with code $($process.ExitCode)"
 }
-finally {
-    $env:Path = $originalPath
+if (-not (Test-Path -LiteralPath $screenshotPath) -or
+    (Get-Item -LiteralPath $screenshotPath).Length -lt 10000) {
+    throw "Main-window screenshot was not created: $screenshotPath"
+}
+if (-not (Test-Path -LiteralPath $logPath)) {
+    throw "Explicit QA log was not created: $logPath"
+}
+
+$logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $logPath
+if ($logText -match "\[(WARN|ERROR|FATAL)\]") {
+    throw "Runtime warnings or errors were recorded:`n$logText"
+}
+
+[pscustomobject]@{
+    Executable = $appPath
+    Fixture = $fixturePath
+    Screenshot = $screenshotPath
+    ScreenshotBytes = (Get-Item -LiteralPath $screenshotPath).Length
+    Log = $logPath
+    Result = "PASS"
 }
