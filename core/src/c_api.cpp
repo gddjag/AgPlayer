@@ -434,6 +434,17 @@ int ag_player_exclusive_mode_active(const ag_player* player)
                : 0;
 }
 
+ag_result ag_player_set_transition_fade_ms(ag_player* player,
+                                           const int milliseconds)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] {
+                     return player->context.set_transition_fade_ms(
+                         milliseconds);
+                 });
+}
+
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)
 {
     if (out_metadata == nullptr) {

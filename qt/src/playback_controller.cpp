@@ -377,6 +377,22 @@ bool PlaybackController::setOutputDevice(const QString& deviceId,
     return true;
 }
 
+bool PlaybackController::setTransitionFadeMs(const int milliseconds)
+{
+    if (player_ == nullptr) {
+        setErrorMessage(QStringLiteral("Playback core is unavailable"));
+        return false;
+    }
+    const ag_result result =
+        ag_player_set_transition_fade_ms(player_, milliseconds);
+    if (result != AG_OK) {
+        runCommand(result);
+        return false;
+    }
+    setErrorMessage({});
+    return true;
+}
+
 void PlaybackController::pollSnapshot()
 {
     if (player_ == nullptr) {

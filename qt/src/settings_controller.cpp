@@ -54,6 +54,7 @@ QStringList SettingsController::fileAssociations() const { return fileAssociatio
 // Playback & Engine getters
 QString SettingsController::outputDevice() const { return outputDevice_; }
 bool SettingsController::exclusiveMode() const noexcept { return exclusiveMode_; }
+int SettingsController::transitionFadeMs() const noexcept { return transitionFadeMs_; }
 bool SettingsController::playButtonRgbGlow() const noexcept { return playButtonRgbGlow_; }
 int SettingsController::defaultPlaybackMode() const noexcept { return defaultPlaybackMode_; }
 bool SettingsController::autoReadBpm() const noexcept { return autoReadBpm_; }
@@ -222,6 +223,19 @@ void SettingsController::setExclusiveMode(const bool value)
     exclusiveMode_ = value;
     persistValue(QStringLiteral("playback/exclusiveMode"), value);
     emit exclusiveModeChanged();
+}
+
+void SettingsController::setTransitionFadeMs(const int value)
+{
+    if (value != 0 && value != 200 && value != 500) {
+        return;
+    }
+    if (transitionFadeMs_ == value) {
+        return;
+    }
+    transitionFadeMs_ = value;
+    persistValue(QStringLiteral("playback/transitionFadeMs"), value);
+    emit transitionFadeMsChanged();
 }
 
 void SettingsController::setPlayButtonRgbGlow(bool value)
@@ -610,6 +624,7 @@ void SettingsController::emitAllChanged()
 
     emit outputDeviceChanged();
     emit exclusiveModeChanged();
+    emit transitionFadeMsChanged();
     emit playButtonRgbGlowChanged();
     emit defaultPlaybackModeChanged();
     emit autoReadBpmChanged();
@@ -796,6 +811,15 @@ void SettingsController::load()
     }
     exclusiveMode_ =
         settings_.value(QStringLiteral("exclusiveMode"), exclusiveMode_).toBool();
+    transitionFadeMs_ =
+        settings_.value(QStringLiteral("transitionFadeMs"),
+                        transitionFadeMs_).toInt();
+    if (transitionFadeMs_ != 0 && transitionFadeMs_ != 200
+        && transitionFadeMs_ != 500) {
+        transitionFadeMs_ = 200;
+        settings_.setValue(QStringLiteral("transitionFadeMs"),
+                           transitionFadeMs_);
+    }
     playButtonRgbGlow_ = settings_.value(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_).toBool();
     const bool hasStoredPlaybackMode =
         settings_.contains(QStringLiteral("defaultPlaybackMode"));
@@ -919,6 +943,7 @@ void SettingsController::saveAll()
     settings_.beginGroup(QStringLiteral("playback"));
     persistValue(QStringLiteral("outputDevice"), outputDevice_);
     persistValue(QStringLiteral("exclusiveMode"), exclusiveMode_);
+    persistValue(QStringLiteral("transitionFadeMs"), transitionFadeMs_);
     persistValue(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_);
     persistValue(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_);
     persistValue(QStringLiteral("modeSchemaVersion"), 2);
@@ -977,6 +1002,7 @@ void SettingsController::restoreDefaults()
         QStringLiteral("ogg")};
     outputDevice_.clear();
     exclusiveMode_ = false;
+    transitionFadeMs_ = 200;
     playButtonRgbGlow_ = true;
     defaultPlaybackMode_ = 3;
     autoReadBpm_ = true;

@@ -40,6 +40,8 @@ void PlaybackControllerTest::outputDevicesAreEnumeratedAndApplied()
         QVERIFY(!controller.outputDevices().isEmpty());
         QCOMPARE(controller.outputDevices().size(),
                  controller.outputDeviceIds().size());
+        QVERIFY(controller.setTransitionFadeMs(200));
+        QVERIFY(!controller.setTransitionFadeMs(100));
         QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
         controller.play();
         QTRY_COMPARE(controller.state(), PlaybackController::Playing);

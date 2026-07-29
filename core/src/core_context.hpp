@@ -35,6 +35,7 @@ public:
     ag_result set_output_device(std::string utf8_id,
                                 bool exclusive) noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
+    ag_result set_transition_fade_ms(int milliseconds) noexcept;
 
 private:
     ag_result record(ag_result result, const char* operation) noexcept;

@@ -1454,61 +1454,61 @@
     </message>
     <message>
         <location line="-933"/>
-        <location line="+1047"/>
+        <location line="+1071"/>
         <source>外观与波形</source>
         <translation>外观与波形</translation>
     </message>
     <message>
-        <location line="-1047"/>
-        <location line="+1048"/>
+        <location line="-1071"/>
+        <location line="+1072"/>
         <source>外观</source>
         <translation>外观</translation>
     </message>
     <message>
-        <location line="-1047"/>
-        <location line="+1191"/>
+        <location line="-1071"/>
+        <location line="+1215"/>
         <source>音频工具预设</source>
         <translation>音频工具预设</translation>
     </message>
     <message>
-        <location line="-1191"/>
-        <location line="+1192"/>
+        <location line="-1215"/>
+        <location line="+1216"/>
         <source>音频工具</source>
         <translation>音频工具</translation>
     </message>
     <message>
-        <location line="-1191"/>
-        <location line="+1290"/>
+        <location line="-1215"/>
+        <location line="+1314"/>
         <source>快捷键设置</source>
         <translation>快捷键设置</translation>
     </message>
     <message>
-        <location line="-1290"/>
-        <location line="+1291"/>
+        <location line="-1314"/>
+        <location line="+1315"/>
         <source>快捷键</source>
         <translation>快捷键</translation>
     </message>
     <message>
-        <location line="-1290"/>
-        <location line="+1398"/>
+        <location line="-1314"/>
+        <location line="+1422"/>
         <source>缓存与数据</source>
         <translation>缓存与数据</translation>
     </message>
     <message>
-        <location line="-1398"/>
-        <location line="+1399"/>
+        <location line="-1422"/>
+        <location line="+1423"/>
         <source>缓存</source>
         <translation>缓存</translation>
     </message>
     <message>
-        <location line="-1398"/>
-        <location line="+1559"/>
+        <location line="-1422"/>
+        <location line="+1583"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>关于</translation>
     </message>
     <message>
-        <location line="-1522"/>
+        <location line="-1546"/>
         <source>确认清空缓存</source>
         <translation>确认清空缓存</translation>
     </message>
@@ -1714,6 +1714,26 @@
     </message>
     <message>
         <location line="+15"/>
+        <source>自动切歌淡入淡出</source>
+        <translation>自动切歌淡入淡出</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>关闭</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>200 毫秒</source>
+        <translation>200 毫秒</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>500 毫秒</source>
+        <translation>500 毫秒</translation>
+    </message>
+    <message>
+        <location line="+17"/>
         <source>自动读取歌曲 BPM</source>
         <translation>自动读取歌曲 BPM</translation>
     </message>
@@ -2293,7 +2313,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+334"/>
+        <location filename="../app/main.cpp" line="+340"/>
         <source>Show AgPlayer</source>
         <translation>显示 AgPlayer</translation>
     </message>

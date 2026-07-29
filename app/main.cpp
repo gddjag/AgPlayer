@@ -207,6 +207,12 @@ int main(int argc, char* argv[])
                          &app, applyOutputDevice);
         QObject::connect(&settings, &SettingsController::exclusiveModeChanged,
                          &app, applyOutputDevice);
+        playback.setTransitionFadeMs(settings.transitionFadeMs());
+        QObject::connect(
+            &settings, &SettingsController::transitionFadeMsChanged,
+            &app, [&settings, &playback]() {
+                playback.setTransitionFadeMs(settings.transitionFadeMs());
+            });
         playback.setMode(static_cast<PlaybackController::Mode>(
             settings.defaultPlaybackMode()));
         QObject::connect(&settings, &SettingsController::defaultPlaybackModeChanged,

@@ -112,6 +112,7 @@ int main(const int argc, char** argv)
     AG_CHECK(argc == 4);
     (void)argc;
     agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
+    AG_CHECK(engine.set_transition_fade_ms(0) == AG_OK);
     AG_CHECK(engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
     AG_CHECK(engine.set_mode(agplayer::PlaybackMode::Sequential) == AG_OK);
     AG_CHECK(engine.previous() == AG_INVALID_ARGUMENT);
@@ -125,6 +126,65 @@ int main(const int argc, char** argv)
     const agplayer::EngineSnapshot internal_snapshot = engine.snapshot();
     AG_CHECK(internal_snapshot.track_index == 1U);
     AG_CHECK(internal_snapshot.track_count == 2U);
+
+    {
+        agplayer::AudioEngine fade_engine(agplayer::AudioBackend::Manual,
+                                          8'192U);
+        AG_CHECK(fade_engine.set_transition_fade_ms(200) == AG_OK);
+        AG_CHECK(fade_engine.set_transition_fade_ms(100)
+                 == AG_INVALID_ARGUMENT);
+        AG_CHECK(fade_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+        AG_CHECK(fade_engine.play() == AG_OK);
+        const std::vector<float> faded =
+            capture_realtime(fade_engine, sample_rate * 2U);
+        float before_boundary_peak = 0.0F;
+        float before_away_peak = 0.0F;
+        float near_boundary_peak = 0.0F;
+        float away_from_boundary_peak = 0.0F;
+        for (std::size_t frame = 0U; frame < 256U; ++frame) {
+            before_boundary_peak = std::max(
+                before_boundary_peak,
+                std::abs(faded[boundary - (frame + 1U) * channels]));
+            before_away_peak = std::max(
+                before_away_peak,
+                std::abs(faded[boundary
+                               - (sample_rate / 10U + frame) * channels]));
+            near_boundary_peak = std::max(
+                near_boundary_peak,
+                std::abs(faded[boundary + frame * channels]));
+            away_from_boundary_peak = std::max(
+                away_from_boundary_peak,
+                std::abs(faded[boundary
+                               + (sample_rate / 10U + frame) * channels]));
+        }
+        AG_CHECK(before_boundary_peak < before_away_peak * 0.25F);
+        AG_CHECK(near_boundary_peak < away_from_boundary_peak * 0.25F);
+    }
+
+    {
+        agplayer::AudioEngine fade_engine(agplayer::AudioBackend::Manual,
+                                          4'096U);
+        AG_CHECK(fade_engine.set_transition_fade_ms(500) == AG_OK);
+        AG_CHECK(fade_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+        AG_CHECK(fade_engine.play() == AG_OK);
+        const std::vector<float> faded =
+            capture_realtime(fade_engine, sample_rate * 2U);
+        const auto peak_at = [&faded, boundary](const std::size_t offset) {
+            float peak = 0.0F;
+            for (std::size_t frame = 0U; frame < 256U; ++frame) {
+                peak = std::max(
+                    peak,
+                    std::abs(faded[boundary
+                                   + (offset + frame) * channels]));
+            }
+            return peak;
+        };
+        const float near_peak = peak_at(0U);
+        const float middle_peak = peak_at(sample_rate / 4U);
+        const float far_peak = peak_at(sample_rate * 9U / 20U);
+        AG_CHECK(near_peak < middle_peak * 0.25F);
+        AG_CHECK(middle_peak < far_peak * 0.75F);
+    }
 
     {
         agplayer::AudioEngine realtime_engine(agplayer::AudioBackend::Manual,

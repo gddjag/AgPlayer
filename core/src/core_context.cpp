@@ -121,6 +121,13 @@ bool CoreContext::exclusive_mode_active() const noexcept
     return audio_engine_.exclusive_mode_active();
 }
 
+ag_result CoreContext::set_transition_fade_ms(
+    const int milliseconds) noexcept
+{
+    return record(audio_engine_.set_transition_fade_ms(milliseconds),
+                  "transition fade change failed");
+}
+
 ag_result CoreContext::record(const ag_result result,
                               const char* operation) noexcept
 {

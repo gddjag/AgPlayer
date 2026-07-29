@@ -236,9 +236,16 @@ TestCase {
         var combo = findChild(page, "outputDeviceCombo")
         var exclusive = findChild(page, "exclusiveModeSwitch")
         var fallback = findChild(page, "exclusiveFallbackLabel")
+        var fade = findChild(page, "transitionFadeCombo")
         verify(combo, "output device combo should exist")
         verify(exclusive, "exclusive mode control should exist")
         verify(fallback, "exclusive fallback status should exist")
+        verify(fade, "transition fade selector should exist")
+        SettingsController.transitionFadeMs = 500
+        tryCompare(fade, "currentValue", 500)
+        SettingsController.transitionFadeMs = 0
+        tryCompare(fade, "currentValue", 0)
+        SettingsController.transitionFadeMs = 200
         verify(combo.valueModel.length
                === PlaybackController.outputDevices.length + 1,
                "device combo should expose system default plus enumerated devices")

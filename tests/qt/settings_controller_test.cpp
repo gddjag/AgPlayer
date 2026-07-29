@@ -132,10 +132,14 @@ void SettingsControllerTest::playbackDeviceSettingsPersistAndMigrateDefaultLabel
         QCOMPARE(settings.exclusiveMode(), false);
         settings.setOutputDevice(QStringLiteral("Test Device"));
         settings.setExclusiveMode(true);
+        settings.setTransitionFadeMs(500);
+        settings.setTransitionFadeMs(100);
+        QCOMPARE(settings.transitionFadeMs(), 500);
     }
     SettingsController reloaded;
     QCOMPARE(reloaded.outputDevice(), QStringLiteral("Test Device"));
     QCOMPARE(reloaded.exclusiveMode(), true);
+    QCOMPARE(reloaded.transitionFadeMs(), 500);
     persisted.clear();
 }
 

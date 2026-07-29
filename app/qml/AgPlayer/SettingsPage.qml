@@ -1048,7 +1048,7 @@ Popup {
 
             SettingCard {
                 title: qsTr("播放行为")
-                Layout.preferredHeight: 210
+                Layout.preferredHeight: 250
 
                 SettingSwitch {
                     text: qsTr("播放键 RGB 光晕")
@@ -1075,6 +1075,30 @@ Popup {
                             return 0
                         }
                         onActivated: SettingsController.defaultPlaybackMode = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("自动切歌淡入淡出")
+                    SettingCombo {
+                        objectName: "transitionFadeCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("关闭"), value: 0 },
+                            { text: qsTr("200 毫秒"), value: 200 },
+                            { text: qsTr("500 毫秒"), value: 500 }
+                        ]
+                        currentIndex: {
+                            for (let i = 0; i < valueModel.length; ++i) {
+                                if (valueModel[i].value
+                                        === SettingsController.transitionFadeMs) {
+                                    return i
+                                }
+                            }
+                            return 1
+                        }
+                        onActivated: SettingsController.transitionFadeMs =
+                                         currentValue
                     }
                 }
 

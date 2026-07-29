@@ -83,6 +83,7 @@ public:
     Q_INVOKABLE void refreshOutputDevices();
     Q_INVOKABLE bool setOutputDevice(const QString& deviceId,
                                      bool exclusive);
+    Q_INVOKABLE bool setTransitionFadeMs(int milliseconds);
 
 signals:
     void stateChanged();

@@ -110,6 +110,8 @@ ag_result ag_player_set_output_device(ag_player* player,
                                       const char* utf8_id,
                                       int exclusive);
 int ag_player_exclusive_mode_active(const ag_player* player);
+ag_result ag_player_set_transition_fade_ms(ag_player* player,
+                                           int milliseconds);
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata);
 void ag_metadata_destroy(ag_metadata* metadata);

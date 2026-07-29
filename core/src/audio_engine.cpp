@@ -152,8 +152,11 @@ public:
             channels_ = decoder_.metadata().channels;
             duration_ms_.store(decoder_.metadata().duration_ms,
                                std::memory_order_release);
+            const std::size_t transition_capacity =
+                static_cast<std::size_t>(sample_rate_) / 2U + 1U;
             ring_buffer_ = std::make_unique<PcmRingBuffer>(
-                buffer_frames_, static_cast<std::size_t>(channels_));
+                (std::max)(buffer_frames_, transition_capacity),
+                static_cast<std::size_t>(channels_));
 
             const ag_result device_result = initialize_device();
             if (device_result != AG_OK) {
@@ -483,14 +486,44 @@ public:
             return;
         }
 
+        const std::int64_t render_start =
+            rendered_frames_total_.load(std::memory_order_acquire);
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
                                : volume_.load(std::memory_order_relaxed);
-        for (std::size_t index = 0; index < frames * channels; ++index) {
-            output[index] *= gain;
+        const int fade_ms =
+            transition_fade_ms_.load(std::memory_order_acquire);
+        const std::int64_t fade_frames =
+            fade_ms > 0 ? static_cast<std::int64_t>(sample_rate_) * fade_ms
+                              / 1'000
+                        : 0;
+        const std::int64_t fade_boundary =
+            fade_boundary_frame_.load(std::memory_order_acquire);
+        for (std::size_t frame = 0U; frame < frames; ++frame) {
+            float transition_gain = 1.0F;
+            if (fade_frames > 0 && fade_boundary >= 0) {
+                const std::int64_t absolute_frame =
+                    render_start + static_cast<std::int64_t>(frame);
+                if (absolute_frame < fade_boundary
+                    && absolute_frame >= fade_boundary - fade_frames) {
+                    transition_gain = static_cast<float>(
+                        fade_boundary - absolute_frame)
+                                      / static_cast<float>(fade_frames);
+                } else if (absolute_frame >= fade_boundary
+                           && absolute_frame
+                                  < fade_boundary + fade_frames) {
+                    transition_gain = static_cast<float>(
+                        absolute_frame - fade_boundary + 1)
+                                      / static_cast<float>(fade_frames);
+                }
+            }
+            for (std::size_t channel = 0U; channel < channels; ++channel) {
+                output[frame * channels + channel] *=
+                    gain * transition_gain;
+            }
         }
         std::fill(output + frames * channels,
                   output + requested_frames * channels,
@@ -501,6 +534,14 @@ public:
                                           std::memory_order_acq_rel)
                                       + static_cast<std::int64_t>(frames);
         publish_pending_transition(rendered);
+        if (fade_frames > 0 && fade_boundary >= 0
+            && rendered >= fade_boundary + fade_frames) {
+            std::int64_t expected = fade_boundary;
+            fade_boundary_frame_.compare_exchange_strong(
+                expected, no_pending_boundary,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire);
+        }
 
         if (frames < requested_frames
             && decode_eof_.load(std::memory_order_acquire)
@@ -695,6 +736,21 @@ public:
     [[nodiscard]] bool exclusive_mode_active() const noexcept
     {
         return device_initialized_ && active_exclusive_mode_;
+    }
+
+    ag_result set_transition_fade_ms(const int milliseconds) noexcept
+    {
+        if (milliseconds != 0 && milliseconds != 200
+            && milliseconds != 500) {
+            return AG_INVALID_ARGUMENT;
+        }
+        transition_fade_ms_.store(milliseconds,
+                                  std::memory_order_release);
+        if (milliseconds == 0) {
+            fade_boundary_frame_.store(no_pending_boundary,
+                                       std::memory_order_release);
+        }
+        return AG_OK;
     }
 
 private:
@@ -1014,9 +1070,13 @@ private:
                 if (transition_result != AG_OK) {
                     pending_transition_error_.store(transition_result,
                                                     std::memory_order_relaxed);
-                    pending_boundary_frame_.store(
-                        produced_frames_total_.load(std::memory_order_relaxed),
-                        std::memory_order_release);
+                    const std::int64_t boundary =
+                        produced_frames_total_.load(
+                            std::memory_order_relaxed);
+                    fade_boundary_frame_.store(boundary,
+                                               std::memory_order_release);
+                    pending_boundary_frame_.store(boundary,
+                                                  std::memory_order_release);
                     publish_pending_transition(
                         rendered_frames_total_.load(std::memory_order_acquire));
                     decode_eof_.store(true, std::memory_order_release);
@@ -1028,9 +1088,12 @@ private:
                 pending_track_index_.store(next_index, std::memory_order_relaxed);
                 pending_duration_ms_.store(decoder_.metadata().duration_ms,
                                            std::memory_order_relaxed);
-                pending_boundary_frame_.store(
-                    produced_frames_total_.load(std::memory_order_relaxed),
-                    std::memory_order_release);
+                const std::int64_t boundary =
+                    produced_frames_total_.load(std::memory_order_relaxed);
+                fade_boundary_frame_.store(boundary,
+                                           std::memory_order_release);
+                pending_boundary_frame_.store(boundary,
+                                              std::memory_order_release);
                 decode_track_index_ = next_index;
                 decode_eof_.store(false, std::memory_order_release);
                 block = {};
@@ -1117,6 +1180,9 @@ private:
                            std::memory_order_release);
         ring_buffer_->clear();
         reset_timeline(0);
+        if (transition_fade_ms_.load(std::memory_order_acquire) > 0) {
+            fade_boundary_frame_.store(0, std::memory_order_release);
+        }
         terminal_error_.store(AG_OK, std::memory_order_release);
         state_.store(previous_state, std::memory_order_release);
         const ag_result thread_result = start_decode_thread();
@@ -1141,6 +1207,8 @@ private:
         produced_frames_total_.store(position_frames, std::memory_order_release);
         pending_boundary_frame_.store(no_pending_boundary,
                                       std::memory_order_release);
+        fade_boundary_frame_.store(no_pending_boundary,
+                                   std::memory_order_release);
         pending_transition_error_.store(AG_OK, std::memory_order_release);
         pending_track_index_.store(session_.index(), std::memory_order_release);
         pending_duration_ms_.store(duration_ms_.load(std::memory_order_acquire),
@@ -1240,11 +1308,13 @@ private:
     std::atomic<std::int64_t> track_start_frame_{0};
     std::atomic<std::int64_t> produced_frames_total_{0};
     std::atomic<std::int64_t> pending_boundary_frame_{no_pending_boundary};
+    std::atomic<std::int64_t> fade_boundary_frame_{no_pending_boundary};
     std::atomic<ag_result> pending_transition_error_{AG_OK};
     std::atomic<std::size_t> pending_track_index_{0U};
     std::atomic<std::int64_t> pending_duration_ms_{0};
     std::atomic<float> volume_{1.0F};
     std::atomic<bool> muted_{false};
+    std::atomic<int> transition_fade_ms_{0};
     std::atomic<std::uint64_t> transition_version_{0U};
     std::mutex random_mutex_;
     std::mt19937 random_{std::random_device{}()};
@@ -1361,6 +1431,12 @@ ag_result AudioEngine::set_output_device(std::string utf8_id,
 bool AudioEngine::exclusive_mode_active() const noexcept
 {
     return impl_->exclusive_mode_active();
+}
+
+ag_result AudioEngine::set_transition_fade_ms(
+    const int milliseconds) noexcept
+{
+    return impl_->set_transition_fade_ms(milliseconds);
 }
 
 } // namespace agplayer

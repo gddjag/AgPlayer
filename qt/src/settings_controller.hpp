@@ -38,6 +38,8 @@ class SettingsController final : public QObject {
                    NOTIFY outputDeviceChanged)
     Q_PROPERTY(bool exclusiveMode READ exclusiveMode WRITE setExclusiveMode
                    NOTIFY exclusiveModeChanged)
+    Q_PROPERTY(int transitionFadeMs READ transitionFadeMs
+                   WRITE setTransitionFadeMs NOTIFY transitionFadeMsChanged)
     Q_PROPERTY(bool playButtonRgbGlow READ playButtonRgbGlow WRITE setPlayButtonRgbGlow
                    NOTIFY playButtonRgbGlowChanged)
     Q_PROPERTY(int defaultPlaybackMode READ defaultPlaybackMode WRITE setDefaultPlaybackMode
@@ -117,6 +119,7 @@ public:
     // Playback & Engine getters
     QString outputDevice() const;
     bool exclusiveMode() const noexcept;
+    int transitionFadeMs() const noexcept;
     bool playButtonRgbGlow() const noexcept;
     int defaultPlaybackMode() const noexcept;
     bool autoReadBpm() const noexcept;
@@ -172,6 +175,7 @@ public:
     // Playback & Engine setters
     void setOutputDevice(const QString& value);
     void setExclusiveMode(bool value);
+    void setTransitionFadeMs(int value);
     void setPlayButtonRgbGlow(bool value);
     void setDefaultPlaybackMode(int value);
     void setAutoReadBpm(bool value);
@@ -235,6 +239,7 @@ signals:
 
     void outputDeviceChanged();
     void exclusiveModeChanged();
+    void transitionFadeMsChanged();
     void playButtonRgbGlowChanged();
     void defaultPlaybackModeChanged();
     void autoReadBpmChanged();
@@ -307,6 +312,7 @@ private:
     // Playback & Engine
     QString outputDevice_;
     bool exclusiveMode_ = false;
+    int transitionFadeMs_ = 200;
     bool playButtonRgbGlow_ = true;
     int defaultPlaybackMode_ = 3;
     bool autoReadBpm_ = true;
