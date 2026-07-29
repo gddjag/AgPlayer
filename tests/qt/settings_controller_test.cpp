@@ -23,6 +23,7 @@ private slots:
     void migratesLegacyDefaultExportDirectory();
     void migratesLegacyPlaybackModes();
     void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
+    void waveformAppearanceSettingsClampPersistAndReset();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
     void editSessionCanCommitOrCancel();
@@ -132,6 +133,7 @@ void SettingsControllerTest::playbackDeviceSettingsPersistAndMigrateDefaultLabel
         QCOMPARE(settings.exclusiveMode(), false);
         settings.setOutputDevice(QStringLiteral("Test Device"));
         settings.setExclusiveMode(true);
+        settings.setMatchTrackSampleRate(false);
         settings.setTransitionFadeMs(500);
         settings.setTransitionFadeMs(100);
         QCOMPARE(settings.transitionFadeMs(), 500);
@@ -139,7 +141,53 @@ void SettingsControllerTest::playbackDeviceSettingsPersistAndMigrateDefaultLabel
     SettingsController reloaded;
     QCOMPARE(reloaded.outputDevice(), QStringLiteral("Test Device"));
     QCOMPARE(reloaded.exclusiveMode(), true);
+    QCOMPARE(reloaded.matchTrackSampleRate(), false);
     QCOMPARE(reloaded.transitionFadeMs(), 500);
+    persisted.clear();
+}
+
+void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
+{
+    QSettings persisted;
+    persisted.clear();
+    {
+        SettingsController settings;
+        QCOMPARE(settings.waveformHeight(), 0.8);
+        QCOMPARE(settings.waveformDensity(), 2.0);
+        QCOMPARE(settings.waveformThickness(), 1.0);
+        QCOMPARE(settings.waveformPeakAlgorithm(), 0);
+        QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#ffffff"));
+        QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#ffdd00"));
+
+        settings.setWaveformHeight(3.0);
+        settings.setWaveformDensity(0.1);
+        settings.setWaveformThickness(2.34);
+        settings.setWaveformPeakAlgorithm(1);
+        settings.setWaveformSolidBaseColor(QStringLiteral("#112233"));
+        settings.setWaveformSolidProgressColor(QStringLiteral("invalid"));
+
+        QCOMPARE(settings.waveformHeight(), 1.5);
+        QCOMPARE(settings.waveformDensity(), 0.5);
+        QCOMPARE(settings.waveformThickness(), 2.3);
+        QCOMPARE(settings.waveformPeakAlgorithm(), 1);
+        QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#112233"));
+        QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#ffdd00"));
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.waveformHeight(), 1.5);
+    QCOMPARE(reloaded.waveformDensity(), 0.5);
+    QCOMPARE(reloaded.waveformThickness(), 2.3);
+    QCOMPARE(reloaded.waveformPeakAlgorithm(), 1);
+    QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#112233"));
+
+    reloaded.resetWaveformDefaults();
+    QCOMPARE(reloaded.waveformHeight(), 0.8);
+    QCOMPARE(reloaded.waveformDensity(), 2.0);
+    QCOMPARE(reloaded.waveformThickness(), 1.0);
+    QCOMPARE(reloaded.waveformPeakAlgorithm(), 0);
+    QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#ffffff"));
+    QCOMPARE(reloaded.waveformSolidProgressColor(), QStringLiteral("#ffdd00"));
     persisted.clear();
 }
 

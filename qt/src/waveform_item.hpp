@@ -16,10 +16,26 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(qreal duration READ duration WRITE setDuration NOTIFY durationChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
+    Q_PROPERTY(int visualMode READ visualMode WRITE setVisualMode
+                   NOTIFY visualModeChanged)
+    Q_PROPERTY(QColor baseColor READ baseColor WRITE setBaseColor
+                   NOTIFY baseColorChanged)
+    Q_PROPERTY(QColor progressColor READ progressColor WRITE setProgressColor
+                   NOTIFY progressColorChanged)
+    Q_PROPERTY(QColor gradientStartColor READ gradientStartColor
+                   WRITE setGradientStartColor NOTIFY gradientStartColorChanged)
+    Q_PROPERTY(QColor gradientMiddleColor READ gradientMiddleColor
+                   WRITE setGradientMiddleColor NOTIFY gradientMiddleColorChanged)
+    Q_PROPERTY(QColor gradientEndColor READ gradientEndColor
+                   WRITE setGradientEndColor NOTIFY gradientEndColorChanged)
+    Q_PROPERTY(bool rgbProgress READ rgbProgress WRITE setRgbProgress
+                   NOTIFY rgbProgressChanged)
+    Q_PROPERTY(qreal amplitudeScale READ amplitudeScale WRITE setAmplitudeScale
+                   NOTIFY amplitudeScaleChanged)
     Q_PROPERTY(qint64 hoverPosition READ hoverPosition NOTIFY hoverPositionChanged)
     Q_PROPERTY(double analysisProgress READ analysisProgress WRITE setAnalysisProgress
                    NOTIFY analysisProgressChanged)
-    Q_PROPERTY(int density READ density WRITE setDensity NOTIFY densityChanged)
+    Q_PROPERTY(qreal density READ density WRITE setDensity NOTIFY densityChanged)
     Q_PROPERTY(qreal lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged)
 
 public:
@@ -39,14 +55,30 @@ public:
 
     QColor waveformColor() const;
     void setWaveformColor(const QColor& color);
+    int visualMode() const noexcept;
+    void setVisualMode(int mode);
+    QColor baseColor() const;
+    void setBaseColor(const QColor& color);
+    QColor progressColor() const;
+    void setProgressColor(const QColor& color);
+    QColor gradientStartColor() const;
+    void setGradientStartColor(const QColor& color);
+    QColor gradientMiddleColor() const;
+    void setGradientMiddleColor(const QColor& color);
+    QColor gradientEndColor() const;
+    void setGradientEndColor(const QColor& color);
+    bool rgbProgress() const noexcept;
+    void setRgbProgress(bool value);
+    qreal amplitudeScale() const noexcept;
+    void setAmplitudeScale(qreal value);
 
     qint64 hoverPosition() const;
 
     double analysisProgress() const;
     void setAnalysisProgress(double progress);
 
-    int density() const;
-    void setDensity(int density);
+    qreal density() const;
+    void setDensity(qreal density);
 
     qreal lineWidth() const;
     void setLineWidth(qreal width);
@@ -61,6 +93,14 @@ signals:
     void positionChanged();
     void durationChanged();
     void waveformColorChanged();
+    void visualModeChanged();
+    void baseColorChanged();
+    void progressColorChanged();
+    void gradientStartColorChanged();
+    void gradientMiddleColorChanged();
+    void gradientEndColorChanged();
+    void rgbProgressChanged();
+    void amplitudeScaleChanged();
     void hoverPositionChanged();
     void analysisProgressChanged();
     void densityChanged();
@@ -101,9 +141,17 @@ private:
     qint64 position_ = 0;
     qint64 duration_ = 0;
     QColor waveformColor_;
+    int visualMode_ = -1;
+    QColor baseColor_ = QColor(QStringLiteral("#e8edf4"));
+    QColor progressColor_ = QColor(QStringLiteral("#ffdd00"));
+    QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
+    QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
+    QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
+    bool rgbProgress_ = true;
+    qreal amplitudeScale_ = 1.0;
     qint64 hoverPosition_ = -1;
     double analysisProgress_ = 0.0;
-    int density_ = 1;
+    qreal density_ = 1.0;
     qreal lineWidth_ = 2.0;
     bool pointerPressed_ = false;
 };

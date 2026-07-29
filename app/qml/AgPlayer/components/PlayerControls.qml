@@ -7,7 +7,6 @@ Rectangle {
     id: root
     color: Theme.background
     property bool emptyMode: false
-    signal toggleLyrics()
 
     RowLayout {
         anchors.fill: parent
@@ -17,6 +16,7 @@ Rectangle {
         spacing: Theme.spacingLg
 
         ToolButton {
+            id: listWindowButton
             objectName: "listWindowButton"
             flat: true
             icon.source: Theme.icon("list-unordered")
@@ -36,16 +36,13 @@ Rectangle {
         Item { Layout.fillWidth: true }
 
         Item {
-            Layout.preferredWidth: root.emptyMode
-                                   ? 702
-                                   : 900
+            Layout.preferredWidth: centerControls.implicitWidth
             Layout.fillHeight: true
 
         RowLayout {
+            id: centerControls
             anchors.fill: parent
-            spacing: root.emptyMode
-                     ? 59.6667
-                     : Theme.spacingMd
+            spacing: root.emptyMode ? 44 : 24
 
         ToolButton {
             objectName: "audioToolsButton"
@@ -112,6 +109,7 @@ Rectangle {
             icon.height: 34
             Layout.preferredWidth: root.emptyMode ? 104 : 72
             Layout.preferredHeight: root.emptyMode ? 104 : 72
+            Layout.topMargin: -8
             Accessible.name: PlaybackController.state === PlaybackController.Playing
                              ? qsTr("Pause")
                              : qsTr("Play")
@@ -127,11 +125,19 @@ Rectangle {
                 radius: width / 2
 
                 Rectangle {
+                    id: cyanGlow
                     anchors.fill: parent
                     anchors.margins: -10
-                    opacity: SettingsController.playButtonRgbGlow ? 0.06 : 0
+                    opacity: SettingsController.playButtonRgbGlow ? 0.08 : 0
                     color: Theme.cyan
                     radius: width / 2
+
+                    SequentialAnimation on opacity {
+                        running: SettingsController.playButtonRgbGlow
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 0.05; to: 0.18; duration: 1100; easing.type: Easing.InOutSine }
+                        NumberAnimation { from: 0.18; to: 0.05; duration: 1100; easing.type: Easing.InOutSine }
+                    }
                 }
 
                 Rectangle {
@@ -140,6 +146,13 @@ Rectangle {
                     opacity: SettingsController.playButtonRgbGlow ? 0.12 : 0
                     color: Theme.waveformViolet
                     radius: width / 2
+
+                    SequentialAnimation on scale {
+                        running: SettingsController.playButtonRgbGlow
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 0.96; to: 1.08; duration: 1100; easing.type: Easing.InOutSine }
+                        NumberAnimation { from: 1.08; to: 0.96; duration: 1100; easing.type: Easing.InOutSine }
+                    }
                 }
 
                 Rectangle {
@@ -237,31 +250,7 @@ Rectangle {
         }
 
         ToolButton {
-            objectName: "lyricsButton"
-            visible: !root.emptyMode
-            icon.source: Theme.icon("music-2-fill")
-            icon.color: Theme.iconSecondary
-            icon.width: 30
-            icon.height: 30
-            Accessible.name: qsTr("Toggle lyrics")
-            focusPolicy: Qt.StrongFocus
-            onClicked: root.toggleLyrics()
-            ToolTip.text: qsTr("Lyrics")
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        ToolButton {
+            id: muteButton
             objectName: "muteButton"
             icon.source: PlaybackController.muted
                          ? Theme.icon("volume-mute-fill")
@@ -292,10 +281,11 @@ Rectangle {
         Slider {
             objectName: "volumeSlider"
             visible: !root.emptyMode
+                     && (muteButton.hovered || hovered || activeFocus || pressed)
             from: 0
             to: 1
             onMoved: PlaybackController.setVolume(value)
-            Layout.preferredWidth: 160
+            Layout.preferredWidth: visible ? 140 : 0
             Accessible.name: qsTr("Volume")
             focusPolicy: Qt.StrongFocus
 
@@ -310,19 +300,26 @@ Rectangle {
 
         Item { Layout.fillWidth: true }
 
-        ToolButton {
-            objectName: "miniPlayerButton"
-            flat: true
-            icon.source: Theme.icon("picture-in-picture-2-line")
-            icon.color: Theme.iconPrimary
-            icon.width: 30
-            icon.height: 30
-            Accessible.name: qsTr("Switch to mini player")
-            focusPolicy: Qt.StrongFocus
-            onClicked: WindowController.showMini()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
+        Item {
+            Layout.preferredWidth: listWindowButton.implicitWidth
+            Layout.fillHeight: true
+
+            ToolButton {
+                objectName: "miniPlayerButton"
+                anchors.centerIn: parent
+                visible: !root.emptyMode
+                flat: true
+                icon.source: Theme.icon("picture-in-picture-2-line")
+                icon.color: Theme.iconPrimary
+                icon.width: 30
+                icon.height: 30
+                Accessible.name: qsTr("Switch to mini player")
+                focusPolicy: Qt.StrongFocus
+                onClicked: WindowController.showMini()
+                ToolTip.text: Accessible.name
+                ToolTip.visible: hovered
+                background: null
+            }
         }
     }
 }

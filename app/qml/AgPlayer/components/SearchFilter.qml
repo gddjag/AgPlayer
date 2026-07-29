@@ -88,7 +88,7 @@ Rectangle {
                     source: index < root.minRating
                             ? Theme.icon("star-fill") : Theme.icon("star-line")
                     tint: index < root.minRating
-                          ? Theme.ratingGold : Theme.iconSecondary
+                          ? Theme.ratingColor(index) : Theme.iconSecondary
                     sourceSize.width: 16
                     sourceSize.height: 16
                     Layout.preferredWidth: 18

@@ -80,15 +80,7 @@ Rectangle {
 
     function applyWaveformMode() {
         var source = root.rawWaveformLayers || {}
-        if (SettingsController.waveformMode === 2) {
-            waveform.layers = {
-                bass: source.bass || [],
-                mid: source.mid || [],
-                high: source.high || []
-            }
-        } else {
-            waveform.layers = { mix: source.mix || [] }
-        }
+        waveform.layers = { mix: source.mix || [] }
     }
 
     function loadWaveform() {
@@ -228,7 +220,7 @@ Rectangle {
                                         ? Theme.icon("star-fill")
                                         : Theme.icon("star-line")
                                 tint: index < root.currentTrackRating()
-                                      ? Theme.ratingGold : Theme.iconSecondary
+                                      ? Theme.ratingColor(index) : Theme.iconSecondary
                                 sourceSize.width: 14
                                 sourceSize.height: 14
                                 Layout.preferredWidth: 15
@@ -305,6 +297,16 @@ Rectangle {
             position: PlaybackController.positionMs
             duration: PlaybackController.durationMs
             analysisProgress: WaveformProvider.analysisProgress
+            visualMode: SettingsController.waveformMode
+            baseColor: SettingsController.waveformMode === 0
+                       ? SettingsController.waveformSolidBaseColor
+                       : SettingsController.waveformRgbBaseColor
+            progressColor: SettingsController.waveformSolidProgressColor
+            gradientStartColor: SettingsController.waveformRgbStartColor
+            gradientMiddleColor: SettingsController.waveformRgbMiddleColor
+            gradientEndColor: SettingsController.waveformRgbEndColor
+            rgbProgress: SettingsController.waveformRgbProgress
+            amplitudeScale: SettingsController.waveformHeight
             density: SettingsController.waveformDensity
             lineWidth: SettingsController.waveformThickness
             clip: true
@@ -313,11 +315,6 @@ Rectangle {
                              && hoverPosition >= 0
             ToolTip.text: root.formatTime(hoverPosition)
 
-            Binding on waveformColor {
-                value: Theme.cyan
-                when: SettingsController.waveformMode === 0
-                restoreMode: Binding.RestoreBindingOrValue
-            }
         }
 
         RowLayout {
@@ -366,6 +363,7 @@ Rectangle {
     Connections {
         target: SettingsController
         function onWaveformModeChanged() { root.applyWaveformMode() }
+        function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
     }
 
     Component.onCompleted: root.loadWaveform()

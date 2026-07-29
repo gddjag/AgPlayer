@@ -52,6 +52,7 @@ typedef struct ag_playback_snapshot {
     ag_playback_state state;
     long long position_ms;
     long long duration_ms;
+    int sample_rate;
     float volume;
     int muted;
     size_t track_index;
@@ -112,6 +113,8 @@ ag_result ag_player_set_output_device(ag_player* player,
 int ag_player_exclusive_mode_active(const ag_player* player);
 ag_result ag_player_set_transition_fade_ms(ag_player* player,
                                            int milliseconds);
+ag_result ag_player_set_match_track_sample_rate(ag_player* player,
+                                                 int enabled);
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata);
 void ag_metadata_destroy(ag_metadata* metadata);
@@ -261,6 +264,12 @@ typedef enum ag_waveform_layer {
     AG_WAVEFORM_LAYER_HIGH = 3
 } ag_waveform_layer;
 
+typedef enum ag_waveform_aggregation {
+    AG_WAVEFORM_AGGREGATION_PEAK = 0,
+    AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE = 1,
+    AG_WAVEFORM_AGGREGATION_RMS = 2
+} ag_waveform_aggregation;
+
 size_t ag_waveform_layer_count(const ag_waveform* waveform,
                                ag_waveform_layer layer);
 float ag_waveform_layer_peak(const ag_waveform* waveform,
@@ -283,6 +292,17 @@ ag_result ag_track_analysis(const char* utf8_path,
                             void* user_data,
                             ag_waveform** out_waveform,
                             double* out_bpm);
+
+/* Variant of ag_track_analysis with selectable bucket aggregation. */
+ag_result ag_track_analysis_with_aggregation(
+    const char* utf8_path,
+    size_t target_points,
+    ag_waveform_aggregation aggregation,
+    const ag_cancel_token* cancel_token,
+    ag_progress_callback progress_callback,
+    void* user_data,
+    ag_waveform** out_waveform,
+    double* out_bpm);
 
 typedef struct ag_bpm_result {
     double bpm;

@@ -36,6 +36,7 @@ public:
                                 bool exclusive) noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
     ag_result set_transition_fade_ms(int milliseconds) noexcept;
+    ag_result set_match_track_sample_rate(bool enabled) noexcept;
 
 private:
     ag_result record(ag_result result, const char* operation) noexcept;

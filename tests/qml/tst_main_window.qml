@@ -63,8 +63,8 @@ TestCase {
                "audio tools action should be visible in the bottom control bar")
         verify(findChild(mainWindow, "listWindowButton").visible,
                "playlist action should be visible in the bottom control bar")
-        verify(findChild(mainWindow, "miniPlayerButton").visible,
-               "mini player action should be visible in the bottom control bar")
+        verify(!findChild(mainWindow, "miniPlayerButton").visible,
+               "empty startup must not expose the mini player action")
     }
 
     function test_failed_import_surfaces_status_in_main() {
@@ -88,18 +88,6 @@ TestCase {
         compare(LibraryModel.count, 0)
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return LibraryModel.count === 1 }, 5000)
-    }
-
-    function test_lyrics_button_is_visible_and_toggles_panel() {
-        var lyricsButton = findChild(mainWindow, "lyricsButton")
-        verify(lyricsButton, "lyrics button should exist")
-        verify(lyricsButton.visible,
-               "lyrics button should be visible when a track is available")
-        compare(mainWindow.lyricsVisible, false)
-        lyricsButton.clicked()
-        tryCompare(mainWindow, "lyricsVisible", true)
-        lyricsButton.clicked()
-        tryCompare(mainWindow, "lyricsVisible", false)
     }
 
     function test_waveform_click_seeks_real_playback_controller() {
@@ -130,21 +118,24 @@ TestCase {
             return Object.keys(waveform.layers).length === 1
                     && waveform.layers.mix.length > 0
         })
-        compare(waveform.waveformColor.toString(), Theme.cyan.toString())
+        compare(waveform.visualMode, 0)
+        compare(waveform.baseColor.toString(),
+                SettingsController.waveformSolidBaseColor)
+        compare(waveform.progressColor.toString(),
+                SettingsController.waveformSolidProgressColor)
 
         SettingsController.waveformMode = 1
         tryVerify(function() {
             return Object.keys(waveform.layers).length === 1
                     && waveform.layers.mix.length > 0
         })
-        verify(waveform.waveformColor.toString() !== Theme.cyan.toString())
+        compare(waveform.visualMode, 1)
 
         SettingsController.waveformMode = 2
         tryVerify(function() {
-            return Object.keys(waveform.layers).length === 3
-                    && waveform.layers.bass.length > 0
-                    && waveform.layers.mid.length > 0
-                    && waveform.layers.high.length > 0
+            return waveform.visualMode === 2
+                    && Object.keys(waveform.layers).length === 1
+                    && waveform.layers.mix.length > 0
         })
 
         SettingsController.waveformMode = previousMode
@@ -173,7 +164,7 @@ TestCase {
 
     function test_empty_startup_uses_compact_reference_structure() {
         compare(mainWindow.width, 1228)
-        compare(mainWindow.height, 424)
+        compare(mainWindow.height, 399)
 
         var startup = findChild(mainWindow, "emptyStartup")
         var controls = findChild(mainWindow, "playerControls")
@@ -235,10 +226,12 @@ TestCase {
         wait(50)
         var combo = findChild(page, "outputDeviceCombo")
         var exclusive = findChild(page, "exclusiveModeSwitch")
+        var sampleRate = findChild(page, "matchTrackSampleRateSwitch")
         var fallback = findChild(page, "exclusiveFallbackLabel")
         var fade = findChild(page, "transitionFadeCombo")
         verify(combo, "output device combo should exist")
         verify(exclusive, "exclusive mode control should exist")
+        verify(sampleRate, "sample-rate matching control should exist")
         verify(fallback, "exclusive fallback status should exist")
         verify(fade, "transition fade selector should exist")
         SettingsController.transitionFadeMs = 500
@@ -246,6 +239,9 @@ TestCase {
         SettingsController.transitionFadeMs = 0
         tryCompare(fade, "currentValue", 0)
         SettingsController.transitionFadeMs = 200
+        SettingsController.matchTrackSampleRate = false
+        mouseClick(sampleRate, sampleRate.width / 2, sampleRate.height / 2)
+        tryCompare(SettingsController, "matchTrackSampleRate", true)
         verify(combo.valueModel.length
                === PlaybackController.outputDevices.length + 1,
                "device combo should expose system default plus enumerated devices")
@@ -260,6 +256,41 @@ TestCase {
         tryCompare(SettingsController, "exclusiveMode", true)
         mouseClick(exclusive, exclusive.width / 2, exclusive.height / 2)
         tryCompare(SettingsController, "exclusiveMode", false)
+        page.close()
+    }
+
+    function test_settings_waveform_controls_are_live() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page)
+        page.open()
+        page.selectedSection = 2
+        wait(50)
+
+        var heightCombo = findChild(page, "waveformHeightCombo")
+        var densityCombo = findChild(page, "waveformDensityCombo")
+        var thicknessCombo = findChild(page, "waveformThicknessCombo")
+        var aggregationCombo = findChild(page, "waveformAggregationCombo")
+        var resetButton = findChild(page, "waveformResetButton")
+        verify(heightCombo)
+        verify(densityCombo)
+        verify(thicknessCombo)
+        verify(aggregationCombo)
+        verify(resetButton)
+
+        SettingsController.waveformHeight = 1.2
+        SettingsController.waveformDensity = 3.5
+        SettingsController.waveformThickness = 2.2
+        SettingsController.waveformPeakAlgorithm = 1
+        tryCompare(heightCombo, "currentValue", 1.2)
+        tryCompare(densityCombo, "currentValue", 3.5)
+        tryCompare(thicknessCombo, "currentValue", 2.2)
+        tryCompare(aggregationCombo, "currentValue", 1)
+
+        resetButton.clicked()
+        tryCompare(SettingsController, "waveformHeight", 0.8)
+        tryCompare(SettingsController, "waveformDensity", 2.0)
+        tryCompare(SettingsController, "waveformThickness", 1.0)
+        tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
         page.close()
     }
 

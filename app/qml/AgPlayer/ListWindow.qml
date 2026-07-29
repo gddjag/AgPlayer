@@ -11,8 +11,8 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1220
-    height: 560
+    width: 1228
+    height: 600
     minimumWidth: 1100
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
@@ -124,6 +124,8 @@ Window {
         color: Theme.background
         border.color: Theme.border
         border.width: 1
+        radius: Theme.windowRadius
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent

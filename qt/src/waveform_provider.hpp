@@ -41,6 +41,8 @@ private:
         QString path;
         ag_waveform* waveform = nullptr;
         ag_result result = AG_OK;
+        ag_waveform_aggregation aggregation =
+            AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
         ag_cancel_token* cancelToken = nullptr;
         std::shared_ptr<std::atomic<double>> progress;
     };
@@ -51,5 +53,7 @@ private:
     std::shared_ptr<std::atomic<double>> activeProgress_;
     ag_cancel_token* activeCancelToken_ = nullptr;
     QString currentPath_;
+    ag_waveform_aggregation currentAggregation_ =
+        AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
     double analysisProgress_ = 0.0;
 };

@@ -30,6 +30,7 @@ struct EngineSnapshot {
     EngineState state = EngineState::Stopped;
     std::int64_t position_ms = 0;
     std::int64_t duration_ms = 0;
+    int sample_rate = 0;
     float volume = 1.0F;
     bool muted = false;
     std::size_t track_index = 0U;
@@ -73,6 +74,7 @@ public:
                                 bool exclusive) noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
     ag_result set_transition_fade_ms(int milliseconds) noexcept;
+    ag_result set_match_track_sample_rate(bool enabled) noexcept;
 
 private:
     class Impl;

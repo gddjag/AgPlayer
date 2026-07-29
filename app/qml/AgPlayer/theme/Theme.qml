@@ -57,6 +57,9 @@ QtObject {
     readonly property int radiusSm: 8
     readonly property int radiusMd: 12
     readonly property int radiusLg: 18
+    readonly property int windowRadius: Qt.platform.os === "osx" ? 10
+                                         : Qt.platform.os === "windows" ? 8
+                                         : 8
 
     readonly property int spacingXs: 4
     readonly property int spacingSm: 8
@@ -77,4 +80,8 @@ QtObject {
 
     readonly property string iconPrefix: "qrc:/qt/qml/AgPlayer/assets/icons/"
     function icon(name) { return iconPrefix + name + ".svg" }
+    function ratingColor(index) {
+        return ["#00D4FF", "#1688FF", "#7B2FF7", "#E62E9B", "#FFDD00"][
+                    Math.max(0, Math.min(4, index))]
+    }
 }

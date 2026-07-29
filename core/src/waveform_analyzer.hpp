@@ -17,12 +17,19 @@ inline constexpr float kMidHighCutoffHz = 2000.0F;
 inline constexpr float kHighCutoffHz = 2000.0F;
 inline constexpr float kFilterQ = 0.707F;
 
+enum class WaveformAggregation {
+    Peak,
+    AverageAbsolute,
+    Rms
+};
+
 class WaveformBucketizer final {
 public:
     WaveformBucketizer(std::size_t total_frames,
                        std::size_t target_points,
                        std::size_t channels,
-                       float sample_rate);
+                       float sample_rate,
+                       WaveformAggregation aggregation = WaveformAggregation::Peak);
 
     [[nodiscard]] ag_result add(const std::vector<float>& samples,
                                 std::size_t frames) noexcept;
@@ -37,6 +44,7 @@ private:
     std::size_t total_frames_ = 0U;
     std::size_t channels_ = 0U;
     float sample_rate_ = 0.0F;
+    WaveformAggregation aggregation_ = WaveformAggregation::Peak;
     std::size_t consumed_frames_ = 0U;
     std::size_t current_bucket_ = 0U;
     std::size_t next_bucket_frame_ = 0U;
@@ -47,6 +55,7 @@ private:
     std::vector<float> bass_buckets_;
     std::vector<float> mid_buckets_;
     std::vector<float> high_buckets_;
+    std::vector<std::size_t> bucket_sample_counts_;
     std::vector<detail::BiquadFilter> bass_filters_;
     std::vector<detail::BandpassFilter> mid_filters_;
     std::vector<detail::BiquadFilter> high_filters_;
@@ -64,7 +73,8 @@ public:
         std::vector<float>& peaks,
         std::vector<float>& bass,
         std::vector<float>& mid,
-        std::vector<float>& high) noexcept;
+        std::vector<float>& high,
+        WaveformAggregation aggregation = WaveformAggregation::Peak) noexcept;
 };
 
 } // namespace agplayer

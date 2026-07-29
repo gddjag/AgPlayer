@@ -29,6 +29,7 @@ static_assert(std::atomic<bool>::is_always_lock_free);
 static_assert(std::atomic<std::size_t>::is_always_lock_free);
 static_assert(std::atomic<std::int64_t>::is_always_lock_free);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+static_assert(std::atomic<int>::is_always_lock_free);
 static_assert(std::atomic<EngineState>::is_always_lock_free);
 static_assert(std::atomic<PlaybackMode>::is_always_lock_free);
 static_assert(std::atomic<ag_result>::is_always_lock_free);
@@ -118,6 +119,8 @@ public:
         if (utf8_path.empty()) {
             return AG_INVALID_ARGUMENT;
         }
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         try {
             std::vector<std::string> queue;
             queue.push_back(utf8_path);
@@ -137,6 +140,8 @@ public:
             return AG_INVALID_ARGUMENT;
         }
 
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         try {
             shutdown_loaded_media();
             state_.store(EngineState::Loading, std::memory_order_release);
@@ -148,12 +153,12 @@ public:
                 return fail_load(decode_result);
             }
 
-            sample_rate_ = decoder_.metadata().sample_rate;
+            sample_rate_.store(decoder_.metadata().sample_rate,
+                               std::memory_order_release);
             channels_ = decoder_.metadata().channels;
             duration_ms_.store(decoder_.metadata().duration_ms,
                                std::memory_order_release);
-            const std::size_t transition_capacity =
-                static_cast<std::size_t>(sample_rate_) / 2U + 1U;
+            constexpr std::size_t transition_capacity = 96'001U;
             ring_buffer_ = std::make_unique<PcmRingBuffer>(
                 (std::max)(buffer_frames_, transition_capacity),
                 static_cast<std::size_t>(channels_));
@@ -179,6 +184,9 @@ public:
 
     ag_result play() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
+        std::unique_lock<std::recursive_mutex> device_lock(device_mutex_);
         EngineState state = state_.load(std::memory_order_acquire);
         if (state == EngineState::Error) {
             return current_error();
@@ -210,11 +218,13 @@ public:
                                                : AG_INVALID_ARGUMENT;
         }
         if (start_output() != AG_OK) {
+            device_lock.unlock();
             return enter_error(AG_DEVICE_ERROR);
         }
         if (state_.load(std::memory_order_acquire) == EngineState::Error) {
             const ag_result result = current_error();
             stop_output();
+            device_lock.unlock();
             stop_decode_thread();
             return result;
         }
@@ -223,6 +233,9 @@ public:
 
     ag_result pause() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
+        std::unique_lock<std::recursive_mutex> device_lock(device_mutex_);
         const EngineState state = state_.load(std::memory_order_acquire);
         if (state == EngineState::Error) {
             return current_error();
@@ -237,6 +250,7 @@ public:
             return AG_INVALID_ARGUMENT;
         }
         if (stop_output() != AG_OK) {
+            device_lock.unlock();
             return enter_error(AG_DEVICE_ERROR);
         }
         EngineState expected = EngineState::Playing;
@@ -252,17 +266,20 @@ public:
 
     ag_result stop() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         if (state_.load(std::memory_order_acquire) == EngineState::Error) {
             return current_error();
         }
         if (!loaded_) {
             return AG_INVALID_ARGUMENT;
         }
+        state_.store(EngineState::Stopped, std::memory_order_release);
+        stop_decode_thread();
         if (stop_output() != AG_OK) {
             return enter_error(AG_DEVICE_ERROR);
         }
 
-        stop_decode_thread();
         const ag_result restore_result = restore_published_decoder();
         if (restore_result != AG_OK) {
             return enter_error(restore_result);
@@ -287,6 +304,8 @@ public:
 
     ag_result seek(const std::int64_t position_ms) noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         if (state_.load(std::memory_order_acquire) == EngineState::Error) {
             return current_error();
         }
@@ -361,7 +380,10 @@ public:
         }
         ring_buffer_->clear();
         const std::int64_t position_frames =
-            (position_ms * sample_rate_ + 999) / 1'000;
+            (position_ms
+                 * sample_rate_.load(std::memory_order_acquire)
+             + 999)
+            / 1'000;
         decode_track_index_ = session_.index();
         reset_timeline(position_frames);
         terminal_error_.store(AG_OK, std::memory_order_release);
@@ -388,6 +410,8 @@ public:
 
     ag_result next() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         if (state_.load(std::memory_order_acquire) == EngineState::Error) {
             return current_error();
         }
@@ -405,6 +429,8 @@ public:
 
     ag_result previous() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         if (state_.load(std::memory_order_acquire) == EngineState::Error) {
             return current_error();
         }
@@ -424,6 +450,8 @@ public:
             && mode != PlaybackMode::RepeatAll) {
             return AG_INVALID_ARGUMENT;
         }
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         session_.set_mode(mode);
         return AG_OK;
     }
@@ -457,10 +485,13 @@ public:
                 track_start_frame_.load(std::memory_order_acquire);
             const std::int64_t track_frames = std::max<std::int64_t>(
                 0, rendered - track_start);
+            const int sample_rate =
+                sample_rate_.load(std::memory_order_acquire);
             const EngineSnapshot result{
                 state_.load(std::memory_order_acquire),
-                sample_rate_ <= 0 ? 0 : track_frames * 1'000 / sample_rate_,
+                sample_rate <= 0 ? 0 : track_frames * 1'000 / sample_rate,
                 duration_ms_.load(std::memory_order_acquire),
+                sample_rate,
                 volume_.load(std::memory_order_acquire),
                 muted_.load(std::memory_order_acquire),
                 session_.index(),
@@ -496,8 +527,10 @@ public:
                                : volume_.load(std::memory_order_relaxed);
         const int fade_ms =
             transition_fade_ms_.load(std::memory_order_acquire);
+        const int sample_rate =
+            sample_rate_.load(std::memory_order_acquire);
         const std::int64_t fade_frames =
-            fade_ms > 0 ? static_cast<std::int64_t>(sample_rate_) * fade_ms
+            fade_ms > 0 ? static_cast<std::int64_t>(sample_rate) * fade_ms
                               / 1'000
                         : 0;
         const std::int64_t fade_boundary =
@@ -567,6 +600,10 @@ public:
 
     ag_result retry_device() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
+        const std::lock_guard<std::recursive_mutex> device_lock(
+            device_mutex_);
         if (!device_lost_.load(std::memory_order_acquire)) {
             return AG_OK;
         }
@@ -605,6 +642,8 @@ public:
 
     void simulate_device_loss() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
         device_lost_.store(true, std::memory_order_release);
         terminal_error_.store(AG_DEVICE_ERROR,
                               std::memory_order_release);
@@ -614,6 +653,8 @@ public:
 
     [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> device_lock(
+            device_mutex_);
         if (backend_ == AudioBackend::Manual) {
             return {};
         }
@@ -651,6 +692,10 @@ public:
             return utf8_id.empty() && !exclusive ? AG_OK
                                                   : AG_INVALID_ARGUMENT;
         }
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
+        const std::lock_guard<std::recursive_mutex> device_lock(
+            device_mutex_);
         try {
             if (!utf8_id.empty()) {
                 const std::vector<OutputDevice> devices = output_devices();
@@ -753,6 +798,12 @@ public:
         return AG_OK;
     }
 
+    ag_result set_match_track_sample_rate(const bool enabled) noexcept
+    {
+        match_track_sample_rate_.store(enabled, std::memory_order_release);
+        return AG_OK;
+    }
+
 private:
     static void data_callback(ma_device* device,
                               void* output,
@@ -793,6 +844,7 @@ private:
 
     ag_result start_output() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> lock(device_mutex_);
         if (backend_ == AudioBackend::Manual) {
             return AG_OK;
         }
@@ -803,6 +855,7 @@ private:
 
     ag_result stop_output() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> lock(device_mutex_);
         if (backend_ == AudioBackend::Manual || !device_initialized_) {
             return AG_OK;
         }
@@ -811,6 +864,7 @@ private:
 
     ag_result initialize_context() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> lock(device_mutex_);
         if (backend_ == AudioBackend::Manual) {
             return AG_OK;
         }
@@ -833,6 +887,7 @@ private:
 
     ag_result initialize_device() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> lock(device_mutex_);
         if (backend_ == AudioBackend::Manual) {
             return AG_OK;
         }
@@ -867,7 +922,8 @@ private:
         config.playback.pDeviceID = selected_id_ptr;
         config.playback.format = ma_format_f32;
         config.playback.channels = static_cast<ma_uint32>(channels_);
-        config.sampleRate = static_cast<ma_uint32>(sample_rate_);
+        config.sampleRate = static_cast<ma_uint32>(
+            sample_rate_.load(std::memory_order_acquire));
         config.dataCallback = data_callback;
         config.notificationCallback = notification_callback;
         config.pUserData = this;
@@ -961,7 +1017,11 @@ private:
                     if (result == AG_OK) {
                         ring_buffer_->clear();
                         const std::int64_t position_frames =
-                            (target_ms * sample_rate_ + 999) / 1'000;
+                            (target_ms
+                                 * sample_rate_.load(
+                                     std::memory_order_acquire)
+                             + 999)
+                            / 1'000;
                         decode_track_index_ = session_.index();
                         reset_timeline(position_frames);
                         terminal_error_.store(AG_OK,
@@ -1059,12 +1119,35 @@ private:
                 }
 
                 ag_result transition_result = AG_OK;
+                const int current_sample_rate =
+                    sample_rate_.load(std::memory_order_acquire);
+                int next_sample_rate = current_sample_rate;
+                bool needs_device_reconfigure = false;
                 if (next_index == decode_track_index_
                     && session_.mode() == PlaybackMode::RepeatOne) {
                     transition_result = decoder_.seek(0);
+                } else if (match_track_sample_rate_.load(
+                               std::memory_order_acquire)) {
+                    transition_result =
+                        decoder_.open(session_.path_at(next_index));
+                    if (transition_result == AG_OK) {
+                        next_sample_rate = decoder_.metadata().sample_rate;
+                        needs_device_reconfigure =
+                            next_sample_rate != current_sample_rate;
+                        if (decoder_.metadata().channels != channels_) {
+                            transition_result = decoder_.open(
+                                session_.path_at(next_index),
+                                next_sample_rate,
+                                channels_);
+                        }
+                        if (transition_result == AG_OK
+                            && needs_device_reconfigure) {
+                            decode_track_index_ = next_index;
+                        }
+                    }
                 } else {
                     transition_result = decoder_.open(session_.path_at(next_index),
-                                                      sample_rate_,
+                                                      current_sample_rate,
                                                       channels_);
                 }
                 if (transition_result != AG_OK) {
@@ -1081,6 +1164,82 @@ private:
                         rendered_frames_total_.load(std::memory_order_acquire));
                     decode_eof_.store(true, std::memory_order_release);
                     return;
+                }
+
+                if (needs_device_reconfigure) {
+                    const std::int64_t boundary =
+                        produced_frames_total_.load(
+                            std::memory_order_acquire);
+                    fade_boundary_frame_.store(boundary,
+                                               std::memory_order_release);
+                    while (rendered_frames_total_.load(
+                               std::memory_order_acquire)
+                               < boundary
+                           && !stop_decode_.load(
+                               std::memory_order_acquire)
+                           && !seek_requested_.load(
+                               std::memory_order_acquire)) {
+                        std::unique_lock<std::mutex> lock(seek_mutex_);
+                        seek_cv_.wait_for(lock, std::chrono::milliseconds(1));
+                    }
+                    if (seek_requested_.load(std::memory_order_acquire)) {
+                        continue;
+                    }
+                    if (stop_decode_.load(std::memory_order_acquire)) {
+                        return;
+                    }
+
+                    const std::lock_guard<std::recursive_mutex> device_lock(
+                        device_mutex_);
+                    if (seek_requested_.load(std::memory_order_acquire)) {
+                        continue;
+                    }
+                    if (stop_decode_.load(std::memory_order_acquire)) {
+                        return;
+                    }
+                    const bool resume =
+                        state_.load(std::memory_order_acquire)
+                        == EngineState::Playing;
+                    if (stop_output() != AG_OK) {
+                        set_decode_error(AG_DEVICE_ERROR);
+                        return;
+                    }
+                    if (device_initialized_) {
+                        ma_device_uninit(&device_);
+                        device_initialized_ = false;
+                    }
+
+                    transition_version_.fetch_add(
+                        1U, std::memory_order_acq_rel);
+                    sample_rate_.store(next_sample_rate,
+                                       std::memory_order_release);
+                    session_.set_index(next_index);
+                    decode_track_index_ = next_index;
+                    duration_ms_.store(
+                        decoder_.metadata().duration_ms,
+                        std::memory_order_release);
+                    ring_buffer_->clear();
+                    reset_timeline(0);
+                    if (transition_fade_ms_.load(
+                            std::memory_order_acquire)
+                        > 0) {
+                        fade_boundary_frame_.store(
+                            0, std::memory_order_release);
+                    }
+                    transition_version_.fetch_add(
+                        1U, std::memory_order_release);
+
+                    if (initialize_device() != AG_OK) {
+                        set_decode_error(AG_DEVICE_ERROR);
+                        return;
+                    }
+                    if (resume && start_output() != AG_OK) {
+                        set_decode_error(AG_DEVICE_ERROR);
+                        return;
+                    }
+                    block = {};
+                    frame_offset = 0U;
+                    continue;
                 }
 
                 pending_transition_error_.store(AG_OK,
@@ -1145,8 +1304,9 @@ private:
         if (decode_track_index_ == published_index && decoder_.is_open()) {
             return AG_OK;
         }
-        const ag_result result = decoder_.open(session_.path_at(published_index),
-                                               sample_rate_,
+        const ag_result result = decoder_.open(
+            session_.path_at(published_index),
+            sample_rate_.load(std::memory_order_acquire),
                                                channels_);
         if (result == AG_OK) {
             decode_track_index_ = published_index;
@@ -1162,16 +1322,44 @@ private:
 
         const EngineState previous_state = state_.load(std::memory_order_acquire);
         const bool resume = previous_state == EngineState::Playing;
+        stop_decode_thread();
         if (stop_output() != AG_OK) {
             return enter_error(AG_DEVICE_ERROR);
         }
-        stop_decode_thread();
 
-        const ag_result open_result = decoder_.open(session_.path_at(index),
-                                                    sample_rate_,
-                                                    channels_);
+        const int previous_sample_rate =
+            sample_rate_.load(std::memory_order_acquire);
+        int next_sample_rate = previous_sample_rate;
+        ag_result open_result = AG_OK;
+        if (match_track_sample_rate_.load(std::memory_order_acquire)) {
+            open_result = decoder_.open(session_.path_at(index));
+            if (open_result == AG_OK) {
+                next_sample_rate = decoder_.metadata().sample_rate;
+                if (decoder_.metadata().channels != channels_) {
+                    open_result = decoder_.open(session_.path_at(index),
+                                                next_sample_rate,
+                                                channels_);
+                }
+            }
+        } else {
+            open_result = decoder_.open(session_.path_at(index),
+                                        previous_sample_rate,
+                                        channels_);
+        }
         if (open_result != AG_OK) {
             return enter_error(open_result);
+        }
+        if (next_sample_rate != previous_sample_rate) {
+            const std::lock_guard<std::recursive_mutex> device_lock(
+                device_mutex_);
+            if (device_initialized_) {
+                ma_device_uninit(&device_);
+                device_initialized_ = false;
+            }
+            sample_rate_.store(next_sample_rate, std::memory_order_release);
+            if (initialize_device() != AG_OK) {
+                return enter_error(AG_DEVICE_ERROR);
+            }
         }
 
         session_.set_index(index);
@@ -1228,19 +1416,23 @@ private:
         state_.store(EngineState::Stopped, std::memory_order_release);
         stop_output();
         stop_decode_thread();
-        if (device_initialized_) {
-            ma_device_uninit(&device_);
-            device_initialized_ = false;
-        }
-        if (context_initialized_) {
-            ma_context_uninit(&context_);
-            context_initialized_ = false;
+        {
+            const std::lock_guard<std::recursive_mutex> device_lock(
+                device_mutex_);
+            if (device_initialized_) {
+                ma_device_uninit(&device_);
+                device_initialized_ = false;
+            }
+            if (context_initialized_) {
+                ma_context_uninit(&context_);
+                context_initialized_ = false;
+            }
         }
         decoder_.close();
         ring_buffer_.reset();
         session_.clear();
         loaded_ = false;
-        sample_rate_ = 0;
+        sample_rate_.store(0, std::memory_order_release);
         channels_ = 0;
         duration_ms_.store(0, std::memory_order_release);
         decode_track_index_ = 0U;
@@ -1281,13 +1473,13 @@ private:
     std::unique_ptr<PcmRingBuffer> ring_buffer_;
     ma_context context_{};
     ma_device device_{};
-    bool context_initialized_ = false;
-    bool device_initialized_ = false;
+    std::atomic<bool> context_initialized_{false};
+    std::atomic<bool> device_initialized_{false};
     bool loaded_ = false;
     std::string selected_device_id_;
     bool exclusive_mode_ = false;
-    bool active_exclusive_mode_ = false;
-    int sample_rate_ = 0;
+    std::atomic<bool> active_exclusive_mode_{false};
+    std::atomic<int> sample_rate_{0};
     int channels_ = 0;
     std::atomic<std::int64_t> duration_ms_{0};
     std::thread decode_thread_;
@@ -1302,6 +1494,8 @@ private:
     std::atomic<bool> seek_done_{false};
     std::mutex seek_mutex_;
     std::condition_variable seek_cv_;
+    mutable std::recursive_mutex control_mutex_;
+    mutable std::recursive_mutex device_mutex_;
     std::atomic<EngineState> state_{EngineState::Stopped};
     std::atomic<ag_result> terminal_error_{AG_OK};
     std::atomic<std::int64_t> rendered_frames_total_{0};
@@ -1315,6 +1509,7 @@ private:
     std::atomic<float> volume_{1.0F};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
+    std::atomic<bool> match_track_sample_rate_{false};
     std::atomic<std::uint64_t> transition_version_{0U};
     std::mutex random_mutex_;
     std::mt19937 random_{std::random_device{}()};
@@ -1437,6 +1632,12 @@ ag_result AudioEngine::set_transition_fade_ms(
     const int milliseconds) noexcept
 {
     return impl_->set_transition_fade_ms(milliseconds);
+}
+
+ag_result AudioEngine::set_match_track_sample_rate(
+    const bool enabled) noexcept
+{
+    return impl_->set_match_track_sample_rate(enabled);
 }
 
 } // namespace agplayer

@@ -128,6 +128,13 @@ ag_result CoreContext::set_transition_fade_ms(
                   "transition fade change failed");
 }
 
+ag_result CoreContext::set_match_track_sample_rate(
+    const bool enabled) noexcept
+{
+    return record(audio_engine_.set_match_track_sample_rate(enabled),
+                  "sample rate policy change failed");
+}
+
 ag_result CoreContext::record(const ag_result result,
                               const char* operation) noexcept
 {

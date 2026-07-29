@@ -9,7 +9,7 @@ ApplicationWindow {
     objectName: "mainWindow"
     visible: true
     width: 1228
-    height: 424
+    height: 399
     minimumWidth: 800
     minimumHeight: 360
     onClosing: function(close) {
@@ -25,7 +25,6 @@ ApplicationWindow {
     // override this with a fake QtObject to verify shared state without audio.
     property var playback: PlaybackController
     property int positionMs: playback.positionMs
-    property bool lyricsVisible: false
 
     Component.onCompleted: {
         Theme.mode = SettingsController.themeMode
@@ -116,50 +115,12 @@ ApplicationWindow {
             visible: LibraryModel.count > 0
         }
 
-        Rectangle {
-            id: lyricsPanel
-            Layout.fillWidth: true
-            Layout.preferredHeight: lyricsVisible ? 160 : 0
-            visible: LibraryModel.count > 0 && lyricsVisible
-            color: Theme.panel
-            clip: true
-
-            Behavior on Layout.preferredHeight {
-                NumberAnimation { duration: 150; easing.type: Easing.InOutQuad }
-            }
-
-            Flickable {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingMd
-                contentWidth: width
-                contentHeight: lyricsText.implicitHeight
-                flickableDirection: Flickable.VerticalFlick
-                ScrollIndicator.vertical: ScrollIndicator {}
-
-                Text {
-                    id: lyricsText
-                    width: parent.width
-                    text: PlaybackController.lyrics.length > 0
-                          ? PlaybackController.lyrics
-                          : qsTr("No lyrics available")
-                    color: Theme.primaryText
-                    font.pixelSize: 14
-                    lineHeight: 1.6
-                    lineHeightMode: Text.ProportionalHeight
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
-
         PlayerControls {
             id: playerControls
             objectName: "playerControls"
             Layout.fillWidth: true
             Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 72
             emptyMode: LibraryModel.count === 0
-            onToggleLyrics: mainWindow.lyricsVisible = !mainWindow.lyricsVisible
         }
     }
 
@@ -199,7 +160,7 @@ ApplicationWindow {
         color: "transparent"
         border.color: Theme.border
         border.width: 1
-        radius: Theme.radiusLg
+        radius: Theme.windowRadius
         z: 100
     }
 

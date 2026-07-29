@@ -49,7 +49,7 @@ Window {
         id: surface
         anchors.fill: parent
         anchors.margins: 4
-        radius: Theme.radiusLg
+        radius: Theme.windowRadius
         color: SettingsController.glassEffect
                ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 0.88)
                : Theme.panel

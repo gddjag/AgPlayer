@@ -178,7 +178,7 @@ Rectangle {
                                     ? Theme.icon("star-fill")
                                     : Theme.icon("star-line")
                             tint: index < root.currentTrackRating()
-                                  ? Theme.ratingGold : Theme.iconSecondary
+                                  ? Theme.ratingColor(index) : Theme.iconSecondary
                             sourceSize.width: 10
                             sourceSize.height: 10
                             Layout.preferredWidth: 12
@@ -281,6 +281,16 @@ Rectangle {
                 layers: ({})
                 position: playback.positionMs
                 duration: playback.durationMs
+                visualMode: SettingsController.waveformMode
+                baseColor: SettingsController.waveformMode === 0
+                           ? SettingsController.waveformSolidBaseColor
+                           : SettingsController.waveformRgbBaseColor
+                progressColor: SettingsController.waveformSolidProgressColor
+                gradientStartColor: SettingsController.waveformRgbStartColor
+                gradientMiddleColor: SettingsController.waveformRgbMiddleColor
+                gradientEndColor: SettingsController.waveformRgbEndColor
+                rgbProgress: SettingsController.waveformRgbProgress
+                amplitudeScale: SettingsController.waveformHeight
                 density: SettingsController.waveformDensity
                 lineWidth: SettingsController.waveformThickness
                 clip: true

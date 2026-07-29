@@ -25,16 +25,22 @@ bool is_cancelled(const std::atomic_bool* cancelled) noexcept
 WaveformBucketizer::WaveformBucketizer(const std::size_t total_frames,
                                        const std::size_t target_points,
                                        const std::size_t channels,
-                                       const float sample_rate)
+                                       const float sample_rate,
+                                       const WaveformAggregation aggregation)
     : total_frames_(total_frames),
       channels_(channels),
       sample_rate_(sample_rate),
+      aggregation_(aggregation),
       buckets_(std::min(total_frames, target_points), 0.0F),
       bass_buckets_(buckets_.size(), 0.0F),
       mid_buckets_(buckets_.size(), 0.0F),
       high_buckets_(buckets_.size(), 0.0F),
+      bucket_sample_counts_(buckets_.size(), 0U),
       failed_(total_frames == 0U || target_points == 0U || channels == 0U
-              || sample_rate <= 0.0F)
+              || sample_rate <= 0.0F
+              || (aggregation != WaveformAggregation::Peak
+                  && aggregation != WaveformAggregation::AverageAbsolute
+                  && aggregation != WaveformAggregation::Rms))
 {
     if (!failed_) {
         bucket_base_frames_ = total_frames_ / buckets_.size();
@@ -81,10 +87,29 @@ ag_result WaveformBucketizer::add(const std::vector<float>& samples,
     }
 
     for (std::size_t frame = 0U; frame < frames; ++frame) {
-        float frame_peak = 0.0F;
-        float bass_peak = 0.0F;
-        float mid_peak = 0.0F;
-        float high_peak = 0.0F;
+        const std::size_t absolute_frame = consumed_frames_ + frame;
+        while (current_bucket_ + 1U < buckets_.size()
+               && absolute_frame >= next_bucket_frame_) {
+            ++current_bucket_;
+            extend_bucket_boundary();
+        }
+
+        const auto accumulate = [this](std::vector<float>& layer,
+                                       const float value) noexcept {
+            const float absolute = std::abs(value);
+            switch (aggregation_) {
+            case WaveformAggregation::Peak:
+                layer[current_bucket_] =
+                    std::max(layer[current_bucket_], absolute);
+                break;
+            case WaveformAggregation::AverageAbsolute:
+                layer[current_bucket_] += absolute;
+                break;
+            case WaveformAggregation::Rms:
+                layer[current_bucket_] += value * value;
+                break;
+            }
+        };
         const std::size_t sample_offset = frame * channels_;
 
         for (std::size_t channel = 0U; channel < channels_; ++channel) {
@@ -98,27 +123,12 @@ ag_result WaveformBucketizer::add(const std::vector<float>& samples,
             const float mid = mid_filters_[channel].process(sample);
             const float high = high_filters_[channel].process(sample);
 
-            frame_peak = std::max(frame_peak, std::abs(sample));
-            bass_peak = std::max(bass_peak, std::abs(bass));
-            mid_peak = std::max(mid_peak, std::abs(mid));
-            high_peak = std::max(high_peak, std::abs(high));
+            accumulate(buckets_, sample);
+            accumulate(bass_buckets_, bass);
+            accumulate(mid_buckets_, mid);
+            accumulate(high_buckets_, high);
+            ++bucket_sample_counts_[current_bucket_];
         }
-
-        const std::size_t absolute_frame = consumed_frames_ + frame;
-        while (current_bucket_ + 1U < buckets_.size()
-               && absolute_frame >= next_bucket_frame_) {
-            ++current_bucket_;
-            extend_bucket_boundary();
-        }
-
-        buckets_[current_bucket_] =
-            std::max(buckets_[current_bucket_], frame_peak);
-        bass_buckets_[current_bucket_] =
-            std::max(bass_buckets_[current_bucket_], bass_peak);
-        mid_buckets_[current_bucket_] =
-            std::max(mid_buckets_[current_bucket_], mid_peak);
-        high_buckets_[current_bucket_] =
-            std::max(high_buckets_[current_bucket_], high_peak);
     }
     consumed_frames_ += frames;
     return AG_OK;
@@ -146,6 +156,25 @@ void normalize_layer(std::vector<float>& layer) noexcept
     }
 }
 
+void finalize_aggregation(std::vector<float>& layer,
+                          const std::vector<std::size_t>& counts,
+                          const WaveformAggregation aggregation) noexcept
+{
+    if (aggregation == WaveformAggregation::Peak) {
+        return;
+    }
+    for (std::size_t index = 0U; index < layer.size(); ++index) {
+        if (counts[index] == 0U) {
+            layer[index] = 0.0F;
+            continue;
+        }
+        layer[index] /= static_cast<float>(counts[index]);
+        if (aggregation == WaveformAggregation::Rms) {
+            layer[index] = std::sqrt(layer[index]);
+        }
+    }
+}
+
 } // namespace
 
 ag_result WaveformBucketizer::finish(std::vector<float>& peaks,
@@ -162,6 +191,10 @@ ag_result WaveformBucketizer::finish(std::vector<float>& peaks,
         return AG_DECODE_ERROR;
     }
 
+    finalize_aggregation(buckets_, bucket_sample_counts_, aggregation_);
+    finalize_aggregation(bass_buckets_, bucket_sample_counts_, aggregation_);
+    finalize_aggregation(mid_buckets_, bucket_sample_counts_, aggregation_);
+    finalize_aggregation(high_buckets_, bucket_sample_counts_, aggregation_);
     normalize_layer(buckets_);
     normalize_layer(bass_buckets_);
     normalize_layer(mid_buckets_);
@@ -183,7 +216,8 @@ ag_result WaveformAnalyzer::analyze(
     std::vector<float>& peaks,
     std::vector<float>& bass,
     std::vector<float>& mid,
-    std::vector<float>& high) noexcept
+    std::vector<float>& high,
+    const WaveformAggregation aggregation) noexcept
 {
     peaks.clear();
     bass.clear();
@@ -255,7 +289,7 @@ ag_result WaveformAnalyzer::analyze(
         WaveformBucketizer bucketizer(
             total_frames, target_points,
             static_cast<std::size_t>(metadata.channels),
-            sample_rate);
+            sample_rate, aggregation);
         std::size_t processed_frames = 0U;
         do {
             if (is_cancelled(cancelled)) {

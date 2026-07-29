@@ -208,10 +208,17 @@ int main(int argc, char* argv[])
         QObject::connect(&settings, &SettingsController::exclusiveModeChanged,
                          &app, applyOutputDevice);
         playback.setTransitionFadeMs(settings.transitionFadeMs());
+        playback.setMatchTrackSampleRate(settings.matchTrackSampleRate());
         QObject::connect(
             &settings, &SettingsController::transitionFadeMsChanged,
             &app, [&settings, &playback]() {
                 playback.setTransitionFadeMs(settings.transitionFadeMs());
+            });
+        QObject::connect(
+            &settings, &SettingsController::matchTrackSampleRateChanged,
+            &app, [&settings, &playback]() {
+                playback.setMatchTrackSampleRate(
+                    settings.matchTrackSampleRate());
             });
         playback.setMode(static_cast<PlaybackController::Mode>(
             settings.defaultPlaybackMode()));

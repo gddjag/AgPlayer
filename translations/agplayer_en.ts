@@ -882,7 +882,7 @@
         <translation>Delete this playlist? Music files will not be deleted.</translation>
     </message>
     <message>
-        <location line="+41"/>
+        <location line="+43"/>
         <source>音乐列表</source>
         <translation>Music List</translation>
     </message>
@@ -900,14 +900,6 @@
         <location line="+6"/>
         <source>一键清空筛选</source>
         <translation>Clear all filters</translation>
-    </message>
-</context>
-<context>
-    <name>Main</name>
-    <message>
-        <location filename="../app/qml/AgPlayer/Main.qml" line="+144"/>
-        <source>No lyrics available</source>
-        <translation>No lyrics available</translation>
     </message>
 </context>
 <context>
@@ -947,7 +939,7 @@
         <translation>Unknown artist</translation>
     </message>
     <message>
-        <location line="+103"/>
+        <location line="+113"/>
         <source>Previous track</source>
         <translation>Previous track</translation>
     </message>
@@ -1288,7 +1280,7 @@
 <context>
     <name>PlayerControls</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="+27"/>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="+26"/>
         <source>Hide playlist window</source>
         <translation>Hide playlist window</translation>
     </message>
@@ -1298,7 +1290,7 @@
         <translation>Show playlist window</translation>
     </message>
     <message>
-        <location line="+29"/>
+        <location line="+26"/>
         <source>Open audio tools</source>
         <translation>Open audio tools</translation>
     </message>
@@ -1318,7 +1310,7 @@
         <translation>Previous</translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+27"/>
         <location line="+5"/>
         <source>Pause</source>
         <translation>Pause</translation>
@@ -1330,7 +1322,7 @@
         <translation>Play</translation>
     </message>
     <message>
-        <location line="+51"/>
+        <location line="+66"/>
         <source>Next track</source>
         <translation>Next track</translation>
     </message>
@@ -1360,17 +1352,7 @@
         <translation>Sequential</translation>
     </message>
     <message>
-        <location line="+27"/>
-        <source>Toggle lyrics</source>
-        <translation>Toggle lyrics</translation>
-    </message>
-    <message>
-        <location line="+3"/>
-        <source>Lyrics</source>
-        <translation>Lyrics</translation>
-    </message>
-    <message>
-        <location line="+24"/>
+        <location line="+30"/>
         <source>Unmute</source>
         <translation>Unmute</translation>
     </message>
@@ -1380,12 +1362,12 @@
         <translation>Mute</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+26"/>
         <source>Volume</source>
         <translation>Volume</translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+22"/>
         <source>Switch to mini player</source>
         <translation>Switch to mini player</translation>
     </message>
@@ -1393,7 +1375,7 @@
 <context>
     <name>PlayerPane</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+154"/>
+        <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="+146"/>
         <source>No track loaded</source>
         <translation>No track loaded</translation>
     </message>
@@ -1434,81 +1416,81 @@
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="+53"/>
-        <location line="+745"/>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="+72"/>
+        <location line="+804"/>
         <location line="+1"/>
         <source>常规</source>
         <translation>General</translation>
     </message>
     <message>
-        <location line="-745"/>
-        <location line="+933"/>
+        <location line="-804"/>
+        <location line="+992"/>
         <source>播放与音频</source>
         <translation>Playback &amp; Audio</translation>
     </message>
     <message>
-        <location line="-933"/>
-        <location line="+934"/>
+        <location line="-992"/>
+        <location line="+993"/>
         <source>播放</source>
         <translation>Playback</translation>
     </message>
     <message>
-        <location line="-933"/>
-        <location line="+1071"/>
+        <location line="-992"/>
+        <location line="+1137"/>
         <source>外观与波形</source>
         <translation>Appearance &amp; Waveform</translation>
     </message>
     <message>
-        <location line="-1071"/>
-        <location line="+1072"/>
+        <location line="-1137"/>
+        <location line="+1138"/>
         <source>外观</source>
         <translation>Appearance</translation>
     </message>
     <message>
-        <location line="-1071"/>
-        <location line="+1215"/>
+        <location line="-1137"/>
+        <location line="+1353"/>
         <source>音频工具预设</source>
         <translation>Audio Tool Presets</translation>
     </message>
     <message>
-        <location line="-1215"/>
-        <location line="+1216"/>
+        <location line="-1353"/>
+        <location line="+1354"/>
         <source>音频工具</source>
         <translation>Audio Tools</translation>
     </message>
     <message>
-        <location line="-1215"/>
-        <location line="+1314"/>
+        <location line="-1353"/>
+        <location line="+1452"/>
         <source>快捷键设置</source>
         <translation>Keyboard Shortcuts</translation>
     </message>
     <message>
-        <location line="-1314"/>
-        <location line="+1315"/>
+        <location line="-1452"/>
+        <location line="+1453"/>
         <source>快捷键</source>
         <translation>Hotkeys</translation>
     </message>
     <message>
-        <location line="-1314"/>
-        <location line="+1422"/>
+        <location line="-1452"/>
+        <location line="+1560"/>
         <source>缓存与数据</source>
         <translation>Cache &amp; Data</translation>
     </message>
     <message>
-        <location line="-1422"/>
-        <location line="+1423"/>
+        <location line="-1560"/>
+        <location line="+1561"/>
         <source>缓存</source>
         <translation>Cache</translation>
     </message>
     <message>
-        <location line="-1422"/>
-        <location line="+1583"/>
+        <location line="-1560"/>
+        <location line="+1721"/>
         <location line="+1"/>
         <source>关于</source>
         <translation>About</translation>
     </message>
     <message>
-        <location line="-1546"/>
+        <location line="-1684"/>
         <source>确认清空缓存</source>
         <translation>Confirm to clear cache</translation>
     </message>
@@ -1518,7 +1500,12 @@
         <translation>Are you sure you want to clear all caches with one click? This action cannot be undone.</translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+7"/>
+        <source>选择波形颜色</source>
+        <translation>Choose waveform color</translation>
+    </message>
+    <message>
+        <location line="+28"/>
         <source>AgPlayer · 设置</source>
         <translation>AgPlayer · Settings</translation>
     </message>
@@ -1548,7 +1535,7 @@
         <translation>Save Changes</translation>
     </message>
     <message>
-        <location line="+301"/>
+        <location line="+334"/>
         <source>纯色波形</source>
         <translation>solid color waveform</translation>
     </message>
@@ -1563,7 +1550,7 @@
         <translation>spectrum waveform</translation>
     </message>
     <message>
-        <location line="+150"/>
+        <location line="+167"/>
         <source>开机与窗口</source>
         <translation>Startup &amp; Windows</translation>
     </message>
@@ -1671,6 +1658,11 @@
         <location line="+23"/>
         <source>独占模式</source>
         <translation>Exclusive mode</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>自动匹配歌曲采样率</source>
+        <translation>Automatically match track sample rate</translation>
     </message>
     <message>
         <location line="+11"/>
@@ -1784,66 +1776,71 @@
     </message>
     <message>
         <location line="+27"/>
-        <source>波形渲染密度</source>
-        <translation>Waveform rendering density</translation>
+        <source>波形高度</source>
+        <translation>Waveform height</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>波形采样密度</source>
+        <translation>Waveform sampling density</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>波形峰值算法</source>
+        <translation>Waveform aggregation</translation>
     </message>
     <message>
         <location line="+4"/>
-        <source>稀疏</source>
-        <translation>sparse</translation>
+        <source>平均绝对值</source>
+        <translation>Average absolute value</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>适中（推荐）</source>
-        <translation>Moderate (recommended)</translation>
+        <source>均方根 (RMS)</source>
+        <translation>Root mean square (RMS)</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>底色 / 进度色</source>
+        <translation>Base / progress color</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>精细</source>
-        <translation>Fine</translation>
+        <source>灰白底色 / RGB渐变</source>
+        <translation>Gray-white base / RGB gradient</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+39"/>
+        <source>RGB显示区域</source>
+        <translation>RGB display region</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>播放进度为RGB</source>
+        <translation>Played region uses RGB</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>未播放区域为RGB</source>
+        <translation>Unplayed region uses RGB</translation>
+    </message>
+    <message>
+        <location line="-72"/>
         <source>波形线条粗细</source>
         <translation>Waveform line thickness</translation>
     </message>
     <message>
-        <location line="+4"/>
-        <source>1px</source>
-        <translation>1px</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>1.5px</source>
-        <translation>1.5px</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>2px</source>
-        <translation>2px</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>3px</source>
-        <translation>3px</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>4px</source>
-        <translation>4px</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>6px</source>
-        <translation>6px</translation>
-    </message>
-    <message>
-        <location line="+14"/>
+        <location line="+80"/>
         <source>鼠标悬停波形时显示时间预览胶囊</source>
         <translation>Show time preview capsule when mouseover waveform</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+6"/>
+        <source>恢复波形默认</source>
+        <translation>Reset waveform defaults</translation>
+    </message>
+    <message>
+        <location line="+24"/>
         <source>通用导出</source>
         <translation>Universal export</translation>
     </message>
@@ -2313,7 +2310,7 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../app/main.cpp" line="+340"/>
+        <location filename="../app/main.cpp" line="+347"/>
         <source>Show AgPlayer</source>
         <translation>Show AgPlayer</translation>
     </message>

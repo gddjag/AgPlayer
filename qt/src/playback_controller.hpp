@@ -84,6 +84,7 @@ public:
     Q_INVOKABLE bool setOutputDevice(const QString& deviceId,
                                      bool exclusive);
     Q_INVOKABLE bool setTransitionFadeMs(int milliseconds);
+    Q_INVOKABLE bool setMatchTrackSampleRate(bool enabled);
 
 signals:
     void stateChanged();

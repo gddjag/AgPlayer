@@ -41,6 +41,7 @@ int main()
     assert(ag_player_set_transition_fade_ms(null_player, 200) == AG_OK);
     assert(ag_player_set_transition_fade_ms(null_player, 100)
            == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_match_track_sample_rate(null_player, true) == AG_OK);
     assert(ag_player_output_device_count(null_player, nullptr)
            == AG_INVALID_ARGUMENT);
     std::size_t id_required = 0U;

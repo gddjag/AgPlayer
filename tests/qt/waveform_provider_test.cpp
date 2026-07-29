@@ -2,6 +2,7 @@
 #include "waveform_provider.hpp"
 
 #include <QFile>
+#include <QDir>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -21,6 +22,7 @@ private slots:
     void emptyPathEmitsEmptyPeaks();
     void cacheHitEmitsPeaksImmediately();
     void analysisEmitsPeaksForFixture();
+    void aggregationChangeUsesSeparateCache();
     void newerTrackSuppressesStaleAnalysisResult();
 
 private:
@@ -132,6 +134,43 @@ void WaveformProviderTest::analysisEmitsPeaksForFixture()
     QVERIFY(!layers.value(QStringLiteral("mid")).toList().isEmpty());
     QVERIFY(!layers.value(QStringLiteral("high")).toList().isEmpty());
     QCOMPARE(provider.analysisProgress(), 1.0);
+}
+
+void WaveformProviderTest::aggregationChangeUsesSeparateCache()
+{
+    if (fixturePath_.isEmpty()) {
+        QSKIP("AGPLAYER_TEST_WAV not set");
+    }
+
+    QTemporaryDir cacheDir;
+    QVERIFY(cacheDir.isValid());
+    SettingsController settings;
+    settings.setCacheDirectory(cacheDir.path());
+
+    const auto analyze = [&](const int algorithm) {
+        settings.setWaveformPeakAlgorithm(algorithm);
+        WaveformProvider provider(&settings);
+        QSignalSpy spy(&provider, &WaveformProvider::waveformReady);
+        provider.loadForTrack(fixturePath_);
+        if (spy.isEmpty()) {
+            QVERIFY2(spy.wait(5000), "waveform analysis did not finish");
+        }
+        QCOMPARE(spy.count(), 1);
+    };
+
+    analyze(0);
+    analyze(1);
+    const QStringList caches = QDir(cacheDir.path()).entryList(
+        {QStringLiteral("*.agwf")}, QDir::Files);
+    QCOMPARE(caches.size(), 2);
+    QVERIFY(std::any_of(caches.begin(), caches.end(),
+                        [](const QString& name) {
+                            return name.endsWith(QStringLiteral("-average.agwf"));
+                        }));
+    QVERIFY(std::any_of(caches.begin(), caches.end(),
+                        [](const QString& name) {
+                            return name.endsWith(QStringLiteral("-rms.agwf"));
+                        }));
 }
 
 void WaveformProviderTest::newerTrackSuppressesStaleAnalysisResult()

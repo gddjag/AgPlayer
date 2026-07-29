@@ -192,7 +192,7 @@ ListView {
                         source: index < delegateRoot.rating
                                 ? Theme.icon("star-fill") : Theme.icon("star-line")
                         tint: index < delegateRoot.rating
-                              ? Theme.ratingGold : Theme.iconSecondary
+                              ? Theme.ratingColor(index) : Theme.iconSecondary
                         sourceSize.width: 12
                         sourceSize.height: 12
                         Layout.preferredWidth: 14

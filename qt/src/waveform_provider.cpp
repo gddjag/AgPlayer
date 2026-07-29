@@ -14,7 +14,17 @@
 
 namespace {
 
-QString cacheFilePathFor(SettingsController* settings, const QString& sourcePath)
+ag_waveform_aggregation aggregationForSettings(
+    const SettingsController* settings) noexcept
+{
+    return settings != nullptr && settings->waveformPeakAlgorithm() == 1
+               ? AG_WAVEFORM_AGGREGATION_RMS
+               : AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
+}
+
+QString cacheFilePathFor(SettingsController* settings,
+                         const QString& sourcePath,
+                         const ag_waveform_aggregation aggregation)
 {
     if (settings == nullptr || sourcePath.isEmpty()) {
         return {};
@@ -31,7 +41,13 @@ QString cacheFilePathFor(SettingsController* settings, const QString& sourcePath
     if (key.empty()) {
         return {};
     }
-    return QDir(dir).filePath(QString::fromStdString(key)
+    const QString suffix =
+        aggregation == AG_WAVEFORM_AGGREGATION_RMS
+            ? QStringLiteral("-rms")
+            : aggregation == AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE
+                  ? QStringLiteral("-average")
+                  : QString();
+    return QDir(dir).filePath(QString::fromStdString(key) + suffix
                               + QStringLiteral(".agwf"));
 }
 
@@ -169,6 +185,7 @@ void WaveformProvider::loadForTrack(const QString& path)
     progressTimer_->stop();
 
     currentPath_ = path;
+    currentAggregation_ = aggregationForSettings(settings_);
     setAnalysisProgress(path.isEmpty() ? 1.0 : 0.0);
 
     if (path.isEmpty()) {
@@ -177,7 +194,8 @@ void WaveformProvider::loadForTrack(const QString& path)
     }
 
     // Try cache first: v2 multi-layer format, then v1 legacy format.
-    const QString cachePath = cacheFilePathFor(settings_, path);
+    const QString cachePath =
+        cacheFilePathFor(settings_, path, currentAggregation_);
     if (!cachePath.isEmpty()) {
         const std::string source = path.toStdString();
         const std::string cache = cachePath.toStdString();
@@ -215,14 +233,17 @@ void WaveformProvider::loadForTrack(const QString& path)
     connect(watcher_, &QFutureWatcher<Job>::finished,
             this, &WaveformProvider::onAnalysisFinished);
     QFuture<Job> future = QtConcurrent::run(
-        [source, targetPoints, cancelToken, progress]() mutable {
+        [source, targetPoints, cancelToken, progress,
+         aggregation = currentAggregation_]() mutable {
             Job job;
             job.path = QString::fromStdString(source);
+            job.aggregation = aggregation;
             job.cancelToken = cancelToken;
             job.progress = progress;
-            job.result = ag_track_analysis(
+            job.result = ag_track_analysis_with_aggregation(
                 source.c_str(),
                 targetPoints,
+                aggregation,
                 cancelToken,
                 [](float p, void* userData) {
                     auto* atomicProgress =
@@ -279,7 +300,8 @@ void WaveformProvider::onAnalysisFinished()
     watcher_ = nullptr;
 
     if (job.result != AG_OK || job.waveform == nullptr
-        || job.path != currentPath_) {
+        || job.path != currentPath_
+        || job.aggregation != currentAggregation_) {
         if (job.waveform != nullptr) {
             ag_waveform_destroy(job.waveform);
         }
@@ -289,7 +311,8 @@ void WaveformProvider::onAnalysisFinished()
         return;
     }
 
-    const QString cachePath = cacheFilePathFor(settings_, currentPath_);
+    const QString cachePath =
+        cacheFilePathFor(settings_, currentPath_, job.aggregation);
     if (!cachePath.isEmpty()) {
         saveWaveformCache(cachePath, currentPath_, job.waveform);
         if (settings_ != nullptr) {

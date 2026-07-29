@@ -19,6 +19,25 @@ Popup {
     property int selectedSection: 0
     property string searchText: ""
     property bool editResolved: true
+    property string waveformColorTarget: ""
+
+    function editWaveformColor(target, value) {
+        waveformColorTarget = target
+        waveformColorDialog.selectedColor = value
+        waveformColorDialog.open()
+    }
+
+    function steppedModel(minimum, maximum, step, decimals, suffix) {
+        var result = []
+        for (var value = minimum; value <= maximum + step / 2; value += step) {
+            var rounded = Number(value.toFixed(decimals))
+            result.push({
+                text: rounded.toFixed(decimals) + suffix,
+                value: rounded
+            })
+        }
+        return result
+    }
 
     onOpened: {
         editResolved = false
@@ -87,7 +106,7 @@ Popup {
 
     background: Rectangle {
         color: Theme.panel
-        radius: Theme.radiusLg
+        radius: Theme.windowRadius
         border.color: Theme.border
         border.width: 1
     }
@@ -98,6 +117,15 @@ Popup {
         text: qsTr("确定要一键清空全部缓存吗？此操作不可撤销。")
         buttons: MessageDialog.Yes | MessageDialog.No
         onAccepted: SettingsController.clearAllCache()
+    }
+
+    ColorDialog {
+        id: waveformColorDialog
+        title: qsTr("选择波形颜色")
+        onAccepted: {
+            if (root.waveformColorTarget.length > 0)
+                SettingsController[root.waveformColorTarget] = selectedColor.toString()
+        }
     }
 
     contentItem: ColumnLayout {
@@ -575,6 +603,39 @@ Popup {
         }
     }
 
+    component WaveformColorButton: Button {
+        id: colorButton
+        property color colorValue
+        property string targetProperty
+        text: colorValue.toString().toUpperCase()
+        onClicked: root.editWaveformColor(targetProperty, colorValue)
+
+        contentItem: RowLayout {
+            spacing: Theme.spacingSm
+            Rectangle {
+                Layout.preferredWidth: 18
+                Layout.preferredHeight: 18
+                radius: 4
+                color: colorButton.colorValue
+                border.color: Theme.border
+            }
+            Text {
+                text: colorButton.text
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 12
+            }
+        }
+        background: Rectangle {
+            color: parent.hovered ? Theme.hoverSurface : Theme.background
+            border.color: Theme.border
+            border.width: 1
+            radius: Theme.radiusSm
+            implicitWidth: 108
+            implicitHeight: 30
+        }
+    }
+
     component FileAssociationCheck: CheckBox {
         property string extPrimary
         property string extSecondary: ""
@@ -673,6 +734,7 @@ Popup {
             spacing: 4
 
             Canvas {
+                id: waveformPreviewCanvas
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 onPaint: {
@@ -691,16 +753,16 @@ Popup {
                     if (mode === 1) {
                         // RGB gradient waveform using project RGBA layers
                         var rGrad = ctx.createLinearGradient(0, 0, width, 0)
-                        rGrad.addColorStop(0, "rgba(170,55,55,0.62)")
-                        rGrad.addColorStop(0.35, "rgba(55,140,55,0.58)")
-                        rGrad.addColorStop(0.7, "rgba(55,90,145,0.52)")
-                        rGrad.addColorStop(1, "rgba(170,55,55,0.62)")
+                        rGrad.addColorStop(0, SettingsController.waveformRgbStartColor)
+                        rGrad.addColorStop(0.5, SettingsController.waveformRgbMiddleColor)
+                        rGrad.addColorStop(1, SettingsController.waveformRgbEndColor)
                         ctx.strokeStyle = rGrad
-                        ctx.lineWidth = 2
+                        ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (var x = 0; x <= width; x += 2) {
                             var amp = Math.sin(x * 0.18) * Math.cos(x * 0.07) * Math.sin(x * 0.04)
-                            var y = cy + amp * (height * 0.38)
+                            var y = cy + amp * (height * 0.38
+                                               * SettingsController.waveformHeight)
                             if (x === 0) ctx.moveTo(x, y)
                             else ctx.lineTo(x, y)
                         }
@@ -711,7 +773,8 @@ Popup {
                         var barCount = Math.floor(width / (step + 2))
                         for (var i = 0; i < barCount; ++i) {
                             var bx = i * (step + 2)
-                            var barHeight = Math.max(2, Math.abs(Math.sin(i * 0.4) * Math.cos(i * 0.17)) * (height * 0.82))
+                            var envelope = 0.22 + 0.78 * Math.sin(Math.PI * i / Math.max(1, barCount - 1))
+                            var barHeight = Math.max(2, Math.abs(Math.sin(i * 0.4) * Math.cos(i * 0.17)) * (height * 0.82) * envelope)
                             var t = i / barCount
                             var rr = Math.round(170 * (1 - t) + 55 * t)
                             var gg = Math.round(55 * (1 - t) + 140 * t)
@@ -721,24 +784,26 @@ Popup {
                         }
                     } else {
                         // Solid cyan filled waveform
-                        ctx.fillStyle = Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.35)
+                        ctx.fillStyle = SettingsController.waveformSolidBaseColor
                         ctx.beginPath()
                         ctx.moveTo(0, cy)
                         for (var sx = 0; sx <= width; sx += 2) {
                             var sa = Math.sin(sx * 0.18) * Math.cos(sx * 0.07) * Math.sin(sx * 0.04)
-                            var sy = cy + sa * (height * 0.38)
+                            var sy = cy + sa * (height * 0.38
+                                               * SettingsController.waveformHeight)
                             ctx.lineTo(sx, sy)
                         }
                         ctx.lineTo(width, cy)
                         ctx.closePath()
                         ctx.fill()
 
-                        ctx.strokeStyle = Theme.cyan
-                        ctx.lineWidth = 1.5
+                        ctx.strokeStyle = SettingsController.waveformSolidProgressColor
+                        ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (sx = 0; sx <= width; sx += 2) {
                             sa = Math.sin(sx * 0.18) * Math.cos(sx * 0.07) * Math.sin(sx * 0.04)
-                            sy = cy + sa * (height * 0.38)
+                            sy = cy + sa * (height * 0.38
+                                           * SettingsController.waveformHeight)
                             if (sx === 0) ctx.moveTo(sx, sy)
                             else ctx.lineTo(sx, sy)
                         }
@@ -773,6 +838,19 @@ Popup {
                 color: Theme.accentText
                 font.pixelSize: 11
             }
+        }
+
+        Connections {
+            target: SettingsController
+            function onWaveformHeightChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformThicknessChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformSolidBaseColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformSolidProgressColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbBaseColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbProgressChanged() { waveformPreviewCanvas.requestPaint() }
         }
 
         MouseArea {
@@ -996,7 +1074,7 @@ Popup {
 
             SettingCard {
                 title: qsTr("音频输出")
-                Layout.preferredHeight: 170
+                Layout.preferredHeight: 215
 
                 SettingRow {
                     label: qsTr("输出设备")
@@ -1031,6 +1109,13 @@ Popup {
                     text: qsTr("独占模式")
                     checked: SettingsController.exclusiveMode
                     onToggled: SettingsController.exclusiveMode = checked
+                }
+
+                SettingSwitch {
+                    objectName: "matchTrackSampleRateSwitch"
+                    text: qsTr("自动匹配歌曲采样率")
+                    checked: SettingsController.matchTrackSampleRate
+                    onToggled: SettingsController.matchTrackSampleRate = checked
                 }
 
                 Label {
@@ -1187,7 +1272,7 @@ Popup {
 
             SettingCard {
                 title: qsTr("Waveform RGB 波形设置")
-                Layout.preferredHeight: 280
+                Layout.preferredHeight: 510
 
                 SettingRow {
                     label: qsTr("默认波形模式")
@@ -1217,15 +1302,27 @@ Popup {
                 }
 
                 SettingRow {
-                    label: qsTr("波形渲染密度")
+                    label: qsTr("波形高度")
                     SettingCombo {
+                        objectName: "waveformHeightCombo"
                         anchors.verticalCenter: parent.verticalCenter
-                        valueModel: [
-                            { text: qsTr("稀疏"), value: 0 },
-                            { text: qsTr("适中（推荐）"), value: 1 },
-                            { text: qsTr("精细"), value: 2 }
-                        ]
-                        currentIndex: SettingsController.waveformDensity
+                        valueModel: root.steppedModel(0.3, 1.5, 0.1, 1, "")
+                        currentIndex: Math.round(
+                                          (SettingsController.waveformHeight - 0.3)
+                                          / 0.1)
+                        onActivated: SettingsController.waveformHeight = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("波形采样密度")
+                    SettingCombo {
+                        objectName: "waveformDensityCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: root.steppedModel(0.5, 5.0, 0.5, 1, "")
+                        currentIndex: Math.round(
+                                          (SettingsController.waveformDensity - 0.5)
+                                          / 0.5)
                         onActivated: SettingsController.waveformDensity = currentValue
                     }
                 }
@@ -1233,23 +1330,82 @@ Popup {
                 SettingRow {
                     label: qsTr("波形线条粗细")
                     SettingCombo {
+                        objectName: "waveformThicknessCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: root.steppedModel(0.3, 3.0, 0.1, 1, "px")
+                        currentIndex: Math.round(
+                                          (SettingsController.waveformThickness - 0.3)
+                                          / 0.1)
+                        onActivated: SettingsController.waveformThickness = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("波形峰值算法")
+                    SettingCombo {
+                        objectName: "waveformAggregationCombo"
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: qsTr("1px"), value: 1.0 },
-                            { text: qsTr("1.5px"), value: 1.5 },
-                            { text: qsTr("2px"), value: 2.0 },
-                            { text: qsTr("3px"), value: 3.0 },
-                            { text: qsTr("4px"), value: 4.0 },
-                            { text: qsTr("6px"), value: 6.0 }
+                            { text: qsTr("平均绝对值"), value: 0 },
+                            { text: qsTr("均方根 (RMS)"), value: 1 }
                         ]
-                        currentIndex: {
-                            const values = [1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
-                            for (let i = 0; i < values.length; ++i) {
-                                if (Math.abs(values[i] - SettingsController.waveformThickness) < 0.01) return i
-                            }
-                            return 2
+                        currentIndex: SettingsController.waveformPeakAlgorithm
+                        onActivated: SettingsController.waveformPeakAlgorithm = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: SettingsController.waveformMode === 0
+                           ? qsTr("底色 / 进度色")
+                           : qsTr("灰白底色 / RGB渐变")
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.spacingSm
+
+                        WaveformColorButton {
+                            visible: SettingsController.waveformMode === 0
+                            colorValue: SettingsController.waveformSolidBaseColor
+                            targetProperty: "waveformSolidBaseColor"
                         }
-                        onActivated: SettingsController.waveformThickness = currentValue
+                        WaveformColorButton {
+                            visible: SettingsController.waveformMode === 0
+                            colorValue: SettingsController.waveformSolidProgressColor
+                            targetProperty: "waveformSolidProgressColor"
+                        }
+                        WaveformColorButton {
+                            visible: SettingsController.waveformMode !== 0
+                            colorValue: SettingsController.waveformRgbBaseColor
+                            targetProperty: "waveformRgbBaseColor"
+                        }
+                        WaveformColorButton {
+                            visible: SettingsController.waveformMode !== 0
+                            colorValue: SettingsController.waveformRgbStartColor
+                            targetProperty: "waveformRgbStartColor"
+                        }
+                        WaveformColorButton {
+                            visible: SettingsController.waveformMode !== 0
+                            colorValue: SettingsController.waveformRgbMiddleColor
+                            targetProperty: "waveformRgbMiddleColor"
+                        }
+                        WaveformColorButton {
+                            visible: SettingsController.waveformMode !== 0
+                            colorValue: SettingsController.waveformRgbEndColor
+                            targetProperty: "waveformRgbEndColor"
+                        }
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("RGB显示区域")
+                    visible: SettingsController.waveformMode === 1
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("播放进度为RGB"), value: true },
+                            { text: qsTr("未播放区域为RGB"), value: false }
+                        ]
+                        currentIndex: SettingsController.waveformRgbProgress ? 0 : 1
+                        onActivated: SettingsController.waveformRgbProgress = currentValue
                     }
                 }
 
@@ -1257,6 +1413,12 @@ Popup {
                     text: qsTr("鼠标悬停波形时显示时间预览胶囊")
                     checked: SettingsController.waveformHoverTimePreview
                     onToggled: SettingsController.waveformHoverTimePreview = checked
+                }
+
+                Button {
+                    objectName: "waveformResetButton"
+                    text: qsTr("恢复波形默认")
+                    onClicked: SettingsController.resetWaveformDefaults()
                 }
             }
         }

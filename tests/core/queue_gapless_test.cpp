@@ -41,6 +41,8 @@ namespace {
 
 constexpr std::size_t sample_rate = 44'100U;
 constexpr std::size_t channels = 2U;
+constexpr double fixture_amplitude = 0.251188643150958;
+constexpr double fixture_frequency = 440.0;
 
 void wait_for_frames(const agplayer::AudioEngine& engine,
                      const std::size_t frames)
@@ -100,6 +102,16 @@ std::vector<float> capture_realtime(agplayer::AudioEngine& engine,
     return captured;
 }
 
+float expected_fixture_sample(const std::size_t frame)
+{
+    const double pi = std::acos(-1.0);
+    return static_cast<float>(
+        std::sin(2.0 * pi * fixture_frequency
+                 * static_cast<double>(frame)
+                 / static_cast<double>(sample_rate))
+        * fixture_amplitude);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -126,6 +138,157 @@ int main(const int argc, char** argv)
     const agplayer::EngineSnapshot internal_snapshot = engine.snapshot();
     AG_CHECK(internal_snapshot.track_index == 1U);
     AG_CHECK(internal_snapshot.track_count == 2U);
+    AG_CHECK(internal_snapshot.sample_rate == static_cast<int>(sample_rate));
+
+    {
+        agplayer::AudioEngine matched_engine(agplayer::AudioBackend::Manual,
+                                             4'096U);
+        AG_CHECK(matched_engine.set_match_track_sample_rate(true) == AG_OK);
+        AG_CHECK(matched_engine.set_transition_fade_ms(200) == AG_OK);
+        AG_CHECK(matched_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+        AG_CHECK(matched_engine.play() == AG_OK);
+        std::array<float, 512U * channels> transition_block{};
+        for (int attempt = 0;
+             attempt < 2'000
+             && matched_engine.snapshot().track_index == 0U;
+             ++attempt) {
+            wait_for_frames(matched_engine, 1U);
+            matched_engine.render(transition_block.data(), 512U);
+        }
+        const agplayer::EngineSnapshot matched = matched_engine.snapshot();
+        AG_CHECK(matched.track_index == 1U);
+        AG_CHECK(matched.sample_rate == 48'000);
+    }
+
+    {
+        agplayer::AudioEngine null_device_engine(
+            agplayer::AudioBackend::Null, 4'096U);
+        AG_CHECK(null_device_engine.set_match_track_sample_rate(true) == AG_OK);
+        AG_CHECK(null_device_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+        AG_CHECK(null_device_engine.play() == AG_OK);
+        for (int attempt = 0;
+             attempt < 400
+             && null_device_engine.snapshot().track_index == 0U;
+             ++attempt) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        const agplayer::EngineSnapshot matched =
+            null_device_engine.snapshot();
+        AG_CHECK(matched.track_index == 1U);
+        AG_CHECK(matched.sample_rate == 48'000);
+    }
+
+    {
+        agplayer::AudioEngine seek_boundary_engine(
+            agplayer::AudioBackend::Manual, 4'096U);
+        AG_CHECK(seek_boundary_engine.set_match_track_sample_rate(true)
+                 == AG_OK);
+        AG_CHECK(seek_boundary_engine.set_queue({argv[1], argv[2]}, 0U)
+                 == AG_OK);
+        AG_CHECK(seek_boundary_engine.play() == AG_OK);
+        wait_for_frames(seek_boundary_engine, sample_rate);
+        AG_CHECK(seek_boundary_engine.seek(500) == AG_OK);
+        const std::vector<float> after_seek =
+            capture(seek_boundary_engine, 512U);
+        AG_CHECK(seek_boundary_engine.snapshot().track_index == 0U);
+        AG_CHECK(std::abs(after_seek[100U * channels]
+                          - expected_fixture_sample(
+                              sample_rate / 2U + 100U))
+                 < 0.01F);
+    }
+
+    {
+        agplayer::AudioEngine stop_boundary_engine(
+            agplayer::AudioBackend::Manual, 4'096U);
+        AG_CHECK(stop_boundary_engine.set_match_track_sample_rate(true)
+                 == AG_OK);
+        AG_CHECK(stop_boundary_engine.set_queue({argv[1], argv[2]}, 0U)
+                 == AG_OK);
+        AG_CHECK(stop_boundary_engine.play() == AG_OK);
+        wait_for_frames(stop_boundary_engine, sample_rate);
+        AG_CHECK(stop_boundary_engine.stop() == AG_OK);
+        AG_CHECK(stop_boundary_engine.play() == AG_OK);
+        const std::vector<float> after_stop =
+            capture(stop_boundary_engine, 512U);
+        AG_CHECK(stop_boundary_engine.snapshot().track_index == 0U);
+        AG_CHECK(std::abs(after_stop[100U * channels]
+                          - expected_fixture_sample(100U))
+                 < 0.01F);
+    }
+
+    {
+        agplayer::AudioEngine lifecycle_engine(
+            agplayer::AudioBackend::Null, 4'096U);
+        AG_CHECK(lifecycle_engine.set_match_track_sample_rate(true) == AG_OK);
+        AG_CHECK(lifecycle_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
+        AG_CHECK(lifecycle_engine.set_mode(
+                     agplayer::PlaybackMode::RepeatAll)
+                 == AG_OK);
+        AG_CHECK(lifecycle_engine.play() == AG_OK);
+        std::atomic<bool> lifecycle_ok{true};
+        std::thread switcher([&] {
+            for (int attempt = 0; attempt < 12; ++attempt) {
+                const ag_result result = lifecycle_engine.next();
+                if (result != AG_OK && result != AG_INVALID_ARGUMENT) {
+                    lifecycle_ok.store(false, std::memory_order_release);
+                }
+            }
+        });
+        std::thread pauser([&] {
+            for (int attempt = 0; attempt < 12; ++attempt) {
+                const ag_result pause_result = lifecycle_engine.pause();
+                if (pause_result != AG_OK
+                    && pause_result != AG_INVALID_ARGUMENT) {
+                    lifecycle_ok.store(false, std::memory_order_release);
+                }
+                const ag_result play_result = lifecycle_engine.play();
+                if (play_result != AG_OK
+                    && play_result != AG_INVALID_ARGUMENT) {
+                    lifecycle_ok.store(false, std::memory_order_release);
+                }
+            }
+        });
+        switcher.join();
+        pauser.join();
+        AG_CHECK(lifecycle_ok.load(std::memory_order_acquire));
+        AG_CHECK(lifecycle_engine.snapshot().state
+                 != agplayer::EngineState::Error);
+    }
+
+    {
+        agplayer::AudioEngine serialized_engine(
+            agplayer::AudioBackend::Null, 4'096U);
+        AG_CHECK(serialized_engine.set_queue({argv[1], argv[2]}, 0U)
+                 == AG_OK);
+        AG_CHECK(serialized_engine.set_mode(
+                     agplayer::PlaybackMode::RepeatAll)
+                 == AG_OK);
+        for (int attempt = 0; attempt < 24; ++attempt) {
+            AG_CHECK(serialized_engine.play() == AG_OK);
+            std::atomic<bool> start{false};
+            ag_result next_result = AG_INTERNAL_ERROR;
+            ag_result pause_result = AG_INTERNAL_ERROR;
+            std::thread switcher([&] {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                next_result = serialized_engine.next();
+            });
+            std::thread pauser([&] {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                pause_result = serialized_engine.pause();
+            });
+            start.store(true, std::memory_order_release);
+            switcher.join();
+            pauser.join();
+            AG_CHECK(next_result == AG_OK);
+            AG_CHECK(pause_result == AG_OK);
+            AG_CHECK(serialized_engine.snapshot().state
+                     == agplayer::EngineState::Paused);
+        }
+    }
 
     {
         agplayer::AudioEngine fade_engine(agplayer::AudioBackend::Manual,

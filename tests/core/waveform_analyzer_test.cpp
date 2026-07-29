@@ -77,6 +77,33 @@ void test_non_finite_pcm_is_rejected()
     }
 }
 
+void test_average_absolute_and_rms_aggregation()
+{
+    const std::vector<float> samples{0.0F, 1.0F, 0.5F, 0.5F};
+    std::vector<float> peaks;
+    std::vector<float> bass;
+    std::vector<float> mid;
+    std::vector<float> high;
+
+    agplayer::WaveformBucketizer average(
+        4U, 2U, 1U, 48000.0F,
+        agplayer::WaveformAggregation::AverageAbsolute);
+    assert(average.add(samples, 4U) == AG_OK);
+    assert(average.finish(peaks, bass, mid, high) == AG_OK);
+    assert(peaks.size() == 2U);
+    assert(std::abs(peaks[0] - 1.0F) < 0.000'001F);
+    assert(std::abs(peaks[1] - 1.0F) < 0.000'001F);
+
+    agplayer::WaveformBucketizer rms(
+        4U, 2U, 1U, 48000.0F,
+        agplayer::WaveformAggregation::Rms);
+    assert(rms.add(samples, 4U) == AG_OK);
+    assert(rms.finish(peaks, bass, mid, high) == AG_OK);
+    assert(peaks.size() == 2U);
+    assert(std::abs(peaks[0] - 1.0F) < 0.000'001F);
+    assert(std::abs(peaks[1] - std::sqrt(0.5F)) < 0.000'001F);
+}
+
 struct ProgressState final {
     std::vector<float> values;
     ag_cancel_token* token = nullptr;
@@ -104,6 +131,7 @@ int main(const int argc, char** argv)
     assert(argc == 2);
     test_actual_frame_bucketing_and_channel_combination();
     test_non_finite_pcm_is_rejected();
+    test_average_absolute_and_rms_aggregation();
     const std::string source_path = argv[1];
 
     ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
@@ -119,6 +147,12 @@ int main(const int argc, char** argv)
     assert(ag_waveform_analyze(source_path.c_str(), 512U, nullptr, nullptr,
                                nullptr, nullptr)
            == AG_INVALID_ARGUMENT);
+    assert(ag_track_analysis_with_aggregation(
+               source_path.c_str(), 512U,
+               static_cast<ag_waveform_aggregation>(99),
+               nullptr, nullptr, nullptr, &waveform, nullptr)
+           == AG_INVALID_ARGUMENT);
+    assert(waveform == nullptr);
 
     ProgressState progress;
     assert(ag_waveform_analyze(source_path.c_str(), 512U, nullptr,

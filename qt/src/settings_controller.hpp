@@ -38,6 +38,9 @@ class SettingsController final : public QObject {
                    NOTIFY outputDeviceChanged)
     Q_PROPERTY(bool exclusiveMode READ exclusiveMode WRITE setExclusiveMode
                    NOTIFY exclusiveModeChanged)
+    Q_PROPERTY(bool matchTrackSampleRate READ matchTrackSampleRate
+                   WRITE setMatchTrackSampleRate
+                   NOTIFY matchTrackSampleRateChanged)
     Q_PROPERTY(int transitionFadeMs READ transitionFadeMs
                    WRITE setTransitionFadeMs NOTIFY transitionFadeMsChanged)
     Q_PROPERTY(bool playButtonRgbGlow READ playButtonRgbGlow WRITE setPlayButtonRgbGlow
@@ -52,10 +55,29 @@ class SettingsController final : public QObject {
     Q_PROPERTY(int themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
     Q_PROPERTY(bool glassEffect READ glassEffect WRITE setGlassEffect NOTIFY glassEffectChanged)
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
-    Q_PROPERTY(int waveformDensity READ waveformDensity WRITE setWaveformDensity
+    Q_PROPERTY(double waveformHeight READ waveformHeight WRITE setWaveformHeight
+                   NOTIFY waveformHeightChanged)
+    Q_PROPERTY(double waveformDensity READ waveformDensity WRITE setWaveformDensity
                    NOTIFY waveformDensityChanged)
     Q_PROPERTY(double waveformThickness READ waveformThickness WRITE setWaveformThickness
                    NOTIFY waveformThicknessChanged)
+    Q_PROPERTY(int waveformPeakAlgorithm READ waveformPeakAlgorithm
+                   WRITE setWaveformPeakAlgorithm NOTIFY waveformPeakAlgorithmChanged)
+    Q_PROPERTY(QString waveformSolidBaseColor READ waveformSolidBaseColor
+                   WRITE setWaveformSolidBaseColor NOTIFY waveformSolidBaseColorChanged)
+    Q_PROPERTY(QString waveformSolidProgressColor READ waveformSolidProgressColor
+                   WRITE setWaveformSolidProgressColor
+                   NOTIFY waveformSolidProgressColorChanged)
+    Q_PROPERTY(QString waveformRgbBaseColor READ waveformRgbBaseColor
+                   WRITE setWaveformRgbBaseColor NOTIFY waveformRgbBaseColorChanged)
+    Q_PROPERTY(QString waveformRgbStartColor READ waveformRgbStartColor
+                   WRITE setWaveformRgbStartColor NOTIFY waveformRgbStartColorChanged)
+    Q_PROPERTY(QString waveformRgbMiddleColor READ waveformRgbMiddleColor
+                   WRITE setWaveformRgbMiddleColor NOTIFY waveformRgbMiddleColorChanged)
+    Q_PROPERTY(QString waveformRgbEndColor READ waveformRgbEndColor
+                   WRITE setWaveformRgbEndColor NOTIFY waveformRgbEndColorChanged)
+    Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
+                   WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
                    WRITE setWaveformHoverTimePreview NOTIFY waveformHoverTimePreviewChanged)
 
@@ -119,6 +141,7 @@ public:
     // Playback & Engine getters
     QString outputDevice() const;
     bool exclusiveMode() const noexcept;
+    bool matchTrackSampleRate() const noexcept;
     int transitionFadeMs() const noexcept;
     bool playButtonRgbGlow() const noexcept;
     int defaultPlaybackMode() const noexcept;
@@ -129,8 +152,17 @@ public:
     int themeMode() const noexcept;
     bool glassEffect() const noexcept;
     int waveformMode() const noexcept;
-    int waveformDensity() const noexcept;
+    double waveformHeight() const noexcept;
+    double waveformDensity() const noexcept;
     double waveformThickness() const noexcept;
+    int waveformPeakAlgorithm() const noexcept;
+    QString waveformSolidBaseColor() const;
+    QString waveformSolidProgressColor() const;
+    QString waveformRgbBaseColor() const;
+    QString waveformRgbStartColor() const;
+    QString waveformRgbMiddleColor() const;
+    QString waveformRgbEndColor() const;
+    bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
 
     // Audio Tools getters
@@ -175,6 +207,7 @@ public:
     // Playback & Engine setters
     void setOutputDevice(const QString& value);
     void setExclusiveMode(bool value);
+    void setMatchTrackSampleRate(bool value);
     void setTransitionFadeMs(int value);
     void setPlayButtonRgbGlow(bool value);
     void setDefaultPlaybackMode(int value);
@@ -185,8 +218,17 @@ public:
     void setThemeMode(int value);
     void setGlassEffect(bool value);
     void setWaveformMode(int value);
-    void setWaveformDensity(int value);
+    void setWaveformHeight(double value);
+    void setWaveformDensity(double value);
     void setWaveformThickness(double value);
+    void setWaveformPeakAlgorithm(int value);
+    void setWaveformSolidBaseColor(const QString& value);
+    void setWaveformSolidProgressColor(const QString& value);
+    void setWaveformRgbBaseColor(const QString& value);
+    void setWaveformRgbStartColor(const QString& value);
+    void setWaveformRgbMiddleColor(const QString& value);
+    void setWaveformRgbEndColor(const QString& value);
+    void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
 
     // Audio Tools setters
@@ -213,6 +255,7 @@ public:
     void setCacheSizeLimitMB(int value);
 
     Q_INVOKABLE void resetToDefaults();
+    Q_INVOKABLE void resetWaveformDefaults();
     Q_INVOKABLE void beginEdit();
     Q_INVOKABLE void commitEdit();
     Q_INVOKABLE void cancelEdit();
@@ -239,6 +282,7 @@ signals:
 
     void outputDeviceChanged();
     void exclusiveModeChanged();
+    void matchTrackSampleRateChanged();
     void transitionFadeMsChanged();
     void playButtonRgbGlowChanged();
     void defaultPlaybackModeChanged();
@@ -248,8 +292,17 @@ signals:
     void themeModeChanged();
     void glassEffectChanged();
     void waveformModeChanged();
+    void waveformHeightChanged();
     void waveformDensityChanged();
     void waveformThicknessChanged();
+    void waveformPeakAlgorithmChanged();
+    void waveformSolidBaseColorChanged();
+    void waveformSolidProgressColorChanged();
+    void waveformRgbBaseColorChanged();
+    void waveformRgbStartColorChanged();
+    void waveformRgbMiddleColorChanged();
+    void waveformRgbEndColorChanged();
+    void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
 
     void defaultOutputDirectoryChanged();
@@ -312,6 +365,7 @@ private:
     // Playback & Engine
     QString outputDevice_;
     bool exclusiveMode_ = false;
+    bool matchTrackSampleRate_ = true;
     int transitionFadeMs_ = 200;
     bool playButtonRgbGlow_ = true;
     int defaultPlaybackMode_ = 3;
@@ -322,8 +376,17 @@ private:
     int themeMode_ = 0;
     bool glassEffect_ = true;
     int waveformMode_ = 1;
-    int waveformDensity_ = 1;
-    double waveformThickness_ = 2.0;
+    double waveformHeight_ = 0.8;
+    double waveformDensity_ = 2.0;
+    double waveformThickness_ = 1.0;
+    int waveformPeakAlgorithm_ = 0;
+    QString waveformSolidBaseColor_ = QStringLiteral("#ffffff");
+    QString waveformSolidProgressColor_ = QStringLiteral("#ffdd00");
+    QString waveformRgbBaseColor_ = QStringLiteral("#e8edf4");
+    QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
+    QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+    QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+    bool waveformRgbProgress_ = true;
     bool waveformHoverTimePreview_ = true;
 
     // Audio Tools

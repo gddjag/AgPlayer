@@ -393,6 +393,21 @@ bool PlaybackController::setTransitionFadeMs(const int milliseconds)
     return true;
 }
 
+bool PlaybackController::setMatchTrackSampleRate(const bool enabled)
+{
+    if (player_ == nullptr) {
+        return false;
+    }
+    const ag_result result =
+        ag_player_set_match_track_sample_rate(player_, enabled ? 1 : 0);
+    if (result != AG_OK) {
+        runCommand(result);
+        return false;
+    }
+    setErrorMessage({});
+    return true;
+}
+
 void PlaybackController::pollSnapshot()
 {
     if (player_ == nullptr) {

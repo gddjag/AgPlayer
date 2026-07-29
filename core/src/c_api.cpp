@@ -274,6 +274,7 @@ ag_result ag_player_snapshot(const ag_player* player,
         snapshot->state = to_c_state(value.state);
         snapshot->position_ms = value.position_ms;
         snapshot->duration_ms = value.duration_ms;
+        snapshot->sample_rate = value.sample_rate;
         snapshot->volume = value.volume;
         snapshot->muted = value.muted ? 1 : 0;
         snapshot->track_index = value.track_index;
@@ -443,6 +444,17 @@ ag_result ag_player_set_transition_fade_ms(ag_player* player,
                      return player->context.set_transition_fade_ms(
                          milliseconds);
                  });
+}
+
+ag_result ag_player_set_match_track_sample_rate(ag_player* player,
+                                                 const int enabled)
+{
+    if (player == nullptr || (enabled != 0 && enabled != 1)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        return player->context.set_match_track_sample_rate(enabled != 0);
+    });
 }
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)
@@ -892,6 +904,21 @@ ag_result ag_track_analysis(const char* utf8_path,
                             ag_waveform** out_waveform,
                             double* const out_bpm)
 {
+    return ag_track_analysis_with_aggregation(
+        utf8_path, target_points, AG_WAVEFORM_AGGREGATION_PEAK,
+        cancel_token, progress_callback, user_data, out_waveform, out_bpm);
+}
+
+ag_result ag_track_analysis_with_aggregation(
+    const char* utf8_path,
+    const size_t target_points,
+    const ag_waveform_aggregation aggregation,
+    const ag_cancel_token* cancel_token,
+    const ag_progress_callback progress_callback,
+    void* const user_data,
+    ag_waveform** out_waveform,
+    double* const out_bpm)
+{
     if (out_waveform == nullptr) {
         return AG_INVALID_ARGUMENT;
     }
@@ -901,7 +928,9 @@ ag_result ag_track_analysis(const char* utf8_path,
         *out_bpm = 0.0;
     }
 
-    if (utf8_path == nullptr || utf8_path[0] == '\0' || target_points == 0U) {
+    if (utf8_path == nullptr || utf8_path[0] == '\0' || target_points == 0U
+        || aggregation < AG_WAVEFORM_AGGREGATION_PEAK
+        || aggregation > AG_WAVEFORM_AGGREGATION_RMS) {
         return AG_INVALID_ARGUMENT;
     }
 
@@ -913,9 +942,11 @@ ag_result ag_track_analysis(const char* utf8_path,
         std::vector<float> bass;
         std::vector<float> mid;
         std::vector<float> high;
+        const auto internal_aggregation =
+            static_cast<agplayer::WaveformAggregation>(aggregation);
         ag_result waveform_result = agplayer::WaveformAnalyzer::analyze(
             utf8_path, target_points, cancelled, progress_callback, user_data,
-            peaks, bass, mid, high);
+            peaks, bass, mid, high, internal_aggregation);
         if (waveform_result != AG_OK) {
             return waveform_result;
         }

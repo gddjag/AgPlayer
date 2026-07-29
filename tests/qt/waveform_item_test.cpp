@@ -42,6 +42,7 @@ private slots:
     void rendersMultiBandLayers();
     void fallsBackToFrequencyLayerWhenMixMissing();
     void densityAndLineWidthAffectRenderedGeometry();
+    void visualModesUseConfiguredProgressAndBaseColors();
 };
 
 namespace {
@@ -121,20 +122,54 @@ void WaveformItemTest::densityAndLineWidthAffectRenderedGeometry()
     QSGNode* sparseNode = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(sparseNode != nullptr);
     auto* sparseGeometry = static_cast<QSGGeometryNode*>(sparseNode)->geometry();
-    QCOMPARE(sparseGeometry->vertexCount(), 60);
+    QCOMPARE(sparseGeometry->vertexCount(), 120);
     QCOMPARE(sparseGeometry->lineWidth(), 1.0F);
 
     item.setDensity(2);
     QSGNode* fineNode = item.updatePaintNode(sparseNode, nullptr);
     QCOMPARE(fineNode, sparseNode);
     auto* fineGeometry = static_cast<QSGGeometryNode*>(fineNode)->geometry();
-    QCOMPARE(fineGeometry->vertexCount(), 240);
+    QCOMPARE(fineGeometry->vertexCount(), 480);
 
     item.setDensity(99);
     item.setLineWidth(99.0);
-    QCOMPARE(item.density(), 2);
-    QCOMPARE(item.lineWidth(), 6.0);
+    QCOMPARE(item.density(), 5.0);
+    QCOMPARE(item.lineWidth(), 3.0);
     delete fineNode;
+}
+
+void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
+{
+    TestableWaveformItem item;
+    item.setWidth(100);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setPosition(50);
+    item.setDensity(2.0);
+    item.setLineWidth(1.0);
+    item.setAmplitudeScale(0.5);
+    item.setVisualMode(0);
+    item.setBaseColor(QColor(QStringLiteral("#ffffff")));
+    item.setProgressColor(QColor(QStringLiteral("#ffdd00")));
+    item.setPeaks(peaks({1.0, 1.0, 1.0, 1.0}));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* data = vertices(node);
+    compareColor(data[0], 0xFF, 0xDD, 0x00, 0xFF);
+    compareColor(data[4], 0xFF, 0xFF, 0xFF, 0xFF);
+    QCOMPARE(data[0].y, 10.0F);
+    QCOMPARE(data[1].y, 30.0F);
+
+    item.setVisualMode(1);
+    item.setGradientStartColor(QColor(QStringLiteral("#00d4ff")));
+    item.setGradientMiddleColor(QColor(QStringLiteral("#7b2ff7")));
+    item.setGradientEndColor(QColor(QStringLiteral("#e62e9b")));
+    item.setRgbProgress(true);
+    node = item.updatePaintNode(node, nullptr);
+    compareColor(vertices(node)[0], 0x00, 0xD4, 0xFF, 0xFF);
+    compareColor(vertices(node)[4], 0xFF, 0xFF, 0xFF, 0xFF);
+    delete node;
 }
 
 void WaveformItemTest::buildsCenteredFiniteNormalizedLinePairs()
@@ -297,7 +332,7 @@ void WaveformItemTest::downsamplesPeaksToPixelBudget()
     const int renderedPeaks = vertexCount
                               / (2 * static_cast<int>(std::ceil(item.lineWidth())));
     const int expectedMaxPoints = static_cast<int>(
-        std::ceil(item.width() / 4.0));
+        std::ceil(item.width() * item.density() / 2.0));
     QVERIFY2(renderedPeaks <= expectedMaxPoints,
              qPrintable(QStringLiteral("rendered %1 peaks, budget was %2")
                             .arg(renderedPeaks)
