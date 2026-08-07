@@ -1,0 +1,525 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="images/favicon.ico" type="image/x-icon">
+  <title>下载 AgPlayer</title>
+  <style id="theme-vars">
+:root {
+  --agp-cyan: #00d9ff;
+  --agp-violet: #7b61ff;
+  --agp-rose: #ff2e7d;
+  --agp-gradient: linear-gradient(135deg, var(--agp-cyan), var(--agp-violet), var(--agp-rose));
+  --agp-gradient-soft: linear-gradient(135deg, rgba(0, 217, 255, 0.16), rgba(123, 97, 255, 0.16), rgba(255, 46, 125, 0.16));
+
+  --agp-background: #080a10;
+  --agp-foreground: #f0f2f8;
+  --agp-card: #0f121c;
+  --agp-card-foreground: #f0f2f8;
+  --agp-popover: #161b29;
+  --agp-popover-foreground: #f0f2f8;
+  --agp-primary: #7b61ff;
+  --agp-primary-foreground: #ffffff;
+  --agp-muted: #111622;
+  --agp-muted-foreground: #8b92a8;
+  --agp-border: #1e2436;
+  --agp-input: #1e2436;
+  --agp-ring: rgba(123, 97, 255, 0.5);
+  --agp-radius-sm: 0.375rem;
+  --agp-radius-md: 0.75rem;
+  --agp-radius-lg: 1rem;
+
+  --agp-surface: #0f121c;
+  --agp-surface-2: #161b29;
+  --agp-surface-3: #1c2333;
+  --agp-ink: #f0f2f8;
+  --agp-ink-2: #8b92a8;
+  --agp-ink-3: #5c647a;
+  --agp-line: #1e2436;
+
+  --agp-state-success: #22c55e;
+  --agp-state-warning: #f59e0b;
+  --agp-state-error: #ef4444;
+  --agp-state-info: #3b82f6;
+
+  --agp-font-display: "Plus Jakarta Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --agp-font-body: "Geist", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --agp-font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--agp-font-body);
+  background-color: var(--agp-background);
+  color: var(--agp-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6, .font-display { font-family: var(--agp-font-display); }
+
+.text-gradient {
+  background: var(--agp-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-border { position: relative; }
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--agp-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glass-card {
+  background: rgba(15, 18, 28, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--agp-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+  <style type="text/tailwindcss">
+@theme inline {
+  --color-background: var(--agp-background);
+  --color-foreground: var(--agp-foreground);
+  --color-card: var(--agp-card);
+  --color-card-foreground: var(--agp-card-foreground);
+  --color-popover: var(--agp-popover);
+  --color-popover-foreground: var(--agp-popover-foreground);
+  --color-primary: var(--agp-primary);
+  --color-primary-foreground: var(--agp-primary-foreground);
+  --color-muted: var(--agp-muted);
+  --color-muted-foreground: var(--agp-muted-foreground);
+  --color-border: var(--agp-border);
+  --color-input: var(--agp-input);
+  --color-ring: var(--agp-ring);
+  --radius-sm: var(--agp-radius-sm);
+  --radius-md: var(--agp-radius-md);
+  --radius-lg: var(--agp-radius-lg);
+}
+@layer base {
+  body { background: var(--agp-background); color: var(--agp-foreground); }
+}
+  </style>
+  <style id="semantic-token-fallback">
+    .bg-background { background-color: var(--agp-background); }
+    .text-background { color: var(--agp-background); }
+    .border-background { border-color: var(--agp-background); }
+    .bg-foreground { background-color: var(--agp-foreground); }
+    .text-foreground { color: var(--agp-foreground); }
+    .border-foreground { border-color: var(--agp-foreground); }
+    .bg-card { background-color: var(--agp-card); }
+    .text-card { color: var(--agp-card); }
+    .border-card { border-color: var(--agp-card); }
+    .bg-card-foreground { background-color: var(--agp-card-foreground); }
+    .text-card-foreground { color: var(--agp-card-foreground); }
+    .bg-popover { background-color: var(--agp-popover); }
+    .text-popover { color: var(--agp-popover); }
+    .border-popover { border-color: var(--agp-popover); }
+    .bg-primary { background-color: var(--agp-primary); }
+    .text-primary { color: var(--agp-primary); }
+    .border-primary { border-color: var(--agp-primary); }
+    .bg-primary-foreground { background-color: var(--agp-primary-foreground); }
+    .text-primary-foreground { color: var(--agp-primary-foreground); }
+    .bg-muted { background-color: var(--agp-muted); }
+    .text-muted { color: var(--agp-muted); }
+    .border-muted { border-color: var(--agp-muted); }
+    .text-muted-foreground { color: var(--agp-muted-foreground); }
+    .border-border { border-color: var(--agp-border); }
+    .bg-gradient { background: var(--agp-gradient); }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased bg-background text-foreground">
+  <header class="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-3 shrink-0">
+        <img src="images/logo.png" alt="AgPlayer" class="h-8 w-auto">
+      </a>
+      <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
+        <a href="index.html" data-dom-id="nav-home" class="hover:text-foreground transition-colors">
+          <span data-lang="zh">首页</span><span data-lang="en">Home</span><span data-lang="th">หน้าแรก</span><span data-lang="vi">Trang chủ</span>
+        </a>
+        <a href="index.html#waveform" data-dom-id="nav-waveform" class="hover:text-foreground transition-colors">
+          <span data-lang="zh">波形</span><span data-lang="en">Waveform</span><span data-lang="th">คลื่นเสียง</span><span data-lang="vi">Sóng âm</span>
+        </a>
+        <a href="index.html#features" data-dom-id="nav-features" class="hover:text-foreground transition-colors">
+          <span data-lang="zh">功能</span><span data-lang="en">Features</span><span data-lang="th">ฟีเจอร์</span><span data-lang="vi">Tính năng</span>
+        </a>
+        <a href="index.html#audio-tools" data-dom-id="nav-audio-tools" class="hover:text-foreground transition-colors">
+          <span data-lang="zh">音频工具</span><span data-lang="en">Audio Tools</span><span data-lang="th">เครื่องมือเสียง</span><span data-lang="vi">Công cụ âm thanh</span>
+        </a>
+        <a href="download.html" data-dom-id="nav-download" class="text-foreground transition-colors">
+          <span data-lang="zh">下载</span><span data-lang="en">Download</span><span data-lang="th">ดาวน์โหลด</span><span data-lang="vi">Tải xuống</span>
+        </a>
+        <a href="index.html#privacy" data-dom-id="nav-privacy" class="hover:text-foreground transition-colors">
+          <span data-lang="zh">隐私</span><span data-lang="en">Privacy</span><span data-lang="th">ความเป็นส่วนตัว</span><span data-lang="vi">Riêng tư</span>
+        </a>
+        <a href="about.html" data-dom-id="nav-about" class="hover:text-foreground transition-colors">
+          <span data-lang="zh">关于</span><span data-lang="en">About</span><span data-lang="th">เกี่ยวกับ</span><span data-lang="vi">Giới thiệu</span>
+        </a>
+      </nav>
+      <div class="relative" id="lang-dropdown">
+        <button type="button" id="lang-trigger" aria-haspopup="listbox" aria-expanded="false" class="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-card/60 hover:bg-muted transition-colors text-xs font-medium">
+          <span class="lang-flag text-sm leading-none">🇨🇳</span>
+          <span class="lang-label">中文</span>
+          <svg class="lang-caret w-3 h-3 opacity-60 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <div id="lang-menu" class="hidden absolute right-0 mt-2 w-40 rounded-lg border border-border bg-popover/95 backdrop-blur-md shadow-xl shadow-black/40 overflow-hidden z-50">
+          <button type="button" data-set-lang="zh" data-dom-id="lang-switch-zh" data-flag="🇨🇳" data-label="中文" class="lang-opt w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-muted transition-colors">
+            <span class="text-sm leading-none">🇨🇳</span><span>中文</span>
+          </button>
+          <button type="button" data-set-lang="en" data-dom-id="lang-switch-en" data-flag="🇺🇸" data-label="English" class="lang-opt w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-muted transition-colors">
+            <span class="text-sm leading-none">🇺🇸</span><span>English</span>
+          </button>
+          <button type="button" data-set-lang="th" data-dom-id="lang-switch-th" data-flag="🇹🇭" data-label="ไทย" class="lang-opt w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-muted transition-colors">
+            <span class="text-sm leading-none">🇹🇭</span><span>ไทย</span>
+          </button>
+          <button type="button" data-set-lang="vi" data-dom-id="lang-switch-vi" data-flag="🇻🇳" data-label="Tiếng Việt" class="lang-opt w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-muted transition-colors">
+            <span class="text-sm leading-none">🇻🇳</span><span>Tiếng Việt</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="download-hero" class="relative overflow-hidden pt-32 pb-20 md:pt-48 md:pb-32">
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <canvas id="dl-space-particles" class="absolute inset-0 w-full h-full"></canvas>
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,_rgba(0,217,255,0.18),_transparent_55%),radial-gradient(ellipse_at_80%_30%,_rgba(123,97,255,0.14),_transparent_45%)]"></div>
+        <svg class="hero-wave absolute -left-[10%] -right-[10%] bottom-0 w-[120%] h-full opacity-40 wave-anim-slow" preserveAspectRatio="none" viewBox="0 0 1440 800" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="dlWaveGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#00d9ff"></stop><stop offset="50%" stop-color="#7b61ff"></stop><stop offset="100%" stop-color="#ff2e7d"></stop></linearGradient>
+            <linearGradient id="dlWaveFill1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,217,255,0.28)"></stop><stop offset="100%" stop-color="rgba(0,217,255,0)"></stop></linearGradient>
+            <linearGradient id="dlWaveFill2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(123,97,255,0.22)"></stop><stop offset="100%" stop-color="rgba(123,97,255,0)"></stop></linearGradient>
+            <linearGradient id="dlWaveFill3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(255,46,125,0.18)"></stop><stop offset="100%" stop-color="rgba(255,46,125,0)"></stop></linearGradient>
+          </defs>
+          <path class="wave-path-1" d="M0,320 C180,260 360,420 540,340 C720,260 900,420 1080,340 C1260,260 1350,360 1440,320 L1440,800 L0,800 Z" fill="url(#dlWaveFill1)" stroke="url(#dlWaveGradient)" stroke-width="1.5"></path>
+          <path class="wave-path-2" d="M0,420 C240,320 480,520 720,420 C960,320 1200,520 1440,420 L1440,800 L0,800 Z" fill="url(#dlWaveFill2)" stroke="url(#dlWaveGradient)" stroke-width="1.2" opacity="0.7"></path>
+          <path class="wave-path-3" d="M0,520 C360,360 720,600 1080,440 C1260,360 1380,480 1440,520 L1440,800 L0,800 Z" fill="url(#dlWaveFill3)" stroke="url(#dlWaveGradient)" stroke-width="1" opacity="0.5"></path>
+        </svg>
+        <svg class="hero-wave-foreground absolute -left-[5%] -right-[5%] bottom-0 w-[110%] h-[70%] opacity-60" preserveAspectRatio="none" viewBox="0 0 1440 400" xmlns="http://www.w3.org/2000/svg">
+          <path class="wave-line-1" d="M0,200 C120,180 240,240 360,200 C480,160 600,260 720,200 C840,140 960,260 1080,200 C1200,140 1320,240 1440,200" fill="none" stroke="url(#dlWaveGradient)" stroke-width="2.5" stroke-linecap="round"></path>
+          <path class="wave-line-2" d="M0,240 C180,180 360,300 540,220 C720,140 900,300 1080,220 C1170,180 1305,260 1440,220" fill="none" stroke="url(#dlWaveGradient)" stroke-width="2" stroke-linecap="round" opacity="0.6"></path>
+        </svg>
+        <div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background"></div>
+      </div>
+
+      <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-card/60 text-xs text-muted-foreground mb-6">
+          <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+          <span data-lang="zh">最新版本 v1.0.0</span>
+          <span data-lang="en">Latest v1.0.0</span>
+          <span data-lang="th">เวอร์ชันล่าสุด v1.0.0</span>
+          <span data-lang="vi">Phiên bản mới nhất v1.0.0</span>
+        </div>
+        <h1 class="font-display text-4xl md:text-6xl font-bold tracking-tight text-glow mb-6">
+          <span data-lang="zh">下载 <span class="text-gradient">AgPlayer</span></span>
+          <span data-lang="en">Download <span class="text-gradient">AgPlayer</span></span>
+          <span data-lang="th">ดาวน์โหลด <span class="text-gradient">AgPlayer</span></span>
+          <span data-lang="vi">Tải <span class="text-gradient">AgPlayer</span></span>
+        </h1>
+        <p class="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
+          <span data-lang="zh">永久免费、无广告、纯本地离线运行。选择下方适合您系统的安装包，即可开始体验。</span>
+          <span data-lang="en">Free forever, ad-free, and purely offline. Choose the installer for your system and start experiencing.</span>
+          <span data-lang="th">ฟรีตลอดชีพ ไม่มีโฆษณา ทำงานออฟไลน์ล้วน เลือกติดตั้งสำหรับระบบของคุณ</span>
+          <span data-lang="vi">Miễn phí vĩnh viễn, không quảng cáo, hoạt động ngoại tuyến hoàn toàn. Chọn gói cài đặt phù hợp.</span>
+        </p>
+      </div>
+    </section>
+
+    <section id="download-options" class="relative z-10 pb-24 md:pb-32">
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid md:grid-cols-2 gap-6">
+          <div class="glass-card rounded-2xl p-8 flex flex-col items-center text-center hover:border-primary/40 transition-colors">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--agp-cyan)]/20 to-[var(--agp-violet)]/20 flex items-center justify-center mb-6 border border-border">
+              <svg class="w-8 h-8 text-foreground" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.555l7.2-.98v7.04H3V5.555zm0 12.89l7.2.98v-7.04H3v6.06zM11.2 4.4L21 3v8.616h-9.8V4.4zm0 15.2L21 21v-8.616h-9.8v8.216z"></path></svg>
+            </div>
+            <h2 class="font-display text-2xl font-bold mb-2">Windows</h2>
+            <p class="text-sm text-muted-foreground mb-6">
+              <span data-lang="zh">适用于 Windows 10 / 11 64 位系统</span>
+              <span data-lang="en">For Windows 10 / 11 64-bit</span>
+              <span data-lang="th">สำหรับ Windows 10 / 11 64 บิต</span>
+              <span data-lang="vi">Dành cho Windows 10 / 11 64-bit</span>
+            </p>
+            <div class="space-y-2 text-xs text-muted-foreground mb-8">
+              <p>AgPlayer-1.0.0-win-x64.exe</p>
+              <p data-lang="zh">文件大小：约 24 MB</p>
+              <p data-lang="en">Size: ~24 MB</p>
+              <p data-lang="th">ขนาดไฟล์：ประมาณ 24 MB</p>
+              <p data-lang="vi">Kích thước：~24 MB</p>
+            </div>
+            <a href="#" data-dom-id="cta-download-windows" class="mt-auto group inline-flex items-center gap-2 px-8 py-4 rounded-full text-primary-foreground font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all bg-gradient-to-r from-[var(--agp-cyan)] via-[var(--agp-violet)] to-[var(--agp-rose)] hover:scale-[1.02]">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+              <span data-lang="zh">下载 Windows 版</span>
+              <span data-lang="en">Download for Windows</span>
+              <span data-lang="th">ดาวน์โหลดสำหรับ Windows</span>
+              <span data-lang="vi">Tải cho Windows</span>
+            </a>
+          </div>
+
+          <div class="glass-card rounded-2xl p-8 flex flex-col items-center text-center hover:border-primary/40 transition-colors">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--agp-violet)]/20 to-[var(--agp-rose)]/20 flex items-center justify-center mb-6 border border-border">
+              <svg class="w-8 h-8 text-foreground" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.08zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.51-3.74 4.25z"></path></svg>
+            </div>
+            <h2 class="font-display text-2xl font-bold mb-2">macOS</h2>
+            <p class="text-sm text-muted-foreground mb-6">
+              <span data-lang="zh">适用于 macOS 12 及以上（Apple / Intel）</span>
+              <span data-lang="en">For macOS 12 and later (Apple / Intel)</span>
+              <span data-lang="th">สำหรับ macOS 12 ขึ้นไป (Apple / Intel)</span>
+              <span data-lang="vi">Dành cho macOS 12 trở lên (Apple / Intel)</span>
+            </p>
+            <div class="space-y-2 text-xs text-muted-foreground mb-8">
+              <p>AgPlayer-1.0.0-mac.dmg</p>
+              <p data-lang="zh">文件大小：约 31 MB</p>
+              <p data-lang="en">Size: ~31 MB</p>
+              <p data-lang="th">ขนาดไฟล์：ประมาณ 31 MB</p>
+              <p data-lang="vi">Kích thước：~31 MB</p>
+            </div>
+            <a href="#" data-dom-id="cta-download-macos" class="mt-auto group inline-flex items-center gap-2 px-8 py-4 rounded-full text-primary-foreground font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all bg-gradient-to-r from-[var(--agp-cyan)] via-[var(--agp-violet)] to-[var(--agp-rose)] hover:scale-[1.02]">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+              <span data-lang="zh">下载 macOS 版</span>
+              <span data-lang="en">Download for macOS</span>
+              <span data-lang="th">ดาวน์โหลดสำหรับ macOS</span>
+              <span data-lang="vi">Tải cho macOS</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="mt-12 glass-card rounded-2xl p-6 md:p-8">
+          <h3 class="font-display text-lg font-semibold mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+            <span data-lang="zh">安装说明</span>
+            <span data-lang="en">Installation Notes</span>
+            <span data-lang="th">คำแนะนำการติดตั้ง</span>
+            <span data-lang="vi">Hướng dẫn cài đặt</span>
+          </h3>
+          <ul class="space-y-3 text-sm text-muted-foreground list-disc list-inside">
+            <li data-lang="zh">下载完成后，运行安装程序并按提示完成安装。</li>
+            <li data-lang="en">After downloading, run the installer and follow the prompts.</li>
+            <li data-lang="th">ดาวน์โหลดเสร็จแล้ว รันโปรแกรมติดตั้งและทำตามคำแนะนำ</li>
+            <li data-lang="vi">Sau khi tải xuống, chạy trình cài đặt và làm theo hướng dẫn.</li>
+            <li data-lang="zh">首次启动建议授予本地文件访问权限，以便管理曲库。</li>
+            <li data-lang="en">Grant local file access on first launch for library management.</li>
+            <li data-lang="th">แนะนำให้อนุญาตการเข้าถึงไฟล์ในเครื่องเมื่อเปิดครั้งแรก</li>
+            <li data-lang="vi">Khuyến nghị cấp quyền truy cập tệp cục bộ khi khởi động lần đầu.</li>
+            <li data-lang="zh">软件完全离线运行，不会上传任何音频或个人信息。</li>
+            <li data-lang="en">The app runs entirely offline and never uploads audio or personal data.</li>
+            <li data-lang="th">ซอฟต์แวร์ทำงานออฟไลน์โดยสมบูรณ์ ไม่อัปโหลดเสียงหรือข้อมูลส่วนตัว</li>
+            <li data-lang="vi">Phần mềm chạy hoàn toàn ngoại tuyến, không tải lên âm thanh hay thông tin cá nhân.</li>
+          </ul>
+          <div class="mt-6 pt-6 border-t border-border text-xs text-muted-foreground font-mono space-y-1">
+            <p data-lang="zh">SHA256 校验值（示例）：</p>
+            <p data-lang="en">SHA256 checksums (example):</p>
+            <p data-lang="th">ค่า SHA256 (ตัวอย่าง)：</p>
+            <p data-lang="vi">Giá trị SHA256 (ví dụ)：</p>
+            <p>Windows: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</p>
+            <p>macOS: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-border bg-background py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <a href="index.html" class="flex items-center gap-3">
+        <img src="images/logo.png" alt="AgPlayer" class="h-7 w-auto">
+      </a>
+      <nav class="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
+        <a href="index.html" class="hover:text-foreground transition-colors"><span data-lang="zh">首页</span><span data-lang="en">Home</span><span data-lang="th">หน้าแรก</span><span data-lang="vi">Trang chủ</span></a>
+        <a href="index.html#features" class="hover:text-foreground transition-colors"><span data-lang="zh">功能</span><span data-lang="en">Features</span><span data-lang="th">ฟีเจอร์</span><span data-lang="vi">Tính năng</span></a>
+        <a href="download.html" class="hover:text-foreground transition-colors"><span data-lang="zh">下载</span><span data-lang="en">Download</span><span data-lang="th">ดาวน์โหลด</span><span data-lang="vi">Tải xuống</span></a>
+        <a href="index.html#privacy" class="hover:text-foreground transition-colors"><span data-lang="zh">隐私</span><span data-lang="en">Privacy</span><span data-lang="th">ความเป็นส่วนตัว</span><span data-lang="vi">Riêng tư</span></a>
+        <a href="about.html" class="hover:text-foreground transition-colors"><span data-lang="zh">关于</span><span data-lang="en">About</span><span data-lang="th">เกี่ยวกับ</span><span data-lang="vi">Giới thiệu</span></a>
+      </nav>
+      <p class="text-xs text-muted-foreground">© 2026 AgPlayer | <span data-lang="zh">原生本地音频波形播放器</span><span data-lang="en">Native local audio waveform player</span><span data-lang="th">เครื่องเล่นเสียงคลื่นในเครื่องแบบเนทีฟ</span><span data-lang="vi">Trình phát sóng âm thanh nội bộ gốc</span></p>
+    </div>
+  </footer>
+
+  <style>
+    [data-lang] { display: none; }
+    html[lang="zh"] [data-lang="zh"],
+    html[lang="en"] [data-lang="en"],
+    html[lang="th"] [data-lang="th"],
+    html[lang="vi"] [data-lang="vi"] { display: inline; }
+    html[lang="zh"] [data-lang="zh"].block,
+    html[lang="en"] [data-lang="en"].block,
+    html[lang="th"] [data-lang="th"].block,
+    html[lang="vi"] [data-lang="vi"].block { display: block; }
+    .wave-anim-slow { animation: waveDrift 10s ease-in-out infinite alternate; }
+    @keyframes waveDrift { 0% { transform: translateX(0) translateY(0) scaleY(1); } 100% { transform: translateX(-3%) translateY(-18px) scaleY(1.08); } }
+    .wave-path-1, .wave-path-2, .wave-path-3 { transform-origin: center bottom; }
+    .wave-path-1 { animation: waveBreathe 7s ease-in-out infinite alternate; }
+    .wave-path-2 { animation: waveBreathe 9s ease-in-out infinite alternate-reverse; }
+    .wave-path-3 { animation: waveBreathe 11s ease-in-out infinite alternate; }
+    @keyframes waveBreathe { 0% { transform: translateY(0) scaleY(1) scaleX(1); opacity: 1; } 100% { transform: translateY(-14px) scaleY(1.06) scaleX(1.03); opacity: 0.85; } }
+    .wave-line-1 { animation: lineFlow 8s ease-in-out infinite alternate; }
+    .wave-line-2 { animation: lineFlow 10s ease-in-out infinite alternate-reverse; }
+    @keyframes lineFlow { 0% { transform: translateX(0); opacity: 0.8; } 100% { transform: translateX(-3%); opacity: 1; } }
+    .text-glow { text-shadow: 0 0 40px rgba(0,217,255,0.15), 0 0 80px rgba(123,97,255,0.1); }
+  </style>
+  <script>
+    (function() {
+      var trigger = document.getElementById('lang-trigger');
+      var menu = document.getElementById('lang-menu');
+      var caret = trigger ? trigger.querySelector('.lang-caret') : null;
+      var flagEl = trigger ? trigger.querySelector('.lang-flag') : null;
+      var labelEl = trigger ? trigger.querySelector('.lang-label') : null;
+
+      function closeMenu() {
+        if (menu) menu.classList.add('hidden');
+        if (caret) caret.style.transform = '';
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      }
+      function openMenu() {
+        if (menu) menu.classList.remove('hidden');
+        if (caret) caret.style.transform = 'rotate(180deg)';
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+      }
+      function toggleMenu() {
+        if (menu && menu.classList.contains('hidden')) openMenu(); else closeMenu();
+      }
+
+      function setLang(lang) {
+        if (lang === 'zh-CN') lang = 'zh';
+        document.documentElement.lang = lang;
+        document.querySelectorAll('.lang-opt').forEach(function(opt) {
+          var active = opt.dataset.setLang === lang;
+          opt.classList.toggle('text-primary', active);
+          opt.classList.toggle('bg-primary/10', active);
+          if (active) {
+            if (flagEl) flagEl.textContent = opt.dataset.flag;
+            if (labelEl) labelEl.textContent = opt.dataset.label;
+          }
+        });
+        try { localStorage.setItem('agp-lang', lang); } catch(e) {}
+        closeMenu();
+      }
+
+      if (trigger) trigger.addEventListener('click', function(e) { e.stopPropagation(); toggleMenu(); });
+      document.querySelectorAll('.lang-opt').forEach(function(opt) {
+        opt.addEventListener('click', function() { setLang(opt.dataset.setLang); });
+      });
+      document.addEventListener('click', function(e) {
+        if (menu && !menu.contains(e.target) && trigger && !trigger.contains(e.target)) closeMenu();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeMenu();
+      });
+
+      var stored = localStorage.getItem('agp-lang');
+      setLang(stored || 'zh');
+    })();
+  </script>
+  <script>
+    (function() {
+      var canvas = document.getElementById('dl-space-particles');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var particles = [];
+      var w, h, dpr;
+      var raf = null;
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var COLORS = ['#00d9ff', '#7b61ff', '#ff2e7d', '#ffffff'];
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var rect = canvas.getBoundingClientRect();
+        w = rect.width;
+        h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function spawn() {
+        var count = Math.max(40, Math.min(110, Math.floor(w * h / 14000)));
+        particles = [];
+        for (var i = 0; i < count; i++) {
+          var roll = Math.random();
+          var r = roll < 0.78 ? Math.random() * 1.1 + 0.3 : Math.random() * 2.2 + 1.1;
+          particles.push({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            r: r,
+            vx: (Math.random() - 0.5) * 0.18,
+            vy: (Math.random() - 0.5) * 0.18,
+            tw: Math.random() * Math.PI * 2,
+            tws: 0.008 + Math.random() * 0.02,
+            c: COLORS[Math.floor(Math.random() * COLORS.length)]
+          });
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, w, h);
+        for (var i = 0; i < particles.length; i++) {
+          var p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.tw += p.tws;
+          if (p.x < -10) p.x = w + 10;
+          if (p.x > w + 10) p.x = -10;
+          if (p.y < -10) p.y = h + 10;
+          if (p.y > h + 10) p.y = -10;
+          var alpha = 0.35 + Math.sin(p.tw) * 0.35;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = p.c;
+          ctx.globalAlpha = Math.max(0.08, alpha);
+          if (p.r > 1.4) {
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = p.c;
+          } else {
+            ctx.shadowBlur = 0;
+          }
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        raf = requestAnimationFrame(draw);
+      }
+
+      function init() {
+        resize();
+        spawn();
+        if (raf) cancelAnimationFrame(raf);
+        if (reduced) { draw(); cancelAnimationFrame(raf); raf = null; return; }
+        draw();
+      }
+
+      var timer;
+      window.addEventListener('resize', function() {
+        clearTimeout(timer);
+        timer = setTimeout(function() { resize(); spawn(); }, 200);
+      });
+
+      if (document.readyState === 'complete') {
+        init();
+      } else {
+        window.addEventListener('load', init);
+      }
+    })();
+  </script>
+</body>
+</html>
