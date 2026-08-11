@@ -106,15 +106,13 @@ VertexColor mixColor(double normalizedX,
         return {{baseColor.red(), baseColor.green(), baseColor.blue()}, 255U};
     }
     if (visualMode == 2) {
-        double phase = std::fmod(
-            normalizedX * 4.0 + 0.08 * std::sin(normalizedX * 97.0), 1.0);
-        if (phase < 0.0) {
-            phase += 1.0;
-        }
-        const QColor color = QColor::fromHsvF(
-            static_cast<float>(phase), 0.86F, 1.0F);
-        return {{color.red(), color.green(), color.blue()},
-                static_cast<unsigned char>(played ? 255U : 150U)};
+        // The spectrum is rendered twice: the complete, unplayed canvas and
+        // the clipped played canvas.  Preserve that distinction so a seek
+        // immediately moves the played colour with the real playback clock.
+        const Rgb color = played
+            ? gradientColor(normalizedX, gradientStart, gradientMiddle, gradientEnd)
+            : Rgb{baseColor.red(), baseColor.green(), baseColor.blue()};
+        return {color, 255U};
     }
     if (legacyColor.isValid()) {
         return {{legacyColor.red(), legacyColor.green(), legacyColor.blue()},
@@ -133,6 +131,9 @@ std::size_t computePlayedCount(std::size_t peakCount, qint64 position, qint64 du
     }
     if (duration <= 0) {
         return 1U;
+    }
+    if (position <= 0) {
+        return 0U;
     }
     const double playedFraction = std::clamp(
         static_cast<double>(position) / static_cast<double>(duration), 0.0, 1.0);
@@ -179,6 +180,66 @@ void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
             vertices[vertex + 1U].a = color.alpha;
         }
     }
+}
+
+std::size_t renderedSpectrumBarCount(qreal width, qreal devicePixelRatio)
+{
+    // Keep the visualizer dense on wide windows.  The audio engine still
+    // produces a small fixed spectrum; resample it at paint time instead of
+    // leaving unused rails at both ends of the waveform canvas.
+    constexpr qreal desiredStride = WaveformItem::spectrumBarWidth()
+        + WaveformItem::spectrumBarGap();
+    const qreal physicalWidth = std::max<qreal>(0.0, width * devicePixelRatio);
+    const auto forWidth = static_cast<std::size_t>(std::ceil(
+        physicalWidth / desiredStride));
+    return std::clamp(forWidth, std::size_t{1U}, std::size_t{1024U});
+}
+
+std::vector<float> resampleValues(const std::vector<float>& values,
+                                  std::size_t pointCount)
+{
+    std::vector<float> result;
+    if (values.empty() || pointCount == 0U) {
+        return result;
+    }
+    result.resize(pointCount);
+    if (values.size() == pointCount) {
+        std::copy(values.begin(), values.end(), result.begin());
+        return result;
+    }
+    if (values.size() < pointCount) {
+        if (values.size() == 1U) {
+            std::fill(result.begin(), result.end(), values.front());
+            return result;
+        }
+        for (std::size_t index = 0U; index < pointCount; ++index) {
+            const double sourcePosition = pointCount == 1U
+                ? 0.0
+                : static_cast<double>(index)
+                    * static_cast<double>(values.size() - 1U)
+                    / static_cast<double>(pointCount - 1U);
+            const std::size_t left = static_cast<std::size_t>(sourcePosition);
+            const std::size_t right = std::min(left + 1U, values.size() - 1U);
+            const double fraction = sourcePosition - static_cast<double>(left);
+            result[index] = static_cast<float>(
+                values[left] + (values[right] - values[left]) * fraction);
+        }
+        return result;
+    }
+
+    const std::size_t bucketSize = values.size() / pointCount;
+    const std::size_t remainder = values.size() % pointCount;
+    std::size_t rawIndex = 0U;
+    for (std::size_t index = 0U; index < pointCount; ++index) {
+        const std::size_t end = rawIndex + bucketSize + (index < remainder ? 1U : 0U);
+        float bucketMax = 0.0F;
+        for (std::size_t i = rawIndex; i < end; ++i) {
+            bucketMax = std::max(bucketMax, values[i]);
+        }
+        result[index] = bucketMax;
+        rawIndex = end;
+    }
+    return result;
 }
 
 void updateLayerVertexColors(QSGGeometry::ColoredPoint2D* vertices,
@@ -263,8 +324,8 @@ void WaveformItem::setPeaks(const QVariantList& peaks)
 
     QVariantList normalizedPeaks;
     normalizedPeaks.reserve(peaks.size());
-    auto mix = std::make_shared<LayerSnapshot>();
-    mix->values.reserve(static_cast<std::size_t>(peaks.size()));
+    std::vector<float> inputValues;
+    inputValues.reserve(static_cast<std::size_t>(peaks.size()));
 
     for (const QVariant& value : peaks) {
         bool converted = false;
@@ -273,8 +334,51 @@ void WaveformItem::setPeaks(const QVariantList& peaks)
             peak = 0.0;
         }
         peak = std::clamp(std::abs(peak), 0.0, 1.0);
-        mix->values.push_back(static_cast<float>(peak));
+        inputValues.push_back(static_cast<float>(peak));
         normalizedPeaks.append(peak);
+    }
+
+    auto mix = std::make_shared<LayerSnapshot>();
+    if (visualMode_ == 2 && !inputValues.empty()) {
+        const std::vector<float> target = resampleValues(
+            inputValues, static_cast<std::size_t>(spectrumBarCount()));
+        const bool initialize = spectrumVisual_.size() != target.size()
+                                || spectrumPeakHold_.size() != target.size();
+        double elapsedSeconds = 1.0 / 60.0;
+        if (spectrumTimer_.isValid()) {
+            elapsedSeconds = std::clamp(
+                static_cast<double>(spectrumTimer_.restart()) / 1000.0,
+                0.001, 0.1);
+        } else {
+            spectrumTimer_.start();
+        }
+        if (initialize) {
+            spectrumVisual_ = target;
+            spectrumPeakHold_ = target;
+        } else {
+            for (std::size_t index = 0U; index < target.size(); ++index) {
+                const double seconds = target[index] > spectrumVisual_[index]
+                    ? spectrumAttackSeconds() : spectrumDecaySeconds();
+                const float alpha = static_cast<float>(
+                    1.0 - std::exp(-elapsedSeconds / seconds));
+                spectrumVisual_[index] += (target[index] - spectrumVisual_[index]) * alpha;
+                if (target[index] >= spectrumPeakHold_[index]) {
+                    spectrumPeakHold_[index] = target[index];
+                } else {
+                    const float peakAlpha = static_cast<float>(
+                        1.0 - std::exp(-elapsedSeconds
+                                       / spectrumPeakFallSeconds()));
+                    spectrumPeakHold_[index] +=
+                        (target[index] - spectrumPeakHold_[index]) * peakAlpha;
+                }
+            }
+        }
+        mix->values = spectrumVisual_;
+        auto held = std::make_shared<LayerSnapshot>();
+        held->values = spectrumPeakHold_;
+        snapshot->spectrumPeakHold = std::move(held);
+    } else {
+        mix->values = std::move(inputValues);
     }
 
     snapshot->mix = std::move(mix);
@@ -414,6 +518,9 @@ void WaveformItem::setVisualMode(int mode)
         return;
     }
     visualMode_ = clamped;
+    spectrumVisual_.clear();
+    spectrumPeakHold_.clear();
+    spectrumTimer_.invalidate();
     emit visualModeChanged();
     update();
 }
@@ -521,7 +628,7 @@ qreal WaveformItem::density() const
 void WaveformItem::setDensity(qreal density)
 {
     const qreal finite = std::isfinite(density) ? density : 2.0;
-    const qreal clamped = std::clamp(finite, qreal{0.5}, qreal{5.0});
+    const qreal clamped = std::clamp(finite, qreal{0.15}, qreal{5.0});
     if (qFuzzyCompare(clamped, density_)) {
         return;
     }
@@ -538,7 +645,7 @@ qreal WaveformItem::lineWidth() const
 void WaveformItem::setLineWidth(qreal width)
 {
     const qreal finite = std::isfinite(width) ? width : 1.0;
-    const qreal clamped = std::clamp(finite, qreal{0.3}, qreal{3.0});
+    const qreal clamped = std::clamp(finite, qreal{0.3}, qreal{8.0});
     if (qFuzzyCompare(clamped, lineWidth_)) {
         return;
     }
@@ -608,7 +715,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         sizeReference = &snapshot->high->values;
     }
     const std::size_t rawPeakCount = sizeReference->size();
-    const std::size_t peakCount = std::min(rawPeakCount, maxPoints);
+    const std::size_t peakCount = visualMode_ == 2
+        ? renderedSpectrumBarCount(width(), devicePixelRatio)
+        : std::min(rawPeakCount, maxPoints);
 
     const unsigned char layerMask =
         (hasMix ? 1U : 0U)
@@ -631,17 +740,29 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || node->rgbProgress_ != rgbProgress_
                                  || !qFuzzyCompare(node->amplitudeScale_,
                                                    amplitudeScale_)
+                                 || (visualMode_ == 2
+                                     && node->waveformColor_ != waveformColor_)
                                  || node->layerMask_ != layerMask;
 
     if (geometryChanged) {
         // Wide GPU lines are unsupported by several Qt RHI backends. Render
         // adjacent 1 px lines instead so thickness works without warnings.
         node->geometry_.setLineWidth(1.0F);
-        const std::size_t strokeCopies = static_cast<std::size_t>(
-            std::max(1.0, std::ceil(lineWidth_)));
-        const std::size_t activeLayers =
-            (hasMix ? 1U : 0U) + (hasBass ? 1U : 0U) + (hasMid ? 1U : 0U) + (hasHigh ? 1U : 0U);
-        const auto vertexCount = peakCount * 2U * activeLayers * strokeCopies;
+        const std::size_t strokeCopies = visualMode_ == 2
+            ? static_cast<std::size_t>(spectrumBarWidth())
+            : static_cast<std::size_t>(std::max(1.0, std::ceil(lineWidth_)));
+        const std::size_t activeLayers = visualMode_ == 2
+            ? (hasMix ? 1U : 0U)
+            : (hasMix ? 1U : 0U) + (hasBass ? 1U : 0U)
+                + (hasMid ? 1U : 0U) + (hasHigh ? 1U : 0U);
+        // Spectrum bars are drawn as adjacent vertical 1 px lines plus a
+        // horizontal cap. The cap makes each peak readable on dense displays
+        // without introducing a separate scene-graph node per bar.
+        const std::size_t spectrumCapVertices = visualMode_ == 2
+            ? peakCount * 2U
+            : 0U;
+        const auto vertexCount = peakCount * 2U
+            * activeLayers * strokeCopies + spectrumCapVertices;
         if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
             delete node;
             return nullptr;
@@ -650,50 +771,35 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node->geometry_.allocate(static_cast<int>(vertexCount));
         auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
         const float center = static_cast<float>(height() * 0.5);
+        const float spectrumBaseline = static_cast<float>(height());
         const std::size_t playedCount = computePlayedCount(peakCount, position_, duration_);
 
-        const auto downsampleLayer = [](const std::vector<float>& values,
-                                        std::size_t peakCount,
-                                        std::size_t maxPoints) {
-            std::vector<float> result;
-            if (values.empty() || peakCount == 0U) {
-                return result;
-            }
-            result.resize(peakCount);
-            if (values.size() <= maxPoints) {
-                for (std::size_t i = 0U; i < peakCount; ++i) {
-                    result[i] = values[i];
-                }
-                return result;
-            }
-            const std::size_t bucketSize = values.size() / peakCount;
-            const std::size_t remainder = values.size() % peakCount;
-            std::size_t rawIndex = 0U;
-            for (std::size_t index = 0U; index < peakCount; ++index) {
-                const std::size_t extra = index < remainder ? 1U : 0U;
-                const std::size_t end = rawIndex + bucketSize + extra;
-                float bucketMax = 0.0F;
-                for (std::size_t i = rawIndex; i < end; ++i) {
-                    bucketMax = std::max(bucketMax, values[i]);
-                }
-                result[index] = bucketMax;
-                rawIndex = end;
-            }
-            return result;
-        };
-
-        const std::vector<float> mixValues = hasMix
-                                                 ? downsampleLayer(snapshot->mix->values, peakCount, maxPoints)
-                                                 : std::vector<float>{};
+        std::vector<float> mixValues = hasMix
+                                                 ? resampleValues(snapshot->mix->values, peakCount)
+                                                  : std::vector<float>{};
+        const std::vector<float> heldSpectrumValues = visualMode_ == 2
+            && snapshot->spectrumPeakHold
+            && !snapshot->spectrumPeakHold->values.empty()
+            ? resampleValues(snapshot->spectrumPeakHold->values, peakCount)
+            : std::vector<float>{};
         const std::vector<float> bassValues = hasBass
-                                                  ? downsampleLayer(snapshot->bass->values, peakCount, maxPoints)
+                                                  ? resampleValues(snapshot->bass->values, peakCount)
                                                   : std::vector<float>{};
         const std::vector<float> midValues = hasMid
-                                                 ? downsampleLayer(snapshot->mid->values, peakCount, maxPoints)
+                                                 ? resampleValues(snapshot->mid->values, peakCount)
                                                  : std::vector<float>{};
         const std::vector<float> highValues = hasHigh
-                                                  ? downsampleLayer(snapshot->high->values, peakCount, maxPoints)
+                                                  ? resampleValues(snapshot->high->values, peakCount)
                                                   : std::vector<float>{};
+
+        if (visualMode_ == 2 && !mixValues.empty()) {
+            const float peak = *std::max_element(mixValues.begin(), mixValues.end());
+            if (peak > 0.0F) {
+                for (float& value : mixValues) {
+                    value = std::pow(std::clamp(value / peak, 0.0F, 1.0F), 0.58F);
+                }
+            }
+        }
 
         std::size_t vertexOffset = 0U;
         const auto writeLayer = [&](const std::vector<float>& values,
@@ -709,15 +815,36 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                                    ? 0.5
                                                    : static_cast<double>(index)
                                                          / static_cast<double>(peakCount - 1U);
+                    const double spectrumNaturalSpan =
+                        static_cast<double>(peakCount) * spectrumBarWidth()
+                        + static_cast<double>(peakCount - 1U) * spectrumBarGap();
+                    const double spectrumSpan = std::min(width(), spectrumNaturalSpan);
+                    const double spectrumStart = (width() - spectrumSpan) * 0.5;
+                    const double spectrumStride = peakCount <= 1U
+                        ? 0.0
+                        : (spectrumSpan - spectrumBarWidth())
+                            / static_cast<double>(peakCount - 1U);
+                    const double logicalX = visualMode_ == 2
+                        ? spectrumStart + spectrumBarWidth() * 0.5
+                            + static_cast<double>(index) * spectrumStride
+                        : normalizedX * width();
                     const float x = static_cast<float>(std::clamp(
-                        normalizedX * width() + offset, 0.0, width()));
-                    const double spectrumEnvelope =
-                        visualMode_ == 2
-                            ? 0.22 + 0.78 * std::sin(normalizedX * 3.141592653589793)
-                            : 1.0;
-                    const float amplitude = static_cast<float>(
-                        values[index] * center * amplitudeScale_
+                        logicalX + offset, 0.0, width()));
+                    const double spectrumEnvelope = visualMode_ == 2
+                        ? 0.60 + 0.40 * std::sin(
+                              normalizedX * 3.141592653589793)
+                        : 1.0;
+                    float amplitude = static_cast<float>(
+                        values[index]
+                        * (visualMode_ == 2
+                               ? std::min(height(), spectrumMaxHeight())
+                               : center)
+                        * amplitudeScale_
                         * spectrumEnvelope);
+                    if (visualMode_ != 2 && color == nullptr) {
+                        amplitude = std::max(
+                            amplitude, std::min(0.5F, center));
+                    }
 
                     unsigned char red = 0;
                     unsigned char green = 0;
@@ -748,19 +875,78 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                     const std::size_t vertex =
                         vertexOffset + (copy * peakCount + index) * 2U;
 
-                    vertices[vertex].set(
-                        x, center - amplitude, red, green, blue, alpha);
-                    vertices[vertex + 1U].set(
-                        x, center + amplitude, red, green, blue, alpha);
+                    if (visualMode_ == 2) {
+                        vertices[vertex].set(
+                            x, spectrumBaseline - amplitude,
+                            red, green, blue, alpha);
+                        vertices[vertex + 1U].set(
+                            x, spectrumBaseline,
+                            red, green, blue, alpha);
+                    } else {
+                        vertices[vertex].set(
+                            x, center - amplitude, red, green, blue, alpha);
+                        vertices[vertex + 1U].set(
+                            x, center + amplitude, red, green, blue, alpha);
+                    }
                 }
             }
-            vertexOffset += peakCount * 2U * strokeCopies;
+            if (visualMode_ == 2) {
+                const float capHalfWidth = static_cast<float>(spectrumBarWidth() * 0.5);
+                for (std::size_t index = 0U; index < peakCount; ++index) {
+                    const double normalizedX = peakCount == 1U
+                        ? 0.5
+                        : static_cast<double>(index)
+                            / static_cast<double>(peakCount - 1U);
+                    const double spectrumNaturalSpan =
+                        static_cast<double>(peakCount) * spectrumBarWidth()
+                        + static_cast<double>(peakCount - 1U) * spectrumBarGap();
+                    const double spectrumSpan = std::min(width(), spectrumNaturalSpan);
+                    const double spectrumStart = (width() - spectrumSpan) * 0.5;
+                    const double spectrumStride = peakCount <= 1U
+                        ? 0.0
+                        : (spectrumSpan - spectrumBarWidth())
+                            / static_cast<double>(peakCount - 1U);
+                    const float x = static_cast<float>(std::clamp(
+                        spectrumStart + spectrumBarWidth() * 0.5
+                            + static_cast<double>(index) * spectrumStride,
+                        0.0, width()));
+                    const double envelope = 0.60 + 0.40 * std::sin(
+                        normalizedX * 3.141592653589793);
+                    const float heldValue = heldSpectrumValues.empty()
+                        ? values[index] : heldSpectrumValues[index];
+                    const float amplitude = static_cast<float>(
+                        heldValue * std::min(height(), spectrumMaxHeight())
+                        * amplitudeScale_ * envelope);
+                    const VertexColor capColor = mixColor(
+                        normalizedX, index < playedCount, visualMode_, waveformColor_,
+                        baseColor_, progressColor_, gradientStartColor_,
+                        gradientMiddleColor_, gradientEndColor_, rgbProgress_);
+                    const std::size_t vertex = vertexOffset
+                        + peakCount * 2U * strokeCopies + index * 2U;
+                    const float y = spectrumBaseline - amplitude;
+                    vertices[vertex].set(
+                        std::max(0.0F, x - capHalfWidth), y,
+                        static_cast<unsigned char>(capColor.rgb.red),
+                        static_cast<unsigned char>(capColor.rgb.green),
+                        static_cast<unsigned char>(capColor.rgb.blue), capColor.alpha);
+                    vertices[vertex + 1U].set(
+                        std::min(static_cast<float>(width()), x + capHalfWidth), y,
+                        static_cast<unsigned char>(capColor.rgb.red),
+                        static_cast<unsigned char>(capColor.rgb.green),
+                        static_cast<unsigned char>(capColor.rgb.blue), capColor.alpha);
+                }
+                vertexOffset += peakCount * 2U * (strokeCopies + 1U);
+            } else {
+                vertexOffset += peakCount * 2U * strokeCopies;
+            }
         };
 
         writeLayer(mixValues, nullptr);
-        writeLayer(bassValues, &kBassColor);
-        writeLayer(midValues, &kMidColor);
-        writeLayer(highValues, &kHighColor);
+        if (visualMode_ != 2) {
+            writeLayer(bassValues, &kBassColor);
+            writeLayer(midValues, &kMidColor);
+            writeLayer(highValues, &kHighColor);
+        }
 
         node->revision_ = snapshot->revision;
         node->width_ = width();
@@ -794,8 +980,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
-    const std::size_t strokeCopies = static_cast<std::size_t>(
-        std::max(1.0, std::ceil(node->lineWidth_)));
+    const std::size_t strokeCopies = node->visualMode_ == 2
+        ? static_cast<std::size_t>(spectrumBarWidth())
+        : static_cast<std::size_t>(std::max(1.0, std::ceil(node->lineWidth_)));
     std::size_t vertexOffset = 0U;
     if (hasMix) {
         updateMixVertexColors(
@@ -804,6 +991,15 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             gradientMiddleColor_, gradientEndColor_, rgbProgress_,
             strokeCopies);
         vertexOffset += peakCount * 2U * strokeCopies;
+        if (node->visualMode_ == 2) {
+            // Peak-hold caps are a separate geometry range.  Recolor them in
+            // the same update so their colour never trails the bar below.
+            updateMixVertexColors(
+                vertices + vertexOffset, peakCount, newPlayedCount, waveformColor_,
+                visualMode_, baseColor_, progressColor_, gradientStartColor_,
+                gradientMiddleColor_, gradientEndColor_, rgbProgress_, 1U);
+            vertexOffset += peakCount * 2U;
+        }
     }
     if (hasBass) {
         updateLayerVertexColors(

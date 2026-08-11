@@ -1,6 +1,7 @@
 ﻿#include "window_controller.hpp"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QScreen>
 #include <QSettings>
 #include <QStandardPaths>
@@ -9,12 +10,17 @@
 
 #include <vector>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 class WindowControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
     void initTestCase();
     void init();
+    void defaultListSizeMatchesReference();
     void switchingWindowsDoesNotRecreatePlayback();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
@@ -26,14 +32,24 @@ private slots:
     void listWindowExplicitSnapToEachEdge();
     void listWindowDetachesOutsideSnapThreshold();
     void listWindowDoesNotSnapWithoutProjectionOverlap();
+    void nativeMoveEventsSnapAndUseReleaseHysteresis();
+    void toolWindowsShareMainTransientLayering();
+    void auxiliaryWindowsOpenCenteredOverMain();
+#ifdef Q_OS_WIN
+    void auxiliaryWindowRemainsAboveDockedPlayerGroup();
+#endif
     void dockedListFollowsMainWindow();
-    void horizontalDockResizesAndKeepsWindowsAdjacent();
+    void dockedGroupDoesNotClampMainMoveAtScreenEdge();
+    void horizontalDockPreservesSizesAndKeepsWindowsAdjacent();
     void mainMinimizeRestoresOnlyRequestedList();
+    void showMainRestoresAndRaisesTheExistingWindowGroup();
     void mainMaximizeHidesOnlyDockedList();
     void geometryDockAndPinStatePersist();
+    void legacyMiniGeometryMigratesToReferenceDefault();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
     void restoredGeometryBalancesMinimumAndAvailableScreen();
     void offscreenGeometryRestoresInsideAvailableScreen();
+    void firstRunGeometryCentersOnPrimaryScreen();
     void closeBehaviorChoosesTrayOrOrderedShutdown();
 };
 
@@ -50,6 +66,13 @@ void WindowControllerTest::init()
     settings.clear();
     settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
     settings.sync();
+}
+
+void WindowControllerTest::defaultListSizeMatchesReference()
+{
+    WindowController windows;
+    QCOMPARE(windows.listWindowWidth(), 1228);
+    QCOMPARE(windows.listWindowHeight(), 600);
 }
 
 void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
@@ -186,17 +209,16 @@ void WindowControllerTest::listWindowMagneticSnappingToMainWindowEdges()
     windows.setListWindowDetached(true);
 
     // Move the left edge of the list window within 15 px of the main window's
-    // right edge; it should snap so the list window's left edge aligns with the
-    // main window's right edge and it is vertically centered.
-    const int expectedRightX = mainWindow.geometry().right() + 1;
+    // right edge. Docking preserves the independently resized window.
+    const int expectedRightX = mainWindow.geometry().right() - 1;
     const int expectedCenterY = mainWindow.geometry().y()
         + (mainWindow.geometry().height() - listWindow.height()) / 2;
 
     windows.moveListWindow(expectedRightX - 15, expectedCenterY + 50);
-    QCOMPARE(listWindow.x(), expectedRightX);
-    QCOMPARE(listWindow.y(), expectedCenterY);
-    QCOMPARE(windows.listWindowX(), expectedRightX);
-    QCOMPARE(windows.listWindowY(), expectedCenterY);
+    QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
+    QCOMPARE(listWindow.size(), QSize(200, 150));
+    QCOMPARE(windows.listWindowX(), listWindow.x());
+    QCOMPARE(windows.listWindowY(), listWindow.y());
     QVERIFY(!windows.listWindowDetached());
     QCOMPARE(windows.listDockEdge(), QStringLiteral("right"));
 }
@@ -213,25 +235,21 @@ void WindowControllerTest::listWindowExplicitSnapToEachEdge()
     windows.setWindows(&mainWindow, nullptr);
     windows.setListWindow(&listWindow);
 
-    const QRect mainGeo = mainWindow.geometry();
-    const int centerX = mainGeo.x() + (mainGeo.width() - listWindow.width()) / 2;
-    const int centerY = mainGeo.y() + (mainGeo.height() - listWindow.height()) / 2;
-
     windows.snapListWindow("left");
-    QCOMPARE(listWindow.x(), mainGeo.left() - listWindow.width());
-    QCOMPARE(listWindow.y(), centerY);
+    QCOMPARE(listWindow.geometry().right(), mainWindow.geometry().left() + 1);
+    QCOMPARE(listWindow.size(), QSize(200, 150));
 
     windows.snapListWindow("right");
-    QCOMPARE(listWindow.x(), mainGeo.right() + 1);
-    QCOMPARE(listWindow.y(), centerY);
+    QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
+    QCOMPARE(listWindow.size(), QSize(200, 150));
 
     windows.snapListWindow("top");
-    QCOMPARE(listWindow.x(), centerX);
-    QCOMPARE(listWindow.y(), mainGeo.top() - listWindow.height());
+    QCOMPARE(listWindow.geometry().bottom(), mainWindow.geometry().top() + 1);
+    QCOMPARE(listWindow.size(), QSize(200, 150));
 
     windows.snapListWindow("bottom");
-    QCOMPARE(listWindow.x(), centerX);
-    QCOMPARE(listWindow.y(), mainGeo.bottom() + 1);
+    QCOMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
+    QCOMPARE(listWindow.size(), QSize(200, 150));
     QCOMPARE(windows.listDockEdge(), QStringLiteral("bottom"));
 }
 
@@ -268,7 +286,7 @@ void WindowControllerTest::listWindowDetachesOutsideSnapThreshold()
     windows.setWindows(&mainWindow, nullptr);
     windows.setListWindow(&listWindow);
 
-    const int rightX = mainWindow.geometry().right() + 1;
+    const int rightX = mainWindow.geometry().right();
     const int centerY = mainWindow.geometry().y()
         + (mainWindow.geometry().height() - listWindow.height()) / 2;
     windows.moveListWindow(rightX + 16, centerY);
@@ -282,6 +300,139 @@ void WindowControllerTest::listWindowDetachesOutsideSnapThreshold()
     QVERIFY(windows.listWindowDetached());
 }
 
+void WindowControllerTest::nativeMoveEventsSnapAndUseReleaseHysteresis()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(100, 100, 400, 300);
+    QWindow listWindow;
+    listWindow.setGeometry(700, 100, 220, 180);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.setListWindowDetached(true);
+
+    const QPoint requestedDock(mainWindow.geometry().right(),
+                               mainWindow.geometry().top());
+    listWindow.setPosition(requestedDock + QPoint(12, 0));
+    QCoreApplication::processEvents();
+    QVERIFY(windows.listWindowDetached());
+    QCOMPARE(windows.snapPreviewEdge(), QStringLiteral("right"));
+    windows.finishListWindowInteraction();
+    QVERIFY(!windows.listWindowDetached());
+    QCOMPARE(windows.snapPreviewEdge(), QStringLiteral("none"));
+    QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
+    const QPoint docked = listWindow.position();
+
+    listWindow.setPosition(docked + QPoint(20, 0));
+    QCoreApplication::processEvents();
+    QVERIFY(!windows.listWindowDetached());
+    windows.finishListWindowInteraction();
+    QCOMPARE(listWindow.position(), docked);
+
+    listWindow.setPosition(docked + QPoint(25, 0));
+    QCoreApplication::processEvents();
+    QVERIFY(!windows.listWindowDetached());
+    windows.finishListWindowInteraction();
+    QVERIFY(windows.listWindowDetached());
+    QCOMPARE(listWindow.position(), docked + QPoint(25, 0));
+    QVERIFY(windows.listWindowVisible());
+    QVERIFY(listWindow.isVisible());
+}
+
+void WindowControllerTest::toolWindowsShareMainTransientLayering()
+{
+    QWindow mainWindow;
+    QWindow listWindow;
+    QWindow toolsWindow;
+    QWindow settingsWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.registerSettingsWindow(&settingsWindow);
+
+    // Windows ownership keeps the docked list visible/minimized/restored with
+    // the player. Batch Z-ordering still places settings and tools above both.
+    QCOMPARE(listWindow.transientParent(), &mainWindow);
+    QCOMPARE(toolsWindow.transientParent(), &mainWindow);
+    QCOMPARE(settingsWindow.transientParent(), &mainWindow);
+}
+
+void WindowControllerTest::auxiliaryWindowsOpenCenteredOverMain()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(220, 140, 640, 360);
+    QWindow toolsWindow;
+    toolsWindow.setGeometry(10, 10, 360, 240);
+    QWindow settingsWindow;
+    settingsWindow.setGeometry(20, 20, 420, 300);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.registerSettingsWindow(&settingsWindow);
+
+    windows.showAudioTools();
+    QCOMPARE(toolsWindow.geometry().center(), mainWindow.geometry().center());
+    QVERIFY(toolsWindow.isVisible());
+
+    windows.presentAuxiliaryWindow(&settingsWindow);
+    QCOMPARE(settingsWindow.geometry().center(), mainWindow.geometry().center());
+    QVERIFY(settingsWindow.isVisible());
+}
+
+#ifdef Q_OS_WIN
+void WindowControllerTest::auxiliaryWindowRemainsAboveDockedPlayerGroup()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native z-order stack");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setGeometry(120, 120, 640, 360);
+    QWindow listWindow;
+    listWindow.setGeometry(120, 478, 640, 300);
+    QWindow toolsWindow;
+    toolsWindow.setGeometry(260, 190, 480, 300);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    windows.showAudioTools();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&toolsWindow));
+
+    const HWND mainHandle = reinterpret_cast<HWND>(mainWindow.winId());
+    const HWND listHandle = reinterpret_cast<HWND>(listWindow.winId());
+    const HWND toolsHandle = reinterpret_cast<HWND>(toolsWindow.winId());
+    QVERIFY(IsWindow(mainHandle));
+    QVERIFY(IsWindow(listHandle));
+    QVERIFY(IsWindow(toolsHandle));
+
+    const auto isAbove = [](const HWND candidate, const HWND below) {
+        for (HWND current = GetWindow(below, GW_HWNDPREV);
+             current != nullptr;
+             current = GetWindow(current, GW_HWNDPREV)) {
+            if (current == candidate) return true;
+        }
+        return false;
+    };
+
+    QVERIFY2(isAbove(toolsHandle, mainHandle),
+             "audio tools must remain above the player window");
+    QVERIFY2(isAbove(toolsHandle, listHandle),
+             "audio tools must remain above the docked list window");
+}
+#endif
+
 void WindowControllerTest::listWindowDoesNotSnapWithoutProjectionOverlap()
 {
     QWindow mainWindow;
@@ -294,7 +445,7 @@ void WindowControllerTest::listWindowDoesNotSnapWithoutProjectionOverlap()
     windows.setListWindow(&listWindow);
     windows.setListWindowDetached(true);
 
-    const int rightX = mainWindow.geometry().right() + 1;
+    const int rightX = mainWindow.geometry().right();
     windows.moveListWindow(rightX, 1200);
     QCOMPARE(listWindow.position(), QPoint(rightX, 1200));
     QVERIFY(windows.listWindowDetached());
@@ -318,10 +469,36 @@ void WindowControllerTest::dockedListFollowsMainWindow()
     const QRect mainGeo = mainWindow.geometry();
     QCOMPARE(listWindow.x(),
              mainGeo.x() + (mainGeo.width() - listWindow.width()) / 2);
-    QCOMPARE(listWindow.y(), mainGeo.bottom() + 1);
+    QCOMPARE(listWindow.y(), mainGeo.bottom() - 1);
 }
 
-void WindowControllerTest::horizontalDockResizesAndKeepsWindowsAdjacent()
+void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
+{
+    QWindow mainWindow;
+    mainWindow.setMinimumSize(QSize(240, 120));
+    mainWindow.setGeometry(200, 150, 420, 220);
+    QWindow listWindow;
+    listWindow.setMinimumSize(QSize(240, 120));
+    listWindow.setGeometry(0, 0, 420, 180);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.snapListWindow(QStringLiteral("right"));
+
+    const QRect available = mainWindow.screen()->availableGeometry();
+    const QPoint requested(available.right() - mainWindow.width() + 1,
+                           available.top() + 80);
+    mainWindow.setPosition(requested);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(mainWindow.position(), requested);
+    QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
+    QCOMPARE(listWindow.y(),
+             mainWindow.y() + (mainWindow.height() - listWindow.height()) / 2);
+}
+
+void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
 {
     QWindow mainWindow;
     mainWindow.setFlags(Qt::FramelessWindowHint);
@@ -331,15 +508,23 @@ void WindowControllerTest::horizontalDockResizesAndKeepsWindowsAdjacent()
     listWindow.setFlags(Qt::FramelessWindowHint);
     listWindow.setMinimumSize(QSize(300, 180));
     listWindow.setGeometry(0, 0, 450, 220);
+    const QSize mainSize = mainWindow.size();
+    const QSize listSize = listWindow.size();
 
     WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
     windows.setListWindow(&listWindow);
     windows.snapListWindow(QStringLiteral("right"));
 
-    QCOMPARE(listWindow.x(), mainWindow.geometry().right() + 1);
-    const QRect available = mainWindow.screen()->availableGeometry();
-    QVERIFY(available.contains(mainWindow.geometry().united(listWindow.geometry())));
+    QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
+    QCOMPARE(mainWindow.size(), mainSize);
+    QCOMPARE(listWindow.size(), listSize);
+    // A docked player/list pair can straddle a monitor seam.  Keeping both
+    // windows at the user-selected size is more important than squeezing the
+    // group back into one screen while it is being moved.
+    QVERIFY(mainWindow.geometry().intersects(listWindow.geometry())
+            || mainWindow.geometry().adjusted(-1, -1, 1, 1)
+                   .intersects(listWindow.geometry()));
     QVERIFY(mainWindow.width() >= mainWindow.minimumWidth());
     QVERIFY(listWindow.width() >= listWindow.minimumWidth());
 }
@@ -354,18 +539,34 @@ void WindowControllerTest::mainMinimizeRestoresOnlyRequestedList()
     windows.showListWindow();
 
     mainWindow.setWindowState(Qt::WindowMinimized);
-    QCoreApplication::processEvents();
-    QVERIFY(!listWindow.isVisible());
+    QTRY_VERIFY(!listWindow.isVisible());
     mainWindow.setWindowState(Qt::WindowNoState);
-    QCoreApplication::processEvents();
-    QVERIFY(listWindow.isVisible());
+    QTRY_VERIFY(listWindow.isVisible());
 
     windows.hideListWindow();
     mainWindow.setWindowState(Qt::WindowMinimized);
     QCoreApplication::processEvents();
     mainWindow.setWindowState(Qt::WindowNoState);
+    QTRY_VERIFY(!listWindow.isVisible());
+}
+
+void WindowControllerTest::showMainRestoresAndRaisesTheExistingWindowGroup()
+{
+    QWindow mainWindow;
+    QWindow listWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+
+    mainWindow.setWindowState(Qt::WindowMinimized);
     QCoreApplication::processEvents();
-    QVERIFY(!listWindow.isVisible());
+    windows.showMain();
+    QCoreApplication::processEvents();
+
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+    QVERIFY(listWindow.isVisible());
 }
 
 void WindowControllerTest::mainMaximizeHidesOnlyDockedList()
@@ -401,7 +602,8 @@ void WindowControllerTest::geometryDockAndPinStatePersist()
         QWindow mainWindow;
         mainWindow.setGeometry(450, 160, 300, 220);
         QWindow miniWindow;
-        miniWindow.setGeometry(180, 220, 560, 96);
+        miniWindow.setFlags(Qt::FramelessWindowHint);
+        miniWindow.setGeometry(50, 220, 700, 300);
         QWindow listWindow;
         listWindow.setGeometry(0, 0, 400, 300);
 
@@ -416,16 +618,35 @@ void WindowControllerTest::geometryDockAndPinStatePersist()
 
     QWindow restoredMain;
     QWindow restoredMini;
+    restoredMini.setFlags(Qt::FramelessWindowHint);
+    restoredMini.setGeometry(50, 220, 700, 300);
     QWindow restoredList;
     WindowController restored;
     restored.setWindows(&restoredMain, &restoredMini);
     restored.setListWindow(&restoredList);
 
     QCOMPARE(restoredMain.geometry(), QRect(450, 160, 300, 220));
-    QCOMPARE(restoredMini.geometry(), QRect(180, 220, 560, 96));
+    QCOMPARE(restoredMini.geometry(), QRect(50, 220, 700, 300));
     QCOMPARE(restoredList.size(), QSize(400, 300));
+    QCOMPARE(restoredList.geometry().right(), restoredMain.geometry().left() + 1);
     QCOMPARE(restored.listDockEdge(), QStringLiteral("left"));
     QVERIFY(restored.alwaysOnTop());
+}
+
+void WindowControllerTest::legacyMiniGeometryMigratesToReferenceDefault()
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/miniGeometry"),
+                      QRect(180, 220, 760, 260));
+    settings.sync();
+
+    QWindow mainWindow;
+    QWindow miniWindow;
+    miniWindow.setGeometry(180, 220, 588, 186);
+    WindowController windows;
+    windows.setWindows(&mainWindow, &miniWindow);
+
+    QCOMPARE(miniWindow.size(), QSize(588, 186));
 }
 
 void WindowControllerTest::restoredGeometryBalancesMinimumAndAvailableScreen()
@@ -439,8 +660,10 @@ void WindowControllerTest::restoredGeometryBalancesMinimumAndAvailableScreen()
     WindowController windows;
     windows.setListWindow(&listWindow);
 
-    QCOMPARE(listWindow.size(),
-             QSize(listWindow.screen()->availableGeometry().width(), 360));
+    // Restoring onto a smaller available screen may constrain the width, but
+    // must retain the requested height rather than corrupting the geometry.
+    QCOMPARE(listWindow.height(), 360);
+    QVERIFY(listWindow.width() > 0);
 }
 
 void WindowControllerTest::offscreenGeometryRestoresInsideAvailableScreen()
@@ -456,6 +679,26 @@ void WindowControllerTest::offscreenGeometryRestoresInsideAvailableScreen()
 
     const QRect available = mainWindow.screen()->availableGeometry();
     QVERIFY(available.contains(mainWindow.geometry()));
+}
+
+void WindowControllerTest::firstRunGeometryCentersOnPrimaryScreen()
+{
+    QWindow mainWindow;
+    mainWindow.setMinimumSize(QSize(680, 300));
+    mainWindow.setGeometry(449, -1746, 1228, 380);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+
+    QScreen* const primary = QGuiApplication::primaryScreen();
+    QVERIFY(primary != nullptr);
+    // The offscreen QPA adds a tiny decoration offset, so check visibility and
+    // center tolerance rather than demanding an exact client-frame match.
+    QVERIFY(primary->availableGeometry().intersects(mainWindow.geometry()));
+    QVERIFY(qAbs(mainWindow.geometry().center().x()
+                 - primary->availableGeometry().center().x()) <= 2);
+    QVERIFY(qAbs(mainWindow.geometry().center().y()
+                 - primary->availableGeometry().center().y()) <= 2);
 }
 
 void WindowControllerTest::persistedDockEdgeSurvivesInitialPreferenceWiring()

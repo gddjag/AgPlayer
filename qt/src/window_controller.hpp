@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QAbstractNativeEventFilter>
 #include <QPointer>
 #include <QSettings>
 #include <QTimer>
@@ -9,7 +10,7 @@
 
 class QWindow;
 
-class WindowController final : public QObject {
+class WindowController final : public QObject, public QAbstractNativeEventFilter {
     Q_OBJECT
     Q_PROPERTY(bool mainVisible READ mainVisible NOTIFY mainVisibleChanged)
     Q_PROPERTY(bool miniVisible READ miniVisible NOTIFY miniVisibleChanged)
@@ -20,6 +21,7 @@ class WindowController final : public QObject {
     Q_PROPERTY(int preferredDockEdge READ preferredDockEdge WRITE setPreferredDockEdge
                    NOTIFY preferredDockEdgeChanged)
     Q_PROPERTY(QString listDockEdge READ listDockEdge NOTIFY listDockEdgeChanged)
+    Q_PROPERTY(QString snapPreviewEdge READ snapPreviewEdge NOTIFY snapPreviewEdgeChanged)
     Q_PROPERTY(int closeBehavior READ closeBehavior WRITE setCloseBehavior
                    NOTIFY closeBehaviorChanged)
     Q_PROPERTY(bool listWindowVisible READ listWindowVisible NOTIFY listWindowVisibleChanged)
@@ -53,6 +55,7 @@ public:
     bool magneticSnapEnabled() const noexcept;
     int preferredDockEdge() const noexcept;
     QString listDockEdge() const;
+    QString snapPreviewEdge() const;
     int closeBehavior() const noexcept;
     bool listWindowVisible() const noexcept;
     bool listWindowDetached() const noexcept;
@@ -91,6 +94,9 @@ public:
     Q_INVOKABLE void snapListWindow(const QString& direction);
     Q_INVOKABLE void activateSearch();
     Q_INVOKABLE void toggleMiniPlayer();
+    Q_INVOKABLE void registerSettingsWindow(QWindow* window);
+    Q_INVOKABLE void presentAuxiliaryWindow(QWindow* window);
+    Q_INVOKABLE void finishListWindowInteraction();
 
 signals:
     void mainVisibleChanged();
@@ -100,6 +106,7 @@ signals:
     void magneticSnapEnabledChanged();
     void preferredDockEdgeChanged();
     void listDockEdgeChanged();
+    void snapPreviewEdgeChanged();
     void closeBehaviorChanged();
     void listWindowVisibleChanged();
     void listWindowDetachedChanged();
@@ -111,6 +118,8 @@ signals:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    bool nativeEventFilter(const QByteArray& eventType, void* message,
+                           qintptr* result) override;
 
 private:
     enum class PendingView { None, Main, Mini };
@@ -122,7 +131,8 @@ private:
     void applyListWindowDetached(bool detached);
     void shutdown();
     bool shouldShowListWindow() const;
-    void repositionDockedListWindow();
+    void repositionDockedListWindow(bool constrainToScreen = true,
+                                    bool synchronizeSize = true);
     void setListDockEdge(const QString& edge);
     QString snapEdgeForPosition(int x, int y) const;
     void loadPersistedWindowState();
@@ -134,11 +144,17 @@ private:
     void updateListWindowPosition();
     QPoint computeSnappedPosition(int x, int y) const;
     QPoint computeSnapForEdge(const QString& direction) const;
+    void applyPlatformWindowStyle(QWindow* window) const;
+    void raiseDockedGroup(QWindow* topWindow = nullptr);
 
     QPointer<QWindow> mainWindow_;
+    quintptr mainWindowHandle_ = 0;
     QPointer<QWindow> miniWindow_;
     QPointer<QWindow> listWindow_;
+    quintptr listWindowHandle_ = 0;
     QPointer<QWindow> audioToolsWindow_;
+    QPointer<QWindow> settingsWindow_;
+    QPointer<QWindow> lastAuxiliaryWindow_;
     ShutdownActions shutdownActions_;
     QSettings settings_;
     QTimer windowStateSyncTimer_;
@@ -159,10 +175,13 @@ private:
     bool listWindowDetached_ = false;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
-    int listWindowWidth_ = 1000;
-    int listWindowHeight_ = 420;
+    int listWindowWidth_ = 1228;
+    int listWindowHeight_ = 600;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;
+    bool updatingWindowZOrder_ = false;
+    QString pendingListSnapEdge_;
+    bool pendingListDetach_ = false;
     bool preferredDockEdgeInitialized_ = false;
     bool hasPersistedDockEdge_ = false;
     PendingView pendingView_ = PendingView::None;

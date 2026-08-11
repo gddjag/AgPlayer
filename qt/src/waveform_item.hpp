@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QQuickItem>
 #include <QVariantList>
 
@@ -37,6 +38,13 @@ class WaveformItem : public QQuickItem {
                    NOTIFY analysisProgressChanged)
     Q_PROPERTY(qreal density READ density WRITE setDensity NOTIFY densityChanged)
     Q_PROPERTY(qreal lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged)
+    Q_PROPERTY(int spectrumBarCount READ spectrumBarCount CONSTANT)
+    Q_PROPERTY(qreal spectrumBarWidth READ spectrumBarWidth CONSTANT)
+    Q_PROPERTY(qreal spectrumBarGap READ spectrumBarGap CONSTANT)
+    Q_PROPERTY(qreal spectrumMaxHeight READ spectrumMaxHeight CONSTANT)
+    Q_PROPERTY(qreal spectrumAttackSeconds READ spectrumAttackSeconds CONSTANT)
+    Q_PROPERTY(qreal spectrumDecaySeconds READ spectrumDecaySeconds CONSTANT)
+    Q_PROPERTY(qreal spectrumPeakFallSeconds READ spectrumPeakFallSeconds CONSTANT)
 
 public:
     explicit WaveformItem(QQuickItem* parent = nullptr);
@@ -83,6 +91,14 @@ public:
     qreal lineWidth() const;
     void setLineWidth(qreal width);
 
+    static constexpr int spectrumBarCount() noexcept { return 128; }
+    static constexpr qreal spectrumBarWidth() noexcept { return 5.0; }
+    static constexpr qreal spectrumBarGap() noexcept { return 2.0; }
+    static constexpr qreal spectrumMaxHeight() noexcept { return 72.0; }
+    static constexpr qreal spectrumAttackSeconds() noexcept { return 0.02; }
+    static constexpr qreal spectrumDecaySeconds() noexcept { return 0.10; }
+    static constexpr qreal spectrumPeakFallSeconds() noexcept { return 0.35; }
+
     Q_INVOKABLE qint64 timeForX(qreal x) const;
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
@@ -126,6 +142,7 @@ private:
         std::shared_ptr<const LayerSnapshot> bass;
         std::shared_ptr<const LayerSnapshot> mid;
         std::shared_ptr<const LayerSnapshot> high;
+        std::shared_ptr<const LayerSnapshot> spectrumPeakHold;
         std::uint64_t revision = 0;
     };
 
@@ -142,8 +159,8 @@ private:
     qint64 duration_ = 0;
     QColor waveformColor_;
     int visualMode_ = -1;
-    QColor baseColor_ = QColor(QStringLiteral("#e8edf4"));
-    QColor progressColor_ = QColor(QStringLiteral("#ffdd00"));
+    QColor baseColor_ = QColor(QStringLiteral("#9098a6"));
+    QColor progressColor_ = QColor(QStringLiteral("#d27722"));
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
@@ -153,5 +170,8 @@ private:
     double analysisProgress_ = 0.0;
     qreal density_ = 1.0;
     qreal lineWidth_ = 2.0;
+    std::vector<float> spectrumVisual_;
+    std::vector<float> spectrumPeakHold_;
+    QElapsedTimer spectrumTimer_;
     bool pointerPressed_ = false;
 };

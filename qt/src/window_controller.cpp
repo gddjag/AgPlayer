@@ -9,9 +9,18 @@
 
 #include <utility>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <dwmapi.h>
+#endif
+
 namespace {
 
 constexpr int kSnapDistance = 15;
+constexpr int kSnapReleaseDistance = 24;
+// Frameless DWM windows keep a translucent edge pixel.  A two-logical-pixel
+// shared edge covers it at every supported DPI without exposing the desktop.
+constexpr int kDockOverlap = 2;
 
 bool isDockEdge(const QString& edge)
 {
@@ -27,6 +36,20 @@ bool isMinimized(const QWindow* window)
 bool isMaximized(const QWindow* window)
 {
     return window != nullptr && window->windowState() == Qt::WindowMaximized;
+}
+
+bool supportsWindowStacking()
+{
+    const QString platform = QGuiApplication::platformName();
+    return platform.compare(QStringLiteral("offscreen"), Qt::CaseInsensitive) != 0
+        && platform.compare(QStringLiteral("minimal"), Qt::CaseInsensitive) != 0;
+}
+
+void raiseWindow(QWindow* window)
+{
+    if (window != nullptr && supportsWindowStacking()) {
+        window->raise();
+    }
 }
 
 } // namespace
@@ -46,11 +69,17 @@ WindowController::WindowController(ShutdownActions actions, QObject* parent)
     windowStateSyncTimer_.setInterval(250);
     connect(&windowStateSyncTimer_, &QTimer::timeout,
             this, &WindowController::flushWindowState);
+    if (QCoreApplication::instance() != nullptr) {
+        QCoreApplication::instance()->installNativeEventFilter(this);
+    }
     loadPersistedWindowState();
 }
 
 WindowController::~WindowController()
 {
+    if (QCoreApplication::instance() != nullptr) {
+        QCoreApplication::instance()->removeNativeEventFilter(this);
+    }
     flushWindowState();
     shutdownActions_ = {};
 }
@@ -62,6 +91,11 @@ bool WindowController::alwaysOnTop() const noexcept { return alwaysOnTop_; }
 bool WindowController::magneticSnapEnabled() const noexcept { return magneticSnapEnabled_; }
 int WindowController::preferredDockEdge() const noexcept { return preferredDockEdge_; }
 QString WindowController::listDockEdge() const { return listDockEdge_; }
+QString WindowController::snapPreviewEdge() const
+{
+    return isDockEdge(pendingListSnapEdge_) ? pendingListSnapEdge_
+                                            : QStringLiteral("none");
+}
 int WindowController::closeBehavior() const noexcept { return closeBehavior_; }
 bool WindowController::listWindowVisible() const noexcept { return listWindowVisible_; }
 bool WindowController::listWindowDetached() const noexcept { return listWindowDetached_; }
@@ -74,25 +108,76 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
 {
     if (mainWindow_ != nullptr) {
         mainWindow_->removeEventFilter(this);
+        mainWindow_->disconnect(this);
     }
     if (miniWindow_ != nullptr) {
         miniWindow_->removeEventFilter(this);
     }
 
-    mainWindow_ = mainWindow;
+    // Do not publish mainWindow_ until its native handle exists. This
+    // controller is also a global native event filter; calling winId() from
+    // WM_NCCREATE would otherwise recursively create the same HWND.
+    mainWindow_ = nullptr;
+    mainWindowHandle_ = 0;
     miniWindow_ = miniWindow;
-    if (mainWindow_ != nullptr) {
-        restoreGeometry(mainWindow_, QStringLiteral("windows/mainGeometry"));
+    if (mainWindow != nullptr) {
+        const QString mainGeometryKey = QStringLiteral("windows/mainGeometry");
+        const QString mainGeometryVersionKey =
+            QStringLiteral("windows/mainGeometryVersion");
+        if (settings_.value(mainGeometryVersionKey, 0).toInt() < 1) {
+            QRect geometry = settings_.value(mainGeometryKey).toRect();
+            if (geometry.isValid() && geometry.height() == 399) {
+                geometry.setHeight(380);
+                settings_.setValue(mainGeometryKey, geometry);
+            }
+            settings_.setValue(mainGeometryVersionKey, 1);
+        }
+        restoreGeometry(mainWindow, mainGeometryKey);
+        const bool usesWindowsPlatform =
+            QGuiApplication::platformName().compare(
+                QStringLiteral("windows"), Qt::CaseInsensitive) == 0;
+        const quintptr nativeHandle = usesWindowsPlatform
+            ? static_cast<quintptr>(mainWindow->winId()) : 0;
+        mainWindow_ = mainWindow;
+        mainWindowHandle_ = nativeHandle;
         mainWindow_->installEventFilter(this);
+        connect(mainWindow_, &QWindow::windowStateChanged, this,
+                [this](const Qt::WindowState state) {
+                    const bool visible = listWindowPanelAllowed_
+                        && listWindowRequestedVisible_ && mainVisible_
+                        && state != Qt::WindowMinimized
+                        && (listWindowDetached_
+                            || state != Qt::WindowMaximized);
+                    applyListWindowVisible(visible);
+                });
+        applyPlatformWindowStyle(mainWindow_);
         mainWindow_->setVisible(mainVisible_);
         persistGeometry(mainWindow_, QStringLiteral("windows/mainGeometry"));
+        if (audioToolsWindow_ != nullptr) {
+            audioToolsWindow_->setTransientParent(mainWindow_);
+        }
+        if (settingsWindow_ != nullptr) {
+            settingsWindow_->setTransientParent(mainWindow_);
+        }
     }
     if (miniWindow_ != nullptr) {
-        restoreGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
+        const QString miniGeometryKey =
+            QStringLiteral("windows/miniGeometry");
+        const QRect savedMiniGeometry =
+            settings_.value(miniGeometryKey).toRect();
+        const QString miniGeometryVersionKey =
+            QStringLiteral("windows/miniGeometryVersion");
+        if (settings_.value(miniGeometryVersionKey, 0).toInt() < 4
+            && savedMiniGeometry.isValid()) {
+            settings_.remove(miniGeometryKey);
+        }
+        settings_.setValue(miniGeometryVersionKey, 4);
+        restoreGeometry(miniWindow_, miniGeometryKey);
         miniWindow_->installEventFilter(this);
+        applyPlatformWindowStyle(miniWindow_);
         miniWindow_->setFlag(Qt::WindowStaysOnTopHint, alwaysOnTop_);
         miniWindow_->setVisible(miniVisible_);
-        persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
+        persistGeometry(miniWindow_, miniGeometryKey);
     }
 }
 
@@ -101,13 +186,29 @@ void WindowController::setListWindow(QWindow* listWindow)
     if (listWindow_ != nullptr) {
         listWindow_->removeEventFilter(this);
     }
-    listWindow_ = listWindow;
-    if (listWindow_ == nullptr) {
+    if (listWindow == nullptr) {
+        listWindow_ = nullptr;
+        listWindowHandle_ = 0;
         return;
     }
 
-    restoreGeometry(listWindow_, QStringLiteral("windows/listGeometry"));
+    // Restore the logical geometry before materializing the native handle so
+    // DPI/frame adjustments do not overwrite the persisted client geometry.
+    restoreGeometry(listWindow, QStringLiteral("windows/listGeometry"));
+    applyPlatformWindowStyle(listWindow);
+    // Materialize the platform handle before publishing listWindow_. The
+    // controller is already a native event filter at this point; calling
+    // winId() from inside WM_NCCREATE would recursively create the same window.
+    const bool usesWindowsPlatform =
+        QGuiApplication::platformName().compare(
+            QStringLiteral("windows"), Qt::CaseInsensitive) == 0;
+    const quintptr nativeHandle = usesWindowsPlatform
+        ? static_cast<quintptr>(listWindow->winId()) : 0;
+    listWindow_ = listWindow;
+    listWindowHandle_ = nativeHandle;
+
     listWindow_->installEventFilter(this);
+    setListDockEdge(listWindowDetached_ ? QStringLiteral("none") : listDockEdge_);
     setListWindowWidth(listWindow_->width());
     setListWindowHeight(listWindow_->height());
     if (!listWindowDetached_) {
@@ -122,14 +223,99 @@ void WindowController::setListWindow(QWindow* listWindow)
 
 void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
 {
+    if (audioToolsWindow_ != nullptr) {
+        audioToolsWindow_->removeEventFilter(this);
+    }
     audioToolsWindow_ = audioToolsWindow;
     if (audioToolsWindow_ != nullptr) {
+        audioToolsWindow_->setTransientParent(mainWindow_);
+        audioToolsWindow_->installEventFilter(this);
+        applyPlatformWindowStyle(audioToolsWindow_);
         audioToolsWindow_->setVisible(audioToolsVisible_);
         if (audioToolsVisible_) {
             audioToolsWindow_->requestActivate();
-            audioToolsWindow_->raise();
+            raiseWindow(audioToolsWindow_);
         }
     }
+}
+
+void WindowController::registerSettingsWindow(QWindow* window)
+{
+    if (settingsWindow_ != nullptr) {
+        settingsWindow_->removeEventFilter(this);
+    }
+    settingsWindow_ = window;
+    if (settingsWindow_ != nullptr) {
+        settingsWindow_->setTransientParent(mainWindow_);
+        restoreGeometry(settingsWindow_, QStringLiteral("windows/settingsGeometry"));
+        settingsWindow_->installEventFilter(this);
+        applyPlatformWindowStyle(settingsWindow_);
+        persistGeometry(settingsWindow_, QStringLiteral("windows/settingsGeometry"));
+    }
+}
+
+void WindowController::presentAuxiliaryWindow(QWindow* window)
+{
+    if (window == nullptr) {
+        return;
+    }
+
+    if (window->transientParent() != mainWindow_) {
+        window->setTransientParent(mainWindow_);
+    }
+
+    if (mainWindow_ != nullptr) {
+        const QRect mainGeometry = mainWindow_->geometry();
+        QScreen* screen = QGuiApplication::screenAt(mainGeometry.center());
+        if (screen == nullptr) {
+            screen = mainWindow_->screen();
+        }
+        if (screen != nullptr) {
+            const QRect available = screen->availableGeometry();
+            const QSize size(qMin(window->width(), available.width()),
+                             qMin(window->height(), available.height()));
+            if (size != window->size()) {
+                window->resize(size);
+            }
+            QPoint position(mainGeometry.center().x() - (size.width() - 1) / 2,
+                            mainGeometry.center().y() - (size.height() - 1) / 2);
+            position.setX(qBound(available.left(), position.x(),
+                                 available.right() - size.width() + 1));
+            position.setY(qBound(available.top(), position.y(),
+                                 available.bottom() - size.height() + 1));
+            window->setPosition(position);
+        }
+    }
+
+    lastAuxiliaryWindow_ = window;
+    window->setVisible(true);
+    window->requestActivate();
+    raiseDockedGroup(window);
+}
+
+void WindowController::applyPlatformWindowStyle(QWindow* window) const
+{
+#ifdef Q_OS_WIN
+    if (window == nullptr
+        || QGuiApplication::platformName().compare(
+               QStringLiteral("windows"), Qt::CaseInsensitive) != 0) {
+        return;
+    }
+    constexpr DWORD kCornerPreferenceAttribute = 33;
+    constexpr int kDoNotRound = 1;
+    constexpr int kRound = 2;
+    const int preference = isMaximized(window) ? kDoNotRound : kRound;
+    const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    if (hwnd != nullptr) {
+        DwmSetWindowAttribute(
+            hwnd,
+            static_cast<DWMWINDOWATTRIBUTE>(kCornerPreferenceAttribute),
+            &preference,
+            sizeof(preference));
+    }
+#else
+    Q_UNUSED(window);
+#endif
 }
 
 void WindowController::setMainReady(bool ready) noexcept
@@ -271,6 +457,14 @@ void WindowController::showMain()
     }
     applyMainVisible(true);
     applyMiniVisible(false);
+    if (mainWindow_ != nullptr) {
+        if (isMinimized(mainWindow_)) {
+            mainWindow_->setWindowState(Qt::WindowNoState);
+        }
+        applyListWindowVisible(shouldShowListWindow());
+        mainWindow_->requestActivate();
+        raiseDockedGroup();
+    }
     pendingView_ = PendingView::None;
 }
 
@@ -427,7 +621,7 @@ void WindowController::activateSearch()
     showListWindow();
     if (listWindow_ != nullptr) {
         listWindow_->requestActivate();
-        listWindow_->raise();
+        raiseWindow(listWindow_);
     }
     emit searchRequested();
 }
@@ -472,13 +666,16 @@ void WindowController::applyMiniVisible(bool visible)
 void WindowController::applyAudioToolsVisible(bool visible)
 {
     if (audioToolsVisible_ == visible) {
+        if (visible) {
+            presentAuxiliaryWindow(audioToolsWindow_);
+        }
         return;
     }
     if (audioToolsWindow_ != nullptr) {
-        audioToolsWindow_->setVisible(visible);
         if (visible) {
-            audioToolsWindow_->requestActivate();
-            audioToolsWindow_->raise();
+            presentAuxiliaryWindow(audioToolsWindow_);
+        } else {
+            audioToolsWindow_->setVisible(false);
         }
     }
     audioToolsVisible_ = visible;
@@ -487,7 +684,8 @@ void WindowController::applyAudioToolsVisible(bool visible)
 
 void WindowController::applyListWindowVisible(bool visible)
 {
-    if (listWindowVisible_ == visible) {
+    if (listWindowVisible_ == visible
+        && (listWindow_ == nullptr || listWindow_->isVisible() == visible)) {
         return;
     }
     if (listWindow_ != nullptr) {
@@ -500,7 +698,7 @@ void WindowController::applyListWindowVisible(bool visible)
         listWindow_->setVisible(visible);
         if (visible) {
             listWindow_->requestActivate();
-            listWindow_->raise();
+            raiseWindow(listWindow_);
         }
     }
     listWindowVisible_ = visible;
@@ -517,13 +715,34 @@ void WindowController::updateListWindowPosition()
     repositionDockedListWindow();
 }
 
-void WindowController::repositionDockedListWindow()
+void WindowController::repositionDockedListWindow(bool constrainToScreen,
+                                                  bool synchronizeSize)
 {
+    Q_UNUSED(synchronizeSize)
+
     if (listWindow_ == nullptr || mainWindow_ == nullptr || listWindowDetached_) {
         return;
     }
     if (isMaximized(mainWindow_)) {
         applyListWindowVisible(false);
+        return;
+    }
+
+    // During a native move the operating system may keep reporting the old
+    // screen until most of the frameless window has crossed the monitor seam.
+    // Clamping the docked group to that screen on every Move event creates the
+    // sticky edge the user has to "tear" through. Moving only the companion
+    // window preserves the one-pixel join while letting Windows handle the
+    // monitor transition normally. Size fitting still runs for explicit dock,
+    // restore and Resize operations.
+    if (!constrainToScreen) {
+        updatingWindowGeometry_ = true;
+        const QPoint position = computeSnapForEdge(listDockEdge_);
+        listWindow_->setPosition(position);
+        updatingWindowGeometry_ = false;
+        setListWindowX(position.x());
+        setListWindowY(position.y());
+        scheduleWindowStateSync();
         return;
     }
     QScreen* screen = mainWindow_->screen();
@@ -535,58 +754,9 @@ void WindowController::repositionDockedListWindow()
     }
 
     const QRect available = screen->availableGeometry();
-    QString effectiveEdge = listDockEdge_;
-    const bool horizontal = effectiveEdge == QStringLiteral("left")
-        || effectiveEdge == QStringLiteral("right");
-    const int minimumCombined = horizontal
-        ? mainWindow_->minimumWidth() + listWindow_->minimumWidth()
-        : mainWindow_->minimumHeight() + listWindow_->minimumHeight();
-    const int availableSpan = horizontal ? available.width() : available.height();
-    if (minimumCombined > availableSpan) {
-        effectiveEdge = horizontal ? QStringLiteral("bottom") : QStringLiteral("right");
-        setListDockEdge(effectiveEdge);
-    }
-
     updatingWindowGeometry_ = true;
-    if (effectiveEdge == QStringLiteral("left")
-        || effectiveEdge == QStringLiteral("right")) {
-        int excess = mainWindow_->width() + listWindow_->width() - available.width();
-        if (excess > 0) {
-            const int listShrink = qMin(
-                excess, listWindow_->width() - listWindow_->minimumWidth());
-            if (listShrink > 0) {
-                listWindow_->resize(listWindow_->width() - listShrink,
-                                    listWindow_->height());
-                excess -= listShrink;
-            }
-            const int mainShrink = qMin(
-                excess, mainWindow_->width() - mainWindow_->minimumWidth());
-            if (mainShrink > 0) {
-                mainWindow_->resize(mainWindow_->width() - mainShrink,
-                                    mainWindow_->height());
-            }
-        }
-    } else {
-        int excess = mainWindow_->height() + listWindow_->height() - available.height();
-        if (excess > 0) {
-            const int listShrink = qMin(
-                excess, listWindow_->height() - listWindow_->minimumHeight());
-            if (listShrink > 0) {
-                listWindow_->resize(listWindow_->width(),
-                                    listWindow_->height() - listShrink);
-                excess -= listShrink;
-            }
-            const int mainShrink = qMin(
-                excess, mainWindow_->height() - mainWindow_->minimumHeight());
-            if (mainShrink > 0) {
-                mainWindow_->resize(mainWindow_->width(),
-                                    mainWindow_->height() - mainShrink);
-            }
-        }
-    }
-
     QRect mainGeometry = mainWindow_->geometry();
-    QPoint position = computeSnapForEdge(effectiveEdge);
+    QPoint position = computeSnapForEdge(listDockEdge_);
     QRect group = mainGeometry.united(
         QRect(position, QSize(listWindow_->width(), listWindow_->height())));
     int shiftX = 0;
@@ -603,7 +773,7 @@ void WindowController::repositionDockedListWindow()
     }
     if (shiftX != 0 || shiftY != 0) {
         mainWindow_->setPosition(mainWindow_->position() + QPoint(shiftX, shiftY));
-        position = computeSnapForEdge(effectiveEdge);
+        position = computeSnapForEdge(listDockEdge_);
     }
     listWindow_->setPosition(position);
     updatingWindowGeometry_ = false;
@@ -615,6 +785,13 @@ void WindowController::repositionDockedListWindow()
 void WindowController::setListDockEdge(const QString& edge)
 {
     const QString normalized = isDockEdge(edge) ? edge : QStringLiteral("none");
+    if (listWindow_ != nullptr) {
+        QWindow* desiredOwner = normalized == QStringLiteral("none")
+            ? nullptr : mainWindow_;
+        if (listWindow_->transientParent() != desiredOwner) {
+            listWindow_->setTransientParent(desiredOwner);
+        }
+    }
     if (listDockEdge_ == normalized) {
         return;
     }
@@ -622,6 +799,91 @@ void WindowController::setListDockEdge(const QString& edge)
     settings_.setValue(QStringLiteral("windows/listDockEdge"), listDockEdge_);
     scheduleWindowStateSync();
     emit listDockEdgeChanged();
+}
+
+void WindowController::finishListWindowInteraction()
+{
+    if (listWindow_ == nullptr || mainWindow_ == nullptr) return;
+    if (listWindowDetached_) {
+        if (isDockEdge(pendingListSnapEdge_)) {
+            listWindowDetached_ = false;
+            emit listWindowDetachedChanged();
+            setListDockEdge(pendingListSnapEdge_);
+            repositionDockedListWindow();
+        }
+    } else if (pendingListDetach_) {
+        setListWindowDetached(true);
+    } else if (isDockEdge(listDockEdge_)) {
+        repositionDockedListWindow();
+    }
+    const bool hadPreview = isDockEdge(pendingListSnapEdge_);
+    pendingListSnapEdge_.clear();
+    if (hadPreview) emit snapPreviewEdgeChanged();
+    pendingListDetach_ = false;
+    applyListWindowVisible(shouldShowListWindow());
+}
+
+void WindowController::raiseDockedGroup(QWindow* topWindow)
+{
+    QWindow* overlay = topWindow;
+    if (overlay == nullptr && lastAuxiliaryWindow_ != nullptr
+        && lastAuxiliaryWindow_->isVisible()) {
+        overlay = lastAuxiliaryWindow_;
+    }
+#ifdef Q_OS_WIN
+    constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+    const bool hasList = !listWindowDetached_ && listWindow_ != nullptr
+        && listWindow_->isVisible();
+    // DeferWindowPos resolves the relative inserts against the old z-order;
+    // a transient QML list can therefore end above a settings/tools window.
+    // Raise the group bottom-up in separate native operations instead. Each
+    // HWND_TOP promotion is deterministic and preserves the final stack:
+    // player < docked list < active auxiliary window.
+    const auto raiseNative = [flags](QWindow* const window) {
+        if (window == nullptr || !window->isVisible()) return;
+        SetWindowPos(reinterpret_cast<HWND>(window->winId()),
+                     HWND_TOP, 0, 0, 0, 0, flags);
+    };
+    raiseNative(mainWindow_);
+    if (hasList) raiseNative(listWindow_);
+    raiseNative(overlay);
+#else
+    if (mainWindow_ != nullptr) raiseWindow(mainWindow_);
+    if (!listWindowDetached_ && listWindow_ != nullptr && listWindow_->isVisible()) {
+        raiseWindow(listWindow_);
+    }
+    if (overlay != nullptr) raiseWindow(overlay);
+#endif
+}
+
+bool WindowController::nativeEventFilter(const QByteArray& eventType, void* message,
+                                         qintptr* result)
+{
+    Q_UNUSED(result);
+#ifdef Q_OS_WIN
+    if (eventType == QByteArrayLiteral("windows_generic_MSG")) {
+        const auto* msg = static_cast<MSG*>(message);
+        if (msg != nullptr && mainWindow_ != nullptr
+            && msg->hwnd == reinterpret_cast<HWND>(mainWindowHandle_)
+            && msg->message == WM_ACTIVATE
+            && LOWORD(msg->wParam) != WA_INACTIVE) {
+            QTimer::singleShot(0, this, [this]() {
+                if (mainWindow_ == nullptr || !mainWindow_->isVisible()) {
+                    return;
+                }
+                showMain();
+            });
+        } else if (msg != nullptr && listWindow_ != nullptr
+            && msg->hwnd == reinterpret_cast<HWND>(listWindowHandle_)
+            && msg->message == WM_EXITSIZEMOVE) {
+            finishListWindowInteraction();
+        }
+    }
+#else
+    Q_UNUSED(eventType);
+    Q_UNUSED(message);
+#endif
+    return false;
 }
 
 QString WindowController::snapEdgeForPosition(int x, int y) const
@@ -633,10 +895,10 @@ QString WindowController::snapEdgeForPosition(int x, int y) const
     const QRect mainGeo = mainWindow_->geometry();
     const int listWidth = listWindow_->width();
     const int listHeight = listWindow_->height();
-    const int leftX = mainGeo.left() - listWidth;
-    const int rightX = mainGeo.right() + 1;
-    const int topY = mainGeo.top() - listHeight;
-    const int bottomY = mainGeo.bottom() + 1;
+    const int leftX = mainGeo.left() - listWidth + kDockOverlap;
+    const int rightX = mainGeo.right() - kDockOverlap + 1;
+    const int topY = mainGeo.top() - listHeight + kDockOverlap;
+    const int bottomY = mainGeo.bottom() - kDockOverlap + 1;
     const bool verticalProjectionOverlaps =
         y < mainGeo.bottom() + 1 && y + listHeight > mainGeo.top();
     const bool horizontalProjectionOverlaps =
@@ -689,6 +951,28 @@ void WindowController::restoreGeometry(QWindow* window, const QString& key)
     }
     QRect geometry = settings_.value(key).toRect();
     if (!geometry.isValid()) {
+        // A QML Window may be created on the screen containing a stale cursor
+        // position before the controller gets a chance to manage it.  Start a
+        // first-run window on the primary work area instead so it is never
+        // invisible on an unavailable/virtual secondary display.
+        QScreen* const primary = QGuiApplication::primaryScreen();
+        if (primary == nullptr || window->width() <= 0 || window->height() <= 0) {
+            return;
+        }
+        const QRect available = primary->availableGeometry();
+        // Programmatic callers may already have deliberately placed a window
+        // on the primary screen. Preserve that geometry; only rehome the
+        // platform's invisible first-run placement.
+        if (available.intersects(window->geometry())) {
+            return;
+        }
+        const QSize boundedSize(qMin(qMax(window->width(), window->minimumWidth()),
+                                    available.width()),
+                                qMin(qMax(window->height(), window->minimumHeight()),
+                                    available.height()));
+        QRect centered(QPoint(0, 0), boundedSize);
+        centered.moveCenter(available.center());
+        window->setGeometry(centered);
         return;
     }
     geometry.setWidth(qMax(geometry.width(), window->minimumWidth()));
@@ -716,13 +1000,25 @@ void WindowController::restoreGeometry(QWindow* window, const QString& key)
         return;
     }
 
-    const QRect available = bestScreen->availableGeometry();
-    geometry.setWidth(qMin(geometry.width(), available.width()));
-    geometry.setHeight(qMin(geometry.height(), available.height()));
-    const int maxX = available.right() - geometry.width() + 1;
-    const int maxY = available.bottom() - geometry.height() + 1;
-    geometry.moveLeft(qBound(available.left(), geometry.left(), maxX));
-    geometry.moveTop(qBound(available.top(), geometry.top(), maxY));
+    // A restored docked group may deliberately span two monitors.  Constraining
+    // it to the single screen with the largest overlap used to shrink the list
+    // (and break its shared edge with the player) whenever it crossed a monitor
+    // boundary.  Bound only against the full virtual work area instead.
+    QRect virtualAvailable;
+    for (QScreen* screen : screens) {
+        if (screen != nullptr) {
+            virtualAvailable = virtualAvailable.united(screen->availableGeometry());
+        }
+    }
+    if (!virtualAvailable.isValid()) {
+        virtualAvailable = bestScreen->availableGeometry();
+    }
+    geometry.setWidth(qMin(geometry.width(), virtualAvailable.width()));
+    geometry.setHeight(qMin(geometry.height(), virtualAvailable.height()));
+    const int maxX = virtualAvailable.right() - geometry.width() + 1;
+    const int maxY = virtualAvailable.bottom() - geometry.height() + 1;
+    geometry.moveLeft(qBound(virtualAvailable.left(), geometry.left(), maxX));
+    geometry.moveTop(qBound(virtualAvailable.top(), geometry.top(), maxY));
     window->setGeometry(geometry);
 }
 
@@ -745,6 +1041,7 @@ void WindowController::flushWindowState()
     persistGeometry(mainWindow_, QStringLiteral("windows/mainGeometry"));
     persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
     persistGeometry(listWindow_, QStringLiteral("windows/listGeometry"));
+    persistGeometry(settingsWindow_, QStringLiteral("windows/settingsGeometry"));
     settings_.sync();
 }
 
@@ -783,13 +1080,13 @@ QPoint WindowController::computeSnapForEdge(const QString& direction) const
 
     QPoint target(listWindowX_, listWindowY_);
     if (direction == QStringLiteral("left")) {
-        target = QPoint(mainGeo.left() - listWidth, centerY);
+        target = QPoint(mainGeo.left() - listWidth + kDockOverlap, centerY);
     } else if (direction == QStringLiteral("right")) {
-        target = QPoint(mainGeo.right() + 1, centerY);
+        target = QPoint(mainGeo.right() - kDockOverlap + 1, centerY);
     } else if (direction == QStringLiteral("top")) {
-        target = QPoint(centerX, mainGeo.top() - listHeight);
+        target = QPoint(centerX, mainGeo.top() - listHeight + kDockOverlap);
     } else if (direction == QStringLiteral("bottom")) {
-        target = QPoint(centerX, mainGeo.bottom() + 1);
+        target = QPoint(centerX, mainGeo.bottom() - kDockOverlap + 1);
     }
 
     return target;
@@ -801,16 +1098,65 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
         if (event->type() == QEvent::Move || event->type() == QEvent::Resize) {
             scheduleWindowStateSync();
             if (!updatingWindowGeometry_ && !listWindowDetached_) {
-                repositionDockedListWindow();
+                repositionDockedListWindow(false,
+                                           event->type() == QEvent::Resize);
             }
         } else if (event->type() == QEvent::WindowStateChange) {
-            applyListWindowVisible(shouldShowListWindow());
+            applyPlatformWindowStyle(mainWindow_);
+            const Qt::WindowState state = mainWindow_->windowState();
+            const bool visible = listWindowPanelAllowed_
+                && listWindowRequestedVisible_ && mainVisible_
+                && state != Qt::WindowMinimized
+                && (listWindowDetached_ || state != Qt::WindowMaximized);
+            applyListWindowVisible(visible);
+        } else if (event->type() == QEvent::WindowActivate
+                   && !updatingWindowZOrder_ && !listWindowDetached_) {
+            updatingWindowZOrder_ = true;
+            raiseDockedGroup();
+            updatingWindowZOrder_ = false;
         }
+    } else if ((watched == audioToolsWindow_ || watched == settingsWindow_)
+               && event->type() == QEvent::WindowActivate
+               && !updatingWindowZOrder_) {
+        updatingWindowZOrder_ = true;
+        lastAuxiliaryWindow_ = qobject_cast<QWindow*>(watched);
+        raiseDockedGroup(lastAuxiliaryWindow_);
+        updatingWindowZOrder_ = false;
+    } else if (watched == listWindow_ && event->type() == QEvent::WindowActivate
+               && !updatingWindowZOrder_ && !listWindowDetached_) {
+        updatingWindowZOrder_ = true;
+        raiseDockedGroup();
+        updatingWindowZOrder_ = false;
     } else if (watched == miniWindow_
                && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
         scheduleWindowStateSync();
+    } else if ((watched == audioToolsWindow_ || watched == settingsWindow_)
+               && (event->type() == QEvent::Move
+                   || event->type() == QEvent::Resize)) {
+        scheduleWindowStateSync();
+    } else if ((watched == miniWindow_ || watched == listWindow_
+                || watched == audioToolsWindow_ || watched == settingsWindow_)
+               && event->type() == QEvent::WindowStateChange) {
+        applyPlatformWindowStyle(qobject_cast<QWindow*>(watched));
     } else if (watched == listWindow_
                && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
+        if (!updatingWindowGeometry_ && magneticSnapEnabled_
+            && mainWindow_ != nullptr) {
+            if (listWindowDetached_) {
+                const QString candidate = snapEdgeForPosition(
+                    listWindow_->x(), listWindow_->y());
+                if (pendingListSnapEdge_ != candidate) {
+                    pendingListSnapEdge_ = candidate;
+                    emit snapPreviewEdgeChanged();
+                }
+            } else if (isDockEdge(listDockEdge_)) {
+                const QPoint expected = computeSnapForEdge(listDockEdge_);
+                const QPoint actual = listWindow_->position();
+                const int movementDelta = qMax(qAbs(actual.x() - expected.x()),
+                                               qAbs(actual.y() - expected.y()));
+                pendingListDetach_ = movementDelta > kSnapReleaseDistance;
+            }
+        }
         setListWindowX(listWindow_->x());
         setListWindowY(listWindow_->y());
         setListWindowWidth(listWindow_->width());
@@ -818,6 +1164,10 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
         if (!updatingWindowGeometry_) {
             scheduleWindowStateSync();
         }
+    } else if (watched == listWindow_
+               && (event->type() == QEvent::MouseButtonRelease
+                   || event->type() == QEvent::NonClientAreaMouseButtonRelease)) {
+        finishListWindowInteraction();
     }
     return QObject::eventFilter(watched, event);
 }
