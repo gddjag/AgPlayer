@@ -1062,22 +1062,15 @@ TestCase {
         }, 1000, "seek mismatch: actual=" + PlaybackController.positionMs
                  + ", expected=" + expected
                  + ", width=" + seekSurface.width)
-        var guide = findChild(mainWindow, "waveformPlaybackGuide")
-        verify(guide)
-        var expectedWidth = waveform.width * waveform.position
-                            / waveform.duration
         verify(Math.abs(waveform.position - expected) < 150,
                "rendered waveform and playback controller must share one position")
-        verify(Math.abs(guide.x - Math.round(expectedWidth - guide.width / 2)) < 2)
+        verify(!findChild(mainWindow, "waveformPlaybackGuide"),
+               "colored waveform progress must not have a separate playback line")
         var originalWidth = mainWindow.width
         mainWindow.width = Math.max(mainWindow.minimumWidth, originalWidth - 160)
         wait(30)
-        expectedWidth = waveform.width * waveform.position
-                        / waveform.duration
         verify(Math.abs(waveform.position - PlaybackController.positionMs) < 2,
                "waveform position must remain authoritative after resizing")
-        verify(Math.abs(guide.x - Math.round(expectedWidth - guide.width / 2)) < 2,
-               "playback guide must stay aligned after resizing")
         mainWindow.width = originalWidth
     }
 
@@ -1089,10 +1082,7 @@ TestCase {
         // differ for VBR padding and must never create a seekable visual tail.
         pane.waveformDurationMs = PlaybackController.durationMs * 1.25
         compare(pane.effectiveDurationMs, PlaybackController.durationMs)
-        var guide = findChild(mainWindow, "waveformPlaybackGuide")
-        verify(guide)
-        compare(guide.width, 1)
-        compare(guide.color, "#002fa7")
+        verify(!findChild(mainWindow, "waveformPlaybackGuide"))
     }
 
     function test_waveform_mode_button_cycles_the_live_setting() {
@@ -1139,11 +1129,8 @@ TestCase {
         verify(mode)
         verify(play)
         verify(hoverGuide)
-        verify(findChild(mainWindow, "waveformProgressFeather"))
-        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
-        verify(playbackGuide)
-        compare(playbackGuide.width, 1)
-        compare(playbackGuide.color.toString(), "#002fa7")
+        verify(!findChild(mainWindow, "waveformProgressFeather"))
+        verify(!findChild(mainWindow, "waveformPlaybackGuide"))
         compare(previous.icon.width, 24)
         compare(next.icon.width, 24)
         compare(mode.icon.width, 24)

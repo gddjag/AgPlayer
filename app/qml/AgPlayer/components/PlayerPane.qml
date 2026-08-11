@@ -455,37 +455,6 @@ Rectangle {
             }
 
             Rectangle {
-                objectName: "waveformProgressFeather"
-                visible: waveformFrame.playbackX > 1
-                         && waveformFrame.playbackX < waveformFrame.width
-                x: Math.max(0, waveformFrame.playbackX - width / 2)
-                anchors.verticalCenter: parent.verticalCenter
-                width: 3
-                height: parent.height
-                opacity: 0.38
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: "transparent" }
-                    GradientStop { position: 0.5; color: "#ffffff" }
-                    GradientStop { position: 1; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                id: waveformPlaybackGuide
-                objectName: "waveformPlaybackGuide"
-                visible: root.effectiveDurationMs > 0
-                x: Math.max(0, Math.min(
-                                waveformFrame.width - width,
-                                Math.round(waveformFrame.playbackX - width / 2)))
-                width: 1
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                color: "#002FA7"
-                opacity: 0.96
-            }
-
-            Rectangle {
                 id: waveformHoverGuide
                 objectName: "waveformHoverGuide"
                 visible: SettingsController.waveformHoverTimePreview

@@ -183,11 +183,12 @@ private:
     bool listWindowDetached_ = false;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
-    int listWindowWidth_ = 1228;
+    int listWindowWidth_ = 1104;
     int listWindowHeight_ = 570;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;
     bool updatingWindowZOrder_ = false;
+    bool listUserInteraction_ = false;
     QString pendingListSnapEdge_;
     bool pendingListDetach_ = false;
     bool preferredDockEdgeInitialized_ = false;

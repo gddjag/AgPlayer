@@ -8,9 +8,9 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1228
+    width: 1104
     height: 570
-    minimumWidth: 720
+    minimumWidth: 612
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: "transparent"

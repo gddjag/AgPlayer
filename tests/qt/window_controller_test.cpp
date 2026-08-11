@@ -75,7 +75,7 @@ void WindowControllerTest::init()
 void WindowControllerTest::defaultListSizeMatchesReference()
 {
     WindowController windows;
-    QCOMPARE(windows.listWindowWidth(), 1228);
+    QCOMPARE(windows.listWindowWidth(), 1104);
     QCOMPARE(windows.listWindowHeight(), 570);
 }
 
@@ -223,14 +223,15 @@ void WindowControllerTest::listWindowMagneticSnappingToMainWindowEdges()
     windows.setListWindowDetached(true);
 
     // Move the left edge of the list window within 15 px of the main window's
-    // right edge. Docking preserves the independently resized window.
+    // right edge. It was previously bottom-docked, so it inherits the shared
+    // player width before becoming a side dock.
     const int expectedRightX = mainWindow.geometry().right() - 1;
     const int expectedCenterY = mainWindow.geometry().y()
         + (mainWindow.geometry().height() - listWindow.height()) / 2;
 
     windows.moveListWindow(expectedRightX - 15, expectedCenterY + 50);
     QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
-    QCOMPARE(listWindow.size(), QSize(200, 150));
+    QCOMPARE(listWindow.size(), QSize(400, 150));
     QCOMPARE(windows.listWindowX(), listWindow.x());
     QCOMPARE(windows.listWindowY(), listWindow.y());
     QVERIFY(!windows.listWindowDetached());
@@ -250,20 +251,20 @@ void WindowControllerTest::listWindowExplicitSnapToEachEdge()
     windows.setListWindow(&listWindow);
 
     windows.snapListWindow("left");
-    QCOMPARE(listWindow.geometry().right(), mainWindow.geometry().left() + 1);
-    QCOMPARE(listWindow.size(), QSize(200, 150));
+    QCOMPARE(listWindow.geometry().right(), mainWindow.geometry().left() + 3);
+    QCOMPARE(listWindow.size(), QSize(300, 150));
 
     windows.snapListWindow("right");
     QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
-    QCOMPARE(listWindow.size(), QSize(200, 150));
+    QCOMPARE(listWindow.size(), QSize(300, 150));
 
     windows.snapListWindow("top");
     QCOMPARE(listWindow.geometry().bottom(), mainWindow.geometry().top() + 1);
-    QCOMPARE(listWindow.size(), QSize(200, 150));
+    QCOMPARE(listWindow.size(), QSize(300, 150));
 
     windows.snapListWindow("bottom");
     QCOMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
-    QCOMPARE(listWindow.size(), QSize(200, 150));
+    QCOMPARE(listWindow.size(), QSize(300, 150));
     QCOMPARE(windows.listDockEdge(), QStringLiteral("bottom"));
 }
 
@@ -483,6 +484,7 @@ void WindowControllerTest::dockedListFollowsMainWindow()
     const QRect mainGeo = mainWindow.geometry();
     QCOMPARE(listWindow.x(), mainGeo.x());
     QCOMPARE(listWindow.y(), mainGeo.bottom() - 1);
+    QCOMPARE(listWindow.width(), mainGeo.width());
 }
 
 void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
@@ -701,7 +703,7 @@ void WindowControllerTest::geometryDockAndPinStatePersist()
 
     QCOMPARE(restoredMain.geometry(), QRect(450, 160, 300, 220));
     QCOMPARE(restoredMini.geometry(), QRect(50, 220, 700, 300));
-    QCOMPARE(restoredList.size(), QSize(400, 300));
+    QCOMPARE(restoredList.size(), QSize(300, 300));
     QCOMPARE(restoredList.geometry().right(), restoredMain.geometry().left() + 1);
     QCOMPARE(restored.listDockEdge(), QStringLiteral("left"));
     QVERIFY(restored.alwaysOnTop());
