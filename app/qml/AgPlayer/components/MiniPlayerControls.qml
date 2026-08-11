@@ -199,7 +199,9 @@ Rectangle {
                 ToolButton {
                     id: waveformModeButton
                     objectName: "miniWaveformModeButton"
-                    Layout.preferredWidth: 28
+                    Layout.preferredWidth: expanded ? 124 : 28
+                    Layout.minimumWidth: Layout.preferredWidth
+                    Layout.maximumWidth: Layout.preferredWidth
                     Layout.preferredHeight: 28
                     icon.source: Theme.icon("waveform-switch")
                     icon.color: Theme.iconPrimary
@@ -268,7 +270,9 @@ Rectangle {
 
                     ToolButton {
                         id: muteButton
-                        anchors.fill: parent
+                        width: 28
+                        height: parent.height
+                        anchors.left: parent.left
                         icon.source: playback && playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-fill")
                         icon.color: Theme.primaryText; icon.width: 20; icon.height: 20
                         onClicked: if (playback) playback.toggleMuted(); background: null
@@ -291,11 +295,11 @@ Rectangle {
                         objectName: "miniVolumeFlyout"
                         visible: opacity > 0
                         enabled: volumeControl.expanded
-                        x: volumeControl.expanded ? -(width - parent.width) : 0
+                        x: volumeControl.expanded ? muteButton.width : 0
                         y: (parent.height - height) / 2
                         opacity: volumeControl.expanded ? 1 : 0
                         z: 20
-                        width: 104
+                        width: parent.width - muteButton.width
                         height: 32
                         radius: Theme.radiusSm
                         color: Theme.elevated
@@ -313,13 +317,13 @@ Rectangle {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
+                            anchors.leftMargin: 6
                             anchors.rightMargin: 6
-                            spacing: 6
+                            spacing: 4
                             Slider {
                                 id: volumeSlider
                                 objectName: "miniVolumeSlider"
-                                Layout.preferredWidth: 64
+                                Layout.preferredWidth: 60
                                 Layout.preferredHeight: 24
                                 from: 0; to: 1
                                 value: playback && !playback.muted ? playback.volume : 0

@@ -163,6 +163,10 @@ ListView {
     function openInAudioTool(toolIndex) {
         var urls = selectedFileUrls()
         if (urls.length === 0) return
+        // Present the destination first: a loader issue must not make a real
+        // context-menu click appear to do nothing.
+        AudioToolsController.selectTool(toolIndex)
+        WindowController.showAudioTools()
         if (toolIndex === 0) {
             if (typeof LightEditor.queueFiles === "function") LightEditor.queueFiles(urls)
             else LightEditor.loadFile(urls[0])
@@ -176,8 +180,6 @@ ListView {
             if (typeof FilenameProcessor.loadFiles === "function") FilenameProcessor.loadFiles(urls)
             else FilenameProcessor.loadFile(urls[0])
         }
-        AudioToolsController.selectTool(toolIndex)
-        WindowController.showAudioTools()
     }
 
     Keys.onPressed: function(event) {

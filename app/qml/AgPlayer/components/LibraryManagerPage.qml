@@ -19,7 +19,9 @@ Item {
     readonly property int trackRowHeight: 42
     readonly property int preferredTrackViewportHeight:
         visibleRowCount * trackRowHeight
-    readonly property int preferredWindowHeight: 570
+    // The management controls, ten rows and their footer all fit at first
+    // open. The list itself grows with the native window afterwards.
+    readonly property int preferredWindowHeight: 752
     implicitHeight: preferredWindowHeight
     readonly property int pageSize: manager.pageSize
     readonly property int pageCount: manager.pageCount
@@ -117,12 +119,21 @@ Item {
     function openInAudioTool(toolIndex) {
         var urls = selectedFileUrls()
         if (urls.length === 0) return
-        if (toolIndex === 0) LightEditor.queueFiles(urls)
-        else if (toolIndex === 1) FormatConverter.loadFiles(urls)
-        else if (toolIndex === 2) MetadataEditor.loadFiles(urls)
-        else FilenameProcessor.loadFiles(urls)
         AudioToolsController.selectTool(toolIndex)
         WindowController.showAudioTools()
+        if (toolIndex === 0) {
+            if (typeof LightEditor.queueFiles === "function") LightEditor.queueFiles(urls)
+            else LightEditor.loadFile(urls[0])
+        } else if (toolIndex === 1) {
+            if (typeof FormatConverter.loadFiles === "function") FormatConverter.loadFiles(urls)
+            else FormatConverter.loadFile(urls[0])
+        } else if (toolIndex === 2) {
+            if (typeof MetadataEditor.loadFiles === "function") MetadataEditor.loadFiles(urls)
+            else MetadataEditor.loadFile(urls[0])
+        } else {
+            if (typeof FilenameProcessor.loadFiles === "function") FilenameProcessor.loadFiles(urls)
+            else FilenameProcessor.loadFile(urls[0])
+        }
     }
 
     onMinBpmChanged: manager.setBpmRange(minBpm, maxBpm)
@@ -658,13 +669,11 @@ Item {
                         id: trackView
                         objectName: "libraryManagerTrackList"
                         Layout.fillWidth: true
-                        // Keep the default management viewport at ten complete
-                        // rows.  Additional tracks remain scrollable instead of
-                        // silently increasing the first-open window density.
-                        Layout.fillHeight: false
+                        // Start with ten rows, then consume extra native-window
+                        // height so a larger window reveals more songs.
+                        Layout.fillHeight: true
                         Layout.preferredHeight: root.preferredTrackViewportHeight
-                        Layout.minimumHeight: root.preferredTrackViewportHeight
-                        Layout.maximumHeight: root.preferredTrackViewportHeight
+                        Layout.minimumHeight: root.trackRowHeight * 3
                         clip: true
                         focus: true
                         model: manager

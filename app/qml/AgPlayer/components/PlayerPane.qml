@@ -132,10 +132,12 @@ Rectangle {
             root.spectrumVisual = root.shapeSpectrum(
                 PlaybackController.spectrum)
             waveform.peaks = root.spectrumVisual
+            playedWaveform.peaks = root.spectrumVisual
             return
         }
         var source = root.rawWaveformLayers || {}
         waveform.layers = { mix: source.mix || [] }
+        playedWaveform.layers = { mix: source.mix || [] }
     }
 
     function loadWaveform() {
@@ -154,6 +156,8 @@ Rectangle {
         root.waveformDurationMs = 0
         waveform.layers = {}
         waveform.peaks = []
+        playedWaveform.layers = {}
+        playedWaveform.peaks = []
         if (!path || path.length === 0) {
             return
         }
@@ -418,7 +422,10 @@ Rectangle {
                 id: waveform
                 objectName: "mainWaveform"
                 anchors.fill: parent
-                position: root.visualPlaybackPositionMs
+                // Keep this base pass entirely unplayed. The played pass is
+                // clipped below at the exact playback pixel, avoiding the
+                // visible bucket-by-bucket progress jump of peak colouring.
+                position: 0
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
@@ -448,6 +455,34 @@ Rectangle {
                 lineWidth: SettingsController.waveformMode === 2
                             ? 3.0 : SettingsController.waveformThickness
                 onSeekRequested: positionMs => PlaybackController.seek(positionMs)
+            }
+
+            Item {
+                id: playedWaveformClip
+                objectName: "waveformPlayedClip"
+                width: waveformFrame.playbackX
+                height: parent.height
+                clip: true
+
+                WaveformItem {
+                    id: playedWaveform
+                    objectName: "playedWaveform"
+                    width: waveformFrame.width
+                    height: waveformFrame.height
+                    duration: root.effectiveDurationMs
+                    position: root.effectiveDurationMs
+                    analysisProgress: WaveformProvider.analysisProgress
+                    visualMode: SettingsController.waveformMode
+                    baseColor: waveform.baseColor
+                    progressColor: waveform.progressColor
+                    gradientStartColor: waveform.gradientStartColor
+                    gradientMiddleColor: waveform.gradientMiddleColor
+                    gradientEndColor: waveform.gradientEndColor
+                    rgbProgress: waveform.rgbProgress
+                    amplitudeScale: waveform.amplitudeScale
+                    density: waveform.density
+                    lineWidth: waveform.lineWidth
+                }
             }
 
             Rectangle {

@@ -70,6 +70,9 @@ public:
     Q_INVOKABLE void pause();
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void seek(qint64 positionMs);
+    // Waveform analysis belongs to rendering only. The active decoder snapshot
+    // remains the sole authority for the seekable playback timeline.
+    Q_INVOKABLE bool applyWaveformDuration(const QString& trackId, qint64 durationMs);
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
     Q_INVOKABLE void setVolume(float volume);

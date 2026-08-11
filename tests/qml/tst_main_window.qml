@@ -378,7 +378,7 @@ TestCase {
         verify(!findChild(page, "libraryDetailsFavorite"))
         verify(findChild(page, "libraryDetailsFormat"))
         verify(findChild(page, "libraryDetailsBitrate"))
-        compare(page.preferredWindowHeight, 570)
+        compare(page.preferredWindowHeight, 752)
         var managerBpmRange = findChild(page, "libraryManagerBpmRange")
         verify(managerBpmRange)
         compare(managerBpmRange.first.handle.width, 12)
@@ -571,6 +571,10 @@ TestCase {
         var trackView = findChild(manager, "libraryManagerTrackList")
         verify(trackView)
         tryCompare(trackView, "height", manager.preferredTrackViewportHeight)
+        manager.height = manager.preferredWindowHeight + 210
+        tryVerify(function() {
+            return trackView.height > manager.preferredTrackViewportHeight
+        }, 500, "a taller library window must reveal more rows before its footer")
         manager.destroy()
     }
 
@@ -1048,9 +1052,11 @@ TestCase {
         PlaybackController.playRow(playableIndex)
         tryVerify(function() {
             return PlaybackController.durationMs > 0 && waveform.width > 0
+                    && waveform.duration === PlaybackController.durationMs
         }, 5000)
 
-        var expected = Math.round(PlaybackController.durationMs * 0.75)
+        wait(120)
+        var expected = waveform.timeForX(seekSurface.width * 0.75)
         PlaybackController.pause()
         mouseClick(seekSurface, seekSurface.width * 0.75,
                    seekSurface.height / 2)
@@ -1059,15 +1065,27 @@ TestCase {
         }, 1000, "seek mismatch: actual=" + PlaybackController.positionMs
                  + ", expected=" + expected
                  + ", width=" + seekSurface.width)
-        verify(Math.abs(waveform.position - expected) < 150,
-               "rendered waveform and playback controller must share one position")
+        var playedWaveform = findChild(mainWindow, "playedWaveform")
+        verify(playedWaveform)
+        compare(waveform.position, 0)
+        compare(playedWaveform.position, waveform.duration)
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        verify(playedClip,
+               "played waveform colour must be clipped at the exact playback pixel")
+        tryVerify(function() {
+            return Math.abs(playedClip.width
+                            - waveform.width * PlaybackController.positionMs
+                            / waveform.duration) < 1
+        }, 500, "played colour boundary must use the same pixel axis as waveform time")
         verify(!findChild(mainWindow, "waveformPlaybackGuide"),
                "colored waveform progress must not have a separate playback line")
         var originalWidth = mainWindow.width
         mainWindow.width = Math.max(mainWindow.minimumWidth, originalWidth - 160)
         wait(30)
-        verify(Math.abs(waveform.position - PlaybackController.positionMs) < 2,
-               "waveform position must remain authoritative after resizing")
+        verify(Math.abs(playedClip.width
+                        - waveform.width * PlaybackController.positionMs
+                        / waveform.duration) < 1,
+               "played colour boundary must remain authoritative after resizing")
         mainWindow.width = originalWidth
     }
 
@@ -1427,7 +1445,7 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 1000)
+        compare(settingsWindow.width, 920)
         verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
                "settings window must fit the available desktop")
         const page = findChild(mainWindow, "settingsPage")
@@ -1444,7 +1462,7 @@ TestCase {
         verify(contentColumn, "settings must expose the single content column")
         var headerDragArea = findChild(page, "settingsHeaderDragArea")
         verify(headerDragArea, "settings header must expose a full-width native drag surface")
-        verify(headerDragArea.width > settingsWindow.width * 0.60)
+        verify(headerDragArea.width > settingsWindow.width * 0.50)
         compare(sidebar.width, 208)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")

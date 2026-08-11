@@ -157,6 +157,10 @@ TestCase {
             var left = flyout.parent.x + flyout.x
             return left >= 0 && left + flyout.width <= miniPlayer.width
         }, 300, "expanded mini volume flyout must remain inside the window canvas")
+        tryVerify(function() {
+            return flyout.x >= 28
+                    && flyout.x + flyout.width === flyout.parent.width
+        }, 300, "mini volume flyout must expand to the right of its mute button")
         flyout.parent.expanded = false
         verify(findChild(miniPlayer, "miniRating"))
         verify(findChild(miniPlayer, "miniWaveform"))
@@ -173,8 +177,8 @@ TestCase {
         compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize, 11)
         compare(play.width, 34)
         compare(play.height, 34)
-        compare(slider.visible, false)
-        compare(slider.width, 64)
+        tryCompare(slider, "visible", false, 300)
+        compare(slider.width, 60)
         verify(slider.handle.width <= 8)
         playbackFake.setVolume(0.37)
         tryCompare(percent, "text", "37%")

@@ -31,6 +31,7 @@ Window {
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
     property string exportPlaylistId: ""
+    property real libraryWindowHeight: 752
 
     onClosing: function(close) {
         close.accepted = false
@@ -48,6 +49,11 @@ Window {
         }
     }
 
+    onHeightChanged: {
+        if (filterModel && filterModel.category === "library")
+            libraryWindowHeight = height
+    }
+
     function ensureLibraryManagerHeight() {
         if (!filterModel || filterModel.category !== "library") {
             listWindow.minimumHeight = 320
@@ -55,9 +61,11 @@ Window {
                 listWindow.height = 570
             return
         }
-        // Library management scrolls inside the existing ten-row viewport;
-        // it must never raise the native minimum height or resize the list.
+        // First entry is tall enough for ten rows and the footer. Later manual
+        // heights are remembered without raising the native minimum size.
         listWindow.minimumHeight = 320
+        if (listWindow.height !== listWindow.libraryWindowHeight)
+            listWindow.height = listWindow.libraryWindowHeight
     }
     Connections {
         target: ImportController

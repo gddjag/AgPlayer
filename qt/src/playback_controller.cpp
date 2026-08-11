@@ -206,13 +206,9 @@ bool PlaybackController::applyWaveformDuration(const QString& trackId,
     if (player_ == nullptr) {
         return false;
     }
-
-    const ag_result result = ag_player_set_duration_ms(player_, durationMs);
-    runCommand(result);
-    if (result != AG_OK) {
-        return false;
-    }
-    pollSnapshot();
+    // Do not mutate the player duration from asynchronous waveform analysis.
+    // A late result otherwise changes the click/time axis beneath the user and
+    // makes the colored waveform progress jump to a different pixel.
     return true;
 }
 
