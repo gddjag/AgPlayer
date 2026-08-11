@@ -51,16 +51,12 @@ Rectangle {
         if (source.length === 0)
             return []
         var half = 64
-        var sourcePeak = 0
-        for (var sourceOffset = 0; sourceOffset < source.length; ++sourceOffset)
-            sourcePeak = Math.max(sourcePeak, Number(source[sourceOffset]) || 0)
-        var gain = sourcePeak > 0 ? Math.max(1, 1.0 / sourcePeak) : 0
         var result = new Array(half * 2)
         for (var index = 0; index < half; ++index) {
             var sourceIndex = Math.min(
                 source.length - 1, Math.floor(index * source.length / half))
             var target = Math.min(1, Math.max(
-                0, (Number(source[sourceIndex]) || 0) * gain))
+                0, Math.sqrt(Number(source[sourceIndex]) || 0) * 1.35))
             result[index] = target
             result[half * 2 - 1 - index] = target
         }
@@ -292,14 +288,14 @@ Rectangle {
 
                     Rectangle {
                         id: volumeFlyout
+                        objectName: "miniVolumeFlyout"
                         visible: opacity > 0
                         enabled: volumeControl.expanded
-                        x: volumeControl.expanded ? -(width - parent.width + 4)
-                                                  : -10
+                        x: volumeControl.expanded ? -(width - parent.width) : 0
                         y: (parent.height - height) / 2
                         opacity: volumeControl.expanded ? 1 : 0
                         z: 20
-                        width: 138
+                        width: 104
                         height: 32
                         radius: Theme.radiusSm
                         color: Theme.elevated
@@ -323,7 +319,7 @@ Rectangle {
                             Slider {
                                 id: volumeSlider
                                 objectName: "miniVolumeSlider"
-                                Layout.preferredWidth: 96
+                                Layout.preferredWidth: 64
                                 Layout.preferredHeight: 24
                                 from: 0; to: 1
                                 value: playback && !playback.muted ? playback.volume : 0

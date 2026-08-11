@@ -378,10 +378,7 @@ TestCase {
         verify(!findChild(page, "libraryDetailsFavorite"))
         verify(findChild(page, "libraryDetailsFormat"))
         verify(findChild(page, "libraryDetailsBitrate"))
-        verify(page.preferredWindowHeight >= 840)
-        verify(page.preferredWindowHeight
-               >= detailsContent.implicitHeight + 250,
-               "library window height must follow the complete details content")
+        compare(page.preferredWindowHeight, 570)
         var managerBpmRange = findChild(page, "libraryManagerBpmRange")
         verify(managerBpmRange)
         compare(managerBpmRange.first.handle.width, 12)
@@ -1159,6 +1156,10 @@ TestCase {
 
         surface.updatePreview(Math.max(2, surface.width * 0.85))
         tryVerify(function() { return guide.visible && guide.x > surface.width * 0.70 })
+        surface.updatePreview(surface.width)
+        tryVerify(function() {
+            return guide.x === surface.width - guide.width
+        }, 300, "hover guide must remain on the final waveform pixel")
         SettingsController.waveformHoverTimePreview = previousPreview
     }
 
@@ -1217,9 +1218,9 @@ TestCase {
         compare(waveform.spectrumBarCount, 128)
         compare(waveform.spectrumBarWidth, 5)
         compare(waveform.spectrumBarGap, 2)
-        compare(waveform.spectrumMaxHeight, 72)
-        fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
-        fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
+        compare(waveform.spectrumMaxHeight, 96)
+        fuzzyCompare(waveform.spectrumAttackSeconds, 0.012, 0.001)
+        fuzzyCompare(waveform.spectrumDecaySeconds, 0.075, 0.001)
         fuzzyCompare(waveform.spectrumPeakFallSeconds, 0.75, 0.001)
         fuzzyCompare(waveform.amplitudeScale, 1.0, 0.001)
         var pane = findChild(mainWindow, "playerPane")
@@ -1426,7 +1427,7 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 1228)
+        compare(settingsWindow.width, 1000)
         verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
                "settings window must fit the available desktop")
         const page = findChild(mainWindow, "settingsPage")

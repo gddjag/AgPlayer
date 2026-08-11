@@ -229,9 +229,9 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     QCOMPARE(item.spectrumBarCount(), 128);
     QCOMPARE(item.spectrumBarWidth(), 5.0);
     QCOMPARE(item.spectrumBarGap(), 2.0);
-    QCOMPARE(item.spectrumMaxHeight(), 72.0);
-    QCOMPARE(item.spectrumAttackSeconds(), 0.02);
-    QCOMPARE(item.spectrumDecaySeconds(), 0.10);
+    QCOMPARE(item.spectrumMaxHeight(), 96.0);
+    QCOMPARE(item.spectrumAttackSeconds(), 0.012);
+    QCOMPARE(item.spectrumDecaySeconds(), 0.075);
     QCOMPARE(item.spectrumPeakFallSeconds(), 0.75);
 
     item.setWidth(600);
@@ -248,9 +248,10 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     QVERIFY(data[0].x >= 0.0F && data[0].x <= 2.0F);
     const int lastBarVertex = 86 * 2 * 4 + (86 - 1) * 2;
     QVERIFY(data[lastBarVertex].x >= 598.0F && data[lastBarVertex].x <= 600.0F);
-    // The center bar is capped to a 72 px maximum height.
+    // The faster, taller spectrum should lift the center bar above the former
+    // 72 px visual cap while remaining bottom-aligned.
     const int centerBarVertex = 43 * 2;
-    QVERIFY(data[centerBarVertex].y >= 23.0F);
+    QVERIFY(data[centerBarVertex].y <= 23.0F);
     QCOMPARE(data[centerBarVertex + 1].y, 96.0F);
     // A one-pixel horizontal cap must remain visible above each bottom-aligned
     // bar so the live spectrum has the square peak markers from the reference.

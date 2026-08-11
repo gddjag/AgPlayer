@@ -150,8 +150,14 @@ TestCase {
         verify(findChild(miniPlayer, "miniTrackTitle"))
         var volume = findChild(miniPlayer, "miniVolumeSlider")
         verify(volume)
-        verify(volume.parent.parent.x + volume.parent.parent.width <= miniPlayer.width,
-               "mini volume flyout must remain inside the window canvas")
+        var flyout = findChild(miniPlayer, "miniVolumeFlyout")
+        verify(flyout)
+        flyout.parent.expanded = true
+        tryVerify(function() {
+            var left = flyout.parent.x + flyout.x
+            return left >= 0 && left + flyout.width <= miniPlayer.width
+        }, 300, "expanded mini volume flyout must remain inside the window canvas")
+        flyout.parent.expanded = false
         verify(findChild(miniPlayer, "miniRating"))
         verify(findChild(miniPlayer, "miniWaveform"))
         verify(findChild(miniPlayer, "miniTransport"))
@@ -168,7 +174,7 @@ TestCase {
         compare(play.width, 34)
         compare(play.height, 34)
         compare(slider.visible, false)
-        compare(slider.width, 96)
+        compare(slider.width, 64)
         verify(slider.handle.width <= 8)
         playbackFake.setVolume(0.37)
         tryCompare(percent, "text", "37%")

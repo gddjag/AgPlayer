@@ -114,17 +114,13 @@ Rectangle {
         if (source.length === 0)
             return []
         var half = 64
-        var sourcePeak = 0
-        for (var sourceOffset = 0; sourceOffset < source.length; ++sourceOffset)
-            sourcePeak = Math.max(sourcePeak, Number(source[sourceOffset]) || 0)
-        var gain = sourcePeak > 0 ? Math.max(1, 1.0 / sourcePeak) : 0
         var result = new Array(half * 2)
         for (var index = 0; index < half; ++index) {
             var sourceIndex = Math.min(
                 source.length - 1,
                 Math.floor(index * source.length / half))
             var target = Math.min(1, Math.max(0,
-                              (Number(source[sourceIndex]) || 0) * gain))
+                              Math.sqrt(Number(source[sourceIndex]) || 0) * 1.35))
             result[index] = target
             result[half * 2 - 1 - index] = target
         }
@@ -459,11 +455,10 @@ Rectangle {
                 objectName: "waveformHoverGuide"
                 visible: SettingsController.waveformHoverTimePreview
                          && waveformFrame.hoverPreviewMs >= 0
-                x: root.effectiveDurationMs > 0
-                   ? Math.round(waveformFrame.hoverPreviewMs
-                                / root.effectiveDurationMs
-                                * waveformFrame.width)
-                   : 0
+                x: Math.max(0, Math.min(parent.width - width,
+                                         Math.round(waveformFrame.hoverPreviewMs
+                                                    / Math.max(1, root.effectiveDurationMs)
+                                                    * parent.width)))
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
@@ -513,8 +508,7 @@ Rectangle {
                         waveformFrame.hoverPreviewMs = -1
                         return
                     }
-                    var ratio = Math.max(0, Math.min(1, pointerX / width))
-                    waveformFrame.hoverPreviewMs = ratio * root.effectiveDurationMs
+                    waveformFrame.hoverPreviewMs = waveform.timeForX(pointerX)
                 }
 
                 onPositionChanged: function(mouse) {

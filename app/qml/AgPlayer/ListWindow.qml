@@ -50,18 +50,14 @@ Window {
 
     function ensureLibraryManagerHeight() {
         if (!filterModel || filterModel.category !== "library") {
-            listWindow.minimumHeight = 420
+            listWindow.minimumHeight = 320
+            if (listWindow.height !== 570)
+                listWindow.height = 570
             return
         }
-        var geometry = listWindow.screen
-                       ? listWindow.screen.availableGeometry : null
-        var available = geometry && geometry.height > 0
-                        ? geometry.height : 1080
-        var targetHeight = Math.min(available,
-                                    libraryManagerPage.preferredWindowHeight)
-        listWindow.minimumHeight = targetHeight
-        if (listWindow.height < targetHeight)
-            listWindow.height = targetHeight
+        // Library management scrolls inside the existing ten-row viewport;
+        // it must never raise the native minimum height or resize the list.
+        listWindow.minimumHeight = 320
     }
     Connections {
         target: ImportController

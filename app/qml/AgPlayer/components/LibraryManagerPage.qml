@@ -19,8 +19,7 @@ Item {
     readonly property int trackRowHeight: 42
     readonly property int preferredTrackViewportHeight:
         visibleRowCount * trackRowHeight
-    readonly property int preferredWindowHeight:
-        Math.max(840, Math.ceil(detailsContent.implicitHeight + 300))
+    readonly property int preferredWindowHeight: 570
     implicitHeight: preferredWindowHeight
     readonly property int pageSize: manager.pageSize
     readonly property int pageCount: manager.pageCount

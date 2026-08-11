@@ -7,7 +7,7 @@ Window {
     id: settingsWindow
     objectName: "settingsWindow"
     visible: false
-    width: 1228
+    width: 1000
     height: Math.min(900, Math.max(640, Screen.desktopAvailableHeight - 40))
     minimumWidth: 900
     minimumHeight: 640
