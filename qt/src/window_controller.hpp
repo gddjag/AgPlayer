@@ -131,8 +131,7 @@ private:
     void applyListWindowDetached(bool detached);
     void shutdown();
     bool shouldShowListWindow() const;
-    void repositionDockedListWindow(bool constrainToScreen = true,
-                                    bool synchronizeSize = true);
+    void repositionDockedListWindow();
     void setListDockEdge(const QString& edge);
     QString snapEdgeForPosition(int x, int y) const;
     void loadPersistedWindowState();

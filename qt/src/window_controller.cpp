@@ -715,11 +715,8 @@ void WindowController::updateListWindowPosition()
     repositionDockedListWindow();
 }
 
-void WindowController::repositionDockedListWindow(bool constrainToScreen,
-                                                  bool synchronizeSize)
+void WindowController::repositionDockedListWindow()
 {
-    Q_UNUSED(synchronizeSize)
-
     if (listWindow_ == nullptr || mainWindow_ == nullptr || listWindowDetached_) {
         return;
     }
@@ -728,53 +725,11 @@ void WindowController::repositionDockedListWindow(bool constrainToScreen,
         return;
     }
 
-    // During a native move the operating system may keep reporting the old
-    // screen until most of the frameless window has crossed the monitor seam.
-    // Clamping the docked group to that screen on every Move event creates the
-    // sticky edge the user has to "tear" through. Moving only the companion
-    // window preserves the one-pixel join while letting Windows handle the
-    // monitor transition normally. Size fitting still runs for explicit dock,
-    // restore and Resize operations.
-    if (!constrainToScreen) {
-        updatingWindowGeometry_ = true;
-        const QPoint position = computeSnapForEdge(listDockEdge_);
-        listWindow_->setPosition(position);
-        updatingWindowGeometry_ = false;
-        setListWindowX(position.x());
-        setListWindowY(position.y());
-        scheduleWindowStateSync();
-        return;
-    }
-    QScreen* screen = mainWindow_->screen();
-    if (screen == nullptr) {
-        screen = QGuiApplication::screenAt(mainWindow_->geometry().center());
-    }
-    if (screen == nullptr) {
-        return;
-    }
-
-    const QRect available = screen->availableGeometry();
+    // A docked pair is one visual group, but still two independently resized
+    // native windows. Never fit it back into a single monitor: doing so on a
+    // seam mutates the user's position or size as Windows changes screens.
     updatingWindowGeometry_ = true;
-    QRect mainGeometry = mainWindow_->geometry();
-    QPoint position = computeSnapForEdge(listDockEdge_);
-    QRect group = mainGeometry.united(
-        QRect(position, QSize(listWindow_->width(), listWindow_->height())));
-    int shiftX = 0;
-    int shiftY = 0;
-    if (group.left() < available.left()) {
-        shiftX = available.left() - group.left();
-    } else if (group.right() > available.right()) {
-        shiftX = available.right() - group.right();
-    }
-    if (group.top() < available.top()) {
-        shiftY = available.top() - group.top();
-    } else if (group.bottom() > available.bottom()) {
-        shiftY = available.bottom() - group.bottom();
-    }
-    if (shiftX != 0 || shiftY != 0) {
-        mainWindow_->setPosition(mainWindow_->position() + QPoint(shiftX, shiftY));
-        position = computeSnapForEdge(listDockEdge_);
-    }
+    const QPoint position = computeSnapForEdge(listDockEdge_);
     listWindow_->setPosition(position);
     updatingWindowGeometry_ = false;
     setListWindowX(position.x());
@@ -1075,18 +1030,15 @@ QPoint WindowController::computeSnapForEdge(const QString& direction) const
     const QRect mainGeo = mainWindow_->geometry();
     const int listWidth = listWindow_->width();
     const int listHeight = listWindow_->height();
-    const int centerY = mainGeo.y() + (mainGeo.height() - listHeight) / 2;
-    const int centerX = mainGeo.x() + (mainGeo.width() - listWidth) / 2;
-
     QPoint target(listWindowX_, listWindowY_);
     if (direction == QStringLiteral("left")) {
-        target = QPoint(mainGeo.left() - listWidth + kDockOverlap, centerY);
+        target = QPoint(mainGeo.left() - listWidth + kDockOverlap, mainGeo.y());
     } else if (direction == QStringLiteral("right")) {
-        target = QPoint(mainGeo.right() - kDockOverlap + 1, centerY);
+        target = QPoint(mainGeo.right() - kDockOverlap + 1, mainGeo.y());
     } else if (direction == QStringLiteral("top")) {
-        target = QPoint(centerX, mainGeo.top() - listHeight + kDockOverlap);
+        target = QPoint(mainGeo.x(), mainGeo.top() - listHeight + kDockOverlap);
     } else if (direction == QStringLiteral("bottom")) {
-        target = QPoint(centerX, mainGeo.bottom() - kDockOverlap + 1);
+        target = QPoint(mainGeo.x(), mainGeo.bottom() - kDockOverlap + 1);
     }
 
     return target;
@@ -1098,8 +1050,7 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
         if (event->type() == QEvent::Move || event->type() == QEvent::Resize) {
             scheduleWindowStateSync();
             if (!updatingWindowGeometry_ && !listWindowDetached_) {
-                repositionDockedListWindow(false,
-                                           event->type() == QEvent::Resize);
+                repositionDockedListWindow();
             }
         } else if (event->type() == QEvent::WindowStateChange) {
             applyPlatformWindowStyle(mainWindow_);

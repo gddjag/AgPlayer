@@ -467,8 +467,7 @@ void WindowControllerTest::dockedListFollowsMainWindow()
     QCoreApplication::processEvents();
 
     const QRect mainGeo = mainWindow.geometry();
-    QCOMPARE(listWindow.x(),
-             mainGeo.x() + (mainGeo.width() - listWindow.width()) / 2);
+    QCOMPARE(listWindow.x(), mainGeo.x());
     QCOMPARE(listWindow.y(), mainGeo.bottom() - 1);
 }
 
@@ -494,8 +493,7 @@ void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
 
     QCOMPARE(mainWindow.position(), requested);
     QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
-    QCOMPARE(listWindow.y(),
-             mainWindow.y() + (mainWindow.height() - listWindow.height()) / 2);
+    QCOMPARE(listWindow.y(), mainWindow.y());
 }
 
 void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
@@ -517,6 +515,7 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
     windows.snapListWindow(QStringLiteral("right"));
 
     QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
+    QCOMPARE(listWindow.y(), mainWindow.y());
     QCOMPARE(mainWindow.size(), mainSize);
     QCOMPARE(listWindow.size(), listSize);
     // A docked player/list pair can straddle a monitor seam.  Keeping both
