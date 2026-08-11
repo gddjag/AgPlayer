@@ -1,23 +1,26 @@
 #include "import_controller.hpp"
 
+#include "audio_file_discovery.hpp"
 #include "bpm_analyzer.hpp"
-#include "file_association_controller.hpp"
 #include "metadata_probe.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QDir>
-#include <QDirIterator>
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
+#include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <atomic>
+#include <condition_variable>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <utility>
 
 struct ImportCallbackState {
     std::mutex mutex;
@@ -191,9 +194,38 @@ ImportController::ImportController(LibraryModel* model, QObject* parent)
 }
 
 ImportController::ImportController(LibraryModel* model, ProbeFunction probe, QObject* parent)
+    : ImportController(
+          model, std::move(probe),
+          [](const QList<QUrl>& urls) {
+              QStringList paths;
+              const QList<QUrl> expanded = agplayer::qt::expandAudioUrls(urls);
+              paths.reserve(expanded.size() + urls.size());
+              for (const QUrl& url : expanded) {
+                  paths.append(url.toLocalFile());
+              }
+              for (const QUrl& url : urls) {
+                  const QString path = url.toLocalFile();
+                  const QFileInfo info(path);
+                  // Directly selected/dropped files must be probed even when
+                  // their suffix is missing or wrong, so the UI can report a
+                  // concrete format error instead of silently ignoring them.
+                  // Directory expansion remains extension-filtered.
+                  if (!path.isEmpty() && !info.isDir()) {
+                      paths.append(path);
+                  }
+              }
+              return paths;
+          },
+          parent)
+{
+}
+
+ImportController::ImportController(LibraryModel* model, ProbeFunction probe,
+                                   DiscoveryFunction discovery, QObject* parent)
     : QObject(parent),
       model_(model),
       probe_(std::move(probe)),
+      discovery_(std::move(discovery)),
       callbackState_(std::make_shared<ImportCallbackState>())
 {
     callbackState_->controller = this;
@@ -227,6 +259,7 @@ void ImportController::cancel()
     // (containsPath check) and handleResult guards the finished emission on
     // busy_ to avoid double delivery.
     markCancelled(callbackState_, true);
+    pendingUrls_.clear();
     if (busy_) {
         busy_ = false;
         emit busyChanged();
@@ -249,38 +282,42 @@ QStringList ImportController::errors() const
     return errors_;
 }
 
+QStringList ImportController::importedTrackIds() const
+{
+    return importedTrackIds_;
+}
+
+int ImportController::skippedCount() const noexcept
+{
+    return skippedCount_;
+}
+
 void ImportController::importFolder(const QUrl& folder)
 {
-    const QString directory = folder.toLocalFile();
-    if (directory.isEmpty()) {
-        importUrls({});
-        return;
-    }
-
-    QStringList filters;
-    for (const QString& extension :
-         FileAssociationController::supportedAudioExtensions()) {
-        filters.append(QStringLiteral("*.") + extension);
-    }
-
-    QList<QUrl> urls;
-    QDirIterator files(directory, filters, QDir::Files,
-                       QDirIterator::Subdirectories);
-    while (files.hasNext()) {
-        urls.append(QUrl::fromLocalFile(files.next()));
-    }
-    importUrls(urls);
+    importUrls({folder});
 }
 
 void ImportController::importUrls(const QList<QUrl>& urls)
 {
     if (busy_) {
+        for (const QUrl& url : urls) {
+            if (url.isValid() && !pendingUrls_.contains(url)) {
+                pendingUrls_.append(url);
+            }
+        }
         return;
     }
 
     markCancelled(callbackState_, false);
     errors_.clear();
     emit errorsChanged();
+    importedTrackIds_.clear();
+    importedTrackIdSet_.clear();
+    emit importedTrackIdsChanged();
+    if (skippedCount_ != 0) {
+        skippedCount_ = 0;
+        emit skippedCountChanged();
+    }
     progress_ = 0.0;
     emit progressChanged();
     busy_ = true;
@@ -295,50 +332,128 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         return;
     }
 
-    QSet<QString> seen;
-    for (const TrackRecord& track : model_->tracks()) {
-        seen.insert(deduplicationKey(track.path));
-    }
-    QStringList paths;
-    for (const QUrl& url : urls) {
-        const QString path = url.toLocalFile();
-        const QString key = deduplicationKey(path);
-        if (!path.isEmpty() && !seen.contains(key)) {
-            seen.insert(key);
-            paths.append(canonicalLibraryPath(path));
-        }
-    }
-
     const std::shared_ptr<ImportCallbackState> callbackState = callbackState_;
     const ProbeFunction probe = probe_;
-    future_ = QtConcurrent::run([callbackState, paths, probe] {
+    const DiscoveryFunction discovery = discovery_;
+    future_ = QtConcurrent::run([callbackState, urls, probe, discovery] {
+        QStringList discoveredPaths = discovery(urls);
+        QSet<QString> seen;
+        QStringList paths;
+        paths.reserve(discoveredPaths.size());
+        for (const QString& candidate : discoveredPaths) {
+            const QString canonical = canonicalLibraryPath(candidate);
+            const QString key = deduplicationKey(canonical);
+            if (!canonical.isEmpty() && !seen.contains(key)) {
+                seen.insert(key);
+                paths.append(canonical);
+            }
+        }
         if (paths.isEmpty()) {
             postToController(callbackState, [](ImportController* controller) {
-                controller->handleResult({}, {AG_OK, {}, {}}, 0, 0);
+                controller->completeImport();
             });
             return;
         }
-        int completed = 0;
-        for (const QString& path : paths) {
-            if (isCancelled(callbackState)) {
-                postToController(callbackState,
-                                 [completed, total = paths.size()](
-                                     ImportController* controller) {
-                                     controller->handleResult({}, {AG_CANCELLED, {}, {}},
-                                                              total, total);
-                                 });
-                return;
-            }
-            ProbeResult result = probe(path);
-            ++completed;
-            postToController(
-                callbackState,
-                [path, result = std::move(result), completed, total = paths.size()](
-                    ImportController* controller) mutable {
-                    controller->handleResult(path, std::move(result), completed, total);
-                });
+
+        struct PipelineState {
+            std::mutex mutex;
+            std::condition_variable readyChanged;
+            std::map<qsizetype, ImportController::Outcome> ready;
+            std::atomic<qsizetype> next{0};
+            int workersRemaining = 0;
+        };
+
+        const auto pipeline = std::make_shared<PipelineState>();
+        QThreadPool probePool;
+        probePool.setMaxThreadCount(4);
+        const int workerCount = qMin(4, paths.size());
+        pipeline->workersRemaining = workerCount;
+        QList<QFuture<void>> workers;
+        workers.reserve(workerCount);
+        for (int worker = 0; worker < workerCount; ++worker) {
+            workers.append(QtConcurrent::run(
+                &probePool, [callbackState, pipeline, paths, probe] {
+                    while (!isCancelled(callbackState)) {
+                        const qsizetype index = pipeline->next.fetch_add(1);
+                        if (index >= paths.size()) {
+                            break;
+                        }
+                        Outcome outcome;
+                        outcome.ordinal = index;
+                        outcome.path = paths[index];
+                        outcome.result = probe(outcome.path);
+                        {
+                            std::lock_guard<std::mutex> lock(pipeline->mutex);
+                            pipeline->ready.emplace(index, std::move(outcome));
+                        }
+                        pipeline->readyChanged.notify_one();
+                    }
+                    {
+                        std::lock_guard<std::mutex> lock(pipeline->mutex);
+                        --pipeline->workersRemaining;
+                    }
+                    pipeline->readyChanged.notify_one();
+                }));
         }
+
+        int delivered = 0;
+        qsizetype nextToDeliver = 0;
+        for (;;) {
+            QList<Outcome> batch;
+            {
+                std::unique_lock<std::mutex> lock(pipeline->mutex);
+                pipeline->readyChanged.wait_for(
+                    lock, std::chrono::milliseconds(50), [&] {
+                        return pipeline->ready.find(nextToDeliver) != pipeline->ready.end()
+                               || pipeline->workersRemaining == 0;
+                    });
+                if (pipeline->ready.find(nextToDeliver) != pipeline->ready.end()
+                    && pipeline->ready.size() < 64
+                    && pipeline->workersRemaining > 0) {
+                    pipeline->readyChanged.wait_for(
+                        lock, std::chrono::milliseconds(50), [&] {
+                            return pipeline->ready.size() >= 64
+                                   || pipeline->workersRemaining == 0;
+                        });
+                }
+                while (batch.size() < 64) {
+                    auto ready = pipeline->ready.find(nextToDeliver);
+                    if (ready == pipeline->ready.end()) break;
+                    batch.append(std::move(ready->second));
+                    pipeline->ready.erase(ready);
+                    ++nextToDeliver;
+                }
+                if (batch.isEmpty() && pipeline->workersRemaining == 0) {
+                    break;
+                }
+            }
+            if (!batch.isEmpty()) {
+                delivered += batch.size();
+                postToController(
+                    callbackState,
+                    [batch = std::move(batch), delivered,
+                     total = paths.size()](ImportController* controller) mutable {
+                        controller->handleBatch(std::move(batch), delivered, total);
+                    });
+            }
+        }
+        for (QFuture<void>& worker : workers) {
+            worker.waitForFinished();
+        }
+        postToController(callbackState, [](ImportController* controller) {
+            controller->completeImport();
+        });
     });
+}
+
+void ImportController::importPaths(const QStringList& paths)
+{
+    QList<QUrl> urls;
+    urls.reserve(paths.size());
+    for (const QString& path : paths) {
+        urls.append(QUrl::fromLocalFile(path));
+    }
+    importUrls(urls);
 }
 
 void ImportController::finishWithoutImport(const QString& error)
@@ -352,39 +467,92 @@ void ImportController::finishWithoutImport(const QString& error)
     emit finished();
 }
 
-void ImportController::handleResult(const QString& path,
-                                    ProbeResult result,
-                                    int completed,
-                                    int total)
+void ImportController::clearErrors()
 {
-    if (total > 0) {
-        if (result.result == AG_OK) {
-            result.track.path = canonicalLibraryPath(result.track.path.isEmpty() ? path : result.track.path);
-            LibraryModel* const model = model_.data();
-            if (model == nullptr) {
-                errors_.append(QStringLiteral("%1: library model is unavailable").arg(path));
-                emit errorsChanged();
-            } else if (model->thread() != thread()) {
-                errors_.append(QStringLiteral("%1: library model thread affinity mismatch").arg(path));
-                emit errorsChanged();
-            } else if (!model->containsPath(result.track.path)) {
-                model->append(std::move(result.track));
-            }
-        } else {
-            const QString detail = result.error.isEmpty() ? errorFor(result.result) : result.error;
-            errors_.append(QStringLiteral("%1: %2").arg(path, detail));
-            emit errorsChanged();
+    if (errors_.isEmpty()) {
+        return;
+    }
+    errors_.clear();
+    emit errorsChanged();
+}
+
+void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int total)
+{
+    LibraryModel* const model = model_.data();
+    QList<TrackRecord> tracks;
+    bool errorsChangedInBatch = false;
+    tracks.reserve(outcomes.size());
+    for (Outcome& outcome : outcomes) {
+        if (outcome.result.result == AG_OK) {
+            outcome.result.track.path = canonicalLibraryPath(
+                outcome.result.track.path.isEmpty()
+                    ? outcome.path : outcome.result.track.path);
+            tracks.append(std::move(outcome.result.track));
+            continue;
         }
-        progress_ = static_cast<double>(completed) / static_cast<double>(total);
-        emit progressChanged();
-    } else {
-        progress_ = 1.0;
-        emit progressChanged();
+        const QString detail = outcome.result.error.isEmpty()
+            ? errorFor(outcome.result.result) : outcome.result.error;
+        errors_.append(QStringLiteral("%1: %2").arg(outcome.path, detail));
+        errorsChangedInBatch = true;
     }
 
-    if (completed == total && busy_) {
-        busy_ = false;
-        emit busyChanged();
-        emit finished();
+    if (model == nullptr) {
+        errors_.append(QStringLiteral("library model is unavailable"));
+        errorsChangedInBatch = true;
+    } else if (model->thread() != thread()) {
+        errors_.append(QStringLiteral("library model thread affinity mismatch"));
+        errorsChangedInBatch = true;
+    } else {
+        const int candidateCount = tracks.size();
+        const QStringList insertedIds = model->insertBatch(
+            importedTrackIds_.size(), std::move(tracks));
+        const int skipped = candidateCount - insertedIds.size();
+        if (skipped > 0) {
+            skippedCount_ += skipped;
+            emit skippedCountChanged();
+        }
+        bool idsChanged = false;
+        for (const Outcome& outcome : outcomes) {
+            if (outcome.result.result != AG_OK) continue;
+            const QString importedPath = canonicalLibraryPath(
+                outcome.result.track.path.isEmpty() ? outcome.path
+                                                     : outcome.result.track.path);
+            const int row = model->indexForLocalFile(importedPath);
+            const QString trackId = row < 0 ? QString{}
+                : model->data(model->index(row, 0), LibraryModel::TrackIdRole).toString();
+            if (!trackId.isEmpty() && !importedTrackIdSet_.contains(trackId)) {
+                importedTrackIdSet_.insert(trackId);
+                importedTrackIds_.append(trackId);
+                idsChanged = true;
+            }
+        }
+        if (idsChanged) {
+            emit importedTrackIdsChanged();
+        }
+    }
+    if (errorsChangedInBatch) {
+        emit errorsChanged();
+    }
+    if (total > 0) {
+        progress_ = qMax(progress_, static_cast<double>(completed)
+                                      / static_cast<double>(total));
+        emit progressChanged();
+    }
+}
+
+void ImportController::completeImport()
+{
+    if (!busy_) {
+        return;
+    }
+    progress_ = 1.0;
+    emit progressChanged();
+    busy_ = false;
+    emit busyChanged();
+    emit finished();
+    if (!pendingUrls_.isEmpty()) {
+        const QList<QUrl> queued = std::exchange(pendingUrls_, {});
+        QMetaObject::invokeMethod(this, [this, queued] { importUrls(queued); },
+                                  Qt::QueuedConnection);
     }
 }

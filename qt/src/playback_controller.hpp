@@ -34,7 +34,7 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
 
 public:
-    static constexpr int PollIntervalMs = 34;
+    static constexpr int PollIntervalMs = 17;
 
     enum State { Stopped, Loading, Playing, Paused, Error };
     Q_ENUM(State)

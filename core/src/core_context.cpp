@@ -76,6 +76,18 @@ ag_result CoreContext::set_volume(const float volume) noexcept
     return record(audio_engine_.set_volume(volume), "volume change failed");
 }
 
+ag_result CoreContext::set_equalizer(const GraphicEqSettings& settings,
+                                     const std::uint64_t revision) noexcept
+{
+    return record(audio_engine_.set_equalizer(settings, revision),
+                  "equalizer change failed");
+}
+
+EqualizerStatus CoreContext::equalizer_status() const noexcept
+{
+    return audio_engine_.equalizer_status();
+}
+
 void CoreContext::set_muted(const bool muted) noexcept
 {
     audio_engine_.set_muted(muted);

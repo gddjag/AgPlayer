@@ -28,9 +28,11 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <shobjidl.h>
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "equalizer_controller.hpp"
 #include "format_converter.hpp"
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
@@ -55,6 +57,10 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
 
 int main(int argc, char* argv[])
 {
+#ifdef Q_OS_WIN
+    // Keep taskbar grouping identical to the installed shortcut identity.
+    SetCurrentProcessExplicitAppUserModelID(L"AgPlayer.Desktop");
+#endif
     // The application supplies its own control visuals. A non-native style
     // keeps those visuals supported and consistent on Windows/macOS while
     // Theme.qml still follows the host system palette when requested.
@@ -62,6 +68,8 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
+    app.setWindowIcon(QIcon(QStringLiteral(
+        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico")));
 
     // Development-only QA arguments. Parsed before ag_player_create so the
     // production player instance is reused (controllers are never bypassed).
@@ -179,6 +187,11 @@ int main(int argc, char* argv[])
         }
 
         PlaybackController playback(core, &library);
+        EqualizerController equalizer(core);
+        QObject::connect(&playback, &PlaybackController::currentTrackIdChanged,
+                         &equalizer, &EqualizerController::refreshStatus);
+        QObject::connect(&playback, &PlaybackController::stateChanged,
+                         &equalizer, &EqualizerController::refreshStatus);
         SettingsController settings;
         const auto applyOutputDevice = [&settings, &playback]() {
             const QString requested = settings.outputDevice();
@@ -315,7 +328,7 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &pitchShifter,
                                     &speedAdjuster, &lightEditor, &settings,
-                                    &waveformProvider, &playlists);
+                                    &waveformProvider, &playlists, &equalizer);
 
         QString pendingPlayFilePath;
 

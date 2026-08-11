@@ -8,23 +8,46 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 1228
-    height: 399
-    minimumWidth: 800
-    minimumHeight: 360
+    width: 1104
+    height: 342
+    minimumWidth: 612
+    minimumHeight: 228
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
     }
     flags: Qt.FramelessWindowHint
-    color: Theme.background
+    color: "transparent"
+    background: null
     title: "AgPlayer"
+    palette.window: Theme.background
+    palette.windowText: Theme.primaryText
+    palette.base: Theme.elevated
+    palette.alternateBase: Theme.panel
+    palette.text: Theme.primaryText
+    palette.button: Theme.elevated
+    palette.buttonText: Theme.primaryText
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentText
+    palette.mid: Theme.border
 
     // Shared-state surface so the main window and the mini player can bind to
     // the same playback source. Defaults to the production singleton; tests
     // override this with a fake QtObject to verify shared state without audio.
     property var playback: PlaybackController
-    property int positionMs: playback.positionMs
+    property int positionMs: playback ? playback.positionMs : 0
+    property bool playFirstDroppedTrack: false
+
+    DockedWindowFrame {
+        anchors.fill: parent
+        dockEdge: WindowController.listWindowVisible
+                  && !WindowController.listWindowDetached
+                  ? WindowController.listDockEdge : "none"
+        windowRole: "main"
+        maximized: mainWindow.visibility === Window.Maximized
+        showBorders: false
+        z: -10
+    }
 
     Component.onCompleted: {
         Theme.mode = SettingsController.themeMode
@@ -34,6 +57,21 @@ ApplicationWindow {
         target: SettingsController
         function onThemeModeChanged() {
             Theme.mode = SettingsController.themeMode
+        }
+    }
+
+    Connections {
+        target: ImportController
+        function onFinished() {
+            if (!mainWindow.playFirstDroppedTrack)
+                return
+            mainWindow.playFirstDroppedTrack = false
+            if (ImportController.importedTrackIds.length < 1)
+                return
+            var row = LibraryModel.indexForTrackId(
+                        ImportController.importedTrackIds[0])
+            if (row >= 0)
+                LibraryModel.playRow(row)
         }
     }
 
@@ -56,6 +94,16 @@ ApplicationWindow {
         ImportController.importUrls(urls)
     }
 
+    // NativeDropRouter handles WM_DROPFILES and Qt-delivered drops first.  A
+    // QML-level fallback is still required for Explorer/OLE routes that never
+    // reach the native message filter (notably when a child surface owns the
+    // drop target).  Keeping it separate avoids making ordinary file-dialog
+    // imports unexpectedly start playback.
+    function importDroppedFiles(urls) {
+        playFirstDroppedTrack = true
+        ImportController.importUrls(urls)
+    }
+
     function openFolderDialog() {
         var dialog = folderDialogComponent.createObject(mainWindow)
         if (dialog)
@@ -63,9 +111,29 @@ ApplicationWindow {
     }
 
     function openSettingsPage() {
-        settingsPageLoader.active = true
-        if (settingsPageLoader.item)
-            settingsPageLoader.item.open()
+        settingsWindowLoader.active = true
+        Qt.callLater(function() {
+            if (settingsWindowLoader.item)
+                settingsWindowLoader.item.openSettings()
+        })
+    }
+
+    function openEqualizer() {
+        equalizerWindowLoader.active = true
+        Qt.callLater(function() {
+            if (equalizerWindowLoader.item)
+                equalizerWindowLoader.item.openEqualizer()
+        })
+    }
+
+    function editingText() {
+        var item = mainWindow.activeFocusItem
+        while (item) {
+            if (item instanceof TextInput || item instanceof TextEdit)
+                return true
+            item = item.parent
+        }
+        return false
     }
 
     Component {
@@ -91,9 +159,9 @@ ApplicationWindow {
         TitleBar {
             id: titleBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
+            Layout.preferredHeight: 36
             window: mainWindow
-            showBrand: LibraryModel.count === 0
+            showBrand: true
             onOpenSettings: mainWindow.openSettingsPage()
         }
 
@@ -111,7 +179,7 @@ ApplicationWindow {
             id: playerPane
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: 260
+            Layout.minimumHeight: 128
             visible: LibraryModel.count > 0
         }
 
@@ -119,20 +187,21 @@ ApplicationWindow {
             id: playerControls
             objectName: "playerControls"
             Layout.fillWidth: true
-            Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 72
+            Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 64
             emptyMode: LibraryModel.count === 0
+            onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
     }
 
-    DropArea {
+    FileDropArea {
+        objectName: "mainFileDropFallback"
         anchors.fill: parent
-        onDropped: function(drop) {
-            var urls = []
-            for (var i = 0; i < drop.urls.length; i++) {
-                urls.push(drop.urls[i])
-            }
-            ImportController.importUrls(urls)
-            drop.acceptProposedAction()
+        // Keep the fallback beneath interactive player controls.  It only
+        // participates in drag-and-drop hit testing; putting it above the
+        // controls steals click and seek input on some Qt/Windows builds.
+        z: -5
+        onUrlsDropped: function(urls) {
+            mainWindow.importDroppedFiles(urls)
         }
     }
 
@@ -146,22 +215,37 @@ ApplicationWindow {
     }
 
     Loader {
-        id: settingsPageLoader
+        id: settingsWindowLoader
         active: false
         sourceComponent: Component {
-            SettingsPage {
-                objectName: "settingsPage"
-            }
+            SettingsWindow {}
         }
     }
 
-    Rectangle {
+    Loader {
+        id: equalizerWindowLoader
+        active: false
+        sourceComponent: Component {
+            EqualizerWindow {}
+        }
+    }
+
+    DockedWindowFrame {
         anchors.fill: parent
-        color: "transparent"
-        border.color: Theme.border
-        border.width: 1
-        radius: Theme.windowRadius
+        dockEdge: WindowController.listWindowVisible
+                  && !WindowController.listWindowDetached
+                  ? WindowController.listDockEdge : "none"
+        windowRole: "main"
+        maximized: mainWindow.visibility === Window.Maximized
+        showFill: false
         z: 100
+    }
+
+    Shortcut {
+        sequence: "Space"
+        context: Qt.WindowShortcut
+        enabled: !mainWindow.editingText()
+        onActivated: PlaybackController.togglePlayback()
     }
 
     Shortcut {
@@ -173,13 +257,18 @@ ApplicationWindow {
     Shortcut {
         sequence: SettingsController.hkWaveformMode
         context: Qt.ApplicationShortcut
-        onActivated: SettingsController.setWaveformMode(
-                         (SettingsController.waveformMode + 1) % 3)
+        onActivated: SettingsController.waveformMode =
+                         (SettingsController.waveformMode + 1) % 3
     }
 
     Shortcut {
         sequence: SettingsController.hkAudioTools
         context: Qt.ApplicationShortcut
         onActivated: WindowController.showAudioTools()
+    }
+
+    WindowResizeHandles {
+        objectName: "mainResizeHandles"
+        targetWindow: mainWindow
     }
 }

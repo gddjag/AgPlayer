@@ -1,0 +1,70 @@
+#include "library_file_operations.hpp"
+#include "library_model.hpp"
+
+#include <QFile>
+#include <QTemporaryDir>
+#include <QTest>
+
+class LibraryFileOperationsTest final : public QObject {
+    Q_OBJECT
+private slots:
+    void renamesCopiesMovesAndRelocatesWithoutSilentOverwrite();
+};
+
+void LibraryFileOperationsTest::renamesCopiesMovesAndRelocatesWithoutSilentOverwrite()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString original = dir.filePath(QStringLiteral("source.mp3"));
+    QFile source(original);
+    QVERIFY(source.open(QIODevice::WriteOnly));
+    QCOMPARE(source.write("audio"), qint64(5));
+    source.close();
+
+    TrackRecord record;
+    record.trackId = QStringLiteral("track");
+    record.path = original;
+    record.title = QStringLiteral("Source");
+    record.available = true;
+    LibraryModel library;
+    library.replaceAll({record});
+    LibraryFileOperations operations;
+    operations.setLibraryModel(&library);
+
+    QCOMPARE(operations.fileUrl(QStringLiteral("track")), QUrl::fromLocalFile(original));
+    QVERIFY(operations.fileUrl(QStringLiteral("missing")).isEmpty());
+
+    QVERIFY(operations.renameTrack(QStringLiteral("track"), QStringLiteral("renamed")));
+    QString path = library.trackForId(QStringLiteral("track"))
+                       .value(QStringLiteral("path")).toString();
+    QVERIFY(path.endsWith(QStringLiteral("renamed.mp3")));
+    QVERIFY(QFileInfo::exists(path));
+
+    const QString copyDir = dir.filePath(QStringLiteral("copy"));
+    QVERIFY(QDir().mkpath(copyDir));
+    QCOMPARE(operations.copyTracks({QStringLiteral("track")}, copyDir,
+                                   LibraryFileOperations::AutoRename), 1);
+    QVERIFY(QFileInfo::exists(QDir(copyDir).filePath(QStringLiteral("renamed.mp3"))));
+    QCOMPARE(operations.copyTracks({QStringLiteral("track")}, copyDir,
+                                   LibraryFileOperations::Skip), 0);
+
+    const QString moveDir = dir.filePath(QStringLiteral("move"));
+    QVERIFY(QDir().mkpath(moveDir));
+    QCOMPARE(operations.moveTracksToUrl({QStringLiteral("track")},
+                                        QUrl::fromLocalFile(moveDir),
+                                        LibraryFileOperations::Skip), 1);
+    path = library.trackForId(QStringLiteral("track"))
+               .value(QStringLiteral("path")).toString();
+    QVERIFY(path.startsWith(QDir::fromNativeSeparators(moveDir)));
+
+    const QString relocated = dir.filePath(QStringLiteral("relocated.mp3"));
+    QVERIFY(QFile::copy(path, relocated));
+    QVERIFY(operations.relocateTrackToUrl(QStringLiteral("track"),
+                                          QUrl::fromLocalFile(relocated)));
+    QCOMPARE(library.trackForId(QStringLiteral("track"))
+                 .value(QStringLiteral("path")).toString(),
+             QDir::fromNativeSeparators(QFileInfo(relocated).absoluteFilePath()));
+}
+
+QTEST_GUILESS_MAIN(LibraryFileOperationsTest)
+#include "library_file_operations_test.moc"

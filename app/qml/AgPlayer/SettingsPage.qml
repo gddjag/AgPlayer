@@ -4,47 +4,210 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
-Popup {
+Item {
     id: root
 
-    parent: Overlay.overlay
-    anchors.centerIn: parent
-    width: Math.min(1180, parent.width - 24)
-    height: Math.min(760, parent.height - 24)
-    modal: true
-    dim: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 0
+    anchors.fill: parent
+    visible: false
+    focus: true
+
+    // Compatibility properties keep SettingsWindow's public contract stable
+    // while this page remains a plain fill component with no second frame.
+    property bool modal: false
+    property bool dim: false
+    property int closePolicy: Popup.CloseOnEscape
+    signal opened()
+    signal aboutToHide()
+    signal closed()
 
     property int selectedSection: 0
     property string searchText: ""
     property bool editResolved: true
-    property string waveformColorTarget: ""
+    property var hostWindow
+    property bool syncingSectionFromScroll: false
+    property bool programmaticScroll: false
 
-    function editWaveformColor(target, value) {
-        waveformColorTarget = target
-        waveformColorDialog.selectedColor = value
-        waveformColorDialog.open()
+    function open() {
+        if (visible)
+            return
+        visible = true
+        forceActiveFocus()
+        opened()
     }
 
-    function steppedModel(minimum, maximum, step, decimals, suffix) {
-        var result = []
-        for (var value = minimum; value <= maximum + step / 2; value += step) {
-            var rounded = Number(value.toFixed(decimals))
-            result.push({
-                text: rounded.toFixed(decimals) + suffix,
-                value: rounded
-            })
+    function close() {
+        if (!visible)
+            return
+        aboutToHide()
+        visible = false
+        closed()
+    }
+
+    Dialog {
+        id: feedbackDialog
+        objectName: "feedbackDialog"
+        anchors.centerIn: parent
+        width: 420
+        modal: true
+        title: qsTr("反馈")
+        standardButtons: Dialog.Ok
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                objectName: "feedbackMessage"
+                text: qsTr("建议反馈请发邮件：agplayer@foxmail.com")
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+                wrapMode: Text.Wrap
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                TextField {
+                    id: feedbackEmailField
+                    objectName: "feedbackEmailField"
+                    Layout.fillWidth: true
+                    text: "agplayer@foxmail.com"
+                    readOnly: true
+                    selectByMouse: true
+                }
+                Button {
+                    objectName: "copyFeedbackEmailButton"
+                    text: qsTr("复制邮箱")
+                    onClicked: {
+                        feedbackEmailField.selectAll()
+                        feedbackEmailField.copy()
+                    }
+                }
+            }
         }
-        return result
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            border.width: 1
+            radius: Theme.radiusMd
+        }
+    }
+
+    Keys.onEscapePressed: cancelAndClose()
+
+    function shortcutText(event) {
+        if (event.key === Qt.Key_Control || event.key === Qt.Key_Shift
+                || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)
+            return ""
+        const parts = []
+        if (event.modifiers & Qt.ControlModifier) parts.push("Ctrl")
+        if (event.modifiers & Qt.AltModifier) parts.push("Alt")
+        if (event.modifiers & Qt.ShiftModifier) parts.push("Shift")
+        if (event.modifiers & Qt.MetaModifier) parts.push("Meta")
+        let keyText = event.text ? event.text.toUpperCase() : ""
+        if (event.key === Qt.Key_Space) keyText = "Space"
+        else if (event.key === Qt.Key_Tab) keyText = "Tab"
+        else if (event.key === Qt.Key_Escape) keyText = "Esc"
+        else if (event.key === Qt.Key_Left) keyText = "Left"
+        else if (event.key === Qt.Key_Right) keyText = "Right"
+        else if (event.key === Qt.Key_Up) keyText = "Up"
+        else if (event.key === Qt.Key_Down) keyText = "Down"
+        else if (event.key === Qt.Key_MediaPlay) keyText = "MediaPlayPause"
+        else if (event.key === Qt.Key_MediaPrevious) keyText = "MediaPrevTrack"
+        else if (event.key === Qt.Key_MediaNext) keyText = "MediaNextTrack"
+        else if (event.key === Qt.Key_VolumeUp) keyText = "VolumeUp"
+        else if (event.key === Qt.Key_VolumeDown) keyText = "VolumeDown"
+        else if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F12)
+            keyText = "F" + (event.key - Qt.Key_F1 + 1)
+        if (!keyText)
+            return ""
+        parts.push(keyText)
+        return parts.join(" + ")
+    }
+
+    function shortcutConflicts(candidate, original) {
+        if (!candidate || candidate === original)
+            return false
+        const shortcuts = [
+            SettingsController.hkPlayPause,
+            SettingsController.hkPrevNext,
+            SettingsController.hkVolumeUpDown,
+            SettingsController.hkToggleMiniPlayer,
+            SettingsController.hkSearch,
+            SettingsController.hkWaveformMode,
+            SettingsController.hkAudioTools
+        ]
+        return shortcuts.indexOf(candidate) >= 0
+    }
+
+    function isAllowedGlobalShortcut(candidate) {
+        return candidate.indexOf("Media") === 0
+                || candidate.indexOf("Volume") === 0
+                || candidate.indexOf(" + ") > 0
     }
 
     onOpened: {
         editResolved = false
         SettingsController.beginEdit()
+        Qt.callLater(scrollToSelectedSection)
     }
 
-    onClosed: {
+    onSelectedSectionChanged: {
+        if (!syncingSectionFromScroll)
+            Qt.callLater(scrollToSelectedSection)
+    }
+
+    function selectSection(index) {
+        selectedSection = index
+    }
+
+    function scrollToSelectedSection() {
+        if (!settingsScroll || !settingsScroll.contentItem
+                || !settingsContentColumn
+                || selectedSection < 0
+                || selectedSection >= settingsContentColumn.children.length)
+            return
+        const target = settingsContentColumn.children[selectedSection]
+        const maximum = Math.max(0, settingsContentColumn.height
+                                  - settingsScroll.availableHeight)
+        const nextY = Math.max(0, Math.min(target.y, maximum))
+        programmaticScroll = true
+        sectionScrollAnimation.stop()
+        sectionScrollAnimation.from = settingsScroll.contentItem.contentY
+        sectionScrollAnimation.to = nextY
+        sectionScrollAnimation.start()
+    }
+
+    function updateSectionFromScroll() {
+        if (programmaticScroll || !settingsScroll.contentItem)
+            return
+        const maximum = Math.max(0, settingsContentColumn.height
+                                  - settingsScroll.availableHeight)
+        const currentY = settingsScroll.contentItem.contentY
+        let nextSection = 0
+        if (maximum > 0 && currentY >= maximum - 1) {
+            nextSection = settingsContentColumn.children.length - 1
+        } else {
+            const probeY = currentY + Math.min(
+                        120, settingsScroll.availableHeight * 0.25)
+            for (let i = 0; i < settingsContentColumn.children.length; ++i) {
+                if (settingsContentColumn.children[i].y <= probeY)
+                    nextSection = i
+            }
+        }
+        if (nextSection !== selectedSection) {
+            syncingSectionFromScroll = true
+            selectedSection = nextSection
+            syncingSectionFromScroll = false
+        }
+    }
+
+    NumberAnimation {
+        id: sectionScrollAnimation
+        target: settingsScroll.contentItem
+        property: "contentY"
+        duration: 180
+        easing.type: Easing.OutCubic
+        onStopped: root.programmaticScroll = false
+    }
+
+    onAboutToHide: {
         if (!editResolved) {
             editResolved = true
             SettingsController.cancelEdit()
@@ -104,13 +267,6 @@ Popup {
         }
     }
 
-    background: Rectangle {
-        color: Theme.panel
-        radius: Theme.windowRadius
-        border.color: Theme.border
-        border.width: 1
-    }
-
     MessageDialog {
         id: clearCacheConfirmDialog
         title: qsTr("确认清空缓存")
@@ -119,16 +275,23 @@ Popup {
         onAccepted: SettingsController.clearAllCache()
     }
 
-    ColorDialog {
-        id: waveformColorDialog
-        title: qsTr("选择波形颜色")
-        onAccepted: {
-            if (root.waveformColorTarget.length > 0)
-                SettingsController[root.waveformColorTarget] = selectedColor.toString()
+    // This sits outside the header layout deliberately: it owns only the
+    // native-window drag strip and must not participate in header sizing.
+    MouseArea {
+        objectName: "settingsHeaderDragArea"
+        anchors.left: root.left
+        anchors.top: root.top
+        width: Math.max(0, root.width - 390)
+        height: 56
+        acceptedButtons: Qt.LeftButton
+        z: 2
+        onPressed: function(mouse) {
+            if (root.hostWindow) root.hostWindow.startSystemMove()
         }
     }
 
-    contentItem: ColumnLayout {
+    ColumnLayout {
+        anchors.fill: parent
         spacing: 0
 
         // Header
@@ -221,6 +384,7 @@ Popup {
                     radius: Theme.radiusSm
                 }
             }
+
         }
 
         Rectangle {
@@ -237,7 +401,9 @@ Popup {
 
             // Sidebar
             Rectangle {
-                Layout.preferredWidth: 260
+                id: settingsSidebar
+                objectName: "settingsSidebar"
+                Layout.preferredWidth: 208
                 Layout.fillHeight: true
                 color: "transparent"
 
@@ -294,7 +460,7 @@ Popup {
                             id: mouseArea
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: root.selectedSection = modelData.index
+                            onClicked: root.selectSection(modelData.index)
                         }
                     }
                 }
@@ -317,23 +483,53 @@ Popup {
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-                StackLayout {
-                    id: contentStack
-                    width: settingsScroll.availableWidth
-                    currentIndex: root.selectedSection
-                    implicitHeight: {
-                        const page = children[currentIndex]
-                        return page ? page.implicitHeight + Theme.spacingLg : 0
+                Connections {
+                    target: settingsScroll.contentItem
+                    function onContentYChanged() {
+                        root.updateSectionFromScroll()
                     }
-                    height: Math.max(settingsScroll.availableHeight, implicitHeight)
+                    function onMovementStarted() {
+                        sectionScrollAnimation.stop()
+                        root.programmaticScroll = false
+                    }
+                }
 
-                    GeneralSection {}
-                    PlaybackSection {}
-                    AppearanceSection {}
-                    AudioToolsSection {}
-                    HotkeysSection {}
-                    CacheSection {}
-                    AboutSection {}
+                ColumnLayout {
+                    id: settingsContentColumn
+                    objectName: "settingsContentColumn"
+                    width: Math.min(760, Math.max(0,
+                                                  settingsScroll.availableWidth - 48))
+                    x: Math.max(24, (settingsScroll.availableWidth - width) / 2)
+                    spacing: 6
+
+                    GeneralSection {
+                        objectName: "generalSettingsSection"
+                        Layout.fillWidth: true
+                    }
+                    PlaybackSection {
+                        objectName: "playbackSettingsSection"
+                        Layout.fillWidth: true
+                    }
+                    AppearanceSection {
+                        objectName: "appearanceSettingsSection"
+                        Layout.fillWidth: true
+                    }
+                    AudioToolsSection {
+                        objectName: "audioToolsSettingsSection"
+                        Layout.fillWidth: true
+                    }
+                    HotkeysSection {
+                        objectName: "hotkeysSettingsSection"
+                        Layout.fillWidth: true
+                    }
+                    CacheSection {
+                        objectName: "cacheSettingsSection"
+                        Layout.fillWidth: true
+                    }
+                    AboutSection {
+                        objectName: "aboutSettingsSection"
+                        Layout.fillWidth: true
+                    }
                 }
             }
         }
@@ -347,10 +543,10 @@ Popup {
         // Footer
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 64
+            Layout.preferredHeight: 52
             Layout.leftMargin: Theme.spacingLg
             Layout.rightMargin: Theme.spacingLg
-            spacing: Theme.spacingMd
+            spacing: 12
 
             Item { Layout.fillWidth: true }
 
@@ -413,17 +609,18 @@ Popup {
         property alias title: titleText.text
         default property alias content: contentContainer.children
 
-        color: Theme.elevated
-        radius: Theme.radiusMd
-        border.color: Theme.border
-        border.width: 1
+        color: "transparent"
+        radius: 0
+        border.width: 0
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignTop
+        implicitHeight: titleText.implicitHeight + contentContainer.implicitHeight + 20
+        Layout.preferredHeight: implicitHeight
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: Theme.spacingMd
-            spacing: Theme.spacingMd
+            anchors.margins: 6
+            spacing: 6
 
             Text {
                 id: titleText
@@ -437,10 +634,17 @@ Popup {
             ColumnLayout {
                 id: contentContainer
                 Layout.fillWidth: true
-                spacing: Theme.spacingSm
+                spacing: 6
             }
 
-            Item { Layout.fillHeight: true }
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: Theme.border
         }
     }
 
@@ -449,30 +653,31 @@ Popup {
         property alias subtitle: subtitleText.text
 
         Layout.fillWidth: true
-        Layout.topMargin: Theme.spacingLg
-        Layout.bottomMargin: Theme.spacingMd
-        spacing: Theme.spacingMd
+        Layout.topMargin: 4
+        Layout.bottomMargin: 0
+        spacing: 8
 
         Rectangle {
             Layout.preferredWidth: 4
-            Layout.preferredHeight: 24
+            Layout.preferredHeight: 20
             color: Theme.cyan
             radius: 2
         }
 
         ColumnLayout {
-            spacing: 2
+            spacing: subtitleText.visible ? 2 : 0
 
             Text {
                 id: titleText
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 18
+                font.pixelSize: 16
                 font.weight: Font.Bold
             }
 
             Text {
                 id: subtitleText
+                visible: text.length > 0 && text !== titleText.text
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
@@ -480,42 +685,46 @@ Popup {
         }
     }
 
-    component SettingRow: RowLayout {
+    component SettingRow: Item {
         property alias label: labelText.text
         default property alias content: contentContainer.children
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 40
-        spacing: Theme.spacingMd
+        Layout.preferredHeight: 36
 
         Text {
             id: labelText
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 14
-            Layout.preferredWidth: 130
-            Layout.alignment: Qt.AlignVCenter
+            width: 176
         }
 
         Item {
             id: contentContainer
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            anchors.left: labelText.right
+            anchors.leftMargin: 10
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
         }
     }
 
     component SettingSwitch: Switch {
+        id: control
         property alias labelText: label.text
 
         indicator: Rectangle {
             implicitWidth: 40
             implicitHeight: 22
             radius: 11
-            color: parent.checked ? Theme.cyan : Theme.border
+            color: control.checked ? Theme.cyan : Theme.border
 
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                x: parent.checked ? parent.width - width - 2 : 2
+                x: control.checked ? parent.width - width - 2 : 2
                 width: 18
                 height: 18
                 radius: 9
@@ -554,6 +763,9 @@ Popup {
             font.pixelSize: 13
             verticalAlignment: Text.AlignVCenter
             leftPadding: Theme.spacingSm
+            rightPadding: (combo.indicator ? combo.indicator.width : 0)
+                          + Theme.spacingSm
+            elide: Text.ElideRight
         }
 
         background: Rectangle {
@@ -603,42 +815,106 @@ Popup {
         }
     }
 
-    component WaveformColorButton: Button {
-        id: colorButton
-        property color colorValue
-        property string targetProperty
-        text: colorValue.toString().toUpperCase()
-        onClicked: root.editWaveformColor(targetProperty, colorValue)
+    component SettingStepper: RowLayout {
+        id: stepper
+        property real value: 0
+        property real minimumValue: 0
+        property real maximumValue: 1
+        property real stepSize: 0.1
+        property int decimals: 1
+        property string suffix: ""
+        signal valueEdited(real nextValue)
 
-        contentItem: RowLayout {
-            spacing: Theme.spacingSm
-            Rectangle {
-                Layout.preferredWidth: 18
-                Layout.preferredHeight: 18
-                radius: 4
-                color: colorButton.colorValue
-                border.color: Theme.border
-            }
-            Text {
-                text: colorButton.text
-                color: Theme.primaryText
+        function normalized(nextValue) {
+            const bounded = Math.max(minimumValue,
+                                     Math.min(maximumValue, nextValue))
+            return Number(bounded.toFixed(decimals))
+        }
+
+        function decrease() {
+            valueEdited(normalized(value - stepSize))
+        }
+
+        function increase() {
+            valueEdited(normalized(value + stepSize))
+        }
+
+        spacing: 0
+
+        Button {
+            text: "\u2212"
+            enabled: stepper.value > stepper.minimumValue
+            focusPolicy: Qt.StrongFocus
+            onClicked: stepper.decrease()
+            contentItem: Text {
+                text: parent.text
+                color: parent.enabled ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: 16
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                color: parent.pressed ? Theme.border
+                      : parent.hovered ? Theme.hoverSurface
+                      : Theme.background
+                border.color: Theme.border
+                border.width: 1
+                radius: Theme.radiusSm
+                implicitWidth: 34
+                implicitHeight: 32
             }
         }
-        background: Rectangle {
-            color: parent.hovered ? Theme.hoverSurface : Theme.background
+
+        Rectangle {
+            Layout.preferredWidth: 88
+            Layout.preferredHeight: 32
+            color: Theme.background
             border.color: Theme.border
             border.width: 1
-            radius: Theme.radiusSm
-            implicitWidth: 108
-            implicitHeight: 30
+
+            Text {
+                anchors.centerIn: parent
+                text: stepper.value.toFixed(stepper.decimals) + stepper.suffix
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 13
+            }
+        }
+
+        Button {
+            text: "+"
+            enabled: stepper.value < stepper.maximumValue
+            focusPolicy: Qt.StrongFocus
+            onClicked: stepper.increase()
+            contentItem: Text {
+                text: parent.text
+                color: parent.enabled ? Theme.primaryText : Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 18
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                color: parent.pressed ? Theme.border
+                      : parent.hovered ? Theme.hoverSurface
+                      : Theme.background
+                border.color: Theme.border
+                border.width: 1
+                radius: Theme.radiusSm
+                implicitWidth: 34
+                implicitHeight: 32
+            }
         }
     }
 
     component FileAssociationCheck: CheckBox {
+        id: associationCheck
         property string extPrimary
         property string extSecondary: ""
+        implicitWidth: associationLabel.implicitWidth
+        implicitHeight: Math.max(indicator.implicitHeight,
+                                 associationLabel.implicitHeight)
 
         indicator: Rectangle {
             implicitWidth: 18
@@ -658,6 +934,7 @@ Popup {
         }
 
         contentItem: Text {
+            id: associationLabel
             text: parent.text
             color: Theme.primaryText
             font.family: Theme.fontPrimary
@@ -870,22 +1147,21 @@ Popup {
     }
 
     component GeneralSection: ColumnLayout {
-        spacing: Theme.spacingSm
+        spacing: 6
 
         SectionHeader {
             title: qsTr("常规")
-            subtitle: qsTr("常规")
+            subtitle: ""
         }
 
         GridLayout {
             Layout.fillWidth: true
-            columns: 2
+            columns: 1
             columnSpacing: Theme.spacingMd
-            rowSpacing: Theme.spacingMd
+            rowSpacing: 8
 
             SettingCard {
                 title: qsTr("开机与窗口")
-                Layout.preferredHeight: 320
 
                 SettingSwitch {
                     text: qsTr("开机自动启动")
@@ -960,7 +1236,6 @@ Popup {
 
             SettingCard {
                 title: qsTr("文件关联")
-                Layout.preferredHeight: 320
 
                 SettingSwitch {
                     text: qsTr("设为系统默认音频播放器")
@@ -1058,7 +1333,7 @@ Popup {
     }
 
     component PlaybackSection: ColumnLayout {
-        spacing: Theme.spacingSm
+        spacing: 6
         Component.onCompleted: PlaybackController.refreshOutputDevices()
 
         SectionHeader {
@@ -1068,13 +1343,12 @@ Popup {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: 2
+            columns: 1
             columnSpacing: Theme.spacingMd
             rowSpacing: Theme.spacingMd
 
             SettingCard {
                 title: qsTr("音频输出")
-                Layout.preferredHeight: 215
 
                 SettingRow {
                     label: qsTr("输出设备")
@@ -1101,6 +1375,31 @@ Popup {
                             return 0
                         }
                         onActivated: SettingsController.outputDevice = currentValue
+                    }
+                }
+
+                Button {
+                    text: qsTr("打开系统默认应用设置")
+                    onClicked: SettingsController.openDefaultAppsSettings()
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        color: parent.pressed ? Theme.border
+                              : parent.hovered ? Theme.hoverSurface
+                              : "transparent"
+                        border.color: Theme.border
+                        border.width: 1
+                        radius: Theme.radiusSm
+                        implicitWidth: 180
+                        implicitHeight: 32
                     }
                 }
 
@@ -1132,14 +1431,7 @@ Popup {
             }
 
             SettingCard {
-                title: qsTr("播放行为")
-                Layout.preferredHeight: 250
-
-                SettingSwitch {
-                    text: qsTr("播放键 RGB 光晕")
-                    checked: SettingsController.playButtonRgbGlow
-                    onToggled: SettingsController.playButtonRgbGlow = checked
-                }
+                title: qsTr("播放行为与响度")
 
                 SettingRow {
                     label: qsTr("默认播放模式")
@@ -1198,6 +1490,58 @@ Popup {
                     checked: SettingsController.autoReadRating
                     onToggled: SettingsController.autoReadRating = checked
                 }
+
+                SettingRow {
+                    label: qsTr("ReplayGain 响度")
+                    SettingCombo {
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("关闭（原始电平）"), value: 0 },
+                            { text: qsTr("单曲增益"), value: 1 },
+                            { text: qsTr("专辑增益"), value: 2 }
+                        ]
+                        currentIndex: SettingsController.replayGainMode
+                        onActivated: SettingsController.replayGainMode = currentValue
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("削波保护")
+                    checked: SettingsController.replayGainClipProtection
+                    onToggled: SettingsController.replayGainClipProtection = checked
+                }
+
+                Label {
+                    visible: PlaybackController.replayGainClippingWarning
+                    text: qsTr("当前 ReplayGain 增益可能削波，已按设置限制峰值")
+                    color: Theme.ratingGold
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Button {
+                        Layout.fillWidth: true
+                        text: ReplayGainScanner.running
+                              ? qsTr("正在扫描响度…") : qsTr("扫描当前歌曲响度")
+                        enabled: !ReplayGainScanner.running
+                                 && PlaybackController.currentTrackId.length > 0
+                        onClicked: ReplayGainScanner.scanTrack(
+                                       PlaybackController.currentTrackId)
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: ReplayGainScanner.running
+                              ? qsTr("响度扫描 %1%").arg(
+                                    Math.round(ReplayGainScanner.progress * 100))
+                              : qsTr("扫描全部歌曲响度")
+                        enabled: !ReplayGainScanner.running && LibraryModel.count > 0
+                        onClicked: ReplayGainScanner.scanAll()
+                    }
+                }
             }
         }
 
@@ -1214,13 +1558,12 @@ Popup {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: 2
+            columns: 1
             columnSpacing: Theme.spacingMd
             rowSpacing: Theme.spacingMd
 
             SettingCard {
                 title: qsTr("主题样式")
-                Layout.preferredHeight: 160
 
                 SettingRow {
                     label: qsTr("主题模式")
@@ -1272,7 +1615,6 @@ Popup {
 
             SettingCard {
                 title: qsTr("Waveform RGB 波形设置")
-                Layout.preferredHeight: 510
 
                 SettingRow {
                     label: qsTr("默认波形模式")
@@ -1302,45 +1644,78 @@ Popup {
                 }
 
                 SettingRow {
+                    visible: SettingsController.waveformMode !== 2
                     label: qsTr("波形高度")
-                    SettingCombo {
-                        objectName: "waveformHeightCombo"
+                    SettingStepper {
+                        objectName: "waveformHeightStepper"
                         anchors.verticalCenter: parent.verticalCenter
-                        valueModel: root.steppedModel(0.3, 1.5, 0.1, 1, "")
-                        currentIndex: Math.round(
-                                          (SettingsController.waveformHeight - 0.3)
-                                          / 0.1)
-                        onActivated: SettingsController.waveformHeight = currentValue
+                        value: SettingsController.waveformHeight
+                        minimumValue: 0.3
+                        maximumValue: 1.5
+                        stepSize: 0.1
+                        decimals: 1
+                        onValueEdited: nextValue =>
+                            SettingsController.waveformHeight = nextValue
                     }
                 }
 
                 SettingRow {
+                    label: qsTr("波形画布高度")
+                    SettingStepper {
+                        objectName: "waveformCanvasHeightStepper"
+                        anchors.verticalCenter: parent.verticalCenter
+                        value: SettingsController.waveformCanvasHeight
+                        minimumValue: 48
+                        maximumValue: 84
+                        stepSize: 2
+                        decimals: 0
+                        suffix: " px"
+                        onValueEdited: nextValue =>
+                            SettingsController.waveformCanvasHeight = nextValue
+                    }
+                }
+
+                SettingSwitch {
+                    text: qsTr("锁定波形画布高度")
+                    checked: SettingsController.waveformCanvasLocked
+                    onToggled: SettingsController.waveformCanvasLocked = checked
+                }
+
+                SettingRow {
+                    visible: SettingsController.waveformMode !== 2
                     label: qsTr("波形采样密度")
-                    SettingCombo {
-                        objectName: "waveformDensityCombo"
+                    SettingStepper {
+                        objectName: "waveformDensityStepper"
                         anchors.verticalCenter: parent.verticalCenter
-                        valueModel: root.steppedModel(0.5, 5.0, 0.5, 1, "")
-                        currentIndex: Math.round(
-                                          (SettingsController.waveformDensity - 0.5)
-                                          / 0.5)
-                        onActivated: SettingsController.waveformDensity = currentValue
+                        value: SettingsController.waveformDensity
+                        minimumValue: 0.5
+                        maximumValue: 5.0
+                        stepSize: 0.5
+                        decimals: 1
+                        onValueEdited: nextValue =>
+                            SettingsController.waveformDensity = nextValue
                     }
                 }
 
                 SettingRow {
+                    visible: SettingsController.waveformMode !== 2
                     label: qsTr("波形线条粗细")
-                    SettingCombo {
-                        objectName: "waveformThicknessCombo"
+                    SettingStepper {
+                        objectName: "waveformThicknessStepper"
                         anchors.verticalCenter: parent.verticalCenter
-                        valueModel: root.steppedModel(0.3, 3.0, 0.1, 1, "px")
-                        currentIndex: Math.round(
-                                          (SettingsController.waveformThickness - 0.3)
-                                          / 0.1)
-                        onActivated: SettingsController.waveformThickness = currentValue
+                        value: SettingsController.waveformThickness
+                        minimumValue: 0.3
+                        maximumValue: 3.0
+                        stepSize: 0.1
+                        decimals: 1
+                        suffix: " px"
+                        onValueEdited: nextValue =>
+                            SettingsController.waveformThickness = nextValue
                     }
                 }
 
                 SettingRow {
+                    visible: SettingsController.waveformMode !== 2
                     label: qsTr("波形峰值算法")
                     SettingCombo {
                         objectName: "waveformAggregationCombo"
@@ -1355,42 +1730,43 @@ Popup {
                 }
 
                 SettingRow {
+                    visible: SettingsController.waveformMode !== 2
                     label: SettingsController.waveformMode === 0
                            ? qsTr("底色 / 进度色")
-                           : qsTr("灰白底色 / RGB渐变")
+                           : qsTr("纯色 / RGB渐变")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
 
-                        WaveformColorButton {
+                        ColorField {
                             visible: SettingsController.waveformMode === 0
                             colorValue: SettingsController.waveformSolidBaseColor
                             targetProperty: "waveformSolidBaseColor"
                         }
-                        WaveformColorButton {
+                        ColorField {
                             visible: SettingsController.waveformMode === 0
                             colorValue: SettingsController.waveformSolidProgressColor
                             targetProperty: "waveformSolidProgressColor"
                         }
-                        WaveformColorButton {
+                        ColorField {
                             visible: SettingsController.waveformMode !== 0
                             colorValue: SettingsController.waveformRgbBaseColor
                             targetProperty: "waveformRgbBaseColor"
                         }
-                        WaveformColorButton {
+                        ColorField {
                             visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.waveformRgbStartColor
-                            targetProperty: "waveformRgbStartColor"
+                            colorValue: SettingsController.spectrumRgbStartColor
+                            targetProperty: "spectrumRgbStartColor"
                         }
-                        WaveformColorButton {
+                        ColorField {
                             visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.waveformRgbMiddleColor
-                            targetProperty: "waveformRgbMiddleColor"
+                            colorValue: SettingsController.spectrumRgbMiddleColor
+                            targetProperty: "spectrumRgbMiddleColor"
                         }
-                        WaveformColorButton {
+                        ColorField {
                             visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.waveformRgbEndColor
-                            targetProperty: "waveformRgbEndColor"
+                            colorValue: SettingsController.spectrumRgbEndColor
+                            targetProperty: "spectrumRgbEndColor"
                         }
                     }
                 }
@@ -1415,6 +1791,42 @@ Popup {
                     onToggled: SettingsController.waveformHoverTimePreview = checked
                 }
 
+                SettingRow {
+                    visible: SettingsController.waveformMode === 2
+                    label: qsTr("频谱颜色")
+                    RowLayout {
+                        anchors.fill: parent
+                        SettingCombo {
+                            valueModel: [
+                                { text: qsTr("单色"), value: 0 },
+                                { text: qsTr("自定义 RGB"), value: 1 }
+                            ]
+                            currentIndex: SettingsController.spectrumColorMode
+                            onActivated: SettingsController.spectrumColorMode = currentValue
+                        }
+                        ColorField {
+                            visible: SettingsController.spectrumColorMode === 0
+                            colorValue: SettingsController.spectrumSolidColor
+                            targetProperty: "spectrumSolidColor"
+                        }
+                        ColorField {
+                            visible: SettingsController.spectrumColorMode === 1
+                            colorValue: SettingsController.waveformRgbStartColor
+                            targetProperty: "waveformRgbStartColor"
+                        }
+                        ColorField {
+                            visible: SettingsController.spectrumColorMode === 1
+                            colorValue: SettingsController.waveformRgbMiddleColor
+                            targetProperty: "waveformRgbMiddleColor"
+                        }
+                        ColorField {
+                            visible: SettingsController.spectrumColorMode === 1
+                            colorValue: SettingsController.waveformRgbEndColor
+                            targetProperty: "waveformRgbEndColor"
+                        }
+                    }
+                }
+
                 Button {
                     objectName: "waveformResetButton"
                     text: qsTr("恢复波形默认")
@@ -1431,18 +1843,17 @@ Popup {
 
         SectionHeader {
             title: qsTr("音频工具预设")
-            subtitle: qsTr("音频工具")
+            subtitle: qsTr("导出路径与转码参数")
         }
 
         GridLayout {
             Layout.fillWidth: true
-            columns: 3
+            columns: 1
             columnSpacing: Theme.spacingMd
-            rowSpacing: Theme.spacingMd
+            rowSpacing: 8
 
             SettingCard {
                 title: qsTr("通用导出")
-                Layout.preferredHeight: 160
 
                 SettingRow {
                     label: qsTr("默认导出路径")
@@ -1466,37 +1877,6 @@ Popup {
                         onActivated: SettingsController.overwritePolicy = currentValue
                     }
                 }
-            }
-
-            SettingCard {
-                title: qsTr("转码与剪辑预设")
-                Layout.preferredHeight: 160
-
-                SettingRow {
-                    label: qsTr("默认转码输出格式")
-                    SettingCombo {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 240
-                        valueModel: [
-                            { text: qsTr("MP3 / 320kbps / 44.1kHz / Stereo"), value: "MP3 / 320kbps / 44.1kHz / Stereo" },
-                            { text: qsTr("MP3 / 256kbps / 44.1kHz / Stereo"), value: "MP3 / 256kbps / 44.1kHz / Stereo" },
-                            { text: qsTr("MP3 / 192kbps / 44.1kHz / Stereo"), value: "MP3 / 192kbps / 44.1kHz / Stereo" },
-                            { text: qsTr("FLAC / 44.1kHz / Stereo"), value: "FLAC / 44.1kHz / Stereo" },
-                            { text: qsTr("WAV / 44.1kHz / Stereo"), value: "WAV / 44.1kHz / Stereo" }
-                        ]
-                        currentIndex: {
-                            const values = [
-                                "MP3 / 320kbps / 44.1kHz / Stereo",
-                                "MP3 / 256kbps / 44.1kHz / Stereo",
-                                "MP3 / 192kbps / 44.1kHz / Stereo",
-                                "FLAC / 44.1kHz / Stereo",
-                                "WAV / 44.1kHz / Stereo"
-                            ]
-                            return values.indexOf(SettingsController.defaultTranscodeFormat)
-                        }
-                        onActivated: SettingsController.defaultTranscodeFormat = currentValue
-                    }
-                }
 
                 SettingSwitch {
                     text: qsTr("批量转码时保持原音频元数据")
@@ -1506,24 +1886,104 @@ Popup {
             }
 
             SettingCard {
+                title: qsTr("转码输出")
+
+                SettingRow {
+                    label: qsTr("格式")
+                    SettingCombo {
+                        id: transcodeFormatCombo
+                        objectName: "transcodeFormatCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: "MP3", value: "MP3" },
+                            { text: "WAV", value: "WAV" },
+                            { text: "FLAC", value: "FLAC" }
+                        ]
+                        currentIndex: ["MP3", "WAV", "FLAC"].indexOf(
+                                          SettingsController.transcodeFormat)
+                        onActivated: SettingsController.transcodeFormat = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("MP3 码率")
+                    SettingCombo {
+                        objectName: "transcodeBitrateCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: SettingsController.transcodeFormat === "MP3"
+                        opacity: enabled ? 1 : 0.45
+                        valueModel: [
+                            { text: "128 kbps", value: 128 },
+                            { text: "192 kbps", value: 192 },
+                            { text: "256 kbps", value: 256 },
+                            { text: "320 kbps", value: 320 }
+                        ]
+                        currentIndex: [128, 192, 256, 320].indexOf(
+                                          SettingsController.transcodeBitrateKbps)
+                        onActivated: SettingsController.transcodeBitrateKbps = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("采样率")
+                    SettingCombo {
+                        objectName: "transcodeSampleRateCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: "44.1 kHz", value: 44100 },
+                            { text: "48 kHz", value: 48000 },
+                            { text: "88.2 kHz", value: 88200 },
+                            { text: "96 kHz", value: 96000 },
+                            { text: "176.4 kHz", value: 176400 },
+                            { text: "192 kHz", value: 192000 }
+                        ]
+                        currentIndex: [44100, 48000, 88200, 96000,
+                                       176400, 192000].indexOf(
+                                          SettingsController.transcodeSampleRateHz)
+                        onActivated: SettingsController.transcodeSampleRateHz = currentValue
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("声道")
+                    SettingCombo {
+                        objectName: "transcodeChannelCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("单声道"), value: 1 },
+                            { text: qsTr("立体声"), value: 2 }
+                        ]
+                        currentIndex: SettingsController.transcodeChannels === 1 ? 0 : 1
+                        onActivated: SettingsController.transcodeChannels = currentValue
+                    }
+                }
+            }
+
+            SettingCard {
                 title: qsTr("变调与变速预设")
-                Layout.preferredHeight: 160
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
 
                 SettingSwitch {
-                    text: qsTr("变速时变调行为：保持原音高/语速")
+                    objectName: "keepPitchPresetSwitch"
+                    Layout.fillWidth: true
+                    text: qsTr("变速时保持原音高")
                     checked: SettingsController.keepPitchWhileSpeedChange
                     onToggled: SettingsController.keepPitchWhileSpeedChange = checked
                 }
 
                 SettingSwitch {
+                    objectName: "vocalProtectionPresetSwitch"
+                    Layout.fillWidth: true
                     text: qsTr("升降调人声保护")
                     checked: SettingsController.vocalProtection
                     onToggled: SettingsController.vocalProtection = checked
                 }
+                }
             }
         }
-
-        Item { Layout.fillHeight: true }
     }
 
     component HotkeysSection: ColumnLayout {
@@ -1536,39 +1996,41 @@ Popup {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: 2
+            columns: 1
             columnSpacing: Theme.spacingMd
             rowSpacing: Theme.spacingMd
 
             SettingCard {
                 title: qsTr("全局快捷键")
-                Layout.preferredHeight: 220
 
                 HotkeyRow {
                     label: qsTr("播放 / 暂停")
                     value: SettingsController.hkPlayPause
+                    globalShortcut: true
                     onCommitted: text => SettingsController.hkPlayPause = text
                 }
                 HotkeyRow {
                     label: qsTr("上一首 / 下一首")
                     value: SettingsController.hkPrevNext
+                    globalShortcut: true
                     onCommitted: text => SettingsController.hkPrevNext = text
                 }
                 HotkeyRow {
                     label: qsTr("音量加 / 减")
                     value: SettingsController.hkVolumeUpDown
+                    globalShortcut: true
                     onCommitted: text => SettingsController.hkVolumeUpDown = text
                 }
                 HotkeyRow {
                     label: qsTr("显示 / 隐藏迷你播放器")
                     value: SettingsController.hkToggleMiniPlayer
+                    globalShortcut: true
                     onCommitted: text => SettingsController.hkToggleMiniPlayer = text
                 }
             }
 
             SettingCard {
                 title: qsTr("应用内快捷键")
-                Layout.preferredHeight: 220
 
                 HotkeyRow {
                     label: qsTr("快速搜索歌曲")
@@ -1594,6 +2056,8 @@ Popup {
     component HotkeyRow: RowLayout {
         property alias label: labelText.text
         property string value
+        property bool globalShortcut: false
+        property bool invalidShortcut: false
         signal committed(string text)
 
         Layout.fillWidth: true
@@ -1614,7 +2078,7 @@ Popup {
             Layout.fillHeight: true
             color: Theme.background
             radius: Theme.radiusSm
-            border.color: Theme.border
+            border.color: parent.invalidShortcut ? Theme.favoriteRed : Theme.border
             border.width: 1
 
             TextField {
@@ -1629,8 +2093,33 @@ Popup {
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 selectByMouse: true
+                placeholderText: qsTr("按下快捷键")
                 background: null
-                onEditingFinished: parent.parent.committed(text.trim())
+                Keys.onPressed: function(event) {
+                    const candidate = root.shortcutText(event)
+                    if (!candidate)
+                        return
+                    event.accepted = true
+                    invalidShortcut =
+                            root.shortcutConflicts(candidate, value)
+                            || (globalShortcut
+                                && !root.isAllowedGlobalShortcut(candidate))
+                    if (!invalidShortcut) {
+                        text = candidate
+                        committed(candidate)
+                    }
+                }
+                onEditingFinished: {
+                    const candidate = text.trim()
+                    invalidShortcut =
+                            root.shortcutConflicts(candidate, value)
+                            || (globalShortcut
+                                && !root.isAllowedGlobalShortcut(candidate))
+                    if (!invalidShortcut && candidate)
+                        committed(candidate)
+                    else
+                        text = value
+                }
             }
         }
     }
@@ -1645,13 +2134,12 @@ Popup {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: 2
+            columns: 1
             columnSpacing: Theme.spacingMd
             rowSpacing: Theme.spacingMd
 
             SettingCard {
                 title: qsTr("路径与自动清理")
-                Layout.preferredHeight: 220
 
                 SettingRow {
                     label: qsTr("缓存路径")
@@ -1660,6 +2148,36 @@ Popup {
                         path: SettingsController.cacheDirectory
                         dialogFolder: SettingsController.cacheDirectory
                         onPathSelected: SettingsController.cacheDirectory = newPath
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("缓存上限")
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 8
+                        TextField {
+                            objectName: "cacheSizeLimitField"
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 32
+                            text: (SettingsController.cacheSizeLimitMB / 1024).toFixed(0)
+                            horizontalAlignment: Text.AlignRight
+                            validator: DoubleValidator { bottom: 0.1; decimals: 1 }
+                            onEditingFinished: {
+                                const gb = Number(text)
+                                if (isFinite(gb) && gb >= 0.1)
+                                    SettingsController.cacheSizeLimitMB = Math.round(gb * 1024)
+                                else
+                                    text = (SettingsController.cacheSizeLimitMB / 1024).toFixed(0)
+                            }
+                        }
+                        Text {
+                            text: "GB"
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                        }
+                        Item { Layout.fillWidth: true }
                     }
                 }
 
@@ -1690,13 +2208,13 @@ Popup {
 
             SettingCard {
                 title: qsTr("清理按钮")
-                Layout.preferredHeight: 220
 
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacingSm
 
                     Button {
+                        objectName: "clearWaveformCacheButton"
                         text: qsTr("波形缓存")
                         onClicked: SettingsController.clearWaveformCache()
                         contentItem: Text {
@@ -1720,6 +2238,7 @@ Popup {
                     }
 
                     Button {
+                        objectName: "clearCoverCacheButton"
                         text: qsTr("封面缓存")
                         onClicked: SettingsController.clearCoverCache()
                         contentItem: Text {
@@ -1743,6 +2262,7 @@ Popup {
                     }
 
                     Button {
+                        objectName: "clearTempCacheButton"
                         text: qsTr("转码临时文件")
                         onClicked: SettingsController.clearTempFiles()
                         contentItem: Text {
@@ -1764,29 +2284,28 @@ Popup {
                             implicitHeight: 32
                         }
                     }
-                }
 
-                Button {
-                    text: qsTr("一键清空全部缓存")
-                    onClicked: clearCacheConfirmDialog.open()
-
-                    contentItem: Text {
-                        text: parent.text
-                        color: "#FFFFFF"
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 13
-                        font.weight: Font.Medium
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        color: parent.pressed ? Qt.darker(Theme.favoriteRed, 1.2)
-                              : parent.hovered ? Qt.lighter(Theme.favoriteRed, 1.1)
-                              : Theme.favoriteRed
-                        radius: Theme.radiusSm
-                        implicitWidth: 180
-                        implicitHeight: 36
+                    Button {
+                        objectName: "clearAllCacheButton"
+                        text: qsTr("全部缓存")
+                        onClicked: clearCacheConfirmDialog.open()
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#FFFFFF"
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: parent.pressed ? Qt.darker(Theme.favoriteRed, 1.2)
+                                  : parent.hovered ? Qt.lighter(Theme.favoriteRed, 1.1)
+                                  : Theme.favoriteRed
+                            radius: Theme.radiusSm
+                            implicitWidth: 90
+                            implicitHeight: 32
+                        }
                     }
                 }
 
@@ -1808,7 +2327,6 @@ Popup {
         SettingCard {
             title: ""
             Layout.fillWidth: true
-            Layout.preferredHeight: 220
 
             RowLayout {
                 Layout.fillWidth: true
@@ -1827,7 +2345,8 @@ Popup {
                     spacing: Theme.spacingXs
 
                     Text {
-                        text: "AgPlayer"
+                        objectName: "aboutProductLine"
+                        text: "AgPlayer " + SettingsController.version
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 22
@@ -1835,21 +2354,15 @@ Popup {
                     }
 
                     Text {
-                        text: SettingsController.version
-                        color: Theme.secondaryText
+                        text: qsTr("让音乐·看得见")
+                        color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 13
+                        font.pixelSize: 14
+                        font.weight: Font.Medium
                     }
 
                     Text {
-                        text: qsTr("发布日期: ") + SettingsController.releaseDate
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 13
-                    }
-
-                    Text {
-                        text: qsTr("轻量、纯粹、为音乐而生。")
+                        text: qsTr("零广告 · 零联网 · 零订阅")
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 13
@@ -1858,8 +2371,8 @@ Popup {
 
                 Item { Layout.fillWidth: true }
 
-                ColumnLayout {
-                    spacing: Theme.spacingMd
+                RowLayout {
+                    spacing: Theme.spacingSm
 
                     Button {
                         text: qsTr("访问官网")
@@ -1882,6 +2395,32 @@ Popup {
                             border.width: 1
                             radius: Theme.radiusSm
                             implicitWidth: 120
+                            implicitHeight: 36
+                        }
+                    }
+
+                    Button {
+                        objectName: "feedbackButton"
+                        text: qsTr("反馈")
+                        onClicked: feedbackDialog.open()
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: parent.pressed ? Theme.border
+                                  : parent.hovered ? Theme.hoverSurface
+                                  : "transparent"
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: Theme.radiusSm
+                            implicitWidth: 96
                             implicitHeight: 36
                         }
                     }

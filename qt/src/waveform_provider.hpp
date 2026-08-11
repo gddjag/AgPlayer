@@ -3,7 +3,10 @@
 #include <QFutureWatcher>
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <QThreadPool>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <agplayer/c_api.h>
 
@@ -17,6 +20,8 @@ class WaveformProvider : public QObject {
     Q_OBJECT
     Q_PROPERTY(double analysisProgress READ analysisProgress
                    NOTIFY analysisProgressChanged)
+    Q_PROPERTY(qulonglong activeGeneration READ activeGeneration
+                   NOTIFY activeGenerationChanged)
 
 public:
     explicit WaveformProvider(SettingsController* settings = nullptr,
@@ -24,13 +29,18 @@ public:
     ~WaveformProvider() override;
 
     double analysisProgress() const noexcept;
+    qulonglong activeGeneration() const noexcept;
 
     Q_INVOKABLE void loadForTrack(const QString& path);
+    Q_INVOKABLE qulonglong loadForTrack(const QString& trackId,
+                                        const QString& path);
+    Q_INVOKABLE void prefetchTracks(const QStringList& paths);
     Q_INVOKABLE void cancelForTrack(const QString& path);
 
 signals:
     void waveformReady(const QString& path, const QVariantMap& layers);
     void analysisProgressChanged();
+    void activeGenerationChanged();
 
 private:
     void onAnalysisFinished();
@@ -39,6 +49,8 @@ private:
 
     struct Job {
         QString path;
+        QString trackId;
+        quint64 generation = 0;
         ag_waveform* waveform = nullptr;
         ag_result result = AG_OK;
         ag_waveform_aggregation aggregation =
@@ -53,7 +65,12 @@ private:
     std::shared_ptr<std::atomic<double>> activeProgress_;
     ag_cancel_token* activeCancelToken_ = nullptr;
     QString currentPath_;
+    QString currentTrackId_;
+    QVariantMap currentLayers_;
+    quint64 activeGeneration_ = 0;
     ag_waveform_aggregation currentAggregation_ =
         AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
     double analysisProgress_ = 0.0;
+    QThreadPool currentAnalysisPool_;
+    QThreadPool prefetchPool_;
 };

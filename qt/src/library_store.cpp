@@ -29,7 +29,17 @@ QJsonObject toJson(const TrackRecord& track)
             {QStringLiteral("importError"), track.importError},
             {QStringLiteral("lyrics"), track.lyrics},
             {QStringLiteral("playCount"), track.playCount},
-            {QStringLiteral("lastPlayedAtMs"), QJsonValue(track.lastPlayedAtMs)}};
+            {QStringLiteral("lastPlayedAtMs"), QJsonValue(track.lastPlayedAtMs)},
+            {QStringLiteral("tags"), QJsonArray::fromStringList(track.tags)},
+            {QStringLiteral("addedAtMs"), QJsonValue(track.addedAtMs)},
+            {QStringLiteral("fileStatus"), track.fileStatus},
+            {QStringLiteral("contentHash"), track.contentHash},
+            {QStringLiteral("audioFingerprint"),
+             QString::fromLatin1(track.audioFingerprint.toBase64())},
+            {QStringLiteral("replayGainScanned"), track.replayGainScanned},
+            {QStringLiteral("replayGainTrackDb"), track.replayGainTrackDb},
+            {QStringLiteral("replayGainAlbumDb"), track.replayGainAlbumDb},
+            {QStringLiteral("replayPeak"), track.replayPeak}};
 }
 
 TrackRecord fromJson(const QJsonObject& object)
@@ -56,6 +66,25 @@ TrackRecord fromJson(const QJsonObject& object)
     track.playCount = object.value(QStringLiteral("playCount")).toInt();
     track.lastPlayedAtMs =
         object.value(QStringLiteral("lastPlayedAtMs")).toInteger();
+    const QJsonArray tags = object.value(QStringLiteral("tags")).toArray();
+    for (const QJsonValue& tag : tags) {
+        if (tag.isString()) {
+            track.tags.append(tag.toString());
+        }
+    }
+    track.addedAtMs = object.value(QStringLiteral("addedAtMs")).toInteger();
+    track.fileStatus = object.value(QStringLiteral("fileStatus"))
+                           .toString(QStringLiteral("normal"));
+    track.contentHash = object.value(QStringLiteral("contentHash")).toString();
+    track.audioFingerprint = QByteArray::fromBase64(
+        object.value(QStringLiteral("audioFingerprint")).toString().toLatin1());
+    track.replayGainScanned =
+        object.value(QStringLiteral("replayGainScanned")).toBool();
+    track.replayGainTrackDb =
+        object.value(QStringLiteral("replayGainTrackDb")).toDouble();
+    track.replayGainAlbumDb =
+        object.value(QStringLiteral("replayGainAlbumDb")).toDouble();
+    track.replayPeak = object.value(QStringLiteral("replayPeak")).toDouble();
     return track;
 }
 }

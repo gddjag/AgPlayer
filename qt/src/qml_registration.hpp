@@ -1,6 +1,7 @@
 #pragma once
 
 class AudioToolsController;
+class EqualizerController;
 class FormatConverter;
 class ImportController;
 class LibraryFilterModel;
@@ -31,4 +32,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  LightEditor* lightEditor,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider = nullptr,
-                                 PlaylistModel* playlistModel = nullptr);
+                                 PlaylistModel* playlistModel = nullptr,
+                                 EqualizerController* equalizer = nullptr);

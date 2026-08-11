@@ -3,196 +3,165 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
-// Frameless mini-player window. Shares the same controller/model singletons
-// as the main window so playback state, queue and waveform survive the
-// main <-> mini switch without re-creating a decoder or core handle.
-//
-// `playback` and `windows` default to the production singletons and can be
-// overridden by tests (see tst_mini_player.qml) with fake QtObjects to verify
-// shared state and window actions without touching real audio.
 Window {
     id: miniWindow
     objectName: "miniPlayerWindow"
     visible: false
-    width: 560
-    height: 96
-    minimumWidth: 480
-    minimumHeight: 96
-    maximumHeight: 96
+    width: 588
+    height: 186
+    minimumWidth: 588
+    minimumHeight: 186
+    maximumHeight: 186
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: "AgPlayer Mini"
-    onClosing: function(close) {
-        close.accepted = false
-        windows.requestClose()
-    }
+    palette.window: Theme.background
+    palette.windowText: Theme.primaryText
+    palette.base: Theme.elevated
+    palette.alternateBase: Theme.panel
+    palette.text: Theme.primaryText
+    palette.button: Theme.elevated
+    palette.buttonText: Theme.primaryText
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentText
+    palette.mid: Theme.border
 
-    // Injected dependencies — defaults keep production wiring implicit.
     property var playback: PlaybackController
     property var windows: WindowController
+    property int positionMs: playback ? playback.positionMs : 0
 
-    // Shared-state surface used by tests to verify main and mini mirror the
-    // same playback position. Mirrors the same property added to Main.qml.
-    property int positionMs: playback.positionMs
-
-    // Aliases used by tests / WindowController to reach in by name.
     property alias playPauseButton: controls.playPauseButton
     property alias pinButton: pinButton
     property alias restoreButton: restoreButton
     property alias minimizeButton: minimizeButton
     property alias closeButton: closeButton
 
-    // Wide translucent rounded surface. Blur is only used when the platform
-    // supports it; the fallback is an opaque #0B111B surface with a thin
-    // cool-gray border (spec 5.3 + section 8).
+    onClosing: function(close) {
+        close.accepted = false
+        if (windows)
+            windows.requestClose()
+    }
+
     Rectangle {
         id: surface
         anchors.fill: parent
-        anchors.margins: 4
+        anchors.margins: 2
         radius: Theme.windowRadius
         color: SettingsController.glassEffect
-               ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 0.88)
-               : Theme.panel
+               ? Qt.rgba(Theme.background.r, Theme.background.g,
+                         Theme.background.b, 0.94)
+               : Theme.background
         border.color: Theme.border
         border.width: 1
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 0
             spacing: 0
 
-            // --- Title area: brand mark + window controls ---
-            Rectangle {
+            Item {
+                id: titleArea
                 Layout.fillWidth: true
-                Layout.preferredHeight: 28
-                color: "transparent"
+                Layout.preferredHeight: 30
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: Theme.spacingSm
-                    anchors.rightMargin: Theme.spacingXs
-                    spacing: Theme.spacingXs
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 5
+                    spacing: 1
 
                     Image {
                         source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        sourceSize.width: 16
-                        sourceSize.height: 16
-                        Layout.preferredWidth: 16
-                        Layout.preferredHeight: 16
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
                         fillMode: Image.PreserveAspectFit
                     }
-
                     Text {
                         text: "AgPlayer"
-                        color: Theme.secondaryText
+                        color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.weight: Font.Medium
                     }
-
                     Item { Layout.fillWidth: true }
 
                     ToolButton {
                         id: pinButton
+                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("pushpin-fill")
-                        icon.color: windows.alwaysOnTop ? Theme.cyan : Theme.secondaryText
-                        icon.width: 14
-                        icon.height: 14
-                        Accessible.name: windows.alwaysOnTop
+                        icon.color: windows && windows.alwaysOnTop ? Theme.cyan
+                                                                   : Theme.secondaryText
+                        icon.width: 18
+                        icon.height: 18
+                        Accessible.name: windows && windows.alwaysOnTop
                                          ? qsTr("Disable always on top")
                                          : qsTr("Pin on top")
-                        focusPolicy: Qt.StrongFocus
-                        onClicked: windows.setAlwaysOnTop(!windows.alwaysOnTop)
-                        ToolTip.text: Accessible.name
-                        ToolTip.visible: hovered
-
+                        onClicked: {
+                            if (windows)
+                                windows.setAlwaysOnTop(!windows.alwaysOnTop)
+                        }
                         background: Rectangle {
-                            color: !parent.enabled ? "transparent"
-                                  : parent.pressed ? Theme.cyan
-                                  : parent.visualFocus ? Theme.border
-                                  : parent.hovered ? Theme.border
-                                  : "transparent"
-                            border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                            border.width: parent.visualFocus ? 2 : 0
+                            color: parent.hovered ? Theme.hoverSurface
+                                                  : "transparent"
                             radius: Theme.radiusSm
                         }
                     }
-
                     ToolButton {
                         id: restoreButton
+                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 14
-                        icon.height: 14
+                        icon.width: 18
+                        icon.height: 18
                         Accessible.name: qsTr("Restore main window")
-                        focusPolicy: Qt.StrongFocus
                         onClicked: windows.showMain()
-                        ToolTip.text: qsTr("Restore")
-                        ToolTip.visible: hovered
-
                         background: Rectangle {
-                            color: !parent.enabled ? "transparent"
-                                  : parent.pressed ? Theme.cyan
-                                  : parent.visualFocus ? Theme.border
-                                  : parent.hovered ? Theme.border
-                                  : "transparent"
-                            border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                            border.width: parent.visualFocus ? 2 : 0
+                            color: parent.hovered ? Theme.hoverSurface
+                                                  : "transparent"
                             radius: Theme.radiusSm
                         }
                     }
-
                     ToolButton {
                         id: minimizeButton
+                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 14
-                        icon.height: 14
+                        icon.width: 18
+                        icon.height: 18
                         Accessible.name: qsTr("Minimize")
-                        focusPolicy: Qt.StrongFocus
                         onClicked: miniWindow.showMinimized()
-                        ToolTip.text: qsTr("Minimize")
-                        ToolTip.visible: hovered
-
                         background: Rectangle {
-                            color: !parent.enabled ? "transparent"
-                                  : parent.pressed ? Theme.cyan
-                                  : parent.visualFocus ? Theme.border
-                                  : parent.hovered ? Theme.border
-                                  : "transparent"
-                            border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                            border.width: parent.visualFocus ? 2 : 0
+                            color: parent.hovered ? Theme.hoverSurface
+                                                  : "transparent"
                             radius: Theme.radiusSm
                         }
                     }
-
                     ToolButton {
                         id: closeButton
+                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.secondaryText
-                        icon.width: 14
-                        icon.height: 14
+                        icon.width: 18
+                        icon.height: 18
                         Accessible.name: qsTr("Close")
-                        focusPolicy: Qt.StrongFocus
                         onClicked: windows.requestClose()
-                        ToolTip.text: qsTr("Close")
-                        ToolTip.visible: hovered
-
                         background: Rectangle {
-                            color: !parent.enabled ? "transparent"
-                                  : parent.pressed ? Theme.favoriteRed
-                                  : parent.visualFocus ? Theme.border
-                                  : parent.hovered ? Theme.favoriteRed
-                                  : "transparent"
-                            border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                            border.width: parent.visualFocus ? 2 : 0
+                            color: parent.hovered ? Theme.favoriteRed
+                                                  : "transparent"
                             radius: Theme.radiusSm
                         }
                     }
                 }
+
+                DragHandler {
+                    target: null
+                    acceptedButtons: Qt.LeftButton
+                    onActiveChanged: if (active) miniWindow.startSystemMove()
+                }
             }
 
-            // --- Main content: cover / favorite / metadata / waveform / transport / volume ---
             MiniPlayerControls {
                 id: controls
                 Layout.fillWidth: true
@@ -201,17 +170,10 @@ Window {
                 windows: miniWindow.windows
             }
         }
+    }
 
-        // Drag the frameless window from anywhere not covered by a button.
-        // `z: -1` keeps this MouseArea behind the RowLayout so ToolButtons
-        // receive presses first; no event forwarding is required.
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
-            z: -1
-            onPressed: function(mouse) {
-                miniWindow.startSystemMove()
-            }
-        }
+    WindowResizeHandles {
+        objectName: "miniResizeHandles"
+        targetWindow: miniWindow
     }
 }

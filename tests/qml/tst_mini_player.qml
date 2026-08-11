@@ -93,10 +93,44 @@ TestCase {
 
     function test_mini_and_main_share_state() {
         playbackFake.publishPlaying(25000, 286000)
+        compare(findChild(miniPlayer, "miniPlayButtonBody").border.color.toString(),
+                Theme.playRingPlaying.toString())
         compare(mainPlayer.positionMs, 25000, "main window should mirror shared playback position")
         compare(miniPlayer.positionMs, 25000, "mini window should mirror shared playback position")
         mouseClick(miniPlayer.playPauseButton)
         compare(playbackFake.pauseCalls, 1, "clicking mini playPause should call playback.togglePlayback once")
+        compare(findChild(miniPlayer, "miniPlayButtonBody").border.color.toString(),
+                Theme.playRingPaused.toString())
+        compare(findChild(miniPlayer, "miniPlayButtonBody").border.width, 3)
+    }
+
+    function test_windows_keep_a_safe_position_when_playback_is_released() {
+        miniPlayer.playback = null
+        mainPlayer.playback = null
+        compare(miniPlayer.positionMs, 0)
+        compare(mainPlayer.positionMs, 0)
+        miniPlayer.playback = playbackFake
+        mainPlayer.playback = playbackFake
+    }
+
+    function test_mini_waveform_prefers_exact_decoded_duration() {
+        var controls = findChild(miniPlayer, "miniPlayerControls")
+        verify(controls)
+        playbackFake.durationMs = 307000
+        controls.playback.durationMs = 240000
+        controls.waveformDurationMs = 301250
+        compare(controls.effectiveDurationMs, 240000)
+        controls.waveformDurationMs = 0
+    }
+
+    function test_mini_player_can_cycle_the_shared_waveform_mode() {
+        var button = findChild(miniPlayer, "miniWaveformModeButton")
+        verify(button)
+        compare(button.icon.source.toString().endsWith("/waveform-switch.svg"), true)
+        var previousMode = SettingsController.waveformMode
+        mouseClick(button)
+        compare(SettingsController.waveformMode, (previousMode + 1) % 3)
+        SettingsController.waveformMode = previousMode
     }
 
     function test_pin_and_restore_are_real_actions() {
@@ -105,6 +139,71 @@ TestCase {
         mouseClick(miniPlayer.restoreButton)
         compare(windowController.mainVisible, true, "restore button should call windows.showMain() -> mainVisible=true")
         compare(windowController.miniVisible, false, "restore button should call windows.showMain() -> miniVisible=false")
+    }
+
+    function test_reference_layout_and_scalable_window() {
+        compare(miniPlayer.width, 588)
+        compare(miniPlayer.height, 186)
+        compare(miniPlayer.minimumWidth, 588)
+        compare(miniPlayer.minimumHeight, 186)
+        verify(findChild(miniPlayer, "miniCover"))
+        verify(findChild(miniPlayer, "miniTrackTitle"))
+        var volume = findChild(miniPlayer, "miniVolumeSlider")
+        verify(volume)
+        verify(volume.parent.parent.x + volume.parent.parent.width <= miniPlayer.width,
+               "mini volume flyout must remain inside the window canvas")
+        verify(findChild(miniPlayer, "miniRating"))
+        verify(findChild(miniPlayer, "miniWaveform"))
+        verify(findChild(miniPlayer, "miniTransport"))
+        var play = miniPlayer.playPauseButton
+        var slider = findChild(miniPlayer, "miniVolumeSlider")
+        var percent = findChild(miniPlayer, "miniVolumePercent")
+        verify(play)
+        verify(slider)
+        verify(percent)
+        compare(findChild(miniPlayer, "miniRating").spacing, 2)
+        compare(findChild(miniPlayer, "miniFavoriteButton").icon.width, 21)
+        compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)
+        compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize, 11)
+        compare(play.width, 34)
+        compare(play.height, 34)
+        compare(slider.visible, false)
+        compare(slider.width, 96)
+        verify(slider.handle.width <= 8)
+        playbackFake.setVolume(0.37)
+        tryCompare(percent, "text", "37%")
+    }
+
+    function test_mode_icons_match_main_player_and_follow_system_foreground() {
+        var button = findChild(miniPlayer, "miniModeButton")
+        verify(button)
+        var cases = [
+            { mode: PlaybackController.Sequential, icon: "/play-order-line.svg" },
+            { mode: PlaybackController.Shuffle, icon: "/shuffle-arrows-line.svg" },
+            { mode: PlaybackController.RepeatOne, icon: "/repeat-one-line-alt.svg" },
+            { mode: PlaybackController.RepeatAll, icon: "/repeat-list-line.svg" }
+        ]
+
+        for (var index = 0; index < cases.length; ++index) {
+            playbackFake.mode = cases[index].mode
+            verify(button.icon.source.toString().endsWith(cases[index].icon),
+                   "mini player must share the four playback mode icons")
+            compare(button.icon.color.toString(),
+                    Theme.iconPrimary.toString())
+        }
+        playbackFake.mode = PlaybackController.Sequential
+    }
+
+    function test_mini_spectrum_uses_same_fixed_bars_as_main() {
+        var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 2
+        var waveform = findChild(miniPlayer, "miniWaveform")
+        verify(waveform)
+        tryCompare(waveform, "visualMode", 2)
+        compare(waveform.lineWidth, 3)
+        compare(waveform.spectrumBarCount, 128)
+        compare(waveform.spectrumBarGap, 2)
+        SettingsController.waveformMode = previousMode
     }
 
     function test_native_close_routes_through_window_controller() {

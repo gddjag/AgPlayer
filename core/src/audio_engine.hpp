@@ -1,6 +1,7 @@
 #pragma once
 
 #include "playback_session.hpp"
+#include "graphic_equalizer.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -43,6 +44,16 @@ struct OutputDevice {
     std::string name;
 };
 
+struct EqualizerStatus {
+    std::uint64_t revision = 0;
+    bool enabled = true;
+    bool bypassed = false;
+    bool auto_clip_protection = true;
+    int sample_rate = 0;
+    bool active = false;
+    double protection_db = 0.0;
+};
+
 class AudioEngine final {
 public:
     AudioEngine(AudioBackend backend, std::size_t buffer_frames);
@@ -62,6 +73,9 @@ public:
     ag_result previous() noexcept;
     ag_result set_mode(PlaybackMode mode) noexcept;
     ag_result set_volume(float volume) noexcept;
+    ag_result set_equalizer(const GraphicEqSettings& settings,
+                            std::uint64_t revision) noexcept;
+    [[nodiscard]] EqualizerStatus equalizer_status() const noexcept;
     void set_muted(bool muted) noexcept;
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
     void render(float* output, std::size_t requested_frames) noexcept;

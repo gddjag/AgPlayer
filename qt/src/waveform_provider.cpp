@@ -32,18 +32,15 @@ ag_waveform_aggregation aggregationForSettings(
                : AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
 }
 
-QString cacheFilePathFor(SettingsController* settings,
-                         const QString& sourcePath,
-                         const ag_waveform_aggregation aggregation)
+QString cacheFilePathForDirectory(
+    const QString& directory,
+    const QString& sourcePath,
+    const ag_waveform_aggregation aggregation)
 {
-    if (settings == nullptr || sourcePath.isEmpty()) {
+    if (directory.isEmpty() || sourcePath.isEmpty()) {
         return {};
     }
-    const QString dir = settings->cacheDirectory();
-    if (dir.isEmpty()) {
-        return {};
-    }
-    if (!QDir().mkpath(dir)) {
+    if (!QDir().mkpath(directory)) {
         return {};
     }
     const std::string key =
@@ -57,8 +54,18 @@ QString cacheFilePathFor(SettingsController* settings,
             : aggregation == AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE
                   ? QStringLiteral("-average")
                   : QString();
-    return QDir(dir).filePath(QString::fromStdString(key) + suffix
-                              + QStringLiteral(".agwf"));
+    return QDir(directory).filePath(QString::fromStdString(key) + suffix
+                                    + QStringLiteral(".agwf"));
+}
+
+QString cacheFilePathFor(SettingsController* settings,
+                         const QString& sourcePath,
+                         const ag_waveform_aggregation aggregation)
+{
+    return settings != nullptr
+               ? cacheFilePathForDirectory(
+                     settings->cacheDirectory(), sourcePath, aggregation)
+               : QString();
 }
 
 QVariantList peaksFromVector(const std::vector<float>& peaks)
@@ -93,6 +100,8 @@ QVariantMap layersFromWaveform(const ag_waveform* waveform)
     layers[QStringLiteral("bass")] = layerToList(waveform, AG_WAVEFORM_LAYER_BASS);
     layers[QStringLiteral("mid")] = layerToList(waveform, AG_WAVEFORM_LAYER_MID);
     layers[QStringLiteral("high")] = layerToList(waveform, AG_WAVEFORM_LAYER_HIGH);
+    layers[QStringLiteral("_durationMs")] =
+        static_cast<qlonglong>(ag_waveform_duration_ms(waveform));
     return layers;
 }
 
@@ -122,6 +131,7 @@ void saveWaveformCache(const QString& cachePath,
         data.high[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, index);
     }
     data.bpm = ag_waveform_bpm(waveform);
+    data.duration_ms = ag_waveform_duration_ms(waveform);
     if (!agplayer::WaveformCache::save_v2(
             filesystemPath(cachePath), filesystemPath(sourcePath), data)) {
         RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Waveform"),
@@ -136,6 +146,10 @@ WaveformProvider::WaveformProvider(SettingsController* settings, QObject* parent
     : QObject(parent)
     , settings_(settings)
 {
+    currentAnalysisPool_.setMaxThreadCount(1);
+    currentAnalysisPool_.setThreadPriority(QThread::HighPriority);
+    prefetchPool_.setMaxThreadCount(1);
+    prefetchPool_.setThreadPriority(QThread::LowPriority);
     progressTimer_ = new QTimer(this);
     progressTimer_->setInterval(100);
     connect(progressTimer_, &QTimer::timeout, this, [this] {
@@ -154,7 +168,7 @@ WaveformProvider::~WaveformProvider()
         activeCancelToken_ = nullptr;
     }
     if (watcher_ != nullptr) {
-        disconnect(watcher_, nullptr, this, nullptr);
+        watcher_->disconnect(this);
         delete watcher_;
         watcher_ = nullptr;
     }
@@ -164,6 +178,11 @@ WaveformProvider::~WaveformProvider()
 double WaveformProvider::analysisProgress() const noexcept
 {
     return analysisProgress_;
+}
+
+qulonglong WaveformProvider::activeGeneration() const noexcept
+{
+    return activeGeneration_;
 }
 
 void WaveformProvider::setAnalysisProgress(double progress)
@@ -179,6 +198,27 @@ void WaveformProvider::setAnalysisProgress(double progress)
 
 void WaveformProvider::loadForTrack(const QString& path)
 {
+    loadForTrack(path, path);
+}
+
+qulonglong WaveformProvider::loadForTrack(const QString& trackId,
+                                          const QString& path)
+{
+    const ag_waveform_aggregation requestedAggregation =
+        aggregationForSettings(settings_);
+    if (!path.isEmpty() && path == currentPath_
+        && trackId == currentTrackId_
+        && requestedAggregation == currentAggregation_) {
+        if (watcher_ != nullptr) {
+            return activeGeneration_;
+        }
+        if (!currentLayers_.isEmpty()) {
+            setAnalysisProgress(1.0);
+            emit waveformReady(path, currentLayers_);
+            return activeGeneration_;
+        }
+    }
+
     // Cancel and discard any running analysis. The background task keeps its
     // own copy of the cancel token, so we only cancel here and let it destroy
     // the token when it finishes.
@@ -187,7 +227,7 @@ void WaveformProvider::loadForTrack(const QString& path)
             ag_cancel_token_cancel(activeCancelToken_);
             activeCancelToken_ = nullptr;
         }
-        disconnect(watcher_, nullptr, this, nullptr);
+        watcher_->disconnect(this);
         delete watcher_;
         watcher_ = nullptr;
     }
@@ -195,12 +235,16 @@ void WaveformProvider::loadForTrack(const QString& path)
     progressTimer_->stop();
 
     currentPath_ = path;
-    currentAggregation_ = aggregationForSettings(settings_);
+    currentTrackId_ = trackId;
+    currentLayers_.clear();
+    ++activeGeneration_;
+    emit activeGenerationChanged();
+    currentAggregation_ = requestedAggregation;
     setAnalysisProgress(path.isEmpty() ? 1.0 : 0.0);
 
     if (path.isEmpty()) {
         emit waveformReady(path, QVariantMap{});
-        return;
+        return activeGeneration_;
     }
 
     // Try cache first: v2 multi-layer format, then v1 legacy format.
@@ -216,18 +260,22 @@ void WaveformProvider::loadForTrack(const QString& path)
             layers[QStringLiteral("bass")] = peaksFromVector(data.bass);
             layers[QStringLiteral("mid")] = peaksFromVector(data.mid);
             layers[QStringLiteral("high")] = peaksFromVector(data.high);
-            setAnalysisProgress(1.0);
-            emit waveformReady(path, layers);
-            return;
+            layers[QStringLiteral("_trackId")] = currentTrackId_;
+            layers[QStringLiteral("_generation")] = activeGeneration_;
+            layers[QStringLiteral("_sampleCount")] =
+                static_cast<int>(data.mix.size());
+            layers[QStringLiteral("_cacheVersion")] = 2;
+            if (data.duration_ms > 0U) {
+                layers[QStringLiteral("_durationMs")] =
+                    static_cast<qlonglong>(data.duration_ms);
+                currentLayers_ = layers;
+                setAnalysisProgress(1.0);
+                emit waveformReady(path, layers);
+                return activeGeneration_;
+            }
         }
-        std::vector<float> peaks;
-        if (agplayer::WaveformCache::load(cache, source, peaks)) {
-            QVariantMap layers;
-            layers[QStringLiteral("mix")] = peaksFromVector(peaks);
-            setAnalysisProgress(1.0);
-            emit waveformReady(path, layers);
-            return;
-        }
+        // Legacy caches do not carry a decoded duration. Rebuild once so
+        // drawing, progress and seek share the same exact timeline.
     }
 
     // Start background analysis.
@@ -237,16 +285,21 @@ void WaveformProvider::loadForTrack(const QString& path)
     activeCancelToken_ = cancelToken;
 
     const std::string source = path.toUtf8().toStdString();
+    const QString sourceTrackId = currentTrackId_;
+    const quint64 sourceGeneration = activeGeneration_;
     constexpr std::size_t targetPoints = 2000;
 
     watcher_ = new QFutureWatcher<Job>(this);
     connect(watcher_, &QFutureWatcher<Job>::finished,
             this, &WaveformProvider::onAnalysisFinished);
     QFuture<Job> future = QtConcurrent::run(
-        [source, targetPoints, cancelToken, progress,
+        &currentAnalysisPool_,
+        [source, sourceTrackId, sourceGeneration, targetPoints, cancelToken, progress,
          aggregation = currentAggregation_]() mutable {
             Job job;
             job.path = QString::fromStdString(source);
+            job.trackId = sourceTrackId;
+            job.generation = sourceGeneration;
             job.aggregation = aggregation;
             job.cancelToken = cancelToken;
             job.progress = progress;
@@ -268,6 +321,64 @@ void WaveformProvider::loadForTrack(const QString& path)
         });
     watcher_->setFuture(future);
     progressTimer_->start();
+    return activeGeneration_;
+}
+
+void WaveformProvider::prefetchTracks(const QStringList& paths)
+{
+    const QString cacheDirectory =
+        settings_ != nullptr ? settings_->cacheDirectory() : QString();
+    const ag_waveform_aggregation aggregation =
+        aggregationForSettings(settings_);
+    if (cacheDirectory.isEmpty() || paths.isEmpty()) {
+        return;
+    }
+
+    (void)QtConcurrent::run(
+        &prefetchPool_,
+        [paths, cacheDirectory, aggregation] {
+            constexpr std::size_t targetPoints = 2000;
+            for (const QString& path : paths) {
+                if (path.isEmpty()) {
+                    continue;
+                }
+                const QString cachePath =
+                    cacheFilePathForDirectory(
+                        cacheDirectory, path, aggregation);
+                if (cachePath.isEmpty()) {
+                    continue;
+                }
+                const std::filesystem::path sourcePath = filesystemPath(path);
+                const std::filesystem::path cacheFile =
+                    filesystemPath(cachePath);
+                agplayer::WaveformCacheData cached;
+                std::vector<float> legacy;
+                if (agplayer::WaveformCache::load_v2(
+                        cacheFile, sourcePath, cached)
+                    || agplayer::WaveformCache::load(
+                        cacheFile, sourcePath, legacy)) {
+                    continue;
+                }
+
+                ag_waveform* waveform = nullptr;
+                const QByteArray encodedPath = path.toUtf8();
+                const ag_result result = ag_track_analysis_with_aggregation(
+                    encodedPath.constData(),
+                    targetPoints,
+                    aggregation,
+                    nullptr,
+                    nullptr,
+                    nullptr,
+                    &waveform,
+                    nullptr);
+                if (result == AG_OK && waveform != nullptr) {
+                    saveWaveformCache(cachePath, path, waveform);
+                }
+                if (waveform != nullptr) {
+                    ag_waveform_destroy(waveform);
+                }
+            }
+        });
 }
 
 void WaveformProvider::cancelForTrack(const QString& path)
@@ -280,13 +391,16 @@ void WaveformProvider::cancelForTrack(const QString& path)
         activeCancelToken_ = nullptr;
     }
     if (watcher_ != nullptr) {
-        disconnect(watcher_, nullptr, this, nullptr);
+        watcher_->disconnect(this);
         delete watcher_;
         watcher_ = nullptr;
     }
     activeProgress_.reset();
     progressTimer_->stop();
     currentPath_.clear();
+    currentTrackId_.clear();
+    ++activeGeneration_;
+    emit activeGenerationChanged();
     setAnalysisProgress(0.0);
 }
 
@@ -311,6 +425,8 @@ void WaveformProvider::onAnalysisFinished()
 
     if (job.result != AG_OK || job.waveform == nullptr
         || job.path != currentPath_
+        || job.trackId != currentTrackId_
+        || job.generation != activeGeneration_
         || job.aggregation != currentAggregation_) {
         if (job.waveform != nullptr) {
             ag_waveform_destroy(job.waveform);
@@ -331,7 +447,14 @@ void WaveformProvider::onAnalysisFinished()
     }
 
     setAnalysisProgress(1.0);
-    emit waveformReady(currentPath_, waveformToVariantMap(job.waveform));
+    QVariantMap result = waveformToVariantMap(job.waveform);
+    result[QStringLiteral("_trackId")] = currentTrackId_;
+    result[QStringLiteral("_generation")] = activeGeneration_;
+    result[QStringLiteral("_sampleCount")] =
+        result.value(QStringLiteral("mix")).toList().size();
+    result[QStringLiteral("_cacheVersion")] = 2;
+    currentLayers_ = result;
+    emit waveformReady(currentPath_, result);
     ag_waveform_destroy(job.waveform);
 }
 

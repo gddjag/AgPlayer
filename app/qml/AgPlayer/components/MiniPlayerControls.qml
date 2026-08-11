@@ -3,20 +3,21 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
-// Content panel for the mini player. Exposes the same `playback`/`windows`
-// properties as MiniPlayerWindow so it can be reused or tested in isolation.
-// All bindings route to the injected `playback` (defaulting to the production
-// singleton) so the mini window shares state with the main window without
-// creating a second controller/core handle.
 Rectangle {
     id: root
+    objectName: "miniPlayerControls"
     color: "transparent"
 
     property var playback: PlaybackController
     property var windows: WindowController
     property var rawWaveformLayers: ({})
+    property real waveformDurationMs: 0
+    // The decoder's clock is authoritative for seek and playback progress.
+    // Analysis duration is only a fallback before a playable source exists.
+    readonly property real effectiveDurationMs: playback && playback.durationMs > 0
+                                                ? playback.durationMs
+                                                : waveformDurationMs
 
-    // Aliases exposed so MiniPlayerWindow (and tests) can reach in by name.
     property alias playPauseButton: playPauseButton
     property alias previousButton: previousButton
     property alias nextButton: nextButton
@@ -26,492 +27,360 @@ Rectangle {
     property alias volumeSlider: volumeSlider
 
     function formatTime(ms): string {
-        if (ms <= 0)
-            return "00:00"
-        var totalSec = Math.floor(ms / 1000)
-        var min = Math.floor(totalSec / 60)
-        var sec = totalSec % 60
-        return (min < 10 ? "0" : "") + min + ":"
-                + (sec < 10 ? "0" : "") + sec
+        var total = Math.max(0, Math.floor(ms / 1000))
+        return Math.floor(total / 60) + ":" + ((total % 60) < 10 ? "0" : "") + (total % 60)
     }
-
     function currentRow(): int {
-        return LibraryModel.indexForTrackId(playback.currentTrackId)
+        return playback ? LibraryModel.indexForTrackId(playback.currentTrackId) : -1
     }
-
     function currentTrackValue(role): variant {
-        var row = root.currentRow()
-        if (row < 0 || row >= LibraryModel.rowCount())
-            return ""
-        var idx = LibraryModel.index(row, 0)
-        return LibraryModel.data(idx, role)
+        var row = currentRow()
+        return row >= 0 ? LibraryModel.data(LibraryModel.index(row, 0), role) : ""
     }
-
-    function currentTrackFavorite(): bool {
-        var row = root.currentRow()
-        if (row < 0 || row >= LibraryModel.rowCount())
-            return false
-        var idx = LibraryModel.index(row, 0)
-        return LibraryModel.data(idx, LibraryModel.FavoriteRole)
-    }
-
-    function coverSource(): string {
-        var url = root.currentTrackValue(LibraryModel.CoverUrlRole)
-        if (url && url !== "")
-            return url
-        return "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-    }
-
+    function currentTrackFavorite(): bool { return !!currentTrackValue(LibraryModel.FavoriteRole) }
     function currentTrackRating(): int {
-        if (typeof LibraryModel.RatingRole === "undefined")
-            return 0
-        var raw = root.currentTrackValue(LibraryModel.RatingRole)
-        var value = parseInt(raw, 10)
-        if (isNaN(value))
-            return 0
-        return Math.max(0, Math.min(5, value))
+        var value = parseInt(currentTrackValue(LibraryModel.RatingRole), 10)
+        return isNaN(value) ? 0 : Math.max(0, Math.min(5, value))
     }
-
-    function currentTrackBpm(): string {
-        if (typeof LibraryModel.BpmRole === "undefined")
-            return "--"
-        var raw = root.currentTrackValue(LibraryModel.BpmRole)
-        var value = parseFloat(raw)
-        if (isNaN(value) || value <= 0)
-            return "--"
-        return Math.round(value) + " BPM"
+    function coverSource(): string {
+        var cover = currentTrackValue(LibraryModel.CoverUrlRole)
+        return cover ? cover : "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
     }
-
-    function formatFileSize(bytes): string {
-        if (bytes <= 0)
-            return ""
-        if (bytes >= 1024 * 1024 * 1024)
-            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB"
-        if (bytes >= 1024 * 1024)
-            return (bytes / (1024 * 1024)).toFixed(1) + " MB"
-        if (bytes >= 1024)
-            return Math.round(bytes / 1024) + " KB"
-        return bytes + " B"
+    function shapeSpectrum(values) {
+        var source = values || []
+        if (source.length === 0)
+            return []
+        var half = 64
+        var sourcePeak = 0
+        for (var sourceOffset = 0; sourceOffset < source.length; ++sourceOffset)
+            sourcePeak = Math.max(sourcePeak, Number(source[sourceOffset]) || 0)
+        var gain = sourcePeak > 0 ? Math.max(1, 1.0 / sourcePeak) : 0
+        var result = new Array(half * 2)
+        for (var index = 0; index < half; ++index) {
+            var sourceIndex = Math.min(
+                source.length - 1, Math.floor(index * source.length / half))
+            var target = Math.min(1, Math.max(
+                0, (Number(source[sourceIndex]) || 0) * gain))
+            result[index] = target
+            result[half * 2 - 1 - index] = target
+        }
+        return result
     }
-
     function applyWaveformMode() {
-        if (SettingsController.waveformMode === 2) {
-            waveform.peaks = playback.spectrum
-            return
-        }
-        waveform.layers = rawWaveformLayers
+        if (SettingsController.waveformMode === 2)
+            waveform.peaks = root.shapeSpectrum(playback ? playback.spectrum : [])
+        else waveform.layers = { mix: rawWaveformLayers.mix || [] }
     }
-
     function loadWaveform() {
-        var path = root.currentTrackValue(LibraryModel.PathRole)
-        if (path.length === 0) {
-            rawWaveformLayers = {}
-            applyWaveformMode()
-            return
+        var path = currentTrackValue(LibraryModel.PathRole)
+        rawWaveformLayers = ({}); waveformDurationMs = 0
+        waveform.layers = ({}); waveform.peaks = []
+        if (path && playback) WaveformProvider.loadForTrack(playback.currentTrackId, path)
+    }
+    function modeName(): string {
+        switch (playback ? playback.mode : PlaybackController.Sequential) {
+        case PlaybackController.RepeatOne: return qsTr("单曲循环")
+        case PlaybackController.Shuffle: return qsTr("随机播放")
+        case PlaybackController.RepeatAll: return qsTr("列表循环")
+        default: return qsTr("顺序播放")
         }
-        WaveformProvider.loadForTrack(path)
     }
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.spacingMd
-        anchors.rightMargin: Theme.spacingMd
-        spacing: Theme.spacingSm
+        anchors.leftMargin: 14; anchors.rightMargin: 14
+        anchors.topMargin: 8; anchors.bottomMargin: 4
+        spacing: 14
 
-        // --- Left: brand mark + cover ---
-        Item {
-            Layout.preferredWidth: 44
-            Layout.preferredHeight: 44
-            Layout.alignment: Qt.AlignVCenter
-
+        Rectangle {
+            objectName: "miniCover"
+            Layout.preferredWidth: 128; Layout.preferredHeight: 128
+            radius: Theme.radiusSm; color: Theme.panel; clip: true
             Image {
                 anchors.fill: parent
-                source: root.coverSource()
-                sourceSize.width: 44
-                sourceSize.height: 44
-                fillMode: Image.PreserveAspectFit
+                anchors.margins: root.currentRow() >= 0 ? 0 : 16
+                source: root.coverSource(); fillMode: Image.PreserveAspectFit; smooth: true
             }
         }
 
-        // --- Favorite accent ---
-        ToolButton {
-            id: favoriteButton
-            icon.source: root.currentTrackFavorite()
-                         ? Theme.icon("heart-fill")
-                         : Theme.icon("heart-line")
-            icon.color: root.currentTrackFavorite()
-                        ? Theme.favoriteRed
-                        : Theme.secondaryText
-            icon.width: 16
-            icon.height: 16
-            Accessible.name: root.currentTrackFavorite()
-                             ? qsTr("Remove from favorites")
-                             : qsTr("Add to favorites")
-            focusPolicy: Qt.StrongFocus
-            enabled: root.currentRow() >= 0
-            onClicked: playback.toggleFavorite()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        // --- Center: metadata + badges + waveform ---
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: 2
-
+            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 1
             RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingXs
-
+                Layout.fillWidth: true; Layout.preferredHeight: 18; spacing: 3
+                Text {
+                    objectName: "miniTrackTitle"
+                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
+                    color: Theme.primaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 16; font.weight: Font.DemiBold
+                    elide: Text.ElideRight; Layout.fillWidth: true
+                }
                 RowLayout {
-                    spacing: 1
-                    Layout.alignment: Qt.AlignVCenter
-                    visible: SettingsController.autoReadRating
-                             && root.currentRow() >= 0
-
+                    objectName: "miniRating"; spacing: 2
                     Repeater {
                         model: 5
                         delegate: ThemedIcon {
-                            source: index < root.currentTrackRating()
-                                    ? Theme.icon("star-fill")
-                                    : Theme.icon("star-line")
-                            tint: index < root.currentTrackRating()
-                                  ? Theme.ratingColor(index) : Theme.iconSecondary
-                            sourceSize.width: 10
-                            sourceSize.height: 10
-                            Layout.preferredWidth: 12
-                            Layout.preferredHeight: 12
+                            required property int index
+                            source: index < root.currentTrackRating() ? Theme.icon("star-fill") : Theme.icon("star-line")
+                            tint: index < root.currentTrackRating() ? Theme.ratingColor(index) : Theme.iconSecondary
+                            sourceSize.width: 16; sourceSize.height: 16
+                            Layout.preferredWidth: 17; Layout.preferredHeight: 18
                         }
                     }
                 }
-
-                Text {
-                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("No track loaded")
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    ToolTip.text: text
-                    ToolTip.visible: miniTitleHover.hovered && text !== qsTr("No track loaded")
-                    ToolTip.delay: 500
-
-                    HoverHandler {
-                        id: miniTitleHover
-                    }
+                ToolButton {
+                    id: favoriteButton
+                    objectName: "miniFavoriteButton"
+                    Layout.preferredWidth: 32; Layout.preferredHeight: 32
+                    icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
+                    icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
+                    icon.width: 21; icon.height: 21; enabled: root.currentRow() >= 0
+                    onClicked: if (playback) playback.toggleFavorite(); background: null
                 }
             }
-
-            RowLayout {
+            Text {
+                text: (root.currentTrackValue(LibraryModel.ArtistRole) || qsTr("未知艺术家"))
+                      + " · " + (root.currentTrackValue(LibraryModel.AlbumRole) || qsTr("未知专辑"))
+                color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 9
+                elide: Text.ElideRight; Layout.fillWidth: true; Layout.preferredHeight: 12
+            }
+            Item {
                 Layout.fillWidth: true
-                spacing: Theme.spacingXs
-
+                Layout.preferredHeight: 50
+                WaveformItem {
+                    id: waveform
+                    objectName: "miniWaveform"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    height: 36
+                    position: playback ? playback.positionMs : 0; duration: root.effectiveDurationMs
+                    visualMode: SettingsController.waveformMode
+                    baseColor: SettingsController.waveformMode === 0
+                               ? SettingsController.waveformSolidBaseColor
+                               : (SettingsController.waveformMode === 2
+                                  ? SettingsController.spectrumSolidColor
+                                  : SettingsController.waveformRgbBaseColor)
+                    progressColor: SettingsController.waveformSolidProgressColor
+                    gradientStartColor: SettingsController.waveformMode === 2
+                                        && SettingsController.spectrumColorMode === 0
+                                        ? SettingsController.spectrumSolidColor
+                                        : SettingsController.spectrumRgbStartColor
+                    gradientMiddleColor: SettingsController.waveformMode === 2
+                                         && SettingsController.spectrumColorMode === 0
+                                         ? SettingsController.spectrumSolidColor
+                                         : SettingsController.spectrumRgbMiddleColor
+                    gradientEndColor: SettingsController.waveformMode === 2
+                                      && SettingsController.spectrumColorMode === 0
+                                      ? SettingsController.spectrumSolidColor
+                                      : SettingsController.spectrumRgbEndColor
+                    rgbProgress: SettingsController.waveformRgbProgress
+                    amplitudeScale: SettingsController.waveformMode === 2
+                                    ? 1.0 : SettingsController.waveformHeight
+                    density: SettingsController.waveformMode === 2
+                             ? 1.0 : SettingsController.waveformDensity
+                    lineWidth: SettingsController.waveformMode === 2
+                                ? 3.0 : SettingsController.waveformThickness
+                    onSeekRequested: positionMs => { if (playback) playback.seek(positionMs) }
+                }
                 Text {
-                    property string artist: root.currentTrackValue(LibraryModel.ArtistRole)
-                    text: artist && artist.length > 0 ? artist : qsTr("Unknown artist")
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 11
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    ToolTip.text: text
-                    ToolTip.visible: miniArtistHover.hovered
-                    ToolTip.delay: 500
-
-                    HoverHandler {
-                        id: miniArtistHover
+                    objectName: "miniElapsedTime"
+                    anchors.left: parent.left; anchors.bottom: parent.bottom
+                    text: root.formatTime(playback ? playback.positionMs : 0)
+                    color: Theme.secondaryText; font.pixelSize: 11
+                }
+                Text {
+                    objectName: "miniDurationTime"
+                    anchors.right: parent.right; anchors.bottom: parent.bottom
+                    text: root.formatTime(playback ? playback.durationMs : 0)
+                    color: Theme.secondaryText; font.pixelSize: 11
+                }
+            }
+            RowLayout {
+                id: transport
+                objectName: "miniTransport"
+                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
+                Item { Layout.fillWidth: true }
+                ToolButton {
+                    id: waveformModeButton
+                    objectName: "miniWaveformModeButton"
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    icon.source: Theme.icon("waveform-switch")
+                    icon.color: Theme.iconPrimary
+                    icon.width: 20
+                    icon.height: 20
+                    Accessible.name: qsTr("切换波形样式")
+                    ToolTip.text: Accessible.name
+                    ToolTip.visible: hovered
+                    onClicked: SettingsController.waveformMode =
+                               (SettingsController.waveformMode + 1) % 3
+                    background: null
+                }
+                ToolButton {
+                    id: modeButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                    objectName: "miniModeButton"
+                    icon.source: !playback || playback.mode === PlaybackController.Sequential ? Theme.icon("play-order-line")
+                               : playback.mode === PlaybackController.Shuffle ? Theme.icon("shuffle-arrows-line")
+                               : playback.mode === PlaybackController.RepeatOne ? Theme.icon("repeat-one-line-alt")
+                               : Theme.icon("repeat-list-line")
+                    icon.color: Theme.iconPrimary; icon.width: 20; icon.height: 20
+                    Accessible.name: root.modeName(); ToolTip.text: Accessible.name; ToolTip.visible: hovered
+                    onClicked: if (playback) playback.cycleMode(); background: null
+                }
+                ToolButton {
+                    id: previousButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                    icon.source: Theme.icon("skip-back-fill"); icon.color: Theme.primaryText
+                    icon.width: 19; icon.height: 19; onClicked: if (playback) playback.previous(); background: null
+                }
+                ToolButton {
+                    id: playPauseButton; Layout.preferredWidth: 34; Layout.preferredHeight: 34
+                    icon.source: playback && playback.state === PlaybackController.Playing ? Theme.icon("pause-fill") : Theme.icon("play-fill")
+                    icon.color: Theme.primaryText; icon.width: 18; icon.height: 18
+                    onClicked: if (playback) playback.togglePlayback()
+                    background: Rectangle {
+                        objectName: "miniPlayButtonBody"
+                        radius: width / 2; color: Theme.panel; border.width: 3
+                        border.color: playback && playback.state === PlaybackController.Playing
+                                      ? Theme.playRingPlaying : Theme.playRingPaused
                     }
                 }
+                ToolButton {
+                    id: nextButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                    icon.source: Theme.icon("skip-forward-fill"); icon.color: Theme.primaryText
+                    icon.width: 19; icon.height: 19; onClicked: if (playback) playback.next(); background: null
+                }
+                Item {
+                    id: volumeControl
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    property bool expanded: false
 
-                Repeater {
-                    model: {
-                        var badges = []
-                        var fmt = root.currentTrackValue(LibraryModel.FormatRole)
-                        if (fmt && fmt.length > 0)
-                            badges.push(fmt.toUpperCase())
-                        var bd = root.currentTrackValue(LibraryModel.BitDepthRole)
-                        if (bd > 0)
-                            badges.push(bd + "-bit")
-                        var sr = root.currentTrackValue(LibraryModel.SampleRateRole)
-                        if (sr > 0)
-                            badges.push((sr / 1000) + " kHz")
-                        var br = root.currentTrackValue(LibraryModel.BitRateRole)
-                        if (br > 0)
-                            badges.push(Math.round(br / 1000) + " kbps")
-                        if (root.currentRow() >= 0) {
-                            var bpm = root.currentTrackBpm()
-                            if (bpm.length > 0)
-                                badges.push(bpm)
+                    Timer {
+                        id: miniVolumeOpenTimer
+                        interval: 120
+                        onTriggered: volumeControl.expanded = true
+                    }
+                    Timer {
+                        id: miniVolumeCloseTimer
+                        interval: 240
+                        onTriggered: {
+                            if (!volumeSlider.pressed && !volumeSlider.activeFocus
+                                    && !flyoutHover.hovered)
+                                volumeControl.expanded = false
                         }
-                        var size = root.currentTrackValue(LibraryModel.FileSizeRole)
-                        if (size > 0)
-                            badges.push(root.formatFileSize(size))
-                        return badges
+                    }
+
+                    ToolButton {
+                        id: muteButton
+                        anchors.fill: parent
+                        icon.source: playback && playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-fill")
+                        icon.color: Theme.primaryText; icon.width: 20; icon.height: 20
+                        onClicked: if (playback) playback.toggleMuted(); background: null
+                    }
+                    HoverHandler {
+                        id: volumeHover
+                        onHoveredChanged: {
+                            if (hovered) {
+                                miniVolumeCloseTimer.stop()
+                                miniVolumeOpenTimer.restart()
+                            } else {
+                                miniVolumeOpenTimer.stop()
+                                miniVolumeCloseTimer.restart()
+                            }
+                        }
                     }
 
                     Rectangle {
-                        color: Theme.panel
+                        id: volumeFlyout
+                        visible: opacity > 0
+                        enabled: volumeControl.expanded
+                        x: volumeControl.expanded ? -(width - parent.width + 4)
+                                                  : -10
+                        y: (parent.height - height) / 2
+                        opacity: volumeControl.expanded ? 1 : 0
+                        z: 20
+                        width: 138
+                        height: 32
+                        radius: Theme.radiusSm
+                        color: Theme.elevated
                         border.color: Theme.border
-                        border.width: 1
-                        radius: 4
-                        implicitWidth: badgeText.implicitWidth + Theme.spacingSm * 2
-                        implicitHeight: badgeText.implicitHeight + 2
 
-                        Text {
-                            id: badgeText
-                            anchors.centerIn: parent
-                            text: modelData
-                            color: Theme.secondaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 9
+                        Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        HoverHandler {
+                            id: flyoutHover
+                            onHoveredChanged: {
+                                if (hovered) miniVolumeCloseTimer.stop()
+                                else miniVolumeCloseTimer.restart()
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 6
+                            spacing: 6
+                            Slider {
+                                id: volumeSlider
+                                objectName: "miniVolumeSlider"
+                                Layout.preferredWidth: 96
+                                Layout.preferredHeight: 24
+                                from: 0; to: 1
+                                value: playback && !playback.muted ? playback.volume : 0
+                                onMoved: if (playback) playback.setVolume(value)
+                                onPressedChanged: {
+                                    if (pressed) {
+                                        miniVolumeCloseTimer.stop()
+                                        volumeControl.expanded = true
+                                    } else {
+                                        miniVolumeCloseTimer.restart()
+                                    }
+                                }
+                                background: Rectangle {
+                                    x: volumeSlider.leftPadding
+                                    y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
+                                    width: volumeSlider.availableWidth; height: 3; radius: 1.5
+                                    color: Theme.border
+                                    Rectangle { width: volumeSlider.visualPosition * parent.width; height: parent.height; radius: parent.radius; color: Theme.accent }
+                                }
+                                handle: Rectangle {
+                                    x: volumeSlider.leftPadding + volumeSlider.visualPosition * (volumeSlider.availableWidth - width)
+                                    y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
+                                    width: 8; height: 8; radius: 4; color: Theme.primaryText
+                                }
+                            }
+                            Text {
+                                objectName: "miniVolumePercent"
+                                text: Math.round((playback && !playback.muted ? playback.volume : 0) * 100) + "%"
+                                color: Theme.primaryText
+                                font.pixelSize: 9
+                                Layout.preferredWidth: 26
+                            }
                         }
                     }
                 }
-            }
-
-            WaveformItem {
-                id: waveform
-                Layout.fillWidth: true
-                Layout.preferredHeight: 28
-                Layout.minimumHeight: 20
-                layers: ({})
-                position: playback.positionMs
-                duration: playback.durationMs
-                visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformMode === 0
-                           ? SettingsController.waveformSolidBaseColor
-                           : SettingsController.waveformRgbBaseColor
-                progressColor: SettingsController.waveformSolidProgressColor
-                gradientStartColor: SettingsController.waveformRgbStartColor
-                gradientMiddleColor: SettingsController.waveformRgbMiddleColor
-                gradientEndColor: SettingsController.waveformRgbEndColor
-                rgbProgress: SettingsController.waveformRgbProgress
-                amplitudeScale: SettingsController.waveformHeight
-                density: SettingsController.waveformDensity
-                lineWidth: SettingsController.waveformThickness
-                clip: true
-                ToolTip.visible: SettingsController.waveformHoverTimePreview
-                                 && hoverPosition >= 0
-                ToolTip.text: root.formatTime(hoverPosition)
-            }
-
-            Connections {
-                target: playback
-                function onTrackIndexChanged() { root.loadWaveform() }
-                function onCurrentTrackIdChanged() { root.loadWaveform() }
-                function onSpectrumChanged() {
-                    if (SettingsController.waveformMode === 2)
-                        waveform.peaks = playback.spectrum
-                }
-            }
-
-            Connections {
-                target: WaveformProvider
-                function onWaveformReady(path, layers) {
-                    var currentPath = root.currentTrackValue(LibraryModel.PathRole)
-                    if (path === currentPath) {
-                        root.rawWaveformLayers = layers
-                        root.applyWaveformMode()
-                    }
-                }
-            }
-
-            Connections {
-                target: SettingsController
-                function onWaveformModeChanged() {
-                    root.applyWaveformMode()
-                }
-            }
-
-            Component.onCompleted: root.loadWaveform()
-        }
-
-        // --- Transport: previous / circular play-pause / next ---
-        ToolButton {
-            id: previousButton
-            icon.source: Theme.icon("skip-back-fill")
-            icon.color: Theme.primaryText
-            icon.width: 18
-            icon.height: 18
-            Accessible.name: qsTr("Previous track")
-            focusPolicy: Qt.StrongFocus
-            onClicked: playback.previous()
-            ToolTip.text: qsTr("Previous")
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        ToolButton {
-            id: playPauseButton
-            icon.source: playback.state === PlaybackController.Playing
-                         ? Theme.icon("pause-fill")
-                         : Theme.icon("play-fill")
-            icon.color: Theme.cyan
-            icon.width: 22
-            icon.height: 22
-            Accessible.name: playback.state === PlaybackController.Playing
-                             ? qsTr("Pause")
-                             : qsTr("Play")
-            focusPolicy: Qt.StrongFocus
-            onClicked: playback.togglePlayback()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            // Circular primary button: filled cyan disc with soft glow on hover.
-            background: Rectangle {
-                implicitWidth: 40
-                implicitHeight: 40
-                radius: width / 2
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Theme.cyan }
-                    GradientStop { position: 1.0; color: Theme.violet }
-                }
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                opacity: !parent.enabled ? 0.4
-                       : parent.pressed ? 0.7
-                       : parent.hovered ? 0.9
-                       : 1.0
-            }
-        }
-
-        ToolButton {
-            id: nextButton
-            icon.source: Theme.icon("skip-forward-fill")
-            icon.color: Theme.primaryText
-            icon.width: 18
-            icon.height: 18
-            Accessible.name: qsTr("Next track")
-            focusPolicy: Qt.StrongFocus
-            onClicked: playback.next()
-            ToolTip.text: qsTr("Next")
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        // --- Mode toggle ---
-        ToolButton {
-            id: modeButton
-            icon.source: {
-                switch (playback.mode) {
-                case PlaybackController.RepeatOne:
-                    return Theme.icon("repeat-one-fill")
-                case PlaybackController.Shuffle:
-                    return Theme.icon("shuffle-fill")
-                default:
-                    return Theme.icon("repeat-fill")
-                }
-            }
-            icon.color: playback.mode === PlaybackController.Sequential
-                        ? Theme.secondaryText
-                        : Theme.cyan
-            icon.width: 16
-            icon.height: 16
-            Accessible.name: {
-                switch (playback.mode) {
-                case PlaybackController.RepeatOne:
-                    return qsTr("Repeat one")
-                case PlaybackController.Shuffle:
-                    return qsTr("Shuffle")
-                case PlaybackController.RepeatAll:
-                    return qsTr("Repeat all")
-                default:
-                    return qsTr("Sequential")
-                }
-            }
-            focusPolicy: Qt.StrongFocus
-            onClicked: playback.cycleMode()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        // --- Volume: mute toggle + compact slider ---
-        ToolButton {
-            id: muteButton
-            icon.source: playback.muted
-                         ? Theme.icon("volume-mute-fill")
-                         : Theme.icon("volume-up-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 16
-            icon.height: 16
-            Accessible.name: playback.muted ? qsTr("Unmute") : qsTr("Mute")
-            focusPolicy: Qt.StrongFocus
-            onClicked: playback.toggleMuted()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        Slider {
-            id: volumeSlider
-            from: 0
-            to: 1
-            onMoved: playback.setVolume(value)
-            Layout.preferredWidth: 80
-            Accessible.name: qsTr("Volume")
-            focusPolicy: Qt.StrongFocus
-
-            Binding on value {
-                value: playback.muted ? 0 : playback.volume
-                restoreMode: Binding.RestoreBindingOrValue
+                Item { Layout.fillWidth: true }
             }
         }
     }
+
+    Connections {
+        target: playback; ignoreUnknownSignals: true
+        function onTrackIndexChanged() { root.loadWaveform() }
+        function onCurrentTrackIdChanged() { root.loadWaveform() }
+        function onSpectrumChanged() { if (SettingsController.waveformMode === 2) root.applyWaveformMode() }
+    }
+    Connections {
+        target: WaveformProvider
+        function onWaveformReady(path, layers) {
+            if (path === root.currentTrackValue(LibraryModel.PathRole)) {
+                root.rawWaveformLayers = layers
+                root.waveformDurationMs = Math.max(
+                    0, Number(layers._durationMs) || 0)
+                root.applyWaveformMode()
+            }
+        }
+    }
+    Connections { target: SettingsController; function onWaveformModeChanged() { root.applyWaveformMode() } }
+    Component.onCompleted: root.loadWaveform()
 }

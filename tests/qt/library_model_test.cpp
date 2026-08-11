@@ -17,7 +17,67 @@ private slots:
     void countPropertyTracksRows();
     void findsRowByTrackId();
     void updatesRatingAndPlaybackHistory();
+    void removesOnlyTheSelectedHistoryEntry();
+    void updatesTagsAndManualOrder();
+    void removesTrackWithoutDeletingTheFile();
+    void appendsLargeBatchesWithSingleModelNotification();
+    void appliesMaintenanceResultsWithSingleModelNotification();
 };
+
+void LibraryModelTest::appliesMaintenanceResultsWithSingleModelNotification()
+{
+    LibraryModel model;
+    QList<TrackRecord> tracks;
+    for (int index = 0; index < 200; ++index) {
+        TrackRecord track;
+        track.path = QStringLiteral("C:/music/maintenance-%1.flac").arg(index);
+        track.available = true;
+        tracks.append(track);
+    }
+    model.appendBatch(std::move(tracks));
+
+    QVariantList results;
+    for (int index = 0; index < 200; ++index) {
+        results.append(QVariantMap{
+            {QStringLiteral("trackId"), model.tracks().at(index).trackId},
+            {QStringLiteral("exists"), index % 2 == 0},
+            {QStringLiteral("status"), index % 2 == 0
+                 ? QStringLiteral("normal") : QStringLiteral("missing")},
+            {QStringLiteral("hash"), QStringLiteral("hash-%1").arg(index)}});
+    }
+
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy flushRequested(&model, &LibraryModel::flushRequested);
+    QCOMPARE(model.applyMaintenanceResults(results), 200);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(flushRequested.count(), 1);
+    QVERIFY(!model.tracks().at(1).available);
+    QCOMPARE(model.tracks().at(1).fileStatus, QStringLiteral("missing"));
+}
+
+void LibraryModelTest::appendsLargeBatchesWithSingleModelNotification()
+{
+    LibraryModel model;
+    QList<TrackRecord> tracks;
+    tracks.reserve(250);
+    for (int index = 0; index < 250; ++index) {
+        TrackRecord track;
+        track.path = QStringLiteral("C:/music/batch-%1.wav").arg(index);
+        track.title = QStringLiteral("Batch %1").arg(index);
+        track.available = true;
+        tracks.append(std::move(track));
+    }
+    tracks.append(tracks.front());
+
+    QSignalSpy rowsInserted(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy countChanged(&model, &LibraryModel::countChanged);
+    const QStringList inserted = model.appendBatch(std::move(tracks));
+
+    QCOMPARE(inserted.size(), 250);
+    QCOMPARE(model.rowCount(), 250);
+    QCOMPARE(rowsInserted.count(), 1);
+    QCOMPARE(countChanged.count(), 1);
+}
 
 void LibraryModelTest::exposesRolesAndUpdatesFavorite()
 {
@@ -246,6 +306,102 @@ void LibraryModelTest::updatesRatingAndPlaybackHistory()
              QList<int>{LibraryModel::RatingRole});
     QCOMPARE(changed.at(1).at(2).value<QList<int>>(),
              QList<int>({LibraryModel::PlayCountRole, LibraryModel::LastPlayedAtRole}));
+}
+
+void LibraryModelTest::removesOnlyTheSelectedHistoryEntry()
+{
+    TrackRecord track;
+    track.trackId = QStringLiteral("track-a");
+    track.path = QStringLiteral("C:/music/a.wav");
+    track.playCount = 4;
+    track.lastPlayedAtMs = 123456;
+    LibraryModel model;
+    model.append(track);
+
+    QVERIFY(model.removeFromHistory(track.trackId));
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(model.tracks().front().playCount, 0);
+    QCOMPARE(model.tracks().front().lastPlayedAtMs, 0);
+    QVERIFY(!model.removeFromHistory(track.trackId));
+    QVERIFY(!model.removeFromHistory(QStringLiteral("missing")));
+}
+
+void LibraryModelTest::updatesTagsAndManualOrder()
+{
+    TrackRecord first;
+    first.trackId = QStringLiteral("first");
+    first.path = QStringLiteral("C:/music/first.wav");
+    TrackRecord second;
+    second.trackId = QStringLiteral("second");
+    second.path = QStringLiteral("C:/music/second.wav");
+    LibraryModel model;
+    model.replaceAll({first, second});
+
+    QVERIFY(model.setTags(QStringLiteral("first"),
+                          {QStringLiteral(" Workout "),
+                           QStringLiteral("workout"),
+                           QStringLiteral("Night")}));
+    QCOMPARE(model.data(model.index(0), LibraryModel::TagsRole).toStringList(),
+             QStringList({QStringLiteral("Workout"), QStringLiteral("Night")}));
+    QVERIFY(model.moveTrack(1, 0));
+    QCOMPARE(model.data(model.index(0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("second"));
+    QCOMPARE(model.data(model.index(1), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("first"));
+    TrackRecord third;
+    third.trackId = QStringLiteral("third");
+    third.path = QStringLiteral("C:/music/third.wav");
+    QVERIFY(model.append(third));
+    QCOMPARE(model.reorderTracks({QStringLiteral("first"), QStringLiteral("third")},
+                                 QStringLiteral("second")), 2);
+    QCOMPARE(model.data(model.index(0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("first"));
+    QCOMPARE(model.data(model.index(1), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("third"));
+    QCOMPARE(model.data(model.index(2), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("second"));
+    const QVariantMap snapshot = model.trackForId(QStringLiteral("first"));
+    QCOMPARE(snapshot.value(QStringLiteral("tags")).toStringList(),
+             QStringList({QStringLiteral("Workout"), QStringLiteral("Night")}));
+    QCOMPARE(snapshot.value(QStringLiteral("title")).toString(), first.title);
+}
+
+void LibraryModelTest::removesTrackWithoutDeletingTheFile()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString firstPath = dir.filePath(QStringLiteral("first.wav"));
+    QFile firstFile(firstPath);
+    QVERIFY(firstFile.open(QIODevice::WriteOnly));
+    QCOMPARE(firstFile.write("audio"), 5);
+    firstFile.close();
+
+    TrackRecord first;
+    first.trackId = QStringLiteral("track-a");
+    first.path = firstPath;
+    first.favorite = true;
+    first.playCount = 1;
+    TrackRecord second;
+    second.trackId = QStringLiteral("track-b");
+    second.path = dir.filePath(QStringLiteral("second.wav"));
+
+    LibraryModel model;
+    model.replaceAll({first, second});
+    QSignalSpy removed(&model, &LibraryModel::trackRemoved);
+    QSignalSpy flushed(&model, &LibraryModel::flushRequested);
+
+    QCOMPARE(model.containingFolderUrl(first.trackId),
+             QUrl::fromLocalFile(dir.path()));
+    QVERIFY(model.removeTrack(first.trackId));
+    QVERIFY(QFileInfo::exists(firstPath));
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.indexForTrackId(second.trackId), 0);
+    QCOMPARE(model.favoriteCount(), 0);
+    QCOMPARE(model.historyCount(), 0);
+    QCOMPARE(removed.count(), 1);
+    QCOMPARE(removed.front().front().toString(), first.trackId);
+    QCOMPARE(flushed.count(), 1);
+    QVERIFY(!model.removeTrack(QStringLiteral("missing")));
 }
 
 QTEST_GUILESS_MAIN(LibraryModelTest)

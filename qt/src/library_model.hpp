@@ -1,9 +1,11 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QByteArray>
 #include <QHash>
 #include <QList>
 #include <QSet>
+#include <QStringList>
 #include <QUrl>
 
 struct TrackRecord {
@@ -27,6 +29,15 @@ struct TrackRecord {
     QString lyrics;
     int playCount = 0;
     qint64 lastPlayedAtMs = 0;
+    QStringList tags;
+    qint64 addedAtMs = 0;
+    QString fileStatus = QStringLiteral("normal");
+    QString contentHash;
+    QByteArray audioFingerprint;
+    bool replayGainScanned = false;
+    double replayGainTrackDb = 0.0;
+    double replayGainAlbumDb = 0.0;
+    double replayPeak = 0.0;
 };
 
 QString canonicalLibraryPath(const QString& path);
@@ -59,7 +70,16 @@ public:
         ImportErrorRole,
         LyricsRole,
         PlayCountRole,
-        LastPlayedAtRole
+        LastPlayedAtRole,
+        TagsRole,
+        AddedAtRole,
+        FileStatusRole,
+        ContentHashRole,
+        AudioFingerprintRole,
+        ReplayGainScannedRole,
+        ReplayGainTrackDbRole,
+        ReplayGainAlbumDbRole,
+        ReplayPeakRole
     };
     Q_ENUM(Role)
 
@@ -71,15 +91,33 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     bool append(TrackRecord track);
+    QStringList appendBatch(QList<TrackRecord> tracks);
+    QStringList insertBatch(int row, QList<TrackRecord> tracks);
     void replaceAll(QList<TrackRecord> tracks);
     const QList<TrackRecord>& tracks() const noexcept;
+    const TrackRecord* recordForId(const QString& trackId) const noexcept;
     bool containsPath(const QString& path) const;
     int indexForLocalFile(const QString& localFilePath) const;
     Q_INVOKABLE int indexForTrackId(const QString& trackId) const;
+    Q_INVOKABLE QVariantMap trackForId(const QString& trackId) const;
+    Q_INVOKABLE bool removeTrack(const QString& trackId);
+    Q_INVOKABLE QUrl containingFolderUrl(const QString& trackId) const;
 
     Q_INVOKABLE bool setFavorite(int row, bool favorite);
     Q_INVOKABLE bool setRating(int row, int rating);
+    Q_INVOKABLE bool setTags(const QString& trackId, const QStringList& tags);
+    Q_INVOKABLE bool moveTrack(int fromRow, int toRow);
+    Q_INVOKABLE int reorderTracks(const QStringList& trackIds,
+                                  const QString& beforeTrackId);
+    bool applyMaintenanceResult(const QString& trackId, bool available,
+                                const QString& fileStatus,
+                                const QString& contentHash);
+    int applyMaintenanceResults(const QVariantList& results);
+    bool applyReplayGainResult(const QString& trackId, double trackGainDb,
+                               double albumGainDb, double peak);
+    bool updateTrackPath(const QString& trackId, const QString& newPath);
     bool markPlayed(const QString& trackId, qint64 playedAtMs = 0);
+    Q_INVOKABLE bool removeFromHistory(const QString& trackId);
     Q_INVOKABLE void playRow(int row);
     Q_INVOKABLE void flush();
 
@@ -92,9 +130,11 @@ signals:
     void favoriteCountChanged();
     void historyCountChanged();
     void countChanged();
+    void trackRemoved(const QString& trackId);
 
 private:
     QList<TrackRecord> tracks_;
     QSet<QString> pathKeys_;
+    QHash<QString, int> pathRows_;
     QHash<QString, int> trackRows_;
 };

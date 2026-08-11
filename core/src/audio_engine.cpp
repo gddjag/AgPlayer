@@ -198,6 +198,7 @@ public:
 
             sample_rate_.store(decoder_.metadata().sample_rate,
                                std::memory_order_release);
+            publish_equalizer_for_rate(decoder_.metadata().sample_rate);
             channels_ = decoder_.metadata().channels;
             duration_ms_.store(decoder_.metadata().duration_ms,
                                std::memory_order_release);
@@ -508,6 +509,56 @@ public:
         return AG_OK;
     }
 
+    ag_result set_equalizer(const GraphicEqSettings& settings,
+                            const std::uint64_t revision) noexcept
+    {
+        const int current_rate = sample_rate_.load(std::memory_order_acquire);
+        const int validation_rate =
+            is_graphic_eq_sample_rate_supported(current_rate)
+                ? current_rate
+                : 48'000;
+        const auto program =
+            prepare_graphic_eq(settings, validation_rate, revision);
+        if (!program.has_value()) {
+            return AG_INVALID_ARGUMENT;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(equalizer_settings_mutex_);
+            equalizer_settings_ = settings;
+            equalizer_revision_ = revision;
+        }
+        equalizer_revision_status_.store(revision, std::memory_order_release);
+        equalizer_enabled_status_.store(settings.enabled,
+                                        std::memory_order_release);
+        equalizer_bypassed_status_.store(settings.bypassed,
+                                         std::memory_order_release);
+        equalizer_auto_protection_status_.store(
+            settings.auto_clip_protection, std::memory_order_release);
+        equalizer_protection_status_.store(program->protection_db,
+                                           std::memory_order_release);
+        equalizer_active_status_.store(
+            settings.enabled && !settings.bypassed
+                && is_graphic_eq_sample_rate_supported(current_rate),
+            std::memory_order_release);
+        if (is_graphic_eq_sample_rate_supported(current_rate)
+            && !equalizer_.submit(*program)) {
+            return AG_INTERNAL_ERROR;
+        }
+        return AG_OK;
+    }
+
+    [[nodiscard]] EqualizerStatus equalizer_status() const noexcept
+    {
+        return {
+            equalizer_revision_status_.load(std::memory_order_acquire),
+            equalizer_enabled_status_.load(std::memory_order_acquire),
+            equalizer_bypassed_status_.load(std::memory_order_acquire),
+            equalizer_auto_protection_status_.load(std::memory_order_acquire),
+            equalizer_sample_rate_status_.load(std::memory_order_acquire),
+            equalizer_active_status_.load(std::memory_order_acquire),
+            equalizer_protection_status_.load(std::memory_order_acquire)};
+    }
+
     void set_muted(const bool muted) noexcept
     {
         muted_.store(muted, std::memory_order_release);
@@ -565,6 +616,7 @@ public:
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
+        equalizer_.process(output, frames, channels_);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
                                : volume_.load(std::memory_order_relaxed);
@@ -1318,6 +1370,7 @@ private:
                         1U, std::memory_order_acq_rel);
                     sample_rate_.store(next_sample_rate,
                                        std::memory_order_release);
+                    publish_equalizer_for_rate(next_sample_rate);
                     session_.set_index(next_index);
                     decode_track_index_ = next_index;
                     duration_ms_.store(
@@ -1398,6 +1451,7 @@ private:
         duration_ms_.store(pending_duration_ms_.load(std::memory_order_relaxed),
                            std::memory_order_release);
         session_.set_index(pending_track_index_.load(std::memory_order_relaxed));
+        equalizer_.reset();
         transition_version_.fetch_add(1U, std::memory_order_release);
         pending_boundary_frame_.store(no_pending_boundary,
                                       std::memory_order_release);
@@ -1462,6 +1516,7 @@ private:
                 device_initialized_ = false;
             }
             sample_rate_.store(next_sample_rate, std::memory_order_release);
+            publish_equalizer_for_rate(next_sample_rate);
             if (initialize_device() != AG_OK) {
                 return enter_error(AG_DEVICE_ERROR);
             }
@@ -1495,6 +1550,7 @@ private:
 
     void reset_timeline(const std::int64_t position_frames) noexcept
     {
+        equalizer_.reset();
         rendered_frames_total_.store(position_frames, std::memory_order_release);
         track_start_frame_.store(0, std::memory_order_release);
         produced_frames_total_.store(position_frames, std::memory_order_release);
@@ -1595,6 +1651,41 @@ private:
         }
     }
 
+    void publish_equalizer_for_rate(const int sample_rate) noexcept
+    {
+        GraphicEqSettings settings;
+        std::uint64_t revision = 0;
+        {
+            const std::lock_guard<std::mutex> lock(equalizer_settings_mutex_);
+            settings = equalizer_settings_;
+            revision = equalizer_revision_;
+        }
+        equalizer_sample_rate_status_.store(sample_rate,
+                                            std::memory_order_release);
+        if (!is_graphic_eq_sample_rate_supported(sample_rate)) {
+            GraphicEqSettings disabled;
+            disabled.enabled = false;
+            const auto dry = prepare_graphic_eq(disabled, 48'000, revision);
+            if (dry.has_value()) {
+                (void)equalizer_.submit(*dry);
+            }
+            equalizer_active_status_.store(false, std::memory_order_release);
+            equalizer_protection_status_.store(0.0,
+                                               std::memory_order_release);
+            return;
+        }
+        const auto program = prepare_graphic_eq(settings, sample_rate, revision);
+        if (!program.has_value()) {
+            equalizer_active_status_.store(false, std::memory_order_release);
+            return;
+        }
+        (void)equalizer_.submit(*program);
+        equalizer_protection_status_.store(program->protection_db,
+                                           std::memory_order_release);
+        equalizer_active_status_.store(settings.enabled && !settings.bypassed,
+                                       std::memory_order_release);
+    }
+
     AudioBackend backend_;
     static constexpr std::int64_t no_pending_boundary = -1;
     static constexpr std::int64_t publishing_boundary = -2;
@@ -1642,6 +1733,17 @@ private:
     std::atomic<std::size_t> pending_track_index_{0U};
     std::atomic<std::int64_t> pending_duration_ms_{0};
     std::atomic<float> volume_{1.0F};
+    GraphicEqualizerProcessor equalizer_;
+    mutable std::mutex equalizer_settings_mutex_;
+    GraphicEqSettings equalizer_settings_{};
+    std::uint64_t equalizer_revision_ = 0;
+    std::atomic<std::uint64_t> equalizer_revision_status_{0};
+    std::atomic<bool> equalizer_enabled_status_{true};
+    std::atomic<bool> equalizer_bypassed_status_{false};
+    std::atomic<bool> equalizer_auto_protection_status_{true};
+    std::atomic<int> equalizer_sample_rate_status_{0};
+    std::atomic<bool> equalizer_active_status_{false};
+    std::atomic<double> equalizer_protection_status_{0.0};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
     std::atomic<bool> match_track_sample_rate_{false};
@@ -1709,6 +1811,17 @@ ag_result AudioEngine::set_mode(const PlaybackMode mode) noexcept
 ag_result AudioEngine::set_volume(const float volume) noexcept
 {
     return impl_->set_volume(volume);
+}
+
+ag_result AudioEngine::set_equalizer(const GraphicEqSettings& settings,
+                                     const std::uint64_t revision) noexcept
+{
+    return impl_->set_equalizer(settings, revision);
+}
+
+EqualizerStatus AudioEngine::equalizer_status() const noexcept
+{
+    return impl_->equalizer_status();
 }
 
 void AudioEngine::set_muted(const bool muted) noexcept

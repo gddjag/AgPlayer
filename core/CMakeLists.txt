@@ -3,6 +3,8 @@ add_library(agplayer_core STATIC
     src/c_api.cpp
     src/core_context.cpp
     src/decoder.cpp
+    src/graphic_equalizer.cpp
+    src/graphic_equalizer.hpp
     src/light_editor.cpp
     src/multitrack_editor.cpp
     src/multitrack_editor.hpp

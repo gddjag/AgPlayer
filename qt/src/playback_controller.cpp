@@ -106,6 +106,7 @@ PlaybackController::Mode PlaybackController::mode() const noexcept { return mode
 qint64 PlaybackController::trackIndex() const noexcept { return trackIndex_; }
 qint64 PlaybackController::trackCount() const noexcept { return trackCount_; }
 QString PlaybackController::currentTrackId() const { return currentTrackId_; }
+QStringList PlaybackController::queueTrackIds() const { return queueTrackIds_; }
 QString PlaybackController::lyrics() const { return lyrics_; }
 QString PlaybackController::errorMessage() const { return errorMessage_; }
 bool PlaybackController::deviceLost() const noexcept { return deviceLost_; }
@@ -119,6 +120,11 @@ bool PlaybackController::exclusiveModeActive() const noexcept
 QVariantList PlaybackController::spectrum() const
 {
     return spectrum_;
+}
+
+bool PlaybackController::replayGainClippingWarning() const noexcept
+{
+    return replayGainClippingWarning_;
 }
 
 void PlaybackController::setLibraryModel(LibraryModel* library)
@@ -169,9 +175,45 @@ void PlaybackController::seek(qint64 positionMs)
         runCommand(snapshotResult);
         return;
     }
-    const qint64 durationMs = std::max<qint64>(0, snapshot.duration_ms);
-    runCommand(ag_player_seek(
-        player_, std::clamp(positionMs, qint64{0}, durationMs)));
+    // The waveform decoder may have replaced container metadata with the exact
+    // PCM duration. Do not re-clamp a UI seek to a stale metadata snapshot.
+    const qint64 durationMs = std::max({qint64{0}, durationMs_, snapshot.duration_ms});
+    const qint64 targetMs = std::clamp(positionMs, qint64{0}, durationMs);
+    // The decoder thread can publish an older container duration between UI
+    // polling ticks. Reassert the displayed timeline before submitting the
+    // seek so one click cannot be clamped to a different pixel position.
+    if (durationMs_ > 0 && snapshot.duration_ms != durationMs_) {
+        const ag_result syncResult = ag_player_set_duration_ms(player_, durationMs_);
+        runCommand(syncResult);
+        if (syncResult != AG_OK) {
+            return;
+        }
+    }
+    const ag_result result = ag_player_seek(player_, targetMs);
+    runCommand(result);
+    if (result == AG_OK && positionMs_ != targetMs) {
+        positionMs_ = targetMs;
+        emit positionMsChanged();
+    }
+}
+
+bool PlaybackController::applyWaveformDuration(const QString& trackId,
+                                               qint64 durationMs)
+{
+    if (trackId.isEmpty() || trackId != currentTrackId_ || durationMs <= 0) {
+        return false;
+    }
+    if (player_ == nullptr) {
+        return false;
+    }
+
+    const ag_result result = ag_player_set_duration_ms(player_, durationMs);
+    runCommand(result);
+    if (result != AG_OK) {
+        return false;
+    }
+    pollSnapshot();
+    return true;
 }
 
 void PlaybackController::next()
@@ -182,6 +224,88 @@ void PlaybackController::next()
 void PlaybackController::previous()
 {
     runCommand(player_ != nullptr ? ag_player_previous(player_) : AG_INVALID_ARGUMENT);
+}
+
+bool PlaybackController::queueNext(const QString& trackId)
+{
+    if (player_ == nullptr || library_.isNull()) {
+        setErrorMessage(QStringLiteral("Playback core is unavailable"));
+        return false;
+    }
+    const int row = library_->indexForTrackId(trackId);
+    if (row < 0 || !library_->tracks().at(row).available) {
+        return false;
+    }
+
+    const QByteArray utf8Path = library_->tracks().at(row).path.toUtf8();
+    const ag_result result = ag_player_queue_next(player_, utf8Path.constData());
+    runCommand(result);
+    if (result != AG_OK) {
+        return false;
+    }
+
+    int current = queueTrackIds_.indexOf(currentTrackId_);
+    const int existing = queueTrackIds_.indexOf(trackId);
+    if (existing >= 0) {
+        queueTrackIds_.removeAt(existing);
+        if (existing < current) {
+            --current;
+        }
+    }
+    queueTrackIds_.insert(
+        std::min(current + 1, static_cast<int>(queueTrackIds_.size())),
+        trackId);
+    emit queueTrackIdsChanged();
+    return true;
+}
+
+bool PlaybackController::restoreQueue(const QStringList& trackIds,
+                                      const QString& currentTrackId)
+{
+    if (player_ == nullptr || library_.isNull()) {
+        return false;
+    }
+
+    std::vector<QByteArray> utf8Paths;
+    std::vector<const char*> paths;
+    QStringList validIds;
+    utf8Paths.reserve(static_cast<size_t>(trackIds.size()));
+    paths.reserve(static_cast<size_t>(trackIds.size()));
+    validIds.reserve(trackIds.size());
+    size_t currentIndex = 0;
+    for (const QString& trackId : trackIds) {
+        const int row = library_->indexForTrackId(trackId);
+        if (row < 0) {
+            continue;
+        }
+        const TrackRecord& track = library_->tracks().at(row);
+        if (!track.available || track.path.isEmpty()) {
+            continue;
+        }
+        if (trackId == currentTrackId) {
+            currentIndex = paths.size();
+        }
+        utf8Paths.push_back(track.path.toUtf8());
+        paths.push_back(utf8Paths.back().constData());
+        validIds.append(trackId);
+    }
+    if (paths.empty()) {
+        return false;
+    }
+    if (!validIds.contains(currentTrackId)) {
+        currentIndex = 0;
+    }
+
+    const ag_result result =
+        ag_player_set_queue(player_, paths.data(), paths.size(), currentIndex);
+    runCommand(result);
+    if (result != AG_OK) {
+        return false;
+    }
+    queueTrackIds_ = std::move(validIds);
+    emit queueTrackIdsChanged();
+    pollSnapshot();
+    return true;
 }
 
 void PlaybackController::setVolume(float volume)
@@ -249,6 +373,7 @@ bool PlaybackController::prepareRow(int row)
         trackIds.append(track.trackId);
     }
 
+    applyReplayGainForTrack(library_->tracks().at(row).trackId);
     const ag_result queueResult =
         ag_player_set_queue(player_, paths.data(), paths.size(), requestedIndex);
     if (queueResult != AG_OK) {
@@ -256,7 +381,47 @@ bool PlaybackController::prepareRow(int row)
         return false;
     }
     queueTrackIds_ = std::move(trackIds);
+    emit queueTrackIdsChanged();
     return true;
+}
+
+bool PlaybackController::setReplayGainSettings(const int mode,
+                                               const bool clipProtection)
+{
+    if (mode < 0 || mode > 2) return false;
+    replayGainMode_ = mode;
+    replayGainClipProtection_ = clipProtection;
+    return applyReplayGainForTrack(currentTrackId_);
+}
+
+bool PlaybackController::applyReplayGainForTrack(const QString& trackId)
+{
+    if (player_ == nullptr) return false;
+    float gainDb = 0.0F;
+    float peak = 0.0F;
+    bool warning = false;
+    if (replayGainMode_ != 0 && library_ != nullptr && !trackId.isEmpty()) {
+        const int row = library_->indexForTrackId(trackId);
+        if (row >= 0) {
+            const TrackRecord& track = library_->tracks().at(row);
+            if (track.replayGainScanned) {
+                gainDb = static_cast<float>(replayGainMode_ == 2
+                                                ? track.replayGainAlbumDb
+                                                : track.replayGainTrackDb);
+                peak = static_cast<float>(track.replayPeak);
+                warning = peak > 0.0F
+                          && peak * std::pow(10.0F, gainDb / 20.0F) > 1.0F;
+            }
+        }
+    }
+    const bool ok = ag_player_set_replay_gain(
+                        player_, gainDb, peak,
+                        replayGainClipProtection_ ? 1 : 0) == AG_OK;
+    if (replayGainClippingWarning_ != warning) {
+        replayGainClippingWarning_ = warning;
+        emit replayGainClippingWarningChanged();
+    }
+    return ok;
 }
 
 void PlaybackController::loadRow(int row)
@@ -438,6 +603,11 @@ void PlaybackController::pollSnapshot()
     }
 
     const State nextState = toState(snapshot.state);
+    const int desiredPollInterval =
+        nextState == Playing ? PollIntervalMs : IdlePollIntervalMs;
+    if (pollTimer_.interval() != desiredPollInterval) {
+        pollTimer_.setInterval(desiredPollInterval);
+    }
     const qint64 nextTrackIndex = checkedSize(snapshot.track_index);
     const qint64 nextTrackCount = checkedSize(snapshot.track_count);
     const Mode nextMode = toMode(snapshot.mode);
@@ -455,8 +625,9 @@ void PlaybackController::pollSnapshot()
         positionMs_ = snapshot.position_ms;
         emit positionMsChanged();
     }
-    if (durationMs_ != snapshot.duration_ms) {
-        durationMs_ = snapshot.duration_ms;
+    const qint64 nextDurationMs = snapshot.duration_ms;
+    if (durationMs_ != nextDurationMs) {
+        durationMs_ = nextDurationMs;
         emit durationMsChanged();
     }
     if (volume_ != snapshot.volume) {
@@ -482,6 +653,7 @@ void PlaybackController::pollSnapshot()
     }
     if (currentTrackId_ != nextTrackId) {
         currentTrackId_ = std::move(nextTrackId);
+        applyReplayGainForTrack(currentTrackId_);
         emit currentTrackIdChanged();
 
         QString nextLyrics;
@@ -513,7 +685,9 @@ void PlaybackController::pollSnapshot()
     } else {
         setErrorMessage(QString());
     }
-    pollSpectrum();
+    if (nextState == Playing) {
+        pollSpectrum();
+    }
 }
 
 void PlaybackController::pollSpectrum()
@@ -521,7 +695,7 @@ void PlaybackController::pollSpectrum()
     if (player_ == nullptr) {
         return;
     }
-    std::array<float, 64U> bins{};
+    std::array<float, 128U> bins{};
     if (ag_player_spectrum(player_, bins.data(), bins.size()) != AG_OK) {
         return;
     }

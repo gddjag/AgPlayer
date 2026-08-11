@@ -21,6 +21,7 @@ private slots:
     void initTestCase();
     void init();
     void defaultListSizeMatchesReference();
+    void dpiChangePreservesNativePixelSize();
     void switchingWindowsDoesNotRecreatePlayback();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
@@ -41,6 +42,9 @@ private slots:
     void dockedListFollowsMainWindow();
     void dockedGroupDoesNotClampMainMoveAtScreenEdge();
     void horizontalDockPreservesSizesAndKeepsWindowsAdjacent();
+#ifdef Q_OS_WIN
+    void dockedWindowsKeepNativeSizeAcrossScreens();
+#endif
     void mainMinimizeRestoresOnlyRequestedList();
     void showMainRestoresAndRaisesTheExistingWindowGroup();
     void mainMaximizeHidesOnlyDockedList();
@@ -72,7 +76,17 @@ void WindowControllerTest::defaultListSizeMatchesReference()
 {
     WindowController windows;
     QCOMPARE(windows.listWindowWidth(), 1228);
-    QCOMPARE(windows.listWindowHeight(), 600);
+    QCOMPARE(windows.listWindowHeight(), 570);
+}
+
+void WindowControllerTest::dpiChangePreservesNativePixelSize()
+{
+    const QRect currentGeometry(120, 80, 1104, 342);
+    const QRect windowsSuggestedGeometry(1920, 120, 1656, 513);
+
+    QCOMPARE(WindowController::geometryForDpiChange(
+                 currentGeometry, windowsSuggestedGeometry),
+             QRect(1920, 120, 1104, 342));
 }
 
 void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
@@ -527,6 +541,67 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
     QVERIFY(mainWindow.width() >= mainWindow.minimumWidth());
     QVERIFY(listWindow.width() >= listWindow.minimumWidth());
 }
+
+#ifdef Q_OS_WIN
+void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
+{
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    if (screens.size() < 2) {
+        QSKIP("A second monitor is required for the cross-screen regression");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::FramelessWindowHint);
+    mainWindow.setMinimumSize(QSize(612, 228));
+    mainWindow.setGeometry(QRect(screens.at(0)->availableGeometry().topLeft()
+                                     + QPoint(80, 80),
+                                 QSize(1104, 342)));
+    QWindow listWindow;
+    listWindow.setFlags(Qt::FramelessWindowHint);
+    listWindow.setMinimumSize(QSize(720, 320));
+    listWindow.setGeometry(QRect(QPoint(), QSize(1228, 570)));
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QTRY_VERIFY(mainWindow.winId() != 0 && listWindow.winId() != 0);
+
+    RECT initialMain{};
+    RECT initialList{};
+    QVERIFY(GetWindowRect(reinterpret_cast<HWND>(mainWindow.winId()), &initialMain));
+    QVERIFY(GetWindowRect(reinterpret_cast<HWND>(listWindow.winId()), &initialList));
+    const QSize mainNativeSize(initialMain.right - initialMain.left,
+                               initialMain.bottom - initialMain.top);
+    const QSize listNativeSize(initialList.right - initialList.left,
+                               initialList.bottom - initialList.top);
+
+    mainWindow.setPosition(screens.at(1)->availableGeometry().topLeft()
+                           + QPoint(80, 80));
+    QTRY_VERIFY(mainWindow.screen() == screens.at(1));
+    QTRY_COMPARE(listWindow.x(), mainWindow.x());
+    QTRY_COMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
+
+    const auto nativeSize = [](QWindow& window) {
+        RECT rect{};
+        if (!GetWindowRect(reinterpret_cast<HWND>(window.winId()), &rect)) {
+            return QSize();
+        }
+        return QSize(rect.right - rect.left, rect.bottom - rect.top);
+    };
+    QTRY_COMPARE(nativeSize(mainWindow), mainNativeSize);
+    QTRY_COMPARE(nativeSize(listWindow), listNativeSize);
+
+    mainWindow.setPosition(screens.at(0)->availableGeometry().topLeft()
+                           + QPoint(120, 120));
+    QTRY_VERIFY(mainWindow.screen() == screens.at(0));
+    QTRY_COMPARE(listWindow.x(), mainWindow.x());
+    QTRY_COMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
+    QTRY_COMPARE(nativeSize(mainWindow), mainNativeSize);
+    QTRY_COMPARE(nativeSize(listWindow), listNativeSize);
+}
+#endif
 
 void WindowControllerTest::mainMinimizeRestoresOnlyRequestedList()
 {

@@ -3,7 +3,9 @@
 #include <QObject>
 #include <QAbstractNativeEventFilter>
 #include <QPointer>
+#include <QRect>
 #include <QSettings>
+#include <QSize>
 #include <QTimer>
 
 #include <functional>
@@ -63,6 +65,8 @@ public:
     int listWindowY() const noexcept;
     int listWindowWidth() const noexcept;
     int listWindowHeight() const noexcept;
+    static QRect geometryForDpiChange(const QRect& currentGeometry,
+                                      const QRect& suggestedGeometry);
 
     void setWindows(QWindow* mainWindow, QWindow* miniWindow);
     void setListWindow(QWindow* listWindow);
@@ -145,12 +149,17 @@ private:
     QPoint computeSnapForEdge(const QString& direction) const;
     void applyPlatformWindowStyle(QWindow* window) const;
     void raiseDockedGroup(QWindow* topWindow = nullptr);
+    void rememberNativePixelSize(QWindow* window);
 
     QPointer<QWindow> mainWindow_;
     quintptr mainWindowHandle_ = 0;
+    QSize mainNativePixelSize_;
+    qreal mainTrackedDpr_ = 1.0;
     QPointer<QWindow> miniWindow_;
     QPointer<QWindow> listWindow_;
     quintptr listWindowHandle_ = 0;
+    QSize listNativePixelSize_;
+    qreal listTrackedDpr_ = 1.0;
     QPointer<QWindow> audioToolsWindow_;
     QPointer<QWindow> settingsWindow_;
     QPointer<QWindow> lastAuxiliaryWindow_;
@@ -175,7 +184,7 @@ private:
     int listWindowX_ = 0;
     int listWindowY_ = 0;
     int listWindowWidth_ = 1228;
-    int listWindowHeight_ = 600;
+    int listWindowHeight_ = 570;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;
     bool updatingWindowZOrder_ = false;

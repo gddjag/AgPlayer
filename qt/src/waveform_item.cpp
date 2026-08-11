@@ -777,7 +777,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         std::vector<float> mixValues = hasMix
                                                  ? resampleValues(snapshot->mix->values, peakCount)
                                                   : std::vector<float>{};
-        const std::vector<float> heldSpectrumValues = visualMode_ == 2
+        std::vector<float> heldSpectrumValues = visualMode_ == 2
             && snapshot->spectrumPeakHold
             && !snapshot->spectrumPeakHold->values.empty()
             ? resampleValues(snapshot->spectrumPeakHold->values, peakCount)
@@ -793,12 +793,16 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                                   : std::vector<float>{};
 
         if (visualMode_ == 2 && !mixValues.empty()) {
-            const float peak = *std::max_element(mixValues.begin(), mixValues.end());
-            if (peak > 0.0F) {
-                for (float& value : mixValues) {
-                    value = std::pow(std::clamp(value / peak, 0.0F, 1.0F), 0.58F);
+            // Input magnitudes are already normalized by the analyser. Per-frame
+            // peak normalization makes quiet frames hit the ceiling and hides
+            // the attack/decay relationship to the music.
+            const auto shapeSpectrum = [](std::vector<float>& values) {
+                for (float& value : values) {
+                    value = std::pow(std::clamp(value, 0.0F, 1.0F), 0.58F);
                 }
-            }
+            };
+            shapeSpectrum(mixValues);
+            shapeSpectrum(heldSpectrumValues);
         }
 
         std::size_t vertexOffset = 0U;
