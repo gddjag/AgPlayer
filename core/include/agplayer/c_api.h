@@ -303,6 +303,37 @@ ag_result ag_transcode_ex(const char* input_path,
  * fade_in_ms / fade_out_ms: 0 = no fade. Linear fade.
  * gain: linear amplitude factor (1.0 = no change, 0.5 = -6dB, 2.0 = +6dB).
  * output_path: destination file path (same codec as input).
+#define AG_TRANSCODE_REQUEST_V2_VERSION 2U
+
+/* Versioned conversion request. struct_size and api_version must be set so
+ * future fields can be appended without changing the older transcode ABI. */
+typedef struct ag_transcode_request_v2 {
+    size_t struct_size;
+    uint32_t api_version;
+    const char* output_path;
+    const char* muxer_name;
+    const char* codec_name;
+    long long bit_rate;
+    int sample_rate;
+    const char* channel_layout;
+    const char* sample_format;
+    int audio_stream_index;
+    int keep_metadata;
+    int keep_cover;
+    int bitrate_mode;
+    int quality;
+} ag_transcode_request_v2;
+
+ag_result ag_transcode_v2(const char* input_path,
+                          const ag_transcode_request_v2* request,
+                          const ag_cancel_token* cancel_token,
+                          ag_progress_callback progress_callback,
+                          void* user_data);
+
+/* Returns a thread-local UTF-8 diagnostic for the most recent failed core
+ * operation on this thread; returns an empty string when no detail is known. */
+const char* ag_last_error(void);
+
  * Returns AG_OK on success, AG_CANCELLED if cancelled. */
 ag_result ag_light_edit(const char* input_path,
                         const char* output_path,

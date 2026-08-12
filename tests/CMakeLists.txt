@@ -261,6 +261,39 @@ set_tests_properties(transcoder_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(transcode_verifier_test
+    core/transcode_verifier_test.cpp
+)
+add_dependencies(transcode_verifier_test decoder_fixture)
+target_include_directories(transcode_verifier_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(transcode_verifier_test PRIVATE agplayer_core)
+agplayer_enable_warnings(transcode_verifier_test)
+add_test(NAME transcode_verifier_test
+    COMMAND transcode_verifier_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(transcode_verifier_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(transcode_v2_api_test
+    core/transcode_v2_api_test.cpp
+)
+add_dependencies(transcode_v2_api_test decoder_fixture)
+target_link_libraries(transcode_v2_api_test PRIVATE agplayer_core)
+agplayer_enable_warnings(transcode_v2_api_test)
+add_test(NAME transcode_v2_api_test
+    COMMAND transcode_v2_api_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(transcode_v2_api_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(transcode_capability_test
     core/transcode_capability_test.cpp
 )

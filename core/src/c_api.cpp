@@ -908,6 +908,67 @@ ag_result ag_pitch_shift_ex(const char* input_path,
         const std::atomic_bool* cancelled =
             cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
 
+ag_result ag_transcode_v2(const char* input_path,
+                          const ag_transcode_request_v2* request,
+                          const ag_cancel_token* cancel_token,
+                          const ag_progress_callback progress_callback,
+                          void* const user_data)
+{
+    last_error.clear();
+    if (input_path == nullptr || input_path[0] == '\0'
+        || request == nullptr
+        || request->struct_size < sizeof(ag_transcode_request_v2)
+        || request->api_version != AG_TRANSCODE_REQUEST_V2_VERSION
+        || request->output_path == nullptr
+        || request->output_path[0] == '\0') {
+        last_error = "invalid v2 transcode request";
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::TranscodeConfig config;
+        config.output_path = request->output_path;
+        if (request->muxer_name != nullptr) {
+            config.container_name = request->muxer_name;
+        }
+        if (request->codec_name != nullptr) {
+            config.codec_name = request->codec_name;
+        }
+        config.bit_rate = request->bit_rate;
+        config.sample_rate = request->sample_rate;
+        if (request->channel_layout != nullptr) {
+            config.channel_layout = request->channel_layout;
+        }
+        if (request->sample_format != nullptr) {
+            config.sample_format = request->sample_format;
+        }
+        config.audio_stream_index = request->audio_stream_index;
+        config.keep_metadata = request->keep_metadata != 0;
+        config.keep_cover = request->keep_cover != 0;
+        config.variable_bit_rate = request->bitrate_mode == 1;
+        config.quality = std::clamp(request->quality, 0, 100);
+
+        const std::atomic_bool* cancelled = cancel_token == nullptr
+            ? nullptr : &cancel_token->cancelled;
+        std::function<void(float)> callback;
+        if (progress_callback != nullptr) {
+            callback = [progress_callback, user_data](const float progress) {
+                progress_callback(progress, user_data);
+            };
+        }
+        std::string error;
+        const ag_result result = agplayer::transcode(
+            input_path, config, cancelled, std::move(callback), error);
+        if (result != AG_OK) {
+            last_error = std::move(error);
+        }
+        return result;
+    } catch (...) {
+        last_error = "unexpected exception in v2 transcoder";
+        return AG_INTERNAL_ERROR;
+    }
+}
+
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
             cb = [progress_callback, user_data](float frac) {

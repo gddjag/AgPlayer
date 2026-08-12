@@ -22,6 +22,8 @@ add_library(agplayer_core STATIC
     src/transcode_capability.hpp
     src/transcode_probe.cpp
     src/transcode_probe.hpp
+    src/transcode_verifier.cpp
+    src/transcode_verifier.hpp
     src/timeline_preview_mixer.cpp
     src/timeline_preview_mixer.hpp
     src/time_pitch_engine.cpp

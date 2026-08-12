@@ -5,6 +5,7 @@
 #include <atomic>
 #include <functional>
 #include <string>
+#include <string_view>
 
 namespace agplayer {
 
@@ -16,14 +17,20 @@ namespace agplayer {
 // loudest sample reaches -1 dBFS (0.8913). Already-quiet files are not amplified.
 struct TranscodeConfig {
     std::string output_path;
+    std::string container_name;
     std::string codec_name;
     long long bit_rate = 0;
     int sample_rate = 0;
     int channels = 0;
+    std::string channel_layout;
+    std::string sample_format;
+    int audio_stream_index = -1;
     bool volume_normalize = false;
     bool keep_metadata = false;
+    bool keep_cover = false;
     bool variable_bit_rate = false;
     int quality = 75;
+    std::function<void(std::string_view)> stage_callback;
 };
 
 // Transcode a single audio file. progress_callback receives a fraction in
