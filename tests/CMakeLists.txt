@@ -91,6 +91,32 @@ set_tests_properties(audio_document_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+foreach(audio_editor_core_test IN ITEMS
+    time_pixel_mapper_test
+    peak_pyramid_test
+)
+    add_executable(${audio_editor_core_test}
+        "core/${audio_editor_core_test}.cpp"
+    )
+    if(audio_editor_core_test STREQUAL "peak_pyramid_test")
+        target_sources(${audio_editor_core_test} PRIVATE
+            "${CMAKE_SOURCE_DIR}/core/src/audio_editor/peak_pyramid.cpp"
+        )
+    endif()
+    set_target_properties(${audio_editor_core_test} PROPERTIES AUTOMOC ON)
+    target_include_directories(${audio_editor_core_test} PRIVATE
+        "${CMAKE_SOURCE_DIR}/core/src"
+    )
+    target_link_libraries(${audio_editor_core_test} PRIVATE Qt6::Test)
+    agplayer_enable_warnings(${audio_editor_core_test})
+    add_test(NAME ${audio_editor_core_test} COMMAND ${audio_editor_core_test})
+    set_tests_properties(${audio_editor_core_test} PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+    )
+endforeach()
+
 add_executable(playback_session_test
     core/playback_session_test.cpp
 )
@@ -389,6 +415,44 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
     )
 endforeach()
+
+add_executable(editor_viewport_test
+    qt/editor_viewport_test.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
+)
+set_target_properties(editor_viewport_test PROPERTIES AUTOMOC ON)
+target_include_directories(editor_viewport_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(editor_viewport_test PRIVATE Qt6::Core Qt6::Test)
+agplayer_enable_warnings(editor_viewport_test)
+add_test(NAME editor_viewport_test COMMAND editor_viewport_test)
+set_tests_properties(editor_viewport_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
+add_executable(audio_editor_waveform_item_test
+    qt/audio_editor_waveform_item_test.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_waveform_item.cpp"
+)
+set_target_properties(audio_editor_waveform_item_test PROPERTIES AUTOMOC ON)
+target_include_directories(audio_editor_waveform_item_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(audio_editor_waveform_item_test PRIVATE
+    Qt6::Quick Qt6::Test
+)
+agplayer_enable_warnings(audio_editor_waveform_item_test)
+add_test(NAME audio_editor_waveform_item_test COMMAND audio_editor_waveform_item_test)
+set_tests_properties(audio_editor_waveform_item_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
 
 # WaveformItem owns a QQuickWindow.  Explicitly select offscreen for this
 # visual-unit test without changing the native-drop test's qwindows contract.

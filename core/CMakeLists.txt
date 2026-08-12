@@ -2,6 +2,9 @@ add_library(agplayer_core STATIC
     src/audio_editor/audio_document.cpp
     src/audio_editor/audio_document.hpp
     src/audio_editor/edit_command.hpp
+    src/audio_editor/peak_pyramid.cpp
+    src/audio_editor/peak_pyramid.hpp
+    src/audio_editor/time_pixel_mapper.hpp
     src/audio_engine.cpp
     src/c_api.cpp
     src/core_context.cpp

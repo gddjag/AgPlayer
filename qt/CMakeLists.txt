@@ -1,4 +1,8 @@
 add_library(agplayer_qt STATIC
+    src/audio_editor/audio_editor_waveform_item.cpp
+    src/audio_editor/audio_editor_waveform_item.hpp
+    src/audio_editor/editor_viewport.cpp
+    src/audio_editor/editor_viewport.hpp
     src/audio_file_discovery.cpp
     src/audio_file_discovery.hpp
     src/audio_preview_controller.cpp
