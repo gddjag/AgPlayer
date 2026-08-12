@@ -279,6 +279,42 @@ int main(const int argc, char** argv)
     assert(result == AG_INVALID_ARGUMENT);
     std::filesystem::remove(collision_path);
 
+    // Distinct UTF-8 paths must not be treated as equal when the output does
+    // not exist yet. This catches failed canonicalization being compared as
+    // two empty paths on Windows.
+    const std::filesystem::path unicode_input_directory =
+        input_path.parent_path()
+        / std::filesystem::u8path(u8"\u4e0b\u8f7d");
+    const std::filesystem::path unicode_output_directory =
+        input_path.parent_path()
+        / std::filesystem::u8path(u8"\u684c\u9762");
+    const std::filesystem::path unicode_input =
+        unicode_input_directory
+        / std::filesystem::u8path(u8"\u8f93\u5165.wav");
+    const std::filesystem::path unicode_output =
+        unicode_output_directory
+        / std::filesystem::u8path(u8"\u8f93\u51fa.wav");
+    std::filesystem::create_directories(unicode_input_directory);
+    std::filesystem::create_directories(unicode_output_directory);
+    std::filesystem::remove(unicode_input);
+    std::filesystem::remove(unicode_output);
+    std::filesystem::copy_file(input_path, unicode_input);
+
+    agplayer::TranscodeConfig unicode_config;
+    unicode_config.output_path = unicode_output.u8string();
+    unicode_config.codec_name = "pcm_s16le";
+    error.clear();
+    result = agplayer::transcode(unicode_input.u8string(), unicode_config,
+                                 nullptr, nullptr, error);
+    if (result != AG_OK) {
+        std::cerr << "distinct UTF-8 path transcode failed: "
+                  << static_cast<int>(result) << " " << error << "\n";
+    }
+    assert(result == AG_OK);
+    assert(std::filesystem::exists(unicode_output));
+    std::filesystem::remove_all(unicode_input_directory);
+    std::filesystem::remove_all(unicode_output_directory);
+
     // Volume normalize: output peak should approach -1 dBFS for a quiet fixture.
     // For sine fixture (already loud), gain should be capped at 1.0.
     const std::filesystem::path normalize_output =

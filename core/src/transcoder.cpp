@@ -22,6 +22,29 @@ namespace agplayer {
 
 namespace {
 
+namespace fs = std::filesystem;
+
+fs::path path_from_utf8(const std::string_view value)
+{
+    return fs::u8path(value.begin(), value.end());
+}
+
+bool paths_refer_to_same_file(const fs::path& input, const fs::path& output)
+{
+    std::error_code equivalent_error;
+    const bool equivalent = fs::equivalent(input, output, equivalent_error);
+    if (!equivalent_error && equivalent) {
+        return true;
+    }
+
+    std::error_code input_error;
+    std::error_code output_error;
+    const fs::path normalized_input = fs::weakly_canonical(input, input_error);
+    const fs::path normalized_output = fs::weakly_canonical(output, output_error);
+    return !input_error && !output_error
+           && normalized_input == normalized_output;
+}
+
 bool is_cancelled(const std::atomic_bool* cancelled) noexcept
 {
     return cancelled != nullptr
@@ -452,10 +475,8 @@ ag_result run_transcode_pass(const std::string& input_path,
         error = "Output path is empty";
         return AG_INVALID_ARGUMENT;
     }
-    std::error_code path_ec;
-    if (std::filesystem::equivalent(input_path, config.output_path, path_ec) ||
-        std::filesystem::canonical(input_path, path_ec)
-            == std::filesystem::canonical(config.output_path, path_ec)) {
+    if (paths_refer_to_same_file(path_from_utf8(input_path),
+                                 path_from_utf8(config.output_path))) {
         error = "Input and output path must be different";
         return AG_INVALID_ARGUMENT;
     }
