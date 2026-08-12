@@ -634,6 +634,19 @@ set_tests_properties(library_model_stress_test PROPERTIES
 
 if (WIN32)
     add_test(
+        NAME audio_editor_feature_options_test
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
+            "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/feature-options-contract"
+            "-DTOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+            "-DQT_PREFIX=${CMAKE_PREFIX_PATH}"
+            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}"
+            "-DNINJA_EXECUTABLE=${CMAKE_MAKE_PROGRAM}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/audio_editor_feature_options_test.cmake"
+    )
+    set_tests_properties(audio_editor_feature_options_test PROPERTIES TIMEOUT 120)
+
+    add_test(
         NAME audio_tools_layout_contract_test
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
                 -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/audio_tools_layout_contract_test.ps1
