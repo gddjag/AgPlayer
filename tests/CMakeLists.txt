@@ -417,6 +417,7 @@ foreach(qt_test IN ITEMS
     editor_timeline_math_test
     light_editor_controller_test
     audio_tools_end_to_end_test
+    format_conversion_plan_test
     file_association_controller_test
     native_drop_router_test
     equalizer_controller_test
@@ -436,6 +437,9 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
     )
 endforeach()
+target_include_directories(format_conversion_plan_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
 
 add_executable(editor_viewport_test
     qt/editor_viewport_test.cpp

@@ -37,6 +37,8 @@ add_library(agplayer_qt STATIC
     src/cache_janitor.hpp
     src/format_converter.cpp
     src/format_converter.hpp
+    src/format_conversion_plan.cpp
+    src/format_conversion_plan.hpp
     src/global_hotkey_manager.cpp
     src/global_hotkey_manager.hpp
     src/import_controller.cpp

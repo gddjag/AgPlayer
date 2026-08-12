@@ -1,0 +1,185 @@
+#include "format_conversion_plan.hpp"
+#include "transcode_probe.hpp"
+
+#include "../core/bpm_fixture.hpp"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
+#include <QTest>
+
+class FormatConversionPlanTest final : public QObject {
+    Q_OBJECT
+
+private slots:
+    void probesGeneratedAudio();
+    void plansConflictPoliciesWithoutCreatingOutput();
+    void preservesImportRootAndRejectsTraversal();
+    void rejectsVideoUnlessExtractionIsEnabled();
+};
+
+namespace {
+
+agplayer::MediaProbe audioProbe(bool video = false)
+{
+    agplayer::MediaProbe probe;
+    probe.container = video ? "matroska,webm" : "wav";
+    probe.is_video = video;
+    probe.audio_streams.push_back({0, "pcm_s16le", "", "Main", true,
+                                   16'000, "s16", "mono", 256'000, 1'000});
+    return probe;
+}
+
+FormatPlanInput inputFor(const QString& path,
+                         const QString& root = {},
+                         bool video = false)
+{
+    FormatPlanInput input;
+    input.taskId = QUuid::createUuid();
+    input.inputPath = path;
+    input.importRoot = root;
+    input.probe = audioProbe(video);
+    return input;
+}
+
+FormatConversionRequest flacRequest(const QString& outputDirectory)
+{
+    FormatConversionRequest request;
+    request.formatKey = QStringLiteral("flac");
+    request.outputDirectory = outputDirectory;
+    request.conflictPolicy = FormatConflictPolicy::AutoNumber;
+    request.keepMetadata = true;
+    return request;
+}
+
+} // namespace
+
+void FormatConversionPlanTest::probesGeneratedAudio()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString path = temp.filePath(QStringLiteral("probe.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(path, 120, 1));
+
+    agplayer::MediaProbe probe;
+    std::string error;
+    QCOMPARE(agplayer::probe_transcode_input(path.toUtf8().toStdString(),
+                                             probe, error),
+             AG_OK);
+    QVERIFY2(error.empty(), error.c_str());
+    QVERIFY(!probe.container.empty());
+    QVERIFY(!probe.is_video);
+    QCOMPARE(probe.audio_streams.size(), std::size_t{1});
+    QCOMPARE(probe.audio_streams.front().sample_rate, 16'000);
+    QCOMPARE(probe.audio_streams.front().channel_layout, std::string("mono"));
+    QVERIFY(probe.audio_streams.front().duration_ms > 0);
+}
+
+void FormatConversionPlanTest::plansConflictPoliciesWithoutCreatingOutput()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("song.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+    const QString outputDirectory = temp.filePath(QStringLiteral("converted"));
+    QVERIFY(QDir().mkpath(outputDirectory));
+    const QString existing =
+        QDir(outputDirectory).filePath(QStringLiteral("song.flac"));
+    QFile existingFile(existing);
+    QVERIFY(existingFile.open(QIODevice::WriteOnly));
+    existingFile.write("existing");
+    existingFile.close();
+
+    FormatConversionRequest request = flacRequest(outputDirectory);
+    const QList<FormatPlanInput> inputs{inputFor(input)};
+
+    FormatBatchPlan plan = build_format_conversion_plan(inputs, request);
+    QVERIFY(plan.ready);
+    QVERIFY(!plan.requiresConfirmation);
+    QCOMPARE(plan.tasks.size(), 1);
+    QCOMPARE(QFileInfo(plan.tasks.front().outputPath).fileName(),
+             QStringLiteral("song_1.flac"));
+    QVERIFY(!QFileInfo::exists(plan.tasks.front().outputPath));
+
+    request.conflictPolicy = FormatConflictPolicy::Skip;
+    plan = build_format_conversion_plan(inputs, request);
+    QVERIFY(plan.ready);
+    QVERIFY(plan.tasks.front().skipped);
+    QCOMPARE(plan.tasks.front().outputPath, existing);
+
+    request.conflictPolicy = FormatConflictPolicy::Overwrite;
+    plan = build_format_conversion_plan(inputs, request);
+    QVERIFY(plan.ready);
+    QVERIFY(!plan.tasks.front().skipped);
+    QCOMPARE(plan.tasks.front().outputPath, existing);
+
+    request.conflictPolicy = FormatConflictPolicy::Ask;
+    plan = build_format_conversion_plan(inputs, request);
+    QVERIFY(plan.ready);
+    QVERIFY(plan.requiresConfirmation);
+    QCOMPARE(plan.tasks.front().outputPath, existing);
+    QVERIFY(std::any_of(plan.tasks.front().differences.cbegin(),
+                        plan.tasks.front().differences.cend(),
+                        [](const FormatPlanDifference& difference) {
+        return difference.field == QStringLiteral("conflict")
+               && difference.requiresConfirmation;
+    }));
+    QVERIFY(QFileInfo(existing).size() == 8);
+}
+
+void FormatConversionPlanTest::preservesImportRootAndRejectsTraversal()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString root = temp.filePath(QStringLiteral("album"));
+    const QString nested = QDir(root).filePath(QStringLiteral("disc-1"));
+    const QString outputDirectory = temp.filePath(QStringLiteral("converted"));
+    QVERIFY(QDir().mkpath(nested));
+    QVERIFY(QDir().mkpath(outputDirectory));
+    const QString input = QDir(nested).filePath(QStringLiteral("track.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatConversionRequest request = flacRequest(outputDirectory);
+    request.preserveDirectories = true;
+    FormatBatchPlan plan = build_format_conversion_plan(
+        {inputFor(input, root)}, request);
+    QVERIFY(plan.ready);
+    QCOMPARE(QDir::cleanPath(plan.tasks.front().outputPath),
+             QDir::cleanPath(QDir(outputDirectory).filePath(
+                 QStringLiteral("disc-1/track.flac"))));
+
+    const QString outside = temp.filePath(QStringLiteral("outside.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(outside, 120, 1));
+    plan = build_format_conversion_plan({inputFor(outside, root)}, request);
+    QVERIFY(!plan.ready);
+    QVERIFY(plan.fatalError.contains(QStringLiteral("outside"),
+                                     Qt::CaseInsensitive));
+}
+
+void FormatConversionPlanTest::rejectsVideoUnlessExtractionIsEnabled()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("clip.mkv"));
+    QFile marker(input);
+    QVERIFY(marker.open(QIODevice::WriteOnly));
+    marker.write("fixture-marker");
+    marker.close();
+
+    FormatConversionRequest request = flacRequest(temp.path());
+    FormatBatchPlan plan = build_format_conversion_plan(
+        {inputFor(input, {}, true)}, request);
+    QVERIFY(!plan.ready);
+    QVERIFY(plan.fatalError.contains(QStringLiteral("video"),
+                                     Qt::CaseInsensitive));
+
+    request.extractAudio = true;
+    plan = build_format_conversion_plan({inputFor(input, {}, true)}, request);
+    QVERIFY(plan.ready);
+    QCOMPARE(plan.tasks.front().audioStreamIndex, 0);
+}
+
+QTEST_APPLESS_MAIN(FormatConversionPlanTest)
+
+#include "format_conversion_plan_test.moc"
