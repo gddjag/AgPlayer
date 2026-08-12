@@ -147,7 +147,9 @@ TranscodeFormatCapability inspect(const FormatDefinition& definition)
         result.unavailable_reason = "Muxer is not included in this FFmpeg build";
         return result;
     }
-    if (avformat_query_codec(muxer, codec->id, FF_COMPLIANCE_NORMAL) <= 0) {
+    // A negative result means the muxer cannot answer statically. The
+    // following real avcodec_open2 probe remains authoritative in that case.
+    if (avformat_query_codec(muxer, codec->id, FF_COMPLIANCE_NORMAL) == 0) {
         result.unavailable_reason = "Encoder and muxer are not compatible";
         return result;
     }

@@ -54,6 +54,7 @@ private slots:
     void audioFileDiscoveryExpandsFoldersOffTheGuiThread();
     void formatConverterLoadsDroppedFilesAsynchronously();
     void formatConverterReportsReferenceTaskColumns();
+    void formatConverterExposesQueueFacadeModelsAndPreflight();
     void formatConverterPreflightReturnsResolvedProfileBeforeStarting();
     void formatConverterAskPolicyRequiresConflictConfirmationBeforeStarting();
     void formatConverterSkipPolicyLeavesExistingOutputUntouched();
@@ -112,6 +113,39 @@ void AudioToolsEndToEndTest::formatConverterReportsReferenceTaskColumns()
     QCOMPARE(row.value(QStringLiteral("progress")).toDouble(), 0.0);
     QVERIFY(row.contains(QStringLiteral("outputFormat")));
     QVERIFY(row.contains(QStringLiteral("outputPath")));
+}
+
+void AudioToolsEndToEndTest::formatConverterExposesQueueFacadeModelsAndPreflight()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("facade.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatConverter converter;
+    QVERIFY(converter.taskModel() != nullptr);
+    QVERIFY(converter.filteredTaskModel() != nullptr);
+    converter.addPlaylistPaths({input, input});
+    waitForConverterLoad(converter);
+    QCOMPARE(converter.taskModel()->rowCount(), 1);
+    QCOMPARE(converter.checkedCount(), 1);
+
+    converter.setSelectedFormat(QStringLiteral("flac"));
+    QCOMPARE(converter.currentCapability()
+                 .value(QStringLiteral("key")).toString(),
+             QStringLiteral("flac"));
+    const QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("flac")},
+        {QStringLiteral("outputDir"), temp.filePath(QStringLiteral("out"))},
+        {QStringLiteral("requiresConfirmation"), true}});
+    QCOMPARE(plan.value(QStringLiteral("taskCount")).toInt(), 1);
+    QVERIFY(plan.value(QStringLiteral("ready")).toBool());
+    QVERIFY(!converter.pendingPlan().isEmpty());
+    converter.rejectPendingPlan();
+    QVERIFY(converter.pendingPlan().isEmpty());
+
+    converter.removeChecked();
+    QCOMPARE(converter.taskModel()->rowCount(), 0);
 }
 
 void AudioToolsEndToEndTest::

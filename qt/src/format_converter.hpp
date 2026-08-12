@@ -12,11 +12,14 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVector>
+#include <QAbstractItemModel>
 
 #include <atomic>
 
 template <typename T>
 class QFutureWatcher;
+class FormatConversionTaskModel;
+class FormatConversionFilterModel;
 
 // FormatConverter: batch audio transcoder. Manages a list of input files and
 // transcodes them with bounded parallelism. Each file exposes its
@@ -36,6 +39,18 @@ class FormatConverter final : public QObject {
                    NOTIFY bitrateModeChanged)
     Q_PROPERTY(QString conflictPolicy READ conflictPolicy WRITE setConflictPolicy
                    NOTIFY conflictPolicyChanged)
+    Q_PROPERTY(QAbstractItemModel* taskModel READ taskModel CONSTANT)
+    Q_PROPERTY(QAbstractItemModel* filteredTaskModel READ filteredTaskModel CONSTANT)
+    Q_PROPERTY(QVariantList outputCapabilities READ supportedOutputFormats CONSTANT)
+    Q_PROPERTY(QVariantMap currentCapability READ currentCapability
+                   NOTIFY currentCapabilityChanged)
+    Q_PROPERTY(QVariantMap pendingPlan READ pendingPlan NOTIFY pendingPlanChanged)
+    Q_PROPERTY(QString selectedFormat READ selectedFormat WRITE setSelectedFormat
+                   NOTIFY currentCapabilityChanged)
+    Q_PROPERTY(QString etaText READ etaText NOTIFY progressChanged)
+    Q_PROPERTY(int checkedCount READ checkedCount NOTIFY filesChanged)
+    Q_PROPERTY(int convertingCount READ convertingCount NOTIFY filesChanged)
+    Q_PROPERTY(int cancelledCount READ cancelledCount NOTIFY filesChanged)
 
 public:
     explicit FormatConverter(QObject* parent = nullptr);
@@ -48,6 +63,16 @@ public:
     int failedCount() const noexcept;
     QVariantList files() const;
     QVariantList supportedOutputFormats() const;
+    QAbstractItemModel* taskModel() const;
+    QAbstractItemModel* filteredTaskModel() const;
+    QVariantMap currentCapability() const;
+    QVariantMap pendingPlan() const { return pendingPlan_; }
+    QString selectedFormat() const { return selectedFormat_; }
+    void setSelectedFormat(const QString& value);
+    QString etaText() const;
+    int checkedCount() const;
+    int convertingCount() const;
+    int cancelledCount() const;
     int parallelJobs() const noexcept { return parallelJobs_; }
     void setParallelJobs(int value);
     QString bitrateMode() const { return bitrateMode_; }
@@ -57,6 +82,16 @@ public:
     void setOverwriteExisting(bool value) noexcept { overwriteExisting_ = value; }
 
     Q_INVOKABLE void loadFiles(const QList<QUrl>& urls);
+    Q_INVOKABLE void addUrls(const QList<QUrl>& urls) { loadFiles(urls); }
+    Q_INVOKABLE void addFolder(const QUrl& folderUrl);
+    Q_INVOKABLE void addPlaylistPaths(const QStringList& paths);
+    Q_INVOKABLE void removeChecked();
+    Q_INVOKABLE void clearFinished();
+    Q_INVOKABLE QVariantMap buildPreflight(const QVariantMap& request);
+    Q_INVOKABLE void confirmPendingPlan();
+    Q_INVOKABLE void rejectPendingPlan();
+    Q_INVOKABLE void cancelTask(const QString& taskId);
+    Q_INVOKABLE void cancelAll() { cancel(); }
     Q_INVOKABLE bool setMetadataEditPlan(const QVariantMap& fields,
                                          const QUrl& coverUrl);
     Q_INVOKABLE QVariantMap previewSelected(const QVariantList& indices,
@@ -113,6 +148,8 @@ signals:
     void parallelJobsChanged();
     void bitrateModeChanged();
     void conflictPolicyChanged();
+    void currentCapabilityChanged();
+    void pendingPlanChanged();
 
 private:
     enum class FileStatus {
@@ -129,6 +166,7 @@ private:
     static QString statusString(FileStatus status);
 
     struct FileEntry {
+        QString taskId;
         QString path;
         QString fileName;
         QString format;
@@ -164,6 +202,10 @@ private:
     QVariantMap metadataFields_;
     QByteArray metadataCoverData_;
     QString metadataCoverMime_;
+    FormatConversionTaskModel* taskModel_ = nullptr;
+    FormatConversionFilterModel* filteredTaskModel_ = nullptr;
+    QVariantMap pendingPlan_;
+    QString selectedFormat_ = QStringLiteral("mp3");
 
     void setBusy(bool value);
     void setProgress(double value);
@@ -173,6 +215,7 @@ private:
     void setEntryError(int index, const QString& error);
     void updateEntryProgress(int index, double value,
                              const QVector<int>& jobIndices);
+    void syncTaskModel();
 
     // Generate a non-colliding output path for the given source and format.
     QString computeOutputPath(const QString& inputPath,

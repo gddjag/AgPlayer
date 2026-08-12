@@ -136,6 +136,21 @@ QVariantMap FormatConversionTaskModel::taskAt(const int row) const
     return row >= 0 && row < tasks_.size() ? tasks_.at(row) : QVariantMap{};
 }
 
+QStringList FormatConversionTaskModel::taskIds() const
+{
+    QStringList result;
+    result.reserve(tasks_.size());
+    for (const QVariantMap& task : tasks_) {
+        result.append(task.value(QStringLiteral("taskId")).toString());
+    }
+    return result;
+}
+
+bool FormatConversionTaskModel::containsTask(const QString& taskId) const
+{
+    return rowById_.contains(taskId);
+}
+
 int FormatConversionTaskModel::checkedCount() const
 {
     return static_cast<int>(std::count_if(
@@ -200,6 +215,15 @@ void FormatConversionTaskModel::removeTasks(const QStringList& taskIds)
         endRemoveRows();
     }
     rebuildRows();
+}
+
+void FormatConversionTaskModel::clearTasks()
+{
+    if (tasks_.isEmpty()) return;
+    beginResetModel();
+    tasks_.clear();
+    rowById_.clear();
+    endResetModel();
 }
 
 void FormatConversionTaskModel::rebuildRows()

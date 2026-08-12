@@ -1,7 +1,11 @@
 #include "format_converter.hpp"
 
 #include "audio_file_discovery.hpp"
+#include "format_conversion_filter_model.hpp"
+#include "format_conversion_task_model.hpp"
+#include "transcode_capability.hpp"
 #include "metadata_writer.hpp"
+#include "runtime_log.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -186,7 +190,12 @@ bool is_video_file(const QString& path)
 
 FormatConverter::FormatConverter(QObject* parent)
     : QObject(parent)
+    , taskModel_(new FormatConversionTaskModel(this))
+    , filteredTaskModel_(new FormatConversionFilterModel(this))
 {
+    filteredTaskModel_->setSourceModel(taskModel_);
+    connect(this, &FormatConverter::filesChanged, this,
+            &FormatConverter::syncTaskModel);
 }
 
 FormatConverter::~FormatConverter()
@@ -279,6 +288,68 @@ int FormatConverter::failedCount() const noexcept
     return failedCount_.load(std::memory_order_acquire);
 }
 
+QAbstractItemModel* FormatConverter::taskModel() const
+{
+    return taskModel_;
+}
+
+QAbstractItemModel* FormatConverter::filteredTaskModel() const
+{
+    return filteredTaskModel_;
+}
+
+void FormatConverter::setSelectedFormat(const QString& value)
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized.isEmpty() || normalized == selectedFormat_) return;
+    selectedFormat_ = normalized;
+    emit currentCapabilityChanged();
+}
+
+QVariantMap FormatConverter::currentCapability() const
+{
+    for (const QVariant& value : supportedOutputFormats()) {
+        const QVariantMap format = value.toMap();
+        if (format.value(QStringLiteral("key")).toString() == selectedFormat_) {
+            return format;
+        }
+    }
+    return {};
+}
+
+QString FormatConverter::etaText() const
+{
+    if (!busy() || progress() <= 0.0 || progress() >= 1.0) {
+        return QStringLiteral("--:--");
+    }
+    return tr("计算中");
+}
+
+int FormatConverter::checkedCount() const
+{
+    return taskModel_->checkedCount();
+}
+
+int FormatConverter::convertingCount() const
+{
+    int count = 0;
+    QMutexLocker lock(&mutex_);
+    for (const FileEntry& entry : entries_) {
+        if (entry.status == FileStatus::Converting) ++count;
+    }
+    return count;
+}
+
+int FormatConverter::cancelledCount() const
+{
+    int count = 0;
+    QMutexLocker lock(&mutex_);
+    for (const FileEntry& entry : entries_) {
+        if (entry.status == FileStatus::Cancelled) ++count;
+    }
+    return count;
+}
+
 QVariantList FormatConverter::files() const
 {
     QMutexLocker lock(&mutex_);
@@ -301,6 +372,52 @@ QVariantList FormatConverter::files() const
         list.append(map);
     }
     return list;
+}
+
+void FormatConverter::syncTaskModel()
+{
+    QList<FileEntry> entries;
+    {
+        QMutexLocker lock(&mutex_);
+        entries = entries_;
+    }
+    QSet<QString> liveIds;
+    for (const FileEntry& entry : entries) {
+        const QString taskId = entry.taskId.isEmpty()
+            ? QDir::cleanPath(entry.path).toCaseFolded() : entry.taskId;
+        liveIds.insert(taskId);
+        const QVariantMap values{
+            {QStringLiteral("taskId"), taskId},
+            {QStringLiteral("checked"), true},
+            {QStringLiteral("fileName"), entry.fileName},
+            {QStringLiteral("path"), entry.path},
+            {QStringLiteral("sourceFormat"), entry.format},
+            {QStringLiteral("durationMs"), entry.durationMs},
+            {QStringLiteral("sampleRate"), entry.sampleRate},
+            {QStringLiteral("bitRate"), entry.bitRate},
+            {QStringLiteral("channelLayout"), entry.channels == 1
+                ? QStringLiteral("mono") : QStringLiteral("stereo")},
+            {QStringLiteral("outputFormat"), entry.outputFormat},
+            {QStringLiteral("outputPath"), entry.outputPath},
+            {QStringLiteral("status"), statusString(entry.status)},
+            {QStringLiteral("stage"), statusString(entry.status)},
+            {QStringLiteral("progress"), entry.progress},
+            {QStringLiteral("errorSummary"), entry.errorMessage},
+            {QStringLiteral("errorDetail"), entry.errorMessage}};
+        if (taskModel_->containsTask(taskId)) {
+            QVariantMap changes = values;
+            changes.remove(QStringLiteral("taskId"));
+            changes.remove(QStringLiteral("checked"));
+            taskModel_->updateTask(taskId, changes);
+        } else {
+            taskModel_->appendTask(values);
+        }
+    }
+    QStringList removed;
+    for (const QString& taskId : taskModel_->taskIds()) {
+        if (!liveIds.contains(taskId)) removed.append(taskId);
+    }
+    taskModel_->removeTasks(removed);
 }
 
 void FormatConverter::setBusy(bool value)
@@ -483,17 +600,59 @@ QVariantList FormatConverter::supportedOutputFormats() const
         const char* key;
         const char* label;
         const char* codec;
+        const char* encoderLabel;
     };
     static constexpr Candidate candidates[] = {
-        {"mp3", "MP3", "libmp3lame"},
-        {"wav", "WAV", "pcm_s16le"},
-        {"flac", "FLAC", "flac"},
-        {"aac", "AAC", "aac"},
-        {"m4a", "AAC / M4A", "aac"},
-        {"ogg", "OGG", "libvorbis"},
-        {"opus", "Opus", "libopus"},
-        {"alac", "ALAC", "alac"},
+        {"mp3", "MP3", "libmp3lame", "LAME MP3"},
+        {"wav", "WAV", "pcm_s16le", "PCM"},
+        {"flac", "FLAC", "flac", "FLAC"},
+        {"aac", "AAC", "aac", "AAC"},
+        {"m4a", "AAC / M4A", "aac", "AAC"},
+        {"ogg", "OGG", "libvorbis", "Vorbis"},
+        {"opus", "Opus", "libopus", "libopus"},
+        {"alac", "ALAC", "alac", "ALAC"},
     };
+    const std::vector<agplayer::TranscodeFormatCapability> capabilities =
+        agplayer::transcode_capabilities();
+    if (!capabilities.empty()) {
+        QVariantList actualFormats;
+        for (const agplayer::TranscodeFormatCapability& capability
+             : capabilities) {
+            QVariantList sampleRates;
+            for (const int value : capability.sample_rates)
+                sampleRates.append(value);
+            QVariantList sampleFormats;
+            for (const std::string& value : capability.sample_formats)
+                sampleFormats.append(QString::fromStdString(value));
+            QVariantList channelLayouts;
+            for (const std::string& value : capability.channel_layouts)
+                channelLayouts.append(QString::fromStdString(value));
+            QVariantList bitrateModes;
+            for (const agplayer::TranscodeOptionChoice& mode
+                 : capability.bitrate_modes) {
+                bitrateModes.append(QVariantMap{
+                    {QStringLiteral("key"), QString::fromStdString(mode.key)},
+                    {QStringLiteral("label"), QString::fromStdString(mode.label)},
+                    {QStringLiteral("default"), mode.is_default}});
+            }
+            actualFormats.append(QVariantMap{
+                {QStringLiteral("key"), QString::fromStdString(capability.key)},
+                {QStringLiteral("label"), QString::fromStdString(capability.label)},
+                {QStringLiteral("codec"), QString::fromStdString(capability.codec_name)},
+                {QStringLiteral("encoderLabel"), QString::fromStdString(capability.codec_name)},
+                {QStringLiteral("muxer"), QString::fromStdString(capability.muxer_name)},
+                {QStringLiteral("available"), capability.available},
+                {QStringLiteral("reason"), QString::fromStdString(capability.unavailable_reason)},
+                {QStringLiteral("lossy"), capability.lossy},
+                {QStringLiteral("supportsMetadata"), capability.supports_metadata},
+                {QStringLiteral("supportsCover"), capability.supports_cover},
+                {QStringLiteral("sampleRates"), sampleRates},
+                {QStringLiteral("sampleFormats"), sampleFormats},
+                {QStringLiteral("channelLayouts"), channelLayouts},
+                {QStringLiteral("bitrateModes"), bitrateModes}});
+        }
+        return actualFormats;
+    }
     QVariantList formats;
     for (const Candidate& candidate : candidates) {
         const bool available = ag_encoder_available(candidate.codec) != 0;
@@ -501,6 +660,8 @@ QVariantList FormatConverter::supportedOutputFormats() const
             {QStringLiteral("key"), QString::fromLatin1(candidate.key)},
             {QStringLiteral("label"), QString::fromLatin1(candidate.label)},
             {QStringLiteral("codec"), QString::fromLatin1(candidate.codec)},
+            {QStringLiteral("encoderLabel"),
+             QString::fromLatin1(candidate.encoderLabel)},
             {QStringLiteral("available"), available},
             {QStringLiteral("reason"), available ? QString()
                 : tr("当前内置编码器不可用：%1")
@@ -618,6 +779,7 @@ void FormatConverter::loadFiles(const QList<QUrl>& urls)
 
             FileEntry entry;
             entry.path = path;
+            entry.taskId = QDir::cleanPath(path).toCaseFolded();
             const QFileInfo info(path);
             entry.fileName = info.fileName();
             entry.fileSize = info.size();
@@ -646,6 +808,121 @@ void FormatConverter::loadFiles(const QList<QUrl>& urls)
     });
     discoveryWatcher->setFuture(
         agplayer::qt::expandAudioUrlsAsync(urls, true));
+}
+
+void FormatConverter::addFolder(const QUrl& folderUrl)
+{
+    loadFiles({folderUrl});
+}
+
+void FormatConverter::addPlaylistPaths(const QStringList& paths)
+{
+    QList<QUrl> urls;
+    urls.reserve(paths.size());
+    for (const QString& path : paths) {
+        urls.append(QUrl::fromLocalFile(path));
+    }
+    loadFiles(urls);
+}
+
+void FormatConverter::removeChecked()
+{
+    if (busy()) return;
+    const QSet<QString> checked = [&] {
+        QSet<QString> ids;
+        for (const QString& taskId : taskModel_->taskIds()) {
+            for (int row = 0; row < taskModel_->rowCount(); ++row) {
+                if (taskModel_->taskIdAt(row) == taskId
+                    && taskModel_->taskAt(row)
+                           .value(QStringLiteral("checked")).toBool()) {
+                    ids.insert(taskId);
+                }
+            }
+        }
+        return ids;
+    }();
+    {
+        QMutexLocker lock(&mutex_);
+        for (int index = entries_.size() - 1; index >= 0; --index) {
+            if (checked.contains(entries_.at(index).taskId)) {
+                entries_.removeAt(index);
+            }
+        }
+    }
+    emit fileCountChanged();
+    emit filesChanged();
+}
+
+void FormatConverter::clearFinished()
+{
+    if (busy()) return;
+    {
+        QMutexLocker lock(&mutex_);
+        for (int index = entries_.size() - 1; index >= 0; --index) {
+            const FileStatus status = entries_.at(index).status;
+            if (status == FileStatus::Done || status == FileStatus::Error
+                || status == FileStatus::Cancelled
+                || status == FileStatus::Skipped) {
+                entries_.removeAt(index);
+            }
+        }
+    }
+    emit fileCountChanged();
+    emit filesChanged();
+}
+
+QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
+{
+    QVariantMap plan = request;
+    const QString format = request.value(
+        QStringLiteral("outputFormat"), selectedFormat_).toString().toLower();
+    plan.insert(QStringLiteral("outputFormat"), format);
+    plan.insert(QStringLiteral("taskCount"), checkedCount());
+    plan.insert(QStringLiteral("capability"), currentCapability());
+    const bool requiresConfirmation =
+        request.value(QStringLiteral("requiresConfirmation")).toBool()
+        || conflictPolicy_ == QStringLiteral("ask");
+    plan.insert(QStringLiteral("requiresConfirmation"), requiresConfirmation);
+    plan.insert(QStringLiteral("ready"), checkedCount() > 0
+        && currentCapability().value(QStringLiteral("available")).toBool());
+    pendingPlan_ = plan;
+    emit pendingPlanChanged();
+    return plan;
+}
+
+void FormatConverter::confirmPendingPlan()
+{
+    if (pendingPlan_.isEmpty()) return;
+    const QVariantMap plan = pendingPlan_;
+    pendingPlan_.clear();
+    emit pendingPlanChanged();
+    start(plan.value(QStringLiteral("outputFormat"), selectedFormat_).toString(),
+          plan.value(QStringLiteral("bitRate"), 192000).toInt(),
+          plan.value(QStringLiteral("sampleRate"), 0).toInt(),
+          plan.value(QStringLiteral("channels"), 0).toInt(),
+          plan.value(QStringLiteral("outputDir")).toString(),
+          plan.value(QStringLiteral("keepMetadata"), true).toBool(),
+          plan.value(QStringLiteral("volumeNormalize"), false).toBool(),
+          plan.value(QStringLiteral("extractAudio"), false).toBool());
+}
+
+void FormatConverter::rejectPendingPlan()
+{
+    if (pendingPlan_.isEmpty()) return;
+    pendingPlan_.clear();
+    emit pendingPlanChanged();
+}
+
+void FormatConverter::cancelTask(const QString& taskId)
+{
+    QMutexLocker lock(&mutex_);
+    for (int index = 0; index < entries_.size(); ++index) {
+        if (entries_.at(index).taskId == taskId) {
+            lock.unlock();
+            cancelEntry(index);
+            return;
+        }
+    }
 }
 
 bool FormatConverter::setMetadataEditPlan(const QVariantMap& fields,
@@ -911,13 +1188,13 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
         emit errorOccurred(tr("声道数只支持自动、单声道或立体声"));
         return;
     }
-    int effectiveSampleRate = sampleRate;
     if (normalizedFormat == QStringLiteral("opus")
         && sampleRate != 0 && sampleRate != 48000) {
-        effectiveSampleRate = 48000;
-        emit warningOccurred(
-            tr("Opus 输出采样率将调整为编码器标准的 48 kHz"));
+        emit errorOccurred(
+            QStringLiteral("Opus output requires 48 kHz. Confirm the adjustment before conversion."));
+        return;
     }
+    const int effectiveSampleRate = sampleRate;
     if (!outputDir.isEmpty() && !QDir().mkpath(outputDir)) {
         emit errorOccurred(tr("无法创建输出目录：%1").arg(outputDir));
         return;
@@ -1184,8 +1461,14 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             return;
         } else {
             QFile::remove(stagedPath);
+            const QString coreError = QString::fromUtf8(ag_last_error()).trimmed();
+            const QString detail = coreError.isEmpty()
+                ? RuntimeLog::mapResult(result) : coreError;
+            RuntimeLog::log(result, QStringLiteral("FormatConverter"),
+                            QStringLiteral("input=%1 output=%2 format=%3: %4")
+                                .arg(inputPath, outputPath, outputFormat, detail));
             complete(FileStatus::Error,
-                     tr("转换失败（错误 %1）").arg(result));
+                     tr("转换失败：%1").arg(detail));
             return;
         }
 

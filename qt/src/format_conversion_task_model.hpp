@@ -47,12 +47,15 @@ public:
     bool updateTask(const QString& taskId, const QVariantMap& changes);
     QString taskIdAt(int row) const;
     QVariantMap taskAt(int row) const;
+    QStringList taskIds() const;
+    bool containsTask(const QString& taskId) const;
     int checkedCount() const;
     double durationWeightedProgress() const;
 
     Q_INVOKABLE void setChecked(const QString& taskId, bool checked);
     Q_INVOKABLE void setAllVisibleChecked(bool checked);
     Q_INVOKABLE void removeTasks(const QStringList& taskIds);
+    Q_INVOKABLE void clearTasks();
 
 private:
     void rebuildRows();
