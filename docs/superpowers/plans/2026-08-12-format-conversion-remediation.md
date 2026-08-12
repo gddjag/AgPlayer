@@ -1,5 +1,7 @@
 # Format Conversion Remediation Implementation Plan
 
+> Superseded by `docs/superpowers/plans/2026-08-13-format-conversion-full-replica.md`, which covers the user-approved full UI replica and complete functional scope.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the reference-image format conversion workbench with only real FFmpeg-backed controls and safe batch output.
