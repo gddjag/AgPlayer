@@ -213,6 +213,21 @@ TestCase {
         tryCompare(firstBandControl, "value", -12)
         verify(firstBandControl.visualPosition > 0.95,
                "-12 dB must map to the bottom of a vertical EQ slider")
+        mouseDoubleClickSequence(firstBandControl,
+                                 firstBandControl.width / 2,
+                                 firstBandControl.height / 2)
+        wait(80)
+        compare(firstBand.gainDb, 0,
+                "double-clicking an EQ band must reset it to 0 dB")
+        firstBand.setGain(6)
+        tryCompare(firstBand, "gainDb", 6)
+        var firstBandLabel = findChild(firstBand, "eqBandSlider-0-frequency")
+        verify(firstBandLabel)
+        mouseDoubleClickSequence(firstBandLabel, firstBandLabel.width / 2,
+                                 firstBandLabel.height / 2)
+        wait(80)
+        compare(firstBand.gainDb, 0,
+                "double-clicking an EQ frequency label must reset it to 0 dB")
         EqualizerController.bypassed = true
         tryCompare(findChild(window, "equalizerBypassButton"), "checked", true)
         EqualizerController.resetAll()
@@ -1179,8 +1194,10 @@ TestCase {
         var previousPreview = SettingsController.waveformHoverTimePreview
         SettingsController.waveformHoverTimePreview = true
         var surface = findChild(mainWindow, "mainWaveform")
+        var interactionSurface = findChild(mainWindow, "waveformInteractionSurface")
         var guide = findChild(mainWindow, "waveformHoverGuide")
         verify(surface)
+        verify(interactionSurface)
         verify(guide)
         verify(surface.enabled)
         compare(surface.timeForX(surface.width * 0.15),
@@ -1188,10 +1205,14 @@ TestCase {
         compare(surface.timeForX(surface.width * 0.85),
                 Math.round(surface.duration * 0.85))
         compare(surface.pixelForTime(surface.duration), surface.width)
-        mouseMove(surface, surface.width * 0.15, surface.height / 2)
+        mouseMove(interactionSurface,
+                  interactionSurface.width * 0.15,
+                  interactionSurface.height / 2)
         tryVerify(function() { return guide.visible }, 300)
         compare(guide.x, surface.pixelForTime(Math.round(surface.duration * 0.15)))
-        mouseMove(surface, surface.width * 0.85, surface.height / 2)
+        mouseMove(interactionSurface,
+                  interactionSurface.width * 0.85,
+                  interactionSurface.height / 2)
         tryVerify(function() { return guide.visible }, 300)
         compare(guide.x, surface.pixelForTime(Math.round(surface.duration * 0.85)))
         SettingsController.waveformHoverTimePreview = previousPreview
