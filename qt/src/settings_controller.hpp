@@ -78,6 +78,8 @@ class SettingsController final : public QObject {
                    WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
                    WRITE setWaveformHoverTimePreview NOTIFY waveformHoverTimePreviewChanged)
+    Q_PROPERTY(bool waveformPlaybackGuide READ waveformPlaybackGuide
+                   WRITE setWaveformPlaybackGuide NOTIFY waveformPlaybackGuideChanged)
     Q_PROPERTY(int waveformCanvasHeight READ waveformCanvasHeight
                    WRITE setWaveformCanvasHeight NOTIFY waveformCanvasHeightChanged)
     Q_PROPERTY(bool waveformCanvasLocked READ waveformCanvasLocked
@@ -186,6 +188,7 @@ public:
     QString waveformRgbEndColor() const;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
+    bool waveformPlaybackGuide() const noexcept;
     int waveformCanvasHeight() const noexcept;
     bool waveformCanvasLocked() const noexcept;
     int spectrumColorMode() const noexcept;
@@ -264,6 +267,7 @@ public:
     void setWaveformRgbEndColor(const QString& value);
     void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
+    void setWaveformPlaybackGuide(bool value);
     void setWaveformCanvasHeight(int value);
     void setWaveformCanvasLocked(bool value);
     void setSpectrumColorMode(int value);
@@ -350,6 +354,7 @@ signals:
     void waveformRgbEndColorChanged();
     void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
+    void waveformPlaybackGuideChanged();
     void waveformCanvasHeightChanged();
     void waveformCanvasLockedChanged();
     void spectrumColorModeChanged();
@@ -445,6 +450,7 @@ private:
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
     bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
+    bool waveformPlaybackGuide_ = true;
     int waveformCanvasHeight_ = 78;
     bool waveformCanvasLocked_ = true;
     int spectrumColorMode_ = 0;

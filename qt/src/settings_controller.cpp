@@ -114,6 +114,7 @@ QString SettingsController::waveformRgbMiddleColor() const { return waveformRgbM
 QString SettingsController::waveformRgbEndColor() const { return waveformRgbEndColor_; }
 bool SettingsController::waveformRgbProgress() const noexcept { return waveformRgbProgress_; }
 bool SettingsController::waveformHoverTimePreview() const noexcept { return waveformHoverTimePreview_; }
+bool SettingsController::waveformPlaybackGuide() const noexcept { return waveformPlaybackGuide_; }
 int SettingsController::waveformCanvasHeight() const noexcept { return waveformCanvasHeight_; }
 bool SettingsController::waveformCanvasLocked() const noexcept { return waveformCanvasLocked_; }
 int SettingsController::spectrumColorMode() const noexcept { return spectrumColorMode_; }
@@ -486,6 +487,16 @@ void SettingsController::setWaveformHoverTimePreview(bool value)
     emit waveformHoverTimePreviewChanged();
 }
 
+void SettingsController::setWaveformPlaybackGuide(bool value)
+{
+    if (waveformPlaybackGuide_ == value) {
+        return;
+    }
+    waveformPlaybackGuide_ = value;
+    persistValue(QStringLiteral("appearance/waveformPlaybackGuide"), value);
+    emit waveformPlaybackGuideChanged();
+}
+
 void SettingsController::setWaveformCanvasHeight(int value)
 {
     value = clampValue(value, 48, 84);
@@ -800,6 +811,7 @@ void SettingsController::resetWaveformDefaults()
     setWaveformRgbMiddleColor(QStringLiteral("#7b2ff7"));
     setWaveformRgbEndColor(QStringLiteral("#e62e9b"));
     setWaveformRgbProgress(true);
+    setWaveformPlaybackGuide(true);
     setWaveformCanvasHeight(78);
     setWaveformCanvasLocked(true);
     setSpectrumColorMode(0);
@@ -905,6 +917,7 @@ void SettingsController::emitAllChanged()
     emit waveformRgbEndColorChanged();
     emit waveformRgbProgressChanged();
     emit waveformHoverTimePreviewChanged();
+    emit waveformPlaybackGuideChanged();
     emit waveformCanvasHeightChanged();
     emit waveformCanvasLockedChanged();
     emit spectrumColorModeChanged();
@@ -1163,6 +1176,8 @@ void SettingsController::load()
         settings_.value(QStringLiteral("waveformRgbProgress"),
                         waveformRgbProgress_).toBool();
     waveformHoverTimePreview_ = settings_.value(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_).toBool();
+    waveformPlaybackGuide_ = settings_.value(
+        QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_).toBool();
     waveformCanvasHeight_ = settings_.value(
         QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_).toInt();
     waveformCanvasLocked_ = settings_.value(
@@ -1450,6 +1465,7 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("waveformRgbEndColor"), waveformRgbEndColor_);
     persistValue(QStringLiteral("waveformRgbProgress"), waveformRgbProgress_);
     persistValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
+    persistValue(QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_);
     persistValue(QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_);
     persistValue(QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_);
     persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
@@ -1527,6 +1543,7 @@ void SettingsController::restoreDefaults()
     waveformRgbEndColor_ = QStringLiteral("#e62e9b");
     waveformRgbProgress_ = false;
     waveformHoverTimePreview_ = true;
+    waveformPlaybackGuide_ = true;
     waveformCanvasHeight_ = 78;
     waveformCanvasLocked_ = true;
     spectrumColorMode_ = 0;

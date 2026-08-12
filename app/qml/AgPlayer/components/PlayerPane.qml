@@ -547,6 +547,7 @@ Rectangle {
             Rectangle {
                 id: waveformPlaybackGuide
                 objectName: "waveformPlaybackGuide"
+                visible: SettingsController.waveformPlaybackGuide
                 x: waveform.waveformCursorX
                 width: 1
                 anchors.top: parent.top

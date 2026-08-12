@@ -243,6 +243,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#9098a6"));
         QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#d27722"));
         QCOMPARE(settings.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
+        QCOMPARE(settings.waveformPlaybackGuide(), true);
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
@@ -250,6 +251,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         settings.setWaveformPeakAlgorithm(1);
         settings.setWaveformSolidBaseColor(QStringLiteral("#112233"));
         settings.setWaveformSolidProgressColor(QStringLiteral("invalid"));
+        settings.setWaveformPlaybackGuide(true);
 
         QCOMPARE(settings.waveformHeight(), 1.5);
         QCOMPARE(settings.waveformDensity(), 0.5);
@@ -257,6 +259,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformPeakAlgorithm(), 1);
         QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#112233"));
         QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#d27722"));
+        QCOMPARE(settings.waveformPlaybackGuide(), true);
     }
 
     SettingsController reloaded;
@@ -265,6 +268,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformThickness(), 2.3);
     QCOMPARE(reloaded.waveformPeakAlgorithm(), 1);
     QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#112233"));
+    QCOMPARE(reloaded.waveformPlaybackGuide(), true);
 
     reloaded.resetWaveformDefaults();
     QCOMPARE(reloaded.waveformHeight(), 0.8);
@@ -274,6 +278,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#9098a6"));
     QCOMPARE(reloaded.waveformSolidProgressColor(), QStringLiteral("#d27722"));
     QCOMPARE(reloaded.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
+    QCOMPARE(reloaded.waveformPlaybackGuide(), true);
     persisted.clear();
 }
 

@@ -1791,6 +1791,13 @@ Item {
                     onToggled: SettingsController.waveformHoverTimePreview = checked
                 }
 
+                SettingSwitch {
+                    objectName: "waveformPlaybackGuideSwitch"
+                    text: qsTr("播放进度竖条")
+                    checked: SettingsController.waveformPlaybackGuide
+                    onToggled: SettingsController.waveformPlaybackGuide = checked
+                }
+
                 SettingRow {
                     visible: SettingsController.waveformMode === 2
                     label: qsTr("频谱颜色")

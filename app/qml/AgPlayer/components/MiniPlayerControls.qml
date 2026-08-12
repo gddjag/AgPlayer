@@ -219,6 +219,7 @@ Rectangle {
                 }
                 Rectangle {
                     objectName: "miniWaveformPlaybackGuide"
+                    visible: SettingsController.waveformPlaybackGuide
                     x: waveform.waveformCursorX
                     width: 1
                     height: waveform.height
