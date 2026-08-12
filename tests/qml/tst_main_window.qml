@@ -390,7 +390,11 @@ TestCase {
                "library details must fit without an internal scrollbar")
         verify(!findChild(page, "libraryDetailsPlay"))
         verify(!findChild(page, "libraryDetailsQueue"))
-        verify(!findChild(page, "libraryDetailsFavorite"))
+        var detailsFavorite = findChild(page, "libraryDetailsFavorite")
+        var detailsTags = findChild(page, "libraryDetailsTags")
+        verify(detailsFavorite && detailsTags,
+               "library details must show favorite and tags below song info")
+        verify(detailsTags.text.length > 0)
         verify(findChild(page, "libraryDetailsFormat"))
         verify(findChild(page, "libraryDetailsBitrate"))
         compare(page.preferredWindowHeight, 752)

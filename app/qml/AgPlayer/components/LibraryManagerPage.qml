@@ -876,6 +876,31 @@ Item {
                         color: Theme.secondaryText
                         elide: Text.ElideRight
                     }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 5
+                        ThemedIcon {
+                            objectName: "libraryDetailsFavorite"
+                            width: 16
+                            height: 16
+                            source: Theme.icon(root.selectedTrack.favorite
+                                               ? "heart-fill" : "heart-line")
+                            tint: root.selectedTrack.favorite
+                                  ? Theme.favoriteRed : Theme.secondaryText
+                        }
+                        Text {
+                            objectName: "libraryDetailsTags"
+                            Layout.fillWidth: true
+                            text: qsTr("标签：")
+                                  + (root.selectedTrack.tags
+                                     && root.selectedTrack.tags.length > 0
+                                     ? root.selectedTrack.tags.join(", ")
+                                     : qsTr("无"))
+                            color: Theme.secondaryText
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+                    }
                     Row {
                         spacing: 1
                         Repeater {
