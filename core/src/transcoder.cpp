@@ -1,4 +1,5 @@
 #include "transcoder.hpp"
+#include "ffmpeg_codec_support.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -10,10 +11,12 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 namespace agplayer {
 
@@ -29,17 +32,7 @@ bool is_cancelled(const std::atomic_bool* cancelled) noexcept
 // (float planar) which is the most common lossy encoder format, or S16 for PCM.
 AVSampleFormat pick_sample_fmt(const AVCodec* codec)
 {
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4996)
-#endif
-    if (codec->sample_fmts != nullptr) {
-        return codec->sample_fmts[0];
-    }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-    return AV_SAMPLE_FMT_FLTP;
+    return pick_supported_sample_format(codec, AV_SAMPLE_FMT_FLTP);
 }
 
 int pick_sample_rate(const AVCodecContext* context,
@@ -212,6 +205,20 @@ ag_result open_encoder(const std::string& output_path,
     enc.ctx->sample_fmt = pick_sample_fmt(enc.codec);
     enc.ctx->sample_rate = out_sample_rate;
     enc.ctx->bit_rate = config.bit_rate > 0 ? config.bit_rate : 0;
+    if (config.variable_bit_rate) {
+        const int quality = std::clamp(config.quality, 0, 100);
+        const int qscale = std::clamp(9 - (quality * 9 / 100), 0, 9);
+        enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
+        enc.ctx->global_quality = FF_QP2LAMBDA * qscale;
+        if (enc.ctx->priv_data != nullptr) {
+            if (std::string_view(enc.codec->name) == "libopus") {
+                av_opt_set(enc.ctx->priv_data, "vbr", "on", 0);
+            }
+        }
+    } else if (enc.ctx->priv_data != nullptr
+               && std::string_view(enc.codec->name) == "libopus") {
+        av_opt_set(enc.ctx->priv_data, "vbr", "off", 0);
+    }
     enc.ctx->thread_count = 1;
     build_channel_layout(enc.out_ch_layout, out_channels);
     enc.ctx->ch_layout = enc.out_ch_layout;

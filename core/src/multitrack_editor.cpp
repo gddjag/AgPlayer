@@ -1,4 +1,5 @@
 #include "multitrack_editor.hpp"
+#include "ffmpeg_codec_support.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -67,17 +68,21 @@ struct EncoderState {
 
 AVSampleFormat pick_sample_fmt(const AVCodec* codec)
 {
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4996)
-#endif
-    if (codec->sample_fmts != nullptr) {
-        return codec->sample_fmts[0];
+    return pick_supported_sample_format(codec, AV_SAMPLE_FMT_FLTP);
+}
+
+float fade_gain(FadeCurve curve, float progress) noexcept
+{
+    const float value = std::clamp(progress, 0.0f, 1.0f);
+    switch (curve) {
+    case FadeCurve::Linear:
+        return value;
+    case FadeCurve::Smooth:
+        return value * value * (3.0f - 2.0f * value);
+    case FadeCurve::EqualPower:
+    default:
+        return std::sin(value * 1.57079632679489661923f);
     }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-    return AV_SAMPLE_FMT_FLTP;
 }
 
 ag_result open_decoder(const std::string& path, DecoderState& d,
@@ -236,6 +241,104 @@ bool encode_frame(AVCodecContext* enc_ctx, AVFormatContext* fmt_ctx,
     return ok;
 }
 
+ag_result resize_pcm_for_timeline(const std::filesystem::path& path,
+                                  int64_t source_frames,
+                                  int64_t target_frames,
+                                  int channels,
+                                  int sample_rate,
+                                  bool repeat,
+                                  const std::atomic_bool* cancelled,
+                                  std::string& error)
+{
+    if (target_frames <= 0 || source_frames <= 0 || channels <= 0) {
+        error = "Invalid timeline duration";
+        return AG_INVALID_ARGUMENT;
+    }
+    if (target_frames <= source_frames || !repeat) {
+        return AG_OK;
+    }
+
+    const std::filesystem::path expanded_path = path.string() + ".loop";
+    std::ifstream source(path, std::ios::binary);
+    std::ofstream expanded(expanded_path,
+                           std::ios::binary | std::ios::trunc);
+    if (!source || !expanded) {
+        error = "Failed to create loop render cache";
+        return AG_IO_ERROR;
+    }
+
+    constexpr int64_t kBlockFrames = 4096;
+    const int64_t seam_frames = std::clamp<int64_t>(
+        sample_rate / 200, 1, std::max<int64_t>(1, source_frames / 4));
+    std::vector<float> buffer(
+        static_cast<std::size_t>(kBlockFrames) * channels);
+    int64_t written = 0;
+    while (written < target_frames) {
+        if (is_cancelled(cancelled)) {
+            source.close();
+            expanded.close();
+            std::filesystem::remove(expanded_path);
+            error = "Multitrack edit cancelled";
+            return AG_CANCELLED;
+        }
+        const int64_t source_offset = written % source_frames;
+        const int64_t frames = std::min(
+            {kBlockFrames, target_frames - written,
+             source_frames - source_offset});
+        const std::streamsize bytes = static_cast<std::streamsize>(
+            frames * channels * static_cast<int64_t>(sizeof(float)));
+        source.clear();
+        source.seekg(static_cast<std::streamoff>(
+            source_offset * channels * static_cast<int64_t>(sizeof(float))));
+        source.read(reinterpret_cast<char*>(buffer.data()), bytes);
+        if (source.gcount() != bytes) {
+            source.close();
+            expanded.close();
+            std::filesystem::remove(expanded_path);
+            error = "Failed to read loop source cache";
+            return AG_IO_ERROR;
+        }
+        for (int64_t frame = 0; frame < frames; ++frame) {
+            const int64_t phase = source_offset + frame;
+            float envelope = 1.0f;
+            if (phase < seam_frames && written > 0) {
+                envelope *= static_cast<float>(phase)
+                    / static_cast<float>(seam_frames);
+            }
+            if (phase >= source_frames - seam_frames
+                && written + frame + 1 < target_frames) {
+                envelope *= static_cast<float>(source_frames - phase - 1)
+                    / static_cast<float>(seam_frames);
+            }
+            for (int channel = 0; channel < channels; ++channel) {
+                buffer[static_cast<std::size_t>(frame) * channels + channel]
+                    *= envelope;
+            }
+        }
+        expanded.write(reinterpret_cast<const char*>(buffer.data()), bytes);
+        if (!expanded) {
+            source.close();
+            expanded.close();
+            std::filesystem::remove(expanded_path);
+            error = "Failed to write loop render cache";
+            return AG_IO_ERROR;
+        }
+        written += frames;
+    }
+    source.close();
+    expanded.close();
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    ec.clear();
+    std::filesystem::rename(expanded_path, path, ec);
+    if (ec) {
+        std::filesystem::remove(expanded_path);
+        error = "Failed to replace loop render cache";
+        return AG_IO_ERROR;
+    }
+    return AG_OK;
+}
+
 ag_result render_track_to_temp(const std::string& input_path,
                                int master_sample_rate,
                                const AVChannelLayout& master_layout,
@@ -250,13 +353,19 @@ ag_result render_track_to_temp(const std::string& input_path,
     if (r != AG_OK) return r;
 
     const int channels = master_layout.nb_channels;
-    const int64_t trim_start_req = (track_config.trim_start_ms > 0)
-        ? track_config.trim_start_ms * master_sample_rate / 1000
-        : 0;
-    const int64_t trim_end_req = (track_config.trim_end_ms > 0)
-        ? track_config.trim_end_ms * master_sample_rate / 1000
-        : std::numeric_limits<int64_t>::max();
-    const int64_t target_written = (track_config.trim_end_ms > 0)
+    const int64_t trim_start_req = track_config.trim_start_sample >= 0
+        ? track_config.trim_start_sample
+        : (track_config.trim_start_ms > 0
+               ? track_config.trim_start_ms * master_sample_rate / 1000
+               : 0);
+    const bool has_trim_end = track_config.trim_end_sample >= 0
+        || track_config.trim_end_ms > 0;
+    const int64_t trim_end_req = track_config.trim_end_sample >= 0
+        ? track_config.trim_end_sample
+        : (track_config.trim_end_ms > 0
+               ? track_config.trim_end_ms * master_sample_rate / 1000
+               : std::numeric_limits<int64_t>::max());
+    const int64_t target_written = has_trim_end
         ? std::max<int64_t>(0, trim_end_req - trim_start_req)
         : std::numeric_limits<int64_t>::max();
 
@@ -295,6 +404,10 @@ ag_result render_track_to_temp(const std::string& input_path,
     }
 
     const float gain = static_cast<float>(track_config.gain);
+    const float left_gain = channels >= 2 && track_config.pan > 0.0
+        ? static_cast<float>(1.0 - track_config.pan) : 1.0f;
+    const float right_gain = channels >= 2 && track_config.pan < 0.0
+        ? static_cast<float>(1.0 + track_config.pan) : 1.0f;
     AVPacket* in_pkt = av_packet_alloc();
     AVFrame* in_frame = av_frame_alloc();
     AVFrame* resampled = av_frame_alloc();
@@ -303,9 +416,44 @@ ag_result render_track_to_temp(const std::string& input_path,
     int64_t written_samples = 0;
     bool failed = false;
     bool trim_end_reached = false;
+    bool awaiting_seek_timestamp = false;
+
+    // Long timeline previews and trimmed exports must not decode from sample 0.
+    // Seek slightly before the requested sample, then use the first decoded
+    // frame timestamp to retain sample-position accounting while codecs warm up.
+    constexpr int64_t k_seek_preroll_seconds = 2;
+    if (trim_start_req > static_cast<int64_t>(master_sample_rate)
+                             * (k_seek_preroll_seconds + 1)) {
+        const int64_t seek_sample = trim_start_req
+            - static_cast<int64_t>(master_sample_rate)
+                * k_seek_preroll_seconds;
+        const AVRational sample_time_base{1, master_sample_rate};
+        const AVRational stream_time_base =
+            dec.fmt_ctx->streams[dec.stream_index]->time_base;
+        const int64_t seek_timestamp = av_rescale_q(
+            seek_sample, sample_time_base, stream_time_base);
+        if (av_seek_frame(dec.fmt_ctx, dec.stream_index, seek_timestamp,
+                          AVSEEK_FLAG_BACKWARD) >= 0) {
+            avcodec_flush_buffers(dec.ctx);
+            decoded_samples = seek_sample;
+            awaiting_seek_timestamp = true;
+        }
+    }
 
     auto write_resampled_frame = [&](AVFrame* frame) -> bool {
         if (frame == nullptr || frame->nb_samples <= 0) return true;
+
+        if (awaiting_seek_timestamp) {
+            const int64_t timestamp = frame->best_effort_timestamp;
+            if (timestamp != AV_NOPTS_VALUE) {
+                const AVRational stream_time_base =
+                    dec.fmt_ctx->streams[dec.stream_index]->time_base;
+                decoded_samples = std::max<int64_t>(
+                    0, av_rescale_q(timestamp, stream_time_base,
+                                    AVRational{1, master_sample_rate}));
+            }
+            awaiting_seek_timestamp = false;
+        }
 
         av_frame_unref(resampled);
         resampled->format = AV_SAMPLE_FMT_FLTP;
@@ -331,8 +479,15 @@ ag_result render_track_to_temp(const std::string& input_path,
             static_cast<size_t>(out_samples) * channels);
         for (int i = 0; i < out_samples; ++i) {
             for (int ch = 0; ch < channels; ++ch) {
+                float channel_gain = 1.0f;
+                if (ch == 0) {
+                    channel_gain = left_gain;
+                } else if (ch == 1) {
+                    channel_gain = right_gain;
+                }
                 interleaved[static_cast<size_t>(i) * channels + ch] =
-                    reinterpret_cast<float*>(resampled->data[ch])[i] * gain;
+                    reinterpret_cast<float*>(resampled->data[ch])[i]
+                    * gain * channel_gain;
             }
         }
 
@@ -348,7 +503,7 @@ ag_result render_track_to_temp(const std::string& input_path,
         int64_t write_count =
             static_cast<int64_t>(out_samples) - write_start_in_frame;
 
-        if (track_config.trim_end_ms > 0) {
+        if (has_trim_end) {
             const int64_t remaining = target_written - written_samples;
             if (remaining <= 0) {
                 trim_end_reached = true;
@@ -372,7 +527,7 @@ ag_result render_track_to_temp(const std::string& input_path,
                 return false;
             }
             written_samples += write_count;
-            if (track_config.trim_end_ms > 0
+            if (has_trim_end
                 && written_samples >= target_written) {
                 trim_end_reached = true;
             }
@@ -474,19 +629,41 @@ ag_result render_track_to_temp(const std::string& input_path,
 
     const int64_t trim_start_sample =
         std::min(trim_start_req, decoded_samples);
-    const int64_t trim_end_sample = (track_config.trim_end_ms > 0)
+    const int64_t trim_end_sample = has_trim_end
         ? std::min(trim_end_req, decoded_samples)
         : decoded_samples;
     if (trim_start_sample >= trim_end_sample) {
         error = "Trim start must be before trim end";
         return AG_INVALID_ARGUMENT;
     }
-    const int64_t edited_samples = trim_end_sample - trim_start_sample;
+    int64_t edited_samples = trim_end_sample - trim_start_sample;
+    const int64_t requested_samples = track_config.timeline_duration_samples >= 0
+        ? track_config.timeline_duration_samples
+        : (track_config.timeline_duration_ms > 0
+               ? track_config.timeline_duration_ms * master_sample_rate / 1000
+               : 0);
+    if (requested_samples > 0) {
+        if (requested_samples < edited_samples) {
+            edited_samples = requested_samples;
+        } else if (requested_samples > edited_samples && track_config.loop) {
+            const ag_result loop_result = resize_pcm_for_timeline(
+                temp_path, edited_samples, requested_samples, channels,
+                master_sample_rate, true, cancelled, error);
+            if (loop_result != AG_OK) {
+                return loop_result;
+            }
+            edited_samples = requested_samples;
+        }
+    }
 
-    const int64_t fade_in_req = static_cast<int64_t>(track_config.fade_in_ms)
-                                * master_sample_rate / 1000;
-    const int64_t fade_out_req = static_cast<int64_t>(track_config.fade_out_ms)
-                                 * master_sample_rate / 1000;
+    const int64_t fade_in_req = track_config.fade_in_samples >= 0
+        ? track_config.fade_in_samples
+        : static_cast<int64_t>(track_config.fade_in_ms)
+              * master_sample_rate / 1000;
+    const int64_t fade_out_req = track_config.fade_out_samples >= 0
+        ? track_config.fade_out_samples
+        : static_cast<int64_t>(track_config.fade_out_ms)
+              * master_sample_rate / 1000;
     int64_t fade_in_samples = std::min(fade_in_req, edited_samples);
     int64_t fade_out_samples = std::min(fade_out_req, edited_samples);
     const bool whole_faded = (fade_in_samples == edited_samples
@@ -525,15 +702,19 @@ ag_result render_track_to_temp(const std::string& input_path,
                 const int64_t idx = offset + i;
                 float env = 1.0f;
                 if (fade_in_samples > 0 && idx < fade_in_samples) {
-                    env *= static_cast<float>(idx)
-                           / static_cast<float>(fade_in_samples);
+                    env *= fade_gain(
+                        track_config.fade_in_curve,
+                        static_cast<float>(idx)
+                            / static_cast<float>(fade_in_samples));
                 }
                 if (fade_out_samples > 0
                     && idx >= edited_samples - fade_out_samples) {
                     const int64_t pos =
                         idx - (edited_samples - fade_out_samples);
-                    env *= 1.0f - static_cast<float>(pos)
-                                / static_cast<float>(fade_out_samples);
+                    env *= fade_gain(
+                        track_config.fade_out_curve,
+                        1.0f - static_cast<float>(pos)
+                                   / static_cast<float>(fade_out_samples));
                 }
                 for (int ch = 0; ch < channels; ++ch) {
                     buf[static_cast<size_t>(i) * channels + ch] *= env;
@@ -609,6 +790,23 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
             error = "Timeline start cannot be negative";
             return AG_INVALID_ARGUMENT;
         }
+        if (track.pan < -1.0 || track.pan > 1.0) {
+            error = "Pan must be between -1.0 and 1.0";
+            return AG_INVALID_ARGUMENT;
+        }
+        if (track.timeline_duration_ms < 0) {
+            error = "Timeline duration cannot be negative";
+            return AG_INVALID_ARGUMENT;
+        }
+        if (track.timeline_start_sample < -1
+            || track.trim_start_sample < -1
+            || track.trim_end_sample < -1
+            || track.fade_in_samples < -1
+            || track.fade_out_samples < -1
+            || track.timeline_duration_samples < -1) {
+            error = "Sample positions must be non-negative or -1";
+            return AG_INVALID_ARGUMENT;
+        }
     }
 
     LayoutGuard master_guard;
@@ -662,8 +860,10 @@ ag_result multitrack_edit(const MultiTrackEditConfig& config,
 
         TempTrackInfo info;
         info.path = temp_path;
-        info.start_sample = config.tracks[i].timeline_start_ms
-                            * static_cast<int64_t>(master_sample_rate) / 1000;
+        info.start_sample = config.tracks[i].timeline_start_sample >= 0
+            ? config.tracks[i].timeline_start_sample
+            : config.tracks[i].timeline_start_ms
+                  * static_cast<int64_t>(master_sample_rate) / 1000;
         ag_result r = render_track_to_temp(
             config.tracks[i].input_path,
             master_sample_rate,

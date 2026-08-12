@@ -5,6 +5,18 @@ add_library(agplayer_qt STATIC
     src/audio_preview_controller.hpp
     src/file_association_controller.cpp
     src/file_association_controller.hpp
+    src/filename_processor.cpp
+    src/filename_processor.hpp
+    src/filename_transform_engine.cpp
+    src/filename_transform_engine.hpp
+    src/filename_validator.cpp
+    src/filename_validator.hpp
+    src/rename_plan.cpp
+    src/rename_plan.hpp
+    src/rename_transaction.cpp
+    src/rename_transaction.hpp
+    src/rename_journal_store.cpp
+    src/rename_journal_store.hpp
     src/editor_timeline_math.cpp
     src/editor_timeline_math.hpp
     src/equalizer_controller.cpp
@@ -35,10 +47,14 @@ add_library(agplayer_qt STATIC
     src/light_editor_controller.hpp
     src/metadata_editor.cpp
     src/metadata_editor.hpp
-    src/pitch_shifter.cpp
-    src/pitch_shifter.hpp
+    src/native_drop_router.cpp
+    src/native_drop_router.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
+    src/playback_state_store.cpp
+    src/playback_state_store.hpp
+    src/replay_gain_scanner.cpp
+    src/replay_gain_scanner.hpp
     src/playlist_model.cpp
     src/playlist_model.hpp
     src/qml_registration.cpp
@@ -49,10 +65,10 @@ add_library(agplayer_qt STATIC
     src/translation_manager.cpp
     src/translation_manager.hpp
     src/runtime_log.hpp
-    src/speed_adjuster.cpp
-    src/speed_adjuster.hpp
     src/waveform_provider.cpp
     src/waveform_provider.hpp
+    src/waveform_coordinate_mapper.cpp
+    src/waveform_coordinate_mapper.hpp
     src/window_controller.cpp
     src/window_controller.hpp
     src/waveform_item.cpp

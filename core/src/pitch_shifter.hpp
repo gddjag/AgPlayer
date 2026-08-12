@@ -11,16 +11,14 @@ namespace agplayer {
 // Pitch shift configuration.
 // pitch_cents: pitch shift in cents (1 semitone = 100 cents). Positive = up,
 //   negative = down. Range: -1200..1200 (one octave either way).
-// keep_tempo: if true (default), preserve original tempo/duration by applying
-//   atempo compensation after asetrate. If false, both pitch and tempo change
-//   together (duration changes proportionally).
+// keep_tempo: if true (default), preserve duration while changing pitch. If
+//   false, pitch changes by changing playback rate and duration changes too.
 // tempo_ratio: additional tempo multiplier (1.0 = no change). Applied on top
 //   of pitch shift. Range: 0.5..2.0.
-//   When keep_tempo=true: atempo = tempo_ratio (independent tempo control)
-//   When keep_tempo=false: atempo = 2^(-cents/1200) * tempo_ratio
+//   SoundTouch applies this as an independent playback-tempo multiplier.
 // output_codec_name: empty = same codec as input, else FFmpeg codec name.
 // output_sample_rate: 0 = auto (follow pitch/tempo), else target output Hz.
-// vocal_protection / smooth_transition: experimental flags (currently no-ops).
+// vocal_protection / smooth_transition apply optional output filtering/fades.
 struct PitchShiftConfig {
     int pitch_cents = 0;
     bool keep_tempo = true;
@@ -32,7 +30,7 @@ struct PitchShiftConfig {
     bool smooth_transition = false;
 };
 
-// Pitch-shift an audio file using FFmpeg's asetrate + atempo filter graph.
+// Pitch-shift an audio file using SoundTouch DSP and FFmpeg I/O.
 // progress_callback receives a fraction in [0.0, 1.0] based on processed
 // duration. cancelled (may be null) is polled between frames.
 // Returns AG_OK on success, AG_CANCELLED if cancelled.

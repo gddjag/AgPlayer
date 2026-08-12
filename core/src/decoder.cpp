@@ -351,6 +351,35 @@ private:
         metadata_.album = read_tag(audio_stream.metadata,
                                    format_context_->metadata,
                                    "album");
+        metadata_.album_artist = read_tag(audio_stream.metadata,
+                                          format_context_->metadata,
+                                          "album_artist");
+        metadata_.track = read_tag(audio_stream.metadata,
+                                   format_context_->metadata,
+                                   "track");
+        metadata_.disc = read_tag(audio_stream.metadata,
+                                  format_context_->metadata,
+                                  "disc");
+        metadata_.composer = read_tag(audio_stream.metadata,
+                                      format_context_->metadata,
+                                      "composer");
+        metadata_.comment = read_tag(audio_stream.metadata,
+                                     format_context_->metadata,
+                                     "comment");
+        metadata_.bpm = read_tag(audio_stream.metadata,
+                                 format_context_->metadata,
+                                 "bpm");
+        metadata_.copyright = read_tag(audio_stream.metadata,
+                                       format_context_->metadata,
+                                       "copyright");
+        metadata_.encoder = read_tag(audio_stream.metadata,
+                                     format_context_->metadata,
+                                     "encoded_by");
+        if (metadata_.encoder.empty()) {
+            metadata_.encoder = read_tag(audio_stream.metadata,
+                                         format_context_->metadata,
+                                         "encoder");
+        }
         metadata_.year = read_tag(audio_stream.metadata,
                                   format_context_->metadata,
                                   "date");

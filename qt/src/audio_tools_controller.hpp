@@ -25,6 +25,6 @@ signals:
     void hideRequested();
 
 private:
-    int currentTool_ = 4;  // Default: Info Edit (index 4)
+    int currentTool_ = 0;  // Default: Light Editor
     bool visible_ = false;
 };

@@ -1,5 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "pitch_shifter.hpp"
+#include "ffmpeg_codec_support.hpp"
+#include "time_pitch_engine.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -22,12 +24,6 @@ bool is_cancelled(const std::atomic_bool* cancelled) noexcept
 {
     return cancelled != nullptr
            && cancelled->load(std::memory_order_relaxed);
-}
-
-// Hann window coefficient
-double hann(int n, int N) noexcept
-{
-    return 0.5 * (1.0 - std::cos(2.0 * 3.14159265358979323846 * n / (N - 1)));
 }
 
 // Simple second-order biquad low-pass or high-pass filter for vocal formant compensation.
@@ -76,55 +72,6 @@ private:
     double x1_ = 0.0, x2_ = 0.0;
     double y1_ = 0.0, y2_ = 0.0;
 };
-
-// OLA (Overlap-Add) time-stretch for a single channel of float samples.
-// stretch_factor > 1: stretch (longer), < 1: compress (shorter).
-// Returns the stretched samples in a new vector.
-std::vector<float> ola_stretch(const float* input, int64_t input_samples,
-                                double stretch_factor)
-{
-    if (input_samples <= 0 || stretch_factor <= 0.0) {
-        return {};
-    }
-
-    const int frame_size = 1024;
-    const int hop_analysis = frame_size / 2;
-    const int hop_synthesis = static_cast<int>(std::round(
-        static_cast<double>(hop_analysis) * stretch_factor));
-    if (hop_synthesis < 1) return {};
-
-    const int64_t out_samples = static_cast<int64_t>(
-        std::round(static_cast<double>(input_samples) * stretch_factor));
-    std::vector<float> output(out_samples + frame_size, 0.0f);
-
-    // Precompute Hann window
-    std::vector<float> window(frame_size);
-    for (int i = 0; i < frame_size; ++i) {
-        window[i] = static_cast<float>(hann(i, frame_size));
-    }
-
-    // Overlap-add: extract windowed frames from input, place at stretched
-    // positions in output. The window normalization for 50% overlap is 2.0,
-    // but since hop_synthesis != hop_analysis we use a normalization factor
-    // based on the actual overlap.
-    const double norm_factor = 2.0 / (1.0 + stretch_factor);
-
-    int64_t in_pos = 0;
-    int64_t out_pos = 0;
-    while (in_pos + frame_size <= input_samples) {
-        for (int i = 0; i < frame_size; ++i) {
-            if (out_pos + i < static_cast<int64_t>(output.size())) {
-                output[out_pos + i] += input[in_pos + i] * window[i]
-                                       * static_cast<float>(norm_factor);
-            }
-        }
-        in_pos += hop_analysis;
-        out_pos += hop_synthesis;
-    }
-
-    output.resize(out_samples);
-    return output;
-}
 
 struct DecoderState {
     AVFormatContext* fmt_ctx = nullptr;
@@ -241,10 +188,9 @@ ag_result pitch_shift(const std::string& input_path,
 
     const double pitch_ratio = std::pow(2.0, config.pitch_cents / 1200.0);
 
-    // 2. Set up swresample to convert to float32 planar for OLA processing.
-    // For keep_tempo mode: resample to R/pitch_ratio first (changes sample
-    // count, preserves audio content), then OLA-stretch by pitch_ratio*tempo.
-    // For non-keep_tempo mode: no resampling, just OLA-stretch by tempo_ratio.
+    // 2. Decode to the source sample rate. SoundTouch performs pitch and
+    // tempo processing on interleaved float samples without changing the
+    // encoder clock.
     SwrContext* swr = swr_alloc();
     if (swr == nullptr) {
         error = "Failed to allocate SwrContext";
@@ -263,22 +209,7 @@ ag_result pitch_shift(const std::string& input_path,
 
     av_opt_set_chlayout(swr, "out_chlayout", &out_ch_layout, 0);
 
-    // For keep_tempo: resample to R/pitch_ratio so we get N/pitch_ratio samples
-    // representing the same audio. Then OLA-stretch back to N*tempo samples.
-    // For non-keep_tempo: keep original rate, just OLA-stretch by tempo_ratio.
-    int out_sample_rate;
-    double stretch_factor;
-    if (config.keep_tempo) {
-        out_sample_rate = static_cast<int>(
-            std::round(dec.ctx->sample_rate / pitch_ratio));
-        stretch_factor = pitch_ratio * config.tempo_ratio;
-    } else {
-        out_sample_rate = dec.ctx->sample_rate;
-        stretch_factor = config.tempo_ratio;
-    }
-
-    // Avoid 0 sample rate
-    if (out_sample_rate < 1) out_sample_rate = 1;
+    const int out_sample_rate = dec.ctx->sample_rate;
 
     av_opt_set_int(swr, "out_sample_rate", out_sample_rate, 0);
     av_opt_set_sample_fmt(swr, "out_sample_fmt", AV_SAMPLE_FMT_FLTP, 0);
@@ -445,32 +376,70 @@ ag_result pitch_shift(const std::string& input_path,
         return AG_CANCELLED;
     }
 
-    // 4. Apply OLA time-stretch to each channel
+    // 4. Apply production-grade interleaved pitch/tempo processing.
     if (progress_callback) progress_callback(0.5f);
 
-    std::vector<std::vector<float>> stretched(channels);
-    for (int ch = 0; ch < channels; ++ch) {
-        if (is_cancelled(cancelled)) {
-            error = "Pitch shift cancelled";
-            return AG_CANCELLED;
-        }
-        stretched[ch] = ola_stretch(channel_data[ch].data(),
-            static_cast<int64_t>(channel_data[ch].size()),
-            stretch_factor);
+    const std::size_t input_frames = channel_data.empty()
+        ? 0U : channel_data.front().size();
+    if (input_frames == 0U) {
+        error = "Input contains no decodable audio samples";
+        return AG_INTERNAL_ERROR;
     }
 
-    // For keep_tempo: encode at original rate R (so pitch is shifted by
-    // pitch_ratio, since the audio was resampled to R/pitch_ratio)
-    // For non-keep_tempo: encode at R*pitch_ratio (pitch and tempo shift
-    // together)
-    int enc_sample_rate;
-    if (config.keep_tempo) {
-        enc_sample_rate = dec.ctx->sample_rate;
-    } else {
-        enc_sample_rate = static_cast<int>(
-            std::round(dec.ctx->sample_rate * pitch_ratio));
-        if (enc_sample_rate < 1) enc_sample_rate = 1;
+    std::vector<float> interleaved(input_frames * static_cast<std::size_t>(channels));
+    for (std::size_t frame = 0; frame < input_frames; ++frame) {
+        for (int ch = 0; ch < channels; ++ch) {
+            interleaved[frame * static_cast<std::size_t>(channels)
+                        + static_cast<std::size_t>(ch)] = channel_data[ch][frame];
+        }
     }
+
+    auto processor = create_time_pitch_engine();
+    if (processor == nullptr || !processor->configure(out_sample_rate, channels)
+        || !processor->setTempoRatio(config.tempo_ratio)
+        || (config.keep_tempo
+                ? !processor->setPitchCents(config.pitch_cents)
+                : !processor->setRateRatio(pitch_ratio))) {
+        error = "Invalid time/pitch processor configuration";
+        return AG_INVALID_ARGUMENT;
+    }
+    processor->put(interleaved.data(), input_frames);
+    processor->flush();
+
+    std::vector<float> processed;
+    processed.reserve(interleaved.size());
+    constexpr unsigned int receive_frames = 4096;
+    std::vector<float> receive_buffer(
+        static_cast<std::size_t>(receive_frames)
+        * static_cast<std::size_t>(channels));
+    while (!is_cancelled(cancelled)) {
+        const std::size_t received =
+            processor->receive(receive_buffer.data(), receive_frames);
+        if (received == 0U) break;
+        processed.insert(processed.end(), receive_buffer.begin(),
+            receive_buffer.begin()
+                + static_cast<std::ptrdiff_t>(received)
+                    * static_cast<std::ptrdiff_t>(channels));
+    }
+    if (is_cancelled(cancelled)) {
+        error = "Pitch shift cancelled";
+        return AG_CANCELLED;
+    }
+
+    const std::size_t processed_frames =
+        processed.size() / static_cast<std::size_t>(channels);
+    std::vector<std::vector<float>> stretched(
+        static_cast<std::size_t>(channels),
+        std::vector<float>(processed_frames));
+    for (std::size_t frame = 0; frame < processed_frames; ++frame) {
+        for (int ch = 0; ch < channels; ++ch) {
+            stretched[ch][frame] =
+                processed[frame * static_cast<std::size_t>(channels)
+                          + static_cast<std::size_t>(ch)];
+        }
+    }
+
+    const int enc_sample_rate = out_sample_rate;
 
     if (config.vocal_protection) {
         if (pitch_ratio > 1.0) {
@@ -561,27 +530,8 @@ ag_result pitch_shift(const std::string& input_path,
         : enc_sample_rate;
 
     // Use a sample format the encoder supports (prefer original, fallback to FLTP)
-    AVSampleFormat enc_sample_fmt = dec.ctx->sample_fmt;
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4996)
-#endif
-    if (enc_codec->sample_fmts != nullptr) {
-        // Check if decoder's format is supported by encoder
-        bool supported = false;
-        for (int i = 0; enc_codec->sample_fmts[i] != AV_SAMPLE_FMT_NONE; ++i) {
-            if (enc_codec->sample_fmts[i] == enc_sample_fmt) {
-                supported = true;
-                break;
-            }
-        }
-        if (!supported) {
-            enc_sample_fmt = enc_codec->sample_fmts[0];
-        }
-    }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+    const AVSampleFormat enc_sample_fmt = pick_supported_sample_format(
+        enc_codec, dec.ctx->sample_fmt);
 
     enc_ctx->sample_fmt = enc_sample_fmt;
     enc_ctx->sample_rate = final_sample_rate;

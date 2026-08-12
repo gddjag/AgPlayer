@@ -7,6 +7,8 @@
 #include "light_editor.hpp"
 #include "multitrack_editor.hpp"
 #include "transcoder.hpp"
+
+#include <algorithm>
 #include "bpm_analyzer.hpp"
 #include "waveform_analyzer.hpp"
 
@@ -18,6 +20,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 namespace {
 
@@ -87,6 +93,9 @@ struct ag_waveform {
     std::vector<float> mid_;
     std::vector<float> high_;
     double bpm_ = 0.0;
+    std::uint64_t duration_ms_ = 0U;
+    std::uint64_t total_samples_ = 0U;
+    int sample_rate_ = 0;
 };
 
 struct ag_cancel_token {
@@ -185,6 +194,14 @@ ag_result ag_player_set_queue(ag_player* player,
     });
 }
 
+ag_result ag_player_queue_next(ag_player* player, const char* utf8_path)
+{
+    if (player == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] { return player->context.queue_next(utf8_path); });
+}
+
 ag_result ag_player_play(ag_player* player)
 {
     return player == nullptr
@@ -249,6 +266,19 @@ ag_result ag_player_set_volume(ag_player* player, const float volume)
     return player == nullptr
                ? AG_INVALID_ARGUMENT
                : guard_result([&] { return player->context.set_volume(volume); });
+}
+
+ag_result ag_player_set_replay_gain(ag_player* player, const float gain_db,
+                                    const float peak,
+                                    const int clip_protection)
+{
+    if (player == nullptr || (clip_protection != 0 && clip_protection != 1)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        return player->context.set_replay_gain(gain_db, peak,
+                                               clip_protection != 0);
+    });
 }
 
 ag_result ag_player_set_equalizer(
@@ -503,6 +533,16 @@ ag_result ag_player_set_transition_fade_ms(ag_player* player,
                  });
 }
 
+ag_result ag_player_set_duration_ms(ag_player* player,
+                                    const long long duration_ms)
+{
+    return player == nullptr
+               ? AG_INVALID_ARGUMENT
+               : guard_result([&] {
+                     return player->context.set_duration_ms(duration_ms);
+                 });
+}
+
 ag_result ag_player_set_match_track_sample_rate(ag_player* player,
                                                  const int enabled)
 {
@@ -556,6 +596,46 @@ const char* ag_metadata_artist(const ag_metadata* metadata)
 const char* ag_metadata_album(const ag_metadata* metadata)
 {
     return metadata == nullptr ? "" : metadata->value.album.c_str();
+}
+
+const char* ag_metadata_album_artist(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.album_artist.c_str();
+}
+
+const char* ag_metadata_track(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.track.c_str();
+}
+
+const char* ag_metadata_disc(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.disc.c_str();
+}
+
+const char* ag_metadata_composer(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.composer.c_str();
+}
+
+const char* ag_metadata_comment(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.comment.c_str();
+}
+
+const char* ag_metadata_bpm_tag(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.bpm.c_str();
+}
+
+const char* ag_metadata_copyright(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.copyright.c_str();
+}
+
+const char* ag_metadata_encoder(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.encoder.c_str();
 }
 
 const char* ag_metadata_format(const ag_metadata* metadata)
@@ -631,6 +711,45 @@ ag_result ag_metadata_write(const char* utf8_path,
                             const size_t cover_size,
                             const char* cover_mime_type)
 {
+    return ag_metadata_write_extended(utf8_path,
+                                      title,
+                                      artist,
+                                      album,
+                                      nullptr,
+                                      year,
+                                      genre,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr,
+                                      lyrics,
+                                      cover_data,
+                                      cover_size,
+                                      cover_mime_type);
+}
+
+ag_result ag_metadata_write_extended(const char* utf8_path,
+                                     const char* title,
+                                     const char* artist,
+                                     const char* album,
+                                     const char* album_artist,
+                                     const char* date,
+                                     const char* genre,
+                                     const char* track,
+                                     const char* disc,
+                                     const char* composer,
+                                     const char* comment,
+                                     const char* bpm,
+                                     const char* copyright,
+                                     const char* encoder,
+                                     const char* lyrics,
+                                     const unsigned char* cover_data,
+                                     const size_t cover_size,
+                                     const char* cover_mime_type)
+{
     if (utf8_path == nullptr || utf8_path[0] == '\0') {
         return AG_INVALID_ARGUMENT;
     }
@@ -640,10 +759,21 @@ ag_result ag_metadata_write(const char* utf8_path,
         if (title != nullptr) update.title = title;
         if (artist != nullptr) update.artist = artist;
         if (album != nullptr) update.album = album;
-        if (year != nullptr) update.year = year;
+        if (album_artist != nullptr) update.album_artist = album_artist;
+        if (date != nullptr) update.year = date;
         if (genre != nullptr) update.genre = genre;
+        if (track != nullptr) update.track = track;
+        if (disc != nullptr) update.disc = disc;
+        if (composer != nullptr) update.composer = composer;
+        if (comment != nullptr) update.comment = comment;
+        if (bpm != nullptr) update.bpm = bpm;
+        if (copyright != nullptr) update.copyright = copyright;
+        if (encoder != nullptr) update.encoder = encoder;
         if (lyrics != nullptr) update.lyrics = lyrics;
-        if (cover_size > 0U && cover_data != nullptr) {
+        if (cover_data != nullptr) {
+            update.cover_action = cover_size > 0U
+                ? agplayer::CoverAction::Set
+                : agplayer::CoverAction::Clear;
             update.cover_data = cover_data;
             update.cover_size = cover_size;
             if (cover_mime_type != nullptr) {
@@ -700,6 +830,8 @@ ag_result ag_transcode_ex(const char* input_path,
         if (options != nullptr) {
             config.volume_normalize = options->volume_normalize != 0;
             config.keep_metadata = options->keep_metadata != 0;
+            config.variable_bit_rate = options->bitrate_mode == 1;
+            config.quality = std::clamp(options->quality, 0, 100);
         }
 
         const std::atomic_bool* cancelled =
@@ -733,6 +865,13 @@ ag_result ag_transcode(const char* input_path,
     return ag_transcode_ex(input_path, output_path, codec_name, bit_rate,
                            sample_rate, channels, nullptr, cancel_token,
                            progress_callback, user_data);
+}
+
+int ag_encoder_available(const char* codec_name)
+{
+    return codec_name != nullptr && codec_name[0] != '\0'
+            && avcodec_find_encoder_by_name(codec_name) != nullptr
+        ? 1 : 0;
 }
 
 ag_result ag_pitch_shift_ex(const char* input_path,
@@ -864,9 +1003,13 @@ ag_result ag_waveform_analyze(const char* utf8_path,
         std::vector<float> high;
         const std::atomic_bool* cancelled =
             cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        std::uint64_t duration_ms = 0U;
+        std::uint64_t total_samples = 0U;
+        int sample_rate = 0;
         const ag_result result = agplayer::WaveformAnalyzer::analyze(
             utf8_path, target_points, cancelled, progress_callback, user_data,
-            peaks, bass, mid, high);
+            peaks, bass, mid, high, agplayer::WaveformAggregation::Peak,
+            &duration_ms, &total_samples, &sample_rate);
         if (result != AG_OK) {
             return result;
         }
@@ -878,6 +1021,9 @@ ag_result ag_waveform_analyze(const char* utf8_path,
         waveform->bass_ = std::move(bass);
         waveform->mid_ = std::move(mid);
         waveform->high_ = std::move(high);
+        waveform->duration_ms_ = duration_ms;
+        waveform->total_samples_ = total_samples;
+        waveform->sample_rate_ = sample_rate;
         *out_waveform = waveform;
         return AG_OK;
     } catch (...) {
@@ -966,6 +1112,21 @@ ag_result ag_track_analysis(const char* utf8_path,
         cancel_token, progress_callback, user_data, out_waveform, out_bpm);
 }
 
+uint64_t ag_waveform_duration_ms(const ag_waveform* waveform)
+{
+    return waveform == nullptr ? 0U : waveform->duration_ms_;
+}
+
+uint64_t ag_waveform_total_samples(const ag_waveform* waveform)
+{
+    return waveform == nullptr ? 0U : waveform->total_samples_;
+}
+
+int ag_waveform_sample_rate(const ag_waveform* waveform)
+{
+    return waveform == nullptr ? 0 : waveform->sample_rate_;
+}
+
 ag_result ag_track_analysis_with_aggregation(
     const char* utf8_path,
     const size_t target_points,
@@ -1001,9 +1162,13 @@ ag_result ag_track_analysis_with_aggregation(
         std::vector<float> high;
         const auto internal_aggregation =
             static_cast<agplayer::WaveformAggregation>(aggregation);
+        std::uint64_t duration_ms = 0U;
+        std::uint64_t total_samples = 0U;
+        int sample_rate = 0;
         ag_result waveform_result = agplayer::WaveformAnalyzer::analyze(
             utf8_path, target_points, cancelled, progress_callback, user_data,
-            peaks, bass, mid, high, internal_aggregation);
+            peaks, bass, mid, high, internal_aggregation, &duration_ms,
+            &total_samples, &sample_rate);
         if (waveform_result != AG_OK) {
             return waveform_result;
         }
@@ -1016,6 +1181,9 @@ ag_result ag_track_analysis_with_aggregation(
         waveform->bass_ = std::move(bass);
         waveform->mid_ = std::move(mid);
         waveform->high_ = std::move(high);
+        waveform->duration_ms_ = duration_ms;
+        waveform->total_samples_ = total_samples;
+        waveform->sample_rate_ = sample_rate;
 
         agplayer::BpmAnalyzeInput bpm_input;
         bpm_input.file_path = utf8_path;
@@ -1064,18 +1232,19 @@ ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out)
     });
 }
 
-ag_result ag_multitrack_edit_ex(const size_t track_count,
-                                const char* const* input_paths,
-                                const long long* timeline_start_ms,
-                                const long long* trim_start_ms,
-                                const long long* trim_end_ms,
-                                const int* fade_in_ms,
-                                const int* fade_out_ms,
-                                const double* gain,
-                                const char* output_path,
-                                const ag_cancel_token* cancel_token,
-                                const ag_progress_callback progress_callback,
-                                void* const user_data)
+ag_result ag_multitrack_edit_ex2(const size_t track_count,
+                                 const char* const* input_paths,
+                                 const long long* timeline_start_ms,
+                                 const long long* trim_start_ms,
+                                 const long long* trim_end_ms,
+                                 const int* fade_in_ms,
+                                 const int* fade_out_ms,
+                                 const double* gain,
+                                 const double* pan,
+                                 const char* output_path,
+                                 const ag_cancel_token* cancel_token,
+                                 const ag_progress_callback progress_callback,
+                                 void* const user_data)
 {
     if (track_count == 0 || output_path == nullptr || output_path[0] == '\0') {
         return AG_INVALID_ARGUMENT;
@@ -1098,6 +1267,7 @@ ag_result ag_multitrack_edit_ex(const size_t track_count,
             if (fade_in_ms != nullptr) track.fade_in_ms = fade_in_ms[i];
             if (fade_out_ms != nullptr) track.fade_out_ms = fade_out_ms[i];
             if (gain != nullptr) track.gain = gain[i];
+            if (pan != nullptr) track.pan = pan[i];
             config.tracks.push_back(std::move(track));
         }
 
@@ -1114,6 +1284,143 @@ ag_result ag_multitrack_edit_ex(const size_t track_count,
         std::string error;
         return agplayer::multitrack_edit(config, cancelled, std::move(cb),
                                          error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
+}
+
+ag_result ag_multitrack_edit_ex(const size_t track_count,
+                                const char* const* input_paths,
+                                const long long* timeline_start_ms,
+                                const long long* trim_start_ms,
+                                const long long* trim_end_ms,
+                                const int* fade_in_ms,
+                                const int* fade_out_ms,
+                                const double* gain,
+                                const char* output_path,
+                                const ag_cancel_token* cancel_token,
+                                const ag_progress_callback progress_callback,
+                                void* const user_data)
+{
+    return ag_multitrack_edit_ex2(
+        track_count, input_paths, timeline_start_ms, trim_start_ms,
+        trim_end_ms, fade_in_ms, fade_out_ms, gain, nullptr, output_path,
+        cancel_token, progress_callback, user_data);
+}
+
+ag_result ag_multitrack_edit_v2(
+    const size_t track_count,
+    const ag_multitrack_track_v2* const tracks,
+    const char* const output_path,
+    const ag_cancel_token* const cancel_token,
+    const ag_progress_callback progress_callback,
+    void* const user_data)
+{
+    if (track_count == 0 || tracks == nullptr || output_path == nullptr
+        || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+    try {
+        agplayer::MultiTrackEditConfig config;
+        config.output_path = output_path;
+        config.tracks.reserve(track_count);
+        for (size_t index = 0; index < track_count; ++index) {
+            const ag_multitrack_track_v2& source = tracks[index];
+            if (source.struct_size < sizeof(ag_multitrack_track_v2)
+                || source.api_version != 1U) {
+                return AG_INVALID_ARGUMENT;
+            }
+            agplayer::MultiTrackEditConfig::Track track;
+            if (source.input_path != nullptr) {
+                track.input_path = source.input_path;
+            }
+            track.timeline_start_ms = source.timeline_start_ms;
+            track.trim_start_ms = source.trim_start_ms;
+            track.trim_end_ms = source.trim_end_ms;
+            track.fade_in_ms = source.fade_in_ms;
+            track.fade_out_ms = source.fade_out_ms;
+            track.gain = source.gain;
+            track.pan = source.pan;
+            track.timeline_duration_ms = source.timeline_duration_ms;
+            track.loop = source.loop != 0;
+            config.tracks.push_back(std::move(track));
+        }
+        const std::atomic_bool* cancelled = cancel_token == nullptr
+            ? nullptr : &cancel_token->cancelled;
+        std::function<void(float)> callback;
+        if (progress_callback != nullptr) {
+            callback = [progress_callback, user_data](float value) {
+                progress_callback(value, user_data);
+            };
+        }
+        std::string error;
+        return agplayer::multitrack_edit(config, cancelled,
+                                         std::move(callback), error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
+}
+
+ag_result ag_multitrack_edit_v3(
+    const size_t track_count,
+    const ag_multitrack_track_v3* const tracks,
+    const char* const output_path,
+    const ag_cancel_token* const cancel_token,
+    const ag_progress_callback progress_callback,
+    void* const user_data)
+{
+    if (track_count == 0 || tracks == nullptr || output_path == nullptr
+        || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+    try {
+        agplayer::MultiTrackEditConfig config;
+        config.output_path = output_path;
+        config.tracks.reserve(track_count);
+        for (size_t index = 0; index < track_count; ++index) {
+            const ag_multitrack_track_v3& source = tracks[index];
+            constexpr size_t v3_base_size =
+                offsetof(ag_multitrack_track_v3, fade_in_curve);
+            if (source.struct_size < v3_base_size
+                || source.api_version != 1U) {
+                return AG_INVALID_ARGUMENT;
+            }
+            agplayer::MultiTrackEditConfig::Track track;
+            if (source.input_path != nullptr) {
+                track.input_path = source.input_path;
+            }
+            track.timeline_start_sample = source.timeline_start_sample;
+            track.trim_start_sample = source.trim_start_sample;
+            track.trim_end_sample = source.trim_end_sample;
+            track.fade_in_samples = source.fade_in_samples;
+            track.fade_out_samples = source.fade_out_samples;
+            if (source.struct_size >= sizeof(ag_multitrack_track_v3)) {
+                const auto fade_curve = [](int value) {
+                    if (value == 0) return agplayer::FadeCurve::Linear;
+                    if (value == 2) return agplayer::FadeCurve::Smooth;
+                    return agplayer::FadeCurve::EqualPower;
+                };
+                track.fade_in_curve = fade_curve(source.fade_in_curve);
+                track.fade_out_curve = fade_curve(source.fade_out_curve);
+            }
+            track.gain = source.gain;
+            track.pan = source.pan;
+            track.timeline_duration_samples =
+                source.timeline_duration_samples;
+            track.loop = source.loop != 0;
+            config.tracks.push_back(std::move(track));
+        }
+        const std::atomic_bool* cancelled = cancel_token == nullptr
+            ? nullptr : &cancel_token->cancelled;
+        std::function<void(float)> callback;
+        if (progress_callback != nullptr) {
+            callback = [progress_callback, user_data](float value) {
+                progress_callback(value, user_data);
+            };
+        }
+        std::string error;
+        return agplayer::multitrack_edit(config, cancelled,
+                                         std::move(callback), error);
     } catch (...) {
         return AG_INTERNAL_ERROR;
     }

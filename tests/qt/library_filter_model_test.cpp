@@ -10,11 +10,15 @@ class LibraryFilterModelTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void defaultFullRangeDoesNotHideTracks();
     void filtersKeywordAcrossMetadataFields();
-    void combinesRatingBpmAndFavoriteFilters();
+    void filtersKeywordAcrossCustomTags();
+    void combinesExactRatingBpmAndFavoriteFilters();
+    void filtersExactRatingInsteadOfMinimumRating();
     void filtersAndSortsPlaybackHistory();
     void writesRatingThroughProxyRows();
     void filtersPlaylistMembershipAndTracksLiveChanges();
+    void preservesCustomPlaylistOrder();
 };
 
 namespace {
@@ -60,14 +64,31 @@ QList<TrackRecord> sampleTracks()
 
 } // namespace
 
+void LibraryFilterModelTest::defaultFullRangeDoesNotHideTracks()
+{
+    LibraryModel source;
+    QList<TrackRecord> tracks = sampleTracks();
+    tracks.append(makeTrack(QStringLiteral("epsilon"),
+                            QStringLiteral("Double Time"),
+                            QStringLiteral("Pulse"),
+                            QStringLiteral("Fast"),
+                            1, 210.0));
+    source.replaceAll(tracks);
+
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+
+    QCOMPARE(filter.minBpm(), 60.0);
+    QCOMPARE(filter.maxBpm(), 160.0);
+    QCOMPARE(filter.count(), tracks.size());
+}
+
 void LibraryFilterModelTest::filtersKeywordAcrossMetadataFields()
 {
     LibraryModel source;
     source.replaceAll(sampleTracks());
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
-    filter.setMinBpm(0.0);
-    filter.setMaxBpm(300.0);
 
     filter.setSearchText(QStringLiteral("BLUE"));
     QCOMPARE(filter.count(), 2);
@@ -79,14 +100,29 @@ void LibraryFilterModelTest::filtersKeywordAcrossMetadataFields()
     QCOMPARE(filter.count(), 0);
 }
 
-void LibraryFilterModelTest::combinesRatingBpmAndFavoriteFilters()
+void LibraryFilterModelTest::filtersKeywordAcrossCustomTags()
+{
+    QList<TrackRecord> tracks = sampleTracks();
+    tracks[1].tags = {QStringLiteral("Chill"), QStringLiteral("Rainy Night")};
+    LibraryModel source;
+    source.replaceAll(tracks);
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+
+    filter.setSearchText(QStringLiteral("rainy"));
+    QCOMPARE(filter.count(), 1);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("beta"));
+}
+
+void LibraryFilterModelTest::combinesExactRatingBpmAndFavoriteFilters()
 {
     LibraryModel source;
     source.replaceAll(sampleTracks());
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
     filter.setSearchText(QStringLiteral("horizon"));
-    filter.setMinRating(4);
+    filter.setExactRating(5);
     filter.setMinBpm(120.0);
     filter.setMaxBpm(140.0);
     filter.setCategory(QStringLiteral("favorites"));
@@ -94,6 +130,20 @@ void LibraryFilterModelTest::combinesRatingBpmAndFavoriteFilters()
     QCOMPARE(filter.count(), 1);
     QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
              QStringLiteral("alpha"));
+}
+
+void LibraryFilterModelTest::filtersExactRatingInsteadOfMinimumRating()
+{
+    LibraryModel source;
+    source.replaceAll(sampleTracks());
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+
+    filter.setExactRating(3);
+
+    QCOMPARE(filter.count(), 1);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("beta"));
 }
 
 void LibraryFilterModelTest::filtersAndSortsPlaybackHistory()
@@ -106,8 +156,6 @@ void LibraryFilterModelTest::filtersAndSortsPlaybackHistory()
 
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
-    filter.setMinBpm(0.0);
-    filter.setMaxBpm(300.0);
     filter.setCategory(QStringLiteral("history"));
 
     QCOMPARE(filter.count(), 3);
@@ -125,8 +173,6 @@ void LibraryFilterModelTest::writesRatingThroughProxyRows()
     source.replaceAll(sampleTracks());
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
-    filter.setMinBpm(0.0);
-    filter.setMaxBpm(300.0);
     filter.setSearchText(QStringLiteral("Warm Rain"));
     QCOMPARE(filter.count(), 1);
 
@@ -150,8 +196,6 @@ void LibraryFilterModelTest::filtersPlaylistMembershipAndTracksLiveChanges()
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
     filter.setPlaylistModel(&playlists);
-    filter.setMinBpm(0.0);
-    filter.setMaxBpm(300.0);
     filter.setCategory(playlistId);
 
     QCOMPARE(filter.count(), 1);
@@ -161,6 +205,32 @@ void LibraryFilterModelTest::filtersPlaylistMembershipAndTracksLiveChanges()
     QCOMPARE(filter.count(), 2);
     QVERIFY(playlists.removeTrack(playlistId, QStringLiteral("beta")));
     QCOMPARE(filter.count(), 1);
+}
+
+void LibraryFilterModelTest::preservesCustomPlaylistOrder()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    const QString playlistId = playlists.createPlaylist(QStringLiteral("Focus"));
+    QVERIFY(playlists.addTracks(playlistId,
+                               {QStringLiteral("gamma"), QStringLiteral("alpha"),
+                                QStringLiteral("beta")}));
+
+    LibraryModel source;
+    source.replaceAll(sampleTracks());
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.setPlaylistModel(&playlists);
+    filter.setCategory(playlistId);
+
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("gamma"));
+    QCOMPARE(filter.data(filter.index(1, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("alpha"));
+    QVERIFY(playlists.moveTrack(playlistId, 2, 0));
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("beta"));
 }
 
 QTEST_GUILESS_MAIN(LibraryFilterModelTest)

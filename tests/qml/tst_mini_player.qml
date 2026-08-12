@@ -119,8 +119,21 @@ TestCase {
         playbackFake.durationMs = 307000
         controls.playback.durationMs = 240000
         controls.waveformDurationMs = 301250
-        compare(controls.effectiveDurationMs, 240000)
+        compare(controls.effectiveDurationMs, 301250)
         controls.waveformDurationMs = 0
+        compare(controls.effectiveDurationMs, 240000)
+    }
+
+    function test_mini_waveform_uses_precise_playback_clip() {
+        playbackFake.publishPlaying(150000, 300000)
+        var waveform = findChild(miniPlayer, "miniWaveform")
+        var clip = findChild(miniPlayer, "miniWaveformPlayedClip")
+        var guide = findChild(miniPlayer, "miniWaveformPlaybackGuide")
+        verify(waveform && clip && guide)
+        tryVerify(function() {
+            return Math.abs(clip.width - waveform.waveformCursorX) <= 0.5
+                    && Math.abs(guide.x - waveform.waveformCursorX) <= 0.5
+        })
     }
 
     function test_mini_player_can_cycle_the_shared_waveform_mode() {
@@ -154,6 +167,7 @@ TestCase {
         verify(flyout)
         var closeTimer = findChild(miniPlayer, "miniVolumeCloseTimer")
         verify(closeTimer, "volume flyout must expose its delayed close timer")
+        compare(closeTimer.interval, 2000)
         flyout.parent.expanded = true
         tryVerify(function() {
             var left = flyout.parent.x + flyout.x
@@ -164,9 +178,9 @@ TestCase {
                     && flyout.x + flyout.width === flyout.parent.width
         }, 300, "mini volume flyout must expand to the right of its mute button")
         closeTimer.restart()
-        wait(500)
+        wait(1600)
         verify(flyout.parent.expanded,
-               "volume flyout must stay open long enough to move the pointer onto its slider")
+               "volume flyout must stay open for the two-second pointer transfer")
         flyout.parent.expanded = false
         verify(findChild(miniPlayer, "miniRating"))
         verify(findChild(miniPlayer, "miniWaveform"))

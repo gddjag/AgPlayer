@@ -28,6 +28,7 @@ private slots:
     void controllerCanBeDestroyedWhileProbeIsBlocked();
     void rejectsModelWithDifferentThreadAffinity();
     void writesBpmWhenAutoReadEnabled();
+    void productionProbePrefersValidEmbeddedBpm();
     void leavesBpmZeroWhenAutoReadDisabled();
     void probeObservesDynamicAnalyzeBpmFlag();
     void importsSupportedAudioRecursivelyFromFolder();
@@ -538,6 +539,32 @@ void ImportControllerTest::probeObservesDynamicAnalyzeBpmFlag()
         QCOMPARE(model.rowCount(), 1);
         QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
     }
+}
+
+void ImportControllerTest::productionProbePrefersValidEmbeddedBpm()
+{
+    const QString fixture = QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
+    QVERIFY2(!fixture.isEmpty(), "AGPLAYER_TEST_AUDIO must name the generated WAV fixture");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString tagged = dir.filePath(QStringLiteral("tagged-bpm.mp3"));
+    QCOMPARE(ag_transcode(fixture.toUtf8().constData(), tagged.toUtf8().constData(),
+                         "libmp3lame", 192000, 44100, 2,
+                         nullptr, nullptr, nullptr), AG_OK);
+    QCOMPARE(ag_metadata_write_extended(
+                 tagged.toUtf8().constData(), nullptr, nullptr, nullptr,
+                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                 nullptr, "127.50", nullptr, nullptr, nullptr,
+                 nullptr, 0U, nullptr), AG_OK);
+
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    importer.importUrls({QUrl::fromLocalFile(tagged)});
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(importer.errors().size(), 0);
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(std::abs(model.tracks().front().bpm - 127.5) < 0.01);
 }
 
 void ImportControllerTest::queuesDropsReceivedWhileAnImportIsBusy()

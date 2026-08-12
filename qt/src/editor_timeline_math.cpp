@@ -6,7 +6,7 @@
 
 qint64 beatGridMs(double bpm, int denominator)
 {
-    if (bpm < 40.0 || bpm > 240.0 || denominator <= 0) {
+    if (bpm < 40.0 || bpm > 300.0 || denominator <= 0) {
         return 0;
     }
     return qRound64(240000.0 / (bpm * denominator));

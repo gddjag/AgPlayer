@@ -19,14 +19,20 @@ private slots:
     void initTestCase();
     void defaultCacheDirectoryUsesStandardPaths();
     void defaultOutputDirectoryUsesStandardPaths();
+    void transcodeDefaultsAreSplitAndPersisted();
+    void migratesCombinedTranscodePreset();
     void loadCreatesDefaultDirectories();
     void migratesLegacyDefaultExportDirectory();
+    void migratesOldBuiltInExportDirectoryButKeepsCustomDirectory();
     void migratesLegacyPlaybackModes();
     void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
     void waveformAppearanceSettingsClampPersistAndReset();
+    void visualizerCanvasAndReplayGainSettingsPersist();
+    void migratesRetiredLibraryData();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
     void editSessionCanCommitOrCancel();
+    void rebindFileAssociationsEnablesRegistrationDuringEdit();
     void testModeDoesNotTouchStartupRegistry();
 };
 
@@ -43,8 +49,10 @@ void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
     SettingsController settings;
     const QString cacheDir = settings.cacheDirectory();
     QVERIFY(!cacheDir.contains(QStringLiteral("D:\\Music")));
-    QVERIFY(cacheDir.endsWith(QStringLiteral("/waveform"))
-            || cacheDir.endsWith(QStringLiteral("\\waveform")));
+    const QString expected =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+        + QStringLiteral("/AgPlayer/Cache");
+    QCOMPARE(QDir::cleanPath(cacheDir), QDir::cleanPath(expected));
 }
 
 void SettingsControllerTest::defaultOutputDirectoryUsesStandardPaths()
@@ -52,7 +60,10 @@ void SettingsControllerTest::defaultOutputDirectoryUsesStandardPaths()
     SettingsController settings;
     const QString exportDir = settings.defaultOutputDirectory();
     QVERIFY(!exportDir.contains(QStringLiteral("D:\\Music")));
-    QVERIFY(exportDir.contains(QStringLiteral("AgPlayer_Export")));
+    QCOMPARE(
+        QDir::cleanPath(exportDir),
+        QDir::cleanPath(QStandardPaths::writableLocation(
+            QStandardPaths::DesktopLocation)));
 }
 
 void SettingsControllerTest::loadCreatesDefaultDirectories()
@@ -64,6 +75,49 @@ void SettingsControllerTest::loadCreatesDefaultDirectories()
     QVERIFY(!exportDir.isEmpty());
     QVERIFY(QDir(cacheDir).exists());
     QVERIFY(QDir(exportDir).exists());
+}
+
+void SettingsControllerTest::transcodeDefaultsAreSplitAndPersisted()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    {
+        SettingsController settings;
+        QCOMPARE(settings.transcodeFormat(), QStringLiteral("MP3"));
+        QCOMPARE(settings.transcodeBitrateKbps(), 320);
+        QCOMPARE(settings.transcodeSampleRateHz(), 44100);
+        QCOMPARE(settings.transcodeChannels(), 2);
+
+        settings.setTranscodeFormat(QStringLiteral("FLAC"));
+        settings.setTranscodeBitrateKbps(256);
+        settings.setTranscodeSampleRateHz(192000);
+        settings.setTranscodeChannels(1);
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.transcodeFormat(), QStringLiteral("FLAC"));
+    QCOMPARE(reloaded.transcodeBitrateKbps(), 256);
+    QCOMPARE(reloaded.transcodeSampleRateHz(), 192000);
+    QCOMPARE(reloaded.transcodeChannels(), 1);
+    persisted.clear();
+}
+
+void SettingsControllerTest::migratesCombinedTranscodePreset()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("audioTools/defaultTranscodeFormat"),
+                       QStringLiteral("MP3 / 192kbps / 48kHz / Mono"));
+
+    SettingsController settings;
+    QCOMPARE(settings.transcodeFormat(), QStringLiteral("MP3"));
+    QCOMPARE(settings.transcodeBitrateKbps(), 192);
+    QCOMPARE(settings.transcodeSampleRateHz(), 48000);
+    QCOMPARE(settings.transcodeChannels(), 1);
+    QVERIFY(!persisted.contains(
+        QStringLiteral("audioTools/defaultTranscodeFormat")));
+    persisted.clear();
 }
 
 void SettingsControllerTest::migratesLegacyDefaultExportDirectory()
@@ -83,6 +137,36 @@ void SettingsControllerTest::migratesLegacyDefaultExportDirectory()
         legacyPath);
     QVERIFY(!persisted.contains(
         QStringLiteral("general/defaultExportDirectory")));
+    persisted.clear();
+}
+
+void SettingsControllerTest::
+migratesOldBuiltInExportDirectoryButKeepsCustomDirectory()
+{
+    QSettings persisted;
+    persisted.clear();
+    const QString oldBuiltIn =
+        QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+        + QStringLiteral("/AgPlayer_Export");
+    persisted.setValue(
+        QStringLiteral("audioTools/defaultOutputDirectory"), oldBuiltIn);
+
+    {
+        SettingsController settings;
+        QCOMPARE(
+            QDir::cleanPath(settings.defaultOutputDirectory()),
+            QDir::cleanPath(QStandardPaths::writableLocation(
+                QStandardPaths::DesktopLocation)));
+    }
+
+    const QString custom =
+        QDir::tempPath() + QStringLiteral("/AgPlayer_custom_export");
+    persisted.setValue(
+        QStringLiteral("audioTools/defaultOutputDirectory"), custom);
+    {
+        SettingsController settings;
+        QCOMPARE(settings.defaultOutputDirectory(), custom);
+    }
     persisted.clear();
 }
 
@@ -156,8 +240,9 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformDensity(), 2.0);
         QCOMPARE(settings.waveformThickness(), 1.0);
         QCOMPARE(settings.waveformPeakAlgorithm(), 0);
-        QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#ffffff"));
-        QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#ffdd00"));
+        QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#9098a6"));
+        QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#d27722"));
+        QCOMPARE(settings.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
@@ -171,7 +256,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformThickness(), 2.3);
         QCOMPARE(settings.waveformPeakAlgorithm(), 1);
         QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#112233"));
-        QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#ffdd00"));
+        QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#d27722"));
     }
 
     SettingsController reloaded;
@@ -186,9 +271,89 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformDensity(), 2.0);
     QCOMPARE(reloaded.waveformThickness(), 1.0);
     QCOMPARE(reloaded.waveformPeakAlgorithm(), 0);
-    QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#ffffff"));
-    QCOMPARE(reloaded.waveformSolidProgressColor(), QStringLiteral("#ffdd00"));
+    QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#9098a6"));
+    QCOMPARE(reloaded.waveformSolidProgressColor(), QStringLiteral("#d27722"));
+    QCOMPARE(reloaded.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
     persisted.clear();
+}
+
+void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
+{
+    QSettings persisted;
+    persisted.clear();
+    {
+        SettingsController settings;
+        QCOMPARE(settings.waveformCanvasHeight(), 78);
+        QCOMPARE(settings.waveformCanvasLocked(), true);
+        QCOMPARE(settings.spectrumColorMode(), 0);
+        QCOMPARE(settings.spectrumSolidColor(), QStringLiteral("#0078d4"));
+        QCOMPARE(settings.spectrumRgbStartColor(), QStringLiteral("#00d4ff"));
+        QCOMPARE(settings.spectrumRgbMiddleColor(), QStringLiteral("#7b2ff7"));
+        QCOMPARE(settings.spectrumRgbEndColor(), QStringLiteral("#e62e9b"));
+        QCOMPARE(settings.replayGainMode(), 0);
+        QCOMPARE(settings.replayGainClipProtection(), true);
+
+        settings.setWaveformCanvasHeight(120);
+        settings.setWaveformCanvasLocked(false);
+        settings.setSpectrumColorMode(1);
+        settings.setSpectrumSolidColor(QStringLiteral("#123456"));
+        settings.setSpectrumRgbStartColor(QStringLiteral("#112233"));
+        settings.setSpectrumRgbMiddleColor(QStringLiteral("#445566"));
+        settings.setSpectrumRgbEndColor(QStringLiteral("#778899"));
+        settings.setReplayGainMode(2);
+        settings.setReplayGainClipProtection(false);
+
+        QCOMPARE(settings.waveformCanvasHeight(), 84);
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.waveformCanvasHeight(), 84);
+    QCOMPARE(reloaded.waveformCanvasLocked(), false);
+    QCOMPARE(reloaded.spectrumColorMode(), 1);
+    QCOMPARE(reloaded.spectrumSolidColor(), QStringLiteral("#123456"));
+    QCOMPARE(reloaded.spectrumRgbStartColor(), QStringLiteral("#112233"));
+    QCOMPARE(reloaded.spectrumRgbMiddleColor(), QStringLiteral("#445566"));
+    QCOMPARE(reloaded.spectrumRgbEndColor(), QStringLiteral("#778899"));
+    QCOMPARE(reloaded.replayGainMode(), 2);
+    QCOMPARE(reloaded.replayGainClipProtection(), false);
+    persisted.clear();
+}
+
+void SettingsControllerTest::migratesRetiredLibraryData()
+{
+    const QDir appData(
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    QVERIFY(QDir().mkpath(appData.path()));
+    const QString smart =
+        appData.filePath(QStringLiteral("smart-playlists.json"));
+    const QString retired = smart + QStringLiteral(".retired.bak");
+    const QString oldMaintenance =
+        appData.filePath(QStringLiteral("library-maintenance.json"));
+    const QString manager =
+        appData.filePath(QStringLiteral("library-manager.json"));
+    QFile::remove(smart);
+    QFile::remove(retired);
+    QFile::remove(oldMaintenance);
+    QFile::remove(manager);
+
+    QFile smartFile(smart);
+    QVERIFY(smartFile.open(QIODevice::WriteOnly));
+    QCOMPARE(smartFile.write("{\"legacy\":true}"), 15);
+    smartFile.close();
+    QFile maintenanceFile(oldMaintenance);
+    QVERIFY(maintenanceFile.open(QIODevice::WriteOnly));
+    QCOMPARE(maintenanceFile.write("{\"folders\":[]}"), 14);
+    maintenanceFile.close();
+
+    SettingsController settings;
+    QVERIFY(!QFile::exists(smart));
+    QVERIFY(QFile::exists(retired));
+    QVERIFY(QFile::exists(manager));
+    QCOMPARE(settings.libraryManagerPath(), manager);
+
+    QFile::remove(retired);
+    QFile::remove(oldMaintenance);
+    QFile::remove(manager);
 }
 
 void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()
@@ -329,6 +494,21 @@ void SettingsControllerTest::testModeDoesNotTouchStartupRegistry()
     run.sync();
     QCOMPARE(run.value(QStringLiteral("AgPlayer")), before);
 #endif
+}
+
+void SettingsControllerTest::rebindFileAssociationsEnablesRegistrationDuringEdit()
+{
+    QSettings().clear();
+    SettingsController settings;
+    QVERIFY(!settings.setAsDefaultPlayer());
+
+    settings.beginEdit();
+    settings.rebindFileAssociations();
+    QVERIFY(settings.setAsDefaultPlayer());
+    settings.commitEdit();
+
+    SettingsController reloaded;
+    QVERIFY(reloaded.setAsDefaultPlayer());
 }
 
 QTEST_MAIN(SettingsControllerTest)

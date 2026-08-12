@@ -22,6 +22,7 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(qint64 trackIndex READ trackIndex NOTIFY trackIndexChanged)
     Q_PROPERTY(qint64 trackCount READ trackCount NOTIFY trackCountChanged)
     Q_PROPERTY(QString currentTrackId READ currentTrackId NOTIFY currentTrackIdChanged)
+    Q_PROPERTY(QStringList queueTrackIds READ queueTrackIds NOTIFY queueTrackIdsChanged)
     Q_PROPERTY(QString lyrics READ lyrics NOTIFY lyricsChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(bool deviceLost READ deviceLost NOTIFY deviceLostChanged)
@@ -32,9 +33,12 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(bool exclusiveModeActive READ exclusiveModeActive
                    NOTIFY exclusiveModeActiveChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
+    Q_PROPERTY(bool replayGainClippingWarning READ replayGainClippingWarning
+                   NOTIFY replayGainClippingWarningChanged)
 
 public:
     static constexpr int PollIntervalMs = 17;
+    static constexpr int IdlePollIntervalMs = 100;
 
     enum State { Stopped, Loading, Playing, Paused, Error };
     Q_ENUM(State)
@@ -55,6 +59,7 @@ public:
     qint64 trackIndex() const noexcept;
     qint64 trackCount() const noexcept;
     QString currentTrackId() const;
+    QStringList queueTrackIds() const;
     QString lyrics() const;
     QString errorMessage() const;
     bool deviceLost() const noexcept;
@@ -62,6 +67,7 @@ public:
     QStringList outputDeviceIds() const;
     bool exclusiveModeActive() const noexcept;
     QVariantList spectrum() const;
+    bool replayGainClippingWarning() const noexcept;
 
     void setLibraryModel(LibraryModel* library);
     void setPlayer(ag_player* player);
@@ -70,11 +76,15 @@ public:
     Q_INVOKABLE void pause();
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void seek(qint64 positionMs);
-    // Waveform analysis belongs to rendering only. The active decoder snapshot
-    // remains the sole authority for the seekable playback timeline.
-    Q_INVOKABLE bool applyWaveformDuration(const QString& trackId, qint64 durationMs);
+    // Full PCM analysis supplies the exact decoded-frame duration used by both
+    // the playback snapshot and the waveform pixel timeline.
+    Q_INVOKABLE bool applyWaveformDuration(const QString& trackId,
+                                           qint64 durationMs);
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
+    Q_INVOKABLE bool queueNext(const QString& trackId);
+    Q_INVOKABLE bool restoreQueue(const QStringList& trackIds,
+                                  const QString& currentTrackId);
     Q_INVOKABLE void setVolume(float volume);
     Q_INVOKABLE void volumeUp(float step = 0.05F);
     Q_INVOKABLE void volumeDown(float step = 0.05F);
@@ -91,6 +101,7 @@ public:
                                      bool exclusive);
     Q_INVOKABLE bool setTransitionFadeMs(int milliseconds);
     Q_INVOKABLE bool setMatchTrackSampleRate(bool enabled);
+    Q_INVOKABLE bool setReplayGainSettings(int mode, bool clipProtection);
 
 signals:
     void stateChanged();
@@ -102,17 +113,20 @@ signals:
     void trackIndexChanged();
     void trackCountChanged();
     void currentTrackIdChanged();
+    void queueTrackIdsChanged();
     void lyricsChanged();
     void errorMessageChanged();
     void deviceLostChanged();
     void outputDevicesChanged();
     void exclusiveModeActiveChanged();
     void spectrumChanged();
+    void replayGainClippingWarningChanged();
 
 private:
     void pollSnapshot();
     void pollSpectrum();
     bool prepareRow(int row);
+    bool applyReplayGainForTrack(const QString& trackId);
     void setErrorMessage(QString message);
     void runCommand(int result);
 
@@ -138,4 +152,7 @@ private:
     QStringList outputDeviceIds_;
     bool exclusiveModeActive_ = false;
     QVariantList spectrum_;
+    int replayGainMode_ = 0;
+    bool replayGainClipProtection_ = true;
+    bool replayGainClippingWarning_ = false;
 };

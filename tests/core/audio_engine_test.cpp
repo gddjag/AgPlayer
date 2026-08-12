@@ -43,6 +43,20 @@ int main(const int argc, char** argv)
     assert(ag_player_stop(nullptr) == AG_INVALID_ARGUMENT);
     assert(ag_player_seek(nullptr, 0) == AG_INVALID_ARGUMENT);
     assert(ag_player_set_volume(nullptr, 0.5F) == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_replay_gain(nullptr, 0.0F, 1.0F, 1)
+           == AG_INVALID_ARGUMENT);
+    ag_equalizer_settings equalizer{};
+    equalizer.revision = 7U;
+    equalizer.enabled = 1;
+    equalizer.auto_clip_protection = 1;
+    equalizer.q = 1.414;
+    equalizer.transition_ms = 25.0;
+    assert(ag_player_set_equalizer(nullptr, &equalizer)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_equalizer(player, nullptr)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_equalizer_status(nullptr, nullptr)
+           == AG_INVALID_ARGUMENT);
     assert(ag_player_set_muted(nullptr, 0) == AG_INVALID_ARGUMENT);
     assert(ag_player_snapshot(nullptr, &snapshot) == AG_INVALID_ARGUMENT);
 
@@ -84,6 +98,16 @@ int main(const int argc, char** argv)
 
     assert(ag_player_seek(player, 1'000) == AG_OK);
     assert(ag_player_set_volume(player, 0.25F) == AG_OK);
+    assert(ag_player_set_replay_gain(player, -3.0F, 0.8F, 1) == AG_OK);
+    equalizer.band_gain_db[5] = 6.0;
+    equalizer.preamp_db = -1.5;
+    assert(ag_player_set_equalizer(player, &equalizer) == AG_OK);
+    ag_equalizer_status equalizer_status{};
+    assert(ag_player_equalizer_status(player, &equalizer_status) == AG_OK);
+    assert(equalizer_status.revision == equalizer.revision);
+    assert(equalizer_status.enabled == 1);
+    assert(equalizer_status.auto_clip_protection == 1);
+    assert(equalizer_status.protection_db <= 0.0);
     assert(ag_player_set_muted(player, 1) == AG_OK);
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
     assert(snapshot.state == AG_PAUSED);
@@ -93,6 +117,17 @@ int main(const int argc, char** argv)
 
     assert(ag_player_set_volume(player, -0.01F) == AG_INVALID_ARGUMENT);
     assert(ag_player_set_volume(player, 1.01F) == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_replay_gain(player, NAN, 1.0F, 1)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_replay_gain(player, 0.0F, -1.0F, 1)
+           == AG_INVALID_ARGUMENT);
+    equalizer.band_gain_db[5] = 12.1;
+    assert(ag_player_set_equalizer(player, &equalizer)
+           == AG_INVALID_ARGUMENT);
+    equalizer.band_gain_db[5] = 0.0;
+    equalizer.enabled = 2;
+    assert(ag_player_set_equalizer(player, &equalizer)
+           == AG_INVALID_ARGUMENT);
     assert(ag_player_set_muted(player, 2) == AG_INVALID_ARGUMENT);
     assert(ag_player_seek(player, snapshot.duration_ms + 1) == AG_INVALID_ARGUMENT);
     assert(ag_player_stop(player) == AG_OK);

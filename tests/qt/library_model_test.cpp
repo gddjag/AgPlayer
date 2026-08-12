@@ -22,6 +22,7 @@ private slots:
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
+    void updatesRenamedPathsAsOneBatchWithoutChangingTrackIds();
 };
 
 void LibraryModelTest::appliesMaintenanceResultsWithSingleModelNotification()
@@ -141,6 +142,16 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(changed.front().at(2).value<QList<int>>(), QList<int>{LibraryModel::FavoriteRole});
     QCOMPARE(favoriteCountChanged.count(), 1);
     QVERIFY(!model.setFavorite(-1, true));
+    changed.clear();
+    QSignalSpy flushRequested(&model, &LibraryModel::flushRequested);
+    QVERIFY(model.setBpm(track.trackId, 127.5));
+    QCOMPARE(model.data(index, LibraryModel::BpmRole).toDouble(), 127.5);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(changed.front().at(2).value<QList<int>>(),
+             QList<int>{LibraryModel::BpmRole});
+    QCOMPARE(flushRequested.count(), 1);
+    QVERIFY(!model.setBpm(track.trackId, 127.5));
+    QVERIFY(!model.setBpm(track.trackId, 10.0));
 }
 
 void LibraryModelTest::playRowOnlyRequestsAvailableTracks()
@@ -281,6 +292,33 @@ void LibraryModelTest::findsRowByTrackId()
     QCOMPARE(model.indexForTrackId(QStringLiteral("track-a")), 0);
     QCOMPARE(model.indexForTrackId(QStringLiteral("track-b")), 1);
     QCOMPARE(model.indexForTrackId(QStringLiteral("missing")), -1);
+}
+
+void LibraryModelTest::updatesRenamedPathsAsOneBatchWithoutChangingTrackIds()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString firstPath = directory.filePath(QStringLiteral("first.wav"));
+    const QString secondPath = directory.filePath(QStringLiteral("second.wav"));
+    QFile(firstPath).open(QIODevice::WriteOnly);
+    QFile(secondPath).open(QIODevice::WriteOnly);
+    TrackRecord first;
+    first.trackId = QStringLiteral("first-id");
+    first.path = firstPath;
+    first.rating = 5;
+    TrackRecord second;
+    second.trackId = QStringLiteral("second-id");
+    second.path = secondPath;
+    second.favorite = true;
+    LibraryModel model;
+    model.replaceAll({first, second});
+
+    QVERIFY(model.updateTrackPaths({{QStringLiteral("first-id"), secondPath},
+                                    {QStringLiteral("second-id"), firstPath}}));
+    QCOMPARE(model.trackForId(QStringLiteral("first-id")).value(QStringLiteral("path")).toString(), secondPath);
+    QCOMPARE(model.trackForId(QStringLiteral("first-id")).value(QStringLiteral("rating")).toInt(), 5);
+    QCOMPARE(model.trackForId(QStringLiteral("second-id")).value(QStringLiteral("path")).toString(), firstPath);
+    QVERIFY(model.trackForId(QStringLiteral("second-id")).value(QStringLiteral("favorite")).toBool());
 }
 
 void LibraryModelTest::updatesRatingAndPlaybackHistory()

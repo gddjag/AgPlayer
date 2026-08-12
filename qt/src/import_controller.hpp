@@ -82,3 +82,5 @@ private:
     int skippedCount_ = 0;
     QList<QUrl> pendingUrls_;
 };
+
+double readEmbeddedBpmTag(const QString& requestedPath);

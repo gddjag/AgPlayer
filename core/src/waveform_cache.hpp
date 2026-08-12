@@ -19,6 +19,9 @@ struct WaveformCacheData final {
     std::vector<float> mid;
     std::vector<float> high;
     double bpm = 0.0;
+    std::uint64_t duration_ms = 0U;
+    std::uint64_t total_samples = 0U;
+    std::uint32_t sample_rate = 0U;
     std::vector<WaveformCacheCue> cues;
 };
 

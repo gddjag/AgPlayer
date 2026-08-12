@@ -3,6 +3,8 @@
 
 #include <QAbstractItemModel>
 
+#include <algorithm>
+
 LibraryFilterModel::LibraryFilterModel(QObject* parent)
     : QSortFilterProxyModel(parent)
 {
@@ -35,18 +37,19 @@ void LibraryFilterModel::setSearchText(const QString& text)
     invalidateFilter();
 }
 
-int LibraryFilterModel::minRating() const noexcept
+int LibraryFilterModel::exactRating() const noexcept
 {
-    return minRating_;
+    return exactRating_;
 }
 
-void LibraryFilterModel::setMinRating(int rating)
+void LibraryFilterModel::setExactRating(int rating)
 {
-    if (minRating_ == rating) {
+    rating = std::clamp(rating, 0, 5);
+    if (exactRating_ == rating) {
         return;
     }
-    minRating_ = rating;
-    emit minRatingChanged();
+    exactRating_ = rating;
+    emit exactRatingChanged();
     invalidateFilter();
 }
 
@@ -96,8 +99,11 @@ void LibraryFilterModel::setCategory(const QString& category)
     if (category_ == QStringLiteral("history")) {
         setSortRole(LibraryModel::LastPlayedAtRole);
         sort(0, Qt::DescendingOrder);
-    } else {
+    } else if (category_ == QStringLiteral("all")
+               || category_ == QStringLiteral("favorites")) {
         sort(-1);
+    } else {
+        sort(0, Qt::AscendingOrder);
     }
 }
 
@@ -152,12 +158,15 @@ void LibraryFilterModel::setPlaylistModel(PlaylistModel* playlistModel)
         return;
     }
     if (playlistModel_ != nullptr) {
-        disconnect(playlistModel_, nullptr, this, nullptr);
+        playlistModel_->disconnect(this);
     }
     playlistModel_ = playlistModel;
     if (playlistModel_ != nullptr) {
         connect(playlistModel_, &PlaylistModel::membershipChanged, this,
-                [this] { invalidateFilter(); });
+                [this] {
+                    invalidateFilter();
+                    invalidate();
+                });
         connect(playlistModel_, &QAbstractItemModel::rowsRemoved, this,
                 [this] { invalidateFilter(); });
         connect(playlistModel_, &QAbstractItemModel::modelReset, this,
@@ -228,6 +237,17 @@ bool LibraryFilterModel::lessThan(const QModelIndex& sourceLeft,
             < sourceModel()
                   ->data(sourceRight, LibraryModel::LastPlayedAtRole).toLongLong();
     }
+    if (playlistModel_ != nullptr && category_ != QStringLiteral("all")
+        && category_ != QStringLiteral("favorites")) {
+        const QString leftId = sourceModel()
+                                   ->data(sourceLeft, LibraryModel::TrackIdRole)
+                                   .toString();
+        const QString rightId = sourceModel()
+                                    ->data(sourceRight, LibraryModel::TrackIdRole)
+                                    .toString();
+        const QStringList ids = playlistModel_->trackIdsForPlaylist(category_);
+        return ids.indexOf(leftId) < ids.indexOf(rightId);
+    }
     return sourceLeft.row() < sourceRight.row();
 }
 
@@ -248,24 +268,30 @@ bool LibraryFilterModel::rowMatchesSearch(int sourceRow) const
         return true;
     }
     const QString album = model->data(idx, LibraryModel::AlbumRole).toString().toCaseFolded();
-    return album.contains(text);
+    if (album.contains(text)) {
+        return true;
+    }
+    const QStringList tags = model->data(idx, LibraryModel::TagsRole).toStringList();
+    return std::any_of(tags.cbegin(), tags.cend(), [&text](const QString& tag) {
+        return tag.toCaseFolded().contains(text);
+    });
 }
 
 bool LibraryFilterModel::rowMatchesRating(int sourceRow) const
 {
-    if (minRating_ <= 0) {
+    if (exactRating_ <= 0) {
         return true;
     }
     QAbstractItemModel* model = sourceModel();
     const QModelIndex idx = model->index(sourceRow, 0);
     const int rating = model->data(idx, LibraryModel::RatingRole).toInt();
-    return rating >= minRating_;
+    return rating == exactRating_;
 }
 
 bool LibraryFilterModel::rowMatchesBpm(int sourceRow) const
 {
     // Default range means "BPM filter disabled" so tracks with unknown BPM still show.
-    if (qFuzzyCompare(minBpm_, 0.0) && qFuzzyCompare(maxBpm_, 300.0)) {
+    if (qFuzzyCompare(minBpm_, 60.0) && qFuzzyCompare(maxBpm_, 160.0)) {
         return true;
     }
     QAbstractItemModel* model = sourceModel();

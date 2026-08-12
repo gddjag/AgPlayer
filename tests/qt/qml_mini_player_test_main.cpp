@@ -1,14 +1,13 @@
 #include "audio_tools_controller.hpp"
+#include "filename_processor.hpp"
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
-#include "pitch_shifter.hpp"
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
-#include "speed_adjuster.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -64,9 +63,8 @@ public slots:
         windows_ = std::make_unique<WindowController>();
         audioTools_ = std::make_unique<AudioToolsController>();
         metadataEditor_ = std::make_unique<MetadataEditor>();
+        filenameProcessor_ = std::make_unique<FilenameProcessor>();
         formatConverter_ = std::make_unique<FormatConverter>();
-        pitchShifter_ = std::make_unique<PitchShifter>();
-        speedAdjuster_ = std::make_unique<SpeedAdjuster>();
         lightEditor_ = std::make_unique<LightEditor>();
         settings_ = std::make_unique<SettingsController>();
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
@@ -74,8 +72,8 @@ public slots:
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
-                                    formatConverter_.get(), pitchShifter_.get(),
-                                    speedAdjuster_.get(), lightEditor_.get(),
+                                    formatConverter_.get(), filenameProcessor_.get(),
+                                    lightEditor_.get(),
                                     settings_.get(), waveformProvider_.get());
     }
 
@@ -114,9 +112,8 @@ private:
     std::unique_ptr<WindowController> windows_;
     std::unique_ptr<AudioToolsController> audioTools_;
     std::unique_ptr<MetadataEditor> metadataEditor_;
+    std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
-    std::unique_ptr<PitchShifter> pitchShifter_;
-    std::unique_ptr<SpeedAdjuster> speedAdjuster_;
     std::unique_ptr<LightEditor> lightEditor_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;

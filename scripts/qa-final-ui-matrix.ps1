@@ -4,11 +4,22 @@ param(
     [string]$OutputDirectory = "build/qa/final-ui-matrix",
     [ValidateSet("zh", "en", "th", "vi")]
     [string[]]$Languages = @("zh", "en", "th", "vi"),
-    [ValidateSet("dark", "light")]
-    [string[]]$Themes = @("dark", "light")
+    [ValidateSet("dark", "light", "system")]
+    [string[]]$Themes = @("dark", "light", "system"),
+    [ValidateSet(
+        "startup", "playback", "mini", "settings", "list",
+        "library", "details",
+        "tool-0", "tool-1", "tool-2", "tool-3"
+    )]
+    [string[]]$Surfaces = @(
+        "startup", "playback", "mini", "settings", "list",
+        "library", "details",
+        "tool-0", "tool-1", "tool-2", "tool-3"
+    )
 )
 
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot "qa-runtime.ps1")
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $buildRoot = (Resolve-Path (Join-Path $repoRoot $BuildDirectory)).Path
@@ -30,8 +41,147 @@ $runtimePaths = Get-AgPlayerRuntimePaths `
     -BuildRoot $buildRoot -CachePath $cachePath
 
 $originalPath = $env:Path
+$originalScaleFactor = $env:QT_SCALE_FACTOR
 $results = [System.Collections.Generic.List[object]]::new()
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
+
+function Get-SurfaceExpectation {
+    param([string]$Surface)
+
+    switch -Regex ($Surface) {
+        "^startup$|^playback$" {
+            return [pscustomobject]@{ Width = 1228; Height = 380 }
+        }
+        "^mini$" {
+            return [pscustomobject]@{ Width = 588; Height = 186 }
+        }
+        "^settings$" {
+            return [pscustomobject]@{ Width = 1228; Height = 900 }
+        }
+        "^list$|^details$" {
+            return [pscustomobject]@{ Width = 1228; Height = 600 }
+        }
+        "^library$" {
+            return [pscustomobject]@{ Width = 1228; Height = 840 }
+        }
+        "^tool-\d+$" {
+            return [pscustomobject]@{ Width = 1440; Height = 810 }
+        }
+        default {
+            throw "No screenshot expectation configured for surface '$Surface'"
+        }
+    }
+}
+
+function Measure-Screenshot {
+    param(
+        [string]$Path,
+        [string]$Surface
+    )
+
+    $expected = Get-SurfaceExpectation $Surface
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    try {
+        if ($bitmap.Width -ne $expected.Width -or
+            $bitmap.Height -ne $expected.Height) {
+            throw ("{0} has size {1}x{2}; expected {3}x{4}" -f
+                $Surface, $bitmap.Width, $bitmap.Height,
+                $expected.Width, $expected.Height)
+        }
+
+        $colors = [System.Collections.Generic.HashSet[int]]::new()
+        $opaqueSamples = 0
+        $sampleStride = 8
+        for ($y = 0; $y -lt $bitmap.Height; $y += $sampleStride) {
+            for ($x = 0; $x -lt $bitmap.Width; $x += $sampleStride) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                [void]$colors.Add($pixel.ToArgb())
+                if ($pixel.A -gt 0) {
+                    $opaqueSamples++
+                }
+            }
+        }
+
+        if ($colors.Count -lt 32 -or $opaqueSamples -lt 100) {
+            throw "$Surface appears blank or visually incomplete"
+        }
+
+        $cornerAlpha = @(
+            $bitmap.GetPixel(0, 0).A
+            $bitmap.GetPixel($bitmap.Width - 1, 0).A
+            $bitmap.GetPixel(0, $bitmap.Height - 1).A
+            $bitmap.GetPixel($bitmap.Width - 1, $bitmap.Height - 1).A
+        )
+        $outerCornerAlpha = if ($Surface -match "^(list|library|details)$") {
+            # The list surface is captured while docked below the player. Its
+            # top corners are intentionally square at the shared edge; only
+            # the two outer bottom corners must remain transparent.
+            $cornerAlpha[2..3]
+        }
+        elseif ($Surface -eq "playback") {
+            # Playback is captured with the list window docked below it. The
+            # shared bottom edge is intentionally square; the outer top edge
+            # must still preserve the transparent window corners.
+            $cornerAlpha[0..1]
+        }
+        else {
+            $cornerAlpha
+        }
+        if (($outerCornerAlpha | Measure-Object -Maximum).Maximum -ne 0) {
+            throw "$Surface does not preserve transparent outer corners"
+        }
+
+        return [pscustomobject]@{
+            Width = $bitmap.Width
+            Height = $bitmap.Height
+            UniqueSampledColors = $colors.Count
+            OpaqueSamples = $opaqueSamples
+            CornerAlpha = ($cornerAlpha -join "/")
+        }
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+
+function Measure-ThemeDifference {
+    param(
+        [string]$DarkPath,
+        [string]$LightPath
+    )
+
+    $dark = [System.Drawing.Bitmap]::new($DarkPath)
+    $light = [System.Drawing.Bitmap]::new($LightPath)
+    try {
+        if ($dark.Width -ne $light.Width -or $dark.Height -ne $light.Height) {
+            throw "Theme screenshots have different dimensions"
+        }
+
+        [long]$difference = 0
+        [long]$samples = 0
+        for ($y = 0; $y -lt $dark.Height; $y += 16) {
+            for ($x = 0; $x -lt $dark.Width; $x += 16) {
+                $a = $dark.GetPixel($x, $y)
+                $b = $light.GetPixel($x, $y)
+                if ($a.A -eq 0 -and $b.A -eq 0) {
+                    continue
+                }
+                $difference += [Math]::Abs([int]$a.R - [int]$b.R)
+                $difference += [Math]::Abs([int]$a.G - [int]$b.G)
+                $difference += [Math]::Abs([int]$a.B - [int]$b.B)
+                $samples += 3
+            }
+        }
+        if ($samples -eq 0) {
+            return 0
+        }
+        return [Math]::Round($difference / $samples, 2)
+    }
+    finally {
+        $dark.Dispose()
+        $light.Dispose()
+    }
+}
 
 function Invoke-Capture {
     param(
@@ -64,6 +214,7 @@ function Invoke-Capture {
     if (-not (Test-Path -LiteralPath $log)) {
         throw "$stem did not create a runtime log"
     }
+    $metrics = Measure-Screenshot -Path $screenshot -Surface $Surface
     $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $log
     if ($logText -match "\[(WARN|ERROR|FATAL)\]" -or
         $logText -match "QQml|ReferenceError|TypeError") {
@@ -74,12 +225,18 @@ function Invoke-Capture {
         Theme = $Theme
         Surface = $Surface
         Bytes = (Get-Item -LiteralPath $screenshot).Length
+        Width = $metrics.Width
+        Height = $metrics.Height
+        UniqueSampledColors = $metrics.UniqueSampledColors
+        OpaqueSamples = $metrics.OpaqueSamples
+        CornerAlpha = $metrics.CornerAlpha
         Result = "PASS"
     })
 }
 
 try {
     $env:Path = ($runtimePaths -join ";") + ";" + $originalPath
+    $env:QT_SCALE_FACTOR = "1"
 
     foreach ($language in $Languages) {
         foreach ($theme in $Themes) {
@@ -88,36 +245,83 @@ try {
                 [Guid]::NewGuid().ToString("N"))
             New-Item -ItemType Directory -Force -Path $stateRoot | Out-Null
 
-            Invoke-Capture $language $theme "startup" @(
-                "--qa-library", (Join-Path $stateRoot "startup.json"),
-                "--qa-screenshot-main"
-            )
-            Invoke-Capture $language $theme "playback" @(
-                "--qa-library", (Join-Path $stateRoot "playback.json"),
-                "--qa-play", $playFixture,
-                "--qa-screenshot-main"
-            )
-            Invoke-Capture $language $theme "mini" @(
-                "--qa-library", (Join-Path $stateRoot "mini.json"),
-                "--qa-play", $playFixture,
-                "--qa-screenshot-mini"
-            )
-            Invoke-Capture $language $theme "settings" @(
-                "--qa-library", (Join-Path $stateRoot "settings.json"),
-                "--qa-open-settings",
-                "--qa-screenshot-main"
-            )
-            Invoke-Capture $language $theme "list" @(
-                "--qa-library", (Join-Path $stateRoot "list.json"),
-                "--qa-import-folder", $formatFixtures,
-                "--qa-screenshot-list"
-            )
-            foreach ($tool in 0..4) {
-                Invoke-Capture $language $theme ("tool-{0}" -f $tool) @(
+            if ($Surfaces -contains "startup") {
+                Invoke-Capture $language $theme "startup" @(
+                    "--qa-library", (Join-Path $stateRoot "startup.json"),
+                    "--qa-screenshot-main"
+                )
+            }
+            if ($Surfaces -contains "playback") {
+                Invoke-Capture $language $theme "playback" @(
+                    "--qa-library", (Join-Path $stateRoot "playback.json"),
+                    "--qa-play", $playFixture,
+                    "--qa-screenshot-main"
+                )
+            }
+            if ($Surfaces -contains "mini") {
+                Invoke-Capture $language $theme "mini" @(
+                    "--qa-library", (Join-Path $stateRoot "mini.json"),
+                    "--qa-play", $playFixture,
+                    "--qa-screenshot-mini"
+                )
+            }
+            if ($Surfaces -contains "settings") {
+                Invoke-Capture $language $theme "settings" @(
+                    "--qa-library", (Join-Path $stateRoot "settings.json"),
+                    "--qa-open-settings",
+                    "--qa-screenshot-main"
+                )
+            }
+            if ($Surfaces -contains "list") {
+                Invoke-Capture $language $theme "list" @(
+                    "--qa-library", (Join-Path $stateRoot "list.json"),
+                    "--qa-import-folder", $formatFixtures,
+                    "--qa-screenshot-list"
+                )
+            }
+            if ($Surfaces -contains "library") {
+                Invoke-Capture $language $theme "library" @(
+                    "--qa-library", (Join-Path $stateRoot "library.json"),
+                    "--qa-import-folder", $formatFixtures,
+                    "--qa-list-category", "library",
+                    "--qa-screenshot-list"
+                )
+            }
+            if ($Surfaces -contains "details") {
+                Invoke-Capture $language $theme "details" @(
+                    "--qa-library", (Join-Path $stateRoot "details.json"),
+                    "--qa-import-folder", $formatFixtures,
+                    "--qa-show-track-details",
+                    "--qa-screenshot-list"
+                )
+            }
+            foreach ($tool in 0..3) {
+                $toolSurface = "tool-{0}" -f $tool
+                if ($Surfaces -notcontains $toolSurface) {
+                    continue
+                }
+                Invoke-Capture $language $theme $toolSurface @(
                     "--qa-library", (Join-Path $stateRoot ("tool-{0}.json" -f $tool)),
                     "--qa-tool", [string]$tool,
                     "--qa-screenshot-tools"
                 )
+            }
+        }
+    }
+
+    if ($Themes -contains "dark" -and $Themes -contains "light") {
+        foreach ($language in $Languages) {
+            foreach ($surface in $Surfaces) {
+                $darkPath = Join-Path $outputPath (
+                    "{0}-dark-{1}.png" -f $language, $surface)
+                $lightPath = Join-Path $outputPath (
+                    "{0}-light-{1}.png" -f $language, $surface)
+                $difference = Measure-ThemeDifference $darkPath $lightPath
+                if ($difference -lt 12) {
+                    throw ("{0}-{1} dark/light difference is only {2}; " +
+                        "theme coverage may be incomplete" -f
+                        $language, $surface, $difference)
+                }
             }
         }
     }
@@ -129,10 +333,16 @@ try {
         Captures = $results.Count
         Languages = $Languages.Count
         Themes = $Themes.Count
+        Surfaces = $Surfaces.Count
         Output = $outputPath
         Result = "PASS"
     }
 }
 finally {
     $env:Path = $originalPath
+    if ($null -eq $originalScaleFactor) {
+        Remove-Item Env:QT_SCALE_FACTOR -ErrorAction SilentlyContinue
+    } else {
+        $env:QT_SCALE_FACTOR = $originalScaleFactor
+    }
 }

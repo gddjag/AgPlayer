@@ -14,6 +14,8 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(QVariantList peaks READ peaks WRITE setPeaks NOTIFY peaksChanged)
     Q_PROPERTY(QVariantMap layers READ layers WRITE setLayers NOTIFY layersChanged)
     Q_PROPERTY(qreal position READ position WRITE setPosition NOTIFY positionChanged)
+    Q_PROPERTY(qreal cursorPosition READ cursorPosition WRITE setCursorPosition
+                   NOTIFY cursorPositionChanged)
     Q_PROPERTY(qreal duration READ duration WRITE setDuration NOTIFY durationChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
@@ -38,6 +40,11 @@ class WaveformItem : public QQuickItem {
                    NOTIFY analysisProgressChanged)
     Q_PROPERTY(qreal density READ density WRITE setDensity NOTIFY densityChanged)
     Q_PROPERTY(qreal lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged)
+    Q_PROPERTY(qreal renderWidth READ renderWidth NOTIFY renderWidthChanged)
+    Q_PROPERTY(qreal waveformCursorX READ waveformCursorX NOTIFY waveformCursorXChanged)
+    Q_PROPERTY(qint64 totalSamples READ totalSamples NOTIFY layersChanged)
+    Q_PROPERTY(qint64 sampleRate READ sampleRate NOTIFY layersChanged)
+    Q_PROPERTY(qsizetype peakCount READ peakCount NOTIFY layersChanged)
     Q_PROPERTY(int spectrumBarCount READ spectrumBarCount CONSTANT)
     Q_PROPERTY(qreal spectrumBarWidth READ spectrumBarWidth CONSTANT)
     Q_PROPERTY(qreal spectrumBarGap READ spectrumBarGap CONSTANT)
@@ -57,6 +64,8 @@ public:
 
     qreal position() const;
     void setPosition(qreal position);
+    qreal cursorPosition() const;
+    void setCursorPosition(qreal position);
 
     qreal duration() const;
     void setDuration(qreal duration);
@@ -90,6 +99,11 @@ public:
 
     qreal lineWidth() const;
     void setLineWidth(qreal width);
+    qreal renderWidth() const noexcept;
+    qreal waveformCursorX() const noexcept;
+    qint64 totalSamples() const noexcept;
+    qint64 sampleRate() const noexcept;
+    qsizetype peakCount() const noexcept;
 
     static constexpr int spectrumBarCount() noexcept { return 128; }
     static constexpr qreal spectrumBarWidth() noexcept { return 5.0; }
@@ -100,6 +114,7 @@ public:
     static constexpr qreal spectrumPeakFallSeconds() noexcept { return 0.75; }
 
     Q_INVOKABLE qint64 timeForX(qreal x) const;
+    Q_INVOKABLE qreal pixelForTime(qint64 positionMs) const;
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
 
@@ -107,6 +122,7 @@ signals:
     void peaksChanged();
     void layersChanged();
     void positionChanged();
+    void cursorPositionChanged();
     void durationChanged();
     void waveformColorChanged();
     void visualModeChanged();
@@ -121,9 +137,13 @@ signals:
     void analysisProgressChanged();
     void densityChanged();
     void lineWidthChanged();
+    void renderWidthChanged();
+    void waveformCursorXChanged();
     void seekRequested(qint64 position);
 
 protected:
+    void geometryChange(const QRectF& newGeometry,
+                        const QRectF& oldGeometry) override;
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
     void hoverMoveEvent(QHoverEvent* event) override;
     void hoverLeaveEvent(QHoverEvent* event) override;
@@ -144,6 +164,9 @@ private:
         std::shared_ptr<const LayerSnapshot> high;
         std::shared_ptr<const LayerSnapshot> spectrumPeakHold;
         std::uint64_t revision = 0;
+        qint64 totalSamples = 0;
+        qint64 sampleRate = 0;
+        qsizetype peakCount = 0;
     };
 
     void setHoverPosition(qint64 position);
@@ -156,6 +179,7 @@ private:
     std::shared_ptr<const PeakSnapshot> peakSnapshot_;
     std::uint64_t nextRevision_ = 1;
     qint64 position_ = 0;
+    qint64 cursorPosition_ = -1;
     qint64 duration_ = 0;
     QColor waveformColor_;
     int visualMode_ = -1;
@@ -170,6 +194,7 @@ private:
     double analysisProgress_ = 0.0;
     qreal density_ = 1.0;
     qreal lineWidth_ = 2.0;
+    qreal renderWidth_ = 0.0;
     std::vector<float> spectrumVisual_;
     std::vector<float> spectrumPeakHold_;
     QElapsedTimer spectrumTimer_;

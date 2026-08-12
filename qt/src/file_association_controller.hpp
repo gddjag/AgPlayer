@@ -24,4 +24,6 @@ private:
     bool removeProgId();
     bool writeExtension(const QString& extension, const QString& progId);
     bool removeExtension(const QString& extension);
+    bool writeCapabilities(const QStringList& extensions, const QString& progId);
+    bool removeCapabilities();
 };

@@ -217,12 +217,24 @@ ag_result WaveformAnalyzer::analyze(
     std::vector<float>& bass,
     std::vector<float>& mid,
     std::vector<float>& high,
-    const WaveformAggregation aggregation) noexcept
+    const WaveformAggregation aggregation,
+    std::uint64_t* const duration_ms,
+    std::uint64_t* const total_samples,
+    int* const output_sample_rate) noexcept
 {
     peaks.clear();
     bass.clear();
     mid.clear();
     high.clear();
+    if (duration_ms != nullptr) {
+        *duration_ms = 0U;
+    }
+    if (total_samples != nullptr) {
+        *total_samples = 0U;
+    }
+    if (output_sample_rate != nullptr) {
+        *output_sample_rate = 0;
+    }
 
     if (utf8_path.empty() || target_points == 0U) {
         return AG_INVALID_ARGUMENT;
@@ -269,6 +281,20 @@ ag_result WaveformAnalyzer::analyze(
             return AG_DECODE_ERROR;
         }
         const float sample_rate = static_cast<float>(counting_decoder.metadata().sample_rate);
+        if (sample_rate <= 0.0F) {
+            return AG_UNSUPPORTED_FORMAT;
+        }
+        if (duration_ms != nullptr) {
+            *duration_ms = static_cast<std::uint64_t>(std::llround(
+                static_cast<long double>(total_frames) * 1000.0L
+                / static_cast<long double>(sample_rate)));
+        }
+        if (total_samples != nullptr) {
+            *total_samples = static_cast<std::uint64_t>(total_frames);
+        }
+        if (output_sample_rate != nullptr) {
+            *output_sample_rate = counting_decoder.metadata().sample_rate;
+        }
         counting_decoder.close();
         if (progress_callback != nullptr) {
             progress_callback(0.5F, user_data);
@@ -338,6 +364,15 @@ ag_result WaveformAnalyzer::analyze(
         bass.clear();
         mid.clear();
         high.clear();
+        if (duration_ms != nullptr) {
+            *duration_ms = 0U;
+        }
+        if (total_samples != nullptr) {
+            *total_samples = 0U;
+        }
+        if (output_sample_rate != nullptr) {
+            *output_sample_rate = 0;
+        }
         return AG_INTERNAL_ERROR;
     }
 }

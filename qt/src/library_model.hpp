@@ -105,6 +105,7 @@ public:
 
     Q_INVOKABLE bool setFavorite(int row, bool favorite);
     Q_INVOKABLE bool setRating(int row, int rating);
+    Q_INVOKABLE bool setBpm(const QString& trackId, double bpm);
     Q_INVOKABLE bool setTags(const QString& trackId, const QStringList& tags);
     Q_INVOKABLE bool moveTrack(int fromRow, int toRow);
     Q_INVOKABLE int reorderTracks(const QStringList& trackIds,
@@ -116,6 +117,7 @@ public:
     bool applyReplayGainResult(const QString& trackId, double trackGainDb,
                                double albumGainDb, double peak);
     bool updateTrackPath(const QString& trackId, const QString& newPath);
+    bool updateTrackPaths(const QHash<QString, QString>& paths);
     bool markPlayed(const QString& trackId, qint64 playedAtMs = 0);
     Q_INVOKABLE bool removeFromHistory(const QString& trackId);
     Q_INVOKABLE void playRow(int row);

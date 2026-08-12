@@ -21,6 +21,12 @@ int main()
     assert(session.current_path() == "a");
     assert(session.next_index() == 1);
     assert(session.previous_index() == agplayer::PlaybackSession::npos);
+    assert(session.queue_next("c"));
+    assert(session.path_at(1) == "c");
+    assert(session.next_index() == 1);
+    assert(session.queue_next("b"));
+    assert(session.path_at(1) == "b");
+    assert(!session.queue_next("a"));
 
     session.set_mode(agplayer::PlaybackMode::RepeatOne);
     assert(session.mode() == agplayer::PlaybackMode::RepeatOne);

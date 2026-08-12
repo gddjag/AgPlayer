@@ -14,6 +14,14 @@ struct MediaMetadata final {
     std::string title;
     std::string artist;
     std::string album;
+    std::string album_artist;
+    std::string track;
+    std::string disc;
+    std::string composer;
+    std::string comment;
+    std::string bpm;
+    std::string copyright;
+    std::string encoder;
     std::string format;
     int sample_rate = 0;
     int channels = 0;

@@ -23,15 +23,11 @@ Rectangle {
         Math.max(minimalHeight ? 54 : 86,
                  Math.min(136, height - requestedWaveformHeight
                           - (minimalHeight ? 12 : 16)))
-    // The active decoder owns the playback clock.  Waveform analysis is only
-    // a picture of that clock: using its duration for seeking can leave a VBR
-    // tail after the final audible frame.
-    // The decoder clock is the one seekable time axis. The peak array is
-    // rendered across that axis, preventing VBR-analysis padding from moving
-    // the cursor or the hover guide away from the audible position.
-    readonly property real effectiveDurationMs: PlaybackController.durationMs > 0
-                                                ? PlaybackController.durationMs
-                                                : waveformDurationMs
+    // Full PCM analysis is the exact waveform clock. Container metadata may
+    // include encoder padding and would stretch beat positions across pixels.
+    readonly property real effectiveDurationMs: waveformDurationMs > 0
+                                                ? waveformDurationMs
+                                                : PlaybackController.durationMs
     readonly property real visualPlaybackPositionMs: {
         if (effectiveDurationMs <= 0)
             return 0
@@ -92,9 +88,17 @@ Rectangle {
         return bytes + " B"
     }
 
+    function formatBpm(value): string {
+        value = parseFloat(value)
+        if (isNaN(value) || value <= 0)
+            return ""
+        var rounded = Math.round(value * 10) / 10
+        return (Math.abs(rounded - Math.round(rounded)) < 0.001
+                ? Math.round(rounded).toString() : rounded.toFixed(1)) + " BPM"
+    }
+
     function currentTrackBpm(): string {
-        var value = parseFloat(root.currentTrackValue(LibraryModel.BpmRole))
-        return isNaN(value) || value <= 0 ? "" : Math.round(value) + " BPM"
+        return root.formatBpm(root.currentTrackValue(LibraryModel.BpmRole))
     }
 
     function coverUrlText(): string {
@@ -136,8 +140,14 @@ Rectangle {
             return
         }
         var source = root.rawWaveformLayers || {}
-        waveform.layers = { mix: source.mix || [] }
-        playedWaveform.layers = { mix: source.mix || [] }
+        var snapshot = {
+            mix: source.mix || [],
+            _sampleRate: Number(source._sampleRate) || 0,
+            _totalSamples: Number(source._totalSamples) || 0,
+            _peakCount: Number(source._peakCount) || 0
+        }
+        waveform.layers = snapshot
+        playedWaveform.layers = snapshot
     }
 
     function loadWaveform() {
@@ -207,12 +217,14 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                spacing: Theme.spacingSm
+                // At the native minimum height all metadata rows remain in
+                // the layout; only their spacing and font scale contract.
+                spacing: root.minimalHeight ? 1 : Theme.spacingSm
 
                 Item {
                     id: titleRow
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.minimalHeight ? 30 : 36
+                    Layout.preferredHeight: root.minimalHeight ? 24 : 36
 
                     Item {
                         id: titleViewport
@@ -235,7 +247,7 @@ Rectangle {
                                   || qsTr("No track loaded")
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: root.minimalHeight ? 16
+                            font.pixelSize: root.minimalHeight ? 14
                                             : root.compactHeight ? 22 : 26
                             font.weight: Font.DemiBold
                         }
@@ -276,7 +288,7 @@ Rectangle {
                         anchors.left: titleViewport.right
                         anchors.leftMargin: Theme.spacingSm
                         anchors.verticalCenter: parent.verticalCenter
-                        width: root.minimalHeight ? 30 : 36
+                        width: root.minimalHeight ? 24 : 36
                         height: width
                         flat: true
                         icon.source: root.currentTrackFavorite()
@@ -285,8 +297,8 @@ Rectangle {
                         icon.color: root.currentTrackFavorite()
                                     ? Theme.favoriteRed
                                     : Theme.secondaryText
-                        icon.width: root.minimalHeight ? 18 : 22
-                        icon.height: root.minimalHeight ? 18 : 22
+                        icon.width: root.minimalHeight ? 15 : 22
+                        icon.height: root.minimalHeight ? 15 : 22
                         Accessible.name: root.currentTrackFavorite()
                                          ? qsTr("Remove from favorites")
                                          : qsTr("Add to favorites")
@@ -300,7 +312,10 @@ Rectangle {
                 }
 
                 RowLayout {
+                    id: artistRatingRow
+                    objectName: "trackArtistRatingRow"
                     Layout.fillWidth: true
+                    Layout.preferredHeight: root.minimalHeight ? 13 : 18
                     spacing: Theme.spacingMd
                     visible: true
 
@@ -322,8 +337,9 @@ Rectangle {
                         }
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: root.minimalHeight ? 10 : 14
+                        font.pixelSize: root.minimalHeight ? 9 : 14
                         elide: Text.ElideRight
+                        Layout.fillWidth: true
                     }
 
                     RowLayout {
@@ -351,9 +367,12 @@ Rectangle {
                 }
 
                 RowLayout {
+                    id: metadataBadges
+                    objectName: "trackMetadataBadges"
                     Layout.fillWidth: true
-                    spacing: Theme.spacingSm
-                    visible: !root.minimalHeight
+                    Layout.preferredHeight: root.minimalHeight ? 14 : 22
+                    spacing: root.minimalHeight ? 2 : Theme.spacingSm
+                    visible: true
 
                     Repeater {
                         model: {
@@ -385,9 +404,9 @@ Rectangle {
                             border.width: 1
                             radius: Theme.radiusSm
                             implicitWidth: badgeText.implicitWidth
-                                           + Theme.spacingMd * 2
+                                           + (root.minimalHeight ? 6 : Theme.spacingMd * 2)
                             implicitHeight: badgeText.implicitHeight
-                                            + Theme.spacingXs * 2
+                                            + (root.minimalHeight ? 2 : Theme.spacingXs * 2)
 
                             Text {
                                 id: badgeText
@@ -395,7 +414,7 @@ Rectangle {
                                 text: modelData
                                 color: Theme.secondaryText
                                 font.family: Theme.fontPrimary
-                                font.pixelSize: 11
+                                font.pixelSize: root.minimalHeight ? 8 : 11
                             }
                         }
                     }
@@ -412,11 +431,8 @@ Rectangle {
             Layout.preferredHeight: root.requestedWaveformHeight
             Layout.minimumHeight: root.minimalHeight ? 32 : 48
             clip: true
-            property real hoverPreviewMs: -1
-            readonly property real playbackX:
-                root.effectiveDurationMs > 0
-                ? width * root.visualPlaybackPositionMs
-                  / root.effectiveDurationMs : 0
+            readonly property real hoverPreviewMs: waveform.hoverPosition
+            readonly property real playbackX: waveform.waveformCursorX
 
             WaveformItem {
                 id: waveform
@@ -426,6 +442,7 @@ Rectangle {
                 // clipped below at the exact playback pixel, avoiding the
                 // visible bucket-by-bucket progress jump of peak colouring.
                 position: 0
+                cursorPosition: root.visualPlaybackPositionMs
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
@@ -467,6 +484,7 @@ Rectangle {
                 WaveformItem {
                     id: playedWaveform
                     objectName: "playedWaveform"
+                    enabled: false
                     width: waveformFrame.width
                     height: waveformFrame.height
                     duration: root.effectiveDurationMs
@@ -491,9 +509,8 @@ Rectangle {
                 visible: SettingsController.waveformHoverTimePreview
                          && waveformFrame.hoverPreviewMs >= 0
                 x: Math.max(0, Math.min(parent.width - width,
-                                         Math.round(waveformFrame.hoverPreviewMs
-                                                    / Math.max(1, root.effectiveDurationMs)
-                                                    * parent.width)))
+                                        waveform.pixelForTime(
+                                            waveformFrame.hoverPreviewMs)))
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
@@ -507,9 +524,8 @@ Rectangle {
                 x: Math.max(0, Math.min(
                                 waveformFrame.width - width,
                                  (root.effectiveDurationMs > 0
-                                  ? waveformFrame.hoverPreviewMs
-                                    / root.effectiveDurationMs
-                                   * waveformFrame.width
+                                  ? waveform.pixelForTime(
+                                        waveformFrame.hoverPreviewMs)
                                  : 0) - width / 2))
                 y: 2
                 width: hoverTime.implicitWidth + 12
@@ -528,37 +544,17 @@ Rectangle {
                 }
             }
 
-            MouseArea {
-                id: waveformHoverSurface
-                objectName: "waveformHoverSurface"
-                anchors.fill: parent
-                z: 20
-                enabled: true
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.ArrowCursor
-
-                function updatePreview(pointerX) {
-                    if (root.effectiveDurationMs <= 0 || width <= 0) {
-                        waveformFrame.hoverPreviewMs = -1
-                        return
-                    }
-                    waveformFrame.hoverPreviewMs = waveform.timeForX(pointerX)
-                }
-
-                onPositionChanged: function(mouse) {
-                    updatePreview(mouse.x)
-                    if (pressed) {
-                        PlaybackController.seek(waveformFrame.hoverPreviewMs)
-                    }
-                }
-                onEntered: updatePreview(mouseX)
-                onExited: waveformFrame.hoverPreviewMs = -1
-                onClicked: function(mouse) {
-                    updatePreview(mouse.x)
-                    PlaybackController.seek(waveformFrame.hoverPreviewMs)
-                }
+            Rectangle {
+                id: waveformPlaybackGuide
+                objectName: "waveformPlaybackGuide"
+                x: waveform.waveformCursorX
+                width: 1
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                color: "#002FA7"
+                z: 10
             }
+
         }
 
         RowLayout {

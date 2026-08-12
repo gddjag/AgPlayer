@@ -22,6 +22,8 @@ struct TranscodeConfig {
     int channels = 0;
     bool volume_normalize = false;
     bool keep_metadata = false;
+    bool variable_bit_rate = false;
+    int quality = 75;
 };
 
 // Transcode a single audio file. progress_callback receives a fraction in

@@ -36,6 +36,12 @@ ag_result CoreContext::set_queue(std::vector<std::string> utf8_paths,
                   "queue change failed");
 }
 
+ag_result CoreContext::queue_next(std::string utf8_path) noexcept
+{
+    return record(audio_engine_.queue_next(std::move(utf8_path)),
+                  "queue next failed");
+}
+
 ag_result CoreContext::play() noexcept
 {
     return record(audio_engine_.play(), "play failed");
@@ -74,6 +80,13 @@ ag_result CoreContext::set_mode(const PlaybackMode mode) noexcept
 ag_result CoreContext::set_volume(const float volume) noexcept
 {
     return record(audio_engine_.set_volume(volume), "volume change failed");
+}
+
+ag_result CoreContext::set_replay_gain(const float gain_db, const float peak,
+                                       const bool clip_protection) noexcept
+{
+    return record(audio_engine_.set_replay_gain(gain_db, peak, clip_protection),
+                  "ReplayGain change failed");
 }
 
 ag_result CoreContext::set_equalizer(const GraphicEqSettings& settings,
@@ -145,6 +158,12 @@ ag_result CoreContext::set_transition_fade_ms(
 {
     return record(audio_engine_.set_transition_fade_ms(milliseconds),
                   "transition fade change failed");
+}
+
+ag_result CoreContext::set_duration_ms(const std::int64_t duration_ms) noexcept
+{
+    return record(audio_engine_.set_duration_ms(duration_ms),
+                  "duration synchronization failed");
 }
 
 ag_result CoreContext::set_match_track_sample_rate(

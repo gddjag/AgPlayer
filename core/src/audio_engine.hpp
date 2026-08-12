@@ -13,6 +13,8 @@
 
 namespace agplayer {
 
+class TimelinePreviewMixer;
+
 enum class AudioBackend {
     Default,
     Null,
@@ -63,8 +65,12 @@ public:
     AudioEngine& operator=(const AudioEngine&) = delete;
 
     ag_result load(const std::string& utf8_path) noexcept;
+    ag_result load_timeline(std::shared_ptr<TimelinePreviewMixer> mixer,
+                            std::int64_t loop_start_ms = -1,
+                            std::int64_t loop_end_ms = -1) noexcept;
     ag_result set_queue(std::vector<std::string> utf8_paths,
                         std::size_t start_index) noexcept;
+    ag_result queue_next(std::string utf8_path) noexcept;
     ag_result play() noexcept;
     ag_result pause() noexcept;
     ag_result stop() noexcept;
@@ -73,6 +79,8 @@ public:
     ag_result previous() noexcept;
     ag_result set_mode(PlaybackMode mode) noexcept;
     ag_result set_volume(float volume) noexcept;
+    ag_result set_replay_gain(float gain_db, float peak,
+                              bool clip_protection) noexcept;
     ag_result set_equalizer(const GraphicEqSettings& settings,
                             std::uint64_t revision) noexcept;
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept;
@@ -89,6 +97,7 @@ public:
                                 bool exclusive) noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
     ag_result set_transition_fade_ms(int milliseconds) noexcept;
+    ag_result set_duration_ms(std::int64_t duration_ms) noexcept;
     ag_result set_match_track_sample_rate(bool enabled) noexcept;
 
 private:

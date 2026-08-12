@@ -4,19 +4,91 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace agplayer {
 
-// Fields set to empty string are preserved from the source file.
-// cover_data is applied only if cover_size > 0.
+// QML and container adapters communicate exclusively through canonical fields;
+// FFmpeg dictionary keys remain an implementation detail of this module.
+enum class MetadataAction { Keep, Set, Clear };
+
+enum class CoverAction { Keep, Set, Clear };
+
+enum class CanonicalField {
+    Title,
+    Artist,
+    Album,
+    AlbumArtist,
+    Genre,
+    Year,
+    Date,
+    Composer,
+    Bpm,
+};
+
+struct FieldEdit {
+    CanonicalField field;
+    MetadataAction action = MetadataAction::Keep;
+    std::optional<std::string> value_utf8;
+};
+
+struct MetadataEditPlan {
+    std::vector<FieldEdit> fields;
+    CoverAction cover_action = CoverAction::Keep;
+    const unsigned char* cover_data = nullptr;
+    std::size_t cover_size = 0;
+    std::string cover_mime_type;
+};
+
+enum class FileResultStatus { Completed, Unsupported, Failed, Cancelled };
+
+struct FieldResult {
+    CanonicalField field;
+    MetadataAction requested_action = MetadataAction::Keep;
+    std::string actual_value;
+    std::string reason;
+};
+
+struct MetadataFileResult {
+    FileResultStatus final_status = FileResultStatus::Failed;
+    bool used_stream_copy = false;
+    bool audio_verified_unchanged = false;
+    std::vector<FieldResult> fields;
+    std::string message;
+};
+
+// Validates requests before a writer creates any temporary output.
+bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
+                                 std::string& error);
+
+// Checks the input and matching output container without creating a file.
+ag_result preflight_metadata_edit(const std::string& utf8_path,
+                                  const MetadataEditPlan& plan,
+                                  std::string& error);
+
+ag_result write_metadata_plan(const std::string& utf8_path,
+                              const MetadataEditPlan& plan,
+                              MetadataFileResult& result);
+
+// nullopt keeps a tag, an empty string clears it, and a non-empty string sets it.
 struct MetadataUpdate {
-    std::string title;
-    std::string artist;
-    std::string album;
-    std::string year;
-    std::string genre;
-    std::string lyrics;
+    std::optional<std::string> title;
+    std::optional<std::string> artist;
+    std::optional<std::string> album;
+    std::optional<std::string> album_artist;
+    std::optional<std::string> track;
+    std::optional<std::string> disc;
+    std::optional<std::string> composer;
+    std::optional<std::string> comment;
+    std::optional<std::string> bpm;
+    std::optional<std::string> copyright;
+    std::optional<std::string> encoder;
+    std::optional<std::string> year;
+    std::optional<std::string> genre;
+    std::optional<std::string> lyrics;
+    CoverAction cover_action = CoverAction::Keep;
     const unsigned char* cover_data = nullptr;
     std::size_t cover_size = 0;
     std::string cover_mime_type;
@@ -27,6 +99,7 @@ struct MetadataUpdate {
 // Returns AG_OK on success, or an error code. On failure, error is set.
 ag_result write_metadata(const std::string& utf8_path,
                          const MetadataUpdate& update,
-                         std::string& error);
+                         std::string& error,
+                         const MetadataEditPlan* verification_plan = nullptr);
 
 } // namespace agplayer

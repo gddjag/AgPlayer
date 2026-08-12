@@ -23,8 +23,12 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 
@@ -255,6 +259,9 @@ int main(const int argc, char** argv)
         data.mid = {0.08F, 0.18F, 0.28F};
         data.high = {0.12F};
         data.bpm = 128.5;
+        data.duration_ms = 1000U;
+        data.total_samples = 48'000U;
+        data.sample_rate = 48'000U;
         data.cues.push_back({1200U, "Intro"});
         data.cues.push_back({5000U, "Drop"});
 
@@ -268,6 +275,9 @@ int main(const int argc, char** argv)
         assert(loaded_v2.mid == data.mid);
         assert(loaded_v2.high == data.high);
         assert(std::fabs(loaded_v2.bpm - data.bpm) < 1e-9);
+        assert(loaded_v2.duration_ms == data.duration_ms);
+        assert(loaded_v2.total_samples == data.total_samples);
+        assert(loaded_v2.sample_rate == data.sample_rate);
         assert(loaded_v2.cues.size() == data.cues.size());
         for (std::size_t i = 0U; i < data.cues.size(); ++i) {
             assert(loaded_v2.cues[i].position_ms == data.cues[i].position_ms);
@@ -323,6 +333,9 @@ int main(const int argc, char** argv)
         assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH) == 8U);
         assert(std::isfinite(ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, 0U)));
         assert(ag_waveform_bpm(waveform) == 0.0);
+        assert(ag_waveform_duration_ms(waveform) == 2000U);
+        assert(ag_waveform_total_samples(waveform) == 88'200U);
+        assert(ag_waveform_sample_rate(waveform) == 44'100);
         ag_waveform_destroy(waveform);
     }
 

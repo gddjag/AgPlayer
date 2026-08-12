@@ -38,6 +38,13 @@ Item {
         var seconds = Math.max(0, Math.floor(Number(value) / 1000))
         return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0")
     }
+    function formatBpm(value) {
+        var bpm = Number(value)
+        if (!isFinite(bpm) || bpm <= 0) return "—"
+        var rounded = Math.round(bpm * 10) / 10
+        return Math.abs(rounded - Math.round(rounded)) < 0.001
+                ? Math.round(rounded).toString() : rounded.toFixed(1)
+    }
     function toggleSelection(trackId, additive) {
         var ids = additive ? selectedTrackIds.slice() : []
         var position = ids.indexOf(trackId)
@@ -758,7 +765,7 @@ Item {
                                         }
                                     }
                                 }
-                                Text { text: bpm > 0 ? Math.round(bpm) : "—"; color: Theme.secondaryText; Layout.preferredWidth: 48 }
+                                Text { text: root.formatBpm(bpm); color: Theme.secondaryText; Layout.preferredWidth: 48 }
                                 Text { text: root.formatDuration(durationMs); color: Theme.secondaryText; Layout.preferredWidth: 56 }
                                 Text {
                                     text: status === "missing" ? qsTr("丢失文件")
@@ -891,7 +898,7 @@ Item {
                         Repeater {
                             model: [
                                 qsTr("专辑"), root.selectedTrack.album || "—",
-                                qsTr("BPM"), root.selectedTrack.bpm > 0 ? Math.round(root.selectedTrack.bpm) : "—",
+                                qsTr("BPM"), root.formatBpm(root.selectedTrack.bpm),
                                 qsTr("时长"), root.formatDuration(root.selectedTrack.durationMs || 0),
                                 qsTr("采样率"), root.selectedTrack.sampleRate > 0 ? (root.selectedTrack.sampleRate / 1000).toFixed(1) + " kHz" : "—",
                                 qsTr("类型"), root.selectedTrack.format || "—",

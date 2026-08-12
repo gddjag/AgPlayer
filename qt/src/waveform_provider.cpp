@@ -102,7 +102,22 @@ QVariantMap layersFromWaveform(const ag_waveform* waveform)
     layers[QStringLiteral("high")] = layerToList(waveform, AG_WAVEFORM_LAYER_HIGH);
     layers[QStringLiteral("_durationMs")] =
         static_cast<qlonglong>(ag_waveform_duration_ms(waveform));
+    layers[QStringLiteral("_bpm")] = ag_waveform_bpm(waveform);
     return layers;
+}
+
+void addTimelineMetadata(QVariantMap& layers,
+                         std::uint64_t totalSamples,
+                         int sampleRate)
+{
+    const int peakCount = layers.value(QStringLiteral("mix")).toList().size();
+    layers[QStringLiteral("_sampleCount")] = peakCount;
+    layers[QStringLiteral("_peakCount")] = peakCount;
+    if (totalSamples > 0U && sampleRate > 0) {
+        layers[QStringLiteral("_totalSamples")] =
+            static_cast<qulonglong>(totalSamples);
+        layers[QStringLiteral("_sampleRate")] = sampleRate;
+    }
 }
 
 void saveWaveformCache(const QString& cachePath,
@@ -132,6 +147,9 @@ void saveWaveformCache(const QString& cachePath,
     }
     data.bpm = ag_waveform_bpm(waveform);
     data.duration_ms = ag_waveform_duration_ms(waveform);
+    data.total_samples = ag_waveform_total_samples(waveform);
+    data.sample_rate = static_cast<std::uint32_t>(
+        std::max(0, ag_waveform_sample_rate(waveform)));
     if (!agplayer::WaveformCache::save_v2(
             filesystemPath(cachePath), filesystemPath(sourcePath), data)) {
         RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Waveform"),
@@ -262,12 +280,13 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
             layers[QStringLiteral("high")] = peaksFromVector(data.high);
             layers[QStringLiteral("_trackId")] = currentTrackId_;
             layers[QStringLiteral("_generation")] = activeGeneration_;
-            layers[QStringLiteral("_sampleCount")] =
-                static_cast<int>(data.mix.size());
             layers[QStringLiteral("_cacheVersion")] = 2;
-            if (data.duration_ms > 0U) {
+            if (data.duration_ms > 0U && data.total_samples > 0U
+                && data.sample_rate > 0U) {
                 layers[QStringLiteral("_durationMs")] =
                     static_cast<qlonglong>(data.duration_ms);
+                addTimelineMetadata(layers, data.total_samples,
+                                    static_cast<int>(data.sample_rate));
                 currentLayers_ = layers;
                 setAnalysisProgress(1.0);
                 emit waveformReady(path, layers);
@@ -450,8 +469,9 @@ void WaveformProvider::onAnalysisFinished()
     QVariantMap result = waveformToVariantMap(job.waveform);
     result[QStringLiteral("_trackId")] = currentTrackId_;
     result[QStringLiteral("_generation")] = activeGeneration_;
-    result[QStringLiteral("_sampleCount")] =
-        result.value(QStringLiteral("mix")).toList().size();
+    addTimelineMetadata(result,
+                        ag_waveform_total_samples(job.waveform),
+                        ag_waveform_sample_rate(job.waveform));
     result[QStringLiteral("_cacheVersion")] = 2;
     currentLayers_ = result;
     emit waveformReady(currentPath_, result);

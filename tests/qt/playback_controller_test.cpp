@@ -13,21 +13,56 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cstdio>
+
 class PlaybackControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void commandsReflectOnlyCoreSnapshots();
+    void commandsReflectCoreSnapshotsAndCommittedSeekImmediately();
+    void seekImmediatelyAfterPauseKeepsCommittedPosition();
     void outputDevicesAreEnumeratedAndApplied();
     void snapshotSignalsEmitOnlyForChangesAtBoundedFrequency();
     void liveSpectrumIsPublishedAtBoundedFrequency();
     void unavailableRowsAreExcludedFromQueueIndices();
+    void queuesSelectedTrackNextWithoutRestartingPlayback();
+    void restoresSavedQueueOrderAndFiltersUnavailableTracks();
+    void exactWaveformDurationAlignsPlaybackTimeline();
     void loadsRowWithoutStartingPlayback();
     void nullCoreReportsStableErrors();
     void survivesLibraryModelDestruction();
     void libraryRequestsShareQueueAndFavoriteState();
     void playbackControllerIsAnAgPlayerQmlSingleton();
 };
+
+void PlaybackControllerTest::seekImmediatelyAfterPauseKeepsCommittedPosition()
+{
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        QTRY_COMPARE(controller.durationMs(), 2'000);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QTest::qWait(120);
+
+        controller.pause();
+        controller.seek(1'500);
+
+        QCOMPARE(controller.positionMs(), qint64{1'500});
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        ag_playback_snapshot snapshot{};
+        QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
+        QVERIFY(qAbs(snapshot.position_ms - qint64{1'500}) <= 2);
+        QVERIFY(qAbs(controller.positionMs() - qint64{1'500}) <= 2);
+    }
+    ag_player_destroy(core);
+}
 
 void PlaybackControllerTest::outputDevicesAreEnumeratedAndApplied()
 {
@@ -45,6 +80,8 @@ void PlaybackControllerTest::outputDevicesAreEnumeratedAndApplied()
         QVERIFY(!controller.setTransitionFadeMs(100));
         QVERIFY(controller.setMatchTrackSampleRate(true));
         QVERIFY(controller.setMatchTrackSampleRate(false));
+        QVERIFY(controller.setReplayGainSettings(0, true));
+        QVERIFY(!controller.setReplayGainSettings(3, true));
         QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
         controller.play();
         QTRY_COMPARE(controller.state(), PlaybackController::Playing);
@@ -60,7 +97,7 @@ void PlaybackControllerTest::outputDevicesAreEnumeratedAndApplied()
     ag_player_destroy(core);
 }
 
-void PlaybackControllerTest::commandsReflectOnlyCoreSnapshots()
+void PlaybackControllerTest::commandsReflectCoreSnapshotsAndCommittedSeekImmediately()
 {
     const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
     QVERIFY(!path.isEmpty());
@@ -124,8 +161,7 @@ void PlaybackControllerTest::commandsReflectOnlyCoreSnapshots()
         positionChanged.clear();
 
         controller.seek(seekTarget);
-        QCOMPARE(controller.positionMs(), pausedPosition);
-        QTRY_VERIFY(qAbs(controller.positionMs() - seekTarget) <= 2);
+        QVERIFY(qAbs(controller.positionMs() - seekTarget) <= 2);
         QCOMPARE(positionChanged.count(), 1);
         QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
         QVERIFY(qAbs(snapshot.position_ms - seekTarget) <= 2);
@@ -164,7 +200,9 @@ void PlaybackControllerTest::commandsReflectOnlyCoreSnapshots()
 
 void PlaybackControllerTest::snapshotSignalsEmitOnlyForChangesAtBoundedFrequency()
 {
-    QVERIFY(PlaybackController::PollIntervalMs >= 34);
+    QCOMPARE(PlaybackController::PollIntervalMs, 17);
+    QVERIFY(PlaybackController::IdlePollIntervalMs
+            > PlaybackController::PollIntervalMs);
 
     ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
     ag_player* core = nullptr;
@@ -220,9 +258,10 @@ void PlaybackControllerTest::liveSpectrumIsPublishedAtBoundedFrequency()
                 [](const QVariant& value) { return value.toFloat() > 0.05F; });
         };
         QTRY_VERIFY(hasEnergy());
+        QCOMPARE(controller.spectrum().size(), 128);
         const int before = spectrumChanged.count();
         QTest::qWait(200);
-        QVERIFY(spectrumChanged.count() - before <= 7);
+        QVERIFY(spectrumChanged.count() - before <= 14);
     }
     ag_player_destroy(core);
 }
@@ -298,6 +337,136 @@ void PlaybackControllerTest::unavailableRowsAreExcludedFromQueueIndices()
         QCOMPARE(countChanged.count(), 1);
         QCOMPARE(indexChanged.count(), 3);
         QCOMPARE(trackIdChanged.count(), 3);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::exactWaveformDurationAlignsPlaybackTimeline()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("exact-duration.wav"));
+    QVERIFY(QFile::copy(fixture, path));
+
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("exact-duration");
+    track.path = path;
+    track.available = true;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+        QTRY_COMPARE(controller.durationMs(), 2'000);
+
+        bool accepted = true;
+        QVERIFY(QMetaObject::invokeMethod(
+            &controller, "applyWaveformDuration", Qt::DirectConnection,
+            Q_RETURN_ARG(bool, accepted), Q_ARG(QString, track.trackId),
+            Q_ARG(qint64, 1'875)));
+        QVERIFY(accepted);
+        QTRY_COMPARE(controller.durationMs(), 1'875);
+        ag_playback_snapshot snapshot{};
+        QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
+        QCOMPARE(snapshot.duration_ms, 1'875);
+
+        // Full PCM analysis is the exact seekable timeline; container metadata
+        // may include encoder padding and must not stretch the waveform.
+        controller.seek(1'750);
+        QCOMPARE(controller.positionMs(), 1'750);
+        QTRY_VERIFY(qAbs(controller.positionMs() - 1'750) <= 2);
+
+        accepted = true;
+        QVERIFY(QMetaObject::invokeMethod(
+            &controller, "applyWaveformDuration", Qt::DirectConnection,
+            Q_RETURN_ARG(bool, accepted), Q_ARG(QString, QStringLiteral("other")),
+            Q_ARG(qint64, 1'000)));
+        QVERIFY(!accepted);
+        QCOMPARE(controller.durationMs(), 1'875);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::queuesSelectedTrackNextWithoutRestartingPlayback()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    LibraryModel model;
+    const QStringList ids{QStringLiteral("first"),
+                          QStringLiteral("second"),
+                          QStringLiteral("third")};
+    for (const QString& id : ids) {
+        const QString path = directory.filePath(id + QStringLiteral(".wav"));
+        QVERIFY(QFile::copy(fixture, path));
+        TrackRecord track;
+        track.trackId = id;
+        track.path = path;
+        track.available = true;
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.playRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("first"));
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+
+        QVERIFY(controller.queueNext(QStringLiteral("third")));
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+        controller.next();
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("third"));
+        controller.next();
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("second"));
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::restoresSavedQueueOrderAndFiltersUnavailableTracks()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    LibraryModel model;
+    for (const QString& id : {QStringLiteral("first"), QStringLiteral("second"),
+                              QStringLiteral("third")}) {
+        const QString path = directory.filePath(id + QStringLiteral(".wav"));
+        QVERIFY(QFile::copy(fixture, path));
+        TrackRecord track;
+        track.trackId = id;
+        track.path = path;
+        track.available = id != QStringLiteral("second");
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        QVERIFY(controller.restoreQueue(
+            {QStringLiteral("third"), QStringLiteral("missing"),
+             QStringLiteral("second"), QStringLiteral("first")},
+            QStringLiteral("third")));
+        QCOMPARE(controller.queueTrackIds(),
+                 QStringList({QStringLiteral("third"), QStringLiteral("first")}));
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("third"));
+        QCOMPARE(controller.trackIndex(), 0);
+        QCOMPARE(controller.state(), PlaybackController::Stopped);
     }
     ag_player_destroy(core);
 }

@@ -1,4 +1,5 @@
 #include "light_editor.hpp"
+#include "ffmpeg_codec_support.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -387,26 +388,8 @@ ag_result light_edit(const std::string& input_path,
     }
 
     // Use a sample format the encoder supports
-    AVSampleFormat enc_sample_fmt = dec.ctx->sample_fmt;
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4996)
-#endif
-    if (enc_codec->sample_fmts != nullptr) {
-        bool supported = false;
-        for (int i = 0; enc_codec->sample_fmts[i] != AV_SAMPLE_FMT_NONE; ++i) {
-            if (enc_codec->sample_fmts[i] == enc_sample_fmt) {
-                supported = true;
-                break;
-            }
-        }
-        if (!supported) {
-            enc_sample_fmt = enc_codec->sample_fmts[0];
-        }
-    }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+    const AVSampleFormat enc_sample_fmt = pick_supported_sample_format(
+        enc_codec, dec.ctx->sample_fmt);
 
     enc_ctx->sample_fmt = enc_sample_fmt;
     enc_ctx->sample_rate = sample_rate;

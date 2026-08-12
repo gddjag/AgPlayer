@@ -15,6 +15,7 @@ private slots:
 void EditorTimelineMathTest::computesBeatGrid()
 {
     QCOMPARE(beatGridMs(120.0, 4), 500);
+    QCOMPARE(beatGridMs(300.0, 4), 200);
     QCOMPARE(beatGridMs(128.0, 4), 469);
     QCOMPARE(beatGridMs(20.0, 4), 0);
     QCOMPARE(beatGridMs(120.0, 0), 0);

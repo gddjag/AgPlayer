@@ -1,20 +1,145 @@
 #include "format_converter.hpp"
 
+#include "audio_file_discovery.hpp"
+#include "metadata_writer.hpp"
+
 #include <agplayer/c_api.h>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QFutureWatcher>
 #include <QSet>
 #include <QThread>
 #include <QThreadPool>
+#include <QUuid>
+
+#ifdef Q_OS_WIN
+#  include <windows.h>
+#endif
 #include <QVector>
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
 #include <numeric>
 
 namespace {
+
+QString cover_mime_type(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    if (suffix == QLatin1String("png")) return QStringLiteral("image/png");
+    if (suffix == QLatin1String("jpg") || suffix == QLatin1String("jpeg"))
+        return QStringLiteral("image/jpeg");
+    if (suffix == QLatin1String("bmp")) return QStringLiteral("image/bmp");
+    return {};
+}
+
+agplayer::CanonicalField canonical_field(const QString& key)
+{
+    if (key == QLatin1String("title")) return agplayer::CanonicalField::Title;
+    if (key == QLatin1String("artist")) return agplayer::CanonicalField::Artist;
+    if (key == QLatin1String("album")) return agplayer::CanonicalField::Album;
+    if (key == QLatin1String("albumArtist")) return agplayer::CanonicalField::AlbumArtist;
+    if (key == QLatin1String("genre")) return agplayer::CanonicalField::Genre;
+    if (key == QLatin1String("year")) return agplayer::CanonicalField::Year;
+    if (key == QLatin1String("date")) return agplayer::CanonicalField::Date;
+    if (key == QLatin1String("composer")) return agplayer::CanonicalField::Composer;
+    return agplayer::CanonicalField::Bpm;
+}
+
+agplayer::MetadataEditPlan metadata_plan(const QVariantMap& fields,
+                                         const QByteArray& coverData,
+                                         const QString& coverMime)
+{
+    agplayer::MetadataEditPlan plan;
+    const QStringList keys{QStringLiteral("title"), QStringLiteral("artist"),
+        QStringLiteral("album"), QStringLiteral("albumArtist"), QStringLiteral("genre"),
+        QStringLiteral("year"), QStringLiteral("date"), QStringLiteral("composer"),
+        QStringLiteral("bpm")};
+    for (const QString& key : keys) {
+        const QVariantMap value = fields.value(key).toMap();
+        const QString mode = value.value(QStringLiteral("mode"),
+                                         QStringLiteral("keep")).toString();
+        if (mode == QLatin1String("keep")) continue;
+        const auto action = mode == QLatin1String("clear")
+            ? agplayer::MetadataAction::Clear : agplayer::MetadataAction::Set;
+        plan.fields.push_back({canonical_field(key), action,
+            action == agplayer::MetadataAction::Set
+                ? std::optional<std::string>(value.value(QStringLiteral("value"))
+                    .toString().toUtf8().toStdString()) : std::nullopt});
+    }
+    const QString coverMode = fields.value(QStringLiteral("coverMode"),
+                                           QStringLiteral("keep")).toString();
+    if (coverMode == QLatin1String("set")) {
+        plan.cover_action = agplayer::CoverAction::Set;
+        plan.cover_data = reinterpret_cast<const unsigned char*>(coverData.constData());
+        plan.cover_size = static_cast<std::size_t>(coverData.size());
+        plan.cover_mime_type = coverMime.toStdString();
+    } else if (coverMode == QLatin1String("clear")) {
+        plan.cover_action = agplayer::CoverAction::Clear;
+    }
+    return plan;
+}
+
+} // namespace
+
+namespace {
+
+QString staging_path_for(const QString& finalPath)
+{
+    const QFileInfo info(finalPath);
+    return info.dir().filePath(
+        QStringLiteral(".%1.agplayer-part-%2.%3")
+            .arg(info.completeBaseName(),
+                 QUuid::createUuid().toString(QUuid::Id128),
+                 info.suffix()));
+}
+
+bool validate_audio_output(const QString& path)
+{
+    ag_metadata* metadata = nullptr;
+    const QByteArray utf8 = path.toUtf8();
+    if (ag_metadata_open(utf8.constData(), &metadata) != AG_OK
+        || metadata == nullptr) {
+        return false;
+    }
+    const bool valid = ag_metadata_duration_ms(metadata) > 0;
+    ag_metadata_destroy(metadata);
+    return valid;
+}
+
+bool commit_staged_output(const QString& stagedPath,
+                          const QString& finalPath,
+                          bool overwriteExisting)
+{
+    if (!overwriteExisting && QFileInfo::exists(finalPath)) {
+        return false;
+    }
+#ifdef Q_OS_WIN
+    const std::wstring staged = QDir::toNativeSeparators(stagedPath).toStdWString();
+    const std::wstring final = QDir::toNativeSeparators(finalPath).toStdWString();
+    if (QFileInfo::exists(finalPath)) {
+        return ReplaceFileW(final.c_str(), staged.c_str(), nullptr,
+                            REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)
+               != FALSE;
+    }
+    return MoveFileExW(staged.c_str(), final.c_str(), MOVEFILE_WRITE_THROUGH)
+           != FALSE;
+#else
+    std::error_code error;
+    if (overwriteExisting) {
+        std::filesystem::remove(finalPath.toStdString(), error);
+        error.clear();
+    }
+    std::filesystem::rename(stagedPath.toStdString(), finalPath.toStdString(),
+                            error);
+    return !error;
+#endif
+}
 
 // Map format string to FFmpeg codec name + file extension.
 struct FormatInfo {
@@ -31,12 +156,18 @@ FormatInfo format_info(const QString& format)
         return {"pcm_s16le", "wav"};
     if (f == QStringLiteral("flac"))
         return {"flac", "flac"};
-    if (f == QStringLiteral("aac") || f == QStringLiteral("m4a"))
+    if (f == QStringLiteral("aac"))
+        return {"aac", "aac"};
+    if (f == QStringLiteral("m4a"))
         return {"aac", "m4a"};
     if (f == QStringLiteral("ogg"))
         return {"libvorbis", "ogg"};
     if (f == QStringLiteral("opus"))
         return {"libopus", "opus"};
+    if (f == QStringLiteral("alac"))
+        return {"alac", "m4a"};
+    if (f == QStringLiteral("wma"))
+        return {"wmav2", "wma"};
     // Default to mp3.
     return {"libmp3lame", "mp3"};
 }
@@ -61,9 +192,65 @@ FormatConverter::FormatConverter(QObject* parent)
 FormatConverter::~FormatConverter()
 {
     cancel();
+    if (discoveryWatcher_ != nullptr) {
+        discoveryWatcher_->future().waitForFinished();
+    }
+    if (loadWatcher_ != nullptr) {
+        loadWatcher_->future().waitForFinished();
+    }
     if (watcher_ != nullptr) {
         watcher_->future().waitForFinished();
     }
+}
+
+void FormatConverter::setParallelJobs(int value)
+{
+    if (busy()) {
+        return;
+    }
+    const int bounded = std::clamp(value, 1, 4);
+    if (parallelJobs_ == bounded) {
+        return;
+    }
+    parallelJobs_ = bounded;
+    emit parallelJobsChanged();
+}
+
+void FormatConverter::setBitrateMode(const QString& value)
+{
+    if (busy_.load(std::memory_order_acquire)) {
+        return;
+    }
+    const QString normalized = value.trimmed().toLower();
+    if (normalized != QStringLiteral("cbr")
+        && normalized != QStringLiteral("vbr")) {
+        return;
+    }
+    if (bitrateMode_ == normalized) {
+        return;
+    }
+    bitrateMode_ = normalized;
+    emit bitrateModeChanged();
+}
+
+void FormatConverter::setConflictPolicy(const QString& value)
+{
+    if (busy_.load(std::memory_order_acquire)) {
+        return;
+    }
+    const QString normalized = value.trimmed().toLower();
+    if (normalized != QStringLiteral("auto-number")
+        && normalized != QStringLiteral("skip")
+        && normalized != QStringLiteral("overwrite")
+        && normalized != QStringLiteral("ask")) {
+        return;
+    }
+    if (conflictPolicy_ == normalized) {
+        return;
+    }
+    conflictPolicy_ = normalized;
+    overwriteExisting_ = normalized == QStringLiteral("overwrite");
+    emit conflictPolicyChanged();
 }
 
 double FormatConverter::progress() const noexcept
@@ -103,6 +290,12 @@ QVariantList FormatConverter::files() const
         map[QStringLiteral("format")] = entry.format;
         map[QStringLiteral("fileSize")] = entry.fileSize;
         map[QStringLiteral("durationMs")] = entry.durationMs;
+        map[QStringLiteral("sampleRate")] = entry.sampleRate;
+        map[QStringLiteral("bitRate")] = entry.bitRate;
+        map[QStringLiteral("channels")] = entry.channels;
+        map[QStringLiteral("progress")] = entry.progress;
+        map[QStringLiteral("outputFormat")] = entry.outputFormat;
+        map[QStringLiteral("outputPath")] = entry.outputPath;
         map[QStringLiteral("status")] = statusString(entry.status);
         map[QStringLiteral("errorMessage")] = entry.errorMessage;
         list.append(map);
@@ -139,12 +332,20 @@ QString FormatConverter::statusString(FileStatus status)
     switch (status) {
     case FileStatus::Waiting:
         return QStringLiteral("Waiting");
+    case FileStatus::Ready:
+        return QStringLiteral("Ready");
+    case FileStatus::PendingConfirmation:
+        return QStringLiteral("PendingConfirmation");
+    case FileStatus::Skipped:
+        return QStringLiteral("Skipped");
     case FileStatus::Converting:
         return QStringLiteral("Converting");
     case FileStatus::Done:
         return QStringLiteral("Done");
     case FileStatus::Error:
         return QStringLiteral("Error");
+    case FileStatus::Cancelled:
+        return QStringLiteral("Cancelled");
     }
     return QStringLiteral("Waiting");
 }
@@ -157,6 +358,10 @@ void FormatConverter::setEntryStatus(int index, FileStatus status)
             return;
         }
         entries_[index].status = status;
+        if (status == FileStatus::Done || status == FileStatus::Error
+            || status == FileStatus::Cancelled) {
+            entries_[index].progress = 1.0;
+        }
     }
     emit filesChanged();
 }
@@ -169,6 +374,178 @@ void FormatConverter::setEntryError(int index, const QString& error)
             return;
         }
         entries_[index].errorMessage = error;
+    }
+    emit filesChanged();
+}
+
+QVariantMap FormatConverter::previewSelected(const QVariantList& indices,
+                                             const QString& outputFormat,
+                                             int bitRate,
+                                             int sampleRate,
+                                             int channels,
+                                             const QString& outputDir,
+                                             bool extractAudio)
+{
+    Q_UNUSED(bitRate)
+    Q_UNUSED(channels)
+    Q_UNUSED(extractAudio)
+
+    const QString normalizedFormat = outputFormat.trimmed().toLower();
+    bool supported = false;
+    QString unsupportedReason;
+    for (const QVariant& value : supportedOutputFormats()) {
+        const QVariantMap candidate = value.toMap();
+        if (candidate.value(QStringLiteral("key")).toString()
+            == normalizedFormat) {
+            supported = candidate.value(QStringLiteral("available")).toBool();
+            unsupportedReason = candidate.value(QStringLiteral("reason")).toString();
+            break;
+        }
+    }
+    if (!supported || indices.isEmpty()) {
+        return {{QStringLiteral("ready"), false},
+                {QStringLiteral("requiresConfirmation"), false},
+                {QStringLiteral("reason"), unsupportedReason.isEmpty()
+                    ? tr("没有可用的转换任务或输出格式") : unsupportedReason}};
+    }
+
+    QVariantList conflicts;
+    bool hasUsableEntry = false;
+    if (conflictPolicy_ == QStringLiteral("ask")) {
+        const FormatInfo format = format_info(normalizedFormat);
+        QMutexLocker lock(&mutex_);
+        for (const QVariant& value : indices) {
+            const int index = value.toInt();
+            if (index < 0 || index >= entries_.size()) {
+                continue;
+            }
+            hasUsableEntry = true;
+            const QFileInfo input(entries_.at(index).path);
+            const QString directory = outputDir.isEmpty()
+                ? input.absolutePath() : outputDir;
+            const QString target = QDir(directory).filePath(
+                input.completeBaseName() + QLatin1Char('.')
+                + QString::fromLatin1(format.extension));
+            if (QFileInfo::exists(target)) {
+                conflicts.append(QVariantMap{
+                    {QStringLiteral("inputPath"), input.absoluteFilePath()},
+                    {QStringLiteral("outputPath"), target},
+                });
+            }
+        }
+    } else {
+        QMutexLocker lock(&mutex_);
+        for (const QVariant& value : indices) {
+            const int index = value.toInt();
+            hasUsableEntry = hasUsableEntry
+                || (index >= 0 && index < entries_.size());
+        }
+    }
+    if (!hasUsableEntry) {
+        return {{QStringLiteral("ready"), false},
+                {QStringLiteral("requiresConfirmation"), false},
+                {QStringLiteral("reason"), tr("没有可用的转换任务")}};
+    }
+
+    const int resolvedSampleRate = normalizedFormat == QStringLiteral("opus")
+        ? 48000 : sampleRate;
+    const bool requiresConfirmation = (sampleRate != 0
+        && resolvedSampleRate != sampleRate) || !conflicts.isEmpty();
+    const QVariantMap resolvedProfile{
+        {QStringLiteral("format"), normalizedFormat},
+        {QStringLiteral("sampleRate"), resolvedSampleRate},
+        {QStringLiteral("conflictPolicy"), conflictPolicy_},
+        {QStringLiteral("conflictCount"), conflicts.size()},
+    };
+    {
+        QMutexLocker lock(&mutex_);
+        for (const QVariant& value : indices) {
+            const int index = value.toInt();
+            if (index < 0 || index >= entries_.size()) {
+                continue;
+            }
+            entries_[index].status = requiresConfirmation
+                ? FileStatus::PendingConfirmation : FileStatus::Ready;
+            entries_[index].outputFormat = normalizedFormat.toUpper();
+        }
+    }
+    emit filesChanged();
+    return {{QStringLiteral("ready"), true},
+            {QStringLiteral("requiresConfirmation"), requiresConfirmation},
+            {QStringLiteral("resolvedProfile"), resolvedProfile},
+            {QStringLiteral("conflictCount"), conflicts.size()},
+            {QStringLiteral("conflicts"), conflicts}};
+}
+
+QVariantList FormatConverter::supportedOutputFormats() const
+{
+    struct Candidate {
+        const char* key;
+        const char* label;
+        const char* codec;
+    };
+    static constexpr Candidate candidates[] = {
+        {"mp3", "MP3", "libmp3lame"},
+        {"wav", "WAV", "pcm_s16le"},
+        {"flac", "FLAC", "flac"},
+        {"aac", "AAC", "aac"},
+        {"m4a", "AAC / M4A", "aac"},
+        {"ogg", "OGG", "libvorbis"},
+        {"opus", "Opus", "libopus"},
+        {"alac", "ALAC", "alac"},
+    };
+    QVariantList formats;
+    for (const Candidate& candidate : candidates) {
+        const bool available = ag_encoder_available(candidate.codec) != 0;
+        formats.append(QVariantMap{
+            {QStringLiteral("key"), QString::fromLatin1(candidate.key)},
+            {QStringLiteral("label"), QString::fromLatin1(candidate.label)},
+            {QStringLiteral("codec"), QString::fromLatin1(candidate.codec)},
+            {QStringLiteral("available"), available},
+            {QStringLiteral("reason"), available ? QString()
+                : tr("当前内置编码器不可用：%1")
+                      .arg(QString::fromLatin1(candidate.codec))},
+        });
+    }
+    return formats;
+}
+
+void FormatConverter::updateEntryProgress(int index, double value,
+                                          const QVector<int>& jobIndices)
+{
+    double weightedProgress = 0.0;
+    double totalWeight = 0.0;
+    bool changed = false;
+    {
+        QMutexLocker lock(&mutex_);
+        if (index < 0 || index >= entries_.size()) {
+            return;
+        }
+        FileEntry& entry = entries_[index];
+        const double normalized = std::clamp(value, 0.0, 1.0);
+        if (std::abs(entry.progress - normalized) >= 0.005
+            || normalized >= 1.0) {
+            entry.progress = normalized;
+            changed = true;
+        }
+        if (!changed) {
+            return;
+        }
+        for (const int jobIndex : jobIndices) {
+            if (jobIndex < 0 || jobIndex >= entries_.size()) {
+                continue;
+            }
+            const FileEntry& job = entries_.at(jobIndex);
+            const double weight = static_cast<double>(std::max<qint64>(
+                1, job.durationMs));
+            totalWeight += weight;
+            weightedProgress += weight * job.progress;
+        }
+    }
+    if (totalWeight > 0.0) {
+        progress_.store(weightedProgress / totalWeight,
+                        std::memory_order_release);
+        emit progressChanged();
     }
     emit filesChanged();
 }
@@ -187,41 +564,123 @@ void FormatConverter::loadFiles(const QList<QUrl>& urls)
         }
     }
 
-    QList<FileEntry> newEntries;
-    for (const QUrl& url : urls) {
-        const QString path = url.toLocalFile();
-        if (path.isEmpty() || seen.contains(path)) {
-            continue;
+    cancelFlag_.store(false, std::memory_order_release);
+    setProgress(0.0);
+    setBusy(true);
+
+    auto* discoveryWatcher = new QFutureWatcher<QList<QUrl>>(this);
+    discoveryWatcher_ = discoveryWatcher;
+    connect(discoveryWatcher, &QFutureWatcher<QList<QUrl>>::finished, this,
+            [this, discoveryWatcher, seen = std::move(seen)]() mutable {
+        const QList<QUrl> expandedUrls = discoveryWatcher->result();
+        discoveryWatcher_.clear();
+        discoveryWatcher->deleteLater();
+        if (cancelFlag_.load(std::memory_order_acquire)) {
+            setProgress(1.0);
+            setBusy(false);
+            return;
         }
 
-        FileEntry entry;
-        entry.path = path;
-        const QFileInfo info(path);
-        entry.fileName = info.fileName();
-        entry.fileSize = info.size();
-        entry.status = FileStatus::Waiting;
+        auto* watcher = new QFutureWatcher<QList<FileEntry>>(this);
+        loadWatcher_ = watcher;
+        connect(watcher, &QFutureWatcher<QList<FileEntry>>::finished, this,
+                [this, watcher] {
+            const QList<FileEntry> discovered = watcher->result();
+            if (!cancelFlag_.load(std::memory_order_acquire)) {
+                {
+                    QMutexLocker lock(&mutex_);
+                    entries_.append(discovered);
+                }
+                if (!discovered.isEmpty()) {
+                    emit fileCountChanged();
+                    emit filesChanged();
+                }
+            }
+            loadWatcher_.clear();
+            setProgress(1.0);
+            setBusy(false);
+            watcher->deleteLater();
+        });
 
-        // Read audio metadata to populate format and duration.
-        ag_metadata* metadata = nullptr;
-        if (ag_metadata_open(path.toUtf8().constData(), &metadata) == AG_OK) {
-            entry.format = QString::fromUtf8(ag_metadata_format(metadata));
-            entry.durationMs = ag_metadata_duration_ms(metadata);
-            ag_metadata_destroy(metadata);
-        }
-        if (entry.format.isEmpty()) {
-            entry.format = info.suffix().toUpper();
-        }
+        watcher->setFuture(QtConcurrent::run(
+            [expandedUrls, seen = std::move(seen), this]() mutable {
+        QList<FileEntry> discovered;
+        discovered.reserve(expandedUrls.size());
+        const int total = expandedUrls.size();
+        for (int index = 0; index < total; ++index) {
+            if (cancelFlag_.load(std::memory_order_acquire)) {
+                break;
+            }
+            const QString path = expandedUrls.at(index).toLocalFile();
+            if (path.isEmpty() || seen.contains(path)) {
+                continue;
+            }
 
-        newEntries.append(entry);
-        seen.insert(path);
+            FileEntry entry;
+            entry.path = path;
+            const QFileInfo info(path);
+            entry.fileName = info.fileName();
+            entry.fileSize = info.size();
+            entry.status = FileStatus::Waiting;
+
+            ag_metadata* metadata = nullptr;
+            if (ag_metadata_open(path.toUtf8().constData(), &metadata) == AG_OK
+                && metadata != nullptr) {
+                entry.format = QString::fromUtf8(ag_metadata_format(metadata));
+                entry.durationMs = ag_metadata_duration_ms(metadata);
+                entry.sampleRate = ag_metadata_sample_rate(metadata);
+                entry.bitRate = ag_metadata_bit_rate(metadata);
+                entry.channels = ag_metadata_channels(metadata);
+                ag_metadata_destroy(metadata);
+            }
+            if (entry.format.isEmpty()) {
+                entry.format = info.suffix().toUpper();
+            }
+            discovered.append(std::move(entry));
+            seen.insert(path);
+            progress_.store(static_cast<double>(index + 1) / total,
+                            std::memory_order_release);
+        }
+        return discovered;
+    }));
+    });
+    discoveryWatcher->setFuture(
+        agplayer::qt::expandAudioUrlsAsync(urls, true));
+}
+
+bool FormatConverter::setMetadataEditPlan(const QVariantMap& fields,
+                                          const QUrl& coverUrl)
+{
+    const QString coverMode = fields.value(QStringLiteral("coverMode"),
+                                           QStringLiteral("keep")).toString();
+    QByteArray coverData;
+    QString coverMime;
+    if (coverMode == QLatin1String("set")) {
+        const QString path = coverUrl.toLocalFile();
+        QFile coverFile(path);
+        coverMime = cover_mime_type(path);
+        if (path.isEmpty() || coverMime.isEmpty() || !coverFile.open(QIODevice::ReadOnly)) {
+            emit errorOccurred(tr("无法读取转换模式的封面图片"));
+            return false;
+        }
+        coverData = coverFile.readAll();
+        const QSize size = QImageReader(path).size();
+        if (coverData.isEmpty() || coverData.size() > 20 * 1024 * 1024
+            || !size.isValid() || size.width() > 4096 || size.height() > 4096) {
+            emit errorOccurred(tr("转换模式的封面图片无效"));
+            return false;
+        }
     }
-
-    {
-        QMutexLocker lock(&mutex_);
-        entries_.append(newEntries);
+    agplayer::MetadataEditPlan plan = metadata_plan(fields, coverData, coverMime);
+    std::string error;
+    if (!agplayer::validate_metadata_edit_plan(plan, error)) {
+        emit errorOccurred(QString::fromStdString(error));
+        return false;
     }
-    emit fileCountChanged();
-    emit filesChanged();
+    metadataFields_ = fields;
+    metadataCoverData_ = coverData;
+    metadataCoverMime_ = coverMime;
+    return true;
 }
 
 QString FormatConverter::entryAt(int index) const
@@ -332,25 +791,145 @@ void FormatConverter::start(const QString& outputFormat,
                             bool volumeNormalize,
                             bool extractAudio)
 {
+    QVector<int> indices;
+    {
+        QMutexLocker lock(&mutex_);
+        indices.resize(entries_.size());
+    }
+    std::iota(indices.begin(), indices.end(), 0);
+    startJobs(indices, outputFormat, bitRate, sampleRate, channels, outputDir,
+              keepMetadata, volumeNormalize, extractAudio);
+}
+
+void FormatConverter::startSelected(const QVariantList& indices,
+                                    const QString& outputFormat,
+                                    int bitRate,
+                                    int sampleRate,
+                                    int channels,
+                                    const QString& outputDir,
+                                    bool keepMetadata,
+                                    bool volumeNormalize,
+                                    bool extractAudio)
+{
+    QVector<int> selected;
+    QSet<int> seen;
+    int entryCount = 0;
+    {
+        QMutexLocker lock(&mutex_);
+        entryCount = entries_.size();
+    }
+    selected.reserve(indices.size());
+    for (const QVariant& value : indices) {
+        bool ok = false;
+        const int index = value.toInt(&ok);
+        if (ok && index >= 0 && index < entryCount && !seen.contains(index)) {
+            selected.push_back(index);
+            seen.insert(index);
+        }
+    }
+    startJobs(selected, outputFormat, bitRate, sampleRate, channels, outputDir,
+              keepMetadata, volumeNormalize, extractAudio);
+}
+
+void FormatConverter::retryFailed(const QString& outputFormat,
+                                  int bitRate,
+                                  int sampleRate,
+                                  int channels,
+                                  const QString& outputDir,
+                                  bool keepMetadata,
+                                  bool volumeNormalize,
+                                  bool extractAudio)
+{
+    QVector<int> failed;
+    {
+        QMutexLocker lock(&mutex_);
+        failed.reserve(entries_.size());
+        for (int index = 0; index < entries_.size(); ++index) {
+            if (entries_.at(index).status == FileStatus::Error
+                || entries_.at(index).status == FileStatus::Cancelled) {
+                failed.push_back(index);
+            }
+        }
+    }
+    startJobs(failed, outputFormat, bitRate, sampleRate, channels, outputDir,
+              keepMetadata, volumeNormalize, extractAudio);
+}
+
+void FormatConverter::startJobs(const QVector<int>& jobIndices,
+                                const QString& outputFormat,
+                                int bitRate,
+                                int sampleRate,
+                                int channels,
+                                const QString& outputDir,
+                                bool keepMetadata,
+                                bool volumeNormalize,
+                                bool extractAudio)
+{
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
 
-    int fileCount = 0;
-    {
-        QMutexLocker lock(&mutex_);
-        fileCount = static_cast<int>(entries_.size());
-    }
+    const int fileCount = jobIndices.size();
     if (fileCount == 0) {
-        emit errorOccurred(QStringLiteral("No files to transcode"));
+        emit errorOccurred(tr("没有可转换的文件"));
         return;
     }
+    const QString normalizedFormat = outputFormat.trimmed().toLower();
+    bool formatSupported = false;
+    QString unsupportedReason;
+    for (const QVariant& value : supportedOutputFormats()) {
+        const QVariantMap candidate = value.toMap();
+        if (candidate.value(QStringLiteral("key")).toString()
+            == normalizedFormat) {
+            formatSupported = candidate.value(QStringLiteral("available")).toBool();
+            unsupportedReason = candidate.value(QStringLiteral("reason")).toString();
+            break;
+        }
+    }
+    if (!formatSupported) {
+        emit errorOccurred(unsupportedReason.isEmpty()
+            ? tr("当前编码器不支持输出格式：%1").arg(outputFormat)
+            : unsupportedReason);
+        return;
+    }
+    const bool lossyFormat = normalizedFormat == QStringLiteral("mp3")
+        || normalizedFormat == QStringLiteral("aac")
+        || normalizedFormat == QStringLiteral("m4a")
+        || normalizedFormat == QStringLiteral("ogg")
+        || normalizedFormat == QStringLiteral("opus")
+        || normalizedFormat == QStringLiteral("wma");
+    if (lossyFormat && (bitRate < 8000 || bitRate > 512000)) {
+        emit errorOccurred(tr("%1 需要有效的目标码率")
+                               .arg(outputFormat.toUpper()));
+        return;
+    }
+    if (sampleRate != 0 && (sampleRate < 8000 || sampleRate > 192000)) {
+        emit errorOccurred(tr("采样率必须在 8 kHz 到 192 kHz 之间"));
+        return;
+    }
+    if (channels < 0 || channels > 2) {
+        emit errorOccurred(tr("声道数只支持自动、单声道或立体声"));
+        return;
+    }
+    int effectiveSampleRate = sampleRate;
+    if (normalizedFormat == QStringLiteral("opus")
+        && sampleRate != 0 && sampleRate != 48000) {
+        effectiveSampleRate = 48000;
+        emit warningOccurred(
+            tr("Opus 输出采样率将调整为编码器标准的 48 kHz"));
+    }
     if (!outputDir.isEmpty() && !QDir().mkpath(outputDir)) {
-        emit errorOccurred(QStringLiteral("Failed to create output directory"));
+        emit errorOccurred(tr("无法创建输出目录：%1").arg(outputDir));
         return;
     }
 
     cancelFlag_.store(false, std::memory_order_release);
+    {
+        QMutexLocker lock(&tokenMutex_);
+        for (const int index : jobIndices) {
+            cancelledEntries_.remove(index);
+        }
+    }
     setBusy(true);
     setProgress(0.0);
     setCompletedCount(0);
@@ -359,14 +938,22 @@ void FormatConverter::start(const QString& outputFormat,
     // Reset all statuses to Waiting before starting.
     {
         QMutexLocker lock(&mutex_);
-        for (FileEntry& entry : entries_) {
-            entry.status = FileStatus::Waiting;
-            entry.errorMessage.clear();
+        for (const int index : jobIndices) {
+            if (index >= 0 && index < entries_.size()) {
+                entries_[index].status = FileStatus::Waiting;
+                entries_[index].progress = 0.0;
+                entries_[index].errorMessage.clear();
+            }
         }
     }
     emit filesChanged();
 
     const bool overwriteExisting = overwriteExisting_;
+    const QString bitrateMode = bitrateMode_;
+    const QString conflictPolicy = conflictPolicy_;
+    const QVariantMap metadataFields = metadataFields_;
+    const QByteArray metadataCoverData = metadataCoverData_;
+    const QString metadataCoverMime = metadataCoverMime_;
     auto* watcher = new QFutureWatcher<void>(this);
     watcher_ = watcher;
     connect(watcher, &QFutureWatcher<void>::finished, this,
@@ -386,11 +973,16 @@ void FormatConverter::start(const QString& outputFormat,
         });
 
     QFuture<void> future = QtConcurrent::run(
-        [this, outputFormat, bitRate, sampleRate, channels, outputDir,
-         keepMetadata, volumeNormalize, extractAudio, overwriteExisting]() {
-            runTranscode(outputFormat, bitRate, sampleRate, channels,
+        [this, outputFormat, bitRate, effectiveSampleRate, channels, outputDir,
+         keepMetadata, volumeNormalize, extractAudio, overwriteExisting,
+         bitrateMode, conflictPolicy, metadataFields, metadataCoverData,
+         metadataCoverMime,
+         jobIndices]() {
+            runTranscode(outputFormat, bitRate, effectiveSampleRate, channels,
                          outputDir, keepMetadata, volumeNormalize,
-                         extractAudio, overwriteExisting);
+                         extractAudio, overwriteExisting, bitrateMode, conflictPolicy,
+                         metadataFields, metadataCoverData, metadataCoverMime,
+                         jobIndices);
         });
     watcher->setFuture(future);
 }
@@ -403,17 +995,27 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    bool keepMetadata,
                                    bool volumeNormalize,
                                    bool extractAudio,
-                                   bool overwriteExisting)
+                                   bool overwriteExisting,
+                                   const QString& bitrateMode,
+                                   const QString& conflictPolicy,
+                                   const QVariantMap& metadataFields,
+                                   const QByteArray& metadataCoverData,
+                                   const QString& metadataCoverMime,
+                                   const QVector<int>& jobIndices)
 {
     const FormatInfo fi = format_info(outputFormat);
     const QByteArray codecName = QByteArray(fi.codec_name);
+    const agplayer::MetadataEditPlan plan = metadata_plan(
+        metadataFields, metadataCoverData, metadataCoverMime);
 
     QVector<QString> inputPaths;
     {
         QMutexLocker lock(&mutex_);
-        inputPaths.reserve(entries_.size());
-        for (const FileEntry& entry : entries_) {
-            inputPaths.push_back(entry.path);
+        inputPaths.reserve(jobIndices.size());
+        for (const int index : jobIndices) {
+            if (index >= 0 && index < entries_.size()) {
+                inputPaths.push_back(entries_.at(index).path);
+            }
         }
     }
 
@@ -424,60 +1026,108 @@ void FormatConverter::runTranscode(const QString& outputFormat,
     for (const QString& inputPath : inputPaths) {
         const QString outputPath = computeOutputPath(
             inputPath, outputFormat, outputDir, reservedPaths,
-            overwriteExisting);
+            overwriteExisting || conflictPolicy == QStringLiteral("skip"));
         outputPaths.push_back(outputPath);
         reservedPaths.insert(QDir::cleanPath(outputPath).toCaseFolded());
     }
+    {
+        QMutexLocker lock(&mutex_);
+        for (int index = 0; index < outputPaths.size()
+             && index < jobIndices.size(); ++index) {
+            const int entryIndex = jobIndices.at(index);
+            entries_[entryIndex].outputFormat = outputFormat.toUpper();
+            entries_[entryIndex].outputPath = outputPaths.at(index);
+            entries_[entryIndex].progress = 0.0;
+        }
+    }
+    emit filesChanged();
 
     QVector<int> jobs(totalJobs);
     std::iota(jobs.begin(), jobs.end(), 0);
     QThreadPool pool;
-    pool.setMaxThreadCount(std::clamp(QThread::idealThreadCount(), 1, 4));
+    pool.setMaxThreadCount(std::clamp(
+        parallelJobs_, 1, std::max(1, QThread::idealThreadCount())));
 
     QtConcurrent::blockingMap(&pool, jobs, [&](int i) {
         if (i >= inputPaths.size()) {
             return;
         }
-        const auto completeFailure = [this, i, totalJobs](
+        const int entryIndex = jobIndices.at(i);
+        const auto complete = [this, entryIndex, totalJobs](
+                                  FileStatus status,
                                          const QString& error) {
-            setEntryError(i, error);
-            setEntryStatus(i, FileStatus::Error);
-            failedCount_.fetch_add(1, std::memory_order_acq_rel);
-            emit failedCountChanged();
+            setEntryError(entryIndex, error);
+            setEntryStatus(entryIndex, status);
+            if (status == FileStatus::Error) {
+                failedCount_.fetch_add(1, std::memory_order_acq_rel);
+                emit failedCountChanged();
+            }
             const int completed =
                 completedCount_.fetch_add(1, std::memory_order_acq_rel) + 1;
             if (totalJobs > 0) {
                 setProgress(static_cast<double>(completed) / totalJobs);
             }
         };
+        const auto entryCancelled = [this, entryIndex]() {
+            QMutexLocker lock(&tokenMutex_);
+            return cancelledEntries_.contains(entryIndex);
+        };
         if (cancelFlag_.load(std::memory_order_acquire)) {
-            completeFailure(QStringLiteral("Cancelled"));
+            complete(FileStatus::Cancelled, tr("已取消"));
+            return;
+        }
+        if (entryCancelled()) {
+            complete(FileStatus::Cancelled, tr("已取消"));
             return;
         }
 
         const QString& inputPath = inputPaths.at(i);
         const QString& outputPath = outputPaths.at(i);
+        if (conflictPolicy == QStringLiteral("skip")
+            && QFileInfo::exists(outputPath)) {
+            setEntryStatus(entryIndex, FileStatus::Skipped);
+            const int completed = completedCount_.fetch_add(
+                1, std::memory_order_acq_rel) + 1;
+            if (totalJobs > 0) {
+                setProgress(static_cast<double>(completed) / totalJobs);
+            }
+            return;
+        }
+        const QString stagedPath = staging_path_for(outputPath);
 
-        setEntryStatus(i, FileStatus::Converting);
+        setEntryStatus(entryIndex, FileStatus::Converting);
         if (is_video_file(inputPath) && !extractAudio) {
-            completeFailure(QStringLiteral(
-                "Video input requires Extract audio from video"));
+            complete(FileStatus::Error,
+                     tr("视频文件需要启用“从视频中提取音频”"));
             return;
         }
         ag_cancel_token* token = ag_cancel_token_create();
         {
             QMutexLocker lock(&tokenMutex_);
-            activeTokens_.insert(token);
+            activeTokens_.insert(entryIndex, token);
         }
         if (cancelFlag_.load(std::memory_order_acquire)) {
             ag_cancel_token_cancel(token);
         }
         const QByteArray inputUtf8 = inputPath.toUtf8();
-        const QByteArray outputUtf8 = outputPath.toUtf8();
+        const QByteArray outputUtf8 = stagedPath.toUtf8();
 
         ag_transcode_options options{};
         options.volume_normalize = volumeNormalize ? 1 : 0;
         options.keep_metadata = keepMetadata ? 1 : 0;
+        options.bitrate_mode = bitrateMode == QStringLiteral("vbr") ? 1 : 0;
+        options.quality = 75;
+
+        struct EntryProgressContext {
+            FormatConverter* converter;
+            int entryIndex;
+            const QVector<int>* jobIndices;
+        } progressContext{this, entryIndex, &jobIndices};
+        const auto progressCallback = [](float progress, void* userData) {
+            auto* context = static_cast<EntryProgressContext*>(userData);
+            context->converter->updateEntryProgress(
+                context->entryIndex, progress, *context->jobIndices);
+        };
 
         const ag_result result = ag_transcode_ex(
             inputUtf8.constData(),
@@ -488,26 +1138,54 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             channels,
             &options,
             token,
-            nullptr,
-            nullptr);
+            progressCallback,
+            &progressContext);
 
         {
             QMutexLocker lock(&tokenMutex_);
-            activeTokens_.remove(token);
+            activeTokens_.remove(entryIndex);
         }
         ag_cancel_token_destroy(token);
 
-        if (cancelFlag_.load(std::memory_order_acquire)) {
-            completeFailure(QStringLiteral("Cancelled"));
+        if (cancelFlag_.load(std::memory_order_acquire) || entryCancelled()) {
+            QFile::remove(stagedPath);
+            complete(FileStatus::Cancelled, tr("已取消"));
             return;
         } else if (result == AG_OK) {
-            setEntryStatus(i, FileStatus::Done);
+            if (!validate_audio_output(stagedPath)) {
+                QFile::remove(stagedPath);
+                complete(FileStatus::Error,
+                         tr("转换结果无法重新打开或不包含有效音频"));
+                return;
+            }
+            if (!commit_staged_output(stagedPath, outputPath,
+                                      overwriteExisting)) {
+                QFile::remove(stagedPath);
+                complete(FileStatus::Error,
+                         tr("无法安全写入输出文件：%1").arg(outputPath));
+                return;
+            }
+            if (!plan.fields.empty()
+                || plan.cover_action != agplayer::CoverAction::Keep) {
+                agplayer::MetadataFileResult metadataResult;
+                const ag_result metadataWrite = agplayer::write_metadata_plan(
+                    outputPath.toUtf8().toStdString(), plan, metadataResult);
+                if (metadataWrite != AG_OK) {
+                    complete(FileStatus::Error,
+                             tr("转换文件已保留，但元数据验证失败：%1")
+                                 .arg(QString::fromStdString(metadataResult.message)));
+                    return;
+                }
+            }
+            setEntryStatus(entryIndex, FileStatus::Done);
         } else if (result == AG_CANCELLED) {
-            completeFailure(QStringLiteral("Cancelled"));
+            QFile::remove(stagedPath);
+            complete(FileStatus::Cancelled, tr("已取消"));
             return;
         } else {
-            completeFailure(
-                QStringLiteral("Transcode failed (error %1)").arg(result));
+            QFile::remove(stagedPath);
+            complete(FileStatus::Error,
+                     tr("转换失败（错误 %1）").arg(result));
             return;
         }
 
@@ -523,6 +1201,16 @@ void FormatConverter::cancel()
     cancelFlag_.store(true, std::memory_order_release);
     QMutexLocker lock(&tokenMutex_);
     for (ag_cancel_token* token : activeTokens_) {
+        ag_cancel_token_cancel(token);
+    }
+}
+
+void FormatConverter::cancelEntry(int index)
+{
+    QMutexLocker lock(&tokenMutex_);
+    cancelledEntries_.insert(index);
+    if (ag_cancel_token* token = activeTokens_.value(index, nullptr);
+        token != nullptr) {
         ag_cancel_token_cancel(token);
     }
 }

@@ -37,7 +37,8 @@ TestCase {
             "import QtQuick; QtObject {" +
             " property bool busy: true;" +
             " property real progress: 0.5;" +
-            " property var errors: []" +
+            " property var errors: [];" +
+            " function clearErrors() { errors = [] }" +
             "}", testCase)
         var panel = importStatusComponent.createObject(testCase, {
             controller: fakeController
@@ -50,6 +51,12 @@ TestCase {
         fakeController.errors = ["bad audio"]
         verify(panel.active)
         verify(panel.showingErrors)
+
+        const dismiss = findChild(panel, "dismissImportErrorsButton")
+        verify(dismiss, "import errors must expose a dismiss button")
+        dismiss.clicked()
+        compare(fakeController.errors.length, 0)
+        verify(!panel.active)
 
         panel.destroy()
         fakeController.destroy()

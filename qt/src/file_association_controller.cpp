@@ -5,8 +5,12 @@
 #include <QDir>
 
 #ifdef Q_OS_WIN
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 
@@ -40,17 +44,6 @@ bool writeRegistryString(HKEY key, const wchar_t* subKey, const wchar_t* valueNa
     return status == ERROR_SUCCESS;
 }
 
-bool deleteRegistryKey(HKEY key, const wchar_t* subKey)
-{
-    return RegDeleteTreeW(key, subKey) == ERROR_SUCCESS
-           || RegDeleteKeyW(key, subKey) == ERROR_SUCCESS;
-}
-
-bool deleteRegistryValue(HKEY key, const wchar_t* subKey, const wchar_t* valueName)
-{
-    return RegDeleteKeyValueW(key, subKey, valueName) == ERROR_SUCCESS;
-}
-
 #endif
 
 } // namespace
@@ -64,7 +57,8 @@ QStringList FileAssociationController::supportedAudioExtensions()
 {
     return {QStringLiteral("mp3"), QStringLiteral("wav"), QStringLiteral("flac"),
             QStringLiteral("aac"), QStringLiteral("m4a"), QStringLiteral("ogg"),
-            QStringLiteral("wma"), QStringLiteral("ape"), QStringLiteral("opus")};
+            QStringLiteral("wma"), QStringLiteral("ape"), QStringLiteral("opus"),
+            QStringLiteral("aif"), QStringLiteral("aiff")};
 }
 
 QString FileAssociationController::lastError() const
@@ -99,6 +93,7 @@ bool FileAssociationController::registerForExtensions(const QStringList& extensi
             return false;
         }
     }
+    if (!writeCapabilities(extensions, progId)) return false;
     return true;
 #else
     lastError_ = tr("not supported on this platform");
@@ -162,7 +157,8 @@ bool FileAssociationController::unregisterAll()
     for (const QString& ext : extensions) {
         removeExtension(ext);
     }
-    return removeProgId();
+    const bool capabilitiesOk = removeCapabilities();
+    return removeProgId() && capabilitiesOk;
 #else
     lastError_ = tr("not supported on this platform");
     return false;
@@ -241,7 +237,8 @@ bool FileAssociationController::writeProgId(const QString& appPath)
         key,
         L"shell\\open\\command",
         nullptr,
-        QStringLiteral("\"%1\" \"%2\"").arg(appPath));
+        QStringLiteral("\"%1\" \"%2\"")
+            .arg(appPath, QStringLiteral("%1")));
 
     RegCloseKey(key);
 
@@ -257,7 +254,11 @@ bool FileAssociationController::removeProgId()
 {
     const QString rootPath = QStringLiteral("Software\\Classes\\%1").arg(QString::fromLatin1(kProgId));
     const std::wstring rootPathW = rootPath.toStdWString();
-    if (RegDeleteTreeW(HKEY_CURRENT_USER, rootPathW.c_str()) == ERROR_SUCCESS) {
+    const LSTATUS status =
+        RegDeleteTreeW(HKEY_CURRENT_USER, rootPathW.c_str());
+    if (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND
+        || status == ERROR_PATH_NOT_FOUND) {
+        lastError_.clear();
         return true;
     }
     lastError_ = tr("Failed to remove ProgID registry key");
@@ -332,6 +333,43 @@ bool FileAssociationController::removeExtension(const QString& extension)
         }
     }
     return true;
+}
+
+bool FileAssociationController::writeCapabilities(const QStringList& extensions,
+                                                   const QString& progId)
+{
+    const QString capabilitiesPath = QStringLiteral("Software\\AgPlayer\\Capabilities");
+    const std::wstring capabilitiesPathW = capabilitiesPath.toStdWString();
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, capabilitiesPathW.c_str(), 0, nullptr, 0,
+                        KEY_WRITE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+        lastError_ = tr("Failed to create default-app capabilities");
+        return false;
+    }
+    bool ok = writeRegistryString(key, nullptr, L"ApplicationName", QStringLiteral("AgPlayer"));
+    ok &= writeRegistryString(key, nullptr, L"ApplicationDescription",
+                              tr("AgPlayer audio player"));
+    for (const QString& ext : extensions) {
+        const QString normalized = normalizeExtension(ext);
+        if (!normalized.isEmpty()) {
+            ok &= writeRegistryString(key, L"FileAssociations",
+                                      QStringLiteral(".%1").arg(normalized).toStdWString().c_str(),
+                                      progId);
+        }
+    }
+    RegCloseKey(key);
+    ok &= writeRegistryString(HKEY_CURRENT_USER, L"Software\\RegisteredApplications",
+                              L"AgPlayer", capabilitiesPath);
+    if (!ok) lastError_ = tr("Failed to register default-app capabilities");
+    return ok;
+}
+
+bool FileAssociationController::removeCapabilities()
+{
+    RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"AgPlayer");
+    const LSTATUS status = RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\AgPlayer");
+    return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND
+        || status == ERROR_PATH_NOT_FOUND;
 }
 
 #endif

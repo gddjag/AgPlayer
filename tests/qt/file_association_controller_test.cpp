@@ -46,6 +46,103 @@ private slots:
 #endif
     }
 
+    void supportedAudioExtensionsCoverDropFormats()
+    {
+        const QStringList extensions =
+            FileAssociationController::supportedAudioExtensions();
+        for (const QString& extension : {
+                 QStringLiteral("mp3"), QStringLiteral("wav"),
+                 QStringLiteral("flac"), QStringLiteral("aac"),
+                 QStringLiteral("m4a"), QStringLiteral("ogg"),
+                 QStringLiteral("aif"), QStringLiteral("aiff")}) {
+            QVERIFY2(extensions.contains(extension),
+                     qPrintable(QStringLiteral("missing extension: %1")
+                                    .arg(extension)));
+        }
+    }
+
+    void registersWindowsDefaultAppsCapabilities()
+    {
+#ifdef Q_OS_WIN
+        QVERIFY(controller_->registerForExtensions({QStringLiteral("agptest")}));
+
+        const QString registeredPath =
+            QStringLiteral("Software\\RegisteredApplications");
+        const std::wstring registeredPathW = registeredPath.toStdWString();
+        HKEY registeredKey = nullptr;
+        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, registeredPathW.c_str(), 0,
+                             KEY_READ, &registeredKey) == ERROR_SUCCESS);
+        wchar_t capabilityPath[512] = {};
+        DWORD capabilityPathSize = sizeof(capabilityPath);
+        DWORD valueType = 0;
+        QCOMPARE(RegQueryValueExW(
+                     registeredKey, L"AgPlayer", nullptr, &valueType,
+                     reinterpret_cast<LPBYTE>(capabilityPath),
+                     &capabilityPathSize),
+                 static_cast<LSTATUS>(ERROR_SUCCESS));
+        RegCloseKey(registeredKey);
+        QCOMPARE(valueType, static_cast<DWORD>(REG_SZ));
+        QCOMPARE(QString::fromWCharArray(capabilityPath),
+                 QStringLiteral("Software\\AgPlayer\\Capabilities"));
+
+        const QString associationPath = QStringLiteral(
+            "Software\\AgPlayer\\Capabilities\\FileAssociations");
+        const std::wstring associationPathW = associationPath.toStdWString();
+        HKEY associationKey = nullptr;
+        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, associationPathW.c_str(), 0,
+                             KEY_READ, &associationKey) == ERROR_SUCCESS);
+        wchar_t progId[256] = {};
+        DWORD progIdSize = sizeof(progId);
+        valueType = 0;
+        QCOMPARE(RegQueryValueExW(
+                     associationKey, L".agptest", nullptr, &valueType,
+                     reinterpret_cast<LPBYTE>(progId), &progIdSize),
+                 static_cast<LSTATUS>(ERROR_SUCCESS));
+        RegCloseKey(associationKey);
+        QCOMPARE(QString::fromWCharArray(progId),
+                 QStringLiteral("AgPlayerAudioFile"));
+
+        const QString iconPath = QStringLiteral(
+            "Software\\Classes\\AgPlayerAudioFile\\DefaultIcon");
+        const std::wstring iconPathW = iconPath.toStdWString();
+        HKEY iconKey = nullptr;
+        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, iconPathW.c_str(), 0,
+                             KEY_READ, &iconKey) == ERROR_SUCCESS);
+        wchar_t iconValue[1024] = {};
+        DWORD iconValueSize = sizeof(iconValue);
+        valueType = 0;
+        QCOMPARE(RegQueryValueExW(
+                     iconKey, nullptr, nullptr, &valueType,
+                     reinterpret_cast<LPBYTE>(iconValue), &iconValueSize),
+                 static_cast<LSTATUS>(ERROR_SUCCESS));
+        RegCloseKey(iconKey);
+        QCOMPARE(valueType, static_cast<DWORD>(REG_SZ));
+        QCOMPARE(QString::fromWCharArray(iconValue),
+                 QCoreApplication::applicationFilePath() + QStringLiteral(",0"));
+
+        const QString commandPath = QStringLiteral(
+            "Software\\Classes\\AgPlayerAudioFile\\shell\\open\\command");
+        const std::wstring commandPathW = commandPath.toStdWString();
+        HKEY commandKey = nullptr;
+        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, commandPathW.c_str(), 0,
+                             KEY_READ, &commandKey) == ERROR_SUCCESS);
+        wchar_t commandValue[2048] = {};
+        DWORD commandValueSize = sizeof(commandValue);
+        valueType = 0;
+        QCOMPARE(RegQueryValueExW(
+                     commandKey, nullptr, nullptr, &valueType,
+                     reinterpret_cast<LPBYTE>(commandValue), &commandValueSize),
+                 static_cast<LSTATUS>(ERROR_SUCCESS));
+        RegCloseKey(commandKey);
+        QCOMPARE(QString::fromWCharArray(commandValue),
+                 QStringLiteral("\"%1\" \"%2\"")
+                     .arg(QCoreApplication::applicationFilePath(),
+                          QStringLiteral("%1")));
+#else
+        QSKIP("Windows Default Apps capabilities are Windows-only");
+#endif
+    }
+
     void unregisterAllRemovesProgIdAndExtensions()
     {
 #ifdef Q_OS_WIN
@@ -64,6 +161,17 @@ private slots:
             RegCloseKey(key);
         }
         QVERIFY(!exists);
+#else
+        QVERIFY(!controller_->unregisterAll());
+#endif
+    }
+
+    void unregisterAllIsIdempotent()
+    {
+#ifdef Q_OS_WIN
+        QVERIFY(controller_->unregisterAll());
+        QVERIFY(controller_->unregisterAll());
+        QVERIFY(controller_->lastError().isEmpty());
 #else
         QVERIFY(!controller_->unregisterAll());
 #endif

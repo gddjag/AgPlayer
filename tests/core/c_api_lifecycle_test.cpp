@@ -11,6 +11,9 @@
 
 int main()
 {
+    assert(ag_encoder_available(nullptr) == 0);
+    assert(ag_encoder_available("flac") == 1);
+    assert(ag_encoder_available("agplayer-no-such-encoder") == 0);
     assert(ag_player_create(nullptr) == AG_INVALID_ARGUMENT);
 
     ag_player* player = nullptr;

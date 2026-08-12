@@ -2,6 +2,10 @@
 
 #include <QHoverEvent>
 #include <QMouseEvent>
+#include <QGuiApplication>
+#include <QElapsedTimer>
+#include <QQuickWindow>
+#include <QScreen>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSignalSpy>
@@ -36,6 +40,7 @@ private slots:
     void hoverUpdatesPreviewWithoutSeeking();
     void cancelDoesNotCommitAStaleSeek();
     void downsamplesPeaksToPixelBudget();
+    void downsamplingKeepsImpulseOnItsTimelinePixel();
     void reusesGeometryWhenPositionChangesWithinBucket();
     void subPixelWidthDoesNotCrash();
     void setLayersPopulatesLayerProperties();
@@ -50,6 +55,11 @@ private slots:
     void spectrumRecolorsBarsAndPeakCapsAfterSeek();
     void zeroPositionLeavesCompleteWaveformUnplayed();
     void silentTailRemainsVisibleAtTheTimelineEnd();
+    void cursorAndSeekShareRenderWidth();
+    void resizeUpdatesCursorWithoutReplacingPeakSnapshot();
+    void preservesTimelineMetadataInPeakSnapshot();
+    void windowScaleAndScreenKeepCursorAligned();
+    void resizeLoopStaysWithinInteractiveBudget();
 };
 
 namespace {
@@ -665,6 +675,157 @@ void WaveformItemTest::fallsBackToFrequencyLayerWhenMixMissing()
     QCOMPARE(data[0].x, 0.0F);
     QCOMPARE(data[6].x, 100.0F);
 
+    delete node;
+}
+
+void WaveformItemTest::cursorAndSeekShareRenderWidth()
+{
+    TestableWaveformItem item;
+    item.setWidth(1000.0);
+    item.setHeight(80.0);
+    item.setDuration(300000);
+    item.setPosition(150000);
+    item.setPeaks(peaks({0.2, 0.4, 0.8, 0.3}));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    QCOMPARE(item.renderWidth(), 1000.0);
+    QCOMPARE(item.waveformCursorX(), 500.0);
+    QCOMPARE(item.timeForX(item.waveformCursorX()), qint64{150000});
+    delete node;
+}
+
+void WaveformItemTest::downsamplingKeepsImpulseOnItsTimelinePixel()
+{
+    TestableWaveformItem item;
+    item.setWidth(600);
+    item.setHeight(40);
+    item.setDensity(2.0); // exactly 600 rendered points
+
+    QVariantList source;
+    source.reserve(2000);
+    for (int index = 0; index < 2000; ++index) {
+        source.append(index == 1000 ? 1.0 : 0.0);
+    }
+    item.setPeaks(source);
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* data = vertices(node);
+    int tallestIndex = -1;
+    float tallestHeight = -1.0F;
+    for (int index = 0; index < 600; ++index) {
+        const float height = data[index * 2 + 1].y - data[index * 2].y;
+        if (height > tallestHeight) {
+            tallestHeight = height;
+            tallestIndex = index;
+        }
+    }
+    const double impulseX = static_cast<double>(tallestIndex) / 599.0 * 600.0;
+    QVERIFY2(std::abs(impulseX - 300.0) <= 1.0,
+             qPrintable(QStringLiteral("mid-track impulse rendered at x=%1")
+                            .arg(impulseX)));
+    delete node;
+}
+
+void WaveformItemTest::resizeUpdatesCursorWithoutReplacingPeakSnapshot()
+{
+    TestableWaveformItem item;
+    item.setWidth(500.0);
+    item.setHeight(80.0);
+    item.setDuration(300000);
+    item.setPosition(60000);
+    item.setPeaks(peaks({0.2, 0.4, 0.8, 0.3}));
+    const QVariantList originalPeaks = item.peaks();
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
+    const auto* vertexStorage = geometry->vertexDataAsColoredPoint2D();
+    QCOMPARE(item.waveformCursorX(), 100.0);
+    item.setWidth(3840.0);
+    node = item.updatePaintNode(node, nullptr);
+
+    QCOMPARE(item.renderWidth(), 3840.0);
+    QCOMPARE(item.waveformCursorX(), 768.0);
+    QCOMPARE(item.peaks(), originalPeaks);
+    QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry(), geometry);
+    QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry()
+                 ->vertexDataAsColoredPoint2D(), vertexStorage);
+    delete node;
+}
+
+void WaveformItemTest::preservesTimelineMetadataInPeakSnapshot()
+{
+    TestableWaveformItem item;
+    QVariantMap layers = makeLayers(peaks({0.2, 0.4, 0.8, 0.3}));
+    layers[QStringLiteral("_sampleRate")] = 44'100;
+    layers[QStringLiteral("_totalSamples")] = 13'229'956;
+    layers[QStringLiteral("_peakCount")] = 4;
+
+    item.setLayers(layers);
+
+    QCOMPARE(item.sampleRate(), qint64{44'100});
+    QCOMPARE(item.totalSamples(), qint64{13'229'956});
+    QCOMPARE(item.peakCount(), qsizetype{4});
+}
+
+void WaveformItemTest::windowScaleAndScreenKeepCursorAligned()
+{
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    QVERIFY(!screens.isEmpty());
+
+    for (QScreen* screen : screens) {
+        QQuickWindow window;
+        window.setScreen(screen);
+        window.setGeometry(screen->availableGeometry().topLeft().x(),
+                           screen->availableGeometry().topLeft().y(),
+                           1000, 500);
+
+        TestableWaveformItem item;
+        item.setParentItem(window.contentItem());
+        item.setWidth(1000.0);
+        item.setHeight(80.0);
+        item.setDuration(300000);
+        item.setPosition(150000);
+        item.setPeaks(peaks({0.2, 0.4, 0.8, 0.3}));
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QCOMPARE(item.waveformCursorX(), 500.0);
+        const double physicalCursor = item.waveformCursorX()
+                                      * window.devicePixelRatio();
+        const double expectedPhysical = window.width()
+                                        * window.devicePixelRatio() * 0.5;
+        QVERIFY(std::abs(physicalCursor - expectedPhysical) <= 0.5);
+        delete node;
+    }
+}
+
+void WaveformItemTest::resizeLoopStaysWithinInteractiveBudget()
+{
+    TestableWaveformItem item;
+    item.setWidth(500.0);
+    item.setHeight(80.0);
+    item.setDuration(300000);
+    QVariantList values;
+    values.reserve(2000);
+    for (int index = 0; index < 2000; ++index) {
+        values.append(static_cast<double>(index % 100) / 100.0);
+    }
+    item.setPeaks(values);
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QElapsedTimer timer;
+    timer.start();
+    for (int index = 0; index < 300; ++index) {
+        item.setWidth(500.0 + (index % 1200));
+        node = item.updatePaintNode(node, nullptr);
+    }
+    const qint64 elapsedMs = timer.elapsed();
+    QVERIFY2(elapsedMs < 1000,
+             qPrintable(QStringLiteral("300 resize remaps took %1 ms")
+                            .arg(elapsedMs)));
+    QCOMPARE(item.peaks(), values);
     delete node;
 }
 

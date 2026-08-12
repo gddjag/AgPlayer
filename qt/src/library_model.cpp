@@ -385,6 +385,22 @@ bool LibraryModel::setRating(int row, int rating)
     return true;
 }
 
+bool LibraryModel::setBpm(const QString& trackId, double bpm)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0 || !std::isfinite(bpm) || bpm < 20.0 || bpm > 400.0) {
+        return false;
+    }
+    if (qFuzzyCompare(tracks_[row].bpm, bpm)) {
+        return false;
+    }
+    tracks_[row].bpm = bpm;
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {BpmRole});
+    emit flushRequested();
+    return true;
+}
+
 bool LibraryModel::setTags(const QString& trackId, const QStringList& tags)
 {
     const int row = indexForTrackId(trackId);
@@ -570,6 +586,46 @@ bool LibraryModel::updateTrackPath(const QString& trackId, const QString& newPat
                                        : QStringLiteral("missing");
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+    emit flushRequested();
+    return true;
+}
+
+bool LibraryModel::updateTrackPaths(const QHash<QString, QString>& paths)
+{
+    if (paths.isEmpty()) return true;
+    QSet<QString> replacementKeys;
+    QSet<int> rows;
+    for (auto it = paths.cbegin(); it != paths.cend(); ++it) {
+        const int row = indexForTrackId(it.key());
+        if (row < 0) return false;
+        const QString key = normalizedCanonicalKey(canonicalLibraryPath(it.value()));
+        if (replacementKeys.contains(key)) return false;
+        replacementKeys.insert(key);
+        rows.insert(row);
+    }
+    for (int row = 0; row < tracks_.size(); ++row) {
+        if (!rows.contains(row) && replacementKeys.contains(pathKey(tracks_.at(row).path))) {
+            return false;
+        }
+    }
+    for (const int row : rows) {
+        const QString oldKey = pathKey(tracks_.at(row).path);
+        pathKeys_.remove(oldKey);
+        pathRows_.remove(oldKey);
+    }
+    for (auto it = paths.cbegin(); it != paths.cend(); ++it) {
+        const int row = indexForTrackId(it.key());
+        const QString canonical = canonicalLibraryPath(it.value());
+        const QString key = normalizedCanonicalKey(canonical);
+        TrackRecord& track = tracks_[row];
+        track.path = canonical;
+        track.available = QFileInfo::exists(canonical);
+        track.fileStatus = track.available ? QStringLiteral("normal") : QStringLiteral("missing");
+        pathKeys_.insert(key);
+        pathRows_.insert(key, row);
+        const QModelIndex changed = index(row, 0);
+        emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+    }
     emit flushRequested();
     return true;
 }

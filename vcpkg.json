@@ -10,9 +10,12 @@
         "avcodec",
         "avformat",
         "mp3lame",
-        "swresample"
+        "opus",
+        "swresample",
+        "vorbis"
       ]
     },
-    "miniaudio"
+    "miniaudio",
+    "soundtouch"
   ]
 }

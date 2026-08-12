@@ -33,6 +33,7 @@ public:
     explicit PlaybackSession(ShuffleIndexFunction shuffle_index = {});
 
     void set_queue(std::vector<std::string> paths, std::size_t start_index);
+    bool queue_next(std::string path);
     void clear() noexcept;
     void set_mode(PlaybackMode mode) noexcept;
     void set_index(std::size_t index) noexcept;

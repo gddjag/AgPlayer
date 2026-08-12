@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -74,7 +75,10 @@ public:
         std::vector<float>& bass,
         std::vector<float>& mid,
         std::vector<float>& high,
-        WaveformAggregation aggregation = WaveformAggregation::Peak) noexcept;
+        WaveformAggregation aggregation = WaveformAggregation::Peak,
+        std::uint64_t* duration_ms = nullptr,
+        std::uint64_t* total_samples = nullptr,
+        int* sample_rate = nullptr) noexcept;
 };
 
 } // namespace agplayer

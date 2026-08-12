@@ -1,5 +1,7 @@
 #include "audio_engine.hpp"
 
+#include "timeline_preview_mixer.hpp"
+
 #include "decoder.hpp"
 #include "pcm_ring_buffer.hpp"
 
@@ -173,6 +175,54 @@ public:
         }
     }
 
+    ag_result load_timeline(std::shared_ptr<TimelinePreviewMixer> mixer,
+                            const std::int64_t loop_start_ms,
+                            const std::int64_t loop_end_ms) noexcept
+    {
+        if (mixer == nullptr || mixer->sample_rate() <= 0 || mixer->channels() <= 0
+            || mixer->duration_ms() <= 0) {
+            return AG_INVALID_ARGUMENT;
+        }
+        const bool loop_enabled = loop_start_ms >= 0
+                                  && loop_end_ms > loop_start_ms
+                                  && loop_end_ms <= mixer->duration_ms();
+        if ((loop_start_ms >= 0 || loop_end_ms >= 0) && !loop_enabled) {
+            return AG_INVALID_ARGUMENT;
+        }
+        const std::lock_guard<std::recursive_mutex> control_lock(control_mutex_);
+        try {
+            shutdown_loaded_media();
+            state_.store(EngineState::Loading, std::memory_order_release);
+            timeline_mixer_ = std::move(mixer);
+            sample_rate_.store(timeline_mixer_->sample_rate(),
+                               std::memory_order_release);
+            publish_equalizer_for_rate(timeline_mixer_->sample_rate());
+            channels_ = timeline_mixer_->channels();
+            duration_ms_.store(timeline_mixer_->duration_ms(),
+                               std::memory_order_release);
+            timeline_loop_start_ms_.store(loop_enabled ? loop_start_ms : -1,
+                                          std::memory_order_release);
+            timeline_loop_end_ms_.store(loop_enabled ? loop_end_ms : -1,
+                                        std::memory_order_release);
+            constexpr std::size_t transition_capacity = 96'001U;
+            ring_buffer_ = std::make_unique<PcmRingBuffer>(
+                (std::max)(buffer_frames_, transition_capacity),
+                static_cast<std::size_t>(channels_));
+            const ag_result device_result = initialize_device();
+            if (device_result != AG_OK) {
+                return fail_load(device_result);
+            }
+            reset_timeline(0);
+            loaded_ = true;
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            const ag_result thread_result = start_decode_thread();
+            return thread_result == AG_OK ? AG_OK : fail_load(thread_result);
+        } catch (...) {
+            return fail_load(AG_INTERNAL_ERROR);
+        }
+    }
+
     ag_result set_queue(std::vector<std::string> paths,
                         const std::size_t start_index) noexcept
     {
@@ -324,6 +374,20 @@ public:
             return enter_error(AG_DEVICE_ERROR);
         }
 
+        if (timeline_mixer_ != nullptr) {
+            std::string error;
+            const ag_result seek_result = timeline_mixer_->seek(0, error);
+            if (seek_result != AG_OK) {
+                return enter_error(seek_result);
+            }
+            ring_buffer_->clear();
+            reset_timeline(0);
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            const ag_result thread_result = start_decode_thread();
+            return thread_result == AG_OK ? AG_OK : enter_error(thread_result);
+        }
+
         const ag_result restore_result = restore_published_decoder();
         if (restore_result != AG_OK) {
             return enter_error(restore_result);
@@ -414,11 +478,17 @@ public:
         }
 
         stop_decode_thread();
-        const ag_result restore_result = restore_published_decoder();
-        if (restore_result != AG_OK) {
-            return enter_error(restore_result);
+        ag_result seek_result = AG_OK;
+        if (timeline_mixer_ != nullptr) {
+            std::string error;
+            seek_result = timeline_mixer_->seek(position_ms, error);
+        } else {
+            const ag_result restore_result = restore_published_decoder();
+            if (restore_result != AG_OK) {
+                return enter_error(restore_result);
+            }
+            seek_result = decoder_.seek(position_ms);
         }
-        const ag_result seek_result = decoder_.seek(position_ms);
         if (seek_result != AG_OK) {
             return enter_error(seek_result);
         }
@@ -509,6 +579,20 @@ public:
         return AG_OK;
     }
 
+    ag_result set_replay_gain(const float gain_db, const float peak,
+                              const bool clip_protection) noexcept
+    {
+        if (!std::isfinite(gain_db) || !std::isfinite(peak) || peak < 0.0F) {
+            return AG_INVALID_ARGUMENT;
+        }
+        float linear = std::pow(10.0F, gain_db / 20.0F);
+        if (clip_protection && peak > 0.0F && linear * peak > 1.0F) {
+            linear = 1.0F / peak;
+        }
+        replay_gain_linear_.store(linear, std::memory_order_release);
+        return AG_OK;
+    }
+
     ag_result set_equalizer(const GraphicEqSettings& settings,
                             const std::uint64_t revision) noexcept
     {
@@ -577,8 +661,31 @@ public:
                 rendered_frames_total_.load(std::memory_order_acquire);
             const std::int64_t track_start =
                 track_start_frame_.load(std::memory_order_acquire);
-            const std::int64_t track_frames = std::max<std::int64_t>(
+            std::int64_t track_frames = std::max<std::int64_t>(
                 0, rendered - track_start);
+            if (timeline_mixer_ != nullptr) {
+                const std::int64_t loop_start_ms =
+                    timeline_loop_start_ms_.load(std::memory_order_acquire);
+                const std::int64_t loop_end_ms =
+                    timeline_loop_end_ms_.load(std::memory_order_acquire);
+                const int loop_sample_rate =
+                    sample_rate_.load(std::memory_order_acquire);
+                if (loop_sample_rate > 0 && loop_start_ms >= 0
+                    && loop_end_ms > loop_start_ms) {
+                    const std::int64_t loop_start_frames =
+                        loop_start_ms * loop_sample_rate / 1000;
+                    const std::int64_t loop_end_frames =
+                        loop_end_ms * loop_sample_rate / 1000;
+                    const std::int64_t loop_length_frames =
+                        loop_end_frames - loop_start_frames;
+                    if (loop_length_frames > 0
+                        && track_frames >= loop_end_frames) {
+                        track_frames = loop_start_frames
+                            + ((track_frames - loop_start_frames)
+                               % loop_length_frames);
+                    }
+                }
+            }
             const int sample_rate =
                 sample_rate_.load(std::memory_order_acquire);
             const EngineSnapshot result{
@@ -616,10 +723,12 @@ public:
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
-        equalizer_.process(output, frames, channels_);
+        equalizer_.process(output, frames, channels);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
-                               : volume_.load(std::memory_order_relaxed);
+                               : volume_.load(std::memory_order_relaxed)
+                                     * replay_gain_linear_.load(
+                                         std::memory_order_relaxed);
         const int fade_ms =
             transition_fade_ms_.load(std::memory_order_acquire);
         const int sample_rate =
@@ -745,6 +854,28 @@ public:
                               std::memory_order_release);
         stop_output();
         state_.store(EngineState::Error, std::memory_order_release);
+    }
+
+    ag_result queue_next(std::string path) noexcept
+    {
+        if (path.empty()) {
+            return AG_INVALID_ARGUMENT;
+        }
+        const std::lock_guard<std::recursive_mutex> control_lock(
+            control_mutex_);
+        if (!loaded_) {
+            return AG_INVALID_ARGUMENT;
+        }
+        try {
+            stop_decode_thread();
+            if (!session_.queue_next(std::move(path))) {
+                const ag_result restart = start_decode_thread();
+                return restart == AG_OK ? AG_INVALID_ARGUMENT : restart;
+            }
+            return start_decode_thread();
+        } catch (...) {
+            return enter_error(AG_INTERNAL_ERROR);
+        }
     }
 
     [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept
@@ -955,6 +1086,15 @@ public:
         return AG_OK;
     }
 
+    ag_result set_duration_ms(const std::int64_t duration_ms) noexcept
+    {
+        if (!loaded_ || duration_ms <= 0) {
+            return AG_INVALID_ARGUMENT;
+        }
+        duration_ms_.store(duration_ms, std::memory_order_release);
+        return AG_OK;
+    }
+
     ag_result set_match_track_sample_rate(const bool enabled) noexcept
     {
         match_track_sample_rate_.store(enabled, std::memory_order_release);
@@ -1133,6 +1273,110 @@ private:
         decode_running_.store(false, std::memory_order_release);
     }
 
+    void decode_timeline_loop() noexcept
+    {
+        constexpr std::size_t chunk_frames = 1024U;
+        const std::size_t channel_count = static_cast<std::size_t>(channels_);
+        std::vector<float> samples(chunk_frames * channel_count, 0.0F);
+        std::size_t available_frames = 0U;
+        std::size_t frame_offset = 0U;
+        while (!stop_decode_.load(std::memory_order_acquire)) {
+            if (device_lost_.load(std::memory_order_acquire)) {
+                std::unique_lock<std::mutex> lock(seek_mutex_);
+                seek_cv_.wait(lock, [this] {
+                    return !device_lost_.load(std::memory_order_acquire)
+                           || stop_decode_.load(std::memory_order_acquire);
+                });
+                continue;
+            }
+            if (seek_requested_.load(std::memory_order_acquire)) {
+                const std::int64_t target_ms =
+                    seek_target_ms_.load(std::memory_order_acquire);
+                std::string error;
+                const ag_result result = timeline_mixer_->seek(target_ms, error);
+                if (result == AG_OK) {
+                    ring_buffer_->clear();
+                    const std::int64_t position_frames =
+                        (target_ms * sample_rate_.load(std::memory_order_acquire)
+                         + 999)
+                        / 1000;
+                    reset_timeline(position_frames);
+                    terminal_error_.store(AG_OK, std::memory_order_release);
+                }
+                seek_result_.store(result, std::memory_order_release);
+                seek_requested_.store(false, std::memory_order_release);
+                seeking_.store(false, std::memory_order_release);
+                seek_done_.store(true, std::memory_order_release);
+                seek_cv_.notify_one();
+                available_frames = 0U;
+                frame_offset = 0U;
+                if (result != AG_OK) {
+                    set_decode_error(result);
+                    return;
+                }
+                continue;
+            }
+            if (frame_offset < available_frames) {
+                const std::size_t written = ring_buffer_->write(
+                    samples.data() + frame_offset * channel_count,
+                    available_frames - frame_offset);
+                frame_offset += written;
+                produced_frames_total_.fetch_add(
+                    static_cast<std::int64_t>(written),
+                    std::memory_order_relaxed);
+                if (written == 0U) {
+                    std::unique_lock<std::mutex> lock(seek_mutex_);
+                    seek_cv_.wait_for(lock, std::chrono::milliseconds(10),
+                        [this] {
+                            return seek_requested_.load(std::memory_order_acquire)
+                                   || stop_decode_.load(std::memory_order_acquire);
+                        });
+                }
+                continue;
+            }
+            const std::int64_t loop_start_ms =
+                timeline_loop_start_ms_.load(std::memory_order_acquire);
+            const std::int64_t loop_end_ms =
+                timeline_loop_end_ms_.load(std::memory_order_acquire);
+            const bool looping = loop_start_ms >= 0 && loop_end_ms > loop_start_ms;
+            const std::int64_t timeline_position =
+                timeline_mixer_->position_frames();
+            const std::int64_t total_frames =
+                duration_ms_.load(std::memory_order_acquire)
+                    * sample_rate_.load(std::memory_order_acquire) / 1000;
+            const std::int64_t loop_end_frames = looping
+                ? loop_end_ms * sample_rate_.load(std::memory_order_acquire) / 1000
+                : total_frames;
+            if (timeline_position >= loop_end_frames || timeline_mixer_->at_end()) {
+                if (looping) {
+                    std::string error;
+                    const ag_result result = timeline_mixer_->seek(loop_start_ms, error);
+                    if (result != AG_OK) {
+                        set_decode_error(result);
+                        return;
+                    }
+                    available_frames = 0U;
+                    frame_offset = 0U;
+                    continue;
+                }
+                decode_eof_.store(true, std::memory_order_release);
+                return;
+            }
+            const std::size_t request = static_cast<std::size_t>(
+                std::min<std::int64_t>(
+                    static_cast<std::int64_t>(chunk_frames),
+                    loop_end_frames - timeline_position));
+            std::string error;
+            const ag_result result = timeline_mixer_->read(samples.data(), request, error);
+            if (result != AG_OK) {
+                set_decode_error(result);
+                return;
+            }
+            available_frames = request;
+            frame_offset = 0U;
+        }
+    }
+
     void decode_loop() noexcept
     {
         struct RunningGuard {
@@ -1147,6 +1391,10 @@ private:
             }
         } guard{decode_running_};
         try {
+            if (timeline_mixer_ != nullptr) {
+                decode_timeline_loop();
+                return;
+            }
             DecodedAudioBlock block;
             std::size_t frame_offset = 0U;
             while (!stop_decode_.load(std::memory_order_acquire)) {
@@ -1238,6 +1486,41 @@ private:
                 const std::size_t next_index =
                     session_.next_index_from(decode_track_index_);
                 if (next_index == PlaybackSession::npos) {
+                    // Container metadata can overstate the duration of VBR
+                    // streams. At end of decode, the emitted PCM frame count
+                    // is authoritative and must drive the player timeline,
+                    // waveform clipping and seek mapping.
+                    const int sample_rate =
+                        sample_rate_.load(std::memory_order_acquire);
+                    const std::int64_t produced_frames =
+                        produced_frames_total_.load(std::memory_order_acquire);
+                    const std::int64_t pending_boundary =
+                        pending_boundary_frame_.load(std::memory_order_acquire);
+                    if (sample_rate > 0) {
+                        if (pending_boundary >= 0) {
+                            // The next track may already be decoded while
+                            // the render thread still publishes the previous
+                            // track. Preserve its exact duration for that
+                            // pending hand-off rather than overwriting the
+                            // current row's timeline.
+                            const std::int64_t pending_frames =
+                                std::max<std::int64_t>(
+                                    0, produced_frames - pending_boundary);
+                            pending_duration_ms_.store(
+                                pending_frames * 1'000 / sample_rate,
+                                std::memory_order_release);
+                        } else {
+                            const std::int64_t track_start =
+                                track_start_frame_.load(
+                                    std::memory_order_acquire);
+                            const std::int64_t track_frames =
+                                std::max<std::int64_t>(
+                                    0, produced_frames - track_start);
+                            duration_ms_.store(
+                                track_frames * 1'000 / sample_rate,
+                                std::memory_order_release);
+                        }
+                    }
                     decode_eof_.store(true, std::memory_order_release);
                     return;
                 }
@@ -1590,12 +1873,15 @@ private:
             }
         }
         decoder_.close();
+        timeline_mixer_.reset();
         ring_buffer_.reset();
         session_.clear();
         loaded_ = false;
         sample_rate_.store(0, std::memory_order_release);
         channels_ = 0;
         duration_ms_.store(0, std::memory_order_release);
+        timeline_loop_start_ms_.store(-1, std::memory_order_release);
+        timeline_loop_end_ms_.store(-1, std::memory_order_release);
         decode_track_index_ = 0U;
         reset_timeline(0);
         terminal_error_.store(AG_OK, std::memory_order_release);
@@ -1660,6 +1946,7 @@ private:
             settings = equalizer_settings_;
             revision = equalizer_revision_;
         }
+
         equalizer_sample_rate_status_.store(sample_rate,
                                             std::memory_order_release);
         if (!is_graphic_eq_sample_rate_supported(sample_rate)) {
@@ -1674,6 +1961,7 @@ private:
                                                std::memory_order_release);
             return;
         }
+
         const auto program = prepare_graphic_eq(settings, sample_rate, revision);
         if (!program.has_value()) {
             equalizer_active_status_.store(false, std::memory_order_release);
@@ -1691,6 +1979,7 @@ private:
     static constexpr std::int64_t publishing_boundary = -2;
     std::size_t buffer_frames_;
     Decoder decoder_;
+    std::shared_ptr<TimelinePreviewMixer> timeline_mixer_;
     std::unique_ptr<PcmRingBuffer> ring_buffer_;
     PcmRingBuffer spectrum_tap_{spectrum_tap_capacity, 1U};
     std::array<float, spectrum_fft_size> spectrum_history_{};
@@ -1708,6 +1997,8 @@ private:
     std::atomic<int> sample_rate_{0};
     int channels_ = 0;
     std::atomic<std::int64_t> duration_ms_{0};
+    std::atomic<std::int64_t> timeline_loop_start_ms_{-1};
+    std::atomic<std::int64_t> timeline_loop_end_ms_{-1};
     std::thread decode_thread_;
     std::atomic<bool> stop_decode_{false};
     std::atomic<bool> decode_eof_{false};
@@ -1733,6 +2024,7 @@ private:
     std::atomic<std::size_t> pending_track_index_{0U};
     std::atomic<std::int64_t> pending_duration_ms_{0};
     std::atomic<float> volume_{1.0F};
+    std::atomic<float> replay_gain_linear_{1.0F};
     GraphicEqualizerProcessor equalizer_;
     mutable std::mutex equalizer_settings_mutex_;
     GraphicEqSettings equalizer_settings_{};
@@ -1767,10 +2059,23 @@ ag_result AudioEngine::load(const std::string& utf8_path) noexcept
     return impl_->load(utf8_path);
 }
 
+ag_result AudioEngine::load_timeline(
+    std::shared_ptr<TimelinePreviewMixer> mixer,
+    const std::int64_t loop_start_ms,
+    const std::int64_t loop_end_ms) noexcept
+{
+    return impl_->load_timeline(std::move(mixer), loop_start_ms, loop_end_ms);
+}
+
 ag_result AudioEngine::set_queue(std::vector<std::string> utf8_paths,
                                  const std::size_t start_index) noexcept
 {
     return impl_->set_queue(std::move(utf8_paths), start_index);
+}
+
+ag_result AudioEngine::queue_next(std::string utf8_path) noexcept
+{
+    return impl_->queue_next(std::move(utf8_path));
 }
 
 ag_result AudioEngine::play() noexcept
@@ -1811,6 +2116,12 @@ ag_result AudioEngine::set_mode(const PlaybackMode mode) noexcept
 ag_result AudioEngine::set_volume(const float volume) noexcept
 {
     return impl_->set_volume(volume);
+}
+
+ag_result AudioEngine::set_replay_gain(const float gain_db, const float peak,
+                                       const bool clip_protection) noexcept
+{
+    return impl_->set_replay_gain(gain_db, peak, clip_protection);
 }
 
 ag_result AudioEngine::set_equalizer(const GraphicEqSettings& settings,
@@ -1886,6 +2197,11 @@ ag_result AudioEngine::set_transition_fade_ms(
     const int milliseconds) noexcept
 {
     return impl_->set_transition_fade_ms(milliseconds);
+}
+
+ag_result AudioEngine::set_duration_ms(const std::int64_t duration_ms) noexcept
+{
+    return impl_->set_duration_ms(duration_ms);
 }
 
 ag_result AudioEngine::set_match_track_sample_rate(

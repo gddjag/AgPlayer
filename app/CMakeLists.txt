@@ -31,26 +31,29 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/repeat-list-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-arrows-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/speed-up-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/time-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/voiceprint-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/waveform-switch.svg
 )
 
 set(BRAND_FILES
@@ -110,12 +113,11 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
+        qml/AgPlayer/components/tools/FilenameProcessPage.qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
-        qml/AgPlayer/components/tools/InfoEditPage.qml
+        qml/AgPlayer/components/tools/MetadataEditPage.qml
         qml/AgPlayer/components/tools/LightEditPage.qml
         qml/AgPlayer/components/tools/MultiTrackWaveform.qml
-        qml/AgPlayer/components/tools/PitchShiftPage.qml
-        qml/AgPlayer/components/tools/SpeedAdjustPage.qml
     RESOURCES
         ${BRAND_FILES}
         ${ICON_FILES}

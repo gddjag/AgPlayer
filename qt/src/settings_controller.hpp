@@ -43,8 +43,6 @@ class SettingsController final : public QObject {
                    NOTIFY matchTrackSampleRateChanged)
     Q_PROPERTY(int transitionFadeMs READ transitionFadeMs
                    WRITE setTransitionFadeMs NOTIFY transitionFadeMsChanged)
-    Q_PROPERTY(bool playButtonRgbGlow READ playButtonRgbGlow WRITE setPlayButtonRgbGlow
-                   NOTIFY playButtonRgbGlowChanged)
     Q_PROPERTY(int defaultPlaybackMode READ defaultPlaybackMode WRITE setDefaultPlaybackMode
                    NOTIFY defaultPlaybackModeChanged)
     Q_PROPERTY(bool autoReadBpm READ autoReadBpm WRITE setAutoReadBpm NOTIFY autoReadBpmChanged)
@@ -80,14 +78,38 @@ class SettingsController final : public QObject {
                    WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
                    WRITE setWaveformHoverTimePreview NOTIFY waveformHoverTimePreviewChanged)
+    Q_PROPERTY(int waveformCanvasHeight READ waveformCanvasHeight
+                   WRITE setWaveformCanvasHeight NOTIFY waveformCanvasHeightChanged)
+    Q_PROPERTY(bool waveformCanvasLocked READ waveformCanvasLocked
+                   WRITE setWaveformCanvasLocked NOTIFY waveformCanvasLockedChanged)
+    Q_PROPERTY(int spectrumColorMode READ spectrumColorMode WRITE setSpectrumColorMode
+                   NOTIFY spectrumColorModeChanged)
+    Q_PROPERTY(QString spectrumSolidColor READ spectrumSolidColor WRITE setSpectrumSolidColor
+                   NOTIFY spectrumSolidColorChanged)
+    Q_PROPERTY(QString spectrumRgbStartColor READ spectrumRgbStartColor WRITE setSpectrumRgbStartColor
+                   NOTIFY spectrumRgbStartColorChanged)
+    Q_PROPERTY(QString spectrumRgbMiddleColor READ spectrumRgbMiddleColor WRITE setSpectrumRgbMiddleColor
+                   NOTIFY spectrumRgbMiddleColorChanged)
+    Q_PROPERTY(QString spectrumRgbEndColor READ spectrumRgbEndColor WRITE setSpectrumRgbEndColor
+                   NOTIFY spectrumRgbEndColorChanged)
+    Q_PROPERTY(int replayGainMode READ replayGainMode WRITE setReplayGainMode
+                   NOTIFY replayGainModeChanged)
+    Q_PROPERTY(bool replayGainClipProtection READ replayGainClipProtection
+                   WRITE setReplayGainClipProtection NOTIFY replayGainClipProtectionChanged)
 
     // Audio Tools
     Q_PROPERTY(QString defaultOutputDirectory READ defaultOutputDirectory
                    WRITE setDefaultOutputDirectory NOTIFY defaultOutputDirectoryChanged)
     Q_PROPERTY(int overwritePolicy READ overwritePolicy WRITE setOverwritePolicy
                    NOTIFY overwritePolicyChanged)
-    Q_PROPERTY(QString defaultTranscodeFormat READ defaultTranscodeFormat
-                   WRITE setDefaultTranscodeFormat NOTIFY defaultTranscodeFormatChanged)
+    Q_PROPERTY(QString transcodeFormat READ transcodeFormat WRITE setTranscodeFormat
+                   NOTIFY transcodeFormatChanged)
+    Q_PROPERTY(int transcodeBitrateKbps READ transcodeBitrateKbps
+                   WRITE setTranscodeBitrateKbps NOTIFY transcodeBitrateKbpsChanged)
+    Q_PROPERTY(int transcodeSampleRateHz READ transcodeSampleRateHz
+                   WRITE setTranscodeSampleRateHz NOTIFY transcodeSampleRateHzChanged)
+    Q_PROPERTY(int transcodeChannels READ transcodeChannels WRITE setTranscodeChannels
+                   NOTIFY transcodeChannelsChanged)
     Q_PROPERTY(bool preserveMetadata READ preserveMetadata WRITE setPreserveMetadata
                    NOTIFY preserveMetadataChanged)
     Q_PROPERTY(bool keepPitchWhileSpeedChange READ keepPitchWhileSpeedChange
@@ -122,6 +144,7 @@ class SettingsController final : public QObject {
     // About
     Q_PROPERTY(QString version READ version CONSTANT)
     Q_PROPERTY(QString releaseDate READ releaseDate CONSTANT)
+    Q_PROPERTY(QString libraryManagerPath READ libraryManagerPath CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -143,7 +166,6 @@ public:
     bool exclusiveMode() const noexcept;
     bool matchTrackSampleRate() const noexcept;
     int transitionFadeMs() const noexcept;
-    bool playButtonRgbGlow() const noexcept;
     int defaultPlaybackMode() const noexcept;
     bool autoReadBpm() const noexcept;
     bool autoReadRating() const noexcept;
@@ -164,11 +186,23 @@ public:
     QString waveformRgbEndColor() const;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
+    int waveformCanvasHeight() const noexcept;
+    bool waveformCanvasLocked() const noexcept;
+    int spectrumColorMode() const noexcept;
+    QString spectrumSolidColor() const;
+    QString spectrumRgbStartColor() const;
+    QString spectrumRgbMiddleColor() const;
+    QString spectrumRgbEndColor() const;
+    int replayGainMode() const noexcept;
+    bool replayGainClipProtection() const noexcept;
 
     // Audio Tools getters
     QString defaultOutputDirectory() const;
     int overwritePolicy() const noexcept;
-    QString defaultTranscodeFormat() const;
+    QString transcodeFormat() const;
+    int transcodeBitrateKbps() const noexcept;
+    int transcodeSampleRateHz() const noexcept;
+    int transcodeChannels() const noexcept;
     bool preserveMetadata() const noexcept;
     bool keepPitchWhileSpeedChange() const noexcept;
     bool vocalProtection() const noexcept;
@@ -192,6 +226,7 @@ public:
     // About getters
     QString version() const;
     QString releaseDate() const;
+    QString libraryManagerPath() const;
 
     // General setters
     void setAutoStartWithWindows(bool value);
@@ -209,7 +244,6 @@ public:
     void setExclusiveMode(bool value);
     void setMatchTrackSampleRate(bool value);
     void setTransitionFadeMs(int value);
-    void setPlayButtonRgbGlow(bool value);
     void setDefaultPlaybackMode(int value);
     void setAutoReadBpm(bool value);
     void setAutoReadRating(bool value);
@@ -230,11 +264,23 @@ public:
     void setWaveformRgbEndColor(const QString& value);
     void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
+    void setWaveformCanvasHeight(int value);
+    void setWaveformCanvasLocked(bool value);
+    void setSpectrumColorMode(int value);
+    void setSpectrumSolidColor(const QString& value);
+    void setSpectrumRgbStartColor(const QString& value);
+    void setSpectrumRgbMiddleColor(const QString& value);
+    void setSpectrumRgbEndColor(const QString& value);
+    void setReplayGainMode(int value);
+    void setReplayGainClipProtection(bool value);
 
     // Audio Tools setters
     void setDefaultOutputDirectory(const QString& value);
     void setOverwritePolicy(int value);
-    void setDefaultTranscodeFormat(const QString& value);
+    void setTranscodeFormat(const QString& value);
+    void setTranscodeBitrateKbps(int value);
+    void setTranscodeSampleRateHz(int value);
+    void setTranscodeChannels(int value);
     void setPreserveMetadata(bool value);
     void setKeepPitchWhileSpeedChange(bool value);
     void setVocalProtection(bool value);
@@ -260,6 +306,7 @@ public:
     Q_INVOKABLE void commitEdit();
     Q_INVOKABLE void cancelEdit();
     Q_INVOKABLE void rebindFileAssociations();
+    Q_INVOKABLE bool openDefaultAppsSettings();
     Q_INVOKABLE void clearWaveformCache();
     Q_INVOKABLE void clearCoverCache();
     Q_INVOKABLE void clearTempFiles();
@@ -284,7 +331,6 @@ signals:
     void exclusiveModeChanged();
     void matchTrackSampleRateChanged();
     void transitionFadeMsChanged();
-    void playButtonRgbGlowChanged();
     void defaultPlaybackModeChanged();
     void autoReadBpmChanged();
     void autoReadRatingChanged();
@@ -304,10 +350,22 @@ signals:
     void waveformRgbEndColorChanged();
     void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
+    void waveformCanvasHeightChanged();
+    void waveformCanvasLockedChanged();
+    void spectrumColorModeChanged();
+    void spectrumSolidColorChanged();
+    void spectrumRgbStartColorChanged();
+    void spectrumRgbMiddleColorChanged();
+    void spectrumRgbEndColorChanged();
+    void replayGainModeChanged();
+    void replayGainClipProtectionChanged();
 
     void defaultOutputDirectoryChanged();
     void overwritePolicyChanged();
-    void defaultTranscodeFormatChanged();
+    void transcodeFormatChanged();
+    void transcodeBitrateKbpsChanged();
+    void transcodeSampleRateHzChanged();
+    void transcodeChannelsChanged();
     void preserveMetadataChanged();
     void keepPitchWhileSpeedChangeChanged();
     void vocalProtectionChanged();
@@ -367,7 +425,6 @@ private:
     bool exclusiveMode_ = false;
     bool matchTrackSampleRate_ = true;
     int transitionFadeMs_ = 200;
-    bool playButtonRgbGlow_ = true;
     int defaultPlaybackMode_ = 3;
     bool autoReadBpm_ = true;
     bool autoReadRating_ = true;
@@ -380,27 +437,39 @@ private:
     double waveformDensity_ = 2.0;
     double waveformThickness_ = 1.0;
     int waveformPeakAlgorithm_ = 0;
-    QString waveformSolidBaseColor_ = QStringLiteral("#ffffff");
-    QString waveformSolidProgressColor_ = QStringLiteral("#ffdd00");
-    QString waveformRgbBaseColor_ = QStringLiteral("#e8edf4");
+    QString waveformSolidBaseColor_ = QStringLiteral("#9098a6");
+    QString waveformSolidProgressColor_ = QStringLiteral("#d27722");
+    QString waveformRgbBaseColor_ = QStringLiteral("#00b4a0");
     QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
     QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
-    bool waveformRgbProgress_ = true;
+    bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
+    int waveformCanvasHeight_ = 78;
+    bool waveformCanvasLocked_ = true;
+    int spectrumColorMode_ = 0;
+    QString spectrumSolidColor_ = QStringLiteral("#0078d4");
+    QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
+    QString spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+    QString spectrumRgbEndColor_ = QStringLiteral("#e62e9b");
+    int replayGainMode_ = 0;
+    bool replayGainClipProtection_ = true;
 
     // Audio Tools
     QString defaultOutputDirectory_;
     int overwritePolicy_ = 0;
-    QString defaultTranscodeFormat_ = QStringLiteral("MP3 / 320kbps / 44.1kHz / Stereo");
+    QString transcodeFormat_ = QStringLiteral("MP3");
+    int transcodeBitrateKbps_ = 320;
+    int transcodeSampleRateHz_ = 44100;
+    int transcodeChannels_ = 2;
     bool preserveMetadata_ = true;
     bool keepPitchWhileSpeedChange_ = true;
     bool vocalProtection_ = true;
 
     // Hotkeys
-    QString hkPlayPause_ = QStringLiteral("Global + Space");
-    QString hkPrevNext_ = QStringLiteral("Global + Left / Global + Right");
-    QString hkVolumeUpDown_ = QStringLiteral("Global + Up / Global + Down");
+    QString hkPlayPause_ = QStringLiteral("MediaPlayPause");
+    QString hkPrevNext_ = QStringLiteral("MediaPrevTrack / MediaNextTrack");
+    QString hkVolumeUpDown_ = QStringLiteral("VolumeUp / VolumeDown");
     QString hkToggleMiniPlayer_ = QStringLiteral("Alt + P");
     QString hkSearch_ = QStringLiteral("Ctrl + F");
     QString hkWaveformMode_ = QStringLiteral("Tab");

@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -138,6 +139,22 @@ void markCancelled(const std::shared_ptr<ImportCallbackState>& state, bool value
 }
 }
 
+double readEmbeddedBpmTag(const QString& requestedPath)
+{
+    const QByteArray path = canonicalLibraryPath(requestedPath).toUtf8();
+    ag_metadata* metadata = nullptr;
+    if (ag_metadata_open(path.constData(), &metadata) != AG_OK
+        || metadata == nullptr) {
+        return 0.0;
+    }
+    const QString text = copiedUtf8(ag_metadata_bpm_tag(metadata)).trimmed();
+    ag_metadata_destroy(metadata);
+    bool ok = false;
+    const double value = text.toDouble(&ok);
+    return ok && std::isfinite(value) && value >= 20.0 && value <= 400.0
+        ? value : 0.0;
+}
+
 ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
 {
     const QString path = canonicalLibraryPath(requestedPath);
@@ -159,6 +176,9 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
     track.bitDepth = ag_metadata_bits_per_sample(metadata);
     track.bitRate = ag_metadata_bit_rate(metadata);
     track.durationMs = ag_metadata_duration_ms(metadata);
+    const QString embeddedBpm = copiedUtf8(ag_metadata_bpm_tag(metadata)).trimmed();
+    bool embeddedBpmOk = false;
+    const double embeddedBpmValue = embeddedBpm.toDouble(&embeddedBpmOk);
     size_t coverSize = 0;
     const char* coverMime = nullptr;
     const unsigned char* coverData = ag_metadata_cover(metadata, &coverSize, &coverMime);
@@ -179,7 +199,10 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
     track.available = file.isFile();
     track.trackId = trackIdForPath(path);
     track.coverUrl = cacheCover(coverBytes, mimeType);
-    if (analyzeBpm) {
+    if (embeddedBpmOk && std::isfinite(embeddedBpmValue)
+        && embeddedBpmValue >= 20.0 && embeddedBpmValue <= 400.0) {
+        track.bpm = embeddedBpmValue;
+    } else if (analyzeBpm) {
         const BpmAnalyzeResult bpm = analyze_bpm(path);
         track.bpm = bpm.bpm;
     }

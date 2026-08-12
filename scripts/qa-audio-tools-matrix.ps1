@@ -5,7 +5,9 @@ param(
     [ValidateSet("zh", "en", "th", "vi")]
     [string[]]$Languages = @("zh", "en", "th", "vi"),
     [ValidateSet(0, 1, 2)]
-    [int[]]$Themes = @(0, 1, 2)
+    [int[]]$Themes = @(0, 1, 2),
+    [ValidateRange(0, 3)]
+    [int[]]$Tools = @(0, 1, 2, 3)
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,6 +55,7 @@ function Restore-RegistryValue {
     )
 
     if ($State.Exists) {
+        New-Item -Force -Path $Path | Out-Null
         New-ItemProperty -LiteralPath $Path -Name $Name `
             -PropertyType $PropertyType -Value $State.Value -Force | Out-Null
     } else {
@@ -66,36 +69,43 @@ $themeState = Get-RegistryValueState $appearanceKey "themeMode"
 $originalPath = $env:Path
 
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
-New-Item -ItemType Directory -Force -Path $generalKey | Out-Null
-New-Item -ItemType Directory -Force -Path $appearanceKey | Out-Null
+New-Item -Force -Path "HKCU:\Software\AgPlayer\AgPlayer" | Out-Null
+New-Item -Force -Path $generalKey | Out-Null
+New-Item -Force -Path $appearanceKey | Out-Null
 
 try {
     $env:Path = ($runtimePaths -join ";") + ";" + $originalPath
 
     foreach ($language in $Languages) {
+        New-Item -Force -Path $generalKey | Out-Null
         New-ItemProperty -LiteralPath $generalKey -Name "language" `
             -PropertyType String -Value $language -Force | Out-Null
 
         foreach ($theme in $Themes) {
+            New-Item -Force -Path $appearanceKey | Out-Null
             New-ItemProperty -LiteralPath $appearanceKey -Name "themeMode" `
                 -PropertyType DWord -Value $theme -Force | Out-Null
 
-            $target = Join-Path $outputPath `
-                ("tools-{0}-theme{1}.png" -f $language, $theme)
-            $process = Start-Process -FilePath $appPath `
-                -ArgumentList @("--qa-screenshot-tools", $target) `
-                -Wait -PassThru
-            if ($process.ExitCode -ne 0) {
-                throw "Screenshot failed for $language theme $theme " +
-                    "(exit $($process.ExitCode))"
-            }
-            if (-not (Test-Path -LiteralPath $target) -or
-                (Get-Item -LiteralPath $target).Length -lt 10000) {
-                throw "Invalid screenshot: $target"
-            }
+            foreach ($tool in $Tools) {
+                $target = Join-Path $outputPath `
+                    ("tools-{0}-theme{1}-tool{2}.png" -f `
+                        $language, $theme, $tool)
+                $process = Start-Process -FilePath $appPath `
+                    -ArgumentList @("--qa-tool", $tool,
+                                    "--qa-screenshot-tools", $target) `
+                    -Wait -PassThru
+                if ($process.ExitCode -ne 0) {
+                    throw "Screenshot failed for $language theme $theme " +
+                        "tool $tool (exit $($process.ExitCode))"
+                }
+                if (-not (Test-Path -LiteralPath $target) -or
+                    (Get-Item -LiteralPath $target).Length -lt 10000) {
+                    throw "Invalid screenshot: $target"
+                }
 
-            Get-Item -LiteralPath $target |
-                Select-Object Name, Length, LastWriteTime
+                Get-Item -LiteralPath $target |
+                    Select-Object Name, Length, LastWriteTime
+            }
         }
     }
 }

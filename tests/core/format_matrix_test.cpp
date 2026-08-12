@@ -177,10 +177,15 @@ void FormatMatrixTest::openDecodeSeek()
     }
 
     // Seek to 2000ms and poll until position is near 2000ms (+/-500ms).
-    const ag_result seekResult = ag_player_seek(player, 2000);
+    ag_playback_snapshot beforeSeek{};
+    QCOMPARE(ag_player_snapshot(player, &beforeSeek), AG_OK);
+    const auto seekTarget = (std::min)(std::int64_t{2'000},
+                                       beforeSeek.duration_ms);
+    const ag_result seekResult = ag_player_seek(player, seekTarget);
     if (seekResult != AG_OK) {
         ag_player_destroy(player);
-        QFAIL(qPrintable(QStringLiteral("ag_player_seek(2000) failed (%1) for %2")
+        QFAIL(qPrintable(QStringLiteral("ag_player_seek(%1) failed (%2) for %3")
+                             .arg(seekTarget)
                              .arg(static_cast<int>(seekResult))
                              .arg(extension)));
     }
@@ -195,7 +200,7 @@ void FormatMatrixTest::openDecodeSeek()
             QFAIL(qPrintable(QStringLiteral(
                 "Playback entered AG_ERROR after seek for %1").arg(extension)));
         }
-        const long long delta = snapshot.position_ms - 2000LL;
+        const long long delta = snapshot.position_ms - seekTarget;
         if (delta < 0 ? -delta <= 500LL : delta <= 500LL) {
             seeked = true;
             break;
@@ -205,7 +210,7 @@ void FormatMatrixTest::openDecodeSeek()
     if (!seeked) {
         ag_player_destroy(player);
         QFAIL(qPrintable(QStringLiteral(
-            "Position did not reach 2000ms (+/-500ms) within 5s for %1")
+            "Position did not reach requested time (+/-500ms) within 5s for %1")
                 .arg(extension)));
     }
 

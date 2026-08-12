@@ -12,7 +12,7 @@ class LibraryFilterModel : public QSortFilterProxyModel {
     Q_PROPERTY(QAbstractItemModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY
                    sourceModelChanged)
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
-    Q_PROPERTY(int minRating READ minRating WRITE setMinRating NOTIFY minRatingChanged)
+    Q_PROPERTY(int exactRating READ exactRating WRITE setExactRating NOTIFY exactRatingChanged)
     Q_PROPERTY(double minBpm READ minBpm WRITE setMinBpm NOTIFY minBpmChanged)
     Q_PROPERTY(double maxBpm READ maxBpm WRITE setMaxBpm NOTIFY maxBpmChanged)
     Q_PROPERTY(QString category READ category WRITE setCategory NOTIFY categoryChanged)
@@ -28,8 +28,8 @@ public:
     QString searchText() const noexcept;
     void setSearchText(const QString& text);
 
-    int minRating() const noexcept;
-    void setMinRating(int rating);
+    int exactRating() const noexcept;
+    void setExactRating(int rating);
 
     double minBpm() const noexcept;
     void setMinBpm(double bpm);
@@ -53,7 +53,7 @@ public:
 signals:
     void sourceModelChanged();
     void searchTextChanged();
-    void minRatingChanged();
+    void exactRatingChanged();
     void minBpmChanged();
     void maxBpmChanged();
     void categoryChanged();
@@ -72,7 +72,7 @@ private:
     bool rowMatchesBpm(int sourceRow) const;
 
     QString searchText_;
-    int minRating_ = 0;
+    int exactRating_ = 0;
     double minBpm_ = 60.0;
     double maxBpm_ = 160.0;
     QString category_ = QStringLiteral("all");

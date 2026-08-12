@@ -661,10 +661,8 @@ TestCase {
         tryVerify(function() { return toolsMenu.visible }, 500)
         var editorAction = findChild(toolsMenu, "trackMenuLightEditor")
         verify(editorAction && editorAction.enabled)
-        // Qt Quick renders nested menus in a separate popup window under the
-        // test platform; invoke the visible child after the real row
-        // right-click and native submenu-chain checks above.
-        editorAction.triggered()
+        mouseClick(editorAction, editorAction.width / 2,
+                   editorAction.height / 2)
         tryCompare(AudioToolsController, "currentTool", 0)
         tryCompare(WindowController, "audioToolsVisible", true)
         tryCompare(LightEditor, "hasInput", true, 2000)
@@ -782,7 +780,8 @@ TestCase {
         var targetAction = findChild(moveMenu,
                                      "playlistMoveTarget-" + playlistId)
         verify(targetAction && targetAction.enabled)
-        targetAction.triggered()
+        mouseClick(targetAction, targetAction.width / 2,
+                   targetAction.height / 2)
         tryVerify(function() {
             return PlaylistModel.containsTrack(playlistId, ids[0])
         }, 500)
@@ -1032,7 +1031,7 @@ TestCase {
 
     function test_waveform_click_seeks_real_playback_controller() {
         var waveform = findChild(mainWindow, "mainWaveform")
-        var seekSurface = findChild(mainWindow, "waveformHoverSurface")
+        var seekSurface = waveform
         verify(waveform, "main waveform should exist after importing audio")
         verify(seekSurface, "visible waveform surface should own seeking")
 
@@ -1060,6 +1059,8 @@ TestCase {
         PlaybackController.pause()
         mouseClick(seekSurface, seekSurface.width * 0.75,
                    seekSurface.height / 2)
+        compare(PlaybackController.errorMessage, "",
+                "waveform seek must not be rejected by the playback core")
         tryVerify(function() {
             return Math.abs(PlaybackController.positionMs - expected) < 150
         }, 1000, "seek mismatch: actual=" + PlaybackController.positionMs
@@ -1073,18 +1074,17 @@ TestCase {
         verify(playedClip,
                "played waveform colour must be clipped at the exact playback pixel")
         tryVerify(function() {
-            return Math.abs(playedClip.width
-                            - waveform.width * PlaybackController.positionMs
-                            / waveform.duration) < 1
-        }, 500, "played colour boundary must use the same pixel axis as waveform time")
-        verify(!findChild(mainWindow, "waveformPlaybackGuide"),
-               "colored waveform progress must not have a separate playback line")
+            return Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5
+        }, 500, "played colour boundary must use the C++ waveform mapper")
+        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(playbackGuide, "the precise playback cursor must be present")
+        compare(playbackGuide.width, 1)
+        compare(playbackGuide.color.toString(), "#002fa7")
+        verify(Math.abs(playbackGuide.x - waveform.waveformCursorX) <= 0.5)
         var originalWidth = mainWindow.width
         mainWindow.width = Math.max(mainWindow.minimumWidth, originalWidth - 160)
         wait(30)
-        verify(Math.abs(playedClip.width
-                        - waveform.width * PlaybackController.positionMs
-                        / waveform.duration) < 1,
+        verify(Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5,
                "played colour boundary must remain authoritative after resizing")
         mainWindow.width = originalWidth
     }
@@ -1093,11 +1093,31 @@ TestCase {
         var pane = findChild(mainWindow, "playerPane")
         verify(pane)
         verify(PlaybackController.durationMs > 0)
-        // Decoder/playback duration is authoritative. Analysis duration can
-        // differ for VBR padding and must never create a seekable visual tail.
+        // The complete PCM analysis is authoritative for waveform pixels.
+        // Container duration may include encoder padding and stretch beats.
         pane.waveformDurationMs = PlaybackController.durationMs * 1.25
-        compare(pane.effectiveDurationMs, PlaybackController.durationMs)
-        verify(!findChild(mainWindow, "waveformPlaybackGuide"))
+        compare(pane.effectiveDurationMs, pane.waveformDurationMs)
+        verify(findChild(mainWindow, "waveformPlaybackGuide"))
+    }
+
+    function test_waveform_stays_aligned_at_required_window_sizes() {
+        var waveform = findChild(mainWindow, "mainWaveform")
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(waveform && playedClip && playbackGuide)
+        var originalWidth = mainWindow.width
+        var originalHeight = mainWindow.height
+        var sizes = [[800, 500], [1920, 1080], [3840, 2160]]
+        for (var i = 0; i < sizes.length; ++i) {
+            mainWindow.width = sizes[i][0]
+            mainWindow.height = sizes[i][1]
+            wait(30)
+            verify(Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5)
+            verify(Math.abs(playbackGuide.x - waveform.waveformCursorX) <= 0.5)
+            compare(waveform.pixelForTime(waveform.duration), waveform.renderWidth)
+        }
+        mainWindow.width = originalWidth
+        mainWindow.height = originalHeight
     }
 
     function test_waveform_mode_button_cycles_the_live_setting() {
@@ -1145,7 +1165,7 @@ TestCase {
         verify(play)
         verify(hoverGuide)
         verify(!findChild(mainWindow, "waveformProgressFeather"))
-        verify(!findChild(mainWindow, "waveformPlaybackGuide"))
+        verify(findChild(mainWindow, "waveformPlaybackGuide"))
         compare(previous.icon.width, 24)
         compare(next.icon.width, 24)
         compare(mode.icon.width, 24)
@@ -1153,31 +1173,23 @@ TestCase {
         compare(play.height, 52)
         compare(play.icon.width, 24)
         compare(hoverGuide.color.toString(), "#54ff84")
-        var hoverSurface = findChild(mainWindow, "waveformHoverSurface")
-        verify(hoverSurface,
-               "the full waveform canvas must own hover preview input")
-        compare(hoverSurface.cursorShape, Qt.ArrowCursor)
+        verify(findChild(mainWindow, "mainWaveform"),
+               "the C++ waveform item must own hover and seek input")
     }
 
     function test_waveform_hover_surface_covers_played_and_unplayed_regions() {
         var previousPreview = SettingsController.waveformHoverTimePreview
         SettingsController.waveformHoverTimePreview = true
-        var surface = findChild(mainWindow, "waveformHoverSurface")
+        var surface = findChild(mainWindow, "mainWaveform")
         var guide = findChild(mainWindow, "waveformHoverGuide")
         verify(surface)
         verify(guide)
         verify(surface.enabled)
-        verify(surface.hoverEnabled)
-
-        surface.updatePreview(Math.max(2, surface.width * 0.15))
-        tryVerify(function() { return guide.visible && guide.x < surface.width * 0.30 })
-
-        surface.updatePreview(Math.max(2, surface.width * 0.85))
-        tryVerify(function() { return guide.visible && guide.x > surface.width * 0.70 })
-        surface.updatePreview(surface.width)
-        tryVerify(function() {
-            return guide.x === surface.width - guide.width
-        }, 300, "hover guide must remain on the final waveform pixel")
+        compare(surface.timeForX(surface.width * 0.15),
+                Math.round(surface.duration * 0.15))
+        compare(surface.timeForX(surface.width * 0.85),
+                Math.round(surface.duration * 0.85))
+        compare(surface.pixelForTime(surface.duration), surface.width)
         SettingsController.waveformHoverTimePreview = previousPreview
     }
 
@@ -1215,6 +1227,20 @@ TestCase {
         PlaybackController.setVolume(0.42)
         tryCompare(percent, "text", "42%")
         PlaybackController.setVolume(previousVolume)
+    }
+
+    function test_main_volume_flyout_stays_open_for_two_seconds_after_leave() {
+        var control = findChild(mainWindow, "mainVolumeControl")
+        var closeTimer = findChild(mainWindow, "mainVolumeCloseTimer")
+        var slider = findChild(mainWindow, "volumeSlider")
+        verify(control && closeTimer && slider)
+        control.expandedForQa = true
+        closeTimer.restart()
+        wait(1600)
+        verify(control.expandedForQa,
+               "main volume must stay open for the two-second pointer transfer")
+        wait(550)
+        tryVerify(function() { return !control.expandedForQa }, 300)
     }
 
     function test_spectrum_source_is_mirrored_before_responsive_rendering() {
@@ -1269,6 +1295,25 @@ TestCase {
         filter.destroy()
     }
 
+    function test_fractional_bpm_is_not_rounded_away_in_visible_surfaces() {
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        compare(list.formatBpm(127.5), "127.5")
+        compare(list.formatBpm(128), "128")
+        list.destroy()
+
+        var manager = libraryManagerComponent.createObject(mainWindow.contentItem)
+        verify(manager)
+        compare(manager.formatBpm(127.5), "127.5")
+        compare(manager.formatBpm(128), "128")
+        manager.destroy()
+
+        var pane = findChild(mainWindow, "playerPane")
+        verify(pane)
+        compare(pane.formatBpm(127.5), "127.5 BPM")
+        compare(pane.formatBpm(128), "128 BPM")
+    }
+
     function test_waveform_modes_use_offline_waveform_and_live_spectrum() {
         var waveform = findChild(mainWindow, "mainWaveform")
         var previousMode = SettingsController.waveformMode
@@ -1278,8 +1323,10 @@ TestCase {
         }, 5000)
 
         tryVerify(function() {
-            return Object.keys(waveform.layers).length === 1
-                    && waveform.layers.mix.length > 0
+            return waveform.layers.mix.length > 0
+                    && waveform.sampleRate > 0
+                    && waveform.totalSamples > 0
+                    && waveform.peakCount === waveform.layers.mix.length
         })
         compare(waveform.visualMode, 0)
         compare(waveform.baseColor.toString(),
@@ -1289,8 +1336,10 @@ TestCase {
 
         SettingsController.waveformMode = 1
         tryVerify(function() {
-            return Object.keys(waveform.layers).length === 1
-                    && waveform.layers.mix.length > 0
+            return waveform.layers.mix.length > 0
+                    && waveform.sampleRate > 0
+                    && waveform.totalSamples > 0
+                    && waveform.peakCount === waveform.layers.mix.length
         })
         compare(waveform.visualMode, 1)
 
@@ -1376,8 +1425,8 @@ TestCase {
     }
 
     function test_empty_startup_uses_compact_reference_structure() {
-        compare(mainWindow.width, 1104)
-        compare(mainWindow.height, 342)
+        compare(mainWindow.width, 960)
+        compare(mainWindow.height, 298)
 
         var startup = findChild(mainWindow, "emptyStartup")
         var controls = findChild(mainWindow, "playerControls")
@@ -1420,10 +1469,15 @@ TestCase {
                "playback controls must remain inside the small window")
         var artist = findChild(mainWindow, "trackArtistAlbum")
         var rating = findChild(mainWindow, "trackRating")
+        var metadata = findChild(mainWindow, "trackMetadataBadges")
         verify(artist && artist.visible,
                "artist/album must remain visible at the native minimum height")
         verify(rating && rating.visible,
                "rating must remain visible at the native minimum height")
+        verify(metadata && metadata.visible,
+               "file metadata must remain visible at the native minimum height")
+        verify(artist.height > 0 && rating.height > 0 && metadata.height > 0,
+               "responsive metadata rows must retain a usable rendered height")
         verify(cover.height <= pane.height,
                "cover must scale with the available player height")
         verify(waveform.height >= 32,

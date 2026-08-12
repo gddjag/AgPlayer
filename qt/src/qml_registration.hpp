@@ -3,16 +3,15 @@
 class AudioToolsController;
 class EqualizerController;
 class FormatConverter;
+class FilenameProcessor;
 class ImportController;
 class LibraryFilterModel;
 class LibraryModel;
 class LightEditor;
 class MetadataEditor;
-class PitchShifter;
 class PlaybackController;
 class PlaylistModel;
 class SettingsController;
-class SpeedAdjuster;
 class WaveformProvider;
 class WindowController;
 
@@ -27,8 +26,7 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  AudioToolsController* audioTools,
                                  MetadataEditor* metadataEditor,
                                  FormatConverter* formatConverter,
-                                 PitchShifter* pitchShifter,
-                                 SpeedAdjuster* speedAdjuster,
+                                 FilenameProcessor* filenameProcessor,
                                  LightEditor* lightEditor,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider = nullptr,

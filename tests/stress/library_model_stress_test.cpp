@@ -50,6 +50,16 @@ void LibraryModelStressTest::loadsSearchesAndSortsTenThousandTracks()
     QVERIFY2(lookupMs < 1000,
              qPrintable(QStringLiteral("10k lookups took %1 ms").arg(lookupMs)));
 
+    timer.restart();
+    for (int row = 0; row < trackCount; ++row) {
+        QCOMPARE(source.indexForLocalFile(
+                     QStringLiteral("C:/stress/track-%1.flac").arg(row)), row);
+    }
+    const qint64 pathLookupMs = timer.elapsed();
+    QVERIFY2(pathLookupMs < 1000,
+             qPrintable(QStringLiteral("10k path lookups took %1 ms")
+                            .arg(pathLookupMs)));
+
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
     filter.setMinBpm(0.0);
@@ -63,7 +73,7 @@ void LibraryModelStressTest::loadsSearchesAndSortsTenThousandTracks()
 
     timer.restart();
     filter.setSearchText({});
-    filter.setMinRating(4);
+    filter.setExactRating(4);
     filter.setMinBpm(100.0);
     filter.setMaxBpm(140.0);
     filter.setCategory(QStringLiteral("favorites"));
@@ -73,7 +83,7 @@ void LibraryModelStressTest::loadsSearchesAndSortsTenThousandTracks()
              qPrintable(QStringLiteral("combined filter took %1 ms").arg(combinedMs)));
 
     timer.restart();
-    filter.setMinRating(0);
+    filter.setExactRating(0);
     filter.setMinBpm(0.0);
     filter.setMaxBpm(300.0);
     filter.setCategory(QStringLiteral("history"));

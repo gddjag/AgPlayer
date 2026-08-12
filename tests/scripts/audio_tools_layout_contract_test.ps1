@@ -1,0 +1,106 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$SourceRoot
+)
+
+$ErrorActionPreference = 'Stop'
+$toolsRoot = Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools'
+$lightEditor = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'LightEditPage.qml')
+$trackLane = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MultiTrackWaveform.qml')
+$formatPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatConvertPage.qml')
+$metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
+$filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
+$miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
+$toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
+
+if ($lightEditor -notmatch 'property bool inspectorVisible:\s*false') {
+    throw 'The light editor must keep the inspector closed until a user requests it.'
+}
+if ($lightEditor -notmatch 'let lastLabelX\s*=\s*-Infinity') {
+    throw 'The ruler must suppress labels that would overlap at narrow zoom levels.'
+}
+if ($trackLane -notmatch 'readonly property bool visibleLane:\s*hasFile\s*\|\|\s*trackIndex\s*<\s*6') {
+    throw 'The editor must expose six ready lanes while retaining all 16 engine tracks.'
+}
+if ($trackLane -notmatch 'height:\s*!visibleLane\s*\?\s*0\s*:') {
+    throw 'Hidden empty lanes must not occupy vertical workspace.'
+}
+if ($filenamePage -notmatch 'id:\s*rulesColumn') {
+    throw 'The filename workbench needs an explicit responsive rules column.'
+}
+foreach ($control in @(
+    'filenameFilePanel', 'filenameRulesPanel', 'filenamePreviewPanel',
+    'filenameValidationPanel', 'filenameBottomBar')) {
+    if ($filenamePage -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The filename reference workbench is missing $control."
+    }
+}
+if (($filenamePage -notmatch 'id:\s*numberPositionBox') -or
+    ($filenamePage -notmatch 'id:\s*preserveExtensionCheck')) {
+    throw 'The filename rule panel must expose extension preservation and all numbering positions.'
+}
+if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}Layout\.preferredWidth:\s*190') {
+    throw 'The filename validation panel must not squeeze the preview table into an unusable narrow column.'
+}
+if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*942') {
+    throw 'The tools window must open at the complete reference-workbench size.'
+}
+if ($lightEditor -notmatch 'readonly property int visibleEmptyTrackCount:\s*6') {
+    throw 'The empty editor must show six ready drop lanes, not sixteen unusable mixer strips.'
+}
+foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
+    if ($page -match 'text:\s*qsTr\("从播放器添加"\)[\s\S]{0,220}enabled:\s*false') {
+        throw 'A visible player-import button must never be permanently disabled.'
+    }
+}
+
+if ($metadataPage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*true[\s\S]{0,120}enabled:\s*MetadataEditor\.busy') {
+    throw 'Metadata cancel must remain visibly discoverable and only activate while a write is running.'
+}
+if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*true[\s\S]{0,120}enabled:\s*FilenameProcessor\.busy') {
+    throw 'Rename cancel must remain visibly discoverable and only activate while a transaction is running.'
+}
+if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
+    throw 'Mini-player controls must not reference an undefined expanded property.'
+}
+if ($formatPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(360, page\.width \* 0\.265\)') {
+    throw 'The format converter needs a reference-width settings workbench.'
+}
+if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(480, page\.width \* 0\.36\)') {
+    throw 'The metadata editor needs a complete batch-edit workbench at desktop width.'
+}
+if ($formatPage -notmatch 'enabled:\s*!converter\.busy\s*&&\s*PlaybackController\.currentTrackId\.length > 0') {
+    throw 'The converter player-import action must only be enabled while its controller can accept work.'
+}
+foreach ($control in @(
+    'formatToolbar', 'formatSearchField', 'formatStatusFilters',
+    'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
+    'formatOutputFormatGroup', 'formatEncodingSettingsGroup',
+    'formatOutputOptionsGroup', 'formatTotalProgress')) {
+    if ($formatPage -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The reference conversion workbench is missing $control."
+    }
+}
+if ($formatPage -notmatch 'converter\.previewSelected\(' -or $formatPage -notmatch 'formatPreflightDialog') {
+    throw 'The converter must show real preflight differences before starting a changed plan.'
+}
+if ($metadataPage -notmatch 'enabled:\s*!MetadataEditor\.busy\s*&&\s*PlaybackController\.currentTrackId\.length > 0') {
+    throw 'The metadata player-import action must only be enabled while its controller can accept work.'
+}
+if ($filenamePage -notmatch 'enabled:\s*!FilenameProcessor\.busy\s*&&\s*PlaybackController\.currentTrackId\.length > 0') {
+    throw 'The filename player-import action must only be enabled while its controller can accept work.'
+}
+foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
+    if ($page -notmatch 'function addCurrentPlayerTrack\(\)') {
+        throw 'Each file tool must import the active player file through its real controller.'
+    }
+    if ($page -notmatch 'file:///') {
+        throw 'Player file paths must be converted to explicit local-file URLs on Windows.'
+    }
+    if ($page -notmatch 'PlaybackController\.queueTrackIds') {
+        throw 'The player import action must accept the active playback queue, not only one track.'
+    }
+    if ($page -notmatch 'Qt\.resolvedUrl\("file:///"') {
+        throw 'The player import action must hand the native controller QUrl values, not bare file strings.'
+    }
+}

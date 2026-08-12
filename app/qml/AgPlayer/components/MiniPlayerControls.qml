@@ -12,11 +12,12 @@ Rectangle {
     property var windows: WindowController
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
-    // The decoder's clock is authoritative for seek and playback progress.
-    // Analysis duration is only a fallback before a playable source exists.
-    readonly property real effectiveDurationMs: playback && playback.durationMs > 0
-                                                ? playback.durationMs
-                                                : waveformDurationMs
+    // The complete decoded PCM duration is the waveform clock; metadata is a
+    // fallback only until analysis finishes.
+    readonly property real effectiveDurationMs: waveformDurationMs > 0
+                                                ? waveformDurationMs
+                                                : playback && playback.durationMs > 0
+                                                  ? playback.durationMs : 0
 
     property alias playPauseButton: playPauseButton
     property alias previousButton: previousButton
@@ -63,14 +64,25 @@ Rectangle {
         return result
     }
     function applyWaveformMode() {
-        if (SettingsController.waveformMode === 2)
+        if (SettingsController.waveformMode === 2) {
             waveform.peaks = root.shapeSpectrum(playback ? playback.spectrum : [])
-        else waveform.layers = { mix: rawWaveformLayers.mix || [] }
+            playedWaveform.peaks = waveform.peaks
+        } else {
+            var source = rawWaveformLayers || {}
+            waveform.layers = {
+                mix: source.mix || [],
+                _sampleRate: Number(source._sampleRate) || 0,
+                _totalSamples: Number(source._totalSamples) || 0,
+                _peakCount: Number(source._peakCount) || 0
+            }
+            playedWaveform.layers = waveform.layers
+        }
     }
     function loadWaveform() {
         var path = currentTrackValue(LibraryModel.PathRole)
         rawWaveformLayers = ({}); waveformDurationMs = 0
         waveform.layers = ({}); waveform.peaks = []
+        playedWaveform.layers = ({}); playedWaveform.peaks = []
         if (path && playback) WaveformProvider.loadForTrack(playback.currentTrackId, path)
     }
     function modeName(): string {
@@ -149,7 +161,9 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
-                    position: playback ? playback.positionMs : 0; duration: root.effectiveDurationMs
+                    position: 0
+                    cursorPosition: playback ? playback.positionMs : 0
+                    duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
                     baseColor: SettingsController.waveformMode === 0
                                ? SettingsController.waveformSolidBaseColor
@@ -178,6 +192,39 @@ Rectangle {
                                 ? 3.0 : SettingsController.waveformThickness
                     onSeekRequested: positionMs => { if (playback) playback.seek(positionMs) }
                 }
+                Item {
+                    objectName: "miniWaveformPlayedClip"
+                    width: waveform.waveformCursorX
+                    height: waveform.height
+                    clip: true
+                    WaveformItem {
+                        id: playedWaveform
+                        objectName: "miniPlayedWaveform"
+                        enabled: false
+                        width: waveform.width
+                        height: waveform.height
+                        duration: waveform.duration
+                        position: waveform.duration
+                        visualMode: waveform.visualMode
+                        baseColor: waveform.baseColor
+                        progressColor: waveform.progressColor
+                        gradientStartColor: waveform.gradientStartColor
+                        gradientMiddleColor: waveform.gradientMiddleColor
+                        gradientEndColor: waveform.gradientEndColor
+                        rgbProgress: waveform.rgbProgress
+                        amplitudeScale: waveform.amplitudeScale
+                        density: waveform.density
+                        lineWidth: waveform.lineWidth
+                    }
+                }
+                Rectangle {
+                    objectName: "miniWaveformPlaybackGuide"
+                    x: waveform.waveformCursorX
+                    width: 1
+                    height: waveform.height
+                    color: SettingsController.waveformSolidProgressColor
+                    z: 10
+                }
                 Text {
                     objectName: "miniElapsedTime"
                     anchors.left: parent.left; anchors.bottom: parent.bottom
@@ -199,7 +246,7 @@ Rectangle {
                 ToolButton {
                     id: waveformModeButton
                     objectName: "miniWaveformModeButton"
-                    Layout.preferredWidth: expanded ? 124 : 28
+                    Layout.preferredWidth: 28
                     Layout.minimumWidth: Layout.preferredWidth
                     Layout.maximumWidth: Layout.preferredWidth
                     Layout.preferredHeight: 28
@@ -263,7 +310,7 @@ Rectangle {
                         objectName: "miniVolumeCloseTimer"
                         // Leave enough time to cross the small gap from the
                         // mute button to the right-hand volume slider.
-                        interval: 850
+                        interval: 2000
                         onTriggered: {
                             if (!volumeSlider.pressed && !volumeSlider.activeFocus
                                     && !flyoutHover.hovered)

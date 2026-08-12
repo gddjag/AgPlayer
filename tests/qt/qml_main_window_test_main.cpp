@@ -1,31 +1,257 @@
 #include "audio_tools_controller.hpp"
+#include "filename_processor.hpp"
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
-#include "pitch_shifter.hpp"
+#include "native_drop_router.hpp"
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
-#include "speed_adjuster.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFile>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QMimeData>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QStandardPaths>
+#include <QSettings>
+#include <QTemporaryDir>
 #include <QUrl>
+#include <QUuid>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
+#include <QQuickItem>
+#include <QQuickStyle>
+#include <QQuickWindow>
 
 #include <memory>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <shellapi.h>
+#include <shlobj.h>
+
+#include <algorithm>
+#include <string>
+#endif
+
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
+
+class NativeDropHelper final : public QObject {
+    Q_OBJECT
+public:
+    void setLibraryModel(LibraryModel* library) { library_ = library; }
+
+    Q_INVOKABLE QStringList ensureSortableTracks()
+    {
+        if (library_ == nullptr) return {};
+        const QString fixture = QString::fromLocal8Bit(
+            qgetenv("AGPLAYER_TEST_AUDIO"));
+        if (!QFileInfo(fixture).isFile()) return {};
+        QList<TrackRecord> tracks;
+        QStringList ids;
+        // QML tests may run against a persisted temporary library.  A stable
+        // literal id can then resolve to a record made unavailable by an
+        // earlier test.  Use one per-process namespace so the drag test
+        // always exercises real, enabled rows instead of stale state.
+        static const QString testRunId =
+            QString::number(QDateTime::currentMSecsSinceEpoch());
+        for (int index = 0; index < 3; ++index) {
+            const QString id = QStringLiteral("drag-test-%1-%2")
+                                   .arg(testRunId)
+                                   .arg(index);
+            ids.append(id);
+            if (library_->indexForTrackId(id) >= 0) continue;
+            const QString path = dropDirectory_.filePath(id + QStringLiteral(".wav"));
+            if (!QFile::copy(fixture, path)) return {};
+            TrackRecord track;
+            track.trackId = id;
+            track.path = path;
+            track.title = QStringLiteral("Drag test %1").arg(index);
+            track.artist = QStringLiteral("AgPlayer QA");
+            track.available = true;
+            tracks.append(track);
+        }
+        library_->appendBatch(std::move(tracks));
+        return ids;
+    }
+
+    Q_INVOKABLE QString ensureLongTitleTrack()
+    {
+        if (library_ == nullptr) return {};
+        const QString id = QStringLiteral("long-title-track");
+        if (library_->indexForTrackId(id) < 0) {
+            TrackRecord track;
+            track.trackId = id;
+            track.path = QStringLiteral("C:/virtual/long-title-track.mp3");
+            track.title = QStringLiteral(
+                "This is an intentionally very long song title for hover marquee verification");
+            track.artist = QStringLiteral("AgPlayer QA");
+            track.available = true;
+            library_->appendBatch({track});
+        }
+        return id;
+    }
+
+    Q_INVOKABLE QString ensureLongAlbumArtistTrack()
+    {
+        if (library_ == nullptr) return {};
+        const QString id = QStringLiteral("long-album-artist-track");
+        if (library_->indexForTrackId(id) < 0) {
+            TrackRecord track;
+            track.trackId = id;
+            track.path = QStringLiteral("C:/virtual/long-album-artist-track.mp3");
+            track.title = QStringLiteral("Column alignment QA");
+            track.artist = QStringLiteral(
+                "An intentionally long artist name for hover marquee verification");
+            track.album = QStringLiteral(
+                "An intentionally long album name for hover marquee verification");
+            track.available = true;
+            library_->appendBatch({track});
+        }
+        return id;
+    }
+
+    Q_INVOKABLE bool sendUrls(QObject* target, const QList<QUrl>& urls)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        auto* window = qobject_cast<QWindow*>(target);
+        if (item != nullptr) {
+            window = item->window();
+        }
+        if (window == nullptr || urls.isEmpty()) {
+            return false;
+        }
+        QMimeData mime;
+        mime.setUrls(urls);
+        const QPointF scenePosition = item != nullptr
+            ? item->mapToScene(QPointF(item->width() / 2.0,
+                                       item->height() / 2.0))
+            : QPointF(window->width() / 2.0, window->height() / 2.0);
+        QDragEnterEvent enter(scenePosition.toPoint(), Qt::CopyAction, &mime,
+                              Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &enter);
+        QDropEvent drop(scenePosition, Qt::CopyAction, &mime,
+                        Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &drop);
+        return enter.isAccepted() && drop.isAccepted();
+    }
+
+    Q_INVOKABLE bool sendWindowsDropFiles(QObject* target,
+                                          const QList<QUrl>& urls)
+    {
+#ifdef Q_OS_WIN
+        auto* item = qobject_cast<QQuickItem*>(target);
+        auto* window = qobject_cast<QWindow*>(target);
+        if (item != nullptr) {
+            window = item->window();
+        }
+        if (window == nullptr || !window->isVisible()) {
+            return false;
+        }
+
+        QStringList paths;
+        paths.reserve(urls.size());
+        qsizetype characterCount = 1; // Final multi-string terminator.
+        for (const QUrl& url : urls) {
+            if (!url.isLocalFile()) {
+                continue;
+            }
+            const QString path = QDir::toNativeSeparators(url.toLocalFile());
+            if (path.isEmpty()) {
+                continue;
+            }
+            paths.append(path);
+            characterCount += path.size() + 1;
+        }
+        if (paths.isEmpty()) {
+            return false;
+        }
+
+        const SIZE_T byteCount = sizeof(DROPFILES)
+            + static_cast<SIZE_T>(characterCount) * sizeof(wchar_t);
+        HGLOBAL memory = GlobalAlloc(GHND, byteCount);
+        if (memory == nullptr) {
+            return false;
+        }
+        auto* payload = static_cast<unsigned char*>(GlobalLock(memory));
+        if (payload == nullptr) {
+            GlobalFree(memory);
+            return false;
+        }
+
+        auto* header = reinterpret_cast<DROPFILES*>(payload);
+        header->pFiles = sizeof(DROPFILES);
+        header->fWide = TRUE;
+        auto* destination = reinterpret_cast<wchar_t*>(payload
+                                                       + sizeof(DROPFILES));
+        for (const QString& path : paths) {
+            const std::wstring nativePath = path.toStdWString();
+            std::copy(nativePath.cbegin(), nativePath.cend(), destination);
+            destination += nativePath.size();
+            *destination++ = L'\0';
+        }
+        *destination = L'\0';
+        GlobalUnlock(memory);
+
+        const HWND handle = reinterpret_cast<HWND>(window->winId());
+        if (!PostMessageW(handle, WM_DROPFILES,
+                          reinterpret_cast<WPARAM>(memory), 0)) {
+            GlobalFree(memory);
+            return false;
+        }
+        return true;
+#else
+        Q_UNUSED(target)
+        Q_UNUSED(urls)
+        return false;
+#endif
+    }
+
+    Q_INVOKABLE bool supportsWindowsDropFiles() const
+    {
+#ifdef Q_OS_WIN
+        return QGuiApplication::platformName().compare(
+                   QStringLiteral("windows"), Qt::CaseInsensitive) == 0;
+#else
+        return false;
+#endif
+    }
+
+    Q_INVOKABLE QUrl copyForNativeDrop(const QUrl& source)
+    {
+        if (!source.isLocalFile() || !dropDirectory_.isValid()) {
+            return {};
+        }
+        const QFileInfo sourceInfo(source.toLocalFile());
+        if (!sourceInfo.isFile()) {
+            return {};
+        }
+        const QString copyPath = dropDirectory_.filePath(
+            QStringLiteral("native-drop-%1.%2")
+                .arg(QUuid::createUuid().toString(QUuid::WithoutBraces),
+                     sourceInfo.suffix()));
+        return QFile::copy(sourceInfo.absoluteFilePath(), copyPath)
+            ? QUrl::fromLocalFile(copyPath) : QUrl{};
+    }
+
+private:
+    QPointer<LibraryModel> library_;
+    QTemporaryDir dropDirectory_;
+};
 
 class QmlMainWindowSetup final : public QObject {
     Q_OBJECT
@@ -44,22 +270,24 @@ public:
 public slots:
     void applicationAvailable()
     {
+        QQuickStyle::setStyle(QStringLiteral("Basic"));
         QStandardPaths::setTestModeEnabled(true);
         QCoreApplication::setOrganizationName("AgPlayer");
         QCoreApplication::setApplicationName("AgPlayer-test");
+        QSettings().remove(QStringLiteral("windows/settingsGeometry"));
 
         if (ag_player_create(&core_) != AG_OK) {
             return;
         }
         library_ = std::make_unique<LibraryModel>();
+        nativeDropHelper_.setLibraryModel(library_.get());
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
         audioTools_ = std::make_unique<AudioToolsController>();
         metadataEditor_ = std::make_unique<MetadataEditor>();
+        filenameProcessor_ = std::make_unique<FilenameProcessor>();
         formatConverter_ = std::make_unique<FormatConverter>();
-        pitchShifter_ = std::make_unique<PitchShifter>();
-        speedAdjuster_ = std::make_unique<SpeedAdjuster>();
         lightEditor_ = std::make_unique<LightEditor>();
         settings_ = std::make_unique<SettingsController>();
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
@@ -67,8 +295,8 @@ public slots:
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
-                                    formatConverter_.get(), pitchShifter_.get(),
-                                    speedAdjuster_.get(), lightEditor_.get(),
+                                    formatConverter_.get(), filenameProcessor_.get(),
+                                    lightEditor_.get(),
                                     settings_.get(), waveformProvider_.get());
     }
 
@@ -79,15 +307,50 @@ public slots:
             QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
         engine->rootContext()->setContextProperty(
             "testAudioUrl", QUrl::fromLocalFile(fixture));
+        engine->rootContext()->setContextProperty("nativeDropHelper",
+                                                  &nativeDropHelper_);
 
         component_ = std::make_unique<QQmlComponent>(engine);
         component_->loadFromModule("AgPlayer", "Main");
         if (component_->isError()) {
+            qWarning().noquote() << component_->errorString();
             return;
         }
 
         mainWindow_ = component_->create();
+        if (mainWindow_ == nullptr) {
+            qWarning().noquote() << component_->errorString();
+        }
         if (mainWindow_) {
+            auto* nativeWindow = qobject_cast<QWindow*>(mainWindow_);
+            if (nativeWindow != nullptr) {
+                nativeDrops_ = std::make_unique<NativeDropRouter>();
+                nativeDrops_->registerWindow(nativeWindow,
+                                             NativeDropRouter::Target::Main);
+                QObject::connect(
+                    nativeDrops_.get(), &NativeDropRouter::pathsDropped,
+                    importer_.get(), [this](NativeDropRouter::Target target,
+                                             const QStringList& paths) {
+                        if (target == NativeDropRouter::Target::Main) {
+                            playFirstImportedAfterNativeDrop_ = true;
+                            importer_->importPaths(paths);
+                        }
+                    });
+                QObject::connect(importer_.get(), &ImportController::finished,
+                                 playback_.get(), [this] {
+                    if (!playFirstImportedAfterNativeDrop_) {
+                        return;
+                    }
+                    playFirstImportedAfterNativeDrop_ = false;
+                    const QStringList ids = importer_->importedTrackIds();
+                    if (!ids.isEmpty()) {
+                        const int row = library_->indexForTrackId(ids.front());
+                        if (row >= 0) {
+                            playback_->playRow(row);
+                        }
+                    }
+                });
+            }
             engine->rootContext()->setContextProperty("testMainWindow", mainWindow_);
         }
     }
@@ -100,14 +363,16 @@ private:
     std::unique_ptr<WindowController> windows_;
     std::unique_ptr<AudioToolsController> audioTools_;
     std::unique_ptr<MetadataEditor> metadataEditor_;
+    std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
-    std::unique_ptr<PitchShifter> pitchShifter_;
-    std::unique_ptr<SpeedAdjuster> speedAdjuster_;
     std::unique_ptr<LightEditor> lightEditor_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
+    std::unique_ptr<NativeDropRouter> nativeDrops_;
     std::unique_ptr<QQmlComponent> component_;
     QObject* mainWindow_ = nullptr;
+    bool playFirstImportedAfterNativeDrop_ = false;
+    NativeDropHelper nativeDropHelper_;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(qml_main_window, QmlMainWindowSetup)

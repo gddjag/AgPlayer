@@ -41,6 +41,8 @@ public:
     // Enables or disables all registered hotkeys without losing registrations.
     void setEnabled(bool enabled);
 
+    int passiveSystemShortcutCount() const noexcept;
+
     bool nativeEventFilter(const QByteArray& eventType, void* message,
                            qintptr* result) override;
 
@@ -53,6 +55,7 @@ private:
         uint modifiers;
         uint key;
         Action action;
+        bool passiveSystemKey = false;
     };
 
     bool registerNativeHotkey(const Hotkey& hotkey);

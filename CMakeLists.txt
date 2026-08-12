@@ -29,6 +29,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
 )
 find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)
+find_package(SoundTouch CONFIG REQUIRED)
 
 add_subdirectory(core)
 add_subdirectory(qt)

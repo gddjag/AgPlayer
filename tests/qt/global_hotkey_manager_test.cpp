@@ -11,7 +11,9 @@ private slots:
     void zeroKeyRegistrationIsRejected();
     void duplicateRegistrationsAreRejected();
     void enabledStateCanBeToggled();
-    void parseOnlyCombo();
+    void unmodifiedTypingKeysAreRejected();
+    void mediaKeysAreAcceptedWithoutModifiers();
+    void volumeMediaKeysRemainAvailableToWindows();
     void modifierPlusKeyCombo();
 };
 
@@ -33,30 +35,50 @@ void GlobalHotkeyManagerTest::zeroKeyRegistrationIsRejected()
 void GlobalHotkeyManagerTest::duplicateRegistrationsAreRejected()
 {
     GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
-    // Both map to the same raw key on Windows; the second registration should
-    // fail because the combination is already registered.
-    QVERIFY(manager.registerShortcut("Global + Space",
+    QVERIFY(manager.registerShortcut("Ctrl + Alt + Space",
                                       GlobalHotkeyManager::Action::PlayPause));
-    QVERIFY(!manager.registerShortcut("Space",
+    QVERIFY(!manager.registerShortcut("Ctrl + Alt + Space",
                                        GlobalHotkeyManager::Action::PlayPause));
 }
 
 void GlobalHotkeyManagerTest::enabledStateCanBeToggled()
 {
     GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
-    QVERIFY(manager.registerShortcut("Global + F10",
+    QVERIFY(manager.registerShortcut("Ctrl + F10",
                                       GlobalHotkeyManager::Action::PlayPause));
     manager.setEnabled(false);
     manager.setEnabled(true);
     manager.unregisterAll();
 }
 
-void GlobalHotkeyManagerTest::parseOnlyCombo()
+void GlobalHotkeyManagerTest::unmodifiedTypingKeysAreRejected()
 {
     GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
-    QVERIFY(manager.registerShortcut("Space", GlobalHotkeyManager::Action::PlayPause));
-    QVERIFY(manager.registerShortcut("Left", GlobalHotkeyManager::Action::Previous));
-    QVERIFY(manager.registerShortcut("Tab", GlobalHotkeyManager::Action::Next));
+    QVERIFY(!manager.registerShortcut("Space", GlobalHotkeyManager::Action::PlayPause));
+    QVERIFY(!manager.registerShortcut("Global + Left",
+                                      GlobalHotkeyManager::Action::Previous));
+    QVERIFY(!manager.registerShortcut("Tab", GlobalHotkeyManager::Action::Next));
+}
+
+void GlobalHotkeyManagerTest::mediaKeysAreAcceptedWithoutModifiers()
+{
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
+    QVERIFY(manager.registerShortcut("MediaPlayPause",
+                                     GlobalHotkeyManager::Action::PlayPause));
+    QVERIFY(manager.registerShortcut("MediaPrevTrack",
+                                     GlobalHotkeyManager::Action::Previous));
+    QVERIFY(manager.registerShortcut("MediaNextTrack",
+                                     GlobalHotkeyManager::Action::Next));
+}
+
+void GlobalHotkeyManagerTest::volumeMediaKeysRemainAvailableToWindows()
+{
+    GlobalHotkeyManager manager(GlobalHotkeyManager::Backend::InMemory);
+    QVERIFY(manager.registerShortcut("VolumeUp",
+                                     GlobalHotkeyManager::Action::VolumeUp));
+    QVERIFY(manager.registerShortcut("VolumeDown",
+                                     GlobalHotkeyManager::Action::VolumeDown));
+    QCOMPARE(manager.passiveSystemShortcutCount(), 2);
 }
 
 void GlobalHotkeyManagerTest::modifierPlusKeyCombo()

@@ -5,7 +5,9 @@
 #include <QDebug>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDesktopServices>
 #include <QDirIterator>
+#include <QFile>
 #include <QList>
 #include <QStandardPaths>
 #include <QTimer>
@@ -37,6 +39,28 @@ QString normalizedColor(const QString& value)
     return color.isValid() ? color.name(QColor::HexRgb) : QString();
 }
 
+void migrateRetiredLibraryData()
+{
+    const QDir appData(
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    QDir().mkpath(appData.path());
+
+    const QString oldMaintenance =
+        appData.filePath(QStringLiteral("library-maintenance.json"));
+    const QString libraryManager =
+        appData.filePath(QStringLiteral("library-manager.json"));
+    if (QFile::exists(oldMaintenance) && !QFile::exists(libraryManager)) {
+        QFile::copy(oldMaintenance, libraryManager);
+    }
+
+    const QString smartPlaylists =
+        appData.filePath(QStringLiteral("smart-playlists.json"));
+    const QString retiredBackup = smartPlaylists + QStringLiteral(".retired.bak");
+    if (QFile::exists(smartPlaylists) && !QFile::exists(retiredBackup)) {
+        QFile::rename(smartPlaylists, retiredBackup);
+    }
+}
+
 } // namespace
 
 SettingsController::SettingsController(QObject* parent)
@@ -44,6 +68,7 @@ SettingsController::SettingsController(QObject* parent)
       settings_(this),
       fileAssociationController_(std::make_unique<FileAssociationController>(this))
 {
+    migrateRetiredLibraryData();
     load();
     applyAutoStartWithWindows();
     applyFileAssociations();
@@ -69,7 +94,6 @@ QString SettingsController::outputDevice() const { return outputDevice_; }
 bool SettingsController::exclusiveMode() const noexcept { return exclusiveMode_; }
 bool SettingsController::matchTrackSampleRate() const noexcept { return matchTrackSampleRate_; }
 int SettingsController::transitionFadeMs() const noexcept { return transitionFadeMs_; }
-bool SettingsController::playButtonRgbGlow() const noexcept { return playButtonRgbGlow_; }
 int SettingsController::defaultPlaybackMode() const noexcept { return defaultPlaybackMode_; }
 bool SettingsController::autoReadBpm() const noexcept { return autoReadBpm_; }
 bool SettingsController::autoReadRating() const noexcept { return autoReadRating_; }
@@ -90,11 +114,23 @@ QString SettingsController::waveformRgbMiddleColor() const { return waveformRgbM
 QString SettingsController::waveformRgbEndColor() const { return waveformRgbEndColor_; }
 bool SettingsController::waveformRgbProgress() const noexcept { return waveformRgbProgress_; }
 bool SettingsController::waveformHoverTimePreview() const noexcept { return waveformHoverTimePreview_; }
+int SettingsController::waveformCanvasHeight() const noexcept { return waveformCanvasHeight_; }
+bool SettingsController::waveformCanvasLocked() const noexcept { return waveformCanvasLocked_; }
+int SettingsController::spectrumColorMode() const noexcept { return spectrumColorMode_; }
+QString SettingsController::spectrumSolidColor() const { return spectrumSolidColor_; }
+QString SettingsController::spectrumRgbStartColor() const { return spectrumRgbStartColor_; }
+QString SettingsController::spectrumRgbMiddleColor() const { return spectrumRgbMiddleColor_; }
+QString SettingsController::spectrumRgbEndColor() const { return spectrumRgbEndColor_; }
+int SettingsController::replayGainMode() const noexcept { return replayGainMode_; }
+bool SettingsController::replayGainClipProtection() const noexcept { return replayGainClipProtection_; }
 
 // Audio Tools getters
 QString SettingsController::defaultOutputDirectory() const { return defaultOutputDirectory_; }
 int SettingsController::overwritePolicy() const noexcept { return overwritePolicy_; }
-QString SettingsController::defaultTranscodeFormat() const { return defaultTranscodeFormat_; }
+QString SettingsController::transcodeFormat() const { return transcodeFormat_; }
+int SettingsController::transcodeBitrateKbps() const noexcept { return transcodeBitrateKbps_; }
+int SettingsController::transcodeSampleRateHz() const noexcept { return transcodeSampleRateHz_; }
+int SettingsController::transcodeChannels() const noexcept { return transcodeChannels_; }
 bool SettingsController::preserveMetadata() const noexcept { return preserveMetadata_; }
 bool SettingsController::keepPitchWhileSpeedChange() const noexcept { return keepPitchWhileSpeedChange_; }
 bool SettingsController::vocalProtection() const noexcept { return vocalProtection_; }
@@ -116,8 +152,13 @@ int SettingsController::cacheSizeLimitMB() const noexcept { return cacheSizeLimi
 int SettingsController::currentCacheSizeMB() const noexcept { return currentCacheSizeMB_; }
 
 // About getters
-QString SettingsController::version() const { return QStringLiteral("AgPlayer v1.0.0"); }
+QString SettingsController::version() const { return QStringLiteral("v1.0"); }
 QString SettingsController::releaseDate() const { return QStringLiteral("2026.10"); }
+QString SettingsController::libraryManagerPath() const
+{
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+        .filePath(QStringLiteral("library-manager.json"));
+}
 
 // General setters
 void SettingsController::setAutoStartWithWindows(bool value)
@@ -269,16 +310,6 @@ void SettingsController::setTransitionFadeMs(const int value)
     transitionFadeMs_ = value;
     persistValue(QStringLiteral("playback/transitionFadeMs"), value);
     emit transitionFadeMsChanged();
-}
-
-void SettingsController::setPlayButtonRgbGlow(bool value)
-{
-    if (playButtonRgbGlow_ == value) {
-        return;
-    }
-    playButtonRgbGlow_ = value;
-    persistValue(QStringLiteral("playback/playButtonRgbGlow"), value);
-    emit playButtonRgbGlowChanged();
 }
 
 void SettingsController::setDefaultPlaybackMode(int value)
@@ -455,6 +486,78 @@ void SettingsController::setWaveformHoverTimePreview(bool value)
     emit waveformHoverTimePreviewChanged();
 }
 
+void SettingsController::setWaveformCanvasHeight(int value)
+{
+    value = clampValue(value, 48, 84);
+    if (waveformCanvasHeight_ == value) return;
+    waveformCanvasHeight_ = value;
+    persistValue(QStringLiteral("appearance/waveformCanvasHeight"), value);
+    emit waveformCanvasHeightChanged();
+}
+
+#define AGPLAYER_BOOL_SETTER(Name, member, key, signalName) \
+    void SettingsController::Name(bool value)               \
+    {                                                        \
+        if (member == value) return;                         \
+        member = value;                                      \
+        persistValue(QStringLiteral(key), value);             \
+        emit signalName();                                   \
+    }
+
+AGPLAYER_BOOL_SETTER(setWaveformCanvasLocked, waveformCanvasLocked_,
+                     "appearance/waveformCanvasLocked", waveformCanvasLockedChanged)
+AGPLAYER_BOOL_SETTER(setReplayGainClipProtection, replayGainClipProtection_,
+                     "playback/replayGainClipProtection", replayGainClipProtectionChanged)
+
+#undef AGPLAYER_BOOL_SETTER
+
+void SettingsController::setSpectrumColorMode(int value)
+{
+    value = clampValue(value, 0, 1);
+    if (spectrumColorMode_ == value) return;
+    spectrumColorMode_ = value;
+    persistValue(QStringLiteral("appearance/spectrumColorMode"), value);
+    emit spectrumColorModeChanged();
+}
+
+void SettingsController::setSpectrumSolidColor(const QString& value)
+{
+    const QString color = normalizedColor(value);
+    if (color.isEmpty() || spectrumSolidColor_ == color) return;
+    spectrumSolidColor_ = color;
+    persistValue(QStringLiteral("appearance/spectrumSolidColor"), color);
+    emit spectrumSolidColorChanged();
+}
+
+#define AGPLAYER_SPECTRUM_COLOR_SETTER(Name, member, key, signalName) \
+    void SettingsController::Name(const QString& value)               \
+    {                                                                  \
+        const QString color = normalizedColor(value);                  \
+        if (color.isEmpty() || member == color) return;                \
+        member = color;                                                 \
+        persistValue(QStringLiteral(key), color);                       \
+        emit signalName();                                              \
+    }
+
+AGPLAYER_SPECTRUM_COLOR_SETTER(setSpectrumRgbStartColor, spectrumRgbStartColor_,
+                               "appearance/spectrumRgbStartColor", spectrumRgbStartColorChanged)
+AGPLAYER_SPECTRUM_COLOR_SETTER(setSpectrumRgbMiddleColor, spectrumRgbMiddleColor_,
+                               "appearance/spectrumRgbMiddleColor", spectrumRgbMiddleColorChanged)
+AGPLAYER_SPECTRUM_COLOR_SETTER(setSpectrumRgbEndColor, spectrumRgbEndColor_,
+                               "appearance/spectrumRgbEndColor", spectrumRgbEndColorChanged)
+
+#undef AGPLAYER_SPECTRUM_COLOR_SETTER
+
+
+void SettingsController::setReplayGainMode(int value)
+{
+    value = clampValue(value, 0, 2);
+    if (replayGainMode_ == value) return;
+    replayGainMode_ = value;
+    persistValue(QStringLiteral("playback/replayGainMode"), value);
+    emit replayGainModeChanged();
+}
+
 // Audio Tools setters
 void SettingsController::setDefaultOutputDirectory(const QString& value)
 {
@@ -477,14 +580,51 @@ void SettingsController::setOverwritePolicy(int value)
     emit overwritePolicyChanged();
 }
 
-void SettingsController::setDefaultTranscodeFormat(const QString& value)
+void SettingsController::setTranscodeFormat(const QString& value)
 {
-    if (defaultTranscodeFormat_ == value) {
+    const QString normalized = value.trimmed().toUpper();
+    const QString accepted = normalized == QStringLiteral("WAV")
+            || normalized == QStringLiteral("FLAC")
+        ? normalized : QStringLiteral("MP3");
+    if (transcodeFormat_ == accepted) {
         return;
     }
-    defaultTranscodeFormat_ = value;
-    persistValue(QStringLiteral("audioTools/defaultTranscodeFormat"), value);
-    emit defaultTranscodeFormatChanged();
+    transcodeFormat_ = accepted;
+    persistValue(QStringLiteral("audioTools/transcodeFormat"), accepted);
+    emit transcodeFormatChanged();
+}
+
+void SettingsController::setTranscodeBitrateKbps(int value)
+{
+    static const QList<int> allowed = {128, 192, 256, 320};
+    if (!allowed.contains(value) || transcodeBitrateKbps_ == value) {
+        return;
+    }
+    transcodeBitrateKbps_ = value;
+    persistValue(QStringLiteral("audioTools/transcodeBitrateKbps"), value);
+    emit transcodeBitrateKbpsChanged();
+}
+
+void SettingsController::setTranscodeSampleRateHz(int value)
+{
+    static const QList<int> allowed = {
+        44100, 48000, 88200, 96000, 176400, 192000};
+    if (!allowed.contains(value) || transcodeSampleRateHz_ == value) {
+        return;
+    }
+    transcodeSampleRateHz_ = value;
+    persistValue(QStringLiteral("audioTools/transcodeSampleRateHz"), value);
+    emit transcodeSampleRateHzChanged();
+}
+
+void SettingsController::setTranscodeChannels(int value)
+{
+    if ((value != 1 && value != 2) || transcodeChannels_ == value) {
+        return;
+    }
+    transcodeChannels_ = value;
+    persistValue(QStringLiteral("audioTools/transcodeChannels"), value);
+    emit transcodeChannelsChanged();
 }
 
 void SettingsController::setPreserveMetadata(bool value)
@@ -653,13 +793,17 @@ void SettingsController::resetWaveformDefaults()
     setWaveformDensity(2.0);
     setWaveformThickness(1.0);
     setWaveformPeakAlgorithm(0);
-    setWaveformSolidBaseColor(QStringLiteral("#ffffff"));
-    setWaveformSolidProgressColor(QStringLiteral("#ffdd00"));
-    setWaveformRgbBaseColor(QStringLiteral("#e8edf4"));
+    setWaveformSolidBaseColor(QStringLiteral("#9098a6"));
+    setWaveformSolidProgressColor(QStringLiteral("#d27722"));
+    setWaveformRgbBaseColor(QStringLiteral("#00b4a0"));
     setWaveformRgbStartColor(QStringLiteral("#00d4ff"));
     setWaveformRgbMiddleColor(QStringLiteral("#7b2ff7"));
     setWaveformRgbEndColor(QStringLiteral("#e62e9b"));
     setWaveformRgbProgress(true);
+    setWaveformCanvasHeight(78);
+    setWaveformCanvasLocked(true);
+    setSpectrumColorMode(0);
+    setSpectrumSolidColor(QStringLiteral("#0078d4"));
 }
 
 void SettingsController::beginEdit()
@@ -742,7 +886,6 @@ void SettingsController::emitAllChanged()
     emit exclusiveModeChanged();
     emit matchTrackSampleRateChanged();
     emit transitionFadeMsChanged();
-    emit playButtonRgbGlowChanged();
     emit defaultPlaybackModeChanged();
     emit autoReadBpmChanged();
     emit autoReadRatingChanged();
@@ -762,10 +905,22 @@ void SettingsController::emitAllChanged()
     emit waveformRgbEndColorChanged();
     emit waveformRgbProgressChanged();
     emit waveformHoverTimePreviewChanged();
+    emit waveformCanvasHeightChanged();
+    emit waveformCanvasLockedChanged();
+    emit spectrumColorModeChanged();
+    emit spectrumSolidColorChanged();
+    emit spectrumRgbStartColorChanged();
+    emit spectrumRgbMiddleColorChanged();
+    emit spectrumRgbEndColorChanged();
+    emit replayGainModeChanged();
+    emit replayGainClipProtectionChanged();
 
     emit defaultOutputDirectoryChanged();
     emit overwritePolicyChanged();
-    emit defaultTranscodeFormatChanged();
+    emit transcodeFormatChanged();
+    emit transcodeBitrateKbpsChanged();
+    emit transcodeSampleRateHzChanged();
+    emit transcodeChannelsChanged();
     emit preserveMetadataChanged();
     emit keepPitchWhileSpeedChangeChanged();
     emit vocalProtectionChanged();
@@ -831,9 +986,10 @@ static bool removeDirectoryContents(const QString& path)
 
 void SettingsController::rebindFileAssociations()
 {
-    if (editActive_) {
-        return;
-    }
+    // Rebinding is an explicit opt-in action.  It must also work while the
+    // settings transaction is open; otherwise the button silently unregisters
+    // everything when the switch was previously off.
+    setSetAsDefaultPlayer(true);
     applyFileAssociations();
 }
 
@@ -875,7 +1031,7 @@ void SettingsController::clearAllCache()
 
 void SettingsController::openOfficialWebsite()
 {
-    QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/AgPlayer/AgPlayer")));
+    QDesktopServices::openUrl(QUrl(QStringLiteral("https://www.agplayer.com")));
 }
 
 void SettingsController::trimCacheNow()
@@ -950,7 +1106,7 @@ void SettingsController::load()
         settings_.setValue(QStringLiteral("transitionFadeMs"),
                            transitionFadeMs_);
     }
-    playButtonRgbGlow_ = settings_.value(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_).toBool();
+    settings_.remove(QStringLiteral("playButtonRgbGlow"));
     const bool hasStoredPlaybackMode =
         settings_.contains(QStringLiteral("defaultPlaybackMode"));
     const int playbackModeSchema =
@@ -968,6 +1124,9 @@ void SettingsController::load()
     }
     autoReadBpm_ = settings_.value(QStringLiteral("autoReadBpm"), autoReadBpm_).toBool();
     autoReadRating_ = settings_.value(QStringLiteral("autoReadRating"), autoReadRating_).toBool();
+    replayGainMode_ = settings_.value(QStringLiteral("replayGainMode"), replayGainMode_).toInt();
+    replayGainClipProtection_ = settings_.value(
+        QStringLiteral("replayGainClipProtection"), replayGainClipProtection_).toBool();
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
@@ -1004,20 +1163,74 @@ void SettingsController::load()
         settings_.value(QStringLiteral("waveformRgbProgress"),
                         waveformRgbProgress_).toBool();
     waveformHoverTimePreview_ = settings_.value(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_).toBool();
+    waveformCanvasHeight_ = settings_.value(
+        QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_).toInt();
+    waveformCanvasLocked_ = settings_.value(
+        QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_).toBool();
+    spectrumColorMode_ = settings_.value(
+        QStringLiteral("spectrumColorMode"), spectrumColorMode_).toInt();
+    spectrumSolidColor_ = settings_.value(
+        QStringLiteral("spectrumSolidColor"), spectrumSolidColor_).toString();
+    spectrumRgbStartColor_ = settings_.value(
+        QStringLiteral("spectrumRgbStartColor"), spectrumRgbStartColor_).toString();
+    spectrumRgbMiddleColor_ = settings_.value(
+        QStringLiteral("spectrumRgbMiddleColor"), spectrumRgbMiddleColor_).toString();
+    spectrumRgbEndColor_ = settings_.value(
+        QStringLiteral("spectrumRgbEndColor"), spectrumRgbEndColor_).toString();
+    const int waveformPaletteSchema =
+        settings_.value(QStringLiteral("waveformPaletteSchema"), 1).toInt();
+    if (waveformPaletteSchema < 2) {
+        if (normalizedColor(waveformSolidProgressColor_)
+            == QStringLiteral("#e4007f")) {
+            waveformSolidProgressColor_ = QStringLiteral("#d27722");
+            settings_.setValue(QStringLiteral("waveformSolidProgressColor"),
+                               waveformSolidProgressColor_);
+        }
+        if (normalizedColor(waveformRgbBaseColor_)
+            == QStringLiteral("#9098a6")) {
+            waveformRgbBaseColor_ = QStringLiteral("#00b4a0");
+            settings_.setValue(QStringLiteral("waveformRgbBaseColor"),
+                               waveformRgbBaseColor_);
+        }
+        if (normalizedColor(spectrumSolidColor_)
+            == QStringLiteral("#e62e9b")) {
+            spectrumSolidColor_ = QStringLiteral("#0078d4");
+            settings_.setValue(QStringLiteral("spectrumSolidColor"),
+                               spectrumSolidColor_);
+        }
+        settings_.setValue(QStringLiteral("waveformPaletteSchema"), 2);
+    }
+    for (const QString& obsoleteKey : {
+             QStringLiteral("spectrumHeight"),
+             QStringLiteral("spectrumDensity"),
+             QStringLiteral("spectrumBarWidth"),
+             QStringLiteral("spectrumAttack"),
+             QStringLiteral("spectrumRelease")}) {
+        settings_.remove(obsoleteKey);
+    }
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("audioTools"));
     const bool hasDefaultOutputDirectory =
         settings_.contains(QStringLiteral("defaultOutputDirectory"));
-    defaultOutputDirectory_ =
+    const QString storedOutputDirectory =
         settings_
             .value(QStringLiteral("defaultOutputDirectory"),
                    legacyDefaultExportDirectory.isEmpty()
                        ? defaultOutputDirectory_
                        : legacyDefaultExportDirectory)
             .toString();
-    if (!hasDefaultOutputDirectory
-        && !legacyDefaultExportDirectory.isEmpty()) {
+    const QString oldBuiltInExportDirectory =
+        QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+        + QStringLiteral("/AgPlayer_Export");
+    const bool usesOldBuiltInDirectory =
+        QDir::cleanPath(storedOutputDirectory)
+        == QDir::cleanPath(oldBuiltInExportDirectory);
+    defaultOutputDirectory_ = usesOldBuiltInDirectory
+        ? defaultExportDir() : storedOutputDirectory;
+    if (usesOldBuiltInDirectory
+        || (!hasDefaultOutputDirectory
+            && !legacyDefaultExportDirectory.isEmpty())) {
         settings_.setValue(QStringLiteral("defaultOutputDirectory"),
                            defaultOutputDirectory_);
     }
@@ -1028,7 +1241,47 @@ void SettingsController::load()
                 + defaultOutputDirectory_);
     }
     overwritePolicy_ = settings_.value(QStringLiteral("overwritePolicy"), overwritePolicy_).toInt();
-    defaultTranscodeFormat_ = settings_.value(QStringLiteral("defaultTranscodeFormat"), defaultTranscodeFormat_).toString();
+    const bool hasSplitTranscodeSettings =
+        settings_.contains(QStringLiteral("transcodeFormat"))
+        || settings_.contains(QStringLiteral("transcodeBitrateKbps"))
+        || settings_.contains(QStringLiteral("transcodeSampleRateHz"))
+        || settings_.contains(QStringLiteral("transcodeChannels"));
+    const QString legacyTranscodePreset =
+        settings_.value(QStringLiteral("defaultTranscodeFormat")).toString();
+    transcodeFormat_ =
+        settings_.value(QStringLiteral("transcodeFormat"), transcodeFormat_).toString();
+    transcodeBitrateKbps_ =
+        settings_.value(QStringLiteral("transcodeBitrateKbps"),
+                        transcodeBitrateKbps_).toInt();
+    transcodeSampleRateHz_ =
+        settings_.value(QStringLiteral("transcodeSampleRateHz"),
+                        transcodeSampleRateHz_).toInt();
+    transcodeChannels_ =
+        settings_.value(QStringLiteral("transcodeChannels"),
+                        transcodeChannels_).toInt();
+    if (!hasSplitTranscodeSettings && !legacyTranscodePreset.isEmpty()) {
+        const QString preset = legacyTranscodePreset.toUpper();
+        transcodeFormat_ = preset.startsWith(QStringLiteral("WAV"))
+            ? QStringLiteral("WAV")
+            : preset.startsWith(QStringLiteral("FLAC"))
+                ? QStringLiteral("FLAC") : QStringLiteral("MP3");
+        transcodeBitrateKbps_ = preset.contains(QStringLiteral("128KBPS")) ? 128
+            : preset.contains(QStringLiteral("192KBPS")) ? 192
+            : preset.contains(QStringLiteral("256KBPS")) ? 256 : 320;
+        transcodeSampleRateHz_ = preset.contains(QStringLiteral("96KHZ")) ? 96000
+            : preset.contains(QStringLiteral("48KHZ")) ? 48000 : 44100;
+        transcodeChannels_ = preset.contains(QStringLiteral("MONO")) ? 1 : 2;
+        settings_.setValue(QStringLiteral("transcodeFormat"), transcodeFormat_);
+        settings_.setValue(QStringLiteral("transcodeBitrateKbps"),
+                           transcodeBitrateKbps_);
+        settings_.setValue(QStringLiteral("transcodeSampleRateHz"),
+                           transcodeSampleRateHz_);
+        settings_.setValue(QStringLiteral("transcodeChannels"),
+                           transcodeChannels_);
+    }
+    if (!legacyTranscodePreset.isEmpty()) {
+        settings_.remove(QStringLiteral("defaultTranscodeFormat"));
+    }
     preserveMetadata_ = settings_.value(QStringLiteral("preserveMetadata"), preserveMetadata_).toBool();
     keepPitchWhileSpeedChange_ = settings_.value(QStringLiteral("keepPitchWhileSpeedChange"), keepPitchWhileSpeedChange_).toBool();
     vocalProtection_ = settings_.value(QStringLiteral("vocalProtection"), vocalProtection_).toBool();
@@ -1038,6 +1291,18 @@ void SettingsController::load()
     hkPlayPause_ = settings_.value(QStringLiteral("playPause"), hkPlayPause_).toString();
     hkPrevNext_ = settings_.value(QStringLiteral("prevNext"), hkPrevNext_).toString();
     hkVolumeUpDown_ = settings_.value(QStringLiteral("volumeUpDown"), hkVolumeUpDown_).toString();
+    if (hkPlayPause_ == QStringLiteral("Global + Space")) {
+        hkPlayPause_ = QStringLiteral("MediaPlayPause");
+        settings_.setValue(QStringLiteral("playPause"), hkPlayPause_);
+    }
+    if (hkPrevNext_ == QStringLiteral("Global + Left / Global + Right")) {
+        hkPrevNext_ = QStringLiteral("MediaPrevTrack / MediaNextTrack");
+        settings_.setValue(QStringLiteral("prevNext"), hkPrevNext_);
+    }
+    if (hkVolumeUpDown_ == QStringLiteral("Global + Up / Global + Down")) {
+        hkVolumeUpDown_ = QStringLiteral("VolumeUp / VolumeDown");
+        settings_.setValue(QStringLiteral("volumeUpDown"), hkVolumeUpDown_);
+    }
     hkToggleMiniPlayer_ = settings_.value(QStringLiteral("toggleMiniPlayer"), hkToggleMiniPlayer_).toString();
     hkSearch_ = settings_.value(QStringLiteral("search"), hkSearch_).toString();
     hkWaveformMode_ = settings_.value(QStringLiteral("waveformMode"), hkWaveformMode_).toString();
@@ -1045,9 +1310,21 @@ void SettingsController::load()
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("cache"));
-    cacheDirectory_ = settings_.value(QStringLiteral("directory"), QString()).toString();
-    if (cacheDirectory_.isEmpty()) {
+    const QString storedCacheDirectory =
+        settings_.value(QStringLiteral("directory"), QString()).toString();
+    const QString oldBuiltInCacheDirectory =
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+        + QStringLiteral("/waveform");
+    const bool usesOldBuiltInCacheDirectory =
+        !storedCacheDirectory.isEmpty()
+        && QDir::cleanPath(storedCacheDirectory)
+            == QDir::cleanPath(oldBuiltInCacheDirectory);
+    cacheDirectory_ = storedCacheDirectory;
+    if (cacheDirectory_.isEmpty() || usesOldBuiltInCacheDirectory) {
         cacheDirectory_ = defaultCacheDirectory();
+        if (usesOldBuiltInCacheDirectory) {
+            settings_.setValue(QStringLiteral("directory"), cacheDirectory_);
+        }
         if (!QDir().mkpath(cacheDirectory_)) {
             RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
                 QStringLiteral("Failed to create default cache directory: ") + cacheDirectory_);
@@ -1068,25 +1345,63 @@ void SettingsController::load()
     waveformDensity_ = quantize(waveformDensity_, 0.5, 5.0, 0.5);
     waveformThickness_ = quantize(waveformThickness_, 0.3, 3.0, 0.1);
     waveformPeakAlgorithm_ = clampValue(waveformPeakAlgorithm_, 0, 1);
+    waveformCanvasHeight_ = clampValue(waveformCanvasHeight_, 48, 84);
+    spectrumColorMode_ = clampValue(spectrumColorMode_, 0, 1);
+    replayGainMode_ = clampValue(replayGainMode_, 0, 2);
     const auto validOr = [](const QString& value, const QString& fallback) {
         const QString normalized = normalizedColor(value);
         return normalized.isEmpty() ? fallback : normalized;
     };
     waveformSolidBaseColor_ =
-        validOr(waveformSolidBaseColor_, QStringLiteral("#ffffff"));
+        validOr(waveformSolidBaseColor_, QStringLiteral("#9098a6"));
     waveformSolidProgressColor_ =
-        validOr(waveformSolidProgressColor_, QStringLiteral("#ffdd00"));
+        validOr(waveformSolidProgressColor_, QStringLiteral("#d27722"));
     waveformRgbBaseColor_ =
-        validOr(waveformRgbBaseColor_, QStringLiteral("#e8edf4"));
+        validOr(waveformRgbBaseColor_, QStringLiteral("#00b4a0"));
     waveformRgbStartColor_ =
         validOr(waveformRgbStartColor_, QStringLiteral("#00d4ff"));
     waveformRgbMiddleColor_ =
         validOr(waveformRgbMiddleColor_, QStringLiteral("#7b2ff7"));
     waveformRgbEndColor_ =
         validOr(waveformRgbEndColor_, QStringLiteral("#e62e9b"));
+    spectrumSolidColor_ =
+        validOr(spectrumSolidColor_, QStringLiteral("#0078d4"));
+    spectrumRgbStartColor_ =
+        validOr(spectrumRgbStartColor_, QStringLiteral("#00d4ff"));
+    spectrumRgbMiddleColor_ =
+        validOr(spectrumRgbMiddleColor_, QStringLiteral("#7b2ff7"));
+    spectrumRgbEndColor_ =
+        validOr(spectrumRgbEndColor_, QStringLiteral("#e62e9b"));
     overwritePolicy_ = clampValue(overwritePolicy_, 0, 1);
+    transcodeFormat_ = transcodeFormat_.trimmed().toUpper();
+    if (transcodeFormat_ != QStringLiteral("MP3")
+        && transcodeFormat_ != QStringLiteral("WAV")
+        && transcodeFormat_ != QStringLiteral("FLAC")) {
+        transcodeFormat_ = QStringLiteral("MP3");
+    }
+    if (!QList<int>{128, 192, 256, 320}.contains(transcodeBitrateKbps_)) {
+        transcodeBitrateKbps_ = 320;
+    }
+    if (!QList<int>{44100, 48000, 88200, 96000, 176400, 192000}
+             .contains(transcodeSampleRateHz_)) {
+        transcodeSampleRateHz_ = 44100;
+    }
+    transcodeChannels_ = transcodeChannels_ == 1 ? 1 : 2;
     cacheSizeLimitMB_ = std::max(cacheSizeLimitMB_, 100);
 
+}
+
+bool SettingsController::openDefaultAppsSettings()
+{
+#ifdef Q_OS_WIN
+    // Windows only lets the user choose the final default application.  Make
+    // sure AgPlayer is registered first so it is present on that page.
+    rebindFileAssociations();
+    return QDesktopServices::openUrl(
+        QUrl(QStringLiteral("ms-settings:defaultapps?registeredAppUser=AgPlayer")));
+#else
+    return false;
+#endif
 }
 
 void SettingsController::saveAll()
@@ -1109,11 +1424,12 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("matchTrackSampleRate"),
                  matchTrackSampleRate_);
     persistValue(QStringLiteral("transitionFadeMs"), transitionFadeMs_);
-    persistValue(QStringLiteral("playButtonRgbGlow"), playButtonRgbGlow_);
     persistValue(QStringLiteral("defaultPlaybackMode"), defaultPlaybackMode_);
     persistValue(QStringLiteral("modeSchemaVersion"), 2);
     persistValue(QStringLiteral("autoReadBpm"), autoReadBpm_);
     persistValue(QStringLiteral("autoReadRating"), autoReadRating_);
+    persistValue(QStringLiteral("replayGainMode"), replayGainMode_);
+    persistValue(QStringLiteral("replayGainClipProtection"), replayGainClipProtection_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
@@ -1134,12 +1450,24 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("waveformRgbEndColor"), waveformRgbEndColor_);
     persistValue(QStringLiteral("waveformRgbProgress"), waveformRgbProgress_);
     persistValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
+    persistValue(QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_);
+    persistValue(QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_);
+    persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
+    persistValue(QStringLiteral("spectrumSolidColor"), spectrumSolidColor_);
+    persistValue(QStringLiteral("spectrumRgbStartColor"), spectrumRgbStartColor_);
+    persistValue(QStringLiteral("spectrumRgbMiddleColor"), spectrumRgbMiddleColor_);
+    persistValue(QStringLiteral("spectrumRgbEndColor"), spectrumRgbEndColor_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("audioTools"));
     persistValue(QStringLiteral("defaultOutputDirectory"), defaultOutputDirectory_);
     persistValue(QStringLiteral("overwritePolicy"), overwritePolicy_);
-    persistValue(QStringLiteral("defaultTranscodeFormat"), defaultTranscodeFormat_);
+    persistValue(QStringLiteral("transcodeFormat"), transcodeFormat_);
+    persistValue(QStringLiteral("transcodeBitrateKbps"),
+                 transcodeBitrateKbps_);
+    persistValue(QStringLiteral("transcodeSampleRateHz"),
+                 transcodeSampleRateHz_);
+    persistValue(QStringLiteral("transcodeChannels"), transcodeChannels_);
     persistValue(QStringLiteral("preserveMetadata"), preserveMetadata_);
     persistValue(QStringLiteral("keepPitchWhileSpeedChange"), keepPitchWhileSpeedChange_);
     persistValue(QStringLiteral("vocalProtection"), vocalProtection_);
@@ -1180,7 +1508,6 @@ void SettingsController::restoreDefaults()
     exclusiveMode_ = false;
     matchTrackSampleRate_ = true;
     transitionFadeMs_ = 200;
-    playButtonRgbGlow_ = true;
     defaultPlaybackMode_ = 3;
     autoReadBpm_ = true;
     autoReadRating_ = true;
@@ -1192,25 +1519,37 @@ void SettingsController::restoreDefaults()
     waveformDensity_ = 2.0;
     waveformThickness_ = 1.0;
     waveformPeakAlgorithm_ = 0;
-    waveformSolidBaseColor_ = QStringLiteral("#ffffff");
-    waveformSolidProgressColor_ = QStringLiteral("#ffdd00");
-    waveformRgbBaseColor_ = QStringLiteral("#e8edf4");
+    waveformSolidBaseColor_ = QStringLiteral("#9098a6");
+    waveformSolidProgressColor_ = QStringLiteral("#d27722");
+    waveformRgbBaseColor_ = QStringLiteral("#00b4a0");
     waveformRgbStartColor_ = QStringLiteral("#00d4ff");
     waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     waveformRgbEndColor_ = QStringLiteral("#e62e9b");
-    waveformRgbProgress_ = true;
+    waveformRgbProgress_ = false;
     waveformHoverTimePreview_ = true;
+    waveformCanvasHeight_ = 78;
+    waveformCanvasLocked_ = true;
+    spectrumColorMode_ = 0;
+    spectrumSolidColor_ = QStringLiteral("#0078d4");
+    spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
+    spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+    spectrumRgbEndColor_ = QStringLiteral("#e62e9b");
+    replayGainMode_ = 0;
+    replayGainClipProtection_ = true;
 
     defaultOutputDirectory_ = defaultExportDir();
     overwritePolicy_ = 0;
-    defaultTranscodeFormat_ = QStringLiteral("MP3 / 320kbps / 44.1kHz / Stereo");
+    transcodeFormat_ = QStringLiteral("MP3");
+    transcodeBitrateKbps_ = 320;
+    transcodeSampleRateHz_ = 44100;
+    transcodeChannels_ = 2;
     preserveMetadata_ = true;
     keepPitchWhileSpeedChange_ = true;
     vocalProtection_ = true;
 
-    hkPlayPause_ = QStringLiteral("Global + Space");
-    hkPrevNext_ = QStringLiteral("Global + Left / Global + Right");
-    hkVolumeUpDown_ = QStringLiteral("Global + Up / Global + Down");
+    hkPlayPause_ = QStringLiteral("MediaPlayPause");
+    hkPrevNext_ = QStringLiteral("MediaPrevTrack / MediaNextTrack");
+    hkVolumeUpDown_ = QStringLiteral("VolumeUp / VolumeDown");
     hkToggleMiniPlayer_ = QStringLiteral("Alt + P");
     hkSearch_ = QStringLiteral("Ctrl + F");
     hkWaveformMode_ = QStringLiteral("Tab");
@@ -1256,14 +1595,19 @@ QString SettingsController::defaultMusicDirectory()
 
 QString SettingsController::defaultCacheDirectory()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-           + QStringLiteral("/waveform");
+    QString documents =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    if (documents.isEmpty()) {
+        documents = QDir::homePath() + QStringLiteral("/Documents");
+    }
+    return documents + QStringLiteral("/AgPlayer/Cache");
 }
 
 QString SettingsController::defaultExportDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
-           + QStringLiteral("/AgPlayer_Export");
+    const QString desktop =
+        QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    return desktop.isEmpty() ? QDir::homePath() : desktop;
 }
 
 QString SettingsController::validatedLanguage(const QString& value)

@@ -118,21 +118,21 @@ QString RuntimeLog::mapResult(ag_result result)
     case AG_OK:
         return {};
     case AG_INVALID_ARGUMENT:
-        return QStringLiteral("\xe5\x8f\x82\xe6\x95\xb0\xe6\x97\xa0\xe6\x95\x88");
+        return QStringLiteral("参数无效");
     case AG_IO_ERROR:
-        return QStringLiteral("\xe6\x97\xa0\xe6\xb3\x95\xe8\xaf\xbb\xe5\x8f\x96\xe6\x96\x87\xe4\xbb\xb6");
+        return QStringLiteral("无法读取文件");
     case AG_UNSUPPORTED_FORMAT:
-        return QStringLiteral("\xe4\xb8\x8d\xe6\x94\xaf\xe6\x8c\x81\xe7\x9a\x84\xe9\x9f\xb3\xe9\xa2\x91\xe6\xa0\xbc\xe5\xbc\x8f");
+        return QStringLiteral("不支持的音频格式");
     case AG_DECODE_ERROR:
-        return QStringLiteral("\xe8\xa7\xa3\xe7\xa0\x81\xe5\xa4\xb1\xe8\xb4\xa5");
+        return QStringLiteral("解码失败");
     case AG_DEVICE_ERROR:
-        return QStringLiteral("\xe9\x9f\xb3\xe9\xa2\x91\xe8\xae\xbe\xe5\xa4\x87\xe9\x94\x99\xe8\xaf\xaf");
+        return QStringLiteral("音频设备错误");
     case AG_CANCELLED:
-        return QStringLiteral("\xe6\x93\x8d\xe4\xbd\x9c\xe5\xb7\xb2\xe5\x8f\x96\xe6\xb6\x88");
+        return QStringLiteral("操作已取消");
     case AG_INTERNAL_ERROR:
-        return QStringLiteral("\xe5\x86\x85\xe9\x83\xa8\xe9\x94\x99\xe8\xaf\xaf");
+        return QStringLiteral("内部错误");
     }
-    return QStringLiteral("\xe6\x9c\xaa\xe7\x9f\xa5\xe9\x94\x99\xe8\xaf\xaf");
+    return QStringLiteral("未知错误");
 }
 
 QString RuntimeLog::severityFor(QtMsgType type)

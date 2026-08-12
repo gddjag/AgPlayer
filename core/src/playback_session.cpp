@@ -1,5 +1,6 @@
 #include "playback_session.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -22,6 +23,32 @@ void PlaybackSession::set_queue(std::vector<std::string> paths,
     index_.store(start_index, std::memory_order_release);
     state_ = PlaybackState::Stopped;
     error_.clear();
+}
+
+bool PlaybackSession::queue_next(std::string path)
+{
+    if (path.empty() || paths_.empty()) {
+        return false;
+    }
+
+    std::size_t current = index_.load(std::memory_order_acquire);
+    const auto found = std::find(paths_.begin(), paths_.end(), path);
+    if (found != paths_.end()) {
+        const std::size_t existing =
+            static_cast<std::size_t>(std::distance(paths_.begin(), found));
+        if (existing == current) {
+            return false;
+        }
+        paths_.erase(found);
+        if (existing < current) {
+            --current;
+        }
+    }
+
+    paths_.insert(paths_.begin() + static_cast<std::ptrdiff_t>(current + 1U),
+                  std::move(path));
+    index_.store(current, std::memory_order_release);
+    return true;
 }
 
 void PlaybackSession::clear() noexcept

@@ -14,8 +14,12 @@
 #include <type_traits>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <fcntl.h>
@@ -30,6 +34,8 @@ constexpr std::uint32_t cache_version_v1 = 1U;
 constexpr std::uint32_t cache_version_v2 = 2U;
 constexpr std::uint64_t v1_header_size = 32U;
 constexpr std::uint64_t v2_header_size = 88U;
+constexpr std::uint64_t v2_timeline_header_size = 104U;
+constexpr std::uint64_t v2_timeline_metadata_flag = 1U;
 constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t fnv_prime = 1'099'511'628'211ULL;
 
@@ -432,7 +438,7 @@ bool WaveformCache::save_v2(const std::filesystem::path& cache_path,
         const std::uint64_t float_bytes =
             (mix_count + bass_count + mid_count + high_count) * sizeof(float);
         if (float_bytes > std::numeric_limits<std::uint64_t>::max()
-                                - v2_header_size) {
+                                - v2_timeline_header_size) {
             return false;
         }
 
@@ -449,8 +455,11 @@ bool WaveformCache::save_v2(const std::filesystem::path& cache_path,
             || !write_little_endian(output, high_count)
             || !write_double(output, data.bpm)
             || !write_little_endian(output, cue_count)
-            || !write_little_endian(output, std::uint64_t{0U}) // flags
-            || !write_little_endian(output, std::uint64_t{0U})) { // reserved
+            || !write_little_endian(output, v2_timeline_metadata_flag)
+            || !write_little_endian(output, data.duration_ms)
+            || !write_little_endian(output, data.total_samples)
+            || !write_little_endian(
+                output, static_cast<std::uint64_t>(data.sample_rate))) {
             output.close();
             std::filesystem::remove(temp_path, cleanup_error);
             return false;
@@ -551,6 +560,19 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
             return false;
         }
 
+        const bool has_timeline_metadata =
+            (flags & v2_timeline_metadata_flag) != 0U;
+        const std::uint64_t header_size = has_timeline_metadata
+            ? v2_timeline_header_size : v2_header_size;
+        std::uint64_t total_samples = 0U;
+        std::uint64_t sample_rate = 0U;
+        if (has_timeline_metadata
+            && (!read_little_endian(input, total_samples)
+                || !read_little_endian(input, sample_rate)
+                || sample_rate > std::numeric_limits<std::uint32_t>::max())) {
+            return false;
+        }
+
         const std::uint64_t max_count =
             std::numeric_limits<std::uint64_t>::max() / sizeof(float);
         if (mix_count > max_count || bass_count > max_count
@@ -563,13 +585,16 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
         const std::uint64_t float_bytes =
             (mix_count + bass_count + mid_count + high_count) * sizeof(float);
         if (float_bytes > std::numeric_limits<std::uint64_t>::max()
-                                - v2_header_size
-            || file_size < v2_header_size + float_bytes) {
+                                - header_size
+            || file_size < header_size + float_bytes) {
             return false;
         }
 
         WaveformCacheData loaded;
         loaded.bpm = bpm;
+        loaded.duration_ms = reserved;
+        loaded.total_samples = total_samples;
+        loaded.sample_rate = static_cast<std::uint32_t>(sample_rate);
         if (!read_layer(input, mix_count, loaded.mix)
             || !read_layer(input, bass_count, loaded.bass)
             || !read_layer(input, mid_count, loaded.mid)
@@ -577,7 +602,7 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
             return false;
         }
 
-        const std::uint64_t payload_bytes = v2_header_size + float_bytes;
+        const std::uint64_t payload_bytes = header_size + float_bytes;
         const std::uint64_t remaining =
             static_cast<std::uint64_t>(file_size) - payload_bytes;
 

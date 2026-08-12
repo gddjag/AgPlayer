@@ -4,86 +4,84 @@ import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
-    id: sidebar
-    color: Theme.panel
-    implicitWidth: 200
-    radius: Theme.radiusSm
-    border.color: Theme.border
-    border.width: 1
+    id: navigation
+    objectName: "audioToolsTopNav"
+    color: "transparent"
+    implicitHeight: 38
 
-    property int currentTool: 1
+    readonly property var toolNames: [
+        qsTr("轻度剪辑"), qsTr("格式转换"),
+        qsTr("元数据修改"), qsTr("文件名处理")
+    ]
+    property int currentTool: 0
     property Window window
     signal toolSelected(int index)
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
-        anchors.topMargin: 12
         spacing: 4
 
         Repeater {
             model: [
-                { name: qsTr("格式转换"), icon: "equalizer-line" },
                 { name: qsTr("轻度剪辑"), icon: "scissors-cut-line" },
-                { name: qsTr("调整速度"), icon: "speed-up-line" },
-                { name: qsTr("升调降调"), icon: "music-2-line" },
-                { name: qsTr("信息修改"), icon: "information-line" }
+                { name: qsTr("格式转换"), icon: "equalizer-line" },
+                { name: qsTr("元数据修改"), icon: "information-line" },
+                { name: qsTr("文件名处理"), icon: "file-copy-line" }
             ]
 
             Button {
-                Layout.fillWidth: true
-                Layout.leftMargin: 0
-                Layout.rightMargin: 10
-                Layout.preferredHeight: 62
+                objectName: "audioToolNavButton"
+                Layout.preferredWidth: index === 2 ? 138 : 128
+                Layout.maximumWidth: Layout.preferredWidth
+                Layout.preferredHeight: 36
+                Layout.maximumHeight: 36
                 flat: true
-                checked: sidebar.currentTool === index
+                checked: navigation.currentTool === index
                 focusPolicy: Qt.StrongFocus
 
                 contentItem: RowLayout {
-                    spacing: 12
-
-                    ToolButton {
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
-                        enabled: false
-                        flat: true
-                        icon.source: Theme.icon(modelData.icon)
-                        icon.color: checked ? Theme.cyan : Theme.iconSecondary
-                        icon.width: 24
-                        icon.height: 24
-                        opacity: checked ? 1.0 : 0.78
+                    spacing: 7
+                    Item { Layout.preferredWidth: 7 }
+                    ThemedIcon {
+                        source: Theme.icon(modelData.icon)
+                        tint: checked ? Theme.cyan : Theme.iconSecondary
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
                     }
-
                     Text {
                         text: modelData.name
                         color: checked ? Theme.primaryText : Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 15
+                        font.pixelSize: 14
                         font.weight: checked ? Font.DemiBold : Font.Normal
-                        Layout.fillWidth: true
                     }
+                    Item { Layout.fillWidth: true }
                 }
 
                 background: Rectangle {
-                    color: checked ? Qt.rgba(0.05, 0.35, 0.95, 0.26)
+                    color: checked ? Qt.rgba(Theme.accent.r,
+                                             Theme.accent.g,
+                                             Theme.accent.b, 0.14)
                                    : (parent.hovered ? Theme.hoverSurface : "transparent")
-                    border.color: checked ? Theme.cyan : "transparent"
-                    border.width: checked ? 1 : 0
+                    border.width: 0
                     radius: Theme.radiusSm
 
                     Rectangle {
                         visible: parent.parent.checked
                         anchors.left: parent.left
-                        anchors.top: parent.top
+                        anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        width: 3
+                        height: 2
                         color: Theme.cyan
                     }
                 }
 
-                onClicked: sidebar.toolSelected(index)
+                onClicked: navigation.toolSelected(index)
             }
         }
 
-        Item { Layout.fillHeight: true }
+        Item { Layout.fillWidth: true }
     }
 }

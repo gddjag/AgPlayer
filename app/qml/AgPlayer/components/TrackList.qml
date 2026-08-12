@@ -55,6 +55,13 @@ ListView {
         return (minutes < 10 ? "0" : "") + minutes + ":"
                 + (total % 60 < 10 ? "0" : "") + total % 60
     }
+    function formatBpm(value) {
+        var bpm = Number(value)
+        if (!isFinite(bpm) || bpm <= 0) return "—"
+        var rounded = Math.round(bpm * 10) / 10
+        return Math.abs(rounded - Math.round(rounded)) < 0.001
+                ? Math.round(rounded).toString() : rounded.toFixed(1)
+    }
     function isCurrentTrack(trackId) { return PlaybackController.currentTrackId === trackId }
     function isSelected(trackId) { return selectedTrackIds.indexOf(trackId) >= 0 }
     function trackIdAt(row) {
@@ -510,7 +517,7 @@ ListView {
                     }
                 }
             }
-            BodyText { objectName: "trackBpmCell"; text: rowItem.bpm > 0 ? Math.round(rowItem.bpm) : "—"; horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
+            BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
             BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
         }
 
@@ -579,16 +586,17 @@ ListView {
             enabled: root.playlistModel.count > 0
             Instantiator {
                 model: root.playlistModel
-                delegate: SystemMenuItem {
+                delegate: ContextMenuAction {
                     required property string playlistId
                     required property string name
                     objectName: "playlistMoveTarget-" + playlistId
                     text: name; enabled: playlistId !== root.selectedCategory
-                    // Use the button activation signal, which is delivered for
-                    // both pointer and keyboard activation in a nested popup.
-                    onClicked: root.customPlaylistSelected
-                               ? root.playlistModel.moveTracks(root.selectedCategory, playlistId, trackMenu.targetTrackIds)
-                               : root.playlistModel.addTracks(playlistId, trackMenu.targetTrackIds)
+                    onActionRequested: root.customPlaylistSelected
+                                       ? root.playlistModel.moveTracks(root.selectedCategory,
+                                                                       playlistId,
+                                                                       trackMenu.targetTrackIds)
+                                       : root.playlistModel.addTracks(playlistId,
+                                                                      trackMenu.targetTrackIds)
                 }
                 onObjectAdded: function(index, object) { moveMenu.insertItem(index, object) }
                 onObjectRemoved: function(index, object) { moveMenu.removeItem(object) }
@@ -602,10 +610,10 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
-            SystemMenuItem { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onClicked: root.openInAudioTool(0) }
-            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
-            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onClicked: root.openInAudioTool(2) }
-            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onClicked: root.openInAudioTool(3) }
+            ContextMenuAction { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onActionRequested: root.openInAudioTool(0) }
+            ContextMenuAction { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onActionRequested: root.openInAudioTool(1) }
+            ContextMenuAction { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onActionRequested: root.openInAudioTool(2) }
+            ContextMenuAction { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onActionRequested: root.openInAudioTool(3) }
         }
         MenuSeparator {}
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }
@@ -644,6 +652,25 @@ ListView {
                    ? Theme.activeSelection : "transparent"
             radius: Theme.radiusSm
         }
+    }
+
+    // MenuItem uses triggered for keyboard activation, while some native
+    // Windows menu paths deliver clicked first.  Funnel both through one
+    // guarded signal so a context-menu command is never ignored or doubled.
+    component ContextMenuAction: SystemMenuItem {
+        property bool dispatching: false
+        signal actionRequested()
+
+        function requestAction() {
+            if (dispatching || !enabled)
+                return
+            dispatching = true
+            actionRequested()
+            Qt.callLater(function() { dispatching = false })
+        }
+
+        onClicked: requestAction()
+        onTriggered: requestAction()
     }
 
     Popup {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,6 +97,7 @@ ag_result ag_player_set_queue(ag_player* player,
                               const char* const* utf8_paths,
                               size_t count,
                               size_t start_index);
+ag_result ag_player_queue_next(ag_player* player, const char* utf8_path);
 ag_result ag_player_play(ag_player* player);
 ag_result ag_player_pause(ag_player* player);
 ag_result ag_player_stop(ag_player* player);
@@ -104,6 +106,8 @@ ag_result ag_player_next(ag_player* player);
 ag_result ag_player_previous(ag_player* player);
 ag_result ag_player_set_mode(ag_player* player, ag_playback_mode mode);
 ag_result ag_player_set_volume(ag_player* player, float volume);
+ag_result ag_player_set_replay_gain(ag_player* player, float gain_db,
+                                    float peak, int clip_protection);
 ag_result ag_player_set_equalizer(ag_player* player,
                                   const ag_equalizer_settings* settings);
 ag_result ag_player_equalizer_status(const ag_player* player,
@@ -145,6 +149,7 @@ ag_result ag_player_set_output_device(ag_player* player,
 int ag_player_exclusive_mode_active(const ag_player* player);
 ag_result ag_player_set_transition_fade_ms(ag_player* player,
                                            int milliseconds);
+ag_result ag_player_set_duration_ms(ag_player* player, long long duration_ms);
 ag_result ag_player_set_match_track_sample_rate(ag_player* player,
                                                  int enabled);
 
@@ -153,6 +158,14 @@ void ag_metadata_destroy(ag_metadata* metadata);
 const char* ag_metadata_title(const ag_metadata* metadata);
 const char* ag_metadata_artist(const ag_metadata* metadata);
 const char* ag_metadata_album(const ag_metadata* metadata);
+const char* ag_metadata_album_artist(const ag_metadata* metadata);
+const char* ag_metadata_track(const ag_metadata* metadata);
+const char* ag_metadata_disc(const ag_metadata* metadata);
+const char* ag_metadata_composer(const ag_metadata* metadata);
+const char* ag_metadata_comment(const ag_metadata* metadata);
+const char* ag_metadata_bpm_tag(const ag_metadata* metadata);
+const char* ag_metadata_copyright(const ag_metadata* metadata);
+const char* ag_metadata_encoder(const ag_metadata* metadata);
 const char* ag_metadata_format(const ag_metadata* metadata);
 int ag_metadata_sample_rate(const ag_metadata* metadata);
 int ag_metadata_channels(const ag_metadata* metadata);
@@ -167,11 +180,11 @@ const char* ag_metadata_genre(const ag_metadata* metadata);
 const char* ag_metadata_lyrics(const ag_metadata* metadata);
 
 /* Write metadata to an audio file using FFmpeg stream copy (no re-encoding).
- * Fields set to NULL are preserved from the source. cover_data is applied
- * only if non-NULL and cover_size > 0. lyrics set to NULL is preserved from
- * the source; pass an empty string to clear existing lyrics. Writes to a temp
- * file then atomically replaces the original. Returns AG_OK on success, or an
- * error code. */
+ * Fields set to NULL are preserved from the source. For cover_data, NULL keeps
+ * the current cover, non-NULL with cover_size 0 clears it, and non-NULL with a
+ * positive size replaces it. lyrics set to NULL is preserved from the source;
+ * pass an empty string to clear existing lyrics. Writes to a temp file then
+ * atomically replaces the original. Returns AG_OK on success, or an error code. */
 ag_result ag_metadata_write(const char* utf8_path,
                             const char* title,
                             const char* artist,
@@ -182,6 +195,24 @@ ag_result ag_metadata_write(const char* utf8_path,
                             const unsigned char* cover_data,
                             size_t cover_size,
                             const char* cover_mime_type);
+ag_result ag_metadata_write_extended(const char* utf8_path,
+                                     const char* title,
+                                     const char* artist,
+                                     const char* album,
+                                     const char* album_artist,
+                                     const char* date,
+                                     const char* genre,
+                                     const char* track,
+                                     const char* disc,
+                                     const char* composer,
+                                     const char* comment,
+                                     const char* bpm,
+                                     const char* copyright,
+                                     const char* encoder,
+                                     const char* lyrics,
+                                     const unsigned char* cover_data,
+                                     size_t cover_size,
+                                     const char* cover_mime_type);
 
 ag_cancel_token* ag_cancel_token_create(void);
 void ag_cancel_token_cancel(ag_cancel_token* token);
@@ -202,6 +233,9 @@ ag_result ag_transcode(const char* input_path,
                        const ag_cancel_token* cancel_token,
                        ag_progress_callback progress_callback,
                        void* user_data);
+
+/* Returns 1 when the linked FFmpeg build contains the named encoder. */
+int ag_encoder_available(const char* codec_name);
 
 /* Extended options for ag_pitch_shift_ex. Set unused fields to 0/NULL. */
 typedef struct ag_pitch_shift_options {
@@ -246,6 +280,8 @@ ag_result ag_pitch_shift(const char* input_path,
 typedef struct ag_transcode_options {
     int volume_normalize;    /* 1 = normalize peak to -1 dBFS before encoding */
     int keep_metadata;       /* 1 = copy input container and audio-stream tags */
+    int bitrate_mode;        /* 0 = constant bitrate, 1 = variable bitrate */
+    int quality;             /* VBR quality 0..100; 75 is the default */
 } ag_transcode_options;
 
 /* Transcode with extended options. Behaves like ag_transcode when options is
@@ -308,6 +344,9 @@ float ag_waveform_layer_peak(const ag_waveform* waveform,
                              ag_waveform_layer layer,
                              size_t index);
 double ag_waveform_bpm(const ag_waveform* waveform);
+uint64_t ag_waveform_duration_ms(const ag_waveform* waveform);
+uint64_t ag_waveform_total_samples(const ag_waveform* waveform);
+int ag_waveform_sample_rate(const ag_waveform* waveform);
 
 /* Analyze the waveform and BPM of an audio file offline.
  * Returns AG_OK on success and fills *out_waveform. *out_bpm is set to the
@@ -364,6 +403,75 @@ ag_result ag_multitrack_edit_ex(size_t track_count,
                                 const int* fade_in_ms,
                                 const int* fade_out_ms,
                                 const double* gain,
+                                const char* output_path,
+                                const ag_cancel_token* cancel_token,
+                                ag_progress_callback progress_callback,
+                                void* user_data);
+
+/* Extended multitrack render with per-track stereo pan (-1.0 left, 0 centre,
+ * +1.0 right). Pass pan=NULL for centred tracks. */
+ag_result ag_multitrack_edit_ex2(size_t track_count,
+                                 const char* const* input_paths,
+                                 const long long* timeline_start_ms,
+                                 const long long* trim_start_ms,
+                                 const long long* trim_end_ms,
+                                 const int* fade_in_ms,
+                                 const int* fade_out_ms,
+                                 const double* gain,
+                                 const double* pan,
+                                 const char* output_path,
+                                 const ag_cancel_token* cancel_token,
+                                 ag_progress_callback progress_callback,
+                                 void* user_data);
+
+typedef struct ag_multitrack_track_v2 {
+    size_t struct_size;
+    uint32_t api_version;
+    const char* input_path;
+    long long timeline_start_ms;
+    long long trim_start_ms;
+    long long trim_end_ms;
+    int fade_in_ms;
+    int fade_out_ms;
+    double gain;
+    double pan;
+    long long timeline_duration_ms;
+    int loop;
+} ag_multitrack_track_v2;
+
+/* Versioned multitrack API. api_version=1 and struct_size=sizeof(struct) are
+ * required. This is the preferred bridge for Qt and future platform adapters. */
+ag_result ag_multitrack_edit_v2(size_t track_count,
+                                const ag_multitrack_track_v2* tracks,
+                                const char* output_path,
+                                const ag_cancel_token* cancel_token,
+                                ag_progress_callback progress_callback,
+                                void* user_data);
+
+typedef struct ag_multitrack_track_v3 {
+    size_t struct_size;
+    uint32_t api_version;
+    const char* input_path;
+    long long timeline_start_sample;
+    long long trim_start_sample;
+    long long trim_end_sample;
+    long long fade_in_samples;
+    long long fade_out_samples;
+    double gain;
+    double pan;
+    long long timeline_duration_samples;
+    int loop;
+    /* 0=linear, 1=equal-power, 2=smooth. Older callers that omit these
+     * trailing fields use equal-power. */
+    int fade_in_curve;
+    int fade_out_curve;
+} ag_multitrack_track_v3;
+
+/* Sample-authoritative multitrack render. Sample positions use the project
+ * sample rate, which is the first non-empty input track's decoded rate.
+ * Set optional trim/fade/duration fields to -1 to use their default. */
+ag_result ag_multitrack_edit_v3(size_t track_count,
+                                const ag_multitrack_track_v3* tracks,
                                 const char* output_path,
                                 const ag_cancel_token* cancel_token,
                                 ag_progress_callback progress_callback,

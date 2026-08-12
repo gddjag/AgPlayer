@@ -12,6 +12,10 @@ add_library(agplayer_core STATIC
     src/pitch_shifter.cpp
     src/playback_session.cpp
     src/transcoder.cpp
+    src/timeline_preview_mixer.cpp
+    src/timeline_preview_mixer.hpp
+    src/time_pitch_engine.cpp
+    src/time_pitch_engine.hpp
     src/waveform_analyzer.cpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
@@ -27,6 +31,6 @@ target_include_directories(agplayer_core SYSTEM
         "${FFMPEG_INCLUDE_DIRS}"
         "${MINIAUDIO_INCLUDE_DIRS}"
 )
-target_link_libraries(agplayer_core PRIVATE ${FFMPEG_LIBRARIES})
+target_link_libraries(agplayer_core PRIVATE ${FFMPEG_LIBRARIES} SoundTouch::SoundTouch)
 
 agplayer_enable_warnings(agplayer_core)

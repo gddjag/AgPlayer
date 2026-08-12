@@ -124,13 +124,20 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
         const QString mainGeometryKey = QStringLiteral("windows/mainGeometry");
         const QString mainGeometryVersionKey =
             QStringLiteral("windows/mainGeometryVersion");
-        if (settings_.value(mainGeometryVersionKey, 0).toInt() < 1) {
+        if (settings_.value(mainGeometryVersionKey, 0).toInt() < 2) {
             QRect geometry = settings_.value(mainGeometryKey).toRect();
             if (geometry.isValid() && geometry.height() == 399) {
                 geometry.setHeight(380);
                 settings_.setValue(mainGeometryKey, geometry);
             }
-            settings_.setValue(mainGeometryVersionKey, 1);
+            // Only migrate exact historical defaults. User-resized windows
+            // remain untouched while the new compact first-run geometry wins.
+            if (geometry.size() == QSize(1036, 321)
+                || geometry.size() == QSize(1228, 380)) {
+                geometry.setSize(QSize(960, 298));
+                settings_.setValue(mainGeometryKey, geometry);
+            }
+            settings_.setValue(mainGeometryVersionKey, 2);
         }
         restoreGeometry(mainWindow, mainGeometryKey);
         const bool usesWindowsPlatform =

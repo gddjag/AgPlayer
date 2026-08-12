@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QVariantList>
 #include <QVariantMap>
 
 #include <atomic>
@@ -20,14 +21,32 @@ struct MetadataEntry {
     QString title;
     QString artist;
     QString album;
+    QString albumArtist;
     QString year;
     QString genre;
+    QString track;
+    QString disc;
+    QString composer;
+    QString comment;
+    QString bpm;
+    QString copyright;
+    QString encoder;
     QString lyrics;
     QString format;
     qint64 durationMs = 0;
     qint64 fileSize = 0;
+    bool hasCover = false;
+    QString coverPreview;
+    QString coverInfo;
     bool hasError = false;
     QString error;
+};
+
+struct MetadataApplySummary {
+    int successCount = 0;
+    int failureCount = 0;
+    QList<MetadataEntry> entries;
+    QVariantList results;
 };
 
 class MetadataEditor final : public QObject {
@@ -36,6 +55,7 @@ class MetadataEditor final : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(int fileCount READ fileCount NOTIFY fileCountChanged)
     Q_PROPERTY(QString coverImage READ coverImage NOTIFY coverImageChanged)
+    Q_PROPERTY(QVariantList results READ results NOTIFY resultsChanged)
 
 public:
     explicit MetadataEditor(QObject* parent = nullptr);
@@ -45,33 +65,18 @@ public:
     bool busy() const noexcept;
     int fileCount() const noexcept;
     QString coverImage() const;
+    QVariantList results() const { return results_; }
 
     Q_INVOKABLE void loadFiles(const QList<QUrl>& urls);
     Q_INVOKABLE QVariantMap entryAt(int index) const;
+    Q_INVOKABLE void removeFiles(const QList<int>& indices);
     Q_INVOKABLE void applyMetadata(const QVariantMap& fields,
                                    const QList<int>& indices);
+    Q_INVOKABLE void preflightMetadata(const QVariantMap& fields,
+                                       const QList<int>& indices);
+    Q_INVOKABLE bool exportResults(const QUrl& destination);
     Q_INVOKABLE void setCoverImage(const QUrl& url);
     Q_INVOKABLE void clearCoverImage();
-    Q_INVOKABLE QStringList previewRename(const QString& prefix,
-                                          const QString& suffix,
-                                          bool autoNumber,
-                                          int numberStart,
-                                          int numberDigits) const;
-    Q_INVOKABLE QVariantList renamePreviewEntries(const QString& prefix,
-                                                  const QString& suffix,
-                                                  bool autoNumber,
-                                                  int numberStart,
-                                                  int numberDigits) const;
-    Q_INVOKABLE QString renameExample(const QString& prefix,
-                                      const QString& suffix,
-                                      bool autoNumber,
-                                      int numberStart,
-                                      int numberDigits) const;
-    Q_INVOKABLE void applyRename(const QString& prefix,
-                                 const QString& suffix,
-                                 bool autoNumber,
-                                 int numberStart,
-                                 int numberDigits);
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void clear();
 
@@ -82,8 +87,8 @@ signals:
     void entriesLoaded();
     void entriesChanged();
     void coverImageChanged();
+    void resultsChanged();
     void metadataApplied(int successCount, int failureCount);
-    void renameApplied(int successCount, int failureCount);
     void errorOccurred(const QString& message);
 
 private:
@@ -91,8 +96,10 @@ private:
     std::atomic<bool> cancelFlag_{false};
     std::atomic<double> progress_{0.0};
     std::atomic<bool> busy_{false};
+    QPointer<QFutureWatcher<QList<QUrl>>> discoveryWatcher_;
     QPointer<QFutureWatcher<QList<MetadataEntry>>> loadWatcher_;
-    QPointer<QFutureWatcher<QPair<int, int>>> operationWatcher_;
+    QPointer<QFutureWatcher<MetadataApplySummary>> operationWatcher_;
+    QVariantList results_;
 
     QString coverPath_;
     QByteArray coverData_;
@@ -100,9 +107,7 @@ private:
 
     void setBusy(bool value);
     void setProgress(double value);
+    void startMetadataLoad(QList<QUrl> expandedUrls);
     void resetCover();
     static QString mimeTypeForImage(const QString& path);
-    QString computeNewName(const QString& original, const QString& prefix,
-                           const QString& suffix, bool autoNumber,
-                           int number, int numberDigits) const;
 };

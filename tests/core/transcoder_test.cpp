@@ -12,6 +12,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <vector>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -100,6 +101,19 @@ float scan_peak(const std::filesystem::path& path)
         }
     } while (!block.end_of_stream);
     return peak;
+}
+
+std::vector<float> decode_samples(const std::filesystem::path& path)
+{
+    agplayer::Decoder decoder;
+    assert(decoder.open(path.string(), 44100, 2) == AG_OK);
+    std::vector<float> samples;
+    agplayer::DecodedAudioBlock block;
+    do {
+        assert(decoder.read(block) == AG_OK);
+        samples.insert(samples.end(), block.samples.begin(), block.samples.end());
+    } while (!block.end_of_stream);
+    return samples;
 }
 
 std::filesystem::path make_stream_tagged_matroska(
@@ -205,6 +219,26 @@ int main(const int argc, char** argv)
     }
     assert(result == AG_OK);
     assert(std::filesystem::exists(happy_output));
+
+    // Lossless output must preserve decoded PCM samples.
+    const std::filesystem::path lossless_output =
+        input_path.parent_path() / "transcoder-lossless.flac";
+    std::filesystem::remove(lossless_output);
+    agplayer::TranscodeConfig lossless_config;
+    lossless_config.output_path = lossless_output.string();
+    lossless_config.codec_name = "flac";
+    error.clear();
+    result = agplayer::transcode(input_path.string(), lossless_config,
+                                 nullptr, nullptr, error);
+    assert(result == AG_OK);
+    const std::vector<float> source_samples = decode_samples(input_path);
+    const std::vector<float> lossless_samples = decode_samples(lossless_output);
+    assert(source_samples.size() == lossless_samples.size());
+    for (std::size_t index = 0; index < source_samples.size(); ++index) {
+        assert(std::abs(source_samples[index] - lossless_samples[index])
+               <= 1.0e-5f);
+    }
+    std::filesystem::remove(lossless_output);
 
     // Failure path: corrupted ADPCM-tagged WAV triggers avcodec_send_packet
     // failure. The tool must return a non-AG_OK status and must not leave a

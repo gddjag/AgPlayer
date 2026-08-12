@@ -206,9 +206,22 @@ bool PlaybackController::applyWaveformDuration(const QString& trackId,
     if (player_ == nullptr) {
         return false;
     }
-    // Do not mutate the player duration from asynchronous waveform analysis.
-    // A late result otherwise changes the click/time axis beneath the user and
-    // makes the colored waveform progress jump to a different pixel.
+    // Full PCM analysis counts the exact decoded frames. Container metadata
+    // can include encoder delay/padding, which stretches every beat on the
+    // waveform when it is used as the visual clock.
+    const ag_result result = ag_player_set_duration_ms(player_, durationMs);
+    if (result != AG_OK) {
+        runCommand(result);
+        return false;
+    }
+    if (durationMs_ != durationMs) {
+        durationMs_ = durationMs;
+        emit durationMsChanged();
+    }
+    if (positionMs_ > durationMs_) {
+        positionMs_ = durationMs_;
+        emit positionMsChanged();
+    }
     return true;
 }
 

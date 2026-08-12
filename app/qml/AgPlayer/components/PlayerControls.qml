@@ -31,7 +31,8 @@ Rectangle {
 
     Timer {
         id: volumeCloseTimer
-        interval: 280
+        objectName: "mainVolumeCloseTimer"
+        interval: 2000
         onTriggered: {
             if (!volumeSlider.pressed && !volumeSlider.activeFocus)
                 root.volumeExpanded = false
@@ -205,6 +206,8 @@ Rectangle {
 
         Item {
             id: volumeControl
+            objectName: "mainVolumeControl"
+            property alias expandedForQa: root.volumeExpanded
             Layout.preferredWidth: root.emptyMode
                                    ? 44 : 44 + volumeSlider.width
                                           + volumePercent.width

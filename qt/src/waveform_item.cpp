@@ -1,4 +1,5 @@
 #include "waveform_item.hpp"
+#include "waveform_coordinate_mapper.hpp"
 
 #include <QHoverEvent>
 #include <QMouseEvent>
@@ -124,7 +125,10 @@ VertexColor mixColor(double normalizedX,
                 played ? 255U : WaveformItem::unplayedAlpha())};
 }
 
-std::size_t computePlayedCount(std::size_t peakCount, qint64 position, qint64 duration)
+std::size_t computePlayedCount(std::size_t peakCount,
+                               qint64 position,
+                               qint64 duration,
+                               qint64 totalSamples)
 {
     if (peakCount == 0U) {
         return 0U;
@@ -135,12 +139,12 @@ std::size_t computePlayedCount(std::size_t peakCount, qint64 position, qint64 du
     if (position <= 0) {
         return 0U;
     }
-    const double playedFraction = std::clamp(
-        static_cast<double>(position) / static_cast<double>(duration), 0.0, 1.0);
+    const qint64 sampleCount = totalSamples > 0 ? totalSamples : duration;
+    const double playedIndex = WaveformCoordinateMapper::timeToPeak(
+        position, duration, sampleCount, static_cast<qsizetype>(peakCount));
     if (peakCount == 1U) {
-        return playedFraction >= 0.5 ? 1U : 0U;
+        return position >= duration / 2 ? 1U : 0U;
     }
-    const double playedIndex = playedFraction * static_cast<double>(peakCount - 1U);
     return std::min(peakCount,
                     static_cast<std::size_t>(std::floor(playedIndex)) + 1U);
 }
@@ -195,22 +199,23 @@ std::size_t renderedSpectrumBarCount(qreal width, qreal devicePixelRatio)
     return std::clamp(forWidth, std::size_t{1U}, std::size_t{1024U});
 }
 
-std::vector<float> resampleValues(const std::vector<float>& values,
-                                  std::size_t pointCount)
+void resampleValues(const std::vector<float>& values,
+                    std::size_t pointCount,
+                    std::vector<float>& result)
 {
-    std::vector<float> result;
     if (values.empty() || pointCount == 0U) {
-        return result;
+        result.clear();
+        return;
     }
     result.resize(pointCount);
     if (values.size() == pointCount) {
         std::copy(values.begin(), values.end(), result.begin());
-        return result;
+        return;
     }
     if (values.size() < pointCount) {
         if (values.size() == 1U) {
             std::fill(result.begin(), result.end(), values.front());
-            return result;
+            return;
         }
         for (std::size_t index = 0U; index < pointCount; ++index) {
             const double sourcePosition = pointCount == 1U
@@ -224,21 +229,28 @@ std::vector<float> resampleValues(const std::vector<float>& values,
             result[index] = static_cast<float>(
                 values[left] + (values[right] - values[left]) * fraction);
         }
-        return result;
+        return;
     }
 
-    const std::size_t bucketSize = values.size() / pointCount;
-    const std::size_t remainder = values.size() % pointCount;
-    std::size_t rawIndex = 0U;
     for (std::size_t index = 0U; index < pointCount; ++index) {
-        const std::size_t end = rawIndex + bucketSize + (index < remainder ? 1U : 0U);
+        // Derive every boundary from the same global fraction. Distributing
+        // all remainder samples into the first buckets compresses the first
+        // part of the song and can move a mid-track beat dozens of pixels.
+        const std::size_t begin = index * values.size() / pointCount;
+        const std::size_t end = (index + 1U) * values.size() / pointCount;
         float bucketMax = 0.0F;
-        for (std::size_t i = rawIndex; i < end; ++i) {
+        for (std::size_t i = begin; i < end; ++i) {
             bucketMax = std::max(bucketMax, values[i]);
         }
         result[index] = bucketMax;
-        rawIndex = end;
     }
+}
+
+std::vector<float> resampleValues(const std::vector<float>& values,
+                                  std::size_t pointCount)
+{
+    std::vector<float> result;
+    resampleValues(values, pointCount, result);
     return result;
 }
 
@@ -299,6 +311,11 @@ public:
     std::size_t peakCount_ = 0;
     std::size_t playedCount_ = 0;
     unsigned char layerMask_ = 0;
+    std::vector<float> mixValues_;
+    std::vector<float> heldSpectrumValues_;
+    std::vector<float> bassValues_;
+    std::vector<float> midValues_;
+    std::vector<float> highValues_;
 };
 
 } // namespace
@@ -321,6 +338,7 @@ void WaveformItem::setPeaks(const QVariantList& peaks)
 {
     auto snapshot = std::make_shared<PeakSnapshot>();
     snapshot->revision = nextRevision_++;
+    snapshot->peakCount = peaks.size();
 
     QVariantList normalizedPeaks;
     normalizedPeaks.reserve(peaks.size());
@@ -422,6 +440,17 @@ void WaveformItem::setLayers(const QVariantMap& layers)
     snapshot->bass = bass->values.empty() ? nullptr : std::move(bass);
     snapshot->mid = mid->values.empty() ? nullptr : std::move(mid);
     snapshot->high = high->values.empty() ? nullptr : std::move(high);
+    snapshot->peakCount = std::max({normalizedMix.size(), normalizedBass.size(),
+                                    normalizedMid.size(), normalizedHigh.size()});
+    snapshot->sampleRate =
+        std::max<qint64>(0, layers.value(QStringLiteral("_sampleRate")).toLongLong());
+    snapshot->totalSamples =
+        std::max<qint64>(0, layers.value(QStringLiteral("_totalSamples")).toLongLong());
+    const qint64 declaredPeakCount =
+        layers.value(QStringLiteral("_peakCount")).toLongLong();
+    if (declaredPeakCount > 0) {
+        snapshot->peakCount = static_cast<qsizetype>(declaredPeakCount);
+    }
 
     layers_ = layers;
     peaks_.clear();
@@ -456,6 +485,24 @@ qreal WaveformItem::position() const
     return static_cast<qreal>(position_);
 }
 
+qreal WaveformItem::cursorPosition() const
+{
+    return static_cast<qreal>(cursorPosition_);
+}
+
+void WaveformItem::setCursorPosition(qreal position)
+{
+    const qint64 integralPosition = std::isfinite(position) ? qRound64(position) : 0;
+    const qint64 clamped = std::clamp(integralPosition, qint64{0},
+                                      std::max(duration_, qint64{0}));
+    if (clamped == cursorPosition_) {
+        return;
+    }
+    cursorPosition_ = clamped;
+    emit cursorPositionChanged();
+    emit waveformCursorXChanged();
+}
+
 void WaveformItem::setPosition(qreal position)
 {
     const qint64 integralPosition = std::isfinite(position) ? qRound64(position) : 0;
@@ -466,6 +513,7 @@ void WaveformItem::setPosition(qreal position)
     }
     position_ = clamped;
     emit positionChanged();
+    emit waveformCursorXChanged();
     update();
 }
 
@@ -483,10 +531,15 @@ void WaveformItem::setDuration(qreal duration)
     }
     duration_ = clamped;
     emit durationChanged();
+    emit waveformCursorXChanged();
 
     if (position_ > duration_) {
         position_ = duration_;
         emit positionChanged();
+    }
+    if (cursorPosition_ > duration_) {
+        cursorPosition_ = duration_;
+        emit cursorPositionChanged();
     }
     if (hoverPosition_ > duration_) {
         setHoverPosition(duration_);
@@ -656,23 +709,53 @@ void WaveformItem::setLineWidth(qreal width)
 
 qint64 WaveformItem::timeForX(qreal x) const
 {
-    if (width() <= 0.0 || duration_ <= 0 || !std::isfinite(x)) {
-        return 0;
-    }
-    if (x <= 0.0) {
-        return 0;
-    }
-    if (x >= width()) {
-        return duration_;
-    }
+    return WaveformCoordinateMapper::pixelToTime(
+        x, renderWidth_ > 0.0 ? renderWidth_ : width(), duration_);
+}
 
-    const long double ratio = static_cast<long double>(x / width());
-    const long double rounded = std::floor(
-        ratio * static_cast<long double>(duration_) + static_cast<long double>(0.5));
-    if (rounded >= static_cast<long double>(duration_)) {
-        return duration_;
+qreal WaveformItem::pixelForTime(qint64 positionMs) const
+{
+    return WaveformCoordinateMapper::timeToPixel(
+        positionMs, duration_, renderWidth_ > 0.0 ? renderWidth_ : width());
+}
+
+qreal WaveformItem::renderWidth() const noexcept
+{
+    return renderWidth_;
+}
+
+qreal WaveformItem::waveformCursorX() const noexcept
+{
+    const qint64 cursor = cursorPosition_ >= 0 ? cursorPosition_ : position_;
+    return WaveformCoordinateMapper::timeToPixel(
+        cursor, duration_, renderWidth_ > 0.0 ? renderWidth_ : width());
+}
+
+qint64 WaveformItem::totalSamples() const noexcept
+{
+    return peakSnapshot_ ? peakSnapshot_->totalSamples : 0;
+}
+
+qint64 WaveformItem::sampleRate() const noexcept
+{
+    return peakSnapshot_ ? peakSnapshot_->sampleRate : 0;
+}
+
+qsizetype WaveformItem::peakCount() const noexcept
+{
+    return peakSnapshot_ ? peakSnapshot_->peakCount : 0;
+}
+
+void WaveformItem::geometryChange(const QRectF& newGeometry,
+                                  const QRectF& oldGeometry)
+{
+    QQuickItem::geometryChange(newGeometry, oldGeometry);
+    const qreal actualRenderWidth = std::max<qreal>(0.0, newGeometry.width());
+    if (!qFuzzyCompare(renderWidth_ + 1.0, actualRenderWidth + 1.0)) {
+        renderWidth_ = actualRenderWidth;
+        emit renderWidthChanged();
+        emit waveformCursorXChanged();
     }
-    return static_cast<qint64>(rounded);
 }
 
 QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
@@ -768,29 +851,50 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             return nullptr;
         }
 
-        node->geometry_.allocate(static_cast<int>(vertexCount));
+        if (node->geometry_.vertexCount() != static_cast<int>(vertexCount)) {
+            node->geometry_.allocate(static_cast<int>(vertexCount));
+        }
         auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
         const float center = static_cast<float>(height() * 0.5);
         const float spectrumBaseline = static_cast<float>(height());
-        const std::size_t playedCount = computePlayedCount(peakCount, position_, duration_);
+        const std::size_t playedCount = computePlayedCount(
+            peakCount, position_, duration_, snapshot->totalSamples);
 
-        std::vector<float> mixValues = hasMix
-                                                 ? resampleValues(snapshot->mix->values, peakCount)
-                                                  : std::vector<float>{};
-        std::vector<float> heldSpectrumValues = visualMode_ == 2
+        if (hasMix) {
+            resampleValues(snapshot->mix->values, peakCount, node->mixValues_);
+        } else {
+            node->mixValues_.clear();
+        }
+        const bool hasHeldSpectrum = visualMode_ == 2
             && snapshot->spectrumPeakHold
-            && !snapshot->spectrumPeakHold->values.empty()
-            ? resampleValues(snapshot->spectrumPeakHold->values, peakCount)
-            : std::vector<float>{};
-        const std::vector<float> bassValues = hasBass
-                                                  ? resampleValues(snapshot->bass->values, peakCount)
-                                                  : std::vector<float>{};
-        const std::vector<float> midValues = hasMid
-                                                 ? resampleValues(snapshot->mid->values, peakCount)
-                                                 : std::vector<float>{};
-        const std::vector<float> highValues = hasHigh
-                                                  ? resampleValues(snapshot->high->values, peakCount)
-                                                  : std::vector<float>{};
+            && !snapshot->spectrumPeakHold->values.empty();
+        if (hasHeldSpectrum) {
+            resampleValues(snapshot->spectrumPeakHold->values, peakCount,
+                           node->heldSpectrumValues_);
+        } else {
+            node->heldSpectrumValues_.clear();
+        }
+        if (hasBass) {
+            resampleValues(snapshot->bass->values, peakCount, node->bassValues_);
+        } else {
+            node->bassValues_.clear();
+        }
+        if (hasMid) {
+            resampleValues(snapshot->mid->values, peakCount, node->midValues_);
+        } else {
+            node->midValues_.clear();
+        }
+        if (hasHigh) {
+            resampleValues(snapshot->high->values, peakCount, node->highValues_);
+        } else {
+            node->highValues_.clear();
+        }
+
+        auto& mixValues = node->mixValues_;
+        auto& heldSpectrumValues = node->heldSpectrumValues_;
+        const auto& bassValues = node->bassValues_;
+        const auto& midValues = node->midValues_;
+        const auto& highValues = node->highValues_;
 
         if (visualMode_ == 2 && !mixValues.empty()) {
             // Input magnitudes are already normalized by the analyser. Per-frame
@@ -976,7 +1080,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         return node;
     }
 
-    const std::size_t newPlayedCount = computePlayedCount(peakCount, position_, duration_);
+    const std::size_t newPlayedCount = computePlayedCount(
+        peakCount, position_, duration_, snapshot->totalSamples);
     const bool colorChanged = node->waveformColor_ != waveformColor_
                               || node->playedCount_ != newPlayedCount;
     if (!colorChanged) {

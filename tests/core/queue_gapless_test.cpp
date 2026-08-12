@@ -14,9 +14,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <thread>
 #include <vector>
 
@@ -112,6 +114,39 @@ float expected_fixture_sample(const std::size_t frame)
         * fixture_amplitude);
 }
 
+std::filesystem::path write_vbr_fixture_with_incorrect_duration(
+    const std::filesystem::path& input)
+{
+    const std::filesystem::path output =
+        std::filesystem::temp_directory_path()
+        / "agplayer-duration-xing-fixture.mp3";
+    std::filesystem::remove(output);
+    const ag_transcode_options options{0, 0, 1, 75};
+    AG_CHECK(ag_transcode_ex(input.string().c_str(), output.string().c_str(),
+                             "libmp3lame", 192'000, 44'100, 2, &options,
+                             nullptr, nullptr, nullptr)
+             == AG_OK);
+
+    std::fstream stream(output, std::ios::in | std::ios::out | std::ios::binary);
+    AG_CHECK(stream.is_open());
+    const std::vector<char> bytes{
+        std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    const std::array<char, 4U> xing{'X', 'i', 'n', 'g'};
+    const auto marker = std::search(bytes.begin(), bytes.end(), xing.begin(), xing.end());
+    AG_CHECK(marker != bytes.end());
+    const std::size_t offset = static_cast<std::size_t>(
+        std::distance(bytes.begin(), marker));
+    AG_CHECK(offset + 12U <= bytes.size());
+    stream.clear();
+    stream.seekp(static_cast<std::streamoff>(offset + 8U));
+    constexpr std::array<char, 4U> inflated_frame_count{
+        '\0', '\0', '\2', '\0'};
+    stream.write(inflated_frame_count.data(),
+                 static_cast<std::streamsize>(inflated_frame_count.size()));
+    stream.close();
+    return output;
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -123,6 +158,33 @@ int main(const int argc, char** argv)
 
     AG_CHECK(argc == 4);
     (void)argc;
+    {
+        const std::filesystem::path vbr_fixture =
+            write_vbr_fixture_with_incorrect_duration(argv[3]);
+        {
+            agplayer::AudioEngine duration_engine(
+                agplayer::AudioBackend::Manual, 65'536U);
+            AG_CHECK(duration_engine.set_queue({vbr_fixture.string()}, 0U) == AG_OK);
+            AG_CHECK(duration_engine.snapshot().duration_ms > 10'000);
+            AG_CHECK(duration_engine.play() == AG_OK);
+            std::array<float, 512U * channels> final_block{};
+            for (int attempt = 0; attempt < 2'000
+                 && duration_engine.snapshot().state != agplayer::EngineState::Stopped;
+                 ++attempt) {
+                if (duration_engine.buffered_frames() > 0U) {
+                    duration_engine.render(final_block.data(), 512U);
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+            const auto final = duration_engine.snapshot();
+            AG_CHECK(final.state == agplayer::EngineState::Stopped);
+            AG_CHECK(final.position_ms < 3'000);
+            AG_CHECK(std::abs(final.duration_ms - final.position_ms) <= 1);
+        }
+        std::filesystem::remove(vbr_fixture);
+    }
+
     agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
     AG_CHECK(engine.set_transition_fade_ms(0) == AG_OK);
     AG_CHECK(engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);

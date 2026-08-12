@@ -275,6 +275,9 @@ add_executable(metadata_writer_test
     core/metadata_writer_test.cpp
 )
 add_dependencies(metadata_writer_test decoder_fixture)
+target_include_directories(metadata_writer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
 target_link_libraries(metadata_writer_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(metadata_writer_test)
@@ -326,29 +329,36 @@ add_test(NAME recovery_test
 set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
 
 foreach(qt_test IN ITEMS
+    filename_processing_test
+    rename_transaction_test
     library_model_test
     library_store_test
     playlist_model_test
     library_manager_controller_test
     library_file_operations_test
+    playback_state_store_test
     import_controller_test
     library_filter_model_test
     playback_controller_test
     window_controller_test
     global_hotkey_manager_test
+    waveform_coordinate_mapper_test
     waveform_item_test
     waveform_provider_test
     shutdown_test
     runtime_log_test
     settings_controller_test
+    replay_gain_scanner_test
     translation_manager_test
     audio_preview_controller_test
     editor_timeline_math_test
     light_editor_controller_test
     audio_tools_end_to_end_test
     file_association_controller_test
+    native_drop_router_test
     equalizer_controller_test
 )
+
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
     target_include_directories(${qt_test} PRIVATE
@@ -364,6 +374,29 @@ foreach(qt_test IN ITEMS
     )
 endforeach()
 
+# WaveformItem owns a QQuickWindow.  Explicitly select offscreen for this
+# visual-unit test without changing the native-drop test's qwindows contract.
+set_tests_properties(waveform_item_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+add_executable(timeline_preview_mixer_test
+    core/timeline_preview_mixer_test.cpp
+)
+add_dependencies(timeline_preview_mixer_test decoder_fixture)
+target_include_directories(timeline_preview_mixer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(timeline_preview_mixer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(timeline_preview_mixer_test)
+add_test(NAME timeline_preview_mixer_test
+    COMMAND timeline_preview_mixer_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(timeline_preview_mixer_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_test(
     NAME translation_catalog_test
     COMMAND "${CMAKE_COMMAND}"
@@ -372,8 +405,28 @@ add_test(
 )
 set_tests_properties(translation_catalog_test PROPERTIES TIMEOUT 10)
 
+add_test(
+    NAME source_encoding_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckSourceEncoding.cmake"
+)
+set_tests_properties(source_encoding_test PROPERTIES TIMEOUT 10)
+
 set_tests_properties(light_editor_controller_test PROPERTIES TIMEOUT 60)
-set_tests_properties(audio_tools_end_to_end_test PROPERTIES TIMEOUT 120)
+set_tests_properties(import_controller_test PROPERTIES
+    # The 10K indexing contract itself permits up to 30 seconds.  The CTest
+    # watchdog must not terminate that performance test at the old 10-second
+    # generic default.
+    TIMEOUT 35
+)
+set_tests_properties(audio_tools_end_to_end_test PROPERTIES
+    TIMEOUT 120
+    # Metadata writes replace files atomically.  Run this stateful integration
+    # suite in a dedicated CTest process to avoid concurrent Qt/FFmpeg global
+    # state from other UI tests.
+    RUN_SERIAL TRUE
+)
 set_tests_properties(shutdown_test PROPERTIES TIMEOUT 30)
 set_tests_properties(runtime_log_test PROPERTIES TIMEOUT 30)
 
@@ -420,7 +473,7 @@ agplayer_enable_warnings(qml_main_window_test)
 add_dependencies(qml_main_window_test decoder_fixture)
 add_test(NAME qml_main_window_test COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml)
 set_tests_properties(qml_main_window_test PROPERTIES
-    TIMEOUT 10
+    TIMEOUT 20
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
@@ -493,15 +546,23 @@ target_compile_definitions(qml_light_editor_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
 )
 agplayer_enable_warnings(qml_light_editor_test)
+add_dependencies(qml_light_editor_test decoder_fixture)
 add_test(NAME qml_light_editor_test COMMAND qml_light_editor_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_light_editor.qml)
 set_tests_properties(qml_light_editor_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    # Keep the QML contract suite hermetic.  On this Windows build the native
+    # platform plugin can fail before QuickTest starts, whereas its layout and
+    # state assertions do not require a desktop compositor.
+    TIMEOUT 120
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+
 target_include_directories(import_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/tests/core"
+)
+target_include_directories(waveform_provider_test PRIVATE
     "${CMAKE_SOURCE_DIR}/tests/core"
 )
 
@@ -521,8 +582,20 @@ set_tests_properties(waveform_provider_test PROPERTIES
 set_tests_properties(window_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+set_tests_properties(native_drop_router_test PROPERTIES
+    # This test opens a native QWindow and posts WM_DROPFILES to its HWND.
+    # It must not compete with the offscreen QML windows used by the parallel
+    # UI tests, otherwise Windows can reject the temporary exposed surface.
+    RUN_SERIAL TRUE
+)
 set_tests_properties(settings_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+add_dependencies(replay_gain_scanner_test decoder_fixture)
+set_tests_properties(replay_gain_scanner_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
 add_executable(library_stress_test
@@ -558,3 +631,53 @@ set_tests_properties(library_model_stress_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
+
+if (WIN32)
+    add_test(
+        NAME audio_tools_layout_contract_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/audio_tools_layout_contract_test.ps1
+                -SourceRoot ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(audio_tools_layout_contract_test PROPERTIES TIMEOUT 10)
+
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_test(
+            NAME debug_runtime_deployment_test
+            COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                    -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/debug_runtime_deployment_test.ps1
+                    -AppPath $<TARGET_FILE:AgPlayer>
+        )
+        set_tests_properties(debug_runtime_deployment_test PROPERTIES TIMEOUT 10)
+    endif()
+
+    add_test(
+        NAME runtime_deployment_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/runtime_deployment_test.ps1
+                -AppPath $<TARGET_FILE:AgPlayer>
+    )
+    set_tests_properties(runtime_deployment_test PROPERTIES TIMEOUT 10)
+
+    add_test(
+        NAME single_instance_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/single_instance_test.ps1
+                -AppPath $<TARGET_FILE:AgPlayer>
+                -FixturePath ${SINE_WAV_FIXTURE}
+    )
+    set_tests_properties(single_instance_test PROPERTIES
+        TIMEOUT 20
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+    )
+
+    add_test(
+        NAME installer_contract_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/installer_contract_test.ps1
+    )
+    set_tests_properties(installer_contract_test PROPERTIES
+        ENVIRONMENT "AGPLAYER_INSTALLER_SCRIPT=${CMAKE_SOURCE_DIR}/installer/AgPlayer.iss"
+    )
+endif()

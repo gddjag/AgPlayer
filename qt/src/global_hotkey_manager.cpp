@@ -290,6 +290,17 @@ bool parseCombo(const QString& combo, uint& outModifiers, uint& outKey)
     if (!parseKeyName(keyName, key)) {
         return false;
     }
+    const bool mediaKey = keyName == "play" || keyName == "mediaplaypause"
+                          || keyName == "prevtrack"
+                          || keyName == "mediaprevtrack"
+                          || keyName == "nexttrack"
+                          || keyName == "medianexttrack"
+                          || keyName == "volumeup"
+                          || keyName == "volumedown"
+                          || keyName == "volumemute";
+    if (modifiers == 0 && !mediaKey) {
+        return false;
+    }
 
     outModifiers = modifiers;
     outKey = key;
@@ -332,7 +343,12 @@ bool GlobalHotkeyManager::registerHotkey(uint modifiers, uint key, Action action
         }
     }
 
-    Hotkey hotkey{nextId_++, modifiers, key, action};
+    bool passiveSystemKey = false;
+#ifdef Q_OS_WIN
+    passiveSystemKey = modifiers == 0
+        && (key == VK_VOLUME_UP || key == VK_VOLUME_DOWN);
+#endif
+    Hotkey hotkey{nextId_++, modifiers, key, action, passiveSystemKey};
     if (!registerNativeHotkey(hotkey)) {
         return false;
     }
@@ -343,7 +359,7 @@ bool GlobalHotkeyManager::registerHotkey(uint modifiers, uint key, Action action
 void GlobalHotkeyManager::unregisterAll()
 {
     for (const auto& hotkey : hotkeys_) {
-        unregisterNativeHotkey(hotkey.id);
+        if (!hotkey.passiveSystemKey) unregisterNativeHotkey(hotkey.id);
     }
     hotkeys_.clear();
 }
@@ -356,12 +372,19 @@ void GlobalHotkeyManager::setEnabled(bool enabled)
     enabled_ = enabled;
 
     for (const auto& hotkey : hotkeys_) {
+        if (hotkey.passiveSystemKey) continue;
         if (enabled) {
             registerNativeHotkey(hotkey);
         } else {
             unregisterNativeHotkey(hotkey.id);
         }
     }
+}
+
+int GlobalHotkeyManager::passiveSystemShortcutCount() const noexcept
+{
+    return static_cast<int>(std::count_if(hotkeys_.cbegin(), hotkeys_.cend(),
+        [](const Hotkey& hotkey) { return hotkey.passiveSystemKey; }));
 }
 
 bool GlobalHotkeyManager::nativeEventFilter(const QByteArray& eventType, void* message,
@@ -373,9 +396,21 @@ bool GlobalHotkeyManager::nativeEventFilter(const QByteArray& eventType, void* m
 
 #ifdef Q_OS_WIN
     const MSG* msg = static_cast<MSG*>(message);
-    if (msg->message != WM_HOTKEY) {
+    if (msg->message == WM_APPCOMMAND) {
+        const int command = GET_APPCOMMAND_LPARAM(msg->lParam);
+        const Action action = command == APPCOMMAND_VOLUME_UP
+            ? Action::VolumeUp : Action::VolumeDown;
+        if (command == APPCOMMAND_VOLUME_UP || command == APPCOMMAND_VOLUME_DOWN) {
+            for (const auto& hotkey : hotkeys_) {
+                if (hotkey.passiveSystemKey && hotkey.action == action) {
+                    emit triggered(action);
+                    break;
+                }
+            }
+        }
         return false;
     }
+    if (msg->message != WM_HOTKEY) return false;
 
     const int id = static_cast<int>(msg->wParam);
     for (const auto& hotkey : hotkeys_) {
@@ -393,6 +428,7 @@ bool GlobalHotkeyManager::nativeEventFilter(const QByteArray& eventType, void* m
 
 bool GlobalHotkeyManager::registerNativeHotkey(const Hotkey& hotkey)
 {
+    if (hotkey.passiveSystemKey) return true;
     if (backend_ == Backend::InMemory) {
         return true;
     }
