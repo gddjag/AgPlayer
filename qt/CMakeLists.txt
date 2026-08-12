@@ -39,6 +39,10 @@ add_library(agplayer_qt STATIC
     src/format_converter.hpp
     src/format_conversion_plan.cpp
     src/format_conversion_plan.hpp
+    src/format_conversion_task_model.cpp
+    src/format_conversion_task_model.hpp
+    src/format_conversion_filter_model.cpp
+    src/format_conversion_filter_model.hpp
     src/global_hotkey_manager.cpp
     src/global_hotkey_manager.hpp
     src/import_controller.cpp

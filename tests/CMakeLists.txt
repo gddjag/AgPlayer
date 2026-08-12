@@ -436,6 +436,7 @@ foreach(qt_test IN ITEMS
     import_controller_test
     library_filter_model_test
     playback_controller_test
+    format_conversion_task_model_test
     window_controller_test
     global_hotkey_manager_test
     waveform_coordinate_mapper_test
