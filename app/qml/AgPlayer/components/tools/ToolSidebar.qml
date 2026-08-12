@@ -10,7 +10,7 @@ Rectangle {
     implicitHeight: 38
 
     readonly property var toolNames: [
-        qsTr("轻度剪辑"), qsTr("格式转换"),
+        qsTr("音频编辑"), qsTr("格式转换"),
         qsTr("元数据修改"), qsTr("文件名处理")
     ]
     property int currentTool: 0
@@ -23,7 +23,7 @@ Rectangle {
 
         Repeater {
             model: [
-                { name: qsTr("轻度剪辑"), icon: "scissors-cut-line" },
+                { name: qsTr("音频编辑"), icon: "equalizer-line" },
                 { name: qsTr("格式转换"), icon: "equalizer-line" },
                 { name: qsTr("元数据修改"), icon: "information-line" },
                 { name: qsTr("文件名处理"), icon: "file-copy-line" }

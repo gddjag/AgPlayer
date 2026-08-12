@@ -118,6 +118,15 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/MetadataEditPage.qml
         qml/AgPlayer/components/tools/LightEditPage.qml
         qml/AgPlayer/components/tools/MultiTrackWaveform.qml
+        qml/AgPlayer/components/tools/AudioEditorPage.qml
+        qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
+        qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
+        qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml
+        qml/AgPlayer/components/audioeditor/OverviewNavigator.qml
+        qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml
+        qml/AgPlayer/components/audioeditor/TimePitchInspectorSection.qml
+        qml/AgPlayer/components/audioeditor/EditorTransportBar.qml
+        qml/AgPlayer/components/audioeditor/EditorStatusBar.qml
     RESOURCES
         ${BRAND_FILES}
         ${ICON_FILES}

@@ -438,6 +438,58 @@ add_executable(audio_editor_waveform_item_test
     qt/audio_editor_waveform_item_test.cpp
     "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_waveform_item.cpp"
 )
+
+add_executable(audio_editor_controller_test
+    qt/audio_editor_controller_test.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_controller.cpp"
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_action_model.cpp"
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
+    "${CMAKE_SOURCE_DIR}/core/src/audio_editor/audio_document.cpp"
+)
+
+add_executable(qml_audio_editor_test
+    qt/qml_audio_editor_test_main.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_controller.cpp"
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_waveform_item.cpp"
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_action_model.cpp"
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
+    "${CMAKE_SOURCE_DIR}/core/src/audio_editor/audio_document.cpp"
+)
+set_target_properties(qml_audio_editor_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_audio_editor_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(qml_audio_editor_test PRIVATE
+    agplayer_app_qmlplugin
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+)
+agplayer_enable_warnings(qml_audio_editor_test)
+add_test(NAME qml_audio_editor_test
+    COMMAND qml_audio_editor_test
+        -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor.qml"
+)
+set_tests_properties(qml_audio_editor_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/app"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+set_target_properties(audio_editor_controller_test PROPERTIES AUTOMOC ON)
+target_include_directories(audio_editor_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(audio_editor_controller_test PRIVATE Qt6::Core Qt6::Test)
+agplayer_enable_warnings(audio_editor_controller_test)
+add_test(NAME audio_editor_controller_test COMMAND audio_editor_controller_test)
+set_tests_properties(audio_editor_controller_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
 set_target_properties(audio_editor_waveform_item_test PROPERTIES AUTOMOC ON)
 target_include_directories(audio_editor_waveform_item_test PRIVATE
     "${CMAKE_SOURCE_DIR}/qt/src"

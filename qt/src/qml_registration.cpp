@@ -1,6 +1,8 @@
 #include "qml_registration.hpp"
 
 #include "audio_preview_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
+#include "audio_editor/audio_editor_waveform_item.hpp"
 #include "equalizer_controller.hpp"
 #include "audio_tools_controller.hpp"
 #include "filename_processor.hpp"
@@ -46,6 +48,11 @@ void register_agplayer_qml_types(LibraryModel* library,
             return new AudioPreviewController(
                 AG_AUDIO_BACKEND_DEFAULT, playback);
         });
+    qmlRegisterSingletonType<AudioEditorController>(
+        "AgPlayer", 1, 0, "AudioEditorController",
+        [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new AudioEditorController();
+        });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
@@ -74,4 +81,6 @@ void register_agplayer_qml_types(LibraryModel* library,
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", waveformProvider);
     }
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
+    qmlRegisterType<AudioEditorWaveformItem>(
+        "AgPlayer", 1, 0, "AudioEditorWaveformItem");
 }

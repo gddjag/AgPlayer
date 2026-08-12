@@ -168,7 +168,7 @@ Window {
                     anchors.fill: parent
                     currentIndex: AudioToolsController.currentTool
 
-                    LightEditPage { objectName: "lightEditorPage" }
+                    AudioEditorPage { objectName: "audioEditorPage" }
                     FormatConvertPage { objectName: "formatConvertPage" }
                     MetadataEditPage {}
                     FilenameProcessPage {}
