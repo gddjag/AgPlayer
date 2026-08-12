@@ -75,6 +75,22 @@ agplayer_enable_warnings(pcm_ring_buffer_test)
 
 add_test(NAME pcm_ring_buffer_test COMMAND pcm_ring_buffer_test)
 
+add_executable(audio_document_test
+    core/audio_document_test.cpp
+)
+set_target_properties(audio_document_test PROPERTIES AUTOMOC ON)
+target_include_directories(audio_document_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(audio_document_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(audio_document_test)
+add_test(NAME audio_document_test COMMAND audio_document_test)
+set_tests_properties(audio_document_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 add_executable(playback_session_test
     core/playback_session_test.cpp
 )
