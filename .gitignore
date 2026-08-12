@@ -14,8 +14,13 @@
 /*-result.txt
 /*-results.txt
 /qml-*.txt
+/qml_light_editor_results.txt
+/qml_targeted_results.txt
+/qmlout.txt
 /atomic-*.txt
 /audio-*.txt
+/audio_preview_results.txt
+/eq-test.txt
 /converter-*.txt
 /filename-*.txt
 /format-matrix-report.txt
