@@ -1458,6 +1458,8 @@ TestCase {
     }
 
     function test_empty_startup_never_overlaps_the_bottom_controls() {
+        nativeDropHelper.clearLibrary()
+        tryVerify(function() { return LibraryModel.count === 0 })
         var startup = findChild(mainWindow, "emptyStartup")
         var controls = findChild(mainWindow, "playerControls")
         var actionArea = findChild(startup, "startupActionArea")
