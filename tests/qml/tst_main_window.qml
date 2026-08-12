@@ -1193,6 +1193,20 @@ TestCase {
         SettingsController.waveformHoverTimePreview = previousPreview
     }
 
+    function test_waveform_playback_guide_can_be_hidden_without_hiding_progress_color() {
+        var previous = SettingsController.waveformPlaybackGuide
+        var guide = findChild(mainWindow, "waveformPlaybackGuide")
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        verify(guide && playedClip)
+        SettingsController.waveformPlaybackGuide = true
+        tryCompare(guide, "visible", true)
+        SettingsController.waveformPlaybackGuide = false
+        tryCompare(guide, "visible", false)
+        verify(playedClip.visible,
+               "disabling the guide must retain the played-color region")
+        SettingsController.waveformPlaybackGuide = previous
+    }
+
     function test_play_button_uses_system_solid_style_without_rgb_runtime() {
         var play = findChild(mainWindow, "playPauseButton")
         var ring = findChild(mainWindow, "playButtonRgbRing")
@@ -1441,6 +1455,15 @@ TestCase {
                "compact startup actions should exist")
         verify(!findChild(startup, "startupHeroArtwork"),
                "the superseded hero artwork should not exist")
+    }
+
+    function test_empty_startup_never_overlaps_the_bottom_controls() {
+        var startup = findChild(mainWindow, "emptyStartup")
+        var controls = findChild(mainWindow, "playerControls")
+        var actionArea = findChild(startup, "startupActionArea")
+        verify(startup && controls && actionArea)
+        verify(actionArea.y + actionArea.height <= controls.y,
+               "startup actions and format hint must stay above playback controls")
     }
 
     function test_main_window_allows_a_smaller_responsive_native_size() {

@@ -187,7 +187,10 @@ ApplicationWindow {
             id: playerControls
             objectName: "playerControls"
             Layout.fillWidth: true
-            Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 64
+            // Empty startup reserves enough room for the responsive action
+            // area.  The controls stay anchored at the bottom instead of
+            // cutting through the format hint on compact windows.
+            Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
             emptyMode: LibraryModel.count === 0
             onOpenEqualizerRequested: mainWindow.openEqualizer()
         }

@@ -89,6 +89,13 @@ public:
         return ids;
     }
 
+    Q_INVOKABLE void clearLibrary()
+    {
+        if (library_ != nullptr) {
+            library_->replaceAll({});
+        }
+    }
+
     Q_INVOKABLE QString ensureLongTitleTrack()
     {
         if (library_ == nullptr) return {};

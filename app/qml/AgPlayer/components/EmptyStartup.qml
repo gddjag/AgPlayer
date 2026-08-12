@@ -11,14 +11,20 @@ Rectangle {
     signal openFileRequested()
     signal importFolderRequested()
 
+    // The startup panel shares a compact window with the bottom transport.
+    // Scale its vertical rhythm from the height actually allocated by the
+    // layout, so no text or button can intrude into that transport area.
+    readonly property real contentScale: Math.min(1.0, Math.max(0.60,
+        (height - 8) / 185))
+
     ColumnLayout {
         id: startupActionArea
         objectName: "startupActionArea"
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: Theme.spacingXs
+        anchors.topMargin: Math.max(2, Theme.spacingXs * root.contentScale)
         width: Math.min(parent.width - 48, 640)
-        spacing: Theme.spacingSm
+        spacing: Math.max(3, Theme.spacingSm * root.contentScale)
 
         Text {
             objectName: "startupTitle"
@@ -26,37 +32,37 @@ Rectangle {
             text: qsTr("开始播放你的音乐")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 28
+            font.pixelSize: Math.round(28 * root.contentScale)
             font.weight: Font.Medium
             font.letterSpacing: 3
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 6
+            Layout.topMargin: Math.round(6 * root.contentScale)
             text: qsTr("打开或拖拽音频文件到此处开始播放")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 14
+            font.pixelSize: Math.round(14 * root.contentScale)
         }
 
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 22
-            spacing: 20
+            Layout.topMargin: Math.round(22 * root.contentScale)
+            spacing: Math.max(8, Math.round(20 * root.contentScale))
 
             Button {
                 id: openFileButton
                 objectName: "openFileButton"
-                Layout.preferredWidth: 190
-                Layout.preferredHeight: 52
+                Layout.preferredWidth: Math.round(190 * root.contentScale)
+                Layout.preferredHeight: Math.round(52 * root.contentScale)
                 text: qsTr("打开文件")
                 icon.source: Theme.icon("folder-open-line")
                 icon.color: Theme.onBrandGradientText
-                icon.width: 20
-                icon.height: 20
+                icon.width: Math.max(14, Math.round(20 * root.contentScale))
+                icon.height: Math.max(14, Math.round(20 * root.contentScale))
                 palette.buttonText: Theme.onBrandGradientText
-                font.pixelSize: 16
+                font.pixelSize: Math.max(12, Math.round(16 * root.contentScale))
                 Accessible.name: text
                 focusPolicy: Qt.StrongFocus
                 onClicked: root.openFileRequested()
@@ -79,15 +85,15 @@ Rectangle {
             Button {
                 id: importFolderButton
                 objectName: "importFolderButton"
-                Layout.preferredWidth: 190
-                Layout.preferredHeight: 52
+                Layout.preferredWidth: Math.round(190 * root.contentScale)
+                Layout.preferredHeight: Math.round(52 * root.contentScale)
                 text: qsTr("导入文件夹")
                 icon.source: Theme.icon("folder-open-line")
                 icon.color: Theme.iconPrimary
-                icon.width: 20
-                icon.height: 20
+                icon.width: Math.max(14, Math.round(20 * root.contentScale))
+                icon.height: Math.max(14, Math.round(20 * root.contentScale))
                 palette.buttonText: Theme.primaryText
-                font.pixelSize: 16
+                font.pixelSize: Math.max(12, Math.round(16 * root.contentScale))
                 Accessible.name: text
                 focusPolicy: Qt.StrongFocus
                 onClicked: root.importFolderRequested()
@@ -105,11 +111,11 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Theme.spacingLg
+            Layout.topMargin: Math.max(4, Math.round(Theme.spacingLg * root.contentScale))
             text: qsTr("支持 MP3、WAV、FLAC、AAC、OGG、M4A 等音频格式")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            font.pixelSize: Math.max(10, Math.round(13 * root.contentScale))
         }
     }
 }
