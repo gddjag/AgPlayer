@@ -8,8 +8,8 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 1104
-    height: 342
+    width: 1036
+    height: 321
     minimumWidth: 612
     minimumHeight: 228
     onClosing: function(close) {

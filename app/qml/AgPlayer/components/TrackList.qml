@@ -584,9 +584,11 @@ ListView {
                     required property string name
                     objectName: "playlistMoveTarget-" + playlistId
                     text: name; enabled: playlistId !== root.selectedCategory
-                    onTriggered: root.customPlaylistSelected
-                                 ? root.playlistModel.moveTracks(root.selectedCategory, playlistId, trackMenu.targetTrackIds)
-                                 : root.playlistModel.addTracks(playlistId, trackMenu.targetTrackIds)
+                    // Use the button activation signal, which is delivered for
+                    // both pointer and keyboard activation in a nested popup.
+                    onClicked: root.customPlaylistSelected
+                               ? root.playlistModel.moveTracks(root.selectedCategory, playlistId, trackMenu.targetTrackIds)
+                               : root.playlistModel.addTracks(playlistId, trackMenu.targetTrackIds)
                 }
                 onObjectAdded: function(index, object) { moveMenu.insertItem(index, object) }
                 onObjectRemoved: function(index, object) { moveMenu.removeItem(object) }
@@ -600,10 +602,10 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
-            SystemMenuItem { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onTriggered: root.openInAudioTool(0) }
-            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onTriggered: root.openInAudioTool(1) }
-            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onTriggered: root.openInAudioTool(2) }
-            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onTriggered: root.openInAudioTool(3) }
+            SystemMenuItem { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onClicked: root.openInAudioTool(0) }
+            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
+            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onClicked: root.openInAudioTool(2) }
+            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onClicked: root.openInAudioTool(3) }
         }
         MenuSeparator {}
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }

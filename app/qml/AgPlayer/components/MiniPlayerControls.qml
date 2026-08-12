@@ -260,7 +260,10 @@ Rectangle {
                     }
                     Timer {
                         id: miniVolumeCloseTimer
-                        interval: 240
+                        objectName: "miniVolumeCloseTimer"
+                        // Leave enough time to cross the small gap from the
+                        // mute button to the right-hand volume slider.
+                        interval: 850
                         onTriggered: {
                             if (!volumeSlider.pressed && !volumeSlider.activeFocus
                                     && !flyoutHover.hovered)

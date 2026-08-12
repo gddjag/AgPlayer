@@ -323,8 +323,8 @@ Item {
                     required property string playlistId
                     required property string name
                     text: name
-                    onTriggered: PlaylistModel.addTracks(playlistId,
-                                                          trackMenu.targetTrackIds)
+                    onClicked: PlaylistModel.addTracks(playlistId,
+                                                        trackMenu.targetTrackIds)
                 }
                 onObjectAdded: function(index, object) {
                     addToPlaylistMenu.insertItem(index, object)
@@ -346,10 +346,10 @@ Item {
                 border.color: Theme.border
                 radius: Theme.radiusSm
             }
-            SystemMenuItem { text: qsTr("轻度剪辑"); onTriggered: root.openInAudioTool(0) }
-            SystemMenuItem { text: qsTr("格式转换"); onTriggered: root.openInAudioTool(1) }
-            SystemMenuItem { text: qsTr("元数据修改"); onTriggered: root.openInAudioTool(2) }
-            SystemMenuItem { text: qsTr("文件名处理"); onTriggered: root.openInAudioTool(3) }
+            SystemMenuItem { text: qsTr("轻度剪辑"); onClicked: root.openInAudioTool(0) }
+            SystemMenuItem { text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
+            SystemMenuItem { text: qsTr("元数据修改"); onClicked: root.openInAudioTool(2) }
+            SystemMenuItem { text: qsTr("文件名处理"); onClicked: root.openInAudioTool(3) }
         }
         MenuSeparator {}
         SystemMenuItem {

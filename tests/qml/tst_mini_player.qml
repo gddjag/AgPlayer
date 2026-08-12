@@ -152,6 +152,8 @@ TestCase {
         verify(volume)
         var flyout = findChild(miniPlayer, "miniVolumeFlyout")
         verify(flyout)
+        var closeTimer = findChild(miniPlayer, "miniVolumeCloseTimer")
+        verify(closeTimer, "volume flyout must expose its delayed close timer")
         flyout.parent.expanded = true
         tryVerify(function() {
             var left = flyout.parent.x + flyout.x
@@ -161,6 +163,10 @@ TestCase {
             return flyout.x >= 28
                     && flyout.x + flyout.width === flyout.parent.width
         }, 300, "mini volume flyout must expand to the right of its mute button")
+        closeTimer.restart()
+        wait(500)
+        verify(flyout.parent.expanded,
+               "volume flyout must stay open long enough to move the pointer onto its slider")
         flyout.parent.expanded = false
         verify(findChild(miniPlayer, "miniRating"))
         verify(findChild(miniPlayer, "miniWaveform"))
