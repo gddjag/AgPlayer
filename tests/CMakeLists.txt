@@ -261,6 +261,27 @@ set_tests_properties(transcoder_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(transcode_capability_test
+    core/transcode_capability_test.cpp
+)
+target_include_directories(transcode_capability_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_include_directories(transcode_capability_test SYSTEM PRIVATE
+    "${FFMPEG_INCLUDE_DIRS}"
+)
+target_link_libraries(transcode_capability_test PRIVATE
+    agplayer_core
+    ${FFMPEG_LIBRARIES}
+)
+agplayer_enable_warnings(transcode_capability_test)
+add_test(NAME transcode_capability_test COMMAND transcode_capability_test)
+set_tests_properties(transcode_capability_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(pitch_shifter_test
     core/pitch_shifter_test.cpp
 )

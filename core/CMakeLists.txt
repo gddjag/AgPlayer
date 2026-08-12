@@ -18,6 +18,8 @@ add_library(agplayer_core STATIC
     src/pitch_shifter.cpp
     src/playback_session.cpp
     src/transcoder.cpp
+    src/transcode_capability.cpp
+    src/transcode_capability.hpp
     src/timeline_preview_mixer.cpp
     src/timeline_preview_mixer.hpp
     src/time_pitch_engine.cpp
