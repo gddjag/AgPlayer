@@ -118,9 +118,14 @@ public:
         if (library_ == nullptr) return {};
         const QString id = QStringLiteral("long-album-artist-track");
         if (library_->indexForTrackId(id) < 0) {
+            const QString fixture = QString::fromLocal8Bit(
+                qgetenv("AGPLAYER_TEST_AUDIO"));
+            if (!QFileInfo(fixture).isFile()) return {};
+            const QString path = dropDirectory_.filePath(id + QStringLiteral(".wav"));
+            if (!QFileInfo::exists(path) && !QFile::copy(fixture, path)) return {};
             TrackRecord track;
             track.trackId = id;
-            track.path = QStringLiteral("C:/virtual/long-album-artist-track.mp3");
+            track.path = path;
             track.title = QStringLiteral("Column alignment QA");
             track.artist = QStringLiteral(
                 "An intentionally long artist name for hover marquee verification");

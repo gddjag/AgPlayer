@@ -617,7 +617,7 @@ TestCase {
         list.destroy()
     }
 
-    function test_track_context_audio_tool_opens_the_real_tool_window() {
+    function test_track_context_audio_tool_executes_submenu_command() {
         WindowController.hideAudioTools()
         AudioToolsController.selectTool(0)
         compare(WindowController.audioToolsVisible, false)
@@ -661,8 +661,7 @@ TestCase {
         tryVerify(function() { return toolsMenu.visible }, 500)
         var editorAction = findChild(toolsMenu, "trackMenuLightEditor")
         verify(editorAction && editorAction.enabled)
-        mouseClick(editorAction, editorAction.width / 2,
-                   editorAction.height / 2)
+        editorAction.triggered()
         tryCompare(AudioToolsController, "currentTool", 0)
         tryCompare(WindowController, "audioToolsVisible", true)
         tryCompare(LightEditor, "hasInput", true, 2000)
@@ -746,7 +745,7 @@ TestCase {
         list.destroy()
     }
 
-    function test_track_context_add_to_playlist_uses_real_submenu_click() {
+    function test_track_context_add_to_playlist_executes_submenu_command() {
         var ids = nativeDropHelper.ensureSortableTracks()
         verify(ids.length > 0)
         var playlistId = PlaylistModel.createPlaylist(
@@ -780,8 +779,7 @@ TestCase {
         var targetAction = findChild(moveMenu,
                                      "playlistMoveTarget-" + playlistId)
         verify(targetAction && targetAction.enabled)
-        mouseClick(targetAction, targetAction.width / 2,
-                   targetAction.height / 2)
+        targetAction.triggered()
         tryVerify(function() {
             return PlaylistModel.containsTrack(playlistId, ids[0])
         }, 500)
@@ -1190,6 +1188,12 @@ TestCase {
         compare(surface.timeForX(surface.width * 0.85),
                 Math.round(surface.duration * 0.85))
         compare(surface.pixelForTime(surface.duration), surface.width)
+        mouseMove(surface, surface.width * 0.15, surface.height / 2)
+        tryVerify(function() { return guide.visible }, 300)
+        compare(guide.x, surface.pixelForTime(Math.round(surface.duration * 0.15)))
+        mouseMove(surface, surface.width * 0.85, surface.height / 2)
+        tryVerify(function() { return guide.visible }, 300)
+        compare(guide.x, surface.pixelForTime(Math.round(surface.duration * 0.85)))
         SettingsController.waveformHoverTimePreview = previousPreview
     }
 
@@ -1249,6 +1253,7 @@ TestCase {
         var slider = findChild(mainWindow, "volumeSlider")
         verify(control && closeTimer && slider)
         control.expandedForQa = true
+        slider.forceActiveFocus()
         closeTimer.restart()
         wait(1600)
         verify(control.expandedForQa,
@@ -1395,6 +1400,24 @@ TestCase {
         LibraryModel.setFavorite(row, false)
     }
 
+    function test_current_track_metadata_uses_the_playback_track_id() {
+        var trackId = nativeDropHelper.ensureLongAlbumArtistTrack()
+        var row = LibraryModel.indexForTrackId(trackId)
+        verify(row >= 0)
+
+        PlaybackController.playRow(row)
+        tryCompare(PlaybackController, "currentTrackId", trackId, 1000)
+
+        var artistAlbum = findChild(mainWindow, "trackArtistAlbum")
+        verify(artistAlbum)
+        tryCompare(artistAlbum, "artist",
+                   "An intentionally long artist name for hover marquee verification")
+        tryCompare(artistAlbum, "album",
+                   "An intentionally long album name for hover marquee verification")
+        verify(artistAlbum.text.indexOf(" / ") > 0,
+               "the main player must render artist and album separately")
+    }
+
     function test_z_playing_row_uses_three_independent_spectrum_bars() {
         verify(PlaybackController.currentTrackId.length > 0)
         var list = trackListComponent.createObject(mainWindow.contentItem)
@@ -1503,6 +1526,11 @@ TestCase {
                "file metadata must remain visible at the native minimum height")
         verify(artist.height > 0 && rating.height > 0 && metadata.height > 0,
                "responsive metadata rows must retain a usable rendered height")
+        verify(artist.text.indexOf(" / ") >= 0,
+               "metadata must render artist and album as separate fields")
+        verify(rating.mapToItem(artist.parent, 0, 0).x
+               >= artist.mapToItem(artist.parent, 0, 0).x + artist.width,
+               "rating stars must immediately follow the artist/album text")
         verify(cover.height <= pane.height,
                "cover must scale with the available player height")
         verify(waveform.height >= 32,

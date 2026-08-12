@@ -167,8 +167,19 @@ ListView {
         }
         return urls
     }
+    function actionTrackIds() {
+        return trackMenu.targetTrackIds.length > 0
+                ? trackMenu.targetTrackIds.slice()
+                : selectedTrackIds.slice()
+    }
     function openInAudioTool(toolIndex) {
-        var urls = selectedFileUrls()
+        var ids = actionTrackIds()
+        var urls = []
+        for (var index = 0; index < ids.length; ++index) {
+            var url = fileOps.fileUrl(ids[index])
+            if (url && String(url).length > 0)
+                urls.push(url)
+        }
         if (urls.length === 0) return
         // Present the destination first: a loader issue must not make a real
         // context-menu click appear to do nothing.
@@ -586,17 +597,21 @@ ListView {
             enabled: root.playlistModel.count > 0
             Instantiator {
                 model: root.playlistModel
-                delegate: ContextMenuAction {
+                delegate: SystemMenuItem {
                     required property string playlistId
                     required property string name
                     objectName: "playlistMoveTarget-" + playlistId
                     text: name; enabled: playlistId !== root.selectedCategory
-                    onActionRequested: root.customPlaylistSelected
-                                       ? root.playlistModel.moveTracks(root.selectedCategory,
-                                                                       playlistId,
-                                                                       trackMenu.targetTrackIds)
-                                       : root.playlistModel.addTracks(playlistId,
-                                                                      trackMenu.targetTrackIds)
+                    onTriggered: {
+                        var ids = root.actionTrackIds()
+                        if (ids.length === 0)
+                            return
+                        if (root.customPlaylistSelected)
+                            root.playlistModel.moveTracks(root.selectedCategory,
+                                                          playlistId, ids)
+                        else
+                            root.playlistModel.addTracks(playlistId, ids)
+                    }
                 }
                 onObjectAdded: function(index, object) { moveMenu.insertItem(index, object) }
                 onObjectRemoved: function(index, object) { moveMenu.removeItem(object) }
@@ -610,10 +625,10 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
-            ContextMenuAction { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onActionRequested: root.openInAudioTool(0) }
-            ContextMenuAction { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onActionRequested: root.openInAudioTool(1) }
-            ContextMenuAction { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onActionRequested: root.openInAudioTool(2) }
-            ContextMenuAction { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onActionRequested: root.openInAudioTool(3) }
+            SystemMenuItem { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onTriggered: root.openInAudioTool(0) }
+            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onTriggered: root.openInAudioTool(1) }
+            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onTriggered: root.openInAudioTool(2) }
+            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onTriggered: root.openInAudioTool(3) }
         }
         MenuSeparator {}
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }
@@ -652,25 +667,6 @@ ListView {
                    ? Theme.activeSelection : "transparent"
             radius: Theme.radiusSm
         }
-    }
-
-    // MenuItem uses triggered for keyboard activation, while some native
-    // Windows menu paths deliver clicked first.  Funnel both through one
-    // guarded signal so a context-menu command is never ignored or doubled.
-    component ContextMenuAction: SystemMenuItem {
-        property bool dispatching: false
-        signal actionRequested()
-
-        function requestAction() {
-            if (dispatching || !enabled)
-                return
-            dispatching = true
-            actionRequested()
-            Qt.callLater(function() { dispatching = false })
-        }
-
-        onClicked: requestAction()
-        onTriggered: requestAction()
     }
 
     Popup {

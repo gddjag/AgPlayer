@@ -42,6 +42,15 @@ Rectangle {
 
     function currentTrackValue(role): variant {
         var revision = root.libraryRevision
+        var track = LibraryModel.trackForId(PlaybackController.currentTrackId)
+        if (track) {
+            if (role === LibraryModel.ArtistRole)
+                return track.artist || ""
+            if (role === LibraryModel.AlbumRole)
+                return track.album || ""
+            if (role === LibraryModel.TitleRole)
+                return track.title || ""
+        }
         var row = root.currentRow()
         if (row < 0)
             return ""
@@ -251,7 +260,6 @@ Rectangle {
                                             : root.compactHeight ? 22 : 26
                             font.weight: Font.DemiBold
                         }
-
                         HoverHandler { id: titleHover }
 
                         SequentialAnimation {
@@ -311,59 +319,64 @@ Rectangle {
                     }
                 }
 
-                RowLayout {
+                Item {
                     id: artistRatingRow
                     objectName: "trackArtistRatingRow"
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.minimalHeight ? 13 : 18
-                    spacing: Theme.spacingMd
                     visible: true
 
-                    Text {
-                        objectName: "trackArtistAlbum"
-                        property string artist: root.currentTrackValue(
-                                                    LibraryModel.ArtistRole)
-                        property string album: root.currentTrackValue(
-                                                   LibraryModel.AlbumRole)
-                        text: {
-                            var parts = []
-                            if (artist)
-                                parts.push(artist)
-                            if (album)
-                                parts.push(album)
-                            return parts.length > 0
-                                    ? parts.join("  ·  ")
-                                    : qsTr("Unknown artist")
+                    Row {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        spacing: Theme.spacingMd
+
+                        Item {
+                            width: Math.max(0, parent.width
+                                            - (root.minimalHeight ? 55 : 75)
+                                            - parent.spacing)
+                            height: artistAlbumText.implicitHeight
+                            clip: true
+                            Text {
+                                id: artistAlbumText
+                                objectName: "trackArtistAlbum"
+                                property string artist: root.currentTrackValue(
+                                                            LibraryModel.ArtistRole)
+                                property string album: root.currentTrackValue(
+                                                           LibraryModel.AlbumRole)
+                                text: (artist || qsTr("Unknown artist"))
+                                      + " / "
+                                      + (album || qsTr("Unknown album"))
+                                color: Theme.secondaryText
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: root.minimalHeight ? 9 : 14
+                                elide: Text.ElideRight
+                                width: parent.width
+                            }
                         }
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: root.minimalHeight ? 9 : 14
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
 
-                    RowLayout {
-                        objectName: "trackRating"
-                        spacing: 1
-                        visible: true
+                        Row {
+                            objectName: "trackRating"
+                            spacing: 1
+                            visible: true
 
-                        Repeater {
-                            model: 5
-                            delegate: ThemedIcon {
-                                source: index < root.currentTrackRating()
-                                        ? Theme.icon("star-fill")
-                                        : Theme.icon("star-line")
-                                tint: index < root.currentTrackRating()
-                                      ? Theme.ratingColor(index) : Theme.iconSecondary
-                                sourceSize.width: root.minimalHeight ? 10 : 14
-                                sourceSize.height: root.minimalHeight ? 10 : 14
-                                Layout.preferredWidth: root.minimalHeight ? 11 : 15
-                                Layout.preferredHeight: root.minimalHeight ? 11 : 15
+                            Repeater {
+                                model: 5
+                                delegate: ThemedIcon {
+                                    source: index < root.currentTrackRating()
+                                            ? Theme.icon("star-fill")
+                                            : Theme.icon("star-line")
+                                    tint: index < root.currentTrackRating()
+                                          ? Theme.ratingColor(index) : Theme.iconSecondary
+                                    sourceSize.width: root.minimalHeight ? 10 : 14
+                                    sourceSize.height: root.minimalHeight ? 10 : 14
+                                    width: root.minimalHeight ? 11 : 15
+                                    height: root.minimalHeight ? 11 : 15
+                                }
                             }
                         }
                     }
-
-                    Item { Layout.fillWidth: true }
                 }
 
                 RowLayout {
@@ -480,6 +493,7 @@ Rectangle {
                 width: waveformFrame.playbackX
                 height: parent.height
                 clip: true
+                enabled: false
 
                 WaveformItem {
                     id: playedWaveform
