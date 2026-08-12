@@ -64,6 +64,7 @@ Item {
         implicitHeight: 36
         leftPadding: 14
         rightPadding: 14
+        icon.color: highlighted ? Theme.activeSelectionText : Theme.iconPrimary
         palette.button: highlighted ? Theme.accent : Theme.elevated
         palette.buttonText: highlighted ? Theme.activeSelectionText : Theme.primaryText
         palette.highlight: Theme.accent
@@ -88,6 +89,49 @@ Item {
             color: menuItem.highlighted || menuItem.hovered
                    ? Theme.activeSelection : "transparent"
             radius: Theme.radiusSm
+        }
+    }
+
+    component MarqueeText: Item {
+        id: marqueeRoot
+        property alias text: marqueeText.text
+        property color textColor: Theme.primaryText
+        readonly property bool overflowing: marqueeText.implicitWidth > width
+        readonly property real textOffset: marqueeText.x
+        implicitHeight: marqueeText.implicitHeight
+        clip: true
+
+        Text {
+            id: marqueeText
+            x: 0
+            anchors.verticalCenter: parent.verticalCenter
+            color: marqueeRoot.textColor
+            font.family: Theme.fontPrimary
+            font.pixelSize: 13
+            wrapMode: Text.NoWrap
+        }
+        HoverHandler { id: marqueeHover }
+        SequentialAnimation {
+            running: marqueeHover.hovered && marqueeRoot.overflowing
+            loops: Animation.Infinite
+            onRunningChanged: if (!running) marqueeText.x = 0
+            PauseAnimation { duration: 350 }
+            NumberAnimation {
+                target: marqueeText
+                property: "x"
+                to: marqueeRoot.width - marqueeText.implicitWidth
+                duration: Math.max(700,
+                                   (marqueeText.implicitWidth - marqueeRoot.width) * 22)
+                easing.type: Easing.Linear
+            }
+            PauseAnimation { duration: 450 }
+            NumberAnimation {
+                target: marqueeText
+                property: "x"
+                to: 0
+                duration: 300
+                easing.type: Easing.InOutQuad
+            }
         }
     }
 
@@ -449,6 +493,7 @@ Item {
                 onClicked: folderDialog.open()
             }
             ActionButton {
+                objectName: "libraryScanButton"
                 highlighted: true
                 text: manager.scanning ? qsTr("停止扫描") : qsTr("扫描整理")
                 icon.source: Theme.icon(manager.scanning ? "pause-fill" : "arrow-go-forward-line")
@@ -705,10 +750,15 @@ Item {
                             required property int rating
                             required property real bpm
                             required property double durationMs
+                            readonly property bool selected:
+                                root.selectedTrackIds.indexOf(trackId) >= 0
+                            readonly property color contentColor:
+                                selected ? Theme.activeSelectionText : Theme.primaryText
+                            readonly property color secondaryContentColor:
+                                selected ? Theme.activeSelectionText : Theme.secondaryText
                             width: ListView.view.width
                             height: root.trackRowHeight
-                            color: root.selectedTrackIds.indexOf(trackId) >= 0
-                                   ? Qt.rgba(0.45, 0.2, 0.85, 0.32)
+                            color: selected ? Theme.activeSelection
                                    : rowHover.hovered ? Theme.hoverSurface : "transparent"
                             RowLayout {
                                 anchors.fill: parent
@@ -718,18 +768,26 @@ Item {
                                 CheckBox {
                                     Layout.preferredWidth: 26
                                     scale: 0.8
-                                    checked: root.selectedTrackIds.indexOf(trackId) >= 0
+                                    checked: row.selected
                                     onClicked: root.toggleSelection(trackId, true)
                                 }
-                                Text { text: manager.currentPage * manager.pageSize + index + 1; color: Theme.secondaryText; Layout.preferredWidth: 28 }
-                                Text { text: title || qsTr("未知歌曲"); color: Theme.primaryText; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 170 }
-                                Text { text: artist || "—"; color: Theme.secondaryText; elide: Text.ElideRight; Layout.preferredWidth: 90 }
-                                Text { text: album || "—"; color: Theme.secondaryText; elide: Text.ElideRight; Layout.preferredWidth: 100; visible: root.width >= 1080 }
+                                Text { text: manager.currentPage * manager.pageSize + index + 1; color: row.secondaryContentColor; Layout.preferredWidth: 28 }
+                                MarqueeText {
+                                    objectName: "libraryManagerTitleMarquee"
+                                    text: title || qsTr("未知歌曲")
+                                    textColor: row.contentColor
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 170
+                                }
+                                Text { text: artist || "—"; color: row.secondaryContentColor; elide: Text.ElideRight; Layout.preferredWidth: 90 }
+                                Text { text: album || "—"; color: row.secondaryContentColor; elide: Text.ElideRight; Layout.preferredWidth: 100; visible: root.width >= 1080 }
                                 ToolButton {
                                     objectName: "libraryTrackFavorite"
                                     Layout.preferredWidth: 36
                                     icon.source: Theme.icon(favorite ? "heart-fill" : "heart-line")
-                                    icon.color: favorite ? Theme.favoriteRed : Theme.secondaryText
+                                    icon.color: row.selected ? Theme.activeSelectionText
+                                                             : favorite ? Theme.favoriteRed
+                                                                        : Theme.secondaryText
                                     icon.width: 17; icon.height: 17
                                     onClicked: {
                                         var libraryRow = LibraryModel.indexForTrackId(trackId)
@@ -749,8 +807,10 @@ Item {
                                             width: 17
                                             height: 17
                                             icon.source: Theme.icon(index < row.rating ? "star-fill" : "star-line")
-                                            icon.color: index < row.rating
-                                                        ? Theme.ratingGold : Theme.secondaryText
+                                            icon.color: row.selected
+                                                        ? Theme.activeSelectionText
+                                                        : index < row.rating
+                                                          ? Theme.ratingGold : Theme.secondaryText
                                             icon.width: 17
                                             icon.height: 17
                                             padding: 0
@@ -765,12 +825,13 @@ Item {
                                         }
                                     }
                                 }
-                                Text { text: root.formatBpm(bpm); color: Theme.secondaryText; Layout.preferredWidth: 48 }
-                                Text { text: root.formatDuration(durationMs); color: Theme.secondaryText; Layout.preferredWidth: 56 }
+                                Text { text: root.formatBpm(bpm); color: row.secondaryContentColor; Layout.preferredWidth: 48 }
+                                Text { text: root.formatDuration(durationMs); color: row.secondaryContentColor; Layout.preferredWidth: 56 }
                                 Text {
                                     text: status === "missing" ? qsTr("丢失文件")
                                         : duplicateGroup.length > 0 ? qsTr("重复歌曲") : qsTr("正常")
-                                    color: status === "missing" ? Theme.favoriteRed
+                                    color: row.selected ? Theme.activeSelectionText
+                                        : status === "missing" ? Theme.favoriteRed
                                         : duplicateGroup.length > 0 ? Theme.ratingGold : "#39d66d"
                                     Layout.preferredWidth: 70
                                 }
@@ -831,7 +892,6 @@ Item {
                     }
                 }
             }
-
             Surface {
                 objectName: "libraryTrackDetailsPanel"
                 Layout.preferredWidth: 176

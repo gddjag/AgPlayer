@@ -597,6 +597,41 @@ TestCase {
         manager.destroy()
     }
 
+    function test_library_manager_long_title_marquees_on_hover() {
+        var trackId = nativeDropHelper.ensureLongTitleTrack()
+        verify(trackId.length > 0)
+        var track = LibraryModel.trackForId(trackId)
+        var page = libraryManagerComponent.createObject(mainWindow.contentItem,
+                                                        { width: 720 })
+        verify(page)
+        page.searchText = track.title
+        var view = findChild(page, "libraryManagerTrackList")
+        tryVerify(function() { return view && view.count === 1 }, 1000)
+        var row = view.itemAtIndex(0)
+        verify(row)
+        var title = findChild(row, "libraryManagerTitleMarquee")
+        verify(title, "long manager titles need a clipped hover marquee")
+        verify(title.overflowing)
+        compare(title.textOffset, 0)
+        mouseMove(title, title.width / 2, title.height / 2)
+        tryVerify(function() { return title.textOffset < -1 }, 2500)
+        mouseMove(view, 2, view.height - 2)
+        tryCompare(title, "textOffset", 0, 500)
+        page.destroy()
+    }
+
+    function test_library_manager_highlighted_action_uses_native_contrast() {
+        var page = libraryManagerComponent.createObject(mainWindow.contentItem)
+        verify(page)
+        var scan = findChild(page, "libraryScanButton")
+        verify(scan)
+        compare(scan.palette.buttonText.toString(),
+                Theme.activeSelectionText.toString())
+        compare(scan.icon.color.toString(),
+                Theme.activeSelectionText.toString())
+        page.destroy()
+    }
+
     function test_track_context_play_action_uses_real_mouse_click() {
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
