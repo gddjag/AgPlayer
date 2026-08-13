@@ -1,5 +1,7 @@
 #include "library_model.hpp"
 
+#include "agplayer/c_api.h"
+
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -22,6 +24,11 @@ QString normalizedCanonicalKey(const QString& canonicalPath)
 QString pathKey(const QString& path)
 {
     return normalizedCanonicalKey(canonicalLibraryPath(path));
+}
+
+QString copiedMetadata(const char* value)
+{
+    return value == nullptr ? QString{} : QString::fromUtf8(value);
 }
 }
 
@@ -542,6 +549,58 @@ int LibraryModel::applyMaintenanceResults(const QVariantList& results)
                      {AvailableRole, FileStatusRole, ContentHashRole});
     emit flushRequested();
     return changedCount;
+}
+
+bool LibraryModel::refreshMetadataForPath(const QString& path)
+{
+    const int row = indexForLocalFile(path);
+    if (row < 0) return false;
+    ag_metadata* metadata = nullptr;
+    const QByteArray utf8 = canonicalLibraryPath(path).toUtf8();
+    if (ag_metadata_open(utf8.constData(), &metadata) != AG_OK
+        || metadata == nullptr) {
+        return false;
+    }
+    TrackRecord& track = tracks_[row];
+    track.title = copiedMetadata(ag_metadata_title(metadata));
+    track.artist = copiedMetadata(ag_metadata_artist(metadata));
+    track.album = copiedMetadata(ag_metadata_album(metadata));
+    track.format = copiedMetadata(ag_metadata_format(metadata));
+    track.sampleRate = ag_metadata_sample_rate(metadata);
+    track.bitDepth = ag_metadata_bits_per_sample(metadata);
+    track.bitRate = ag_metadata_bit_rate(metadata);
+    track.durationMs = ag_metadata_duration_ms(metadata);
+    track.fileSize = QFileInfo(path).size();
+    bool bpmOk = false;
+    const double bpm = copiedMetadata(ag_metadata_bpm_tag(metadata)).toDouble(&bpmOk);
+    track.bpm = bpmOk && std::isfinite(bpm) ? bpm : 0.0;
+    // A timestamp query forces existing image URLs to bypass QML's cache.
+    size_t coverSize = 0;
+    const unsigned char* cover = ag_metadata_cover(metadata, &coverSize, nullptr);
+    if (cover == nullptr || coverSize == 0) {
+        track.coverUrl = {};
+    } else if (track.coverUrl.isValid()) {
+        QUrl refreshed = track.coverUrl;
+        refreshed.setQuery(QStringLiteral("v=%1").arg(QDateTime::currentMSecsSinceEpoch()));
+        track.coverUrl = refreshed;
+    }
+    ag_metadata_destroy(metadata);
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed,
+                     {TitleRole, ArtistRole, AlbumRole, FormatRole,
+                      SampleRateRole, BitDepthRole, BitRateRole, DurationMsRole,
+                      FileSizeRole, CoverUrlRole, BpmRole});
+    emit flushRequested();
+    return true;
+}
+
+int LibraryModel::refreshMetadataForPaths(const QStringList& paths)
+{
+    int refreshed = 0;
+    for (const QString& path : paths) {
+        if (refreshMetadataForPath(path)) ++refreshed;
+    }
+    return refreshed;
 }
 
 bool LibraryModel::applyReplayGainResult(const QString& trackId,
