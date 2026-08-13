@@ -14,6 +14,7 @@
 
 template <typename T>
 class QFutureWatcher;
+class LibraryModel;
 
 struct MetadataEntry {
     QString path;
@@ -45,8 +46,12 @@ struct MetadataEntry {
 struct MetadataApplySummary {
     int successCount = 0;
     int failureCount = 0;
+    int supportedCount = 0;
+    int unsupportedCount = 0;
+    int cancelledCount = 0;
     QList<MetadataEntry> entries;
     QVariantList results;
+    QList<int> supportedTargets;
 };
 
 class MetadataEditor final : public QObject {
@@ -56,6 +61,13 @@ class MetadataEditor final : public QObject {
     Q_PROPERTY(int fileCount READ fileCount NOTIFY fileCountChanged)
     Q_PROPERTY(QString coverImage READ coverImage NOTIFY coverImageChanged)
     Q_PROPERTY(QVariantList results READ results NOTIFY resultsChanged)
+    Q_PROPERTY(bool requiresPreflightDecision READ requiresPreflightDecision
+               NOTIFY preflightDecisionChanged)
+    Q_PROPERTY(int successCount READ successCount NOTIFY statisticsChanged)
+    Q_PROPERTY(int failedCount READ failedCount NOTIFY statisticsChanged)
+    Q_PROPERTY(int supportedCount READ supportedCount NOTIFY statisticsChanged)
+    Q_PROPERTY(int unsupportedCount READ unsupportedCount NOTIFY statisticsChanged)
+    Q_PROPERTY(int cancelledCount READ cancelledCount NOTIFY statisticsChanged)
 
 public:
     explicit MetadataEditor(QObject* parent = nullptr);
@@ -66,6 +78,13 @@ public:
     int fileCount() const noexcept;
     QString coverImage() const;
     QVariantList results() const { return results_; }
+    bool requiresPreflightDecision() const noexcept { return requiresPreflightDecision_; }
+    int successCount() const noexcept { return successCount_; }
+    int failedCount() const noexcept { return failedCount_; }
+    int supportedCount() const noexcept { return supportedCount_; }
+    int unsupportedCount() const noexcept { return unsupportedCount_; }
+    int cancelledCount() const noexcept { return cancelledCount_; }
+    void setLibraryModel(LibraryModel* model) noexcept { libraryModel_ = model; }
 
     Q_INVOKABLE void loadFiles(const QList<QUrl>& urls);
     Q_INVOKABLE QVariantMap entryAt(int index) const;
@@ -74,7 +93,10 @@ public:
                                    const QList<int>& indices);
     Q_INVOKABLE void preflightMetadata(const QVariantMap& fields,
                                        const QList<int>& indices);
+    Q_INVOKABLE void applyPreflightDecision(const QString& policy);
     Q_INVOKABLE bool exportResults(const QUrl& destination);
+    Q_INVOKABLE bool exportCurrentList(const QUrl& destination,
+                                       const QList<int>& indices) const;
     Q_INVOKABLE void setCoverImage(const QUrl& url);
     Q_INVOKABLE void clearCoverImage();
     Q_INVOKABLE void cancel();
@@ -88,6 +110,10 @@ signals:
     void entriesChanged();
     void coverImageChanged();
     void resultsChanged();
+    void statisticsChanged();
+    void preflightDecisionChanged();
+    void preflightCompleted(int supportedCount, int unsupportedCount);
+    void preflightDecisionRequired(int supportedCount, int unsupportedCount);
     void metadataApplied(int successCount, int failureCount);
     void errorOccurred(const QString& message);
 
@@ -99,7 +125,18 @@ private:
     QPointer<QFutureWatcher<QList<QUrl>>> discoveryWatcher_;
     QPointer<QFutureWatcher<QList<MetadataEntry>>> loadWatcher_;
     QPointer<QFutureWatcher<MetadataApplySummary>> operationWatcher_;
+    QPointer<LibraryModel> libraryModel_;
     QVariantList results_;
+    QVariantMap pendingFields_;
+    QList<int> pendingTargets_;
+    QList<int> pendingSupportedTargets_;
+    QVariantList pendingUnsupportedResults_;
+    bool requiresPreflightDecision_ = false;
+    int successCount_ = 0;
+    int failedCount_ = 0;
+    int supportedCount_ = 0;
+    int unsupportedCount_ = 0;
+    int cancelledCount_ = 0;
 
     QString coverPath_;
     QByteArray coverData_;
@@ -108,6 +145,10 @@ private:
     void setBusy(bool value);
     void setProgress(double value);
     void startMetadataLoad(QList<QUrl> expandedUrls);
+    void startPreflight(const QVariantMap& fields, const QList<int>& indices,
+                        bool applyWhenSupported);
+    void startApply(const QVariantMap& fields, const QList<int>& indices);
+    void resetOperationState();
     void resetCover();
     static QString mimeTypeForImage(const QString& path);
 };

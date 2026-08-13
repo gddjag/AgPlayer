@@ -5,15 +5,14 @@
 #include "filename_validator.hpp"
 #include "library_model.hpp"
 #include "rename_plan.hpp"
+#include "rename_transaction.hpp"
 
 #include <QDir>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
-#include <QRegularExpression>
 #include <QSet>
-#include <QUuid>
 #include <QtConcurrent>
 
 #include <algorithm>
@@ -30,20 +29,6 @@ QString pathKey(const QString& path)
 #else
     return normalized;
 #endif
-}
-
-QString uniqueStagingPath(const QString& source)
-{
-    const QFileInfo info(source);
-    for (;;) {
-        const QString candidate = info.dir().filePath(
-            QStringLiteral(".%1.agplayer-%2.tmp")
-                .arg(info.fileName(),
-                     QUuid::createUuid().toString(QUuid::Id128)));
-        if (!QFileInfo::exists(candidate)) {
-            return candidate;
-        }
-    }
 }
 
 QString contentHash(const QString& path)
@@ -63,72 +48,40 @@ QString contentHash(const QString& path)
     return QString::fromLatin1(hash.result().toHex());
 }
 
-QString sanitizeComponent(QString value)
+agplayer::qt::FilenameRuleSet typedRules(const QVariantMap& rules)
 {
-    const QString invalid = QStringLiteral("<>:\"/\\|?*");
-    for (qsizetype index = 0; index < value.size(); ++index) {
-        const QChar character = value.at(index);
-        if (character.unicode() < 0x20 || invalid.contains(character)) {
-            value[index] = QLatin1Char('_');
-        }
-    }
-    while (value.endsWith(QLatin1Char(' '))
-           || value.endsWith(QLatin1Char('.'))) {
-        value.chop(1);
-    }
-    static const QRegularExpression reservedDeviceName(
-        QStringLiteral("^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$"),
-        QRegularExpression::CaseInsensitiveOption);
-    if (reservedDeviceName.match(value).hasMatch()) {
-        value.prepend(QLatin1Char('_'));
-    }
-    return value.isEmpty() ? QStringLiteral("_") : value;
+    agplayer::qt::FilenameRuleSet typed;
+    typed.prefix = rules.value(QStringLiteral("prefix")).toString();
+    typed.suffix = rules.value(QStringLiteral("suffix")).toString();
+    typed.replaceSpaces = rules.value(QStringLiteral("replaceSpaces"), false).toBool();
+    typed.spaceReplacement = rules.value(QStringLiteral("spaceReplacement"), QStringLiteral("_")).toString();
+    typed.autoNumber = rules.value(QStringLiteral("autoNumber"), false).toBool();
+    typed.numberStart = rules.value(QStringLiteral("numberStart"), 1).toInt();
+    typed.numberDigits = rules.value(QStringLiteral("numberDigits"), 2).toInt();
+    typed.numberSeparator = rules.value(QStringLiteral("numberSeparator"), QStringLiteral("_")).toString();
+    typed.preserveExtension = rules.value(QStringLiteral("preserveExtension"), true).toBool();
+    typed.removePrefixWhenEmpty = rules.value(QStringLiteral("removePrefixWhenEmpty"), true).toBool();
+    typed.removeSuffixWhenEmpty = rules.value(QStringLiteral("removeSuffixWhenEmpty"), true).toBool();
+    typed.removeSequenceWhenEmpty = rules.value(QStringLiteral("removeSequenceWhenEmpty"), true).toBool();
+    const QString mode = rules.value(QStringLiteral("caseMode"), QStringLiteral("keep")).toString();
+    typed.caseRule = mode == QLatin1String("lower") ? agplayer::qt::CaseRule::Lower
+        : mode == QLatin1String("upper") ? agplayer::qt::CaseRule::Upper
+        : mode == QLatin1String("title") ? agplayer::qt::CaseRule::Title
+        : agplayer::qt::CaseRule::Keep;
+    const QString position = rules.value(QStringLiteral("numberPosition"), QStringLiteral("afterSuffix")).toString();
+    typed.numberPosition = position == QLatin1String("beginning") ? agplayer::qt::NumberPosition::Beginning
+        : position == QLatin1String("afterPrefix") ? agplayer::qt::NumberPosition::AfterPrefix
+        : position == QLatin1String("beforeSuffix") ? agplayer::qt::NumberPosition::BeforeSuffix
+        : agplayer::qt::NumberPosition::AfterSuffix;
+    return typed;
 }
 
-QString applyCase(QString value, const QString& mode)
+agplayer::qt::ConflictPolicy typedConflictPolicy(const QString& policy)
 {
-    if (mode == QLatin1String("lower")) {
-        return value.toLower();
-    }
-    if (mode == QLatin1String("upper")) {
-        return value.toUpper();
-    }
-    if (mode == QLatin1String("title")) {
-        bool capitalize = true;
-        for (qsizetype index = 0; index < value.size(); ++index) {
-            if (value.at(index).isLetter()) {
-                value[index] = capitalize ? value.at(index).toUpper()
-                                          : value.at(index).toLower();
-                capitalize = false;
-            } else {
-                capitalize = value.at(index).isSpace()
-                    || value.at(index) == QLatin1Char('_')
-                    || value.at(index) == QLatin1Char('-');
-            }
-        }
-    }
-    return value;
-}
-
-QString collisionFreePath(const QString& desired,
-                          const QSet<QString>& reserved)
-{
-    if (!QFileInfo::exists(desired) && !reserved.contains(pathKey(desired))) {
-        return desired;
-    }
-    const QFileInfo info(desired);
-    const QString suffix = info.suffix().isEmpty()
-        ? QString() : QStringLiteral(".") + info.suffix();
-    for (int number = 2; number <= 9999; ++number) {
-        const QString candidate = info.dir().filePath(
-            info.completeBaseName() + QStringLiteral("_")
-            + QString::number(number) + suffix);
-        if (!QFileInfo::exists(candidate)
-            && !reserved.contains(pathKey(candidate))) {
-            return candidate;
-        }
-    }
-    return {};
+    if (policy == QLatin1String("skip")) return agplayer::qt::ConflictPolicy::Skip;
+    if (policy == QLatin1String("overwrite")) return agplayer::qt::ConflictPolicy::Overwrite;
+    if (policy == QLatin1String("stop")) return agplayer::qt::ConflictPolicy::StopBatch;
+    return agplayer::qt::ConflictPolicy::AutoNumber;
 }
 
 } // namespace
@@ -174,7 +127,7 @@ int FilenameProcessor::fileCount() const noexcept
 
 bool FilenameProcessor::canUndo() const noexcept
 {
-    return !lastTransaction_.isEmpty();
+    return !lastUndoRecord_.plan.items.isEmpty();
 }
 
 QVariantList FilenameProcessor::files() const
@@ -245,8 +198,9 @@ void FilenameProcessor::startLoad(QList<QUrl> expanded)
             [this, watcher] {
         loadWatcher_.clear();
         entries_ = watcher->result();
-        const bool undoChanged = !lastTransaction_.isEmpty();
-        lastTransaction_.clear();
+        const bool undoChanged = canUndo();
+        agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
+        lastUndoRecord_ = {};
         setBusy(false);
         setProgress(1.0);
         emit fileCountChanged();
@@ -331,31 +285,13 @@ QString FilenameProcessor::proposedName(const QString& original,
                                         const QVariantMap& rules,
                                         int ordinal)
 {
-    agplayer::qt::FilenameRuleSet typed;
-    typed.prefix = rules.value(QStringLiteral("prefix")).toString();
-    typed.suffix = rules.value(QStringLiteral("suffix")).toString();
-    typed.replaceSpaces = rules.value(QStringLiteral("replaceSpaces"), false).toBool();
-    typed.spaceReplacement = rules.value(QStringLiteral("spaceReplacement"), QStringLiteral("_")).toString();
-    typed.autoNumber = rules.value(QStringLiteral("autoNumber"), false).toBool();
-    typed.numberStart = rules.value(QStringLiteral("numberStart"), 1).toInt();
-    typed.numberDigits = rules.value(QStringLiteral("numberDigits"), 2).toInt();
-    typed.numberSeparator = rules.value(QStringLiteral("numberSeparator"), QStringLiteral("_")).toString();
-    typed.preserveExtension = rules.value(QStringLiteral("preserveExtension"), true).toBool();
-    const QString mode = rules.value(QStringLiteral("caseMode"), QStringLiteral("keep")).toString();
-    typed.caseRule = mode == QLatin1String("lower") ? agplayer::qt::CaseRule::Lower
-        : mode == QLatin1String("upper") ? agplayer::qt::CaseRule::Upper
-        : mode == QLatin1String("title") ? agplayer::qt::CaseRule::Title
-        : agplayer::qt::CaseRule::Keep;
-    const QString position = rules.value(QStringLiteral("numberPosition"), QStringLiteral("afterSuffix")).toString();
-    typed.numberPosition = position == QLatin1String("beginning") ? agplayer::qt::NumberPosition::Beginning
-        : position == QLatin1String("beforeSuffix") ? agplayer::qt::NumberPosition::BeforeSuffix
-        : position == QLatin1String("afterSuffix") ? agplayer::qt::NumberPosition::AfterSuffix
-        : agplayer::qt::NumberPosition::AfterPrefix;
-    return agplayer::qt::FilenameTransformEngine::transform(original, typed, ordinal);
+    return agplayer::qt::FilenameTransformEngine::transform(
+        original, typedRules(rules), ordinal);
 }
 
 QVariantList FilenameProcessor::preview(const QVariantMap& rules,
-                                        const QList<int>& indices) const
+                                        const QList<int>& indices,
+                                        const QString& conflictPolicy) const
 {
     QVariantList result;
     const QList<int> targets = normalizedTargets(entries_.size(), indices);
@@ -365,27 +301,8 @@ QVariantList FilenameProcessor::preview(const QVariantMap& rules,
         const Entry& entry = entries_.at(index);
         sources.append({index, entry.path, entry.sha256, {}, QFileInfo(entry.path).size()});
     }
-    agplayer::qt::FilenameRuleSet typed;
-    typed.prefix = rules.value(QStringLiteral("prefix")).toString();
-    typed.suffix = rules.value(QStringLiteral("suffix")).toString();
-    typed.replaceSpaces = rules.value(QStringLiteral("replaceSpaces"), false).toBool();
-    typed.spaceReplacement = rules.value(QStringLiteral("spaceReplacement"), QStringLiteral("_")).toString();
-    typed.autoNumber = rules.value(QStringLiteral("autoNumber"), false).toBool();
-    typed.numberStart = rules.value(QStringLiteral("numberStart"), 1).toInt();
-    typed.numberDigits = rules.value(QStringLiteral("numberDigits"), 2).toInt();
-    typed.numberSeparator = rules.value(QStringLiteral("numberSeparator"), QStringLiteral("_")).toString();
-    const QString mode = rules.value(QStringLiteral("caseMode"), QStringLiteral("keep")).toString();
-    typed.caseRule = mode == QLatin1String("lower") ? agplayer::qt::CaseRule::Lower
-        : mode == QLatin1String("upper") ? agplayer::qt::CaseRule::Upper
-        : mode == QLatin1String("title") ? agplayer::qt::CaseRule::Title
-        : agplayer::qt::CaseRule::Keep;
-    const QString position = rules.value(QStringLiteral("numberPosition"), QStringLiteral("afterSuffix")).toString();
-    typed.numberPosition = position == QLatin1String("beginning") ? agplayer::qt::NumberPosition::Beginning
-        : position == QLatin1String("afterPrefix") ? agplayer::qt::NumberPosition::AfterPrefix
-        : position == QLatin1String("beforeSuffix") ? agplayer::qt::NumberPosition::BeforeSuffix
-        : agplayer::qt::NumberPosition::AfterSuffix;
     const agplayer::qt::RenamePlan plan = agplayer::qt::RenamePlanner::build(
-        sources, typed, agplayer::qt::ConflictPolicy::AutoNumber);
+        sources, typedRules(rules), typedConflictPolicy(conflictPolicy));
     result.reserve(plan.items.size());
     for (const auto& item : plan.items) {
         const bool conflict = item.severity != agplayer::qt::RenameSeverity::Ready;
@@ -422,16 +339,22 @@ void FilenameProcessor::apply(const QVariantMap& rules,
         operationWatcher_.clear();
         const RenameResult result = watcher->result();
         entries_ = result.entries;
-        const bool undoChanged = lastTransaction_.isEmpty()
-            != result.committed.isEmpty();
-        lastTransaction_ = result.committed;
-        if (!result.committed.isEmpty() && !library_.isNull()) {
+        const bool hadUndo = canUndo();
+        if (result.transaction.committed) {
+            agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
+            lastUndoRecord_ = result.transaction.undoRecord;
+        }
+        if (result.transaction.committed && !library_.isNull()) {
             QHash<QString, QString> paths;
-            for (const RenameStep& step : result.committed) {
+            for (const auto& item : result.transaction.undoRecord.plan.items) {
+                if (item.action != agplayer::qt::RenameAction::Rename
+                    && item.action != agplayer::qt::RenameAction::Overwrite) {
+                    continue;
+                }
                 for (const TrackRecord& track : library_->tracks()) {
                     if (agplayer::qt::FilenameValidator::collisionKey(track.path)
-                        == agplayer::qt::FilenameValidator::collisionKey(step.source)) {
-                        paths.insert(track.trackId, step.target);
+                        == agplayer::qt::FilenameValidator::collisionKey(item.sourcePath)) {
+                        paths.insert(track.trackId, item.targetPath);
                         break;
                     }
                 }
@@ -445,7 +368,7 @@ void FilenameProcessor::apply(const QVariantMap& rules,
         setBusy(false);
         setProgress(1.0);
         emit entriesChanged();
-        if (undoChanged) {
+        if (hadUndo != canUndo()) {
             emit canUndoChanged();
         }
         if (!result.error.isEmpty()) {
@@ -458,207 +381,96 @@ void FilenameProcessor::apply(const QVariantMap& rules,
         [snapshot, targets, rules, conflictPolicy, this] {
         RenameResult result;
         result.entries = snapshot;
-        QList<RenameStep> plan;
-        QSet<QString> reserved;
-        QSet<QString> sourcePaths;
+        QList<agplayer::qt::RenameSource> sources;
+        sources.reserve(targets.size());
         for (const int index : targets) {
-            sourcePaths.insert(pathKey(snapshot.at(index).path));
-        }
-        for (int ordinal = 0; ordinal < targets.size(); ++ordinal) {
-            const int index = targets.at(ordinal);
             const Entry& entry = snapshot.at(index);
-            QString target = QFileInfo(entry.path).dir().filePath(
-                proposedName(entry.fileName, rules, ordinal));
-            if (QDir::cleanPath(target) == QDir::cleanPath(entry.path)) {
-                ++result.skipped;
-                continue;
-            }
-            const QString targetKey = pathKey(target);
-            const bool conflict =
-                (QFileInfo::exists(target) && !sourcePaths.contains(targetKey))
-                || reserved.contains(targetKey);
-            if (conflict && conflictPolicy == QLatin1String("stop")) {
-                result.failure = targets.size() - result.skipped;
-                result.error = tr("文件名冲突：%1")
-                    .arg(QFileInfo(target).fileName());
-                return result;
-            }
-            if (conflict && conflictPolicy == QLatin1String("skip")) {
-                ++result.skipped;
-                continue;
-            }
-            if (conflict) {
-                target = collisionFreePath(target, reserved);
-            }
-            if (target.isEmpty()) {
-                ++result.failure;
-                continue;
-            }
-            reserved.insert(pathKey(target));
-            plan.append({index, entry.path, target, {}, entry.sha256});
+            sources.append({index, entry.path, entry.sha256, {},
+                            QFileInfo(entry.path).size()});
         }
-
-        int stagedCount = 0;
-        int finalizedCount = 0;
-        const auto rollbackPlan = [&plan, &stagedCount, &finalizedCount]() {
-            bool complete = true;
-            for (int index = finalizedCount - 1; index >= 0; --index) {
-                const RenameStep& step = plan.at(index);
-                if (!QFile::rename(step.target, step.staging)) {
-                    complete = false;
+        const agplayer::qt::RenamePlan plan = agplayer::qt::RenamePlanner::build(
+            sources, typedRules(rules), typedConflictPolicy(conflictPolicy));
+        for (const auto& item : plan.items) {
+            if (item.action == agplayer::qt::RenameAction::NoOp
+                || item.action == agplayer::qt::RenameAction::Skip) {
+                ++result.skipped;
+                if (item.severity == agplayer::qt::RenameSeverity::Error) {
+                    ++result.failure;
                 }
             }
-            for (int index = stagedCount - 1; index >= 0; --index) {
-                const RenameStep& step = plan.at(index);
-                if (QFileInfo::exists(step.staging)
-                    && !QFile::rename(step.staging, step.source)) {
-                    complete = false;
-                }
-            }
-            return complete;
-        };
-
-        for (int stepIndex = 0; stepIndex < plan.size(); ++stepIndex) {
-            if (cancelFlag_.load(std::memory_order_acquire)) {
-                const bool rolledBack = rollbackPlan();
-                result.error = rolledBack
-                    ? tr("重命名已取消")
-                    : tr("重命名已取消，但回滚未完整完成");
-                return result;
-            }
-            RenameStep& step = plan[stepIndex];
-            if (step.sha256.isEmpty() || contentHash(step.source) != step.sha256) {
-                ++result.failure;
-                const bool rolledBack = rollbackPlan();
-                result.error = rolledBack
-                    ? tr("文件内容已变更：%1").arg(QFileInfo(step.source).fileName())
-                    : tr("文件内容已变更且回滚未完整完成：%1")
-                          .arg(QFileInfo(step.source).fileName());
-                return result;
-            }
-            step.staging = uniqueStagingPath(step.source);
-            if (!QFile::rename(step.source, step.staging)) {
-                ++result.failure;
-                const bool rolledBack = rollbackPlan();
-                result.error = rolledBack
-                    ? tr("重命名失败：%1")
-                          .arg(QFileInfo(step.source).fileName())
-                    : tr("重命名失败：%1；回滚未完整完成")
-                          .arg(QFileInfo(step.source).fileName());
-                return result;
-            }
-            ++stagedCount;
-            progress_.store(static_cast<double>(stagedCount)
-                                / qMax(1, plan.size() * 2),
-                            std::memory_order_release);
         }
-
-        for (int stepIndex = 0; stepIndex < plan.size(); ++stepIndex) {
-            if (cancelFlag_.load(std::memory_order_acquire)) {
-                const bool rolledBack = rollbackPlan();
-                result.error = rolledBack
-                    ? tr("重命名已取消")
-                    : tr("重命名已取消，但回滚未完整完成");
-                return result;
-            }
-            const RenameStep& step = plan.at(stepIndex);
-            if (!QFile::rename(step.staging, step.target)) {
-                ++result.failure;
-                const bool rolledBack = rollbackPlan();
-                result.error = rolledBack
-                    ? tr("重命名失败：%1")
-                          .arg(QFileInfo(step.source).fileName())
-                    : tr("重命名失败：%1；回滚未完整完成")
-                          .arg(QFileInfo(step.source).fileName());
-                return result;
-            }
-            ++finalizedCount;
-            if (contentHash(step.target) != step.sha256) {
-                ++result.failure;
-                const bool rolledBack = rollbackPlan();
-                result.error = rolledBack
-                    ? tr("重命名后内容校验失败：%1")
-                          .arg(QFileInfo(step.target).fileName())
-                    : tr("重命名后内容校验失败且回滚未完整完成：%1")
-                          .arg(QFileInfo(step.target).fileName());
-                return result;
-            }
-            result.entries[step.index].path = step.target;
-            result.entries[step.index].fileName =
-                QFileInfo(step.target).fileName();
-            progress_.store(static_cast<double>(plan.size() + finalizedCount)
-                                / qMax(1, plan.size() * 2),
-                            std::memory_order_release);
+        if (!plan.executable) {
+            result.error = tr("当前重命名计划包含错误，未执行任何文件操作");
+            return result;
         }
-        result.committed = plan;
-        result.success = plan.size();
+        result.transaction = agplayer::qt::RenameTransaction().execute(
+            plan, &cancelFlag_);
+        if (!result.transaction.committed) {
+            result.failure = qMax(1, targets.size() - result.skipped);
+            result.error = result.transaction.errorText;
+            return result;
+        }
+        for (const auto& item : plan.items) {
+            if (item.action != agplayer::qt::RenameAction::Rename
+                && item.action != agplayer::qt::RenameAction::Overwrite) {
+                continue;
+            }
+            result.entries[item.itemId].path = item.targetPath;
+            result.entries[item.itemId].fileName = item.proposedFileName;
+            ++result.success;
+        }
         return result;
     }));
 }
 
 void FilenameProcessor::undoLast()
 {
-    if (busy() || lastTransaction_.isEmpty()) {
+    if (busy() || !canUndo()) {
         return;
     }
-    QList<RenameStep> undoPlan = lastTransaction_;
-    QSet<QString> targetPaths;
-    for (const RenameStep& step : undoPlan) {
-        targetPaths.insert(pathKey(step.target));
-    }
-    for (const RenameStep& step : undoPlan) {
-        if (QFileInfo::exists(step.source)
-            && !targetPaths.contains(pathKey(step.source))) {
-            emit undoCompleted(0, 1);
-            return;
+    const agplayer::qt::RenameUndoRecord undoRecord = lastUndoRecord_;
+    const agplayer::qt::RenameTransactionResult result =
+        agplayer::qt::RenameTransaction().undo(undoRecord);
+    if (!result.committed) {
+        if (!result.errorText.isEmpty()) {
+            emit errorOccurred(result.errorText);
         }
+        emit undoCompleted(0, 1);
+        return;
     }
-
-    int stagedCount = 0;
     int restoredCount = 0;
-    const auto rollbackUndo = [&undoPlan, &stagedCount, &restoredCount]() {
-        bool complete = true;
-        for (int index = restoredCount - 1; index >= 0; --index) {
-            const RenameStep& step = undoPlan.at(index);
-            if (!QFile::rename(step.source, step.staging)) {
-                complete = false;
-            }
+    for (const auto& item : undoRecord.plan.items) {
+        if (item.action != agplayer::qt::RenameAction::Rename
+            && item.action != agplayer::qt::RenameAction::Overwrite) {
+            continue;
         }
-        for (int index = stagedCount - 1; index >= 0; --index) {
-            const RenameStep& step = undoPlan.at(index);
-            if (QFileInfo::exists(step.staging)
-                && !QFile::rename(step.staging, step.target)) {
-                complete = false;
-            }
-        }
-        return complete;
-    };
-
-    for (int index = 0; index < undoPlan.size(); ++index) {
-        RenameStep& step = undoPlan[index];
-        step.staging = uniqueStagingPath(step.target);
-        if (!QFile::rename(step.target, step.staging)) {
-            rollbackUndo();
-            emit undoCompleted(0, 1);
-            return;
-        }
-        ++stagedCount;
-    }
-    for (int index = 0; index < undoPlan.size(); ++index) {
-        const RenameStep& step = undoPlan.at(index);
-        if (!QFile::rename(step.staging, step.source)) {
-            rollbackUndo();
-            emit undoCompleted(0, 1);
-            return;
-        }
+        entries_[item.itemId].path = item.sourcePath;
+        entries_[item.itemId].fileName = QFileInfo(item.sourcePath).fileName();
         ++restoredCount;
-        entries_[step.index].path = step.source;
-        entries_[step.index].fileName = QFileInfo(step.source).fileName();
     }
-    lastTransaction_.clear();
+    if (!library_.isNull()) {
+        QHash<QString, QString> restoredPaths;
+        const QList<TrackRecord> tracks = library_->tracks();
+        for (const auto& item : undoRecord.plan.items) {
+            if (item.action != agplayer::qt::RenameAction::Rename
+                && item.action != agplayer::qt::RenameAction::Overwrite) {
+                continue;
+            }
+            for (const TrackRecord& track : tracks) {
+                if (pathKey(track.path) == pathKey(item.targetPath)) {
+                    restoredPaths.insert(track.trackId, item.sourcePath);
+                    break;
+                }
+            }
+        }
+        if (!restoredPaths.isEmpty() && !library_->updateTrackPaths(restoredPaths)) {
+            emit errorOccurred(tr("文件已恢复，但曲库路径同步失败。"));
+        }
+    }
+    lastUndoRecord_ = {};
     emit entriesChanged();
     emit canUndoChanged();
-    emit undoCompleted(undoPlan.size(), 0);
+    emit undoCompleted(restoredCount, 0);
 }
 
 void FilenameProcessor::cancel()
@@ -671,9 +483,10 @@ void FilenameProcessor::clear()
     if (busy()) {
         return;
     }
-    const bool hadUndo = !lastTransaction_.isEmpty();
+    const bool hadUndo = canUndo();
     entries_.clear();
-    lastTransaction_.clear();
+    agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
+    lastUndoRecord_ = {};
     emit fileCountChanged();
     emit entriesChanged();
     if (hadUndo) {

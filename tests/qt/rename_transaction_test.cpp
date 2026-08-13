@@ -1,9 +1,11 @@
 #include "rename_plan.hpp"
+#include "rename_journal_store.hpp"
 #include "rename_transaction.hpp"
 
 #include <QCryptographicHash>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QStandardPaths>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -30,10 +32,20 @@ class RenameTransactionTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void renamesSwapAndKeepsSha256();
     void refusesUndoWhenTargetWasExternallyChanged();
+    void overwriteBacksUpTargetAndUndoRestoresBothFiles();
+    void discardingUndoRemovesOverwriteBackupWithoutChangingCommittedFile();
     void persistsPreparedAndCommittedJournal();
+    void recoversPreparedTransactionFromStageFile();
+    void recoversPreparedTransactionAfterTargetCommit();
 };
+
+void RenameTransactionTest::initTestCase()
+{
+    QStandardPaths::setTestModeEnabled(true);
+}
 
 void RenameTransactionTest::renamesSwapAndKeepsSha256()
 {
@@ -72,6 +84,57 @@ void RenameTransactionTest::refusesUndoWhenTargetWasExternallyChanged()
     QCOMPARE(undo.errorCode, u"undo-target-changed"_s);
 }
 
+void RenameTransactionTest::overwriteBacksUpTargetAndUndoRestoresBothFiles()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(u"source.flac"_s);
+    const QString target = directory.filePath(u"target.flac"_s);
+    writeFile(source, QByteArrayLiteral("source-audio"));
+    writeFile(target, QByteArrayLiteral("existing-audio"));
+    const QString sourceHash = hashFile(source);
+    const QString targetHash = hashFile(target);
+
+    RenamePlan plan = RenameTransaction::makePlanForTests(
+        {{0, source, sourceHash, {}, 12}}, {target});
+    plan.items[0].action = RenameAction::Overwrite;
+    RenameTransaction executor;
+    const RenameTransactionResult committed = executor.execute(plan);
+    QVERIFY2(committed.committed, qPrintable(committed.errorText));
+    QVERIFY(!QFileInfo::exists(source));
+    QCOMPARE(hashFile(target), sourceHash);
+
+    const RenameTransactionResult undone = executor.undo(committed.undoRecord);
+    QVERIFY2(undone.committed, qPrintable(undone.errorText));
+    QCOMPARE(hashFile(source), sourceHash);
+    QCOMPARE(hashFile(target), targetHash);
+}
+
+void RenameTransactionTest::
+    discardingUndoRemovesOverwriteBackupWithoutChangingCommittedFile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(u"source.wav"_s);
+    const QString target = directory.filePath(u"target.wav"_s);
+    writeFile(source, QByteArrayLiteral("new-audio"));
+    writeFile(target, QByteArrayLiteral("old-audio"));
+    const QString sourceHash = hashFile(source);
+
+    RenamePlan plan = RenameTransaction::makePlanForTests(
+        {{0, source, sourceHash, {}, 9}}, {target});
+    plan.items[0].action = RenameAction::Overwrite;
+    const RenameTransactionResult committed = RenameTransaction().execute(plan);
+    QVERIFY(committed.committed);
+    QCOMPARE(committed.undoRecord.overwriteBackups.size(), 1);
+    const QString backup = committed.undoRecord.overwriteBackups.first().backupPath;
+    QVERIFY(QFileInfo::exists(backup));
+
+    QVERIFY(RenameTransaction::discardUndo(committed.undoRecord));
+    QVERIFY(!QFileInfo::exists(backup));
+    QCOMPARE(hashFile(target), sourceHash);
+}
+
 void RenameTransactionTest::persistsPreparedAndCommittedJournal()
 {
     QTemporaryDir directory;
@@ -87,6 +150,54 @@ void RenameTransactionTest::persistsPreparedAndCommittedJournal()
     QFile journal(result.journalPath);
     QVERIFY(journal.open(QIODevice::ReadOnly));
     QVERIFY(journal.readAll().contains("Committed"));
+}
+
+void RenameTransactionTest::recoversPreparedTransactionFromStageFile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(u"source.aac"_s);
+    const QString target = directory.filePath(u"target.aac"_s);
+    writeFile(source, QByteArrayLiteral("recover-stage"));
+    const QString transaction = u"recover-stage-test"_s;
+    const RenamePlan plan = RenameTransaction::makePlanForTests(
+        {{7, source, hashFile(source), {}, 13}}, {target});
+    const QString journal = RenameJournalStore::writePrepared(transaction, plan);
+    QVERIFY(!journal.isEmpty());
+    const QString stage = directory.filePath(
+        u".agplayer-rename-%1-7.tmp"_s.arg(transaction));
+    QVERIFY(QFile::rename(source, stage));
+
+    const RenameRecoveryReport report = RenameJournalStore::recoverIncomplete();
+    QVERIFY(report.recovered >= 1);
+    QCOMPARE(report.failed, 0);
+    QCOMPARE(hashFile(source), plan.items.first().sha256);
+    QVERIFY(!QFileInfo::exists(stage));
+    QVERIFY(!QFileInfo::exists(target));
+    QFile journalFile(journal);
+    QVERIFY(journalFile.open(QIODevice::ReadOnly));
+    QVERIFY(journalFile.readAll().contains("RecoveredAtStartup"));
+}
+
+void RenameTransactionTest::recoversPreparedTransactionAfterTargetCommit()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(u"before.opus"_s);
+    const QString target = directory.filePath(u"after.opus"_s);
+    writeFile(source, QByteArrayLiteral("recover-commit"));
+    const QString transaction = u"recover-commit-test"_s;
+    const RenamePlan plan = RenameTransaction::makePlanForTests(
+        {{9, source, hashFile(source), {}, 14}}, {target});
+    const QString journal = RenameJournalStore::writePrepared(transaction, plan);
+    QVERIFY(!journal.isEmpty());
+    QVERIFY(QFile::rename(source, target));
+
+    const RenameRecoveryReport report = RenameJournalStore::recoverIncomplete();
+    QVERIFY(report.recovered >= 1);
+    QCOMPARE(report.failed, 0);
+    QCOMPARE(hashFile(source), plan.items.first().sha256);
+    QVERIFY(!QFileInfo::exists(target));
 }
 
 QTEST_GUILESS_MAIN(RenameTransactionTest)

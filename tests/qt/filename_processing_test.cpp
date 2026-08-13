@@ -12,6 +12,7 @@ class FilenameProcessingTest final : public QObject {
 
 private slots:
     void transformsStemWithoutChangingExtension();
+    void blankAffixesRemoveRecognizableAffixesAndSequence();
     void keepsHiddenFilesAndExtensionlessNamesWellDefined();
     void reportsUnsafeWindowsNames();
     void plansInternalCollisionsInImportOrder();
@@ -32,6 +33,21 @@ void FilenameProcessingTest::transformsStemWithoutChangingExtension()
 
     QCOMPARE(FilenameTransformEngine::transform(u"Neon City.flac"_s, rules, 0),
              u"[Live]_01_Neon_City_Remaster.flac"_s);
+}
+
+void FilenameProcessingTest::blankAffixesRemoveRecognizableAffixesAndSequence()
+{
+    FilenameRuleSet rules;
+    rules.removePrefixWhenEmpty = true;
+    rules.removeSuffixWhenEmpty = true;
+    rules.removeSequenceWhenEmpty = true;
+
+    QCOMPARE(FilenameTransformEngine::transform(
+                 u"[Live]_01_Neon City_Remaster.flac"_s, rules, 0),
+             u"Neon City.flac"_s);
+    QCOMPARE(FilenameTransformEngine::transform(
+                 u"003 - 东京之夜 - Demo.wav"_s, rules, 0),
+             u"东京之夜.wav"_s);
 }
 
 void FilenameProcessingTest::keepsHiddenFilesAndExtensionlessNamesWellDefined()
