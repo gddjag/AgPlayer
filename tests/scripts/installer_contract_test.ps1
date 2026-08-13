@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $installer = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:AGPLAYER_INSTALLER_SCRIPT
 $repo = Split-Path -Parent (Split-Path -Parent $env:AGPLAYER_INSTALLER_SCRIPT)
 
-if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}$') {
+if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}\r?$') {
     throw "Installed Apps must display only AgPlayer"
 }
 
@@ -19,7 +19,7 @@ if ($installer -notmatch '\[Code\]' -or
     $installer -notmatch 'DelTree\(ExpandConstant\(') {
     throw "Uninstaller must explicitly offer deletion of personal playlists, favorites, and settings"
 }
-if ($installer -notmatch '(?m)^DisableDirPage=no$') {
+if ($installer -notmatch '(?m)^DisableDirPage=no\r?$') {
     throw "Installer must allow choosing an installation directory"
 }
 if ($installer -notmatch '\[Tasks\]' -or

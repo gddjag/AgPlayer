@@ -42,6 +42,9 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(qreal lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged)
     Q_PROPERTY(qreal renderWidth READ renderWidth NOTIFY renderWidthChanged)
     Q_PROPERTY(qreal waveformCursorX READ waveformCursorX NOTIFY waveformCursorXChanged)
+    Q_PROPERTY(bool pointerInteractionEnabled READ pointerInteractionEnabled
+                   WRITE setPointerInteractionEnabled
+                   NOTIFY pointerInteractionEnabledChanged)
     Q_PROPERTY(qint64 totalSamples READ totalSamples NOTIFY layersChanged)
     Q_PROPERTY(qint64 sampleRate READ sampleRate NOTIFY layersChanged)
     Q_PROPERTY(qsizetype peakCount READ peakCount NOTIFY layersChanged)
@@ -101,6 +104,8 @@ public:
     void setLineWidth(qreal width);
     qreal renderWidth() const noexcept;
     qreal waveformCursorX() const noexcept;
+    bool pointerInteractionEnabled() const noexcept;
+    void setPointerInteractionEnabled(bool enabled);
     qint64 totalSamples() const noexcept;
     qint64 sampleRate() const noexcept;
     qsizetype peakCount() const noexcept;
@@ -140,6 +145,7 @@ signals:
     void lineWidthChanged();
     void renderWidthChanged();
     void waveformCursorXChanged();
+    void pointerInteractionEnabledChanged();
     void seekRequested(qint64 position);
 
 protected:
@@ -196,6 +202,7 @@ private:
     qreal density_ = 1.0;
     qreal lineWidth_ = 2.0;
     qreal renderWidth_ = 0.0;
+    bool pointerInteractionEnabled_ = true;
     std::vector<float> spectrumVisual_;
     std::vector<float> spectrumPeakHold_;
     QElapsedTimer spectrumTimer_;

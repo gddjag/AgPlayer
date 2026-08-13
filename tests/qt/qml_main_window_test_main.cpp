@@ -75,7 +75,7 @@ public:
             ids.append(id);
             if (library_->indexForTrackId(id) >= 0) continue;
             const QString path = dropDirectory_.filePath(id + QStringLiteral(".wav"));
-            if (!QFile::copy(fixture, path)) return {};
+            if (!QFileInfo::exists(path) && !QFile::copy(fixture, path)) return {};
             TrackRecord track;
             track.trackId = id;
             track.path = path;
@@ -86,6 +86,17 @@ public:
         }
         library_->appendBatch(std::move(tracks));
         return ids;
+    }
+
+    Q_INVOKABLE void clearTracks()
+    {
+        if (library_ == nullptr) return;
+        while (library_->rowCount() > 0) {
+            const QModelIndex index = library_->index(0, 0);
+            const QString trackId = library_->data(
+                index, LibraryModel::TrackIdRole).toString();
+            if (trackId.isEmpty() || !library_->removeTrack(trackId)) return;
+        }
     }
 
     Q_INVOKABLE void clearLibrary()

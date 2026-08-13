@@ -460,6 +460,10 @@ Rectangle {
                 id: waveform
                 objectName: "mainWaveform"
                 anchors.fill: parent
+                // The overlay owns pointer input. Keeping the renderer passive
+                // prevents a click from being converted twice with different
+                // item coordinates.
+                pointerInteractionEnabled: false
                 // Keep this base pass entirely unplayed. The played pass is
                 // clipped below at the exact playback pixel, avoiding the
                 // visible bucket-by-bucket progress jump of peak colouring.
@@ -534,12 +538,15 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton
                 z: 5
 
-                function updatePreview(mouse) {
+                function updatePreviewAt(x) {
                     waveform.setHoverPositionForInteraction(
-                                waveform.timeForX(mouse.x))
+                                waveform.timeForX(x))
                 }
 
+                function updatePreview(mouse) { updatePreviewAt(mouse.x) }
+
                 onPositionChanged: mouse => updatePreview(mouse)
+                onEntered: updatePreviewAt(mouseX)
                 onPressed: mouse => updatePreview(mouse)
                 onReleased: mouse => {
                     updatePreview(mouse)
