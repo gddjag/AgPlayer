@@ -68,6 +68,12 @@ if ($mainSource -notmatch 'SHGetPropertyStoreForWindow' -or
     $mainSource -notmatch 'window->setIcon') {
     throw "Every native top-level window must publish stable taskbar identity, relaunch metadata, and icon"
 }
+if ($mainSource -notmatch 'LoadImageW' -or
+    $mainSource -notmatch 'MAKEINTRESOURCEW\(kAgPlayerIconResourceId\)' -or
+    $mainSource -notmatch 'WM_SETICON' -or
+    $mainSource -notmatch 'WM_GETICON') {
+    throw "Every native top-level window must publish and verify the PE icon resource"
+}
 if ($installer -notmatch 'AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Installed shortcuts must share the stable taskbar AppUserModelID"
 }

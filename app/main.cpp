@@ -69,6 +69,47 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
 namespace {
 
 constexpr wchar_t kAgPlayerAppUserModelId[] = L"AgPlayer.Desktop";
+constexpr int kAgPlayerIconResourceId = 101;
+
+struct NativeWindowIcons final {
+    HICON bigIcon = nullptr;
+    HICON smallIcon = nullptr;
+};
+
+NativeWindowIcons loadNativeWindowIcons()
+{
+    const HINSTANCE module = GetModuleHandleW(nullptr);
+    return {
+        static_cast<HICON>(LoadImageW(module,
+            MAKEINTRESOURCEW(kAgPlayerIconResourceId), IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+            LR_DEFAULTCOLOR)),
+        static_cast<HICON>(LoadImageW(module,
+            MAKEINTRESOURCEW(kAgPlayerIconResourceId), IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+            LR_DEFAULTCOLOR))
+    };
+}
+
+void publishNativeWindowIcons(const HWND hwnd,
+                              const NativeWindowIcons& icons)
+{
+    if (icons.bigIcon != nullptr) {
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                     reinterpret_cast<LPARAM>(icons.bigIcon));
+    }
+    if (icons.smallIcon != nullptr) {
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                     reinterpret_cast<LPARAM>(icons.smallIcon));
+    }
+    // Read back the values here as a runtime contract: taskbar integration
+    // must never silently depend on the tray icon or a Qt image provider.
+    const auto bigResult = SendMessageW(hwnd, WM_GETICON, ICON_BIG, 0);
+    const auto smallResult = SendMessageW(hwnd, WM_GETICON, ICON_SMALL, 0);
+    if (bigResult == 0 || smallResult == 0) {
+        qWarning("AgPlayer native window icon publication failed");
+    }
+}
 
 HRESULT setWindowStringProperty(IPropertyStore* properties,
                                 const PROPERTYKEY& key,
@@ -81,7 +122,8 @@ HRESULT setWindowStringProperty(IPropertyStore* properties,
     return properties->SetValue(key, property);
 }
 
-void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
+void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
+                               const NativeWindowIcons& nativeIcons)
 {
     if (window == nullptr) {
         return;
@@ -91,6 +133,7 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
     if (hwnd == nullptr) {
         return;
     }
+    publishNativeWindowIcons(hwnd, nativeIcons);
 
     IPropertyStore* properties = nullptr;
     if (FAILED(SHGetPropertyStoreForWindow(
@@ -125,8 +168,10 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
 
 class WindowsShellIdentityFilter final : public QObject {
 public:
-    explicit WindowsShellIdentityFilter(QIcon icon, QObject* parent = nullptr)
-        : QObject(parent), icon_(std::move(icon))
+    explicit WindowsShellIdentityFilter(QIcon icon,
+                                        NativeWindowIcons nativeIcons,
+                                        QObject* parent = nullptr)
+        : QObject(parent), icon_(std::move(icon)), native_icons_(nativeIcons)
     {
     }
 
@@ -135,13 +180,15 @@ protected:
     {
         if (event->type() == QEvent::Show
             || event->type() == QEvent::WinIdChange) {
-            applyWindowsShellIdentity(qobject_cast<QWindow*>(watched), icon_);
+            applyWindowsShellIdentity(qobject_cast<QWindow*>(watched), icon_,
+                                      native_icons_);
         }
         return false;
     }
 
 private:
     QIcon icon_;
+    NativeWindowIcons native_icons_;
 };
 
 } // namespace
@@ -165,7 +212,8 @@ int main(int argc, char* argv[])
         ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
     app.setWindowIcon(applicationIcon);
 #ifdef Q_OS_WIN
-    WindowsShellIdentityFilter shellIdentityFilter(applicationIcon, &app);
+    WindowsShellIdentityFilter shellIdentityFilter(
+        applicationIcon, loadNativeWindowIcons(), &app);
     app.installEventFilter(&shellIdentityFilter);
 #endif
 

@@ -909,3 +909,9 @@ if (WIN32)
         ENVIRONMENT "AGPLAYER_INSTALLER_SCRIPT=${CMAKE_SOURCE_DIR}/installer/AgPlayer.iss"
     )
 endif()
+if(WIN32)
+    add_test(NAME window_icon_contract_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+            -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/window_icon_contract_test.ps1
+            -SourceRoot ${CMAKE_SOURCE_DIR})
+endif()
