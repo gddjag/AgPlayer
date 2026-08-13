@@ -91,6 +91,17 @@ QVariantMap parameterMap(const QJsonObject& object)
     return object.toVariantMap();
 }
 
+QJsonObject parameterDefaults(const QJsonObject& schema)
+{
+    QJsonObject defaults;
+    for (const QJsonValue& value : schema.value(QStringLiteral("parameters")).toArray()) {
+        const QJsonObject control = value.toObject();
+        defaults.insert(control.value(QStringLiteral("key")).toString(),
+                        control.value(QStringLiteral("default")));
+    }
+    return defaults;
+}
+
 bool copyVerifiedPartToNewFile(const QString& partPath,
                                const QString& finalPath,
                                QString* error)
@@ -657,7 +668,8 @@ bool VoiceCloneController::loadModel()
     if (!worker_.isReady() || selectedModelRoot_.isEmpty()) return false;
     loadRequestId_ = worker_.sendRequest(WorkerOperation::Load,
                                          {{QStringLiteral("modelRoot"), selectedModelRoot_},
-                                          {QStringLiteral("parameters"), QJsonObject{}}});
+                                          {QStringLiteral("parameters"),
+                                           parameterDefaults(liveSchema_)}});
     return !loadRequestId_.isEmpty();
 }
 

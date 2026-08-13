@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,6 +11,7 @@
 #include <QLocalSocket>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QUuid>
 
 #include <iostream>
@@ -68,6 +70,15 @@ QJsonObject transact(QLocalSocket* socket, const QJsonObject& message)
             return response;
         }
     }
+}
+
+void sendOnly(QLocalSocket* socket, const QJsonObject& message)
+{
+    const QByteArray frame = QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n';
+    if (socket->write(frame) != frame.size() || !socket->waitForBytesWritten(3000)) {
+        fail(QStringLiteral("Could not start contract generation"));
+    }
+    socket->flush();
 }
 
 QString argument(const QStringList& arguments, const QString& name)
@@ -175,13 +186,35 @@ int main(int argc, char* argv[])
         fail(QStringLiteral("Invalid parameter was not rejected"));
     }
 
-    response = transact(socket,
-                        request(QStringLiteral("cancel"), QStringLiteral("cancel-1"), adapterId,
-                                QJsonObject{{QStringLiteral("targetRequestId"),
-                                             QStringLiteral("generate-1")}}));
-    if (response.value(QStringLiteral("kind")) != QStringLiteral("response")) {
-        fail(QStringLiteral("Cancel contract failed"));
+    QJsonObject longParameters;
+    if (adapterId == QStringLiteral("qwen"))
+        longParameters.insert(QStringLiteral("xVectorOnlyMode"), true);
+    else if (adapterId == QStringLiteral("cosyvoice3"))
+        longParameters.insert(QStringLiteral("inferenceMode"), QStringLiteral("crossLingual"));
+    const QString cancelOutput = outputRoot.filePath(QStringLiteral("contract-cancel.wav"));
+    sendOnly(socket,
+             request(QStringLiteral("generate"), QStringLiteral("generate-active"), adapterId,
+                     QJsonObject{{QStringLiteral("text"), QStringLiteral("__contract_long_running__")},
+                                 {QStringLiteral("referenceAudioPath"), reference.fileName()},
+                                 {QStringLiteral("outputPath"), QStringLiteral("contract-cancel.wav")},
+                                 {QStringLiteral("parameters"), longParameters}}));
+    QElapsedTimer started;
+    started.start();
+    while (!QFileInfo::exists(cancelOutput) && started.elapsed() < 3000) QThread::msleep(10);
+    if (!QFileInfo::exists(cancelOutput)) {
+        fail(QStringLiteral("Long contract task did not become active"));
     }
+    response = transact(socket,
+                        request(QStringLiteral("cancel"), QStringLiteral("cancel-active"), adapterId,
+                                QJsonObject{{QStringLiteral("targetRequestId"),
+                                             QStringLiteral("generate-active")}}));
+    if (response.value(QStringLiteral("kind")) != QStringLiteral("response"))
+        fail(QStringLiteral("Active cancel was not acknowledged"));
+    if (QFileInfo::exists(cancelOutput))
+        fail(QStringLiteral("Cancel ACK arrived before active output cleanup"));
+    QThread::msleep(150);
+    if (QFileInfo::exists(cancelOutput))
+        fail(QStringLiteral("Canceled generation continued writing after ACK"));
 
     response = transact(socket, request(QStringLiteral("shutdown"), QStringLiteral("shutdown-1"), adapterId));
     if (response.value(QStringLiteral("kind")) != QStringLiteral("response")) {

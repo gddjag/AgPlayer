@@ -342,9 +342,11 @@ void VoiceCloneWorkerClient::handleMessage(const VoiceCloneWorkerMessage& messag
         capabilitiesRequestId_ = sendRequest(WorkerOperation::Capabilities);
         if (capabilitiesRequestId_.isEmpty()) failWorker(QStringLiteral("handshake-failed"), error_);
     } else if (message.requestId == capabilitiesRequestId_) {
+        emit responseReceived(message);
         if (handshakeTimer_) handshakeTimer_->stop();
         ready_ = true;
         emit readyChanged();
+        return;
     }
     emit responseReceived(message);
 }

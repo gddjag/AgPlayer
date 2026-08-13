@@ -37,6 +37,38 @@ class CancellationToken:
             raise WorkerError("CANCELLED", "The request was cancelled")
 
 
+class _ContractEngine:
+    """Framework-free engine used only by the real socket contract harness."""
+
+    def __init__(self, delegate) -> None:
+        self._delegate = delegate
+
+    def validate_generation(self, payload: dict, parameters: dict) -> None:
+        self._delegate.validate_generation(payload, parameters)
+
+    def load(self, model_root: pathlib.Path, parameters: dict, token: CancellationToken) -> None:
+        token.raise_if_cancelled()
+
+    def generate(self, text, reference, output, parameters, token, progress, request_id) -> None:
+        if text != "__contract_long_running__":
+            raise WorkerError("CONTRACT_TEST_MODE", "Generation is disabled in contract-test mode")
+        progress("generate", request_id, "contract-running", 0.1)
+        try:
+            with output.open("wb") as stream:
+                stream.write(b"RIFF-contract")
+                stream.flush()
+                while True:
+                    token.raise_if_cancelled()
+                    stream.write(b".")
+                    stream.flush()
+                    threading.Event().wait(0.02)
+        finally:
+            output.unlink(missing_ok=True)
+
+    def unload(self) -> None:
+        return None
+
+
 def _is_link(path: pathlib.Path) -> bool:
     if path.is_symlink():
         return True
@@ -143,24 +175,44 @@ def validate_parameters(schema: dict, values: object) -> dict:
 class _Transport:
     def __init__(self, socket_name: str):
         if os.name == "nt":
-            self._stream = open("\\\\.\\pipe\\" + socket_name, "r+b", buffering=0)
+            import ctypes
+            import msvcrt
+
+            self._reader = open("\\\\.\\pipe\\" + socket_name, "r+b", buffering=0)
+            self._writer = os.fdopen(os.dup(self._reader.fileno()), "wb", buffering=0)
+            self._pipe_handle = msvcrt.get_osfhandle(self._reader.fileno())
+            self._kernel32 = ctypes.windll.kernel32
             self._socket = None
         else:
             self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._socket.connect(socket_name)
-            self._stream = self._socket.makefile("rwb", buffering=0)
+            self._reader = self._socket.makefile("rb", buffering=0)
+            self._writer = self._socket.makefile("wb", buffering=0)
         self._write_lock = threading.Lock()
 
     def read(self, size: int) -> bytes:
-        return self._stream.read(size)
+        if os.name == "nt":
+            import ctypes
+
+            available = ctypes.c_ulong()
+            while True:
+                if not self._kernel32.PeekNamedPipe(
+                    self._pipe_handle, None, 0, None, ctypes.byref(available), None
+                ):
+                    return b""
+                if available.value:
+                    return os.read(self._reader.fileno(), min(size, available.value))
+                threading.Event().wait(0.01)
+        return self._reader.read(size)
 
     def write_json(self, message: dict) -> None:
         frame = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
         with self._write_lock:
-            self._stream.write(frame)
+            self._writer.write(frame)
 
     def close(self) -> None:
-        self._stream.close()
+        self._reader.close()
+        self._writer.close()
         if self._socket is not None:
             self._socket.close()
 
@@ -175,6 +227,7 @@ class WorkerServer:
         self.output_root = existing_directory(args.output_root, "outputRoot")
         self._active: dict[str, CancellationToken] = {}
         self._active_lock = threading.Lock()
+        self._active_changed = threading.Condition(self._active_lock)
         self._loaded = False
         self._stop = False
 
@@ -228,8 +281,9 @@ class WorkerServer:
         return operation, request_id, payload
 
     def _finish_task(self, request_id: str) -> None:
-        with self._active_lock:
+        with self._active_changed:
             self._active.pop(request_id, None)
+            self._active_changed.notify_all()
 
     def _run_load(self, request_id: str, parameters: dict, token: CancellationToken) -> None:
         try:
@@ -249,6 +303,8 @@ class WorkerServer:
             reference = existing_file(payload.get("referenceAudioPath", ""), "referenceAudioPath")
             output = safe_output_path(self.output_root, payload.get("outputPath", ""))
             self.progress("generate", request_id, "preparing", 0.0)
+            self.engine.load(self.model_root, parameters, token)
+            token.raise_if_cancelled()
             self.engine.generate(payload["text"], reference, output, parameters, token, self.progress, request_id)
             token.raise_if_cancelled()
             if not output.exists() or output.stat().st_size == 0:
@@ -293,8 +349,6 @@ class WorkerServer:
                 raise WorkerError("INVALID_REQUEST", "generate text is required")
             parameters = validate_parameters(self.schema, payload.get("parameters"))
             self.engine.validate_generation(payload, parameters)
-            if self.args.contract_test:
-                raise WorkerError("CONTRACT_TEST_MODE", "Generation is disabled in contract-test mode")
             if not self._loaded:
                 raise WorkerError("MODEL_NOT_LOADED", "Load the model before generation")
             self._start_task(request_id, self._run_generate, payload, parameters)
@@ -302,10 +356,12 @@ class WorkerServer:
             target_id = payload.get("targetRequestId")
             if not isinstance(target_id, str) or not target_id:
                 raise WorkerError("INVALID_REQUEST", "cancel targetRequestId is required")
-            with self._active_lock:
+            with self._active_changed:
                 token = self._active.get(target_id)
-            if token:
-                token.cancel()
+                if token:
+                    token.cancel()
+                    while target_id in self._active:
+                        self._active_changed.wait()
             self.respond(operation, request_id)
         elif operation == "unload":
             with self._active_lock:
@@ -394,4 +450,5 @@ def run_worker(engine, schema: dict, expected_adapter_id: str) -> int:
         forbidden = [name for name in sys.modules if name.split(".", 1)[0] in {"torch", "transformers", "qwen_tts", "indextts", "cosyvoice"}]
         if forbidden:
             raise SystemExit(f"Contract mode imported model frameworks: {forbidden[0]}")
+        engine = _ContractEngine(engine)
     return WorkerServer(args, engine, schema).run()

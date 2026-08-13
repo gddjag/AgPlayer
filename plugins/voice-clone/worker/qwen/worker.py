@@ -37,6 +37,11 @@ SCHEMA = {
 class QwenEngine:
     def __init__(self):
         self.model = None
+        self._signature = None
+
+    @staticmethod
+    def load_signature(parameters):
+        return (parameters["device"], parameters["dtype"], parameters["attention"])
 
     def validate_generation(self, payload, parameters):
         if not payload.get("referenceAudioPath"):
@@ -45,6 +50,10 @@ class QwenEngine:
             raise WorkerError("INVALID_PARAMETERS", "referenceTranscript is required unless xVectorOnlyMode is enabled")
 
     def load(self, model_root, parameters, token):
+        signature = self.load_signature(parameters)
+        if self.model is not None and signature == self._signature:
+            return
+        self.unload()
         if not (model_root / "config.json").is_file():
             raise WorkerError("MODEL_INCOMPLETE", "Qwen model config.json is missing")
         token.raise_if_cancelled()
@@ -69,6 +78,7 @@ class QwenEngine:
             str(model_root), device_map=device, dtype=dtype,
             attn_implementation=attention, local_files_only=True
         )
+        self._signature = signature
 
     def generate(self, text, reference, output, parameters, token, progress, request_id):
         if self.model is None:
@@ -105,6 +115,7 @@ class QwenEngine:
 
     def unload(self):
         self.model = None
+        self._signature = None
 
 
 if __name__ == "__main__":

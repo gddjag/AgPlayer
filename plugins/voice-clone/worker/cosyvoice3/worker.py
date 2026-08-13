@@ -40,6 +40,11 @@ def instruction_prompt(value: str) -> str:
 class CosyVoiceEngine:
     def __init__(self):
         self.model = None
+        self._signature = None
+
+    @staticmethod
+    def load_signature(parameters):
+        return (parameters["fp16"],)
 
     def validate_generation(self, payload, parameters):
         if not payload.get("referenceAudioPath"):
@@ -50,6 +55,10 @@ class CosyVoiceEngine:
             raise WorkerError("INVALID_PARAMETERS", "instruction is required for instruct mode")
 
     def load(self, model_root, parameters, token):
+        signature = self.load_signature(parameters)
+        if self.model is not None and signature == self._signature:
+            return
+        self.unload()
         required = ["cosyvoice3.yaml", "campplus.onnx", "speech_tokenizer_v3.onnx"]
         missing = [name for name in required if not (model_root / name).is_file()]
         if missing:
@@ -58,6 +67,7 @@ class CosyVoiceEngine:
         from cosyvoice.cli.cosyvoice import AutoModel
 
         self.model = AutoModel(model_dir=str(model_root), fp16=parameters["fp16"])
+        self._signature = signature
 
     def generate(self, text, reference, output, parameters, token, progress, request_id):
         if self.model is None:
@@ -94,6 +104,7 @@ class CosyVoiceEngine:
 
     def unload(self):
         self.model = None
+        self._signature = None
 
 
 if __name__ == "__main__":

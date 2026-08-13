@@ -161,6 +161,26 @@ int runWorker(const QStringList& arguments)
                 socket.flush();
                 continue;
             }
+            if (request.operation == WorkerOperation::Load) {
+                const QJsonObject parameters = request.payload.value(
+                    QStringLiteral("parameters")).toObject();
+                QFile marker(QDir(outputRoot).filePath(QStringLiteral("load-parameters.json")));
+                if (!marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                    QCoreApplication::exit(95);
+                    return;
+                }
+                marker.write(QJsonDocument(parameters).toJson(QJsonDocument::Compact));
+                marker.close();
+                if (parameters.isEmpty()) {
+                    VoiceCloneWorkerMessage error = responseFor(request);
+                    error.kind = WorkerMessageKind::Error;
+                    error.workerError = {QStringLiteral("missing-load-parameters"),
+                                         QStringLiteral("load parameters are empty"), false, {}};
+                    socket.write(encodeWorkerMessage(error) + '\n');
+                    socket.flush();
+                    continue;
+                }
+            }
             if (request.operation == WorkerOperation::Generate && text == QStringLiteral("crash")) {
                 QCoreApplication::exit(23);
                 return;
@@ -412,6 +432,12 @@ void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWork
     QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
     QCOMPARE(controller.activationState(), QStringLiteral("ready"));
     QVERIFY(activationChanged.count() >= 2);
+    QFile loadParameters(QDir(layout.pluginRoot).filePath(
+        QStringLiteral("cache/load-parameters.json")));
+    QVERIFY(loadParameters.open(QIODevice::ReadOnly));
+    const QJsonObject loaded = QJsonDocument::fromJson(loadParameters.readAll()).object();
+    QCOMPARE(loaded.value(QStringLiteral("seed")).toInt(), 1);
+    QCOMPARE(loaded.value(QStringLiteral("mode")).toString(), QStringLiteral("fast"));
 }
 
 void VoiceCloneControllerTest::activateModelReportsMissingRuntimeWithoutPretendingReady()
