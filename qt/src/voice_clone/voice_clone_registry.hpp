@@ -24,6 +24,7 @@ public:
     static VoiceCloneRegistry loadBuiltIn(const QString& registryPath);
     static VoiceCloneDiscovery discoverUserModels(const QString& portableRoot,
                                                   const QStringList& trustedAdapterIds);
+    VoiceCloneRegistry mergeUserModels(const VoiceCloneDiscovery& discovery) const;
 
     bool isValid() const { return error_.isEmpty(); }
     QString errorString() const { return error_; }

@@ -36,7 +36,10 @@ QJsonObject builtInModel(const QString& stableId,
 {
     return {
         {QStringLiteral("stableId"), stableId},
+        {QStringLiteral("displayName"), stableId},
         {QStringLiteral("description"), description},
+        {QStringLiteral("provider"), QStringLiteral("Official provider")},
+        {QStringLiteral("revision"), QStringLiteral("main")},
         {QStringLiteral("adapterId"), adapterId},
         {QStringLiteral("runtimeId"), runtimeId},
         {QStringLiteral("stable"), true},
@@ -48,6 +51,8 @@ QJsonObject builtInModel(const QString& stableId,
          QJsonObject{{QStringLiteral("project"), projectUrl},
                      {QStringLiteral("huggingFace"), huggingFaceUrl},
                      {QStringLiteral("modelScope"), modelScopeUrl}}},
+        {QStringLiteral("capabilityPreview"),
+         QJsonArray{QStringLiteral("voice-clone")}},
     };
 }
 
@@ -158,6 +163,14 @@ private slots:
     void rejectsExecutableFileEntries();
     void rejectsAbsoluteTraversalAndLinkedPaths();
     void marksUnhashedLocalModelsAsLocalUnverified();
+    void appliesIndexLicenseGateToLocalModels();
+    void mergesBuiltInAndUserLayersWithoutReplacement();
+    void rejectsUnofficialLocalUrls_data();
+    void rejectsUnofficialLocalUrls();
+    void rejectsInvalidReferenceAudioRules_data();
+    void rejectsInvalidReferenceAudioRules();
+    void requiresBuiltInUiMetadata_data();
+    void requiresBuiltInUiMetadata();
 };
 
 void VoiceCloneManifestTest::builtInRegistryContainsOnlyApprovedStableModels()
@@ -489,6 +502,181 @@ void VoiceCloneManifestTest::marksUnhashedLocalModelsAsLocalUnverified()
     QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
     QCOMPARE(discovery.models.size(), 1);
     QCOMPARE(discovery.models.front().installState, QStringLiteral("local-unverified"));
+}
+
+void VoiceCloneManifestTest::appliesIndexLicenseGateToLocalModels()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString manifestPath = copyLocalManifest(temporary.path());
+    QVERIFY(!manifestPath.isEmpty());
+    QJsonObject manifest = readJson(manifestPath);
+    manifest.insert(QStringLiteral("adapterId"), QStringLiteral("indextts25"));
+    manifest.insert(QStringLiteral("runtimeId"), QStringLiteral("indextts25"));
+    manifest.insert(QStringLiteral("source"),
+                    QJsonObject{{QStringLiteral("provider"), QStringLiteral("Hugging Face")},
+                                {QStringLiteral("url"),
+                                 QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")}});
+    manifest.insert(QStringLiteral("license"),
+                    QJsonObject{{QStringLiteral("name"),
+                                 QStringLiteral("bilibili Model Use License Agreement")},
+                                {QStringLiteral("url"),
+                                 QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")}});
+    writeManifest(manifestPath, manifest);
+
+    const auto discovery = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("indextts25")});
+    QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
+    QCOMPARE(discovery.models.size(), 1);
+    QVERIFY(discovery.models.front().requiresLicenseAcceptance);
+
+    QJsonObject wrongLicense = readJson(manifestPath);
+    QJsonObject license = wrongLicense.value(QStringLiteral("license")).toObject();
+    license.insert(QStringLiteral("name"), QStringLiteral("Apache-2.0"));
+    wrongLicense.insert(QStringLiteral("license"), license);
+    writeManifest(manifestPath, wrongLicense);
+    const auto rejected = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("indextts25")});
+    QVERIFY(!rejected.isValid());
+    QVERIFY(rejected.errorString().contains(QStringLiteral("license"), Qt::CaseInsensitive));
+}
+
+void VoiceCloneManifestTest::mergesBuiltInAndUserLayersWithoutReplacement()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString registryPath = writeJson(temporary.filePath(QStringLiteral("built-in.json")),
+                                           approvedBuiltInRegistry());
+    const VoiceCloneRegistry builtIn = VoiceCloneRegistry::loadBuiltIn(registryPath);
+    QVERIFY2(builtIn.isValid(), qPrintable(builtIn.errorString()));
+    QVERIFY(!copyLocalManifest(temporary.path()).isEmpty());
+    const auto discovery = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("qwen")});
+    QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
+
+    const VoiceCloneRegistry merged = builtIn.mergeUserModels(discovery);
+    QVERIFY2(merged.isValid(), qPrintable(merged.errorString()));
+    QCOMPARE(merged.modelIds().size(), 5);
+    QVERIFY(merged.modelIds().contains(QStringLiteral("local/qwen-demo")));
+
+    auto replacement = discovery;
+    replacement.models.front().stableId = QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base");
+    const VoiceCloneRegistry rejected = builtIn.mergeUserModels(replacement);
+    QVERIFY(!rejected.isValid());
+    QVERIFY(rejected.errorString().contains(QStringLiteral("replace"), Qt::CaseInsensitive)
+            || rejected.errorString().contains(QStringLiteral("duplicate"), Qt::CaseInsensitive));
+}
+
+void VoiceCloneManifestTest::rejectsUnofficialLocalUrls_data()
+{
+    QTest::addColumn<QString>("objectName");
+    QTest::addColumn<QString>("url");
+    QTest::newRow("community source")
+        << QStringLiteral("source")
+        << QStringLiteral("https://huggingface.co/community/untrusted-model");
+    QTest::newRow("community license")
+        << QStringLiteral("license")
+        << QStringLiteral("https://github.com/community/untrusted-license");
+    QTest::newRow("lookalike host")
+        << QStringLiteral("source")
+        << QStringLiteral("https://huggingface.co.evil.example/Qwen/model");
+}
+
+void VoiceCloneManifestTest::rejectsUnofficialLocalUrls()
+{
+    QFETCH(QString, objectName);
+    QFETCH(QString, url);
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString manifestPath = copyLocalManifest(temporary.path());
+    QVERIFY(!manifestPath.isEmpty());
+    QJsonObject manifest = readJson(manifestPath);
+    QJsonObject link = manifest.value(objectName).toObject();
+    link.insert(QStringLiteral("url"), url);
+    manifest.insert(objectName, link);
+    writeManifest(manifestPath, manifest);
+
+    const auto discovery = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("qwen")});
+    QVERIFY(!discovery.isValid());
+    QVERIFY(discovery.errorString().contains(objectName, Qt::CaseInsensitive)
+            || discovery.errorString().contains(QStringLiteral("official"), Qt::CaseInsensitive));
+}
+
+void VoiceCloneManifestTest::rejectsInvalidReferenceAudioRules_data()
+{
+    QTest::addColumn<QJsonObject>("rules");
+    QTest::newRow("minimum is string")
+        << QJsonObject{{QStringLiteral("minimumSeconds"), QStringLiteral("3")},
+                       {QStringLiteral("maximumSeconds"), 30},
+                       {QStringLiteral("extensions"), QJsonArray{QStringLiteral("wav")}}};
+    QTest::newRow("negative minimum")
+        << QJsonObject{{QStringLiteral("minimumSeconds"), -1},
+                       {QStringLiteral("maximumSeconds"), 30},
+                       {QStringLiteral("extensions"), QJsonArray{QStringLiteral("wav")}}};
+    QTest::newRow("reversed duration")
+        << QJsonObject{{QStringLiteral("minimumSeconds"), 30},
+                       {QStringLiteral("maximumSeconds"), 3},
+                       {QStringLiteral("extensions"), QJsonArray{QStringLiteral("wav")}}};
+    QTest::newRow("unreasonable maximum")
+        << QJsonObject{{QStringLiteral("minimumSeconds"), 3},
+                       {QStringLiteral("maximumSeconds"), 3600},
+                       {QStringLiteral("extensions"), QJsonArray{QStringLiteral("wav")}}};
+    QTest::newRow("empty extensions")
+        << QJsonObject{{QStringLiteral("minimumSeconds"), 3},
+                       {QStringLiteral("maximumSeconds"), 30},
+                       {QStringLiteral("extensions"), QJsonArray{}}};
+    QTest::newRow("non-string extension")
+        << QJsonObject{{QStringLiteral("minimumSeconds"), 3},
+                       {QStringLiteral("maximumSeconds"), 30},
+                       {QStringLiteral("extensions"), QJsonArray{QStringLiteral("wav"), 7}}};
+}
+
+void VoiceCloneManifestTest::rejectsInvalidReferenceAudioRules()
+{
+    QFETCH(QJsonObject, rules);
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString manifestPath = copyLocalManifest(temporary.path());
+    QVERIFY(!manifestPath.isEmpty());
+    QJsonObject manifest = readJson(manifestPath);
+    manifest.insert(QStringLiteral("referenceAudio"), rules);
+    writeManifest(manifestPath, manifest);
+
+    const auto discovery = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("qwen")});
+    QVERIFY(!discovery.isValid());
+    QVERIFY(discovery.errorString().contains(QStringLiteral("referenceAudio"),
+                                             Qt::CaseInsensitive));
+}
+
+void VoiceCloneManifestTest::requiresBuiltInUiMetadata_data()
+{
+    QTest::addColumn<QString>("fieldName");
+    QTest::newRow("display name") << QStringLiteral("displayName");
+    QTest::newRow("provider") << QStringLiteral("provider");
+    QTest::newRow("revision") << QStringLiteral("revision");
+    QTest::newRow("capability preview") << QStringLiteral("capabilityPreview");
+}
+
+void VoiceCloneManifestTest::requiresBuiltInUiMetadata()
+{
+    QFETCH(QString, fieldName);
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    QJsonObject registryObject = approvedBuiltInRegistry();
+    QJsonArray models = registryObject.value(QStringLiteral("models")).toArray();
+    QJsonObject first = models[0].toObject();
+    first.remove(fieldName);
+    models[0] = first;
+    registryObject.insert(QStringLiteral("models"), models);
+    const QString path = writeJson(temporary.filePath(QStringLiteral("missing-metadata.json")),
+                                   registryObject);
+
+    const VoiceCloneRegistry registry = VoiceCloneRegistry::loadBuiltIn(path);
+    QVERIFY(!registry.isValid());
+    QVERIFY(registry.errorString().contains(fieldName, Qt::CaseInsensitive)
+            || registry.errorString().contains(QStringLiteral("metadata"), Qt::CaseInsensitive));
 }
 
 QTEST_APPLESS_MAIN(VoiceCloneManifestTest)

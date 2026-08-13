@@ -7,6 +7,9 @@
 #include <QJsonParseError>
 #include <QRegularExpression>
 #include <QSet>
+#include <QUrl>
+
+#include <cmath>
 
 namespace agplayer::voice_clone {
 namespace {
@@ -22,6 +25,45 @@ QString unknownField(const QJsonObject& object, const QSet<QString>& allowed)
 bool isHttpsUrl(const QString& value)
 {
     return value.startsWith(QStringLiteral("https://"));
+}
+
+bool isOfficialUrlForAdapter(const QString& value, const QString& adapterId)
+{
+    const QUrl url(value, QUrl::StrictMode);
+    if (!url.isValid() || url.scheme() != QStringLiteral("https")
+        || !url.userInfo().isEmpty() || (url.port(-1) != -1 && url.port() != 443)) {
+        return false;
+    }
+    const QString host = url.host().toLower();
+    const QStringList path = url.path(QUrl::FullyDecoded).split(
+        QLatin1Char('/'), Qt::SkipEmptyParts);
+    QString expectedOrganization;
+    if (adapterId == QStringLiteral("qwen")) {
+        expectedOrganization = host == QStringLiteral("github.com")
+                                   ? QStringLiteral("QwenLM")
+                                   : QStringLiteral("Qwen");
+    } else if (adapterId == QStringLiteral("indextts25")) {
+        expectedOrganization = host == QStringLiteral("github.com")
+                                   ? QStringLiteral("index-tts")
+                                   : QStringLiteral("IndexTeam");
+    } else if (adapterId == QStringLiteral("cosyvoice3")) {
+        expectedOrganization = QStringLiteral("FunAudioLLM");
+    } else {
+        return false;
+    }
+
+    if (host == QStringLiteral("github.com") || host == QStringLiteral("huggingface.co")) {
+        return path.size() >= 2 && path[0] == expectedOrganization;
+    }
+    if (host == QStringLiteral("modelscope.cn")
+        || host == QStringLiteral("www.modelscope.cn")) {
+        const qsizetype organizationIndex = !path.isEmpty() && path[0] == QStringLiteral("models")
+                                                ? 1
+                                                : 0;
+        return path.size() > organizationIndex + 1
+               && path[organizationIndex] == expectedOrganization;
+    }
+    return false;
 }
 
 } // namespace
@@ -93,9 +135,11 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
     model.source = {source.value(QStringLiteral("provider")).toString(),
                     source.value(QStringLiteral("url")).toString()};
     if (!sourceUnknown.isEmpty() || model.source.provider.trimmed().isEmpty()
-        || !isHttpsUrl(model.source.url)) {
+        || !isHttpsUrl(model.source.url)
+        || !isOfficialUrlForAdapter(model.source.url, model.adapterId)) {
         result.error = sourceUnknown.isEmpty()
-                           ? QStringLiteral("invalid source")
+                           ? QStringLiteral("source URL is not an official URL for adapter %1")
+                                 .arg(model.adapterId)
                            : QStringLiteral("unknown source field: %1").arg(sourceUnknown);
         return result;
     }
@@ -106,10 +150,19 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
     model.license = {license.value(QStringLiteral("name")).toString(),
                      license.value(QStringLiteral("url")).toString()};
     if (!licenseUnknown.isEmpty() || model.license.name.trimmed().isEmpty()
-        || !isHttpsUrl(model.license.url)) {
+        || !isHttpsUrl(model.license.url)
+        || !isOfficialUrlForAdapter(model.license.url, model.adapterId)) {
         result.error = licenseUnknown.isEmpty()
-                           ? QStringLiteral("invalid license")
+                           ? QStringLiteral("license URL is not an official URL for adapter %1")
+                                 .arg(model.adapterId)
                            : QStringLiteral("unknown license field: %1").arg(licenseUnknown);
+        return result;
+    }
+    const QString expectedLicense = model.adapterId == QStringLiteral("indextts25")
+                                        ? QStringLiteral("bilibili Model Use License Agreement")
+                                        : QStringLiteral("Apache-2.0");
+    if (model.license.name != expectedLicense) {
+        result.error = QStringLiteral("license name does not match adapter %1").arg(model.adapterId);
         return result;
     }
 
@@ -172,22 +225,44 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
             result.error = QStringLiteral("unknown referenceAudio field: %1").arg(referenceUnknown);
             return result;
         }
+        if (!reference.contains(QStringLiteral("minimumSeconds"))
+            || !reference.value(QStringLiteral("minimumSeconds")).isDouble()
+            || !reference.contains(QStringLiteral("maximumSeconds"))
+            || !reference.value(QStringLiteral("maximumSeconds")).isDouble()
+            || !reference.contains(QStringLiteral("extensions"))
+            || !reference.value(QStringLiteral("extensions")).isArray()) {
+            result.error = QStringLiteral("referenceAudio requires numeric minimumSeconds, "
+                                          "numeric maximumSeconds, and an extensions array");
+            return result;
+        }
         model.referenceAudio.minimumSeconds =
             reference.value(QStringLiteral("minimumSeconds")).toDouble();
         model.referenceAudio.maximumSeconds =
             reference.value(QStringLiteral("maximumSeconds")).toDouble();
-        if (model.referenceAudio.minimumSeconds < 0.0
-            || model.referenceAudio.maximumSeconds < model.referenceAudio.minimumSeconds) {
+        if (!std::isfinite(model.referenceAudio.minimumSeconds)
+            || !std::isfinite(model.referenceAudio.maximumSeconds)
+            || model.referenceAudio.minimumSeconds <= 0.0
+            || model.referenceAudio.maximumSeconds < model.referenceAudio.minimumSeconds
+            || model.referenceAudio.maximumSeconds > 300.0) {
             result.error = QStringLiteral("invalid referenceAudio duration range");
             return result;
         }
         const QJsonArray extensions = reference.value(QStringLiteral("extensions")).toArray();
+        if (extensions.isEmpty()) {
+            result.error = QStringLiteral("referenceAudio extensions must not be empty");
+            return result;
+        }
+        QSet<QString> seenExtensions;
+        static const QRegularExpression extensionPattern(QStringLiteral("^[A-Za-z0-9]{1,10}$"));
         for (const QJsonValue& extension : extensions) {
-            if (!extension.isString() || extension.toString().trimmed().isEmpty()) {
+            const QString normalized = extension.toString().toLower();
+            if (!extension.isString() || !extensionPattern.match(normalized).hasMatch()
+                || seenExtensions.contains(normalized)) {
                 result.error = QStringLiteral("invalid referenceAudio extension");
                 return result;
             }
-            model.referenceAudio.extensions.append(extension.toString().toLower());
+            seenExtensions.insert(normalized);
+            model.referenceAudio.extensions.append(normalized);
         }
     }
     return result;

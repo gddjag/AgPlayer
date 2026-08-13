@@ -170,23 +170,27 @@ QString validateBuiltIn(const QJsonObject& object, VoiceCloneModel* model)
     if (!licenseUnknown.isEmpty() || !urlsUnknown.isEmpty()) {
         return QStringLiteral("unknown built-in URL or license field for %1").arg(stableId);
     }
-    if (object.contains(QStringLiteral("provider"))
-        && object.value(QStringLiteral("provider")).toString().trimmed().isEmpty()) {
+    if (!object.contains(QStringLiteral("displayName"))
+        || object.value(QStringLiteral("displayName")).toString().trimmed().isEmpty()) {
+        return QStringLiteral("missing displayName metadata for %1").arg(stableId);
+    }
+    if (!object.contains(QStringLiteral("provider"))
+        || object.value(QStringLiteral("provider")).toString().trimmed().isEmpty()) {
         return QStringLiteral("invalid provider for %1").arg(stableId);
     }
-    if (object.contains(QStringLiteral("revision"))
-        && object.value(QStringLiteral("revision")).toString().trimmed().isEmpty()) {
+    if (!object.contains(QStringLiteral("revision"))
+        || object.value(QStringLiteral("revision")).toString().trimmed().isEmpty()) {
         return QStringLiteral("invalid revision for %1").arg(stableId);
     }
-    if (object.contains(QStringLiteral("capabilityPreview"))) {
-        if (!object.value(QStringLiteral("capabilityPreview")).isArray()) {
-            return QStringLiteral("invalid capability preview for %1").arg(stableId);
-        }
-        for (const QJsonValue& capability :
-             object.value(QStringLiteral("capabilityPreview")).toArray()) {
-            if (!capability.isString() || capability.toString().trimmed().isEmpty()) {
-                return QStringLiteral("invalid capability preview for %1").arg(stableId);
-            }
+    if (!object.contains(QStringLiteral("capabilityPreview"))
+        || !object.value(QStringLiteral("capabilityPreview")).isArray()
+        || object.value(QStringLiteral("capabilityPreview")).toArray().isEmpty()) {
+        return QStringLiteral("invalid capabilityPreview metadata for %1").arg(stableId);
+    }
+    for (const QJsonValue& capability :
+         object.value(QStringLiteral("capabilityPreview")).toArray()) {
+        if (!capability.isString() || capability.toString().trimmed().isEmpty()) {
+            return QStringLiteral("invalid capabilityPreview metadata for %1").arg(stableId);
         }
     }
     const bool matches = object.value(QStringLiteral("stable")).toBool(false)
@@ -399,6 +403,7 @@ VoiceCloneDiscovery VoiceCloneRegistry::discoverUserModels(
                           QStringLiteral("runtime is not trusted for adapter: %1").arg(model.adapterId));
             continue;
         }
+        model.requiresLicenseAcceptance = model.adapterId == QStringLiteral("indextts25");
 
         const QString modelDirectory = canonicalPath(manifestInfo.absolutePath());
         if (modelDirectory.isEmpty() || !isWithin(modelDirectory, modelRootCanonical)) {
@@ -486,6 +491,29 @@ VoiceCloneDiscovery VoiceCloneRegistry::discoverUserModels(
         model.installState = allHashed ? QStringLiteral("ready")
                                        : QStringLiteral("local-unverified");
         result.models.append(std::move(model));
+    }
+    return result;
+}
+
+VoiceCloneRegistry VoiceCloneRegistry::mergeUserModels(
+    const VoiceCloneDiscovery& discovery) const
+{
+    VoiceCloneRegistry result = *this;
+    if (!result.isValid()) return result;
+    if (!discovery.isValid()) {
+        result.error_ = discovery.errorString();
+        return result;
+    }
+    QSet<QString> ids;
+    for (const VoiceCloneModel& model : result.models_) ids.insert(model.stableId);
+    for (const VoiceCloneModel& model : discovery.models) {
+        if (ids.contains(model.stableId)) {
+            result.error_ = QStringLiteral("user model cannot replace or duplicate model ID: %1")
+                                .arg(model.stableId);
+            return result;
+        }
+        ids.insert(model.stableId);
+        result.models_.append(model);
     }
     return result;
 }
