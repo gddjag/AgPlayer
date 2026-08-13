@@ -1,1 +1,5 @@
 /.worktrees/
+/.codebase-memory/
+/.codex-doc-review/
+/tmp/
+/build/
