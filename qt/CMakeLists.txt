@@ -84,10 +84,14 @@ add_library(agplayer_qt STATIC
     src/waveform_item.cpp
     src/waveform_item.hpp
     src/voice_clone/voice_clone_capability_schema.hpp
+    src/voice_clone/voice_clone_adapter_manifest.cpp
+    src/voice_clone/voice_clone_adapter_manifest.hpp
     src/voice_clone/voice_clone_manifest.cpp
     src/voice_clone/voice_clone_manifest.hpp
     src/voice_clone/voice_clone_registry.cpp
     src/voice_clone/voice_clone_registry.hpp
+    src/voice_clone/voice_clone_worker_protocol.cpp
+    src/voice_clone/voice_clone_worker_protocol.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)

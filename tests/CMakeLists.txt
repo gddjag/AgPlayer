@@ -472,6 +472,7 @@ foreach(qt_test IN ITEMS
     equalizer_controller_test
     voice_clone_manifest_test
     voice_clone_capability_schema_test
+    voice_clone_worker_protocol_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -491,6 +492,10 @@ endforeach()
 
 target_compile_definitions(voice_clone_manifest_test PRIVATE
     AGPLAYER_VOICE_CLONE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/voice-clone"
+)
+
+target_compile_definitions(voice_clone_worker_protocol_test PRIVATE
+    AGPLAYER_VOICE_CLONE_ADAPTERS_DIR="${CMAKE_SOURCE_DIR}/plugins/voice-clone/adapters"
 )
 
 target_include_directories(format_conversion_plan_test PRIVATE
