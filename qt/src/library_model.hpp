@@ -116,6 +116,8 @@ public:
     int applyMaintenanceResults(const QVariantList& results);
     bool applyReplayGainResult(const QString& trackId, double trackGainDb,
                                double albumGainDb, double peak);
+    bool refreshMetadataForPath(const QString& path);
+    int refreshMetadataForPaths(const QStringList& paths);
     bool updateTrackPath(const QString& trackId, const QString& newPath);
     bool updateTrackPaths(const QHash<QString, QString>& paths);
     bool markPlayed(const QString& trackId, qint64 playedAtMs = 0);

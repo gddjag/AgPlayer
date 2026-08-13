@@ -15,6 +15,11 @@ struct FilenameRuleSet {
     bool replaceSpaces = false;
     bool autoNumber = false;
     bool preserveExtension = true;
+    // A blank editable affix means "remove a recognizable existing affix".
+    // This keeps batch editing reversible without guessing at file contents.
+    bool removePrefixWhenEmpty = true;
+    bool removeSuffixWhenEmpty = true;
+    bool removeSequenceWhenEmpty = true;
     int numberStart = 1;
     int numberDigits = 2;
     CaseRule caseRule = CaseRule::Keep;

@@ -585,6 +585,53 @@ int main(const int argc, char** argv)
     AG_CHECK(ag_player_set_queue(player, queue, 2U, 2U) == AG_INVALID_ARGUMENT);
     AG_CHECK(ag_player_set_queue(player, invalid_queue, 2U, 0U)
            == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_scoped_queue(nullptr, queue, 2U, 0U, 1U, 0)
+           == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_scoped_queue(player, queue, 2U, 0U, 0U, 0)
+           == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_scoped_queue(player, queue, 2U, 1U, 1U, 0)
+           == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_scoped_queue(player, invalid_queue, 2U, 0U, 1U, 1)
+           == AG_INVALID_ARGUMENT);
+    AG_CHECK(ag_player_set_scoped_queue(player, queue, 2U, 0U, 1U, 1)
+           == AG_OK);
+    const char* scoped_queue[] = {
+        argv[1], argv[2], argv[1], argv[2], argv[1], argv[2],
+    };
+    AG_CHECK(ag_player_set_scoped_queue(player, scoped_queue, 6U, 0U, 5U, 0)
+           == AG_OK);
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_SEQUENTIAL) == AG_OK);
+    for (std::size_t expected = 1U; expected < 5U; ++expected) {
+        AG_CHECK(ag_player_next(player) == AG_OK);
+        ag_playback_snapshot scoped_snapshot{};
+        AG_CHECK(ag_player_snapshot(player, &scoped_snapshot) == AG_OK);
+        AG_CHECK(scoped_snapshot.track_index == expected);
+    }
+    AG_CHECK(ag_player_next(player) == AG_OK);
+    ag_playback_snapshot scoped_snapshot{};
+    AG_CHECK(ag_player_snapshot(player, &scoped_snapshot) == AG_OK);
+    AG_CHECK(scoped_snapshot.track_index == 0U);
+
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_REPEAT_ONE) == AG_OK);
+    AG_CHECK(ag_player_next(player) == AG_OK);
+    AG_CHECK(ag_player_snapshot(player, &scoped_snapshot) == AG_OK);
+    AG_CHECK(scoped_snapshot.track_index == 0U);
+
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_SHUFFLE) == AG_OK);
+    for (int transition = 0; transition < 12; ++transition) {
+        AG_CHECK(ag_player_next(player) == AG_OK);
+        AG_CHECK(ag_player_snapshot(player, &scoped_snapshot) == AG_OK);
+        AG_CHECK(scoped_snapshot.track_index < 5U);
+    }
+
+    AG_CHECK(ag_player_set_scoped_queue(player, scoped_queue, 6U, 0U, 4U, 1)
+           == AG_OK);
+    AG_CHECK(ag_player_set_mode(player, AG_MODE_REPEAT_ALL) == AG_OK);
+    for (std::size_t expected = 1U; expected <= 4U; ++expected) {
+        AG_CHECK(ag_player_next(player) == AG_OK);
+        AG_CHECK(ag_player_snapshot(player, &scoped_snapshot) == AG_OK);
+        AG_CHECK(scoped_snapshot.track_index == expected);
+    }
     AG_CHECK(ag_player_set_mode(player, static_cast<ag_playback_mode>(99))
            == AG_INVALID_ARGUMENT);
     AG_CHECK(ag_player_set_queue(player, queue, 2U, 0U) == AG_OK);

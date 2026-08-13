@@ -122,6 +122,8 @@ Rectangle {
                                                : 128
                         Layout.preferredHeight: 40
                         enabled: !converter.busy
+                                 && (modelData.action !== "playlist"
+                                     || PlaybackController.currentTrackId.length > 0)
                         text: modelData.text
                         icon.source: Theme.icon(modelData.icon)
                         onClicked: {

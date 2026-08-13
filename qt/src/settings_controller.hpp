@@ -146,7 +146,6 @@ class SettingsController final : public QObject {
     // About
     Q_PROPERTY(QString version READ version CONSTANT)
     Q_PROPERTY(QString releaseDate READ releaseDate CONSTANT)
-    Q_PROPERTY(QString libraryManagerPath READ libraryManagerPath CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -229,7 +228,6 @@ public:
     // About getters
     QString version() const;
     QString releaseDate() const;
-    QString libraryManagerPath() const;
 
     // General setters
     void setAutoStartWithWindows(bool value);
@@ -437,7 +435,7 @@ private:
     // Appearance & Visualizer
     int themeMode_ = 0;
     bool glassEffect_ = true;
-    int waveformMode_ = 1;
+    int waveformMode_ = 0;
     double waveformHeight_ = 0.8;
     double waveformDensity_ = 2.0;
     double waveformThickness_ = 1.0;
@@ -450,7 +448,7 @@ private:
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
     bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
-    bool waveformPlaybackGuide_ = true;
+    bool waveformPlaybackGuide_ = false;
     int waveformCanvasHeight_ = 78;
     bool waveformCanvasLocked_ = true;
     int spectrumColorMode_ = 0;

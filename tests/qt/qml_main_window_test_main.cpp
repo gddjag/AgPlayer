@@ -3,7 +3,6 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
-#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
@@ -299,8 +298,8 @@ public slots:
         audioTools_ = std::make_unique<AudioToolsController>();
         metadataEditor_ = std::make_unique<MetadataEditor>();
         filenameProcessor_ = std::make_unique<FilenameProcessor>();
+        filenameProcessor_->setLibraryModel(library_.get());
         formatConverter_ = std::make_unique<FormatConverter>();
-        lightEditor_ = std::make_unique<LightEditor>();
         settings_ = std::make_unique<SettingsController>();
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
 
@@ -308,7 +307,6 @@ public slots:
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), filenameProcessor_.get(),
-                                    lightEditor_.get(),
                                     settings_.get(), waveformProvider_.get());
     }
 
@@ -377,7 +375,6 @@ private:
     std::unique_ptr<MetadataEditor> metadataEditor_;
     std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
-    std::unique_ptr<LightEditor> lightEditor_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<NativeDropRouter> nativeDrops_;

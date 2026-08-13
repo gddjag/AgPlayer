@@ -19,7 +19,6 @@ private slots:
     void rejectsMissingFiles();
     void clearsOldStateWhenNewSourceCannotLoad();
     void stopsCurrentPreviewWhenNewSourceIsMissing();
-    void previewsTimelineWithoutTemporaryRender();
 };
 
 void AudioPreviewControllerTest::
@@ -167,66 +166,6 @@ void AudioPreviewControllerTest::stopsCurrentPreviewWhenNewSourceIsMissing()
     QCOMPARE(snapshot.state, AG_STOPPED);
     QVERIFY(!preview.pollTimer_.isActive());
     QVERIFY(!preview.hasSource());
-}
-
-void AudioPreviewControllerTest::previewsTimelineWithoutTemporaryRender()
-{
-    const QString fixture = QCoreApplication::applicationDirPath()
-        + QStringLiteral("/fixtures/sine-440hz.wav");
-    QVERIFY2(QFileInfo::exists(fixture), qPrintable(fixture));
-
-    QVariantMap clip;
-    clip.insert(QStringLiteral("path"), fixture);
-    clip.insert(QStringLiteral("timelineStartMs"), 0);
-    clip.insert(QStringLiteral("inMs"), 0);
-    clip.insert(QStringLiteral("outMs"), 500);
-    clip.insert(QStringLiteral("timelineDurationMs"), 500);
-    clip.insert(QStringLiteral("fadeInMs"), 0);
-    clip.insert(QStringLiteral("fadeOutMs"), 0);
-    clip.insert(QStringLiteral("gain"), 1.0);
-    clip.insert(QStringLiteral("pan"), 0.0);
-    clip.insert(QStringLiteral("loopMode"), QStringLiteral("Off"));
-
-    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
-    QVERIFY(preview.playTimeline({clip}));
-    QVERIFY(preview.isTimelinePreview());
-    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
-    QCOMPARE(preview.sourcePath(), QStringLiteral("agplayer://timeline-preview"));
-    QCOMPARE(preview.playbackPath_, QString());
-    QVERIFY(preview.durationMs() >= 450);
-
-    preview.seek(250);
-    QTRY_VERIFY_WITH_TIMEOUT(preview.positionMs() >= 200, 2'000);
-    preview.pause();
-    QTRY_VERIFY_WITH_TIMEOUT(!preview.playing(), 2'000);
-    preview.resume();
-    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
-    preview.stop();
-    QVERIFY(!preview.hasSource());
-    QVERIFY(!preview.isTimelinePreview());
-
-    // The editor hands the loop range to the audio engine.  The controller
-    // must remain in timeline-preview mode after more than one loop duration;
-    // QML must not seek it back after a delayed state notification.
-    clip.insert(QStringLiteral("outMs"), 1500);
-    clip.insert(QStringLiteral("timelineDurationMs"), 1500);
-    QVERIFY(preview.playTimeline({clip}, 500, 500, 1000));
-    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
-    QTest::qWait(1'700);
-    QVERIFY(preview.playing());
-    QVERIFY(preview.positionMs() >= 500 && preview.positionMs() < 1000);
-    preview.stop();
-
-    clip.remove(QStringLiteral("loopMode"));
-    clip.insert(QStringLiteral("outMs"), 500);
-    clip.insert(QStringLiteral("timelineDurationMs"), 500);
-    clip.insert(QStringLiteral("speedRatio"), 2.0);
-    clip.insert(QStringLiteral("keepPitch"), true);
-    clip.insert(QStringLiteral("loopMode"), QStringLiteral("OneShot"));
-    QVERIFY(preview.playTimeline({clip}));
-    QTRY_VERIFY_WITH_TIMEOUT(preview.durationMs() > 0, 2'000);
-    QVERIFY(preview.durationMs() <= 300);
-    preview.stop();
 }
 
 QTEST_MAIN(AudioPreviewControllerTest)

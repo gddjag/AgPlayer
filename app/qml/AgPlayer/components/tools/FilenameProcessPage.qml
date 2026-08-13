@@ -15,6 +15,23 @@ Rectangle {
     property int selectionAnchor: -1
     property int entryRevision: 0
     property string searchText: ""
+    property bool issueFilterEnabled: false
+    property bool qaReferenceMode: false
+
+    onQaReferenceModeChanged: {
+        if (!qaReferenceMode) return
+        prefixField.text = "[Live]_"
+        suffixField.text = "_Remaster"
+        replaceSpacesCheck.checked = true
+        preserveExtensionCheck.checked = true
+        removeAffixesWhenBlankCheck.checked = false
+        autoNumberCheck.checked = true
+        numberStartSpin.value = 1
+        numberDigitsSpin.value = 2
+        numberPositionBox.currentIndex = 1
+        numberSeparatorField.text = "_"
+        refreshPreview()
+    }
 
     function addCurrentPlayerTrack() {
         const ids = PlaybackController.queueTrackIds.length > 0
@@ -29,19 +46,33 @@ Rectangle {
             FilenameProcessor.loadFiles(urls)
     }
 
-    readonly property int conflictCount: {
+    readonly property int warningCount: {
         let count = 0
         for (let i = 0; i < previewRows.length; ++i)
-            if (previewRows[i].conflict) ++count
+            if (previewRows[i].severity === 1) ++count
         return count
     }
+    readonly property int errorCount: {
+        let count = 0
+        for (let i = 0; i < previewRows.length; ++i)
+            if (previewRows[i].severity === 2) ++count
+        return count
+    }
+    readonly property int conflictCount: warningCount + errorCount
     readonly property int unchangedCount: {
         let count = 0
         for (let i = 0; i < previewRows.length; ++i)
             if (previewRows[i].preview === previewRows[i].original) ++count
         return count
     }
-    readonly property int readyCount: Math.max(0, previewRows.length - conflictCount)
+    readonly property int readyCount: Math.max(0, previewRows.length - warningCount - errorCount)
+    readonly property int runnableCount: {
+        let count = 0
+        for (let i = 0; i < previewRows.length; ++i)
+            if (previewRows[i].severity !== 2
+                    && previewRows[i].preview !== previewRows[i].original) ++count
+        return count
+    }
 
     function isSelected(index) { return selectedIndices.indexOf(index) >= 0 }
     function entry(index) {
@@ -49,6 +80,10 @@ Rectangle {
         return FilenameProcessor.entryAt(index)
     }
     function matchesSearch(index) {
+        if (issueFilterEnabled) {
+            const preview = previewForIndex(index)
+            if (!preview || preview.severity === 0) return false
+        }
         const query = searchText.trim().toLowerCase()
         if (query.length === 0) return true
         const item = entry(index)
@@ -90,6 +125,9 @@ Rectangle {
             spaceReplacement: spaceReplacementField.text,
             caseMode: caseBox.currentValue,
             preserveExtension: preserveExtensionCheck.checked,
+            removePrefixWhenEmpty: removeAffixesWhenBlankCheck.checked,
+            removeSuffixWhenEmpty: removeAffixesWhenBlankCheck.checked,
+            removeSequenceWhenEmpty: removeAffixesWhenBlankCheck.checked,
             autoNumber: autoNumberCheck.checked,
             numberStart: numberStartSpin.value,
             numberDigits: numberDigitsSpin.value,
@@ -98,7 +136,12 @@ Rectangle {
         }
     }
     function refreshPreview() {
-        previewRows = FilenameProcessor.preview(rules(), selectedIndices)
+        if (FilenameProcessor.fileCount > 0 && selectedIndices.length === 0) {
+            previewRows = []
+            return
+        }
+        previewRows = FilenameProcessor.preview(
+                    rules(), selectedIndices, conflictBox.currentValue)
     }
     function previewForIndex(index) {
         for (let i = 0; i < previewRows.length; ++i)
@@ -143,6 +186,24 @@ Rectangle {
         id: folderDialog
         onAccepted: FilenameProcessor.loadFiles([selectedFolder])
     }
+    Dialog {
+        id: overwriteConfirmation
+        modal: true
+        anchors.centerIn: parent
+        title: qsTr("确认覆盖现有文件")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: FilenameProcessor.apply(
+            page.rules(), page.selectedIndices, conflictBox.currentValue)
+        ColumnLayout {
+            width: 420
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("覆盖策略会先备份目标文件；重命名成功后仍可安全撤销。是否继续？")
+                color: Theme.primaryText
+            }
+        }
+    }
 
     FileDropArea {
         objectName: "filenameDropArea"
@@ -153,25 +214,40 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 8
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
+        anchors.topMargin: 6
+        anchors.bottomMargin: 6
+        spacing: 7
 
-        RowLayout {
+        Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            spacing: 7
+            Layout.preferredHeight: 54
+            color: Theme.panel
+            border.color: Theme.border
+            border.width: 1
+            radius: Theme.radiusSm
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 6
+                spacing: 16
             Button {
+                Layout.preferredHeight: 40
                 text: qsTr("添加文件")
                 icon.source: Theme.icon("add-line")
                 onClicked: audioDialog.open()
             }
             Button {
+                Layout.preferredHeight: 40
                 text: qsTr("添加文件夹")
                 icon.source: Theme.icon("folder-add-line")
                 onClicked: folderDialog.open()
             }
             Button {
-                text: qsTr("从播放器添加")
+                Layout.preferredHeight: 40
+                text: qsTr("从播放列表添加")
                 icon.source: Theme.icon("music-2-line")
                 enabled: !FilenameProcessor.busy
                          && PlaybackController.currentTrackId.length > 0
@@ -180,42 +256,84 @@ Rectangle {
                 onClicked: page.addCurrentPlayerTrack()
             }
             Button {
+                Layout.preferredHeight: 40
                 text: qsTr("移除选中")
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: selectedIndices.length > 0 && !FilenameProcessor.busy
                 onClicked: deleteSelection()
             }
             Button {
-                text: qsTr("清空")
+                Layout.preferredHeight: 40
+                text: qsTr("清空列表")
+                icon.source: Theme.icon("delete-bin-line")
                 enabled: FilenameProcessor.fileCount > 0 && !FilenameProcessor.busy
                 onClicked: FilenameProcessor.clear()
             }
-            Button {
-                text: qsTr("撤销上次")
-                icon.source: Theme.icon("arrow-go-back-line")
-                enabled: FilenameProcessor.canUndo && !FilenameProcessor.busy
-                onClicked: FilenameProcessor.undoLast()
-            }
             Item { Layout.fillWidth: true }
             TextField {
-                Layout.preferredWidth: 250
-                placeholderText: qsTr("搜索文件名或所在目录")
+                Layout.preferredWidth: 330
+                Layout.preferredHeight: 40
+                leftPadding: 38
+                rightPadding: 40
+                placeholderText: qsTr("搜索文件名、所在目录...")
                 onTextChanged: page.searchText = text
+                Item {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 18
+                    height: 18
+                    Rectangle {
+                        width: 12
+                        height: 12
+                        radius: 6
+                        color: "transparent"
+                        border.color: Theme.iconSecondary
+                        border.width: 1.5
+                    }
+                    Rectangle {
+                        x: 11
+                        y: 11
+                        width: 7
+                        height: 1.5
+                        radius: 1
+                        rotation: 45
+                        transformOrigin: Item.Left
+                        color: Theme.iconSecondary
+                    }
+                }
+                ToolButton {
+                    objectName: "filenameIssueFilterButton"
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 34
+                    height: 34
+                    checkable: true
+                    checked: page.issueFilterEnabled
+                    icon.source: Theme.icon("equalizer-line")
+                    icon.color: checked ? Theme.cyan : Theme.iconPrimary
+                    ToolTip.visible: hovered
+                    ToolTip.text: checked ? qsTr("显示全部文件")
+                                              : qsTr("仅显示警告和错误")
+                    onToggled: page.issueFilterEnabled = checked
+                }
+            }
             }
         }
 
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            spacing: 6
 
             Rectangle {
                 id: filePanel
                 objectName: "filenameFilePanel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(380, page.width * 0.38)
-                Layout.maximumWidth: page.width * 0.45
+                Layout.preferredWidth: Math.max(380, page.width * 0.378)
+                Layout.maximumWidth: page.width * 0.40
                 color: Theme.panel
                 border.color: Theme.border
                 border.width: 1
@@ -226,7 +344,7 @@ Rectangle {
                     spacing: 0
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 48
+                        Layout.preferredHeight: 46
                         color: Theme.panel
                         Label {
                             anchors.verticalCenter: parent.verticalCenter
@@ -259,10 +377,10 @@ Rectangle {
                                     refreshPreview()
                                 }
                             }
-                            Label { text: qsTr("文件名"); color: Theme.secondaryText; Layout.fillWidth: true }
-                            Label { text: qsTr("所在目录"); color: Theme.secondaryText; Layout.preferredWidth: 130 }
-                            Label { text: qsTr("扩展名"); color: Theme.secondaryText; Layout.preferredWidth: 54 }
-                            Label { text: qsTr("大小"); color: Theme.secondaryText; Layout.preferredWidth: 64 }
+                            Label { text: qsTr("文件名"); color: Theme.secondaryText; Layout.preferredWidth: 152 }
+                            Label { text: qsTr("所在目录"); color: Theme.secondaryText; Layout.fillWidth: true }
+                            Label { text: qsTr("扩展名"); color: Theme.secondaryText; Layout.preferredWidth: 62 }
+                            Label { text: qsTr("大小"); color: Theme.secondaryText; Layout.preferredWidth: 72 }
                             Label { text: qsTr("状态"); color: Theme.secondaryText; Layout.preferredWidth: 54 }
                         }
                     }
@@ -281,10 +399,9 @@ Rectangle {
                             readonly property var fileEntry: page.entry(index)
                             readonly property bool searchMatch: page.matchesSearch(index)
                             width: fileList.width
-                            height: searchMatch ? 40 : 0
+                            height: searchMatch ? 42 : 0
                             visible: searchMatch
-                            color: page.isSelected(index) ? Theme.activeSelection
-                                  : (rowHover.hovered ? Theme.hoverSurface : "transparent")
+                            color: rowHover.hovered ? Theme.hoverSurface : "transparent"
                             HoverHandler { id: rowHover }
                             TapHandler {
                                 acceptedButtons: Qt.LeftButton
@@ -312,24 +429,24 @@ Rectangle {
                                 Label {
                                     text: fileEntry.fileName || ""
                                     color: Theme.primaryText
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 130
                                     elide: Text.ElideRight
                                 }
                                 Label {
                                     text: fileEntry.path ? String(fileEntry.path).replace(/[^\\/]+$/, "") : ""
                                     color: Theme.secondaryText
-                                    Layout.preferredWidth: 130
+                                    Layout.fillWidth: true
                                     elide: Text.ElideMiddle
                                 }
                                 Label {
                                     text: String(fileEntry.extension || "").toUpperCase()
                                     color: Theme.secondaryText
-                                    Layout.preferredWidth: 54
+                                    Layout.preferredWidth: 62
                                 }
                                 Label {
                                     text: page.formatSize(fileEntry.fileSize)
                                     color: Theme.secondaryText
-                                    Layout.preferredWidth: 64
+                                    Layout.preferredWidth: 72
                                 }
                                 Label {
                                     text: qsTr("就绪")
@@ -358,25 +475,6 @@ Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 32
-                        color: Theme.background
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            Label {
-                                text: qsTr("已选择 %1 个文件").arg(selectedIndices.length)
-                                color: Theme.secondaryText
-                            }
-                            Item { Layout.fillWidth: true }
-                            Label {
-                                text: qsTr("共 %1 个文件").arg(FilenameProcessor.fileCount)
-                                color: Theme.secondaryText
-                            }
-                        }
-                    }
                 }
             }
 
@@ -384,14 +482,14 @@ Rectangle {
                 id: rulesColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(620, page.width * 0.52)
+                Layout.preferredWidth: Math.max(620, page.width * 0.61)
                 spacing: 8
 
                 Rectangle {
                     id: rulesPanel
                     objectName: "filenameRulesPanel"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 252
+                    Layout.preferredHeight: 258
                     color: Theme.panel
                     border.color: Theme.border
                     border.width: 1
@@ -402,7 +500,7 @@ Rectangle {
                         anchors.margins: 12
                         spacing: 7
                         Label {
-                            text: qsTr("批量文件名规则")
+                            text: qsTr("批量文件名处理")
                             color: Theme.primaryText
                             font.pixelSize: 15
                             font.weight: Font.DemiBold
@@ -412,14 +510,28 @@ Rectangle {
                             spacing: 10
                             GridLayout {
                                 Layout.fillWidth: true
-                                Layout.minimumWidth: 252
+                                Layout.minimumWidth: 320
                                 columns: 2
                                 rowSpacing: 6
                                 columnSpacing: 8
                                 Label { text: qsTr("前缀"); color: Theme.secondaryText }
-                                TextField { id: prefixField; Layout.fillWidth: true; onTextChanged: page.refreshPreview() }
+                                TextField {
+                                    id: prefixField
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("留空：删除识别到的原前缀/序号")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("填写则添加；留空则删除文件名开头的标签和序号")
+                                    onTextChanged: page.refreshPreview()
+                                }
                                 Label { text: qsTr("后缀"); color: Theme.secondaryText }
-                                TextField { id: suffixField; Layout.fillWidth: true; onTextChanged: page.refreshPreview() }
+                                TextField {
+                                    id: suffixField
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("留空：删除识别到的原后缀")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("填写则添加；留空则删除文件名末尾的尾标和标签")
+                                    onTextChanged: page.refreshPreview()
+                                }
                                 Label { text: qsTr("大小写规则"); color: Theme.secondaryText }
                                 ComboBox {
                                     id: caseBox
@@ -436,24 +548,56 @@ Rectangle {
                                     valueRole: "value"
                                     onCurrentValueChanged: page.refreshPreview()
                                 }
+                            }
+                            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                CheckBox {
+                                    id: replaceSpacesCheck
+                                    text: qsTr("替换空格为下划线")
+                                    checked: false
+                                    onToggled: page.refreshPreview()
+                                }
                                 CheckBox {
                                     id: preserveExtensionCheck
                                     text: qsTr("保留扩展名")
                                     checked: true
-                                    Layout.columnSpan: 2
                                     onToggled: page.refreshPreview()
                                 }
                                 CheckBox {
-                                    id: replaceSpacesCheck
-                                    text: qsTr("替换空格")
+                                    id: removeAffixesWhenBlankCheck
+                                    visible: false
+                                    text: qsTr("留空时移除原有前后缀与序号")
+                                    checked: true
                                     onToggled: page.refreshPreview()
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("前缀或后缀留空时，自动清理文件名中可识别的标签、尾标和序号")
                                 }
-                                TextField {
-                                    id: spaceReplacementField
-                                    text: "_"
-                                    enabled: replaceSpacesCheck.checked
+                                RowLayout {
+                                    visible: false
+                                    Label { text: qsTr("空格替换字符"); color: Theme.secondaryText }
+                                    TextField {
+                                        id: spaceReplacementField
+                                        text: "_"
+                                        enabled: replaceSpacesCheck.checked
+                                        Layout.fillWidth: true
+                                        onTextChanged: page.refreshPreview()
+                                    }
+                                }
+                                Label { text: qsTr("冲突策略"); color: Theme.secondaryText }
+                                ComboBox {
+                                    id: conflictBox
+                                    objectName: "filenameConflictBox"
                                     Layout.fillWidth: true
-                                    onTextChanged: page.refreshPreview()
+                                    model: [
+                                        { text: qsTr("自动重命名（添加序号）"), value: "autoNumber" },
+                                        { text: qsTr("跳过冲突文件"), value: "skip" },
+                                        { text: qsTr("覆盖现有文件"), value: "overwrite" },
+                                        { text: qsTr("遇到冲突停止"), value: "stop" }
+                                    ]
+                                    textRole: "text"
+                                    valueRole: "value"
+                                    onCurrentValueChanged: page.refreshPreview()
                                 }
                             }
                             Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
@@ -463,10 +607,12 @@ Rectangle {
                                 columns: 2
                                 rowSpacing: 6
                                 columnSpacing: 7
-                                CheckBox {
+                                ThemedSwitch {
                                     id: autoNumberCheck
-                                    text: qsTr("自动编号")
                                     Layout.columnSpan: 2
+                                    Layout.alignment: Qt.AlignRight
+                                    checked: false
+                                    text: qsTr("自动序号")
                                     onToggled: page.refreshPreview()
                                 }
                                 Label { text: qsTr("起始序号"); color: Theme.secondaryText }
@@ -512,20 +658,6 @@ Rectangle {
                                     text: "_"
                                     enabled: autoNumberCheck.checked
                                     onTextChanged: page.refreshPreview()
-                                }
-                                Label { text: qsTr("冲突策略"); color: Theme.secondaryText }
-                                ComboBox {
-                                    id: conflictBox
-                                    objectName: "filenameConflictBox"
-                                    Layout.fillWidth: true
-                                    Layout.minimumWidth: 180
-                                    model: [
-                                        { text: qsTr("自动编号避让"), value: "autoNumber" },
-                                        { text: qsTr("跳过冲突文件"), value: "skip" },
-                                        { text: qsTr("遇到冲突停止"), value: "stop" }
-                                    ]
-                                    textRole: "text"
-                                    valueRole: "value"
                                 }
                             }
                         }
@@ -592,7 +724,7 @@ Rectangle {
                                     required property int index
                                     required property var modelData
                                     width: previewList.width
-                                    height: 36
+                                    height: 38
                                     color: index % 2 === 0 ? "transparent" : Theme.background
                                     RowLayout {
                                         anchors.fill: parent
@@ -642,14 +774,14 @@ Rectangle {
                             }
                             Label { text: qsTr("全部文件  %1").arg(previewRows.length); color: Theme.secondaryText }
                             Label { text: qsTr("就绪  %1").arg(readyCount); color: Theme.waveformGreen }
-                            Label { text: qsTr("冲突  %1").arg(conflictCount); color: conflictCount > 0 ? Theme.ratingGold : Theme.secondaryText }
-                            Label { text: qsTr("未更改  %1").arg(unchangedCount); color: Theme.secondaryText }
+                            Label { text: qsTr("警告  %1").arg(warningCount); color: warningCount > 0 ? Theme.ratingGold : Theme.secondaryText }
+                            Label { text: qsTr("错误  %1").arg(errorCount); color: errorCount > 0 ? Theme.favoriteRed : Theme.secondaryText }
                             Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
                             Label {
                                 Layout.fillWidth: true
-                                text: qsTr("重命名先进入临时路径，再一次性提交；失败时回滚，不覆盖音频内容。")
+                                text: qsTr("提示\n文件名长度建议不超过 255 个字符；\n某些字符在 Windows 系统中不可用：\n\\ / : * ? \" < > |")
                                 color: Theme.secondaryText
-                                font.pixelSize: 10
+                                font.pixelSize: 12
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -660,8 +792,8 @@ Rectangle {
                             Label { text: qsTr("冲突与验证"); color: Theme.primaryText; font.weight: Font.DemiBold }
                             Label { text: qsTr("全部文件  %1").arg(previewRows.length); color: Theme.secondaryText }
                             Label { text: qsTr("就绪  %1").arg(readyCount); color: Theme.waveformGreen }
-                            Label { text: qsTr("冲突  %1").arg(conflictCount); color: conflictCount > 0 ? Theme.ratingGold : Theme.secondaryText }
-                            Label { text: qsTr("未更改 %1").arg(unchangedCount); color: Theme.secondaryText }
+                            Label { text: qsTr("警告  %1").arg(warningCount); color: warningCount > 0 ? Theme.ratingGold : Theme.secondaryText }
+                            Label { text: qsTr("错误  %1").arg(errorCount); color: errorCount > 0 ? Theme.favoriteRed : Theme.secondaryText }
                             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
                             Label {
                                 Layout.fillWidth: true
@@ -690,8 +822,8 @@ Rectangle {
                         Label { text: qsTr("冲突与验证"); color: Theme.primaryText; font.weight: Font.DemiBold }
                         Label { text: qsTr("全部 %1").arg(previewRows.length); color: Theme.secondaryText }
                         Label { text: qsTr("就绪 %1").arg(readyCount); color: Theme.waveformGreen }
-                        Label { text: qsTr("冲突 %1").arg(conflictCount); color: conflictCount > 0 ? Theme.ratingGold : Theme.secondaryText }
-                        Label { text: qsTr("未更改 %1").arg(unchangedCount); color: Theme.secondaryText }
+                        Label { text: qsTr("警告 %1").arg(warningCount); color: warningCount > 0 ? Theme.ratingGold : Theme.secondaryText }
+                        Label { text: qsTr("错误 %1").arg(errorCount); color: errorCount > 0 ? Theme.favoriteRed : Theme.secondaryText }
                         Item { Layout.fillWidth: true }
                         Label { text: qsTr("事务提交，失败回滚"); color: Theme.secondaryText; font.pixelSize: 10 }
                     }
@@ -703,7 +835,7 @@ Rectangle {
             id: bottomBar
             objectName: "filenameBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 118
+            Layout.preferredHeight: 132
             color: Theme.panel
             border.color: Theme.border
             border.width: 1
@@ -711,11 +843,13 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent
+                anchors.topMargin: 32
+                anchors.bottomMargin: 16
                 anchors.leftMargin: 12
-                anchors.rightMargin: 8
-                spacing: 10
+                anchors.rightMargin: 24
+                spacing: 20
                 Rectangle {
-                    Layout.preferredWidth: 210
+                    Layout.preferredWidth: 278
                     Layout.fillHeight: true
                     color: Theme.background
                     border.color: Theme.border
@@ -724,12 +858,12 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: 10
                     spacing: 1
-                    Label { text: qsTr("成功预览数量"); color: Theme.secondaryText; font.pixelSize: 10 }
-                    Label { text: readyCount; color: Theme.waveformGreen; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Label { text: qsTr("成功预览数量"); color: Theme.secondaryText; font.pixelSize: 14 }
+                    Label { text: qsTr("%1 个文件").arg(readyCount); color: Theme.waveformGreen; font.pixelSize: 24; font.weight: Font.DemiBold }
                     }
                 }
                 Rectangle {
-                    Layout.preferredWidth: 190
+                    Layout.preferredWidth: 266
                     Layout.fillHeight: true
                     color: Theme.background
                     border.color: Theme.border
@@ -738,12 +872,12 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: 10
                     spacing: 1
-                    Label { text: qsTr("冲突数量"); color: Theme.secondaryText; font.pixelSize: 10 }
-                    Label { text: conflictCount; color: conflictCount > 0 ? Theme.ratingGold : Theme.secondaryText; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Label { text: qsTr("冲突数量"); color: Theme.secondaryText; font.pixelSize: 14 }
+                    Label { text: qsTr("%1 个文件").arg(conflictCount); color: conflictCount > 0 ? Theme.ratingGold : Theme.secondaryText; font.pixelSize: 24; font.weight: Font.DemiBold }
                     }
                 }
                 Rectangle {
-                    Layout.preferredWidth: 190
+                    Layout.preferredWidth: 244
                     Layout.fillHeight: true
                     color: Theme.background
                     border.color: Theme.border
@@ -752,8 +886,13 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: 10
                     spacing: 1
-                    Label { text: qsTr("可撤销事务"); color: Theme.secondaryText; font.pixelSize: 10 }
-                    Label { text: FilenameProcessor.canUndo ? qsTr("可撤销") : qsTr("无"); color: Theme.primaryText; font.pixelSize: 14 }
+                    Label { text: qsTr("可撤销本次重命名"); color: Theme.secondaryText; font.pixelSize: 14 }
+                    Label { text: FilenameProcessor.canUndo ? qsTr("是") : qsTr("否"); color: Theme.cyan; font.pixelSize: 24 }
+                    }
+                    TapHandler {
+                        enabled: FilenameProcessor.canUndo && !FilenameProcessor.busy
+                        cursorShape: Qt.PointingHandCursor
+                        onTapped: FilenameProcessor.undoLast()
                     }
                 }
                 ProgressBar {
@@ -762,21 +901,51 @@ Rectangle {
                     value: FilenameProcessor.progress
                 }
                 Item { Layout.fillWidth: !FilenameProcessor.busy }
+                Label {
+                    Layout.preferredWidth: 300
+                    visible: !FilenameProcessor.busy
+                    text: qsTr("重命名操作将在处理后生成日志，\n如需退回，可通过撤销恢复原名列表进行还原。")
+                    color: Theme.secondaryText
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
                 Button {
+                    Layout.preferredWidth: 184
+                    Layout.fillHeight: true
                     text: qsTr("取消")
                     visible: true
                     enabled: FilenameProcessor.busy
                     onClicked: FilenameProcessor.cancel()
                 }
                 Button {
+                    Layout.preferredWidth: 220
+                    Layout.fillHeight: true
                     text: qsTr("开始重命名")
                     icon.source: Theme.icon("play-fill")
                     highlighted: true
-                    enabled: FilenameProcessor.fileCount > 0 && readyCount > 0
+                    enabled: FilenameProcessor.fileCount > 0 && runnableCount > 0
+                             && !(conflictBox.currentValue === "stop"
+                                  && errorCount > 0)
                              && !FilenameProcessor.busy
-                    onClicked: FilenameProcessor.apply(
-                        page.rules(), page.selectedIndices, conflictBox.currentValue)
+                    onClicked: {
+                        if (conflictBox.currentValue === "overwrite")
+                            overwriteConfirmation.open()
+                        else
+                            FilenameProcessor.apply(
+                                page.rules(), page.selectedIndices,
+                                conflictBox.currentValue)
+                    }
                 }
+            }
+            Label {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.leftMargin: 18
+                anchors.topMargin: 10
+                text: qsTr("处理摘要")
+                color: Theme.primaryText
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
             }
         }
     }
@@ -784,7 +953,9 @@ Rectangle {
     Connections {
         target: FilenameProcessor
         function onEntriesLoaded() {
-            page.selectedIndices = []
+            page.selectedIndices = Array.from(
+                {length: FilenameProcessor.fileCount},
+                function(_, index) { return index })
             page.selectionAnchor = -1
             ++page.entryRevision
             page.refreshPreview()

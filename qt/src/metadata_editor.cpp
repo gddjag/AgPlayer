@@ -1,6 +1,7 @@
 #include "metadata_editor.hpp"
 
 #include "audio_file_discovery.hpp"
+#include "library_model.hpp"
 #include "metadata_writer.hpp"
 
 #include "agplayer/c_api.h"
@@ -15,6 +16,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStorageInfo>
+#include <QTemporaryFile>
 #include <QTextStream>
 #include <QtConcurrent>
 
@@ -30,11 +33,16 @@ bool validEditPayload(const QVariantMap& fields, QString& error)
 {
     bool editsYear = false;
     bool editsDate = false;
+    bool hasEdit = fields.value(QStringLiteral("coverMode"),
+                                QStringLiteral("keep")).toString()
+        != QLatin1String("keep");
     for (auto it = fields.cbegin(); it != fields.cend(); ++it) {
         if (it.key() == QLatin1String("coverMode")) continue;
         const QVariantMap descriptor = it.value().toMap();
         const QString mode = descriptor.value(QStringLiteral("mode"),
                                               QStringLiteral("keep")).toString();
+        hasEdit = hasEdit || mode != QLatin1String("keep")
+            || (descriptor.isEmpty() && !it.value().toString().isEmpty());
         if (mode == QLatin1String("set")
             && descriptor.value(QStringLiteral("value")).toString().trimmed().isEmpty()) {
             error = QObject::tr("“设为”不能为空；请改用“清除”。");
@@ -53,6 +61,10 @@ bool validEditPayload(const QVariantMap& fields, QString& error)
     }
     if (editsYear && editsDate) {
         error = QObject::tr("年份和日期映射到同一标签，请只编辑其中一项。");
+        return false;
+    }
+    if (!hasEdit) {
+        error = QObject::tr("请至少设置、清除一个字段，或修改封面。");
         return false;
     }
     return true;
@@ -161,6 +173,22 @@ int MetadataEditor::fileCount() const noexcept
 QString MetadataEditor::coverImage() const
 {
     return coverPath_.isEmpty() ? QString() : QUrl::fromLocalFile(coverPath_).toString();
+}
+
+void MetadataEditor::resetOperationState()
+{
+    requiresPreflightDecision_ = false;
+    successCount_ = 0;
+    failedCount_ = 0;
+    supportedCount_ = 0;
+    unsupportedCount_ = 0;
+    cancelledCount_ = 0;
+    pendingFields_.clear();
+    pendingTargets_.clear();
+    pendingSupportedTargets_.clear();
+    pendingUnsupportedResults_.clear();
+    emit statisticsChanged();
+    emit preflightDecisionChanged();
 }
 
 void MetadataEditor::resetCover()
@@ -431,8 +459,8 @@ void MetadataEditor::removeFiles(const QList<int>& indices)
     }
 }
 
-void MetadataEditor::applyMetadata(const QVariantMap& fields,
-                                   const QList<int>& indices)
+void MetadataEditor::startApply(const QVariantMap& fields,
+                                const QList<int>& indices)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
@@ -467,11 +495,26 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
             operationWatcher_.clear();
             const auto result = watcher->result();
             entries_ = result.entries;
-            results_ = result.results;
+            results_ = pendingUnsupportedResults_;
+            results_.append(result.results);
+            successCount_ = result.successCount;
+            failedCount_ = result.failureCount;
+            cancelledCount_ = result.cancelledCount;
+            if (libraryModel_ != nullptr) {
+                QStringList updatedPaths;
+                for (const QVariant& value : result.results) {
+                    const QVariantMap row = value.toMap();
+                    if (row.value(QStringLiteral("success")).toBool()) {
+                        updatedPaths.append(row.value(QStringLiteral("path")).toString());
+                    }
+                }
+                libraryModel_->refreshMetadataForPaths(updatedPaths);
+            }
             setBusy(false);
             setProgress(1.0);
             emit entriesChanged();
             emit resultsChanged();
+            emit statisticsChanged();
             emit metadataApplied(result.successCount, result.failureCount);
             watcher->deleteLater();
         });
@@ -482,15 +525,62 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
 
     watcher->setFuture(QtConcurrent::run(
         [fields, targets, coverData, coverMime, coverMode, snapshot,
-         this]() mutable {
-            const agplayer::MetadataEditPlan plan =
-                planForPayload(fields, coverData, coverMime, coverMode);
+          this]() mutable {
             MetadataApplySummary summary;
             summary.entries = snapshot;
+            const auto appendPreparationFailure = [&summary](
+                                                  const MetadataEntry& entry,
+                                                  const QString& message) {
+                QVariantMap fileResult;
+                fileResult.insert(QStringLiteral("path"), entry.path);
+                fileResult.insert(QStringLiteral("fileName"), entry.fileName);
+                fileResult.insert(QStringLiteral("success"), false);
+                fileResult.insert(QStringLiteral("stage"), QStringLiteral("prepare"));
+                fileResult.insert(QStringLiteral("message"), message);
+                fileResult.insert(QStringLiteral("errorCode"),
+                                  static_cast<int>(AG_INTERNAL_ERROR));
+                summary.results.push_back(fileResult);
+            };
+            agplayer::MetadataEditPlan plan;
+            try {
+                plan = planForPayload(fields, coverData, coverMime, coverMode);
+            } catch (const std::exception& exception) {
+                summary.failureCount = targets.size();
+                for (const int idx : targets) {
+                    if (idx < 0 || idx >= summary.entries.size()) continue;
+                    const MetadataEntry& entry = summary.entries.at(idx);
+                    appendPreparationFailure(
+                        entry, tr("无法准备元数据修改：%1")
+                                   .arg(QString::fromUtf8(exception.what())));
+                }
+                return summary;
+            } catch (...) {
+                summary.failureCount = targets.size();
+                for (const int idx : targets) {
+                    if (idx < 0 || idx >= summary.entries.size()) continue;
+                    const MetadataEntry& entry = summary.entries.at(idx);
+                    appendPreparationFailure(entry, tr("无法准备元数据修改"));
+                }
+                return summary;
+            }
             const int total = targets.size();
             for (int i = 0; i < total; ++i) {
                 if (cancelFlag_.load(std::memory_order_acquire)) {
-                    break;
+                    QVariantMap cancelled;
+                    const int cancelledIndex = targets[i];
+                    if (cancelledIndex >= 0 && cancelledIndex < summary.entries.size()) {
+                        const MetadataEntry& entry = summary.entries.at(cancelledIndex);
+                        cancelled.insert(QStringLiteral("path"), entry.path);
+                        cancelled.insert(QStringLiteral("fileName"), entry.fileName);
+                    }
+                    cancelled.insert(QStringLiteral("success"), false);
+                    cancelled.insert(QStringLiteral("stage"), QStringLiteral("cancelled"));
+                    cancelled.insert(QStringLiteral("message"), tr("已取消"));
+                    cancelled.insert(QStringLiteral("errorCode"),
+                                     static_cast<int>(agplayer::MetadataErrorCode::Cancelled));
+                    summary.results.push_back(cancelled);
+                    ++summary.cancelledCount;
+                    continue;
                 }
                 const int idx = targets[i];
                 if (idx < 0 || idx >= summary.entries.size()) {
@@ -499,8 +589,18 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
                 }
                 MetadataEntry& e = summary.entries[idx];
                 agplayer::MetadataFileResult writeResult;
-                const ag_result result = agplayer::write_metadata_plan(
-                    e.path.toUtf8().toStdString(), plan, writeResult);
+                ag_result result = AG_INTERNAL_ERROR;
+                try {
+                    result = agplayer::write_metadata_plan(
+                        e.path.toUtf8().toStdString(), plan, writeResult,
+                        &cancelFlag_);
+                } catch (const std::exception& exception) {
+                    writeResult.message = tr("元数据写入异常：%1")
+                                              .arg(QString::fromUtf8(exception.what()))
+                                              .toStdString();
+                } catch (...) {
+                    writeResult.message = tr("元数据写入发生未知异常").toStdString();
+                }
                 if (result == AG_OK) {
                     ++summary.successCount;
                     for (const agplayer::FieldResult& field : writeResult.fields) {
@@ -535,6 +635,8 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
                         e.coverPreview.clear();
                         e.coverInfo.clear();
                     }
+                } else if (result == AG_CANCELLED) {
+                    ++summary.cancelledCount;
                 } else {
                     ++summary.failureCount;
                 }
@@ -542,15 +644,90 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
                 fileResult.insert(QStringLiteral("path"), e.path);
                 fileResult.insert(QStringLiteral("fileName"), e.fileName);
                 fileResult.insert(QStringLiteral("success"), result == AG_OK);
+                fileResult.insert(QStringLiteral("status"),
+                                  result == AG_OK ? QStringLiteral("completed")
+                                  : result == AG_CANCELLED
+                                      ? QStringLiteral("cancelled")
+                                      : result == AG_UNSUPPORTED_FORMAT
+                                          ? QStringLiteral("unsupported")
+                                          : QStringLiteral("failed"));
                 fileResult.insert(QStringLiteral("stage"),
                                   result == AG_OK ? QStringLiteral("verified")
-                                                  : QStringLiteral("write"));
+                                  : result == AG_CANCELLED
+                                      ? QStringLiteral("cancelled")
+                                      : QStringLiteral("write"));
                 fileResult.insert(QStringLiteral("message"),
                                   result == AG_OK
                                       ? tr("已验证元数据与音频流，已完成替换")
                                       : QString::fromStdString(writeResult.message));
                 fileResult.insert(QStringLiteral("errorCode"),
+                                  static_cast<int>(writeResult.error_code));
+                fileResult.insert(QStringLiteral("resultCode"),
                                   static_cast<int>(result));
+                fileResult.insert(QStringLiteral("usedStreamCopy"),
+                                  writeResult.used_stream_copy);
+                fileResult.insert(QStringLiteral("audioVerifiedUnchanged"),
+                                  writeResult.audio_verified_unchanged);
+                fileResult.insert(QStringLiteral("packetsCopied"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.packets_copied));
+                fileResult.insert(QStringLiteral("decoderOpenCount"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.decoder_open_count));
+                fileResult.insert(QStringLiteral("encoderOpenCount"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.encoder_open_count));
+                fileResult.insert(QStringLiteral("audioStreamsBefore"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.audio_streams_before));
+                fileResult.insert(QStringLiteral("audioStreamsAfter"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.audio_streams_after));
+                fileResult.insert(QStringLiteral("chaptersBefore"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.chapters_before));
+                fileResult.insert(QStringLiteral("chaptersAfter"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.chapters_after));
+                fileResult.insert(QStringLiteral("attachmentsBefore"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.attachments_before));
+                fileResult.insert(QStringLiteral("attachmentsAfter"),
+                                  static_cast<qulonglong>(
+                                      writeResult.runtime.attachments_after));
+                QVariantList fieldResults;
+                for (const agplayer::FieldResult& field : writeResult.fields) {
+                    QVariantMap fieldResult;
+                    fieldResult.insert(QStringLiteral("field"),
+                                       static_cast<int>(field.field));
+                    fieldResult.insert(QStringLiteral("action"),
+                                       static_cast<int>(field.requested_action));
+                    fieldResult.insert(QStringLiteral("status"),
+                                       static_cast<int>(field.status));
+                    fieldResult.insert(QStringLiteral("beforeValue"),
+                                       QString::fromUtf8(field.before_value));
+                    fieldResult.insert(QStringLiteral("requestedValue"),
+                                       QString::fromUtf8(field.requested_value));
+                    fieldResult.insert(QStringLiteral("actualValue"),
+                                       QString::fromUtf8(field.actual_value));
+                    fieldResult.insert(QStringLiteral("reason"),
+                                       QString::fromUtf8(field.reason));
+                    fieldResults.append(fieldResult);
+                }
+                fileResult.insert(QStringLiteral("fields"), fieldResults);
+                QVariantMap coverResult;
+                coverResult.insert(QStringLiteral("action"),
+                                   static_cast<int>(writeResult.cover.requested_action));
+                coverResult.insert(QStringLiteral("status"),
+                                   static_cast<int>(writeResult.cover.status));
+                coverResult.insert(QStringLiteral("hadCover"),
+                                   writeResult.cover.had_cover);
+                coverResult.insert(QStringLiteral("hasCover"),
+                                   writeResult.cover.has_cover);
+                coverResult.insert(QStringLiteral("mimeType"),
+                                   QString::fromStdString(
+                                       writeResult.cover.mime_type));
+                fileResult.insert(QStringLiteral("cover"), coverResult);
                 summary.results.push_back(fileResult);
                 const double fraction = total > 0
                     ? static_cast<double>(i + 1) / total : 1.0;
@@ -562,8 +739,23 @@ void MetadataEditor::applyMetadata(const QVariantMap& fields,
         }));
 }
 
+void MetadataEditor::applyMetadata(const QVariantMap& fields,
+                                   const QList<int>& indices)
+{
+    resetOperationState();
+    startPreflight(fields, indices, true);
+}
+
 void MetadataEditor::preflightMetadata(const QVariantMap& fields,
                                        const QList<int>& indices)
+{
+    resetOperationState();
+    startPreflight(fields, indices, false);
+}
+
+void MetadataEditor::startPreflight(const QVariantMap& fields,
+                                    const QList<int>& indices,
+                                    bool applyWhenSupported)
 {
     if (busy_.load(std::memory_order_acquire)) return;
     QString validationError;
@@ -577,46 +769,147 @@ void MetadataEditor::preflightMetadata(const QVariantMap& fields,
         emit errorOccurred(tr("请选择封面图片"));
         return;
     }
-    const agplayer::MetadataEditPlan plan = planForPayload(fields, coverData_,
-                                                            coverMime_.toUtf8(), coverMode);
     QList<int> targets = indices;
     if (targets.isEmpty()) {
         for (int i = 0; i < entries_.size(); ++i) targets.append(i);
     }
-    QVariantList preview;
-    for (const int index : targets) {
-        if (index < 0 || index >= entries_.size()) continue;
-        const MetadataEntry& entry = entries_.at(index);
-        QVariantMap item;
-        item.insert(QStringLiteral("path"), entry.path);
-        item.insert(QStringLiteral("fileName"), entry.fileName);
-        const QFileInfo info(entry.path);
-        std::string preflightError;
-        const ag_result preflight = agplayer::preflight_metadata_edit(
-            entry.path.toUtf8().toStdString(), plan, preflightError);
-        const bool readable = preflight == AG_OK;
-        const QString probePath = info.dir().filePath(
-            QStringLiteral(".agplayer-metadata-write-probe-%1.tmp")
-                .arg(QCoreApplication::applicationPid()));
-        QFile probe(probePath);
-        const bool writable = probe.open(QIODevice::WriteOnly | QIODevice::NewOnly);
-        if (writable) {
-            probe.close();
-            QFile::remove(probePath);
-        }
-        item.insert(QStringLiteral("success"), readable && writable && !entry.hasError);
-        item.insert(QStringLiteral("stage"), QStringLiteral("preflight"));
-        item.insert(QStringLiteral("errorCode"), readable
-                    ? QString() : QString::fromStdString(preflightError));
-        item.insert(QStringLiteral("preflightReason"), readable
-                    ? QString() : QString::fromStdString(preflightError));
-        item.insert(QStringLiteral("message"), !readable ? tr("文件不可读")
-                   : !writable ? tr("目标目录不可用")
-                   : entry.hasError ? entry.error : tr("可使用流复制处理"));
-        preview.push_back(item);
+    if (targets.isEmpty()) {
+        emit errorOccurred(tr("没有可处理的文件"));
+        return;
     }
-    results_ = preview;
-    emit resultsChanged();
+
+    pendingFields_ = fields;
+    pendingTargets_ = targets;
+    cancelFlag_.store(false, std::memory_order_release);
+    setBusy(true);
+    setProgress(0.0);
+
+    auto* watcher = new QFutureWatcher<MetadataApplySummary>(this);
+    operationWatcher_ = watcher;
+    connect(watcher, &QFutureWatcher<MetadataApplySummary>::finished, this,
+        [this, watcher, applyWhenSupported]() {
+            operationWatcher_.clear();
+            const MetadataApplySummary summary = watcher->result();
+            watcher->deleteLater();
+            results_ = summary.results;
+            supportedCount_ = summary.supportedCount;
+            unsupportedCount_ = summary.unsupportedCount;
+            cancelledCount_ = summary.cancelledCount;
+            pendingSupportedTargets_ = summary.supportedTargets;
+            pendingUnsupportedResults_.clear();
+            for (const QVariant& value : summary.results) {
+                if (!value.toMap().value(QStringLiteral("success")).toBool()) {
+                    pendingUnsupportedResults_.append(value);
+                }
+            }
+            setBusy(false);
+            setProgress(1.0);
+            emit resultsChanged();
+            emit statisticsChanged();
+            emit preflightCompleted(supportedCount_, unsupportedCount_);
+
+            if (!applyWhenSupported || cancelledCount_ > 0) return;
+            if (unsupportedCount_ > 0) {
+                requiresPreflightDecision_ = true;
+                emit preflightDecisionChanged();
+                emit preflightDecisionRequired(supportedCount_, unsupportedCount_);
+                return;
+            }
+            startApply(pendingFields_, pendingSupportedTargets_);
+        });
+
+    const QList<MetadataEntry> snapshot = entries_;
+    const QByteArray coverData = coverData_;
+    const QByteArray coverMime = coverMime_.toUtf8();
+    watcher->setFuture(QtConcurrent::run(
+        [this, fields, targets, snapshot, coverData, coverMime, coverMode]() {
+            MetadataApplySummary summary;
+            const agplayer::MetadataEditPlan plan = planForPayload(
+                fields, coverData, coverMime, coverMode);
+            const int total = targets.size();
+            for (int i = 0; i < total; ++i) {
+                QVariantMap item;
+                const int index = targets.at(i);
+                if (index < 0 || index >= snapshot.size()) {
+                    ++summary.unsupportedCount;
+                    continue;
+                }
+                const MetadataEntry& entry = snapshot.at(index);
+                item.insert(QStringLiteral("path"), entry.path);
+                item.insert(QStringLiteral("fileName"), entry.fileName);
+                item.insert(QStringLiteral("stage"), QStringLiteral("preflight"));
+                if (cancelFlag_.load(std::memory_order_acquire)) {
+                    item.insert(QStringLiteral("success"), false);
+                    item.insert(QStringLiteral("status"), QStringLiteral("cancelled"));
+                    item.insert(QStringLiteral("message"), tr("已取消"));
+                    item.insert(QStringLiteral("errorCode"),
+                                static_cast<int>(agplayer::MetadataErrorCode::Cancelled));
+                    ++summary.cancelledCount;
+                    summary.results.append(item);
+                    continue;
+                }
+
+                agplayer::MetadataPreflightReport report;
+                const ag_result preflight = agplayer::preflight_metadata_edit(
+                    entry.path.toUtf8().toStdString(), plan, report);
+                QTemporaryFile probe(QFileInfo(entry.path).dir().filePath(
+                    QStringLiteral(".agplayer-metadata-write-probe-XXXXXX.tmp")));
+                const bool writable = probe.open();
+                const QStorageInfo storage(QFileInfo(entry.path).absolutePath());
+                const bool hasSpace = storage.isValid() && storage.isReady()
+                    && storage.bytesAvailable() > entry.fileSize + 1024 * 1024;
+                const bool supported = preflight == AG_OK && writable && hasSpace
+                    && !entry.hasError;
+                item.insert(QStringLiteral("success"), supported);
+                item.insert(QStringLiteral("status"), supported
+                            ? QStringLiteral("supported")
+                            : QStringLiteral("unsupported"));
+                item.insert(QStringLiteral("container"),
+                            QString::fromStdString(report.container));
+                item.insert(QStringLiteral("errorCode"), static_cast<int>(
+                    !writable ? agplayer::MetadataErrorCode::PermissionDenied
+                    : !hasSpace ? agplayer::MetadataErrorCode::InsufficientDiskSpace
+                    : report.error_code));
+                QVariantList unsupportedFields;
+                for (const agplayer::CanonicalField field
+                     : report.unsupported_fields) {
+                    unsupportedFields.append(static_cast<int>(field));
+                }
+                item.insert(QStringLiteral("unsupportedFields"),
+                            unsupportedFields);
+                const QString reason = !writable ? tr("目标目录不可写")
+                    : !hasSpace ? tr("磁盘空间不足")
+                    : entry.hasError ? entry.error
+                    : QString::fromStdString(report.user_message);
+                item.insert(QStringLiteral("preflightReason"),
+                            supported ? QString() : reason);
+                item.insert(QStringLiteral("message"), supported
+                            ? tr("支持同容器流复制，音频不重编码") : reason);
+                summary.results.append(item);
+                if (supported) {
+                    ++summary.supportedCount;
+                    summary.supportedTargets.append(index);
+                } else {
+                    ++summary.unsupportedCount;
+                }
+                const double fraction = static_cast<double>(i + 1) / total;
+                QMetaObject::invokeMethod(
+                    this, [this, fraction]() { setProgress(fraction); },
+                    Qt::QueuedConnection);
+            }
+            return summary;
+        }));
+}
+
+void MetadataEditor::applyPreflightDecision(const QString& policy)
+{
+    if (!requiresPreflightDecision_ || busy_.load(std::memory_order_acquire)) return;
+    requiresPreflightDecision_ = false;
+    emit preflightDecisionChanged();
+    if (policy == QLatin1String("supportedOnly")
+        || policy == QLatin1String("skipUnsupported")) {
+        startApply(pendingFields_, pendingSupportedTargets_);
+    }
 }
 
 bool MetadataEditor::exportResults(const QUrl& destination)
@@ -649,6 +942,53 @@ bool MetadataEditor::exportResults(const QUrl& destination)
         QJsonArray rows;
         for (const QVariant& value : results_) {
             rows.append(QJsonObject::fromVariantMap(value.toMap()));
+        }
+        file.write(QJsonDocument(rows).toJson(QJsonDocument::Indented));
+    }
+    return true;
+}
+
+bool MetadataEditor::exportCurrentList(const QUrl& destination,
+                                       const QList<int>& indices) const
+{
+    const QString path = destination.toLocalFile();
+    if (path.isEmpty() || indices.isEmpty()) return false;
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        return false;
+    }
+    const auto rowFor = [this](int index) {
+        QVariantMap row = entryAt(index);
+        row.insert(QStringLiteral("index"), index);
+        return row;
+    };
+    if (path.endsWith(QLatin1String(".csv"), Qt::CaseInsensitive)) {
+        QTextStream out(&file);
+        out.setEncoding(QStringConverter::Utf8);
+        out << "fileName,path,title,artist,album,albumArtist,genre,year,composer,bpm\n";
+        const auto csv = [](QString text) {
+            text.replace('"', QStringLiteral("\"\""));
+            return QStringLiteral("\"") + text + QStringLiteral("\"");
+        };
+        for (const int index : indices) {
+            const QVariantMap row = rowFor(index);
+            if (row.isEmpty()) continue;
+            out << csv(row.value(QStringLiteral("fileName")).toString()) << ','
+                << csv(row.value(QStringLiteral("path")).toString()) << ','
+                << csv(row.value(QStringLiteral("title")).toString()) << ','
+                << csv(row.value(QStringLiteral("artist")).toString()) << ','
+                << csv(row.value(QStringLiteral("album")).toString()) << ','
+                << csv(row.value(QStringLiteral("albumArtist")).toString()) << ','
+                << csv(row.value(QStringLiteral("genre")).toString()) << ','
+                << csv(row.value(QStringLiteral("year")).toString()) << ','
+                << csv(row.value(QStringLiteral("composer")).toString()) << ','
+                << csv(row.value(QStringLiteral("bpm")).toString()) << '\n';
+        }
+    } else {
+        QJsonArray rows;
+        for (const int index : indices) {
+            const QVariantMap row = rowFor(index);
+            if (!row.isEmpty()) rows.append(QJsonObject::fromVariantMap(row));
         }
         file.write(QJsonDocument(rows).toJson(QJsonDocument::Indented));
     }

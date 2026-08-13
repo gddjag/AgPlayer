@@ -42,6 +42,10 @@ struct DecodedAudioBlock final {
     bool end_of_stream = false;
 };
 
+// Reads container/stream metadata without allocating or opening a decoder.
+[[nodiscard]] ag_result probe_media_metadata(const std::string& utf8_path,
+                                             MediaMetadata& metadata) noexcept;
+
 class Decoder final {
 public:
     Decoder();

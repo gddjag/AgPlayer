@@ -31,7 +31,6 @@ Window {
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
     property string exportPlaylistId: ""
-    property real libraryWindowHeight: 752
 
     onClosing: function(close) {
         close.accepted = false
@@ -41,31 +40,6 @@ Window {
     Connections {
         target: windows
         function onSearchRequested() { searchFilter.focusSearch() }
-    }
-    Connections {
-        target: filterModel
-        function onCategoryChanged() {
-            listWindow.ensureLibraryManagerHeight()
-        }
-    }
-
-    onHeightChanged: {
-        if (filterModel && filterModel.category === "library")
-            libraryWindowHeight = height
-    }
-
-    function ensureLibraryManagerHeight() {
-        if (!filterModel || filterModel.category !== "library") {
-            listWindow.minimumHeight = 320
-            if (listWindow.height !== 570)
-                listWindow.height = 570
-            return
-        }
-        // First entry is tall enough for ten rows and the footer. Later manual
-        // heights are remembered without raising the native minimum size.
-        listWindow.minimumHeight = 320
-        if (listWindow.height !== listWindow.libraryWindowHeight)
-            listWindow.height = listWindow.libraryWindowHeight
     }
     Connections {
         target: ImportController
@@ -83,7 +57,8 @@ Window {
     function customCategory(): string {
         var category = filterModel ? filterModel.category : "all"
         return category !== "all" && category !== "favorites"
-                && category !== "history" && category !== "library" ? category : ""
+                && category !== "history" && category !== "recentAdded"
+                && category !== "neverPlayed" ? category : ""
     }
     function customPlaylistEmpty(): bool {
         var playlistId = customCategory()
@@ -349,8 +324,7 @@ Window {
                     StackLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        currentIndex: filterModel && filterModel.category === "library" ? 3
-                                      : LibraryModel.count === 0
+                        currentIndex: LibraryModel.count === 0
                                         || listWindow.customPlaylistEmpty() ? 1
                                       : filterModel && filterModel.count > 0
                                         ? 0 : 2
@@ -388,21 +362,12 @@ Window {
                             }
                             }
                         }
-                        LibraryManagerPage {
-                            id: libraryManagerPage
-                            objectName: "libraryManagerPageInList"
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            onPreferredWindowHeightChanged:
-                                listWindow.ensureLibraryManagerHeight()
-                        }
                     }
 
                     SearchFilter {
                         id: searchFilter
                         objectName: "librarySearchFilter"
                         Layout.fillWidth: true
-                        visible: !filterModel || filterModel.category !== "library"
                         searchText: filterModel ? filterModel.searchText : ""
                         exactRating: filterModel ? filterModel.exactRating : 0
                         minBpm: filterModel ? filterModel.minBpm : 60

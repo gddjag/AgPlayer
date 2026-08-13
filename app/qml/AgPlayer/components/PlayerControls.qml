@@ -34,7 +34,7 @@ Rectangle {
         objectName: "mainVolumeCloseTimer"
         interval: 2000
         onTriggered: {
-            if (!volumeSlider.pressed && !volumeSlider.activeFocus)
+            if (!volumeSlider.pressed && !volumeHover.hovered)
                 root.volumeExpanded = false
         }
     }
@@ -215,6 +215,7 @@ Rectangle {
             clip: false
 
             HoverHandler {
+                id: volumeHover
                 onHoveredChanged: {
                     if (hovered) {
                         volumeCloseTimer.stop()

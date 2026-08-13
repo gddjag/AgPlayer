@@ -40,6 +40,38 @@ QString ordinalText(const FilenameRuleSet& rules, int ordinal)
                                      QLatin1Char('0'));
 }
 
+QString removeKnownPrefix(QString stem, const FilenameRuleSet& rules)
+{
+    if (!rules.removePrefixWhenEmpty) return stem;
+    static const QRegularExpression tagAtStart(
+        QStringLiteral("^\\s*(?:\\[[^\\]]+\\]|【[^】]+】|\\([^)]*\\)|（[^）]*）)\\s*[_\\- ]*"));
+    stem.remove(tagAtStart);
+    if (rules.removeSequenceWhenEmpty) {
+        static const QRegularExpression numberAtStart(
+            QStringLiteral("^\\s*\\d{1,6}\\s*(?:[_\\-. ]+)\\s*"));
+        stem.remove(numberAtStart);
+    }
+    return stem;
+}
+
+QString removeKnownSuffix(QString stem, const FilenameRuleSet& rules)
+{
+    if (!rules.removeSuffixWhenEmpty) return stem;
+    static const QRegularExpression tagAtEnd(
+        QStringLiteral("\\s*[_\\- ]*(?:\\[[^\\]]+\\]|【[^】]+】|\\([^)]*\\)|（[^）]*）)\\s*$"));
+    stem.remove(tagAtEnd);
+    static const QRegularExpression commonTail(
+        QStringLiteral("\\s*[_\\- ]+(?:remaster(?:ed)?|demo|live|mix|radio edit|extended|instrumental|acoustic|version)\\s*$"),
+        QRegularExpression::CaseInsensitiveOption);
+    stem.remove(commonTail);
+    if (rules.removeSequenceWhenEmpty) {
+        static const QRegularExpression numberAtEnd(
+            QStringLiteral("\\s*[_\\- .]+\\d{1,6}\\s*$"));
+        stem.remove(numberAtEnd);
+    }
+    return stem;
+}
+
 } // namespace
 
 QString FilenameTransformEngine::transform(const QString& sourceFileName,
@@ -48,6 +80,8 @@ QString FilenameTransformEngine::transform(const QString& sourceFileName,
 {
     const NameParts parts = splitName(sourceFileName);
     QString stem = parts.stem;
+    if (rules.prefix.isEmpty()) stem = removeKnownPrefix(stem, rules);
+    if (rules.suffix.isEmpty()) stem = removeKnownSuffix(stem, rules);
     if (rules.replaceSpaces) {
         stem.replace(QRegularExpression(QStringLiteral(" +")),
                      rules.spaceReplacement);

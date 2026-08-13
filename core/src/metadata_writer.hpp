@@ -2,6 +2,7 @@
 
 #include <agplayer/c_api.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -28,6 +29,9 @@ enum class CanonicalField {
     Bpm,
 };
 
+// One authoritative read/write priority table for normalized fields.
+const std::vector<const char*>& known_metadata_aliases(CanonicalField field);
+
 struct FieldEdit {
     CanonicalField field;
     MetadataAction action = MetadataAction::Keep;
@@ -44,10 +48,96 @@ struct MetadataEditPlan {
 
 enum class FileResultStatus { Completed, Unsupported, Failed, Cancelled };
 
+enum class MetadataErrorCode {
+    None,
+    InvalidEditPlan,
+    PermissionDenied,
+    ReadOnlyFile,
+    FileInUse,
+    InsufficientDiskSpace,
+    UnsupportedContainer,
+    UnsupportedMuxer,
+    UnsupportedField,
+    UnsupportedCover,
+    InputOpenFailed,
+    OutputCreateFailed,
+    HeaderWriteFailed,
+    PacketReadFailed,
+    PacketWriteFailed,
+    TrailerWriteFailed,
+    VerificationFailed,
+    SourceChanged,
+    AtomicReplaceFailed,
+    Cancelled,
+    InternalError,
+};
+
+enum class FieldWriteStatus {
+    Kept,
+    Updated,
+    Cleared,
+    Unsupported,
+    Failed,
+    NotApplicable,
+};
+
 struct FieldResult {
     CanonicalField field;
     MetadataAction requested_action = MetadataAction::Keep;
     std::string actual_value;
+    std::string reason;
+    FieldWriteStatus status = FieldWriteStatus::NotApplicable;
+    std::string before_value;
+    std::string requested_value;
+    std::string user_message;
+};
+
+struct MetadataPreflightReport {
+    bool supported = false;
+    MetadataErrorCode error_code = MetadataErrorCode::None;
+    std::string container;
+    std::string raw_error;
+    std::string user_message;
+    std::vector<CanonicalField> unsupported_fields;
+};
+
+struct MetadataRuntimeMetrics {
+    std::size_t packets_copied = 0;
+    std::size_t decoder_open_count = 0;
+    std::size_t encoder_open_count = 0;
+    std::size_t audio_streams_before = 0;
+    std::size_t audio_streams_after = 0;
+    std::size_t chapters_before = 0;
+    std::size_t chapters_after = 0;
+    std::size_t attachments_before = 0;
+    std::size_t attachments_after = 0;
+};
+
+enum class MetadataFailurePoint {
+    None,
+    HeaderWrite,
+    PacketRead,
+    PacketWrite,
+    TrailerWrite,
+    Reprobe,
+    Verification,
+    SourceChanged,
+    AtomicReplace,
+    PostReplaceReadback,
+};
+
+// Deterministic failure injection used by the core safety tests. Production
+// callers leave this null.
+struct MetadataWriterTestHooks {
+    MetadataFailurePoint fail_at = MetadataFailurePoint::None;
+};
+
+struct CoverResult {
+    CoverAction requested_action = CoverAction::Keep;
+    FieldWriteStatus status = FieldWriteStatus::NotApplicable;
+    bool had_cover = false;
+    bool has_cover = false;
+    std::string mime_type;
     std::string reason;
 };
 
@@ -56,7 +146,10 @@ struct MetadataFileResult {
     bool used_stream_copy = false;
     bool audio_verified_unchanged = false;
     std::vector<FieldResult> fields;
+    CoverResult cover;
     std::string message;
+    MetadataErrorCode error_code = MetadataErrorCode::None;
+    MetadataRuntimeMetrics runtime;
 };
 
 // Validates requests before a writer creates any temporary output.
@@ -68,9 +161,15 @@ ag_result preflight_metadata_edit(const std::string& utf8_path,
                                   const MetadataEditPlan& plan,
                                   std::string& error);
 
+ag_result preflight_metadata_edit(const std::string& utf8_path,
+                                  const MetadataEditPlan& plan,
+                                  MetadataPreflightReport& report);
+
 ag_result write_metadata_plan(const std::string& utf8_path,
                               const MetadataEditPlan& plan,
-                              MetadataFileResult& result);
+                              MetadataFileResult& result,
+                              const std::atomic_bool* cancel = nullptr,
+                              const MetadataWriterTestHooks* test_hooks = nullptr);
 
 // nullopt keeps a tag, an empty string clears it, and a non-empty string sets it.
 struct MetadataUpdate {
@@ -100,6 +199,9 @@ struct MetadataUpdate {
 ag_result write_metadata(const std::string& utf8_path,
                          const MetadataUpdate& update,
                          std::string& error,
-                         const MetadataEditPlan* verification_plan = nullptr);
+                         const MetadataEditPlan* verification_plan = nullptr,
+                         const std::atomic_bool* cancel = nullptr,
+                         const MetadataWriterTestHooks* test_hooks = nullptr,
+                         MetadataRuntimeMetrics* runtime = nullptr);
 
 } // namespace agplayer

@@ -5,25 +5,20 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $toolsRoot = Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools'
-$lightEditor = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'LightEditPage.qml')
-$trackLane = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MultiTrackWaveform.qml')
+$audioEditor = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'AudioEditorPage.qml')
 $formatPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatConvertPage.qml')
 $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 
-if ($lightEditor -notmatch 'property bool inspectorVisible:\s*false') {
-    throw 'The light editor must keep the inspector closed until a user requests it.'
-}
-if ($lightEditor -notmatch 'let lastLabelX\s*=\s*-Infinity') {
-    throw 'The ruler must suppress labels that would overlap at narrow zoom levels.'
-}
-if ($trackLane -notmatch 'readonly property bool visibleLane:\s*hasFile\s*\|\|\s*trackIndex\s*<\s*6') {
-    throw 'The editor must expose six ready lanes while retaining all 16 engine tracks.'
-}
-if ($trackLane -notmatch 'height:\s*!visibleLane\s*\?\s*0\s*:') {
-    throw 'Hidden empty lanes must not occupy vertical workspace.'
+foreach ($control in @(
+    'editorCommandBar', 'fileSummaryBar', 'editorWaveformCanvas',
+    'overviewNavigator', 'editorTransportBar', 'editorInspector',
+    'recordingInspector', 'timePitchInspector', 'editorStatusBar')) {
+    if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The audio editor is missing $control."
+    }
 }
 if ($filenamePage -notmatch 'id:\s*rulesColumn') {
     throw 'The filename workbench needs an explicit responsive rules column.'
@@ -45,8 +40,8 @@ if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}La
 if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*942') {
     throw 'The tools window must open at the complete reference-workbench size.'
 }
-if ($lightEditor -notmatch 'readonly property int visibleEmptyTrackCount:\s*6') {
-    throw 'The empty editor must show six ready drop lanes, not sixteen unusable mixer strips.'
+if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
+    throw 'The new single-track editor must not retain legacy multitrack concepts.'
 }
 foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
     if ($page -match 'text:\s*qsTr\("从播放器添加"\)[\s\S]{0,220}enabled:\s*false') {
@@ -63,7 +58,7 @@ if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*tru
 if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
     throw 'Mini-player controls must not reference an undefined expanded property.'
 }
-if ($formatPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(360, page\.width \* 0\.265\)') {
+if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,160}Layout\.preferredWidth:\s*(Math\.max\(360, page\.width \* 0\.265\)|445)') {
     throw 'The format converter needs a reference-width settings workbench.'
 }
 if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(480, page\.width \* 0\.36\)') {

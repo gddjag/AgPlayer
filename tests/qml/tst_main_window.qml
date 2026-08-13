@@ -8,7 +8,6 @@ TestCase {
     when: windowShown
 
     property var mainWindow: null
-
     Component {
         id: fileDropAreaComponent
         FileDropArea {}
@@ -41,10 +40,14 @@ TestCase {
         SideNavigation {
             width: 208
             height: 500
+            property string lastSelectedCategory: ""
             property int renameRequestCount: 0
             property int exportRequestCount: 0
             property int deleteRequestCount: 0
             property string lastRequestedPlaylistId: ""
+            onCategorySelected: function(category) {
+                lastSelectedCategory = category
+            }
             onRenamePlaylistRequested: function(playlistId) {
                 renameRequestCount += 1
                 lastRequestedPlaylistId = playlistId
@@ -73,14 +76,6 @@ TestCase {
         SearchFilter {
             width: 900
             height: 54
-        }
-    }
-
-    Component {
-        id: libraryManagerComponent
-        LibraryManagerPage {
-            width: 1200
-            height: 760
         }
     }
 
@@ -298,113 +293,6 @@ TestCase {
                 Math.round(miniButton.y + miniButton.height / 2))
     }
 
-    function test_library_manager_summary_cards_are_real_filters() {
-        var page = libraryManagerComponent.createObject(mainWindow.contentItem)
-        verify(page)
-        var manager = findChild(page, "libraryManagerController")
-        var backup = findChild(page, "libraryBackupButton")
-        var backupMenu = findChild(page, "libraryBackupMenu")
-        var backupAction = findChild(page, "libraryBackupAction")
-        var importAction = findChild(page, "libraryImportBackupAction")
-        verify(manager && backup && backupMenu && backupAction && importAction,
-               "library manager must expose backup and import actions")
-        compare(backup.text, "备份/导入")
-        compare(backupAction.text, "备份曲库")
-        compare(importAction.text, "导入备份")
-        verify(manager.defaultBackupUrl.toString().endsWith(".db"))
-        var storage = findChild(page, "librarySummaryCard-storage")
-        var missing = findChild(page, "librarySummaryCard-missing")
-        verify(storage)
-        verify(missing)
-        mouseClick(storage)
-        tryCompare(storage.border, "color", Theme.accent)
-        mouseClick(missing)
-        tryCompare(missing.border, "color", Theme.accent)
-        verify(storage.border.color.toString() !== Theme.accent.toString())
-        mouseClick(storage)
-        tryCompare(storage.border, "color", Theme.accent)
-
-        var trackView = findChild(page, "libraryManagerTrackList")
-        verify(trackView)
-        tryVerify(function() {
-            return !manager.scanning && trackView.count > 0
-        }, 5000)
-        var firstRow = trackView.itemAtIndex(0)
-        verify(firstRow)
-        var favoriteButton = findChild(firstRow, "libraryTrackFavorite")
-        var ratingStar = findChild(firstRow, "libraryTrackRatingStar")
-        verify(favoriteButton && ratingStar)
-        var favoriteTrackId = firstRow.trackId
-        var favoriteBefore = firstRow.favorite
-        mouseClick(favoriteButton)
-        tryVerify(function() {
-            var refreshed = trackView.itemAtIndex(0)
-            return refreshed && refreshed.trackId === favoriteTrackId
-                   && refreshed.favorite !== favoriteBefore
-        }, 500)
-        firstRow = trackView.itemAtIndex(0)
-        favoriteButton = findChild(firstRow, "libraryTrackFavorite")
-        mouseClick(favoriteButton)
-        tryVerify(function() {
-            var refreshed = trackView.itemAtIndex(0)
-            return refreshed && refreshed.trackId === favoriteTrackId
-                   && refreshed.favorite === favoriteBefore
-        }, 500)
-        firstRow = trackView.itemAtIndex(0)
-        ratingStar = findChild(firstRow, "libraryTrackRatingStar")
-        var ratingBefore = ratingStar.icon.source.toString()
-        mouseClick(ratingStar)
-        tryVerify(function() {
-            var refreshed = trackView.itemAtIndex(0)
-            var refreshedStar = refreshed
-                    ? findChild(refreshed, "libraryTrackRatingStar") : null
-            return refreshedStar
-                   && refreshedStar.icon.source.toString() !== ratingBefore
-        }, 500)
-        mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
-                   Qt.RightButton)
-        var trackMenu = findChild(page, "libraryManagerTrackMenu")
-        tryVerify(function() { return trackMenu && trackMenu.visible }, 500)
-        var expectedActions = [
-            "libraryTrackPlay", "libraryTrackPlayNext",
-            "libraryTrackAddToPlaylist", "libraryTrackAudioTools",
-            "libraryTrackShowFolder", "libraryTrackCopyPath",
-            "libraryTrackTag",
-            "libraryTrackRename", "libraryTrackMoveFile",
-            "libraryTrackCopyFile", "libraryTrackRemove",
-            "libraryTrackTrash", "libraryTrackRelocate"
-        ]
-        for (var actionIndex = 0; actionIndex < expectedActions.length;
-             ++actionIndex) {
-            verify(findChild(trackMenu, expectedActions[actionIndex]),
-                   "missing library context action "
-                   + expectedActions[actionIndex])
-        }
-        trackMenu.close()
-
-        var detailsPanel = findChild(page, "libraryTrackDetailsPanel")
-        var detailsContent = findChild(page, "libraryTrackDetailsContent")
-        verify(detailsPanel && detailsContent,
-               "library track details must be a non-scrolling full-height panel")
-        verify(detailsContent.height <= detailsPanel.height,
-               "library details must fit without an internal scrollbar")
-        verify(!findChild(page, "libraryDetailsPlay"))
-        verify(!findChild(page, "libraryDetailsQueue"))
-        var detailsFavorite = findChild(page, "libraryDetailsFavorite")
-        var detailsTags = findChild(page, "libraryDetailsTags")
-        verify(detailsFavorite && detailsTags,
-               "library details must show favorite and tags below song info")
-        verify(detailsTags.text.length > 0)
-        verify(findChild(page, "libraryDetailsFormat"))
-        verify(findChild(page, "libraryDetailsBitrate"))
-        compare(page.preferredWindowHeight, 752)
-        var managerBpmRange = findChild(page, "libraryManagerBpmRange")
-        verify(managerBpmRange)
-        compare(managerBpmRange.first.handle.width, 12)
-        compare(managerBpmRange.second.handle.width, 12)
-        page.destroy()
-    }
-
     function test_native_qt_drop_reaches_the_real_import_controller() {
         var previousCount = LibraryModel.count
         var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
@@ -580,56 +468,21 @@ TestCase {
         listWindow.destroy()
     }
 
-    function test_library_manager_uses_ten_row_scroll_viewport() {
-        var manager = libraryManagerComponent.createObject(mainWindow.contentItem)
-        verify(manager)
-        manager.height = manager.preferredWindowHeight
-        compare(manager.visibleRowCount, 10)
-        compare(manager.trackRowHeight, 42)
-        compare(manager.preferredTrackViewportHeight, 420)
-        var trackView = findChild(manager, "libraryManagerTrackList")
-        verify(trackView)
-        tryCompare(trackView, "height", manager.preferredTrackViewportHeight)
-        manager.height = manager.preferredWindowHeight + 210
-        tryVerify(function() {
-            return trackView.height > manager.preferredTrackViewportHeight
-        }, 500, "a taller library window must reveal more rows before its footer")
-        manager.destroy()
-    }
-
-    function test_library_manager_long_title_marquees_on_hover() {
-        var trackId = nativeDropHelper.ensureLongTitleTrack()
-        verify(trackId.length > 0)
-        var track = LibraryModel.trackForId(trackId)
-        var page = libraryManagerComponent.createObject(mainWindow.contentItem,
-                                                        { width: 720 })
-        verify(page)
-        page.searchText = track.title
-        var view = findChild(page, "libraryManagerTrackList")
-        tryVerify(function() { return view && view.count === 1 }, 1000)
-        var row = view.itemAtIndex(0)
-        verify(row)
-        var title = findChild(row, "libraryManagerTitleMarquee")
-        verify(title, "long manager titles need a clipped hover marquee")
-        verify(title.overflowing)
-        compare(title.textOffset, 0)
-        mouseMove(title, title.width / 2, title.height / 2)
-        tryVerify(function() { return title.textOffset < -1 }, 2500)
-        mouseMove(view, 2, view.height - 2)
-        tryCompare(title, "textOffset", 0, 500)
-        page.destroy()
-    }
-
-    function test_library_manager_highlighted_action_uses_native_contrast() {
-        var page = libraryManagerComponent.createObject(mainWindow.contentItem)
-        verify(page)
-        var scan = findChild(page, "libraryScanButton")
-        verify(scan)
-        compare(scan.palette.buttonText.toString(),
-                Theme.activeSelectionText.toString())
-        compare(scan.icon.color.toString(),
-                Theme.activeSelectionText.toString())
-        page.destroy()
+    function test_sidebar_replaces_library_manager_with_recent_filters() {
+        var side = sideNavigationComponent.createObject(mainWindow.contentItem)
+        verify(side)
+        var history = findChild(side, "historyCategoryButton")
+        var recent = findChild(side, "recentAddedCategoryButton")
+        var never = findChild(side, "neverPlayedCategoryButton")
+        verify(history && recent && never)
+        verify(!findChild(side, "libraryManagerCategoryButton"))
+        verify(recent.y > history.y)
+        verify(never.y > recent.y)
+        mouseClick(recent)
+        compare(side.lastSelectedCategory, "recentAdded")
+        mouseClick(never)
+        compare(side.lastSelectedCategory, "neverPlayed")
+        side.destroy()
     }
 
     function test_track_context_play_action_uses_real_mouse_click() {
@@ -713,13 +566,14 @@ TestCase {
         if (!toolsMenu.visible)
             toolsMenu.open()
         tryVerify(function() { return toolsMenu.visible }, 500)
-        var editorAction = findChild(toolsMenu, "trackMenuLightEditor")
+        var editorAction = findChild(toolsMenu, "trackMenuAudioEditor")
         verify(editorAction && editorAction.enabled)
-        editorAction.triggered()
+        mouseClick(editorAction, editorAction.width / 2,
+                   editorAction.height / 2)
         tryCompare(AudioToolsController, "currentTool", 0)
         tryCompare(WindowController, "audioToolsVisible", true)
-        tryCompare(LightEditor, "hasInput", true, 2000)
-        verify(LightEditor.inputFileName.length > 0,
+        tryCompare(AudioEditorController, "hasDocument", true, 2000)
+        verify(AudioEditorController.fileName.length > 0,
                "the context-menu action must load the selected audio file")
         toolsMenu.close()
         menu.close()
@@ -833,7 +687,8 @@ TestCase {
         var targetAction = findChild(moveMenu,
                                      "playlistMoveTarget-" + playlistId)
         verify(targetAction && targetAction.enabled)
-        targetAction.triggered()
+        mouseClick(targetAction, targetAction.width / 2,
+                   targetAction.height / 2)
         tryVerify(function() {
             return PlaylistModel.containsTrack(playlistId, ids[0])
         }, 500)
@@ -1381,12 +1236,6 @@ TestCase {
         compare(list.formatBpm(128), "128")
         list.destroy()
 
-        var manager = libraryManagerComponent.createObject(mainWindow.contentItem)
-        verify(manager)
-        compare(manager.formatBpm(127.5), "127.5")
-        compare(manager.formatBpm(128), "128")
-        manager.destroy()
-
         var pane = findChild(mainWindow, "playerPane")
         verify(pane)
         compare(pane.formatBpm(127.5), "127.5 BPM")
@@ -1476,6 +1325,22 @@ TestCase {
                    "An intentionally long album name for hover marquee verification")
         verify(artistAlbum.text.indexOf(" / ") > 0,
                "the main player must render artist and album separately")
+    }
+
+    function test_current_track_rating_follows_artist_and_album() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        verify(ids.length > 0)
+        PlaybackController.playRow(LibraryModel.indexForTrackId(ids[0]))
+        tryCompare(PlaybackController, "currentTrackId", ids[0], 1000)
+        var artistAlbum = findChild(mainWindow, "trackArtistAlbum")
+        var rating = findChild(mainWindow, "trackRating")
+        verify(artistAlbum && rating)
+        var artistEnd = artistAlbum.mapToItem(mainWindow.contentItem,
+                                              artistAlbum.width, 0).x
+        var ratingStart = rating.mapToItem(mainWindow.contentItem, 0, 0).x
+        verify(ratingStart <= artistEnd + 24,
+               "rating stars must follow artist/album instead of the row edge: "
+               + ratingStart + " > " + artistEnd)
     }
 
     function test_z_playing_row_uses_three_independent_spectrum_bars() {

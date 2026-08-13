@@ -719,6 +719,11 @@ qreal WaveformItem::pixelForTime(qint64 positionMs) const
         positionMs, duration_, renderWidth_ > 0.0 ? renderWidth_ : width());
 }
 
+void WaveformItem::setHoverPositionForInteraction(qint64 position)
+{
+    setHoverPosition(position);
+}
+
 qreal WaveformItem::renderWidth() const noexcept
 {
     return renderWidth_;

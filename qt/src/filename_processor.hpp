@@ -8,6 +8,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "rename_transaction.hpp"
+
 #include <atomic>
 
 template <typename T>
@@ -36,7 +38,8 @@ public:
     Q_INVOKABLE QVariantMap entryAt(int index) const;
     Q_INVOKABLE void removeFiles(const QList<int>& indices);
     Q_INVOKABLE QVariantList preview(const QVariantMap& rules,
-                                     const QList<int>& indices = {}) const;
+                                     const QList<int>& indices = {},
+                                     const QString& conflictPolicy = QStringLiteral("autoNumber")) const;
     Q_INVOKABLE void apply(const QVariantMap& rules,
                            const QList<int>& indices = {},
                            const QString& conflictPolicy = QStringLiteral("autoNumber"));
@@ -62,16 +65,9 @@ private:
         QString fileName;
         QString sha256;
     };
-    struct RenameStep {
-        int index = -1;
-        QString source;
-        QString target;
-        QString staging;
-        QString sha256;
-    };
     struct RenameResult {
         QList<Entry> entries;
-        QList<RenameStep> committed;
+        agplayer::qt::RenameTransactionResult transaction;
         int success = 0;
         int skipped = 0;
         int failure = 0;
@@ -79,7 +75,7 @@ private:
     };
 
     QList<Entry> entries_;
-    QList<RenameStep> lastTransaction_;
+    agplayer::qt::RenameUndoRecord lastUndoRecord_;
     std::atomic<bool> cancelFlag_{false};
     std::atomic<double> progress_{0.0};
     std::atomic<bool> busy_{false};

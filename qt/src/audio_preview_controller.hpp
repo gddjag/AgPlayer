@@ -15,11 +15,6 @@ template <typename T>
 class QFutureWatcher;
 class QTemporaryDir;
 class PlaybackController;
-namespace agplayer {
-class AudioEngine;
-class TimelinePreviewMixer;
-}
-
 class AudioPreviewController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasSource READ hasSource NOTIFY sourceChanged)
@@ -51,11 +46,6 @@ public:
 
     Q_INVOKABLE void toggle(const QUrl& source);
     Q_INVOKABLE void play(const QUrl& source);
-    Q_INVOKABLE bool playTimeline(const QVariantList& clips,
-                                  qint64 startMs = 0,
-                                  qint64 loopStartMs = -1,
-                                  qint64 loopEndMs = -1);
-    Q_INVOKABLE bool isTimelinePreview() const noexcept;
     Q_INVOKABLE void resume();
     Q_INVOKABLE void pause();
     Q_INVOKABLE void stop();
@@ -83,9 +73,6 @@ private:
 
     ag_player* player_ = nullptr;
     ag_audio_backend backend_ = AG_AUDIO_BACKEND_DEFAULT;
-    std::unique_ptr<agplayer::AudioEngine> timelinePlayer_;
-    std::shared_ptr<agplayer::TimelinePreviewMixer> timelineMixer_;
-    bool timelinePreview_ = false;
     PlaybackController* mainPlayback_ = nullptr;
     QTimer pollTimer_;
     QString sourcePath_;

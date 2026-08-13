@@ -115,6 +115,7 @@ public:
 
     Q_INVOKABLE qint64 timeForX(qreal x) const;
     Q_INVOKABLE qreal pixelForTime(qint64 positionMs) const;
+    Q_INVOKABLE void setHoverPositionForInteraction(qint64 position);
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
 

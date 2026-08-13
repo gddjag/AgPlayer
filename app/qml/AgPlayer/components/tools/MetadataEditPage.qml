@@ -14,6 +14,11 @@ Rectangle {
     property int selectionAnchor: -1
     property int entryRevision: 0
     property string searchText: ""
+    property string sortKey: "fileName"
+    property bool sortAscending: true
+    property string statusFilter: "all"
+    property string exportMode: "results"
+    readonly property var displayedIndices: filteredSortedIndices()
     readonly property var fieldDefinitions: [
         { key: "title", label: qsTr("标题") },
         { key: "artist", label: qsTr("艺术家") },
@@ -70,6 +75,42 @@ Rectangle {
                 || String(item.title || "").toLowerCase().indexOf(query) >= 0
                 || String(item.artist || "").toLowerCase().indexOf(query) >= 0
                 || String(item.album || "").toLowerCase().indexOf(query) >= 0
+    }
+    function rowStatus(index) {
+        const item = entry(index)
+        const result = resultForPath(item.path)
+        if (item.hasError || (result && !result.success)) return "failed"
+        if (result && result.stage === "verified") return "modified"
+        if (result && result.stage === "preflight")
+            return result.success ? "supported" : "failed"
+        return "ready"
+    }
+    function filteredSortedIndices() {
+        entryRevision
+        const rows = []
+        for (let index = 0; index < MetadataEditor.fileCount; ++index) {
+            if (!matchesSearch(index)) continue
+            if (statusFilter !== "all" && rowStatus(index) !== statusFilter) continue
+            rows.push(index)
+        }
+        rows.sort(function(left, right) {
+            const a = entry(left)[sortKey]
+            const b = entry(right)[sortKey]
+            let comparison = 0
+            if (sortKey === "durationMs" || sortKey === "fileSize")
+                comparison = Number(a || 0) - Number(b || 0)
+            else
+                comparison = String(a || "").localeCompare(String(b || ""))
+            return sortAscending ? comparison : -comparison
+        })
+        return rows
+    }
+    function sortBy(key) {
+        if (sortKey === key) sortAscending = !sortAscending
+        else {
+            sortKey = key
+            sortAscending = true
+        }
     }
     function selectIndex(index, modifiers) {
         let next = selectedIndices.slice()
@@ -196,7 +237,13 @@ Rectangle {
         id: exportResultsDialog
         fileMode: FileDialog.SaveFile
         nameFilters: [qsTr("JSON 报告 (*.json)"), qsTr("CSV 报告 (*.csv)")]
-        onAccepted: MetadataEditor.exportResults(selectedFile)
+        onAccepted: {
+            if (page.exportMode === "currentList")
+                MetadataEditor.exportCurrentList(selectedFile, page.displayedIndices)
+            else
+                MetadataEditor.exportResults(selectedFile)
+            page.exportMode = "results"
+        }
     }
     Dialog {
         id: threeStateHelpDialog
@@ -211,6 +258,59 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: qsTr("保留：每个文件保持原值，不写入。\n\n设为：将输入值统一写入目标文件；空值无效，请使用清除。\n\n清除：删除该字段的已知标签。批量文件值不同不会自动覆盖。")
             color: Theme.primaryText
+        }
+    }
+    Dialog {
+        id: preflightDecisionDialog
+        objectName: "metadataPreflightDecisionDialog"
+        modal: true
+        title: qsTr("预检发现不支持项")
+        anchors.centerIn: parent
+        width: 500
+        closePolicy: Popup.NoAutoClose
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.primaryText
+                text: qsTr("%1 个文件可安全流复制，%2 个文件不支持。源文件尚未修改。")
+                      .arg(MetadataEditor.supportedCount)
+                      .arg(MetadataEditor.unsupportedCount)
+            }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.secondaryText
+                text: qsTr("可只处理完全支持的文件，或返回检查逐文件原因。")
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                Button {
+                    text: qsTr("取消")
+                    onClicked: {
+                        MetadataEditor.applyPreflightDecision("cancel")
+                        preflightDecisionDialog.close()
+                    }
+                }
+                Button {
+                    text: qsTr("跳过不支持项继续")
+                    enabled: MetadataEditor.supportedCount > 0
+                    onClicked: {
+                        MetadataEditor.applyPreflightDecision("skipUnsupported")
+                        preflightDecisionDialog.close()
+                    }
+                }
+                Button {
+                    highlighted: true
+                    text: qsTr("只处理完全支持的文件")
+                    enabled: MetadataEditor.supportedCount > 0
+                    onClicked: {
+                        MetadataEditor.applyPreflightDecision("supportedOnly")
+                        preflightDecisionDialog.close()
+                    }
+                }
+            }
         }
     }
     FolderDialog {
@@ -283,6 +383,21 @@ Rectangle {
                 rightPadding: 12
                 onTextChanged: page.searchText = text
             }
+            ComboBox {
+                id: metadataStatusFilter
+                objectName: "metadataStatusFilter"
+                Layout.preferredWidth: 116
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { text: qsTr("全部状态"), value: "all" },
+                    { text: qsTr("就绪"), value: "ready" },
+                    { text: qsTr("支持"), value: "supported" },
+                    { text: qsTr("已修改"), value: "modified" },
+                    { text: qsTr("失败"), value: "failed" }
+                ]
+                onCurrentValueChanged: page.statusFilter = currentValue || "all"
+            }
         }
 
         RowLayout {
@@ -317,21 +432,20 @@ Rectangle {
                             spacing: 8
                             CheckBox {
                                 Layout.preferredWidth: 24
-                                checked: MetadataEditor.fileCount > 0
-                                         && selectedIndices.length === MetadataEditor.fileCount
+                                checked: page.displayedIndices.length > 0
+                                         && page.displayedIndices.every(function(index) {
+                                             return page.isSelected(index)
+                                         })
                                 onClicked: {
-                                    if (checked) {
-                                        selectedIndices = Array.from({length: MetadataEditor.fileCount},
-                                                                     function(_, index) { return index })
-                                    } else selectedIndices = []
+                                    selectedIndices = checked ? page.displayedIndices.slice() : []
                                 }
                             }
-                            Label { text: qsTr("文件名"); color: Theme.secondaryText; Layout.fillWidth: true }
-                            Label { text: qsTr("标题"); color: Theme.secondaryText; Layout.preferredWidth: 120 }
-                            Label { text: qsTr("艺术家"); color: Theme.secondaryText; Layout.preferredWidth: 110 }
-                            Label { text: qsTr("专辑"); color: Theme.secondaryText; Layout.preferredWidth: 110 }
-                            Label { text: qsTr("年份"); color: Theme.secondaryText; Layout.preferredWidth: 50 }
-                            Label { text: qsTr("时长"); color: Theme.secondaryText; Layout.preferredWidth: 48 }
+                            ToolButton { text: qsTr("文件名") + (page.sortKey === "fileName" ? (page.sortAscending ? " ↑" : " ↓") : ""); Layout.fillWidth: true; onClicked: page.sortBy("fileName") }
+                            ToolButton { text: qsTr("标题") + (page.sortKey === "title" ? (page.sortAscending ? " ↑" : " ↓") : ""); Layout.preferredWidth: 120; onClicked: page.sortBy("title") }
+                            ToolButton { text: qsTr("艺术家") + (page.sortKey === "artist" ? (page.sortAscending ? " ↑" : " ↓") : ""); Layout.preferredWidth: 110; onClicked: page.sortBy("artist") }
+                            ToolButton { text: qsTr("专辑") + (page.sortKey === "album" ? (page.sortAscending ? " ↑" : " ↓") : ""); Layout.preferredWidth: 110; onClicked: page.sortBy("album") }
+                            ToolButton { text: qsTr("年份") + (page.sortKey === "year" ? (page.sortAscending ? " ↑" : " ↓") : ""); Layout.preferredWidth: 50; onClicked: page.sortBy("year") }
+                            ToolButton { text: qsTr("时长") + (page.sortKey === "durationMs" ? (page.sortAscending ? " ↑" : " ↓") : ""); Layout.preferredWidth: 48; onClicked: page.sortBy("durationMs") }
                             Label { text: qsTr("封面"); color: Theme.secondaryText; Layout.preferredWidth: 42 }
                             Label { text: qsTr("状态"); color: Theme.secondaryText; Layout.preferredWidth: 56 }
                         }
@@ -343,24 +457,25 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        model: MetadataEditor.fileCount
+                        model: page.displayedIndices
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                         delegate: Rectangle {
                             required property int index
-                            readonly property var metadata: page.entry(index)
-                            readonly property bool searchMatch: page.matchesSearch(index)
+                            required property int modelData
+                            readonly property int sourceIndex: modelData
+                            readonly property var metadata: page.entry(sourceIndex)
                             width: fileList.width
-                            height: searchMatch ? 50 : 0
-                            visible: searchMatch
+                            height: 50
+                            visible: true
                             clip: true
-                            color: page.isSelected(index) ? Theme.activeSelection
+                            color: page.isSelected(sourceIndex) ? Theme.activeSelection
                                   : (rowHover.hovered ? Theme.hoverSurface : "transparent")
                             HoverHandler { id: rowHover }
                             TapHandler {
                                 acceptedButtons: Qt.LeftButton
                                 onTapped: function(eventPoint, button) {
-                                    page.selectIndex(index, button.modifiers)
+                                    page.selectIndex(sourceIndex, button.modifiers)
                                     page.forceActiveFocus()
                                 }
                             }
@@ -371,8 +486,8 @@ Rectangle {
                                 spacing: 8
                                 CheckBox {
                                     Layout.preferredWidth: 24
-                                    checked: page.isSelected(index)
-                                    onClicked: page.toggleIndex(index)
+                                    checked: page.isSelected(sourceIndex)
+                                    onClicked: page.toggleIndex(sourceIndex)
                                 }
                                 Rectangle {
                                     Layout.preferredWidth: 34
@@ -448,7 +563,7 @@ Rectangle {
                                     ThemedIcon {
                                         anchors.centerIn: parent
                                         visible: metadata.coverPreview === ""
-                                        source: Theme.icon("image-line")
+                                        source: Theme.icon("picture-in-picture-2-line")
                                         tint: metadata.hasCover ? Theme.waveformGreen : Theme.iconSecondary
                                         sourceSize.width: 17
                                         sourceSize.height: 17
@@ -459,8 +574,13 @@ Rectangle {
                                         page.resultForPath(metadata.path)
                                     text: metadata.hasError ? qsTr("错误")
                                           : applyResult
-                                            ? (applyResult.success
-                                               ? qsTr("已修改") : qsTr("失败"))
+                                            ? (applyResult.stage === "preflight"
+                                               ? (applyResult.success
+                                                  ? qsTr("支持") : qsTr("不支持"))
+                                               : applyResult.stage === "cancelled"
+                                                 ? qsTr("已取消")
+                                                 : (applyResult.success
+                                                    ? qsTr("已修改") : qsTr("失败")))
                                             : qsTr("就绪")
                                     color: metadata.hasError
                                            || (applyResult && !applyResult.success)
@@ -488,13 +608,44 @@ Rectangle {
                             }
                         }
                     }
+                    Rectangle {
+                        objectName: "metadataFileFooter"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        color: Theme.background
+                        border.color: Theme.border
+                        border.width: 1
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 8
+                            Label {
+                                text: qsTr("已显示 %1 / %2，已选 %3")
+                                      .arg(page.displayedIndices.length)
+                                      .arg(MetadataEditor.fileCount)
+                                      .arg(page.selectedIndices.length)
+                                color: Theme.secondaryText
+                                font.pixelSize: 10
+                            }
+                            Item { Layout.fillWidth: true }
+                            Button {
+                                objectName: "metadataExportCurrentListButton"
+                                text: qsTr("导出当前列表")
+                                enabled: page.displayedIndices.length > 0
+                                onClicked: {
+                                    page.exportMode = "currentList"
+                                    exportResultsDialog.open()
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             Rectangle {
                 id: inspectorPanel
                 objectName: "metadataInspectorPanel"
-                Layout.preferredWidth: Math.min(430, Math.max(360, page.width * 0.31))
+                Layout.preferredWidth: Math.max(480, page.width * 0.36)
                 Layout.fillHeight: true
                 color: Theme.panel
                 border.color: Theme.border
@@ -509,19 +660,22 @@ Rectangle {
 
                     ColumnLayout {
                         width: parent.width
-                        spacing: 8
+                        spacing: 5
 
-                        Label {
-                            text: qsTr("批量元数据编辑")
-                            color: Theme.primaryText
-                            font.pixelSize: 15
-                            font.weight: Font.DemiBold
-                        }
-                        ToolButton {
-                            objectName: "metadataThreeStateHelp"
-                            Layout.alignment: Qt.AlignRight
-                            text: qsTr("三态编辑说明")
-                            onClicked: threeStateHelpDialog.open()
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                text: qsTr("批量元数据编辑")
+                                color: Theme.primaryText
+                                font.pixelSize: 15
+                                font.weight: Font.DemiBold
+                            }
+                            Item { Layout.fillWidth: true }
+                            ToolButton {
+                                objectName: "metadataThreeStateHelp"
+                                text: qsTr("三态编辑说明")
+                                onClicked: threeStateHelpDialog.open()
+                            }
                         }
                         RowLayout {
                             Layout.fillWidth: true
@@ -597,7 +751,7 @@ Rectangle {
                                              value: valueField.text }
                                 }
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 28
+                                Layout.preferredHeight: 24
                                 spacing: 4
                                 Label {
                                     text: modelData.label
@@ -613,22 +767,24 @@ Rectangle {
                                         { text: qsTr("清空"), value: "clear" }
                                     ]
                                     delegate: ToolButton {
-                                        required property var modelData
-                                        objectName: "metadataModeButton"
+                                         required property var modelData
+                                         objectName: "metadataModeButton_" + fieldKey
+                                                     + "_" + modelData.value
                                         text: modelData.text
                                         checkable: true
                                         checked: modelData.value === selectedMode
                                         ButtonGroup.group: fieldModeGroup
                                         Layout.preferredWidth: 42
-                                        Layout.preferredHeight: 26
+                                        Layout.preferredHeight: 22
                                         font.pixelSize: 10
                                         onClicked: selectedMode = modelData.value
                                     }
                                 }
                                 TextField {
                                     id: valueField
+                                    objectName: "metadataValueField_" + fieldKey
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 26
+                                    Layout.preferredHeight: 22
                                     enabled: selectedMode === "set"
                                     font.pixelSize: 11
                                     placeholderText: selectedMode === "set"
@@ -684,8 +840,8 @@ Rectangle {
                                     valueRole: "value"
                                 }
                                 Rectangle {
-                                    Layout.preferredWidth: 112
-                                    Layout.preferredHeight: 112
+                                    Layout.preferredWidth: 92
+                                    Layout.preferredHeight: 92
                                     color: Theme.background
                                     border.color: Theme.border
                                     radius: Theme.radiusSm
@@ -749,6 +905,18 @@ Rectangle {
                                 text: qsTr("修改预览（预估）")
                                 color: Theme.primaryText
                                 font.weight: Font.DemiBold
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                visible: MetadataEditor.results.length > 0
+                                text: qsTr("支持 %1 · 不支持 %2 · 成功 %3 · 失败 %4 · 取消 %5")
+                                      .arg(MetadataEditor.supportedCount)
+                                      .arg(MetadataEditor.unsupportedCount)
+                                      .arg(MetadataEditor.successCount)
+                                      .arg(MetadataEditor.failedCount)
+                                      .arg(MetadataEditor.cancelledCount)
+                                color: Theme.accent
+                                font.pixelSize: 10
                             }
                             Label {
                                 Layout.fillWidth: true
@@ -863,7 +1031,10 @@ Rectangle {
                      objectName: "metadataExportResultsButton"
                      text: qsTr("导出结果")
                     enabled: MetadataEditor.results.length > 0 && !MetadataEditor.busy
-                    onClicked: exportResultsDialog.open()
+                    onClicked: {
+                        page.exportMode = "results"
+                        exportResultsDialog.open()
+                    }
                 }
                 Button {
                     text: qsTr("取消")
@@ -904,5 +1075,6 @@ Rectangle {
             ++page.entryRevision
         }
         function onEntriesChanged() { ++page.entryRevision }
+        function onPreflightDecisionRequired() { preflightDecisionDialog.open() }
     }
 }

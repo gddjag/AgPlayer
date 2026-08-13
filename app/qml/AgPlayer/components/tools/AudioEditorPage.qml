@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -8,6 +9,83 @@ Rectangle {
     objectName: "audioEditorPage"
     color: Theme.background
     clip: true
+
+    FileDialog {
+        id: openDialog
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)")]
+        onAccepted: AudioEditorController.openFile(selectedFile)
+    }
+    FileDialog {
+        id: saveDialog
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "wav"
+        nameFilters: [qsTr("WAV 音频 (*.wav)"), qsTr("FLAC 音频 (*.flac)"),
+                      qsTr("MP3 音频 (*.mp3)"), qsTr("AAC 音频 (*.m4a *.aac)"),
+                      qsTr("Ogg Vorbis (*.ogg)"), qsTr("Opus 音频 (*.opus)")]
+        onAccepted: AudioEditorController.saveAs(selectedFile)
+    }
+    FileDialog {
+        id: exportDialog
+        property bool selectionOnly: false
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "wav"
+        nameFilters: saveDialog.nameFilters
+        onAccepted: AudioEditorController.exportTo(selectedFile, selectionOnly)
+    }
+    Menu {
+        id: moreMenu
+        MenuItem { text: qsTr("增益…"); onTriggered: gainDialog.open() }
+        MenuItem { text: qsTr("峰值归一化"); onTriggered: AudioEditorController.normalize() }
+        MenuItem { text: qsTr("插入 1 秒静音"); onTriggered: AudioEditorController.insertSilence(
+                AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000,
+                AudioEditorController.sampleRate) }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("导出选区…")
+            enabled: AudioEditorController.selectionStart >= 0
+            onTriggered: { exportDialog.selectionOnly = true; exportDialog.open() }
+        }
+    }
+    Dialog {
+        id: gainDialog
+        title: qsTr("调整增益")
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: AudioEditorController.applyGain(gainValue.value)
+        contentItem: RowLayout {
+            Label { text: qsTr("增益") }
+            SpinBox { id: gainValue; from: -60; to: 24; value: 0 }
+            Label { text: "dB" }
+        }
+    }
+    Connections {
+        target: AudioEditorController
+        function onOpenRequested() { openDialog.open() }
+        function onSaveAsRequested() { saveDialog.open() }
+        function onExportRequested() {
+            exportDialog.selectionOnly = false
+            exportDialog.open()
+        }
+        function onMoreMenuRequested() { moreMenu.popup() }
+    }
+
+    focus: true
+    Keys.onPressed: event => {
+        const control = (event.modifiers & Qt.ControlModifier) !== 0
+        if (control && event.key === Qt.Key_O) openDialog.open()
+        else if (control && event.key === Qt.Key_S) AudioEditorController.save()
+        else if (control && event.key === Qt.Key_Z) AudioEditorController.triggerAction("editor.undo")
+        else if (control && event.key === Qt.Key_Y) AudioEditorController.triggerAction("editor.redo")
+        else if (control && event.key === Qt.Key_X) AudioEditorController.triggerAction("editor.cut")
+        else if (control && event.key === Qt.Key_C) AudioEditorController.triggerAction("editor.copy")
+        else if (control && event.key === Qt.Key_V) AudioEditorController.triggerAction("editor.paste")
+        else if (event.key === Qt.Key_Delete) AudioEditorController.triggerAction("editor.deleteSelection")
+        else if (event.key === Qt.Key_Space) AudioEditorController.playPause()
+        else if (event.key === Qt.Key_Escape) AudioEditorController.stopPlayback()
+        else return
+        event.accepted = true
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -87,7 +165,6 @@ Rectangle {
                             objectName: "timePitchInspector"
                             Layout.fillWidth: true
                         }
-                        Item { Layout.fillHeight: true }
                     }
                 }
             }

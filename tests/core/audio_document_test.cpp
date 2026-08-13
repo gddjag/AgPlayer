@@ -135,6 +135,34 @@ private slots:
         }
         QCOMPARE(doc.totalFrames(), SampleFrame{10'100});
     }
+
+    void renderedSourceReplacesSelectionAsOneUndoableEdit()
+    {
+        auto doc = document(100'000);
+        QVERIFY(doc.setSelection({20'000, 60'000}));
+        QVERIFY(doc.replaceRangeWithSource(
+            AudioSource{"processed.wav", 48'000, 2, 20'000},
+            Selection{20'000, 60'000}));
+        QCOMPARE(doc.totalFrames(), SampleFrame{80'000});
+        QCOMPARE(doc.spans().size(), std::size_t{3});
+        QCOMPARE(doc.spans().at(1).source->path,
+                 std::filesystem::path{"processed.wav"});
+        QVERIFY(doc.undo());
+        QCOMPARE(doc.totalFrames(), SampleFrame{100'000});
+    }
+
+    void recordedSourceInsertsAtCursorAsOneUndoableEdit()
+    {
+        auto doc = document(100'000);
+        QVERIFY(doc.insertSource(
+            AudioSource{"recording.wav", 48'000, 2, 24'000}, 50'000));
+        QCOMPARE(doc.totalFrames(), SampleFrame{124'000});
+        QCOMPARE(doc.spans().size(), std::size_t{3});
+        QCOMPARE(doc.spans().at(1).source->path,
+                 std::filesystem::path{"recording.wav"});
+        QVERIFY(doc.undo());
+        QCOMPARE(doc.totalFrames(), SampleFrame{100'000});
+    }
 };
 
 QTEST_APPLESS_MAIN(AudioDocumentTest)

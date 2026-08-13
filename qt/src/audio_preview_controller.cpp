@@ -1,8 +1,6 @@
 #include "audio_preview_controller.hpp"
 
 #include "playback_controller.hpp"
-#include "audio_engine.hpp"
-#include "timeline_preview_mixer.hpp"
 
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -50,8 +48,6 @@ AudioPreviewController::~AudioPreviewController()
         ag_player_destroy(player_);
         player_ = nullptr;
     }
-    timelinePlayer_.reset();
-    timelineMixer_.reset();
     delete previewTempDir_;
     previewTempDir_ = nullptr;
 }
@@ -146,106 +142,9 @@ void AudioPreviewController::play(const QUrl& source)
     }
 }
 
-bool AudioPreviewController::playTimeline(const QVariantList& clips,
-                                          const qint64 startMs,
-                                          const qint64 loopStartMs,
-                                          const qint64 loopEndMs)
-{
-    agplayer::MultiTrackEditConfig config;
-    bool anySolo = false;
-    for (const QVariant& value : clips) {
-        const QVariantMap clip = value.toMap();
-        anySolo = anySolo || clip.value(QStringLiteral("solo")).toBool();
-    }
-    for (const QVariant& value : clips) {
-        const QVariantMap clip = value.toMap();
-        if (clip.value(QStringLiteral("muted")).toBool()
-            || (anySolo && !clip.value(QStringLiteral("solo")).toBool())) {
-            continue;
-        }
-        const QString path = clip.value(QStringLiteral("path")).toString();
-        if (path.isEmpty() || !QFileInfo::exists(path)) {
-            continue;
-        }
-        agplayer::MultiTrackEditConfig::Track track;
-        track.input_path = QFileInfo(path).absoluteFilePath().toStdString();
-        track.timeline_start_ms = clip.value(QStringLiteral("timelineStartMs")).toLongLong();
-        track.trim_start_ms = clip.value(QStringLiteral("inMs")).toLongLong();
-        track.trim_end_ms = clip.value(QStringLiteral("outMs")).toLongLong();
-        track.timeline_duration_ms =
-            clip.value(QStringLiteral("timelineDurationMs")).toLongLong();
-        track.fade_in_ms = clip.value(QStringLiteral("fadeInMs")).toInt();
-        track.fade_out_ms = clip.value(QStringLiteral("fadeOutMs")).toInt();
-        track.gain = clip.value(QStringLiteral("gain"), 1.0).toDouble();
-        track.pan = clip.value(QStringLiteral("pan")).toDouble();
-        track.loop = clip.value(QStringLiteral("loopMode")).toString()
-                     .compare(QStringLiteral("OneShot"), Qt::CaseInsensitive) != 0;
-        track.speed_ratio = std::clamp(
-            clip.value(QStringLiteral("speedRatio"), 1.0).toDouble(),
-            0.5, 2.0);
-        track.pitch_cents = std::clamp(
-            qRound(clip.value(QStringLiteral("pitchSemitones")).toDouble() * 100.0
-                   + clip.value(QStringLiteral("finePitchCents")).toDouble()),
-            -1200, 1200);
-        track.keep_pitch = clip.value(
-            QStringLiteral("keepPitch"), true).toBool();
-        config.tracks.push_back(std::move(track));
-    }
-    if (config.tracks.empty()) {
-        setError(tr("没有可试听的时间线片段"));
-        return false;
-    }
-
-    auto mixer = std::make_shared<agplayer::TimelinePreviewMixer>();
-    std::string error;
-    if (mixer->configure(config, 48000, 2, error) != AG_OK) {
-        setError(tr("无法准备时间线试听"));
-        return false;
-    }
-    stopPlaybackAndClear();
-    if (mainPlayback_ != nullptr
-        && mainPlayback_->state() == PlaybackController::Playing) {
-        mainPlayback_->pause();
-    }
-    agplayer::AudioBackend audioBackend = agplayer::AudioBackend::Default;
-    if (backend_ == AG_AUDIO_BACKEND_NULL) {
-        audioBackend = agplayer::AudioBackend::Null;
-    }
-    auto player = std::make_unique<agplayer::AudioEngine>(audioBackend, 32768U);
-    if (player->load_timeline(mixer, loopStartMs, loopEndMs) != AG_OK
-        || player->seek(startMs) != AG_OK
-        || player->play() != AG_OK) {
-        setError(tr("无法开始时间线试听"));
-        return false;
-    }
-    timelineMixer_ = std::move(mixer);
-    timelinePlayer_ = std::move(player);
-    timelinePreview_ = true;
-    sourcePath_ = QStringLiteral("agplayer://timeline-preview");
-    positionMs_ = std::max<qint64>(0, startMs);
-    durationMs_ = timelinePlayer_->snapshot().duration_ms;
-    playing_ = true;
-    emit sourceChanged();
-    emit stateChanged();
-    pollTimer_.start();
-    return true;
-}
-
-bool AudioPreviewController::isTimelinePreview() const noexcept
-{
-    return timelinePreview_;
-}
-
 void AudioPreviewController::resume()
 {
     if (!hasSource()) {
-        return;
-    }
-    if (timelinePreview_ && timelinePlayer_ != nullptr) {
-        if (timelinePlayer_->play() == AG_OK) {
-            pollTimer_.start();
-            pollSnapshot();
-        }
         return;
     }
     if (player_ != nullptr && ag_player_play(player_) == AG_OK) {
@@ -257,12 +156,6 @@ void AudioPreviewController::resume()
 void AudioPreviewController::pause()
 {
     if (!hasSource()) {
-        return;
-    }
-    if (timelinePreview_ && timelinePlayer_ != nullptr) {
-        if (timelinePlayer_->pause() == AG_OK) {
-            pollSnapshot();
-        }
         return;
     }
     if (player_ == nullptr) {
@@ -285,12 +178,6 @@ void AudioPreviewController::seek(const qint64 positionMs)
     }
     const qint64 bounded = std::clamp<qint64>(
         positionMs, 0, std::max<qint64>(0, durationMs_));
-    if (timelinePreview_ && timelinePlayer_ != nullptr) {
-        if (timelinePlayer_->seek(bounded) == AG_OK) {
-            pollSnapshot();
-        }
-        return;
-    }
     if (player_ != nullptr && ag_player_seek(player_, bounded) == AG_OK) {
         pollSnapshot();
     }
@@ -305,9 +192,6 @@ void AudioPreviewController::setVolume(const double value)
     volume_ = bounded;
     if (player_ != nullptr) {
         ag_player_set_volume(player_, static_cast<float>(volume_));
-    }
-    if (timelinePlayer_ != nullptr) {
-        timelinePlayer_->set_volume(static_cast<float>(volume_));
     }
     emit volumeChanged();
 }
@@ -338,14 +222,14 @@ void AudioPreviewController::setDspParameters(
     smoothTransition_ = smoothTransition;
     ++dspRevision_;
     emit dspParametersChanged();
-    if (hasSource() && !timelinePreview_) {
+    if (hasSource()) {
         scheduleDspPreview();
     }
 }
 
 bool AudioPreviewController::isCurrentSource(const QUrl& source) const
 {
-    if (!hasSource() || timelinePreview_) {
+    if (!hasSource()) {
         return false;
     }
     const QString candidate = source.toLocalFile();
@@ -362,12 +246,6 @@ void AudioPreviewController::stopPlaybackAndClear()
     if (player_ != nullptr) {
         ag_player_stop(player_);
     }
-    if (timelinePlayer_ != nullptr) {
-        timelinePlayer_->stop();
-    }
-    timelinePlayer_.reset();
-    timelineMixer_.reset();
-    timelinePreview_ = false;
     clearSourceState();
 }
 
@@ -392,27 +270,6 @@ void AudioPreviewController::clearSourceState()
 void AudioPreviewController::pollSnapshot()
 {
     if (!hasSource()) {
-        return;
-    }
-    if (timelinePreview_) {
-        if (timelinePlayer_ == nullptr) {
-            return;
-        }
-        const agplayer::EngineSnapshot snapshot = timelinePlayer_->snapshot();
-        const bool nextPlaying = snapshot.state == agplayer::EngineState::Playing;
-        const qint64 nextPosition = snapshot.position_ms;
-        const qint64 nextDuration = snapshot.duration_ms;
-        if (playing_ == nextPlaying && positionMs_ == nextPosition
-            && durationMs_ == nextDuration) {
-            return;
-        }
-        playing_ = nextPlaying;
-        positionMs_ = nextPosition;
-        durationMs_ = nextDuration;
-        if (!nextPlaying) {
-            pollTimer_.stop();
-        }
-        emit stateChanged();
         return;
     }
     if (player_ == nullptr) {

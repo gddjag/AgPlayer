@@ -44,7 +44,8 @@ ListView {
 
     readonly property bool customPlaylistSelected:
         selectedCategory !== "all" && selectedCategory !== "favorites"
-        && selectedCategory !== "history" && selectedCategory !== "library"
+        && selectedCategory !== "history" && selectedCategory !== "recentAdded"
+        && selectedCategory !== "neverPlayed"
 
     LibraryFileOperations { id: fileOps; libraryModel: LibraryModel }
 
@@ -67,6 +68,14 @@ ListView {
     function trackIdAt(row) {
         if (row < 0 || row >= count) return ""
         return trackModel.data(trackModel.index(row, 0), LibraryModel.TrackIdRole)
+    }
+    function visibleTrackIds() {
+        var ids = []
+        for (var row = 0; row < count; ++row) {
+            var id = trackIdAt(row)
+            if (id) ids.push(id)
+        }
+        return ids
     }
     function ensureCurrentTrackVisible() {
         var currentTrackId = PlaybackController.currentTrackId
@@ -186,8 +195,7 @@ ListView {
         AudioToolsController.selectTool(toolIndex)
         WindowController.showAudioTools()
         if (toolIndex === 0) {
-            if (typeof LightEditor.queueFiles === "function") LightEditor.queueFiles(urls)
-            else LightEditor.loadFile(urls[0])
+            AudioEditorController.openFile(urls[0])
         } else if (toolIndex === 1) {
             if (typeof FormatConverter.loadFiles === "function") FormatConverter.loadFiles(urls)
             else FormatConverter.loadFile(urls[0])
@@ -454,8 +462,8 @@ ListView {
                                                    point.modifiers)
                     onDoubleTapped: {
                         if (rowItem.available) {
-                            var row = LibraryModel.indexForTrackId(rowItem.trackId)
-                            if (row >= 0) LibraryModel.playRow(row)
+                            PlaybackController.playTrackIds(
+                                        root.visibleTrackIds(), rowItem.trackId)
                         }
                     }
                 }
@@ -583,14 +591,18 @@ ListView {
         property string targetTrackId
         property var targetTrackIds: []
         property bool targetFavorite: false
-        SystemMenuItem { objectName: "trackMenuPlay"; text: qsTr("播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: { var row = LibraryModel.indexForTrackId(trackMenu.targetTrackId); if (row >= 0) LibraryModel.playRow(row) } }
+        SystemMenuItem { objectName: "trackMenuPlay"; text: qsTr("播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.playTrackIds(root.visibleTrackIds(), trackMenu.targetTrackId) }
         SystemMenuItem { objectName: "trackMenuPlayNext"; text: qsTr("下一首播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.queueNext(trackMenu.targetTrackId) }
         Menu {
             id: moveMenu
+            width: 240
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
+            palette.button: Theme.elevated
+            palette.buttonText: Theme.primaryText
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
+            palette.mid: Theme.border
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
             objectName: "moveTracksMenu"
             title: qsTr("加入歌单")
@@ -602,7 +614,7 @@ ListView {
                     required property string name
                     objectName: "playlistMoveTarget-" + playlistId
                     text: name; enabled: playlistId !== root.selectedCategory
-                    onTriggered: {
+                    onClicked: {
                         var ids = root.actionTrackIds()
                         if (ids.length === 0)
                             return
@@ -618,17 +630,22 @@ ListView {
             }
         }
         Menu {
+            id: audioToolsMenu
             objectName: "audioToolsTrackMenu"
+            width: 240
             title: qsTr("使用音频工具打开")
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
+            palette.button: Theme.elevated
+            palette.buttonText: Theme.primaryText
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
+            palette.mid: Theme.border
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
-            SystemMenuItem { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onTriggered: root.openInAudioTool(0) }
-            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onTriggered: root.openInAudioTool(1) }
-            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onTriggered: root.openInAudioTool(2) }
-            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onTriggered: root.openInAudioTool(3) }
+            SystemMenuItem { objectName: "trackMenuAudioEditor"; text: qsTr("音频编辑"); onClicked: root.openInAudioTool(0) }
+            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
+            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onClicked: root.openInAudioTool(2) }
+            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onClicked: root.openInAudioTool(3) }
         }
         MenuSeparator {}
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }

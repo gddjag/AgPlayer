@@ -317,6 +317,76 @@ bool PlaybackController::restoreQueue(const QStringList& trackIds,
     return true;
 }
 
+bool PlaybackController::playTrackIds(const QStringList& trackIds,
+                                      const QString& currentTrackId)
+{
+    if (player_ == nullptr || library_.isNull() || currentTrackId.isEmpty()) {
+        return false;
+    }
+
+    QStringList scopeIds;
+    for (const QString& trackId : trackIds) {
+        if (scopeIds.contains(trackId)) {
+            continue;
+        }
+        const int row = library_->indexForTrackId(trackId);
+        if (row >= 0 && library_->tracks().at(row).available
+            && !library_->tracks().at(row).path.isEmpty()) {
+            scopeIds.append(trackId);
+        }
+    }
+    const int current = scopeIds.indexOf(currentTrackId);
+    if (current < 0) {
+        return false;
+    }
+    if (current > 0) {
+        scopeIds = scopeIds.mid(current) + scopeIds.mid(0, current);
+    }
+
+    constexpr int minimumStrictScope = 5;
+    QStringList queueIds = scopeIds;
+    const bool allowFallback = scopeIds.size() < minimumStrictScope;
+    if (allowFallback) {
+        for (const TrackRecord& track : library_->tracks()) {
+            if (track.available && !track.path.isEmpty()
+                && !queueIds.contains(track.trackId)) {
+                queueIds.append(track.trackId);
+            }
+        }
+    }
+
+    std::vector<QByteArray> utf8Paths;
+    std::vector<const char*> paths;
+    utf8Paths.reserve(static_cast<size_t>(queueIds.size()));
+    paths.reserve(static_cast<size_t>(queueIds.size()));
+    for (const QString& trackId : queueIds) {
+        const int row = library_->indexForTrackId(trackId);
+        utf8Paths.push_back(library_->tracks().at(row).path.toUtf8());
+        paths.push_back(utf8Paths.back().constData());
+    }
+
+    applyReplayGainForTrack(currentTrackId);
+    const ag_result result = ag_player_set_scoped_queue(
+        player_, paths.data(), paths.size(), 0U,
+        static_cast<size_t>(scopeIds.size()), allowFallback ? 1 : 0);
+    runCommand(result);
+    if (result != AG_OK) {
+        return false;
+    }
+    queueTrackIds_ = std::move(queueIds);
+    emit queueTrackIdsChanged();
+
+    const ag_result playResult = ag_player_play(player_);
+    runCommand(playResult);
+    if (playResult != AG_OK) {
+        return false;
+    }
+    library_->markPlayed(currentTrackId);
+    lastHistoryTrackId_ = currentTrackId;
+    pollSnapshot();
+    return true;
+}
+
 void PlaybackController::setVolume(float volume)
 {
     runCommand(player_ != nullptr ? ag_player_set_volume(player_, volume) : AG_INVALID_ARGUMENT);
