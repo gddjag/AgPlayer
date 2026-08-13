@@ -7,7 +7,7 @@ import AgPlayer
 Rectangle {
     id: page
     objectName: "formatConvertPage"
-    color: "#071018"
+    color: Theme.background
     focus: true
 
     property var converter: FormatConverter
@@ -102,8 +102,8 @@ Rectangle {
             objectName: "formatToolbar"
             Layout.fillWidth: true
             Layout.preferredHeight: 60
-            color: "#0b1721"
-            border.color: "#203340"
+            color: Theme.panel
+            border.color: Theme.border
             radius: 6
 
             RowLayout {
@@ -144,15 +144,15 @@ Rectangle {
                                 converter.clear()
                         }
                         background: Rectangle {
-                            color: parent.hovered ? "#172a37" : "#0c1821"
-                            border.color: "#263b49"
+                            color: parent.hovered ? Theme.hoverSurface : Theme.elevated
+                            border.color: Theme.border
                             radius: 6
                         }
                         contentItem: RowLayout {
                             spacing: 8
                             ThemedIcon {
                                 source: parent.parent.icon.source
-                                tint: "#d7e0e6"
+                                tint: Theme.iconPrimary
                                 sourceSize.width: 18
                                 sourceSize.height: 18
                                 Layout.preferredWidth: 18
@@ -160,7 +160,7 @@ Rectangle {
                             }
                             Text {
                                 text: parent.parent.text
-                                color: "#d7e0e6"
+                                color: Theme.primaryText
                                 font.pixelSize: 14
                             }
                         }
@@ -168,37 +168,6 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
-                Repeater {
-                    model: [
-                        { key: "All", label: qsTr("全部") },
-                        { key: "Converting", label: qsTr("转换中") },
-                        { key: "Done", label: qsTr("已完成") },
-                        { key: "Error", label: qsTr("失败") },
-                        { key: "Cancelled", label: qsTr("已取消") }
-                    ]
-                    Button {
-                        objectName: index === 0 ? "formatStatusFilters" : ""
-                        checkable: true
-                        checked: converter.filteredTaskModel.statusFilter === modelData.key
-                        text: modelData.label
-                        onClicked: converter.filteredTaskModel.statusFilter = modelData.key
-                    }
-                }
-            }
-        }
-
-        Menu {
-            id: filterMenu
-            objectName: "formatStatusFilters"
-            Repeater {
-                model: ["All", "Converting", "Done", "Error", "Cancelled"]
-                MenuItem {
-                    text: modelData === "All" ? qsTr("全部")
-                          : modelData === "Converting" ? qsTr("转换中")
-                          : modelData === "Done" ? qsTr("已完成")
-                          : modelData === "Error" ? qsTr("失败") : qsTr("已取消")
-                    onTriggered: converter.filteredTaskModel.statusFilter = modelData
-                }
             }
         }
 
@@ -233,8 +202,8 @@ Rectangle {
             objectName: "formatBottomBar"
             Layout.fillWidth: true
             Layout.preferredHeight: 114
-            color: "#0b1721"
-            border.color: "#203340"
+            color: Theme.panel
+            border.color: Theme.border
             radius: 6
 
             RowLayout {
@@ -247,34 +216,34 @@ Rectangle {
                     Layout.preferredWidth: 430
                     spacing: 8
                     RowLayout {
-                        Text { text: qsTr("总进度"); color: "#d7e0e6"; font.pixelSize: 14 }
+                        Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: 14 }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
                             Layout.preferredWidth: 320
                             from: 0; to: 1; value: converter.progress
-                            background: Rectangle { implicitHeight: 10; color: "#20303b"; radius: 5 }
+                            background: Rectangle { implicitHeight: 10; color: Theme.border; radius: 5 }
                             contentItem: Item {
                                 implicitHeight: 10
                                 Rectangle {
                                     width: totalProgress.visualPosition * parent.width
                                     height: parent.height
                                     radius: 5
-                                    color: "#1688ff"
+                                    color: Theme.accent
                                 }
                             }
                         }
-                        Text { text: Math.round(totalProgress.value * 100) + "%"; color: "#d7e0e6" }
+                        Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.primaryText }
                     }
                     Text {
                         text: qsTr("%1 个任务 / 预计剩余 %2").arg(converter.fileCount)
                               .arg(converter.etaText)
-                        color: "#91a0aa"
+                        color: Theme.secondaryText
                         font.pixelSize: 13
                     }
                 }
 
-                Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: "#263b49" }
+                Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: Theme.border }
 
                 Item { Layout.fillWidth: true }
 
@@ -282,14 +251,14 @@ Rectangle {
                     objectName: "formatSummaryCard"
                     Layout.preferredWidth: 230
                     Layout.preferredHeight: 46
-                    color: "#09141c"
-                    border.color: "#263b49"
+                    color: Theme.elevated
+                    border.color: Theme.border
                     radius: 6
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 18
-                        Text { text: qsTr("✓ 已完成 %1").arg(converter.completedCount); color: "#19c37d" }
-                        Text { text: qsTr("! 失败 %1").arg(converter.failedCount); color: "#ff4d4f" }
+                        Text { text: qsTr("✓ 已完成 %1").arg(converter.completedCount); color: Theme.waveformGreen }
+                        Text { text: qsTr("! 失败 %1").arg(converter.failedCount); color: Theme.waveformRed }
                     }
                 }
 
@@ -301,8 +270,8 @@ Rectangle {
                     enabled: converter.checkedCount > 0 && !converter.busy
                     text: qsTr("▶  开始处理")
                     onClicked: page.requestPlan()
-                    background: Rectangle { color: parent.enabled ? "#087cf0" : "#23313b"; radius: 6 }
-                    contentItem: Text { text: parent.text; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 17 }
+                    background: Rectangle { color: parent.enabled ? Theme.accent : Theme.border; radius: 6 }
+                    contentItem: Text { text: parent.text; color: Theme.accentText; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 17 }
                 }
 
                 Button {

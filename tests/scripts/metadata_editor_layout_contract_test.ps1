@@ -20,6 +20,9 @@ foreach ($control in @(
 if ($page -match 'metadataSearchField') {
     throw 'Metadata status filters must be directly visible without a search field.'
 }
+if ($page -notmatch 'objectName:\s*"metadataStatusFilter"[\s\S]{0,480}text:\s*qsTr\("任务列表："\)') {
+    throw 'Metadata status filters must sit directly above the task table with a task-list label.'
+}
 
 foreach ($field in @('title', 'artist', 'album', 'albumArtist', 'genre',
                       'year', 'date', 'composer', 'bpm')) {

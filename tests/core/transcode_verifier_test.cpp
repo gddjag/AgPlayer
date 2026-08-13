@@ -64,6 +64,20 @@ int main(const int argc, char** argv)
     assert(stage_count >= 3);
     assert(std::filesystem::exists(output));
 
+    const std::filesystem::path no_cover_output =
+        directory / "no-cover-keep-cover.mp3";
+    std::filesystem::remove(no_cover_output);
+    agplayer::TranscodeConfig no_cover = config;
+    no_cover.output_path = no_cover_output.u8string();
+    no_cover.container_name = "mp3";
+    no_cover.codec_name = "libmp3lame";
+    no_cover.sample_format.clear();
+    no_cover.keep_cover = true;
+    error.clear();
+    assert(agplayer::transcode(input.u8string(), no_cover, nullptr, nullptr,
+                               error) == AG_OK);
+    assert(std::filesystem::exists(no_cover_output));
+
     agplayer::MediaProbe output_probe;
     assert(agplayer::probe_transcode_input(output.u8string(), output_probe,
                                            error) == AG_OK);
@@ -122,6 +136,7 @@ int main(const int argc, char** argv)
     std::filesystem::remove(protected_output);
     std::filesystem::remove(truncated);
     std::filesystem::remove(output);
+    std::filesystem::remove(no_cover_output);
     std::cout << "transcode verifier tests passed\n";
     return 0;
 }

@@ -390,24 +390,6 @@ Rectangle {
                 onClicked: MetadataEditor.clear()
             }
             Item { Layout.fillWidth: true }
-            ButtonGroup { id: metadataStatusFilterGroup }
-            Repeater {
-                model: [
-                    { text: qsTr("全部"), value: "all" },
-                    { text: qsTr("就绪"), value: "ready" },
-                    { text: qsTr("支持"), value: "supported" },
-                    { text: qsTr("已修改"), value: "modified" },
-                    { text: qsTr("失败"), value: "failed" }
-                ]
-                Button {
-                    objectName: index === 0 ? "metadataStatusFilter" : ""
-                    checkable: true
-                    checked: page.statusFilter === modelData.value
-                    ButtonGroup.group: metadataStatusFilterGroup
-                    text: modelData.text
-                    onClicked: page.statusFilter = modelData.value
-                }
-            }
         }
 
         RowLayout {
@@ -428,6 +410,39 @@ Rectangle {
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
+
+                    RowLayout {
+                        objectName: "metadataStatusFilter"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        Layout.leftMargin: 10
+                        Layout.rightMargin: 10
+                        spacing: 6
+                        Label {
+                            text: qsTr("任务列表：")
+                            color: Theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        ButtonGroup { id: metadataStatusFilterGroup }
+                        Repeater {
+                            model: [
+                                { text: qsTr("全部"), value: "all" },
+                                { text: qsTr("就绪"), value: "ready" },
+                                { text: qsTr("支持"), value: "supported" },
+                                { text: qsTr("已修改"), value: "modified" },
+                                { text: qsTr("失败"), value: "failed" }
+                            ]
+                            Button {
+                                checkable: true
+                                checked: page.statusFilter === modelData.value
+                                ButtonGroup.group: metadataStatusFilterGroup
+                                text: modelData.text
+                                onClicked: page.statusFilter = modelData.value
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
 
                     Rectangle {
                         Layout.fillWidth: true

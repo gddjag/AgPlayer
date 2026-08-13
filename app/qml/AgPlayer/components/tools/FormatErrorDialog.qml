@@ -14,7 +14,7 @@ Dialog {
     title: qsTr("转换失败详情")
     standardButtons: Dialog.Close
     contentItem: ColumnLayout {
-        Text { text: root.summary; color: "#ff6666"; font.weight: Font.DemiBold }
+        Text { text: root.summary; color: Theme.waveformRed; font.weight: Font.DemiBold }
         TextArea { Layout.fillWidth: true; Layout.preferredHeight: 180; readOnly: true; text: root.detail; wrapMode: TextEdit.Wrap }
         Button {
             text: qsTr("复制详细信息")

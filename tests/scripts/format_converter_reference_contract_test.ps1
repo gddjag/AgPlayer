@@ -25,6 +25,9 @@ if ($page -match 'formatSearchField|converterParallelJobsBox') {
 if ($combined -notmatch 'key:\s*"Converting"') {
     throw 'The reference task filters must expose the converting state.'
 }
+if (($combined | Select-String -Pattern 'objectName:\s*"formatStatusFilters"' -AllMatches).Matches.Count -ne 1) {
+    throw 'The format workbench must expose one status-filter row without a duplicate toolbar copy.'
+}
 if ($combined -notmatch 'model\.status\s*===\s*"Converting"') {
     throw 'The converting filter must be backed by actual task state.'
 }
