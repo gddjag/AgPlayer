@@ -705,10 +705,6 @@ int main(int argc, char* argv[])
                     audioEditor.setSelection(audioEditor.totalFrames() / 4,
                                              audioEditor.totalFrames() / 2);
                     audioEditor.seekMs(audioEditor.durationMs() / 3);
-                    audioEditor.addMarker(QStringLiteral("标记 1"),
-                                          audioEditor.totalFrames() / 6);
-                    audioEditor.addMarker(QStringLiteral("标记 2"),
-                                          audioEditor.totalFrames() * 5 / 6);
                 }
                 break;
             case 1:

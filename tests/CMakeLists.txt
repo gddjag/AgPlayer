@@ -803,6 +803,12 @@ set_tests_properties(native_drop_router_test PROPERTIES
     # UI tests, otherwise Windows can reject the temporary exposed surface.
     RUN_SERIAL TRUE
 )
+set_tests_properties(playback_controller_test qml_main_window_test qml_waveform_test
+    PROPERTIES
+    # Qt/FFmpeg global process state and the shared generated fixtures make
+    # these integration tests deterministic only when they do not overlap.
+    RUN_SERIAL TRUE
+)
 set_tests_properties(settings_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
