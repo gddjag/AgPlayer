@@ -561,6 +561,13 @@ set_tests_properties(voice_clone_worker_contract_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_test(NAME voice_clone_registry_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_registry_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(voice_clone_registry_contract_test PROPERTIES TIMEOUT 30)
+
 add_test(NAME voice_clone_runtime_pack_test
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
         -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_runtime_pack_test.ps1

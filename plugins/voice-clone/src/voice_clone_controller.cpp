@@ -555,9 +555,46 @@ bool VoiceCloneController::selectModel(const QString& stableId)
 
 bool VoiceCloneController::acceptSelectedLicense()
 {
-    return acceptSelectedLicenseIdentity(selectedModel_.stableId, selectedModel_.adapterId,
-                                         QUrl(selectedModel_.license.url),
-                                         selectedModel_.licenseRevision);
+    const auto required = approvedRequiredLicenses(selectedModel_.stableId,
+                                                   selectedModel_.adapterId);
+    if (required.size() != 1) {
+        setError(QStringLiteral("Every required license must be accepted individually"));
+        return false;
+    }
+    return acceptSelectedLicenses({required.front().id});
+}
+
+bool VoiceCloneController::acceptSelectedLicenses(const QStringList& licenseIds)
+{
+    if (!selectedModel_.requiresLicenseAcceptance || licenseManager_ == nullptr) {
+        setError(QStringLiteral("The selected model has no approved license gate"));
+        return false;
+    }
+    const auto required = approvedRequiredLicenses(selectedModel_.stableId,
+                                                   selectedModel_.adapterId);
+    QSet<QString> requested(licenseIds.cbegin(), licenseIds.cend());
+    if (requested.size() != licenseIds.size() || requested.size() != required.size()) {
+        setError(QStringLiteral("Every required license must be accepted individually"));
+        return false;
+    }
+    for (const VoiceClonePackageLicense& license : required) {
+        if (!requested.contains(license.id)) {
+            setError(QStringLiteral("Every required license must be accepted individually"));
+            return false;
+        }
+    }
+    for (const VoiceClonePackageLicense& license : required) {
+        if (!licenseManager_->acceptLicenseIdentity(selectedModel_.stableId,
+                                                    selectedModel_.adapterId,
+                                                    license.id, license.url,
+                                                    license.revision)) {
+            setError(QStringLiteral("Could not persist every model license acceptance"));
+            return false;
+        }
+    }
+    setError({});
+    emit licenseChanged();
+    return true;
 }
 
 bool VoiceCloneController::acceptSelectedLicenseIdentity(const QString& modelId,
@@ -572,7 +609,16 @@ bool VoiceCloneController::acceptSelectedLicenseIdentity(const QString& modelId,
         setError(QStringLiteral("Selected license identity does not match the active model"));
         return false;
     }
-    if (!licenseManager_->acceptLicenseIdentity(modelId, adapterId, licenseUrl, revision)) {
+    QString licenseId;
+    for (const VoiceClonePackageLicense& license : approvedRequiredLicenses(modelId, adapterId)) {
+        if (license.url == licenseUrl && license.revision == revision) {
+            licenseId = license.id;
+            break;
+        }
+    }
+    if (licenseId.isEmpty()
+        || !licenseManager_->acceptLicenseIdentity(modelId, adapterId, licenseId,
+                                                   licenseUrl, revision)) {
         setError(QStringLiteral("Could not persist selected model license acceptance"));
         return false;
     }
@@ -694,10 +740,8 @@ QString VoiceCloneController::generate(const QString& text,
     }
     if (selectedModel_.requiresLicenseAcceptance
         && (!licenseManager_
-            || !licenseManager_->hasLicenseAcceptance(selectedModel_.stableId,
-                                                      selectedModel_.adapterId,
-                                                      QUrl(selectedModel_.license.url),
-                                                      selectedModel_.licenseRevision))) {
+            || !licenseManager_->hasRequiredLicenseAcceptances(selectedModel_.stableId,
+                                                               selectedModel_.adapterId))) {
         setError(QStringLiteral("Model license acceptance is required before generation"));
         return {};
     }
@@ -844,15 +888,30 @@ bool VoiceCloneController::licenseAcceptanceRequired() const
 {
     if (!selectedModel_.requiresLicenseAcceptance) return false;
     return licenseManager_ == nullptr
-           || !licenseManager_->hasLicenseAcceptance(
-               selectedModel_.stableId, selectedModel_.adapterId,
-               QUrl(selectedModel_.license.url), selectedModel_.licenseRevision);
+           || !licenseManager_->hasRequiredLicenseAcceptances(
+               selectedModel_.stableId, selectedModel_.adapterId);
 }
 QString VoiceCloneController::currentLicenseName() const { return selectedModel_.license.name; }
 QUrl VoiceCloneController::currentLicenseUrl() const { return QUrl(selectedModel_.license.url); }
 QString VoiceCloneController::currentLicenseRevision() const
 {
     return selectedModel_.licenseRevision;
+}
+QVariantList VoiceCloneController::currentLicenseRequirements() const
+{
+    QVariantList result;
+    for (const VoiceClonePackageLicense& license
+         : approvedRequiredLicenses(selectedModel_.stableId, selectedModel_.adapterId)) {
+        result.append(QVariantMap{{QStringLiteral("id"), license.id},
+                                  {QStringLiteral("name"), license.name},
+                                  {QStringLiteral("url"), license.url},
+                                  {QStringLiteral("revision"), license.revision},
+                                  {QStringLiteral("spdx"), license.spdx},
+                                  {QStringLiteral("useRestriction"), license.useRestriction},
+                                  {QStringLiteral("requiredAcceptance"),
+                                   license.requiredAcceptance}});
+    }
+    return result;
 }
 QVariantList VoiceCloneController::basicParameters() const { return basicParameters_; }
 QVariantList VoiceCloneController::advancedParameters() const { return advancedParameters_; }

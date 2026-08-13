@@ -22,6 +22,8 @@ struct ApprovedBuiltIn {
     const char* runtimeId;
     bool licenseGate;
     const char* licenseName;
+    const char* modelRevision;
+    const char* licenseUrl;
     const char* licenseRevision;
     const char* projectUrl;
     const char* huggingFaceUrl;
@@ -33,7 +35,9 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "qwen",
      "qwen",
      false,
-     "Apache-2.0", "",
+     "Apache-2.0", "5d83992436eae1d760afd27aff78a71d676296fc",
+     "https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE",
+     "022e286b98fbec7e1e916cb940cdf532cd9f488e",
      "https://github.com/QwenLM/Qwen3-TTS",
      "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base",
      "https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-0.6B-Base"},
@@ -41,7 +45,9 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "qwen",
      "qwen",
      false,
-     "Apache-2.0", "",
+     "Apache-2.0", "fd4b254389122332181a7c3db7f27e918eec64e3",
+     "https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE",
+     "022e286b98fbec7e1e916cb940cdf532cd9f488e",
      "https://github.com/QwenLM/Qwen3-TTS",
      "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base",
      "https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-1.7B-Base"},
@@ -49,7 +55,9 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "indextts25",
      "indextts25",
      true,
-     "bilibili Model Use License Agreement", "license-2026-08-13",
+     "bilibili Model Use License Agreement", "c39ce5ba981572cb187443877ff559dfb246ce63",
+     "https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE",
+     "c39ce5ba981572cb187443877ff559dfb246ce63",
      "https://github.com/index-tts/index-tts",
      "https://huggingface.co/IndexTeam/IndexTTS-2.5",
      "https://modelscope.cn/models/IndexTeam/IndexTTS-2.5"},
@@ -57,7 +65,9 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "cosyvoice3",
      "cosyvoice3",
      false,
-     "Apache-2.0", "",
+     "Apache-2.0", "29e01c4e8d000f4bcd70751be16fa94bf3d85a18",
+     "https://github.com/FunAudioLLM/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/LICENSE",
+     "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc",
      "https://github.com/FunAudioLLM/CosyVoice",
      "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
      "https://www.modelscope.cn/models/FunAudioLLM/Fun-CosyVoice3-0.5B-2512"},
@@ -201,10 +211,12 @@ QString validateBuiltIn(const QJsonObject& object, VoiceCloneModel* model)
                                 == QLatin1String(approved->runtimeId)
                          && object.value(QStringLiteral("requiresLicenseAcceptance")).toBool()
                                 == approved->licenseGate
+                         && object.value(QStringLiteral("revision")).toString()
+                                == QLatin1String(approved->modelRevision)
                          && license.value(QStringLiteral("name")).toString()
                                 == QLatin1String(approved->licenseName)
                          && license.value(QStringLiteral("url")).toString()
-                                == QLatin1String(approved->huggingFaceUrl)
+                                == QLatin1String(approved->licenseUrl)
                          && license.value(QStringLiteral("revision")).toString()
                                 == QLatin1String(approved->licenseRevision)
                          && urls.value(QStringLiteral("project")).toString()
@@ -226,7 +238,7 @@ QString validateBuiltIn(const QJsonObject& object, VoiceCloneModel* model)
     model->stable = true;
     model->requiresLicenseAcceptance = approved->licenseGate;
     model->license = {QLatin1String(approved->licenseName),
-                      QLatin1String(approved->huggingFaceUrl)};
+                      QLatin1String(approved->licenseUrl)};
     model->licenseRevision = QLatin1String(approved->licenseRevision);
     model->officialProjectUrl = QLatin1String(approved->projectUrl);
     model->huggingFaceUrl = QLatin1String(approved->huggingFaceUrl);

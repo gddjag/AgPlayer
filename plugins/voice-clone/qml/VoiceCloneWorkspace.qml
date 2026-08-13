@@ -75,6 +75,11 @@ Item {
         return next
     }
 
+    function licenseRequirementCheck(index) {
+        const row = licenseRepeater.itemAt(index)
+        return row ? row.checkboxItem : null
+    }
+
     function activationStatusText() {
         if (!controller) return ""
         switch (controller.activationState) {
@@ -251,31 +256,58 @@ Item {
         modal: true
         title: qsTr("确认模型许可与合法授权")
         standardButtons: Dialog.Ok | Dialog.Cancel
-        onOpened: licenseAuthorityConfirmation.checked = false
+        onOpened: {
+            for (let index = 0; index < licenseRepeater.count; ++index)
+                licenseRepeater.itemAt(index).checked = false
+        }
         onAccepted: {
-            if (!licenseAuthorityConfirmation.checked || !root.controller
-                    || !root.controller.acceptSelectedLicense) return
-            root.controller.acceptSelectedLicense()
+            if (!root.controller || !root.controller.acceptSelectedLicenses) return
+            const acceptedIds = []
+            for (let index = 0; index < licenseRepeater.count; ++index) {
+                const item = licenseRepeater.itemAt(index)
+                if (!item.checked) return
+                acceptedIds.push(item.licenseId)
+            }
+            root.controller.acceptSelectedLicenses(acceptedIds)
         }
 
         contentItem: ColumnLayout {
             spacing: 10
             Label {
                 Layout.preferredWidth: 460
-                text: qsTr("使用此模型前，请阅读当前许可，并确认参考音频与待克隆声音均已获得合法授权。")
+                text: qsTr("使用此模型前，请逐项阅读许可，并确认参考音频与待克隆声音均已获得合法授权。")
                 wrapMode: Text.Wrap
                 color: Theme.primaryText
             }
-            Button {
-                text: root.controller && root.controller.currentLicenseName
-                      ? root.controller.currentLicenseName : qsTr("查看模型许可")
-                enabled: root.controller && root.controller.currentLicenseUrl
-                onClicked: Qt.openUrlExternally(root.controller.currentLicenseUrl)
+            Label {
+                Layout.preferredWidth: 460
+                text: qsTr("仅非商业；商业用途禁用，除非另获授权")
+                wrapMode: Text.Wrap
+                color: Theme.favoriteRed
+                visible: root.controller && root.controller.currentLicenseRequirements
+                         && root.controller.currentLicenseRequirements.some(
+                             requirement => requirement.useRestriction === "non-commercial-only")
             }
-            CheckBox {
-                id: licenseAuthorityConfirmation
-                objectName: "voiceCloneLicenseDialogAuthorityCheck"
-                text: qsTr("我已阅读许可，并确认拥有合法授权")
+            Repeater {
+                id: licenseRepeater
+                model: root.controller && root.controller.currentLicenseRequirements
+                       ? root.controller.currentLicenseRequirements : []
+                delegate: RowLayout {
+                    required property var modelData
+                    required property int index
+                    property string licenseId: modelData.id
+                    property alias checked: requirementCheck.checked
+                    property alias checkboxItem: requirementCheck
+                    CheckBox {
+                        id: requirementCheck
+                        objectName: "voiceCloneLicenseRequirementCheck" + parent.index
+                        text: qsTr("我已阅读并接受 %1").arg(modelData.name)
+                    }
+                    Button {
+                        text: qsTr("查看许可")
+                        onClicked: Qt.openUrlExternally(modelData.url)
+                    }
+                }
             }
         }
     }

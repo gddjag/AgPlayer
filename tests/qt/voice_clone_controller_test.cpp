@@ -341,8 +341,7 @@ bool copyRegistry(const QString& pluginRoot)
 QString writeModel(const QString& modelsRoot,
                    const QString& stableId,
                    const QString& adapterId,
-                   const QString& leaf = QStringLiteral("model"),
-                   const QString& licenseRevision = QStringLiteral("license-2026-08-13"))
+                   const QString& leaf = QStringLiteral("model"))
 {
     const QString directory = QDir(modelsRoot).filePath(
         QStringLiteral("installed/%1").arg(leaf));
@@ -351,13 +350,14 @@ QString writeModel(const QString& modelsRoot,
     if (!data.open(QIODevice::WriteOnly) || data.write("{}") != 2) return {};
     const bool index = adapterId == QStringLiteral("indextts25");
     const QString url = index
-                            ? QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")
+                            ? QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE")
                             : QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base");
     QJsonObject license{{QStringLiteral("name"),
                          index ? QStringLiteral("bilibili Model Use License Agreement")
                                : QStringLiteral("Apache-2.0")},
                         {QStringLiteral("url"), url}};
-    if (index) license.insert(QStringLiteral("revision"), licenseRevision);
+    if (index) license.insert(QStringLiteral("revision"),
+                              QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63"));
     const QJsonObject manifest{
         {QStringLiteral("schemaVersion"), 1},
         {QStringLiteral("stableId"), stableId},
@@ -365,7 +365,9 @@ QString writeModel(const QString& modelsRoot,
         {QStringLiteral("description"), QStringLiteral("test model")},
         {QStringLiteral("adapterId"), adapterId},
         {QStringLiteral("runtimeId"), adapterId},
-        {QStringLiteral("revision"), QStringLiteral("main")},
+        {QStringLiteral("revision"), index
+                                         ? QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63")
+                                         : QStringLiteral("main")},
         {QStringLiteral("source"), QJsonObject{{QStringLiteral("provider"), QStringLiteral("official")},
                                                 {QStringLiteral("url"), url}}},
         {QStringLiteral("license"), license},
@@ -528,27 +530,38 @@ void VoiceCloneControllerTest::selectedIndexLicenseAcceptanceUsesExactIdentity()
     QVERIFY(controller.selectModel(modelId));
     QVERIFY(controller.licenseAcceptanceRequired());
     QCOMPARE(controller.currentLicenseUrl(),
-             QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")));
-    QCOMPARE(controller.currentLicenseRevision(), QStringLiteral("license-2026-08-13"));
+             QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE")));
+    QCOMPARE(controller.currentLicenseRevision(), QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63"));
+    const QVariantList requirements = controller.currentLicenseRequirements();
+    QCOMPARE(requirements.size(), 2);
+    QCOMPARE(requirements[1].toMap().value(QStringLiteral("spdx")).toString(),
+             QStringLiteral("CC-BY-NC-4.0"));
+    QCOMPARE(requirements[1].toMap().value(QStringLiteral("useRestriction")).toString(),
+             QStringLiteral("non-commercial-only"));
     QVERIFY(!controller.acceptSelectedLicenseIdentity(
         QStringLiteral("wrong/model"), QStringLiteral("indextts25"),
         controller.currentLicenseUrl(), controller.currentLicenseRevision()));
     QVERIFY(controller.licenseAcceptanceRequired());
-    QVERIFY(controller.acceptSelectedLicense());
+    QVERIFY(!controller.acceptSelectedLicense());
+    QVERIFY(!controller.acceptSelectedLicenses(
+        {requirements[0].toMap().value(QStringLiteral("id")).toString()}));
+    QVERIFY(controller.acceptSelectedLicenses(
+        {requirements[0].toMap().value(QStringLiteral("id")).toString(),
+         requirements[1].toMap().value(QStringLiteral("id")).toString()}));
     QVERIFY(!controller.licenseAcceptanceRequired());
-    QVERIFY(licenses.hasLicenseAcceptance(
-        modelId, QStringLiteral("indextts25"), controller.currentLicenseUrl(),
-        controller.currentLicenseRevision()));
+    QVERIFY(licenses.hasRequiredLicenseAcceptances(modelId, QStringLiteral("indextts25")));
 
     QFile acceptance(licenses.licenseAcceptancePath());
     QVERIFY(acceptance.open(QIODevice::ReadOnly));
     const QJsonArray records = QJsonDocument::fromJson(acceptance.readAll())
                                    .object().value(QStringLiteral("records")).toArray();
-    QCOMPARE(records.size(), 1);
+    QCOMPARE(records.size(), 2);
     const QJsonObject record = records.at(0).toObject();
     QCOMPARE(record.value(QStringLiteral("modelId")).toString(), modelId);
     QCOMPARE(record.value(QStringLiteral("adapterId")).toString(),
              QStringLiteral("indextts25"));
+    QCOMPARE(record.value(QStringLiteral("licenseId")).toString(),
+             QStringLiteral("bilibili-model-use-license"));
     QCOMPARE(record.value(QStringLiteral("licenseUrl")).toString(),
              controller.currentLicenseUrl().toString());
     QCOMPARE(record.value(QStringLiteral("revision")).toString(),
@@ -683,7 +696,10 @@ void VoiceCloneControllerTest::rejectsInvalidDynamicParametersAndUnacceptedIndex
     QVERIFY(controller.errorString().contains(QStringLiteral("license"), Qt::CaseInsensitive));
 
     QVERIFY(controller.licenseAcceptanceRequired());
-    QVERIFY(controller.acceptSelectedLicense());
+    const QVariantList requirements = controller.currentLicenseRequirements();
+    QVERIFY(controller.acceptSelectedLicenses(
+        {requirements[0].toMap().value(QStringLiteral("id")).toString(),
+         requirements[1].toMap().value(QStringLiteral("id")).toString()}));
     QVERIFY(!controller.licenseAcceptanceRequired());
     const QString accepted = controller.generate(QStringLiteral("accepted"), {},
                                                  {{QStringLiteral("seed"), 1},

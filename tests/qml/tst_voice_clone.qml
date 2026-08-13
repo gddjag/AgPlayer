@@ -92,6 +92,7 @@ TestCase {
         property string currentLicenseName: ""
         property url currentLicenseUrl: ""
         property string currentLicenseRevision: ""
+        property var currentLicenseRequirements: []
         property bool licenseIdentityValid: true
         property int refreshCalls: 0
         property int openDirectoryCalls: 0
@@ -121,12 +122,22 @@ TestCase {
             currentLicenseUrl = licenseAcceptanceRequired
                     ? "https://huggingface.co/IndexTeam/IndexTTS-2.5" : ""
             currentLicenseRevision = licenseAcceptanceRequired
-                    ? "license-2026-08-13" : ""
+                    ? "c39ce5ba981572cb187443877ff559dfb246ce63" : ""
+            currentLicenseRequirements = licenseAcceptanceRequired ? [
+                { id: "bilibili-model-use-license", name: "bilibili Model Use License Agreement", url: "https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE", revision: "c39ce5ba981572cb187443877ff559dfb246ce63", spdx: "LicenseRef-Bilibili-Model-Use", useRestriction: "custom-terms" },
+                { id: "maskgct-cc-by-nc-4.0", name: "CC-BY-NC-4.0", url: "https://huggingface.co/amphion/MaskGCT/blob/265c6cef07625665d0c28d2faafb1415562379dc/README.md", revision: "265c6cef07625665d0c28d2faafb1415562379dc", spdx: "CC-BY-NC-4.0", useRestriction: "non-commercial-only" }
+            ] : []
             return true
         }
         function acceptSelectedLicense() {
             ++acceptLicenseCalls
             if (!licenseIdentityValid) return false
+            licenseAcceptanceRequired = false
+            return true
+        }
+        function acceptSelectedLicenses(ids) {
+            ++acceptLicenseCalls
+            if (!licenseIdentityValid || ids.length !== 2) return false
             licenseAcceptanceRequired = false
             return true
         }
@@ -297,7 +308,9 @@ TestCase {
         activationSpy.clear()
         mouseClick(findChild(loader.item, "voiceCloneModelCard0"))
         verify(activationSpy.count >= 2)
-        compare(realVoiceCloneHost.pluginController.activationState, "starting-worker")
+        verify(realVoiceCloneHost.pluginController.activationState === "starting-worker",
+               realVoiceCloneHost.pluginController.errorString + " / "
+               + realVoiceCloneHost.pluginController.activationMessage)
         compare(realVoiceCloneHost.pluginController.modelLoaded, false)
         tryVerify(function() {
             return realVoiceCloneHost.pluginController.workerReady
@@ -441,7 +454,8 @@ TestCase {
         const licenseDialog = findChild(workspace, "voiceCloneLicenseDialog")
         verify(licenseDialog)
         tryCompare(licenseDialog, "visible", true)
-        mouseClick(findChild(workspace, "voiceCloneLicenseDialogAuthorityCheck"))
+        workspace.licenseRequirementCheck(0).checked = true
+        workspace.licenseRequirementCheck(1).checked = true
         licenseDialog.accept()
         compare(fakeController.acceptLicenseCalls, 1)
         compare(workspace.canGenerate, true)

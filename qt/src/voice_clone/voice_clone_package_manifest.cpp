@@ -7,6 +7,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <limits>
+
 namespace agplayer::voice_clone {
 namespace {
 
@@ -16,15 +18,36 @@ struct ApprovedModelIdentity {
     bool requiresLicenseAcceptance;
     const char* licenseUrl;
     const char* licenseRevision;
+    const char* repository;
+    const char* primaryLicenseId;
+    const char* primaryLicenseName;
+    const char* primaryLicenseSpdx;
 };
 
 constexpr ApprovedModelIdentity kApprovedModels[] = {
-    {"Qwen/Qwen3-TTS-12Hz-0.6B-Base", "qwen", false, nullptr, nullptr},
-    {"Qwen/Qwen3-TTS-12Hz-1.7B-Base", "qwen", false, nullptr, nullptr},
+    {"Qwen/Qwen3-TTS-12Hz-0.6B-Base", "qwen", false,
+     "https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE",
+     "022e286b98fbec7e1e916cb940cdf532cd9f488e",
+     "Qwen/Qwen3-TTS-12Hz-0.6B-Base", "apache-2.0", "Apache-2.0", "Apache-2.0"},
+    {"Qwen/Qwen3-TTS-12Hz-1.7B-Base", "qwen", false,
+     "https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE",
+     "022e286b98fbec7e1e916cb940cdf532cd9f488e",
+     "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "apache-2.0", "Apache-2.0", "Apache-2.0"},
     {"IndexTeam/IndexTTS-2.5", "indextts25", true,
-     "https://huggingface.co/IndexTeam/IndexTTS-2.5", "license-2026-08-13"},
-    {"FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "cosyvoice3", false, nullptr, nullptr},
+     "https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE",
+     "c39ce5ba981572cb187443877ff559dfb246ce63", "IndexTeam/IndexTTS-2.5",
+     "bilibili-model-use-license", "bilibili Model Use License Agreement",
+     "LicenseRef-Bilibili-Model-Use"},
+    {"FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "cosyvoice3", false,
+     "https://github.com/FunAudioLLM/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/LICENSE",
+     "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc",
+     "FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "apache-2.0", "Apache-2.0", "Apache-2.0"},
 };
+
+constexpr const char* kMaskGctLicenseId = "maskgct-cc-by-nc-4.0";
+constexpr const char* kMaskGctLicenseUrl =
+    "https://huggingface.co/amphion/MaskGCT/blob/265c6cef07625665d0c28d2faafb1415562379dc/README.md";
+constexpr const char* kMaskGctLicenseRevision = "265c6cef07625665d0c28d2faafb1415562379dc";
 
 QString unknownField(const QJsonObject& object, const QSet<QString>& allowed)
 {
@@ -98,7 +121,51 @@ const ApprovedModelIdentity* approvedIdentity(const QString& modelId,
     return nullptr;
 }
 
+QVector<VoiceClonePackageLicense> approvedPackageLicenses(const QString& modelId,
+                                                          const QString& adapterId)
+{
+    const ApprovedModelIdentity* identity = approvedIdentity(modelId, adapterId);
+    if (identity == nullptr) return {};
+    QVector<VoiceClonePackageLicense> result{{QString::fromLatin1(identity->primaryLicenseId),
+                                              QString::fromLatin1(identity->primaryLicenseName),
+                                              QUrl(QString::fromLatin1(identity->licenseUrl)),
+                                              QString::fromLatin1(identity->licenseRevision),
+                                              QString::fromLatin1(identity->primaryLicenseSpdx),
+                                              identity->requiresLicenseAcceptance,
+                                              identity->requiresLicenseAcceptance
+                                                  ? QStringLiteral("custom-terms") : QString{}}};
+    if (!identity->requiresLicenseAcceptance) return result;
+    result.append({QString::fromLatin1(kMaskGctLicenseId), QStringLiteral("CC-BY-NC-4.0"),
+                   QUrl(QString::fromLatin1(kMaskGctLicenseUrl)),
+                   QString::fromLatin1(kMaskGctLicenseRevision),
+                   QStringLiteral("CC-BY-NC-4.0"), true,
+                   QStringLiteral("non-commercial-only")});
+    result.append({QStringLiteral("w2v-bert-mit"), QStringLiteral("MIT"),
+                   QUrl(QStringLiteral("https://huggingface.co/facebook/w2v-bert-2.0/blob/da985ba0987f70aaeb84a80f2851cfac8c697a7b/README.md")),
+                   QStringLiteral("da985ba0987f70aaeb84a80f2851cfac8c697a7b"),
+                   QStringLiteral("MIT"), false, {}});
+    result.append({QStringLiteral("campplus-apache-2.0"), QStringLiteral("Apache-2.0"),
+                   QUrl(QStringLiteral("https://huggingface.co/funasr/campplus/blob/e4b6ede7ce16997aff4ae69fbca1f0175e2afede/README.md")),
+                   QStringLiteral("e4b6ede7ce16997aff4ae69fbca1f0175e2afede"),
+                   QStringLiteral("Apache-2.0"), false, {}});
+    result.append({QStringLiteral("bigvgan-mit"), QStringLiteral("MIT"),
+                   QUrl(QStringLiteral("https://huggingface.co/nvidia/bigvgan_v2_22khz_80band_256x/blob/633ff708ed5b74903e86ff1298cf4a98e921c513/LICENSE")),
+                   QStringLiteral("633ff708ed5b74903e86ff1298cf4a98e921c513"),
+                   QStringLiteral("MIT"), false, {}});
+    return result;
+}
+
 } // namespace
+
+QVector<VoiceClonePackageLicense> approvedRequiredLicenses(const QString& modelId,
+                                                           const QString& adapterId)
+{
+    QVector<VoiceClonePackageLicense> result;
+    for (const VoiceClonePackageLicense& license : approvedPackageLicenses(modelId, adapterId)) {
+        if (license.requiredAcceptance) result.append(license);
+    }
+    return result;
+}
 
 VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject& object)
 {
@@ -108,7 +175,8 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
         {QStringLiteral("schemaVersion"), QStringLiteral("packageId"),
          QStringLiteral("modelId"), QStringLiteral("adapterId"),
          QStringLiteral("version"), QStringLiteral("revision"),
-         QStringLiteral("license"), QStringLiteral("files")});
+         QStringLiteral("source"), QStringLiteral("licenses"),
+         QStringLiteral("totalBytes"), QStringLiteral("files")});
     if (!rootUnknown.isEmpty()) {
         result.parseError_ = QStringLiteral("unknown package field: %1").arg(rootUnknown);
         return result;
@@ -123,7 +191,9 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
         || !object.value(QStringLiteral("adapterId")).isString()
         || !object.value(QStringLiteral("version")).isString()
         || !object.value(QStringLiteral("revision")).isString()
-        || !object.value(QStringLiteral("license")).isObject()
+        || !object.value(QStringLiteral("source")).isObject()
+        || !object.value(QStringLiteral("licenses")).isArray()
+        || !object.value(QStringLiteral("totalBytes")).isDouble()
         || !object.value(QStringLiteral("files")).isArray()) {
         result.parseError_ = QStringLiteral("invalid package metadata types");
         return result;
@@ -134,21 +204,58 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
     result.adapterId = object.value(QStringLiteral("adapterId")).toString();
     result.version = object.value(QStringLiteral("version")).toString();
     result.revision = object.value(QStringLiteral("revision")).toString();
-    const QJsonObject license = object.value(QStringLiteral("license")).toObject();
-    const QString licenseUnknown = unknownField(
-        license,
-        {QStringLiteral("url"), QStringLiteral("revision")});
-    if (!licenseUnknown.isEmpty()
-        || !license.value(QStringLiteral("url")).isString()
-        || !license.value(QStringLiteral("revision")).isString()) {
-        result.parseError_ = licenseUnknown.isEmpty()
-                                 ? QStringLiteral("invalid license metadata")
-                                 : QStringLiteral("unknown license field: %1").arg(licenseUnknown);
+    result.totalBytes = object.value(QStringLiteral("totalBytes")).toVariant().toLongLong();
+    const QJsonObject source = object.value(QStringLiteral("source")).toObject();
+    const QString sourceUnknown = unknownField(
+        source, {QStringLiteral("provider"), QStringLiteral("repository"),
+                 QStringLiteral("url")});
+    if (!sourceUnknown.isEmpty() || !source.value(QStringLiteral("provider")).isString()
+        || !source.value(QStringLiteral("repository")).isString()
+        || !source.value(QStringLiteral("url")).isString()) {
+        result.parseError_ = sourceUnknown.isEmpty()
+                                 ? QStringLiteral("invalid package source metadata")
+                                 : QStringLiteral("unknown package source field: %1").arg(sourceUnknown);
         return result;
     }
-    result.licenseUrl = QUrl(license.value(QStringLiteral("url")).toString());
-    result.licenseRevision = license.value(QStringLiteral("revision")).toString();
-    result.requiresLicenseAcceptance = result.licenseAcceptanceRequired();
+    result.sourceProvider = source.value(QStringLiteral("provider")).toString();
+    result.sourceRepository = source.value(QStringLiteral("repository")).toString();
+    result.sourceUrl = QUrl(source.value(QStringLiteral("url")).toString());
+
+    const QJsonArray licenseArray = object.value(QStringLiteral("licenses")).toArray();
+    for (const QJsonValue& value : licenseArray) {
+        if (!value.isObject()) {
+            result.parseError_ = QStringLiteral("package license entry must be an object");
+            return result;
+        }
+        const QJsonObject license = value.toObject();
+        const QString licenseUnknown = unknownField(
+            license, {QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("url"),
+                      QStringLiteral("revision"), QStringLiteral("spdx"),
+                      QStringLiteral("requiredAcceptance"), QStringLiteral("useRestriction")});
+        if (!licenseUnknown.isEmpty() || !license.value(QStringLiteral("id")).isString()
+            || !license.value(QStringLiteral("name")).isString()
+            || !license.value(QStringLiteral("url")).isString()
+            || !license.value(QStringLiteral("revision")).isString()
+            || !license.value(QStringLiteral("spdx")).isString()
+            || !license.value(QStringLiteral("requiredAcceptance")).isBool()
+            || !license.value(QStringLiteral("useRestriction")).isString()) {
+            result.parseError_ = licenseUnknown.isEmpty()
+                                     ? QStringLiteral("invalid license metadata")
+                                     : QStringLiteral("unknown license field: %1").arg(licenseUnknown);
+            return result;
+        }
+        result.licenses.append({license.value(QStringLiteral("id")).toString(),
+                                license.value(QStringLiteral("name")).toString(),
+                                QUrl(license.value(QStringLiteral("url")).toString()),
+                                license.value(QStringLiteral("revision")).toString(),
+                                license.value(QStringLiteral("spdx")).toString(),
+                                license.value(QStringLiteral("requiredAcceptance")).toBool(),
+                                license.value(QStringLiteral("useRestriction")).toString()});
+    }
+    if (!result.licenses.isEmpty()) {
+        result.licenseUrl = result.licenses.front().url;
+        result.licenseRevision = result.licenses.front().revision;
+    }
 
     for (const QJsonValue& value : object.value(QStringLiteral("files")).toArray()) {
         if (!value.isObject()) {
@@ -158,11 +265,13 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
         const QJsonObject file = value.toObject();
         const QString fileUnknown = unknownField(
             file,
-            {QStringLiteral("path"), QStringLiteral("url"), QStringLiteral("sha256")});
+            {QStringLiteral("path"), QStringLiteral("url"), QStringLiteral("sha256"),
+             QStringLiteral("sizeBytes")});
         if (!fileUnknown.isEmpty()
             || !file.value(QStringLiteral("path")).isString()
             || !file.value(QStringLiteral("url")).isString()
-            || !file.value(QStringLiteral("sha256")).isString()) {
+            || !file.value(QStringLiteral("sha256")).isString()
+            || !file.value(QStringLiteral("sizeBytes")).isDouble()) {
             result.parseError_ = fileUnknown.isEmpty()
                                      ? QStringLiteral("invalid package file metadata")
                                      : QStringLiteral("unknown package file field: %1")
@@ -171,8 +280,10 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
         }
         result.files.append({file.value(QStringLiteral("path")).toString(),
                              QUrl(file.value(QStringLiteral("url")).toString()),
-                             file.value(QStringLiteral("sha256")).toString().toLatin1()});
+                             file.value(QStringLiteral("sha256")).toString().toLatin1(),
+                             file.value(QStringLiteral("sizeBytes")).toVariant().toLongLong()});
     }
+    result.requiresLicenseAcceptance = result.licenseAcceptanceRequired();
     result.parseError_ = result.validationError();
     return result;
 }
@@ -196,20 +307,49 @@ QString VoiceClonePackageManifest::validationError() const
     if (approved == nullptr) {
         return QStringLiteral("unapproved modelId/adapterId package identity");
     }
-    if (!licenseUrl.isValid()
-        || licenseUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0
-        || licenseUrl.host().isEmpty() || licenseRevision.trimmed().isEmpty()) {
-        return QStringLiteral("invalid package license URL or revision");
+    if (sourceProvider != QStringLiteral("hugging-face")
+        || sourceRepository != QLatin1String(approved->repository)
+        || sourceUrl != QUrl(QStringLiteral("https://huggingface.co/%1").arg(sourceRepository))) {
+        return QStringLiteral("package source does not match the approved official repository");
     }
-    if (approved->requiresLicenseAcceptance
-        && (licenseUrl.toString(QUrl::FullyEncoded) != QLatin1String(approved->licenseUrl)
-            || licenseRevision != QLatin1String(approved->licenseRevision))) {
-        return QStringLiteral("package license identity does not match the approved Registry identity");
+    static const QRegularExpression revisionPattern(QStringLiteral("^[0-9a-f]{40}$"));
+    if (!revisionPattern.match(revision).hasMatch())
+        return QStringLiteral("package revision must be an immutable commit");
+    if (licenses.isEmpty()) return QStringLiteral("package has no licenses");
+    static const QRegularExpression licenseIdPattern(QStringLiteral("^[a-z0-9][a-z0-9._-]*$"));
+    QSet<QString> licenseIds;
+    QSet<QString> matchingApprovedLicenses;
+    const QVector<VoiceClonePackageLicense> expectedLicenses =
+        approvedPackageLicenses(modelId, adapterId);
+    for (const VoiceClonePackageLicense& license : licenses) {
+        if (!licenseIdPattern.match(license.id).hasMatch() || license.name.trimmed().isEmpty()
+            || !license.url.isValid() || license.url.scheme() != QStringLiteral("https")
+            || license.url.host().isEmpty() || license.revision.trimmed().isEmpty()
+            || license.spdx.trimmed().isEmpty() || licenseIds.contains(license.id)) {
+            return QStringLiteral("invalid or duplicate package license identity");
+        }
+        licenseIds.insert(license.id);
+        if (license.requiredAcceptance && !approved->requiresLicenseAcceptance)
+            return QStringLiteral("license gate is not approved for this model");
+        for (const VoiceClonePackageLicense& expected : expectedLicenses) {
+            if (license.id == expected.id && license.name == expected.name
+                && license.url == expected.url && license.revision == expected.revision
+                && license.spdx == expected.spdx
+                && license.requiredAcceptance == expected.requiredAcceptance
+                && license.useRestriction == expected.useRestriction) {
+                matchingApprovedLicenses.insert(expected.id);
+            }
+        }
+    }
+    if (licenses.size() != expectedLicenses.size()
+        || matchingApprovedLicenses.size() != expectedLicenses.size()) {
+        return QStringLiteral("package license set does not match approved identities");
     }
     if (files.isEmpty()) return QStringLiteral("package has no files");
 
     static const QRegularExpression hashPattern(QStringLiteral("^[0-9a-fA-F]{64}$"));
     QSet<QString> targets;
+    qint64 fileBytes = 0;
     for (const VoiceClonePackageFile& file : files) {
         const QString normalized = normalizedRelativePath(file.relativePath);
         if (file.relativePath.trimmed().isEmpty() || QDir::isAbsolutePath(file.relativePath)
@@ -226,12 +366,19 @@ QString VoiceClonePackageManifest::validationError() const
         if (!hashPattern.match(QString::fromLatin1(file.sha256)).hasMatch()) {
             return QStringLiteral("invalid SHA-256 for %1").arg(file.relativePath);
         }
+        if (file.expectedBytes < 0)
+            return QStringLiteral("invalid expected size for %1").arg(file.relativePath);
+        if (file.expectedBytes > (std::numeric_limits<qint64>::max)() - fileBytes)
+            return QStringLiteral("package size overflows");
+        fileBytes += file.expectedBytes;
         const QString key = pathKey(normalized);
         if (targets.contains(key)) {
             return QStringLiteral("duplicate package target: %1").arg(normalized);
         }
         targets.insert(key);
     }
+    if (totalBytes < 0 || totalBytes != fileBytes)
+        return QStringLiteral("package totalBytes does not match file sizes");
     return {};
 }
 
@@ -247,8 +394,10 @@ QString VoiceClonePackageManifest::errorString() const
 
 bool VoiceClonePackageManifest::licenseAcceptanceRequired() const
 {
-    const ApprovedModelIdentity* approved = approvedIdentity(modelId, adapterId);
-    return approved != nullptr && approved->requiresLicenseAcceptance;
+    for (const VoiceClonePackageLicense& license : licenses) {
+        if (license.requiredAcceptance) return true;
+    }
+    return false;
 }
 
 } // namespace agplayer::voice_clone

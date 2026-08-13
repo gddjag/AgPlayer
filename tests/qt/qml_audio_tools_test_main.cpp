@@ -65,7 +65,7 @@ bool stageVoiceClonePlugin(const QString& root)
     }
 
     const QString modelRoot = QDir(root).filePath(
-        QStringLiteral("models/voice-clone/qwen/main"));
+        QStringLiteral("models/voice-clone/qwen/5d83992436eae1d760afd27aff78a71d676296fc"));
     if (!QDir().mkpath(modelRoot)) return false;
     QFile config(QDir(modelRoot).filePath(QStringLiteral("config.json")));
     if (!config.open(QIODevice::WriteOnly) || config.write("{}") != 2) return false;
@@ -81,13 +81,14 @@ bool stageVoiceClonePlugin(const QString& root)
                            {QStringLiteral("description"), QStringLiteral("QML integration model")},
                            {QStringLiteral("adapterId"), QStringLiteral("qwen")},
                            {QStringLiteral("runtimeId"), QStringLiteral("qwen")},
-                           {QStringLiteral("revision"), QStringLiteral("main")},
+                           {QStringLiteral("revision"), QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc")},
                            {QStringLiteral("source"), QJsonObject{
                                 {QStringLiteral("provider"), QStringLiteral("official")},
                                 {QStringLiteral("url"), modelUrl}}},
                            {QStringLiteral("license"), QJsonObject{
                                 {QStringLiteral("name"), QStringLiteral("Apache-2.0")},
-                                {QStringLiteral("url"), modelUrl}}},
+                                {QStringLiteral("url"), QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE")},
+                                {QStringLiteral("revision"), QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e")}}},
                            {QStringLiteral("files"), QJsonArray{QJsonObject{
                                 {QStringLiteral("path"), QStringLiteral("config.json")}}}}})) {
         return false;

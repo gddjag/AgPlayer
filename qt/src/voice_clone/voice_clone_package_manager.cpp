@@ -176,7 +176,7 @@ QString readLicenseRecords(const QString& path, QJsonArray* records)
     }
     const QSet<QString> recordFields{
         QStringLiteral("modelId"), QStringLiteral("adapterId"),
-        QStringLiteral("licenseUrl"), QStringLiteral("revision"),
+        QStringLiteral("licenseId"), QStringLiteral("licenseUrl"), QStringLiteral("revision"),
         QStringLiteral("acceptedAt")};
     for (const QJsonValue& value : root.value(QStringLiteral("records")).toArray()) {
         if (!value.isObject()) return QStringLiteral("invalid license acceptance record");
@@ -433,7 +433,12 @@ void VoiceClonePackageManager::resolveNextFile()
         const QVariant lengthHeader = currentReply->header(QNetworkRequest::ContentLengthHeader);
         bool ok = false;
         const qint64 length = lengthHeader.toLongLong(&ok);
-        resolvedSizes_.append(ok && length >= 0 ? length : -1);
+        const qint64 expected = manifest_.files.at(currentIndex_).expectedBytes;
+        if (ok && length >= 0 && length != expected) {
+            fail(QStringLiteral("Package metadata size does not match manifest"));
+            return;
+        }
+        resolvedSizes_.append(expected);
         ++currentIndex_;
         resolveNextFile();
     });
@@ -479,7 +484,9 @@ bool VoiceClonePackageManager::resumeMetadataMatches(
     return object.value(QStringLiteral("url")).toString() == file.url.toString()
            && object.value(QStringLiteral("sha256")).toString().toLatin1()
                   .compare(file.sha256, Qt::CaseInsensitive) == 0
-           && object.value(QStringLiteral("revision")).toString() == manifest_.revision;
+           && object.value(QStringLiteral("revision")).toString() == manifest_.revision
+           && object.value(QStringLiteral("expectedBytes")).toVariant().toLongLong()
+                  == file.expectedBytes;
 }
 
 bool VoiceClonePackageManager::writeResumeMetadata(const VoiceClonePackageFile& file,
@@ -490,6 +497,7 @@ bool VoiceClonePackageManager::writeResumeMetadata(const VoiceClonePackageFile& 
     const QJsonObject object{{QStringLiteral("url"), file.url.toString()},
                              {QStringLiteral("sha256"), QString::fromLatin1(file.sha256)},
                              {QStringLiteral("revision"), manifest_.revision},
+                             {QStringLiteral("expectedBytes"), file.expectedBytes},
                              {QStringLiteral("totalBytes"), total}};
     const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
     return metadata.write(bytes) == bytes.size() && metadata.commit();
@@ -549,7 +557,7 @@ void VoiceClonePackageManager::downloadNextFile()
     }
     if (!resumeMetadataMatches(entry)) removeCurrentPartial();
     currentResumeOffset_ = QFileInfo(partialFilePath_).size();
-    const qint64 expectedSize = resolvedSizes_.value(currentIndex_, -1);
+    const qint64 expectedSize = manifest_.files.at(currentIndex_).expectedBytes;
     if (expectedSize < 0 && currentResumeOffset_ > 0) {
         removeCurrentPartial();
         currentResumeOffset_ = 0;
@@ -740,12 +748,25 @@ bool VoiceClonePackageManager::hasAcceptedCurrentLicense(QString* error) const
     const QString readError = readLicenseRecords(licenseAcceptancePath(), &records);
     if (error != nullptr) *error = readError;
     if (!readError.isEmpty()) return false;
-    return hasLicenseAcceptance(manifest_.modelId, manifest_.adapterId, manifest_.licenseUrl,
-                                manifest_.licenseRevision);
+    return hasRequiredLicenseAcceptances(manifest_.modelId, manifest_.adapterId);
 }
 
 bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& modelId,
                                                     const QString& adapterId,
+                                                    const QUrl& licenseUrl,
+                                                    const QString& revision) const
+{
+    for (const VoiceClonePackageLicense& license : approvedRequiredLicenses(modelId, adapterId)) {
+        if (license.url == licenseUrl && license.revision == revision) {
+            return hasLicenseAcceptance(modelId, adapterId, license.id, licenseUrl, revision);
+        }
+    }
+    return false;
+}
+
+bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& modelId,
+                                                    const QString& adapterId,
+                                                    const QString& licenseId,
                                                     const QUrl& licenseUrl,
                                                     const QString& revision) const
 {
@@ -756,6 +777,7 @@ bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& modelId,
         const QJsonObject acceptance = value.toObject();
         if (acceptance.value(QStringLiteral("modelId")).toString() == modelId
             && acceptance.value(QStringLiteral("adapterId")).toString() == adapterId
+            && acceptance.value(QStringLiteral("licenseId")).toString() == licenseId
             && acceptance.value(QStringLiteral("licenseUrl")).toString()
                    == licenseUrl.toString()
             && acceptance.value(QStringLiteral("revision")).toString()
@@ -769,27 +791,66 @@ bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& modelId,
     return false;
 }
 
+bool VoiceClonePackageManager::hasRequiredLicenseAcceptances(const QString& modelId,
+                                                             const QString& adapterId) const
+{
+    const QVector<VoiceClonePackageLicense> required = approvedRequiredLicenses(modelId, adapterId);
+    for (const VoiceClonePackageLicense& license : required) {
+        if (!hasLicenseAcceptance(modelId, adapterId, license.id, license.url,
+                                  license.revision)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool VoiceClonePackageManager::acceptLicense(const QUrl& licenseUrl,
                                              const QString& revision)
 {
-    if (!manifest_.licenseAcceptanceRequired() || licenseUrl != manifest_.licenseUrl
-        || revision != manifest_.licenseRevision) {
-        return false;
+    for (const VoiceClonePackageLicense& license : manifest_.licenses) {
+        if (license.requiredAcceptance && license.url == licenseUrl
+            && license.revision == revision) {
+            return acceptLicense(license.id, licenseUrl, revision);
+        }
     }
-    return acceptLicenseIdentity(manifest_.modelId, manifest_.adapterId,
-                                 manifest_.licenseUrl, manifest_.licenseRevision);
+    return false;
+}
+
+bool VoiceClonePackageManager::acceptLicense(const QString& licenseId,
+                                             const QUrl& licenseUrl,
+                                             const QString& revision)
+{
+    for (const VoiceClonePackageLicense& license : manifest_.licenses) {
+        if (license.requiredAcceptance && license.id == licenseId
+            && license.url == licenseUrl && license.revision == revision) {
+            return acceptLicenseIdentity(manifest_.modelId, manifest_.adapterId,
+                                         licenseId, licenseUrl, revision);
+        }
+    }
+    return false;
 }
 
 bool VoiceClonePackageManager::acceptLicenseIdentity(const QString& modelId,
                                                      const QString& adapterId,
+                                                     const QString& licenseId,
                                                      const QUrl& licenseUrl,
                                                      const QString& revision)
 {
     if (modelId.trimmed().isEmpty() || adapterId.trimmed().isEmpty()
+        || licenseId.trimmed().isEmpty()
         || revision.trimmed().isEmpty() || !licenseUrl.isValid()
         || licenseUrl.scheme() != QStringLiteral("https")) {
         return false;
     }
+    bool approved = false;
+    for (const VoiceClonePackageLicense& license : approvedRequiredLicenses(modelId, adapterId)) {
+        if (license.id == licenseId && license.url == licenseUrl
+            && license.revision == revision) {
+            approved = true;
+            break;
+        }
+    }
+    if (!approved) return false;
     QString pathError;
     if (!prepareInstallRoot(installRoot_, &pathError)) {
         error_ = pathError;
@@ -811,6 +872,8 @@ bool VoiceClonePackageManager::acceptLicenseIdentity(const QString& modelId,
                                  == modelId
                              && object.value(QStringLiteral("adapterId")).toString()
                                  == adapterId
+                             && object.value(QStringLiteral("licenseId")).toString()
+                                 == licenseId
                              && object.value(QStringLiteral("licenseUrl")).toString()
                                  == licenseUrl.toString()
                              && object.value(QStringLiteral("revision")).toString()
@@ -822,6 +885,7 @@ bool VoiceClonePackageManager::acceptLicenseIdentity(const QString& modelId,
     retained.append(QJsonObject{
         {QStringLiteral("modelId"), modelId},
         {QStringLiteral("adapterId"), adapterId},
+        {QStringLiteral("licenseId"), licenseId},
         {QStringLiteral("licenseUrl"), licenseUrl.toString()},
         {QStringLiteral("revision"), revision},
         {QStringLiteral("acceptedAt"),

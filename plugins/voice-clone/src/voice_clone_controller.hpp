@@ -29,6 +29,7 @@ class VoiceCloneController final : public QObject {
     Q_PROPERTY(QString currentLicenseName READ currentLicenseName NOTIFY licenseChanged)
     Q_PROPERTY(QUrl currentLicenseUrl READ currentLicenseUrl NOTIFY licenseChanged)
     Q_PROPERTY(QString currentLicenseRevision READ currentLicenseRevision NOTIFY licenseChanged)
+    Q_PROPERTY(QVariantList currentLicenseRequirements READ currentLicenseRequirements NOTIFY licenseChanged)
 
 public:
     explicit VoiceCloneController(QString pluginRoot,
@@ -43,6 +44,7 @@ public:
     Q_INVOKABLE bool activateModel(const QString& stableId);
     Q_INVOKABLE bool selectModel(const QString& stableId);
     Q_INVOKABLE bool acceptSelectedLicense();
+    Q_INVOKABLE bool acceptSelectedLicenses(const QStringList& licenseIds);
     bool acceptSelectedLicenseIdentity(const QString& modelId,
                                        const QString& adapterId,
                                        const QUrl& licenseUrl,
@@ -77,6 +79,7 @@ public:
     QString currentLicenseName() const;
     QUrl currentLicenseUrl() const;
     QString currentLicenseRevision() const;
+    QVariantList currentLicenseRequirements() const;
     QVariantList basicParameters() const;
     QVariantList advancedParameters() const;
     bool advancedSettingsAvailable() const;

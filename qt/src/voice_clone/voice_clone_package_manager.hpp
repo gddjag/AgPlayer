@@ -68,10 +68,20 @@ public:
     void cancel();
     bool retry();
     bool acceptLicense(const QUrl& licenseUrl, const QString& revision);
+    bool acceptLicense(const QString& licenseId,
+                       const QUrl& licenseUrl,
+                       const QString& revision);
     bool hasLicenseAcceptance(const QString& modelId,
                               const QString& adapterId,
                               const QUrl& licenseUrl,
                               const QString& revision) const;
+    bool hasLicenseAcceptance(const QString& modelId,
+                              const QString& adapterId,
+                              const QString& licenseId,
+                              const QUrl& licenseUrl,
+                              const QString& revision) const;
+    bool hasRequiredLicenseAcceptances(const QString& modelId,
+                                       const QString& adapterId) const;
 
     static bool commitStagingDirectory(const QString& stagingDirectory,
                                        const QString& targetDirectory,
@@ -86,6 +96,7 @@ private:
     friend class VoiceCloneController;
     bool acceptLicenseIdentity(const QString& modelId,
                                const QString& adapterId,
+                               const QString& licenseId,
                                const QUrl& licenseUrl,
                                const QString& revision);
     void setState(State state, const QString& error = {});
