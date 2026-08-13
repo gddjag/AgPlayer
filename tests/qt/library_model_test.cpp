@@ -25,7 +25,41 @@ private slots:
     void appliesMaintenanceResultsWithSingleModelNotification();
     void updatesRenamedPathsAsOneBatchWithoutChangingTrackIds();
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
+    void exposesLiveRecentAndNeverPlayedCounts();
 };
+
+void LibraryModelTest::exposesLiveRecentAndNeverPlayedCounts()
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    TrackRecord recentUnplayed;
+    recentUnplayed.path = QStringLiteral("C:/music/recent-unplayed.wav");
+    recentUnplayed.addedAtMs = now - 1'000;
+    TrackRecord oldUnplayed;
+    oldUnplayed.path = QStringLiteral("C:/music/old-unplayed.wav");
+    oldUnplayed.addedAtMs = now - 31LL * 24 * 60 * 60 * 1'000;
+    TrackRecord recentPlayed;
+    recentPlayed.path = QStringLiteral("C:/music/recent-played.wav");
+    recentPlayed.addedAtMs = now - 2'000;
+    recentPlayed.playCount = 1;
+
+    LibraryModel model;
+    QSignalSpy recentChanged(&model, &LibraryModel::recentAddedCountChanged);
+    QSignalSpy neverChanged(&model, &LibraryModel::neverPlayedCountChanged);
+    model.replaceAll({recentUnplayed, oldUnplayed, recentPlayed});
+    QCOMPARE(model.recentAddedCount(), 2);
+    QCOMPARE(model.neverPlayedCount(), 2);
+    QCOMPARE(recentChanged.count(), 1);
+    QCOMPARE(neverChanged.count(), 1);
+
+    const QString playedId = model.tracks().front().trackId;
+    QVERIFY(model.markPlayed(playedId, now));
+    QCOMPARE(model.neverPlayedCount(), 1);
+    QCOMPARE(neverChanged.count(), 2);
+    QVERIFY(model.removeTrack(model.tracks().at(0).trackId));
+    QCOMPARE(model.neverPlayedCount(), 1);
+    QVERIFY(model.removeTrack(model.tracks().at(0).trackId));
+    QCOMPARE(model.neverPlayedCount(), 0);
+}
 
 void LibraryModelTest::stampsNewImportsWithoutOverwritingExistingTimestamps()
 {

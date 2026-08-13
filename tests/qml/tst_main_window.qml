@@ -40,6 +40,8 @@ TestCase {
         SideNavigation {
             width: 208
             height: 500
+            recentAddedCount: 7
+            neverPlayedCount: 11
             property string lastSelectedCategory: ""
             property int renameRequestCount: 0
             property int exportRequestCount: 0
@@ -481,6 +483,8 @@ TestCase {
         verify(!findChild(side, "libraryManagerCategoryButton"))
         verify(recent.y > history.y)
         verify(never.y > recent.y)
+        compare(recent.count, 7)
+        compare(never.count, 11)
         mouseClick(recent)
         compare(side.lastSelectedCategory, "recentAdded")
         mouseClick(never)

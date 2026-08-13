@@ -1,4 +1,5 @@
 #include "audio_editor_controller.hpp"
+#include "playback_controller.hpp"
 
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/document_renderer.hpp"
@@ -993,6 +994,10 @@ bool AudioEditorController::playPause()
         emit playbackChanged();
         return true;
     }
+    if (main_playback_ != nullptr
+        && main_playback_->state() != PlaybackController::Stopped) {
+        main_playback_->stop();
+    }
     ag_playback_snapshot snapshot{};
     if (ag_player_snapshot(player_, &snapshot) != AG_OK
         || snapshot.state == AG_STOPPED || snapshot.state == AG_ERROR) {
@@ -1004,6 +1009,12 @@ bool AudioEditorController::playPause()
     setState(EditorSessionState::Playing);
     emit playbackChanged();
     return true;
+}
+
+void AudioEditorController::setMainPlaybackController(
+    PlaybackController* playback) noexcept
+{
+    main_playback_ = playback;
 }
 
 bool AudioEditorController::stopPlayback()

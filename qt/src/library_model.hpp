@@ -48,6 +48,10 @@ class LibraryModel : public QAbstractListModel {
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int favoriteCount READ favoriteCount NOTIFY favoriteCountChanged)
     Q_PROPERTY(int historyCount READ historyCount NOTIFY historyCountChanged)
+    Q_PROPERTY(int recentAddedCount READ recentAddedCount
+                   NOTIFY recentAddedCountChanged)
+    Q_PROPERTY(int neverPlayedCount READ neverPlayedCount
+                   NOTIFY neverPlayedCountChanged)
 
 public:
     enum Role {
@@ -127,12 +131,16 @@ public:
 
     int favoriteCount() const noexcept;
     int historyCount() const noexcept;
+    int recentAddedCount() const noexcept;
+    int neverPlayedCount() const noexcept;
 
 signals:
     void playRequested(int row);
     void flushRequested();
     void favoriteCountChanged();
     void historyCountChanged();
+    void recentAddedCountChanged();
+    void neverPlayedCountChanged();
     void countChanged();
     void trackRemoved(const QString& trackId);
 

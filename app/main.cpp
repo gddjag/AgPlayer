@@ -638,6 +638,7 @@ int main(int argc, char* argv[])
 
         AudioToolsController audioTools;
         AudioEditorController audioEditor;
+        audioEditor.setMainPlaybackController(&playback);
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(qaTool);
         }

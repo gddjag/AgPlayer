@@ -1,4 +1,6 @@
 #include "audio_editor/audio_editor_controller.hpp"
+#include "library_model.hpp"
+#include "playback_controller.hpp"
 
 #include <QFileInfo>
 #include <QElapsedTimer>
@@ -9,6 +11,29 @@ class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void stopsMainPlaybackBeforeEditorPreview()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        ag_player* mainPlayer = nullptr;
+        const ag_player_config config{AG_AUDIO_BACKEND_NULL, 0U};
+        QCOMPARE(ag_player_create_with_config(&config, &mainPlayer), AG_OK);
+        QCOMPARE(ag_player_load(mainPlayer, fixture.toUtf8().constData()), AG_OK);
+        QCOMPARE(ag_player_play(mainPlayer), AG_OK);
+        LibraryModel library;
+        PlaybackController mainPlayback(mainPlayer, &library);
+        QTRY_COMPARE_WITH_TIMEOUT(mainPlayback.state(),
+                                  PlaybackController::Playing, 2'000);
+        AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+        editor.setMainPlaybackController(&mainPlayback);
+        QVERIFY(editor.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(editor.playPause());
+        QTRY_COMPARE_WITH_TIMEOUT(mainPlayback.state(),
+                                  PlaybackController::Stopped, 2'000);
+        QVERIFY(editor.stopPlayback());
+        ag_player_destroy(mainPlayer);
+    }
+
     void emptyDocumentDisablesDocumentActions()
     {
         AudioEditorController controller;

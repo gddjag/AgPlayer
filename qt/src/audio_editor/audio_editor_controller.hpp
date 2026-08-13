@@ -11,12 +11,15 @@
 
 #include <QObject>
 #include <QFutureWatcher>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 
 #include <atomic>
+
+class PlaybackController;
 
 enum class EditorSessionState {
     Empty,
@@ -140,6 +143,7 @@ public:
     {
         return actions_.action(id);
     }
+    void setMainPlaybackController(PlaybackController* playback) noexcept;
 
     Q_INVOKABLE bool createUntitledDocument(
         quint32 sampleRate, quint32 channels, qint64 frames);
@@ -266,4 +270,5 @@ private:
     bool time_pitch_preview_active_{};
     bool allow_document_replace_{};
     qint64 recording_insert_frame_{};
+    QPointer<PlaybackController> main_playback_;
 };
