@@ -284,6 +284,15 @@ public slots:
             qputenv("AGPLAYER_VOICE_CLONE_ROOT", voiceCloneRoot_.path().toUtf8());
             voiceCloneHost_ = std::make_unique<VoiceCloneHostController>();
         }
+        const QString specialAudioPath = voiceCloneRoot_.filePath(
+            QStringLiteral("audio fixtures/voice #50%.wav"));
+        if (QDir().mkpath(QFileInfo(specialAudioPath).absolutePath())
+            && QFile::copy(QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO")),
+                           specialAudioPath)) {
+            specialAudioUrl_ = QUrl::fromLocalFile(specialAudioPath);
+        } else if (voiceCloneStageError_.isEmpty()) {
+            voiceCloneStageError_ = QStringLiteral("Could not stage reserved-character audio fixture");
+        }
 
         ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
         if (ag_player_create_with_config(&config, &core_) != AG_OK) {
@@ -326,6 +335,7 @@ public slots:
             "testAudioUrl",
             QUrl::fromLocalFile(QString::fromLocal8Bit(
                 qgetenv("AGPLAYER_TEST_AUDIO"))));
+        engine->rootContext()->setContextProperty("testSpecialAudioUrl", specialAudioUrl_);
     }
 
 private:
@@ -344,6 +354,7 @@ private:
     QTemporaryDir voiceCloneRoot_;
     std::unique_ptr<VoiceCloneHostController> voiceCloneHost_;
     QString voiceCloneStageError_;
+    QUrl specialAudioUrl_;
     NativeDropHelper nativeDropHelper_;
 };
 

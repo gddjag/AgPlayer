@@ -446,6 +446,10 @@ bool VoiceCloneController::configureAdapter(const QString& adapterId,
 
 bool VoiceCloneController::activateModel(const QString& stableId)
 {
+    liveSchema_ = {};
+    basicParameters_.clear();
+    advancedParameters_.clear();
+    emit capabilitiesChanged();
     shutdown();
     adapterManifest_ = {};
     launcher_ = {};
@@ -783,6 +787,11 @@ bool VoiceCloneController::deleteResult(const QString& outputPath)
     QDir().rmdir(info.dir().absolutePath());
     setError({});
     return true;
+}
+
+QUrl VoiceCloneController::resultFileUrl(const QString& resultPath) const
+{
+    return QUrl::fromLocalFile(resultPath);
 }
 
 void VoiceCloneController::shutdown()

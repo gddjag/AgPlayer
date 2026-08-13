@@ -132,3 +132,17 @@ Result: 11/11, 100%
 - The real model-card test now clears an `activationChanged` spy and requires at least two new transitions plus the synchronous click state `starting-worker` / `modelLoaded == false` before waiting for the Worker handshake/load. Default auto-activation can no longer satisfy the click assertions.
 - Parameter synchronization now assigns stable object names to instantiated Loader controls. The test changes and resets values through the live model, then checks actual `Switch.checked`, `ComboBox.currentIndex`, integer/double `SpinBox.value`, and string/file `TextField.text`; after a Schema/model reset it checks the new seed control's real value.
 - Final QML result after review fixes: 9 passed, 0 failed.
+
+## Fix round 2 — stale Schema and local-file URLs
+
+### RED evidence
+
+- The Controller test first loaded a real Worker Schema with an advanced `style` control, then switched to an installed model whose launcher/runtime had been removed. Before the fix, `basicParameters`, `advancedParameters`, and the advanced UI control remained from the old model.
+- The QML result-action test staged a real WAV under a path containing a space, `#`, and `%`. Before the fix, manual `file:///` string assembly caused `AudioEditorController.hasDocument` to remain false.
+
+### GREEN evidence
+
+- `activateModel(stableId)` now clears `liveSchema`, basic parameters, and advanced parameters and emits `capabilitiesChanged` before shutdown, selection, or any `needs-download` / `error` return. Native and real-plugin QML tests verify the Schema lists and advanced control are empty after a failed switch.
+- `resultFileUrl(resultPath)` returns `QUrl::fromLocalFile`; QML passes that typed URL directly to `AudioEditorController.openFile`. C++ verifies reserved-character encoding/round-trip, and QML verifies the real editor opens the exact staged path.
+- Focused GREEN: `voice_clone_controller_test` and `qml_voice_clone_test` both passed in `build/msvc-debug` under VS2022 x64.
+- Final regression GREEN: requested 11/11 tests passed; all 7 plugin QML files passed `qmllint` (QtQuick.Dialogs duplicate metadata remains informational); `git diff --check` passed.

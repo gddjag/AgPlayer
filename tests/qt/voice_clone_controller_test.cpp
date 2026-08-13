@@ -382,6 +382,8 @@ class VoiceCloneControllerTest final : public QObject {
 private slots:
     void activateModelResolvesInstalledAdapterAndLoadsWorker();
     void activateModelReportsMissingRuntimeWithoutPretendingReady();
+    void activateModelClearsLiveSchemaBeforeMissingRuntime();
+    void resultFileUrlEncodesReservedCharacters();
     void selectedIndexLicenseAcceptanceUsesExactIdentity();
     void lifecycleCorrelationAndCleanup();
     void rejectsInvalidDynamicParametersAndUnacceptedIndexLicense();
@@ -432,6 +434,58 @@ void VoiceCloneControllerTest::activateModelReportsMissingRuntimeWithoutPretendi
                                                      Qt::CaseInsensitive));
     QVERIFY(!controller.workerReady());
     QVERIFY(!controller.modelLoaded());
+}
+
+void VoiceCloneControllerTest::activateModelClearsLiveSchemaBeforeMissingRuntime()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString readyId = QStringLiteral("local/schema-ready");
+    const QString missingRuntimeId = QStringLiteral("local/schema-missing-runtime");
+    QVERIFY(!writeModel(layout.modelsRoot, readyId, QStringLiteral("qwen"),
+                        QStringLiteral("schema-ready")).isEmpty());
+    QVERIFY(!writeModel(layout.modelsRoot, missingRuntimeId,
+                        QStringLiteral("qwen"),
+                        QStringLiteral("schema-missing")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+
+    QVERIFY2(controller.activateModel(readyId), qPrintable(controller.errorString()));
+    QTRY_VERIFY2_WITH_TIMEOUT(controller.workerReady(), qPrintable(controller.errorString()), 5000);
+    QTRY_VERIFY2_WITH_TIMEOUT(controller.modelLoaded(), qPrintable(controller.errorString()), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.basicParameters().size(), 2, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.advancedParameters().size(), 1, 3000);
+    QVERIFY(controller.advancedSettingsAvailable());
+    controller.shutdown();
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.workerRunning(), 3000);
+    QVERIFY(QFile::remove(QDir(layout.pluginRoot).filePath(
+        QStringLiteral("adapters/qwen/1.0.0/workers/test-worker.exe"))));
+
+    QSignalSpy capabilitiesChanged(&controller, &VoiceCloneController::capabilitiesChanged);
+    QVERIFY(!controller.activateModel(missingRuntimeId));
+    QVERIFY2(controller.activationState() == QStringLiteral("needs-download"),
+             qPrintable(controller.activationMessage()));
+    QCOMPARE(controller.basicParameters(), QVariantList{});
+    QCOMPARE(controller.advancedParameters(), QVariantList{});
+    QVERIFY(!controller.advancedSettingsAvailable());
+    QCOMPARE(capabilitiesChanged.count(), 1);
+}
+
+void VoiceCloneControllerTest::resultFileUrlEncodesReservedCharacters()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    const QString path = QDir(layout.root.path()).filePath(
+        QStringLiteral("results/audio clip #50%.wav"));
+
+    const QUrl url = controller.resultFileUrl(path);
+
+    QCOMPARE(url, QUrl::fromLocalFile(path));
+    QVERIFY(url.toEncoded().contains("audio%20clip%20%2350%25.wav"));
+    QCOMPARE(url.toLocalFile(), path);
 }
 
 void VoiceCloneControllerTest::selectedIndexLicenseAcceptanceUsesExactIdentity()

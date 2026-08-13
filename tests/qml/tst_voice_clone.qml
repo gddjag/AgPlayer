@@ -141,6 +141,9 @@ TestCase {
             return path !== "" && destinationPath !== ""
         }
         function deleteResult(path) { ++deleteCalls; return path !== "" }
+        function resultFileUrl(path) {
+            return path === specialAudioFixturePath() ? testSpecialAudioUrl : testAudioUrl
+        }
     }
 
     QtObject {
@@ -212,6 +215,12 @@ TestCase {
 
     function audioFixturePath() {
         return decodeURIComponent(testAudioUrl.toString().replace(/^file:\/\/\//, ""))
+    }
+
+    function specialAudioFixturePath() {
+        return testSpecialAudioUrl.toLocalFile
+                ? testSpecialAudioUrl.toLocalFile()
+                : decodeURIComponent(testSpecialAudioUrl.toString().replace(/^file:\/\/\//, ""))
     }
 
     function test_stableToolIdSelectsVoiceCloneWithoutChangingLegacyIds() {
@@ -298,6 +307,26 @@ TestCase {
         compare(realVoiceCloneHost.pluginController.activationState, "ready")
         compare(realVoiceCloneHost.pluginController.workerReady, true)
         compare(realVoiceCloneHost.pluginController.modelLoaded, true)
+        compare(realVoiceCloneHost.pluginController.advancedParameters.length, 1)
+        verify(findChild(loader.item, "voiceCloneAdvancedParameter_style"))
+
+        let missingIndex = -1
+        for (let index = 0; index < realVoiceCloneHost.pluginController.models.length; ++index) {
+            if (realVoiceCloneHost.pluginController.models[index].stableId
+                    === "Qwen/Qwen3-TTS-12Hz-1.7B-Base") {
+                missingIndex = index
+                break
+            }
+        }
+        verify(missingIndex >= 0)
+        mouseClick(findChild(loader.item, "voiceCloneModelCard" + missingIndex))
+        tryCompare(realVoiceCloneHost.pluginController, "activationState", "needs-download")
+        compare(realVoiceCloneHost.pluginController.basicParameters.length, 0)
+        compare(realVoiceCloneHost.pluginController.advancedParameters.length, 0)
+        tryVerify(function() {
+            return findChild(loader.item, "voiceCloneAdvancedParameter_style") === null
+        })
+        compare(findChild(loader.item, "voiceCloneAdvancedButton").visible, false)
 
         loader.active = false
         tryCompare(loader, "item", null)
@@ -428,7 +457,7 @@ TestCase {
         const resultPanel = findChild(workspace, "voiceCloneResultPanel")
         compare(resultPanel.hasResult, false)
         mouseClick(generateButton)
-        fakeController.generationFinished("request-1", audioFixturePath())
+        fakeController.generationFinished("request-1", specialAudioFixturePath())
         tryCompare(resultPanel, "hasResult", true)
         wait(20)
         mouseClick(findChild(workspace, "voiceCloneSaveResultButton"))
@@ -439,7 +468,7 @@ TestCase {
         mouseClick(findChild(workspace, "voiceCloneSendToEditorButton"))
         tryCompare(AudioEditorController, "hasDocument", true)
         compare(AudioEditorController.filePath.replace(/\\/g, "/"),
-                audioFixturePath().replace(/\\/g, "/"))
+                specialAudioFixturePath().replace(/\\/g, "/"))
         compare(AudioToolsController.currentToolId, "audio-editor")
         mouseClick(findChild(workspace, "voiceCloneDeleteResultButton"))
         compare(fakeController.saveCalls, 1)

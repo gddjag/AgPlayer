@@ -238,8 +238,7 @@ Item {
                 root.sendResultToEditorRequested(path)
                 // qmllint disable unqualified
                 AudioToolsController.selectToolById("audio-editor")
-                const normalized = path.replace(/\\/g, "/")
-                AudioEditorController.openFile(Qt.resolvedUrl("file:///" + normalized))
+                AudioEditorController.openFile(root.controller.resultFileUrl(path))
                 // qmllint enable unqualified
             }
         }

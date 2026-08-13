@@ -61,6 +61,7 @@ public:
     Q_INVOKABLE bool saveResult(const QString& outputPath,
                                 const QString& destinationPath);
     Q_INVOKABLE bool deleteResult(const QString& outputPath);
+    Q_INVOKABLE QUrl resultFileUrl(const QString& resultPath) const;
     void shutdown();
 
     void setRequestTimeoutMs(int timeoutMs);
