@@ -736,6 +736,21 @@ qreal WaveformItem::waveformCursorX() const noexcept
         cursor, duration_, renderWidth_ > 0.0 ? renderWidth_ : width());
 }
 
+bool WaveformItem::pointerInteractionEnabled() const noexcept
+{
+    return pointerInteractionEnabled_;
+}
+
+void WaveformItem::setPointerInteractionEnabled(bool enabled)
+{
+    if (pointerInteractionEnabled_ == enabled) {
+        return;
+    }
+    pointerInteractionEnabled_ = enabled;
+    pointerPressed_ = false;
+    emit pointerInteractionEnabledChanged();
+}
+
 qint64 WaveformItem::totalSamples() const noexcept
 {
     return peakSnapshot_ ? peakSnapshot_->totalSamples : 0;
@@ -1158,7 +1173,7 @@ void WaveformItem::hoverLeaveEvent(QHoverEvent* event)
 
 void WaveformItem::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() != Qt::LeftButton) {
+    if (!pointerInteractionEnabled_ || event->button() != Qt::LeftButton) {
         event->ignore();
         return;
     }
@@ -1169,7 +1184,7 @@ void WaveformItem::mousePressEvent(QMouseEvent* event)
 
 void WaveformItem::mouseMoveEvent(QMouseEvent* event)
 {
-    if (!pointerPressed_) {
+    if (!pointerInteractionEnabled_ || !pointerPressed_) {
         event->ignore();
         return;
     }
@@ -1179,7 +1194,8 @@ void WaveformItem::mouseMoveEvent(QMouseEvent* event)
 
 void WaveformItem::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (!pointerPressed_ || event->button() != Qt::LeftButton) {
+    if (!pointerInteractionEnabled_ || !pointerPressed_
+        || event->button() != Qt::LeftButton) {
         event->ignore();
         return;
     }

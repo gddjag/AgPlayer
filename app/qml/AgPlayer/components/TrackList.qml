@@ -768,9 +768,14 @@ ListView {
             font.pixelSize: 13
             wrapMode: Text.NoWrap
         }
-        HoverHandler { id: marqueeHover }
+        MouseArea {
+            id: marqueeHover
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            hoverEnabled: true
+        }
         SequentialAnimation {
-            running: marqueeHover.hovered && marqueeRoot.overflowing
+            running: marqueeHover.containsMouse && marqueeRoot.overflowing
             loops: Animation.Infinite
             onRunningChanged: if (!running) marqueeText.x = 0
             PauseAnimation { duration: 350 }

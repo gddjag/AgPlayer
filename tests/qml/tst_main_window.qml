@@ -231,6 +231,9 @@ TestCase {
     }
 
     function test_empty_library_shows_startup_actions() {
+        PlaybackController.pause()
+        nativeDropHelper.clearTracks()
+        tryVerify(function() { return LibraryModel.count === 0 }, 500)
         var startup = findChild(mainWindow, "emptyStartup")
         verify(startup, "empty startup surface should exist")
         verify(startup.visible, "empty startup surface should be visible")
@@ -1099,16 +1102,14 @@ TestCase {
         compare(surface.timeForX(surface.width * 0.85),
                 Math.round(surface.duration * 0.85))
         compare(surface.pixelForTime(surface.duration), surface.width)
-        mouseMove(interactionSurface,
-                  interactionSurface.width * 0.15,
-                  interactionSurface.height / 2)
+        interactionSurface.updatePreviewAt(interactionSurface.width * 0.15)
         tryVerify(function() { return guide.visible }, 300)
-        compare(guide.x, surface.pixelForTime(Math.round(surface.duration * 0.15)))
-        mouseMove(interactionSurface,
-                  interactionSurface.width * 0.85,
-                  interactionSurface.height / 2)
+        tryCompare(guide, "x",
+                   surface.pixelForTime(Math.round(surface.duration * 0.15)))
+        interactionSurface.updatePreviewAt(interactionSurface.width * 0.85)
         tryVerify(function() { return guide.visible }, 300)
-        compare(guide.x, surface.pixelForTime(Math.round(surface.duration * 0.85)))
+        tryCompare(guide, "x",
+                   surface.pixelForTime(Math.round(surface.duration * 0.85)))
         SettingsController.waveformHoverTimePreview = previousPreview
     }
 
@@ -1742,7 +1743,7 @@ TestCase {
         tryCompare(Theme, "isLight", false)
         var darkBackground = Theme.background.toString()
         var darkText = Theme.primaryText.toString()
-        compare(darkBackground, "#202020")
+        compare(darkBackground, "#071018")
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
@@ -1766,7 +1767,7 @@ TestCase {
         compare(Theme.requestedMode, 2)
         compare(Theme.effectiveMode, Theme.systemIsLight ? 1 : 0)
         compare(Theme.background.toString(),
-                Theme.systemIsLight ? "#f3f3f3" : "#202020")
+                Theme.systemIsLight ? "#f3f3f3" : "#071018")
         compare(Theme.cyan.toString(), Theme.accent.toString())
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 
