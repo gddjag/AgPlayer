@@ -46,6 +46,16 @@ Microsoft VibeVoice-1.5B 已由用户明确取消：不得出现在 Registry、U
 
 Registry 是唯一模型产品信息源。每条记录包含稳定 ID、显示名、提供商、参数规模、简介、标签、稳定/实验状态、官方项目页、Hugging Face、ModelScope、许可证名称和 URL、模型 revision、Runtime ID、依赖图、必需文件、哈希/ETag、硬件建议、参考音频规则、输出能力和 Capability Schema。下载大小来自官方仓库 Metadata 或已验证 revision，不写演示假值。
 
+Registry 采用分层合并而不是写死在页面：
+
+1. 插件自带只读官方 Registry，提供首发四个模型；
+2. `models/voice-clone/<model-id>/<revision>/agplayer-model.json` 是用户模型 Manifest；
+3. `plugins/voice-clone/adapters/<adapter-id>/<version>/adapter.json` 是受信任 Adapter Pack Manifest。
+
+用户可自行从官方仓库下载模型文件并放入对应目录，再点击“刷新模型”完成发现。用户 Manifest 只能声明数据、相对文件路径、现有 `adapterId`、`runtimeId`、revision、来源、许可证和能力覆盖，不能包含命令、脚本、绝对路径或可执行文件。目录扫描拒绝 `..`、链接/联接逃逸、重复稳定 ID、协议版本不兼容和缺少必需文件的模型；未提供可验证哈希的手动模型明确标为“本地未验证”，经 Adapter 探测成功前不能显示“已就绪”。
+
+同一推理架构的新模型只需添加模型目录和 Manifest，不改 QML 或 C++ UI。全新推理架构通过独立 Adapter Pack 接入；Adapter Pack 必须由受信任来源签名安装，模型目录不得自行注入可执行代码。新增 Adapter Pack 仍不改页面。
+
 | 模型 | 产品定位 | 首发能力 | 官方来源与许可 |
 | --- | --- | --- | --- |
 | Qwen3-TTS 0.6B Base | 相对轻量的默认声音克隆 | 参考音频克隆、10 种语言、参考文本 ICL / x-vector-only、速度与采样高级参数以 Adapter 实测为准 | Qwen 官方 GitHub、HF、ModelScope；Apache-2.0 |
@@ -55,7 +65,9 @@ Registry 是唯一模型产品信息源。每条记录包含稳定 ID、显示�
 
 Qwen Base 不显示“文字造音色”；该能力属于独立 VoiceDesign 模型，本轮不加入。Qwen 0.6B 不宣传手机支持，也不承诺固定 4–6 GB 显存。任何论文、宣传页或模型族能力，只有在当前正式模型 revision 和 Adapter 上通过探测/测试后才能进入 Capability Schema。
 
-QML 禁止按模型名称分支。字段统一为 `supported / unsupported`、`required / optional / unsupported`、枚举选项、范围、默认值和高级/基础分组；不支持项直接隐藏。
+QML 禁止按模型名称、提供商或 Worker 类型分支。字段统一为 `supported / unsupported`、`required / optional / unsupported`、枚举选项、范围、默认值和 `basic / advanced` 分组；不支持项直接隐藏。
+
+每个 Adapter 以 `adapterId + adapterVersion + protocolVersion` 标识，并在 Worker 握手后返回最终 Capability Schema。Schema 控件类型首发限制为布尔、枚举、整数、浮点、短文本和文件选择；每项包含稳定参数键、标签、说明、范围、步长、默认值、是否必填、分组和可见条件。“高级设置”只在当前 Schema 存在高级项时显示，展开后动态渲染该 Worker 独有的推理参数。Registry 只提供静态预览；Worker 自报能力是运行时最终依据，Controller 会校验并与允许范围取交集。
 
 ## 5. 下载、安装与供应链安全
 
@@ -79,7 +91,7 @@ QML 禁止按模型名称分支。字段统一为 `supported / unsupported`、`r
 
 播放器侧 `VoiceCloneController` 负责 UI 状态、包状态、Worker 生命周期、请求验证、进度、取消、错误恢复和结果导入；不实现具体模型推理。
 
-`AGVoiceWorker` 每次按选中 Runtime 启动，加载一个 Engine Adapter 和一个模型。控制消息包含协议版本、请求 ID、操作、模型 ID/revision、输入/输出路径、文本、参数与取消标记。事件包含阶段、真实进度或 indeterminate、结果和结构化错误。
+`AGVoiceWorker` 是协议角色，不要求所有模型共用同一个可执行文件。每个 Adapter Pack 可提供独立 Worker 启动清单和隔离 Runtime；Controller 只依赖统一协议，并按 `adapterId + protocolVersion` 选择、启动和握手。控制消息包含协议版本、请求 ID、操作、模型 ID/revision、输入/输出路径、文本、参数与取消标记。事件包含阶段、真实进度或 indeterminate、结果、Capability Schema 和结构化错误。
 
 阶段至少为：启动 Worker、握手、加载模型、分析参考人声、生成、编码、校验、完成。若引擎不能提供真实工作量，只显示不确定进度。取消须终止当前推理并清理临时输出；Worker 崩溃、OOM、协议不兼容或超时不得导致播放器退出，Controller 提供一次明确重启操作并释放进程资源。
 
@@ -118,7 +130,7 @@ QML 禁止按模型名称分支。字段统一为 `supported / unsupported`、`r
 
 ## 10. 独立插件包
 
-插件 ZIP 采用稳定根目录：`VoiceClonePlugin/plugin`、`qml`、`bin`、`worker`、`registry`、`licenses`、`config`。Runtime Pack 和模型安装到外部 `runtime/<runtime-id>/<version>` 与 `models/voice-clone/<model-id>/<revision>`，不重复塞入基础 ZIP。
+插件 ZIP 采用稳定根目录：`VoiceClonePlugin/plugin`、`qml`、`bin`、`worker`、`registry`、`adapters`、`licenses`、`config`。Runtime Pack 和模型安装到外部 `runtime/<runtime-id>/<version>` 与 `models/voice-clone/<model-id>/<revision>`，不重复塞入基础 ZIP。插件附带用户模型 Manifest 模板和目录说明。
 
 打包脚本从干净暂存目录收集白名单文件，生成 Manifest、SHA-256 清单、第三方许可清单和版本信息，再创建 ZIP；验证解压路径、必需文件、重复文件、意外模型权重、开发路径和敏感文件。产物名称包含插件版本、平台和架构。
 
@@ -132,6 +144,7 @@ QML 禁止按模型名称分支。字段统一为 `supported / unsupported`、`r
 
 - 四个且仅四个模型；任何 VibeVoice 字符串使测试失败。
 - 官方 URL、模型 ID、许可证、稳定状态、简介和能力均完整；链接为 HTTPS 且 host/组织匹配白名单。
+- 用户模型目录扫描、Manifest 分层合并、刷新、重复 ID、缺文件、路径逃逸、未验证状态和已知 Adapter 复用；增加同架构模型不修改 QML。
 - Metadata 总大小、revision 固定、依赖图完整、断点续传、取消、重试、磁盘不足、哈希失败、路径穿越、更新回滚和原子安装。
 - IndexTTS 未接受许可时不得下载；Qwen/CosyVoice 无自定义许可阻塞。
 
@@ -140,6 +153,8 @@ QML 禁止按模型名称分支。字段统一为 `supported / unsupported`、`r
 - 未安装、安装、启动、握手、加载、生成、取消、崩溃、OOM、超时、重启和卸载状态转换。
 - 协议版本和请求 ID 校验；非法路径/参数拒绝；临时 WAV 清理；无假百分比。
 - 每个 Adapter 对固定 revision 生成真实 Capability；Qwen Base 不暴露 VoiceDesign，Index/CosyVoice 只开放当前 API 可用参数。
+- 不同 Adapter 使用不同 Worker 启动清单仍完成统一握手；未知 `adapterId`、协议不兼容或非法高级参数被拒绝。
+- 高级参数 Schema 可新增、删除和改变枚举/范围而无需修改 QML；Controller 对 Worker 自报 Schema 做类型、范围和可见条件校验。
 - Worker 退出后播放器仍可播放，且无残留进程、临时文件或持久显存占用。
 
 ### 11.3 QML 与视觉
