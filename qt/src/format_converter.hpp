@@ -48,7 +48,7 @@ class FormatConverter final : public QObject {
     Q_PROPERTY(QString selectedFormat READ selectedFormat WRITE setSelectedFormat
                    NOTIFY currentCapabilityChanged)
     Q_PROPERTY(QString etaText READ etaText NOTIFY progressChanged)
-    Q_PROPERTY(int checkedCount READ checkedCount NOTIFY filesChanged)
+    Q_PROPERTY(int checkedCount READ checkedCount NOTIFY checkedCountChanged)
     Q_PROPERTY(int convertingCount READ convertingCount NOTIFY filesChanged)
     Q_PROPERTY(int cancelledCount READ cancelledCount NOTIFY filesChanged)
 
@@ -92,6 +92,9 @@ public:
     Q_INVOKABLE void rejectPendingPlan();
     Q_INVOKABLE void cancelTask(const QString& taskId);
     Q_INVOKABLE void cancelAll() { cancel(); }
+    Q_INVOKABLE void copyText(const QString& text) const;
+    Q_INVOKABLE void setTaskChecked(const QString& taskId, bool checked);
+    Q_INVOKABLE void setAllVisibleChecked(bool checked);
     Q_INVOKABLE bool setMetadataEditPlan(const QVariantMap& fields,
                                          const QUrl& coverUrl);
     Q_INVOKABLE QVariantMap previewSelected(const QVariantList& indices,
@@ -150,6 +153,7 @@ signals:
     void conflictPolicyChanged();
     void currentCapabilityChanged();
     void pendingPlanChanged();
+    void checkedCountChanged();
 
 private:
     enum class FileStatus {
@@ -168,6 +172,7 @@ private:
     struct FileEntry {
         QString taskId;
         QString path;
+        QString importRoot;
         QString fileName;
         QString format;
         qint64 fileSize = 0;
@@ -232,7 +237,12 @@ private:
                    const QString& outputDir,
                    bool keepMetadata,
                    bool volumeNormalize,
-                   bool extractAudio);
+                   bool extractAudio,
+                   bool keepCover = false,
+                   const QString& sampleFormat = {},
+                   const QString& channelLayout = {},
+                   int audioStreamIndex = -1,
+                   bool preserveDirectories = false);
 
     // Bounded parallel transcode worker. Runs in a background thread.
     void runTranscode(const QString& outputFormat,
@@ -248,6 +258,11 @@ private:
                    const QString& conflictPolicy,
                    const QVariantMap& metadataFields,
                    const QByteArray& metadataCoverData,
-                   const QString& metadataCoverMime,
-                   const QVector<int>& jobIndices);
+                      const QString& metadataCoverMime,
+                      const QVector<int>& jobIndices,
+                      bool keepCover,
+                      const QString& sampleFormat,
+                      const QString& channelLayout,
+                      int audioStreamIndex,
+                      bool preserveDirectories);
 };

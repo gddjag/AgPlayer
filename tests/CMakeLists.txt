@@ -91,6 +91,57 @@ set_tests_properties(audio_document_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(document_writer_test
+    core/document_writer_test.cpp
+)
+add_dependencies(document_writer_test decoder_fixture)
+target_include_directories(document_writer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(document_writer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(document_writer_test)
+add_test(NAME document_writer_test
+    COMMAND document_writer_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(document_writer_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(time_pitch_session_test
+    core/time_pitch_session_test.cpp
+)
+add_dependencies(time_pitch_session_test decoder_fixture)
+target_include_directories(time_pitch_session_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(time_pitch_session_test PRIVATE agplayer_core)
+agplayer_enable_warnings(time_pitch_session_test)
+add_test(NAME time_pitch_session_test
+    COMMAND time_pitch_session_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(time_pitch_session_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(recording_session_test
+    core/recording_session_test.cpp
+)
+target_include_directories(recording_session_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(recording_session_test PRIVATE agplayer_core)
+agplayer_enable_warnings(recording_session_test)
+add_test(NAME recording_session_test COMMAND recording_session_test)
+set_tests_properties(recording_session_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 foreach(audio_editor_core_test IN ITEMS
     time_pixel_mapper_test
     peak_pyramid_test
@@ -333,40 +384,6 @@ set_tests_properties(pitch_shifter_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
-add_executable(multitrack_editor_test
-    core/multitrack_editor_test.cpp
-)
-add_dependencies(multitrack_editor_test decoder_fixture)
-target_include_directories(multitrack_editor_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(multitrack_editor_test PRIVATE agplayer_core)
-agplayer_enable_warnings(multitrack_editor_test)
-add_test(NAME multitrack_editor_test COMMAND multitrack_editor_test "${SINE_WAV_FIXTURE}")
-set_tests_properties(multitrack_editor_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
-)
-
-add_executable(light_editor_test
-    core/light_editor_test.cpp
-)
-add_dependencies(light_editor_test decoder_fixture)
-target_include_directories(light_editor_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(light_editor_test PRIVATE agplayer_core)
-
-agplayer_enable_warnings(light_editor_test)
-
-add_test(NAME light_editor_test COMMAND light_editor_test "${SINE_WAV_FIXTURE}")
-set_tests_properties(light_editor_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
-)
-
 add_executable(metadata_writer_test
     core/metadata_writer_test.cpp
 )
@@ -430,13 +447,11 @@ foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
     playlist_model_test
-    library_manager_controller_test
     library_file_operations_test
     playback_state_store_test
     import_controller_test
     library_filter_model_test
     playback_controller_test
-    format_conversion_task_model_test
     window_controller_test
     global_hotkey_manager_test
     waveform_coordinate_mapper_test
@@ -449,9 +464,9 @@ foreach(qt_test IN ITEMS
     translation_manager_test
     audio_preview_controller_test
     editor_timeline_math_test
-    light_editor_controller_test
     audio_tools_end_to_end_test
     format_conversion_plan_test
+    format_conversion_task_model_test
     file_association_controller_test
     native_drop_router_test
     equalizer_controller_test
@@ -471,6 +486,7 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
     )
 endforeach()
+
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
@@ -500,19 +516,10 @@ add_executable(audio_editor_waveform_item_test
 
 add_executable(audio_editor_controller_test
     qt/audio_editor_controller_test.cpp
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_controller.cpp"
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_action_model.cpp"
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
-    "${CMAKE_SOURCE_DIR}/core/src/audio_editor/audio_document.cpp"
 )
 
 add_executable(qml_audio_editor_test
     qt/qml_audio_editor_test_main.cpp
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_controller.cpp"
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/audio_editor_waveform_item.cpp"
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_action_model.cpp"
-    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
-    "${CMAKE_SOURCE_DIR}/core/src/audio_editor/audio_document.cpp"
 )
 set_target_properties(qml_audio_editor_test PROPERTIES AUTOMOC ON)
 target_include_directories(qml_audio_editor_test PRIVATE
@@ -520,6 +527,7 @@ target_include_directories(qml_audio_editor_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
 target_link_libraries(qml_audio_editor_test PRIVATE
+    agplayer_qt
     agplayer_app_qmlplugin
     Qt6::Quick
     Qt6::QuickControls2
@@ -536,16 +544,18 @@ set_tests_properties(qml_audio_editor_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
+
 set_target_properties(audio_editor_controller_test PROPERTIES AUTOMOC ON)
 target_include_directories(audio_editor_controller_test PRIVATE
     "${CMAKE_SOURCE_DIR}/qt/src"
     "${CMAKE_SOURCE_DIR}/core/src"
 )
-target_link_libraries(audio_editor_controller_test PRIVATE Qt6::Core Qt6::Test)
+target_link_libraries(audio_editor_controller_test PRIVATE agplayer_qt Qt6::Test)
 agplayer_enable_warnings(audio_editor_controller_test)
 add_test(NAME audio_editor_controller_test COMMAND audio_editor_controller_test)
 set_tests_properties(audio_editor_controller_test PROPERTIES
     TIMEOUT 10
+    ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
@@ -571,23 +581,6 @@ set_tests_properties(waveform_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
-add_executable(timeline_preview_mixer_test
-    core/timeline_preview_mixer_test.cpp
-)
-add_dependencies(timeline_preview_mixer_test decoder_fixture)
-target_include_directories(timeline_preview_mixer_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(timeline_preview_mixer_test PRIVATE agplayer_core)
-agplayer_enable_warnings(timeline_preview_mixer_test)
-add_test(NAME timeline_preview_mixer_test
-    COMMAND timeline_preview_mixer_test "${SINE_WAV_FIXTURE}")
-set_tests_properties(timeline_preview_mixer_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
-)
-
 add_test(
     NAME translation_catalog_test
     COMMAND "${CMAKE_COMMAND}"
@@ -604,7 +597,6 @@ add_test(
 )
 set_tests_properties(source_encoding_test PROPERTIES TIMEOUT 10)
 
-set_tests_properties(light_editor_controller_test PROPERTIES TIMEOUT 60)
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog must not terminate that performance test at the old 10-second
@@ -720,34 +712,54 @@ set_tests_properties(qml_error_states_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
-add_executable(qml_light_editor_test
-    qt/qml_light_editor_test_main.cpp
+add_executable(qml_audio_tools_test
+    qt/qml_audio_tools_test_main.cpp
 )
-set_target_properties(qml_light_editor_test PROPERTIES AUTOMOC ON)
-target_include_directories(qml_light_editor_test PRIVATE
+set_target_properties(qml_audio_tools_test PROPERTIES AUTOMOC ON)
+target_include_directories(qml_audio_tools_test PRIVATE
     "${CMAKE_SOURCE_DIR}/qt/src"
     "${CMAKE_SOURCE_DIR}/core/include"
 )
-target_link_libraries(qml_light_editor_test PRIVATE
+target_link_libraries(qml_audio_tools_test PRIVATE
     agplayer_app_qml
     agplayer_app_qmlplugin
     Qt6::QuickTest
 )
-target_compile_definitions(qml_light_editor_test PRIVATE
+target_compile_definitions(qml_audio_tools_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
 )
-agplayer_enable_warnings(qml_light_editor_test)
-add_dependencies(qml_light_editor_test decoder_fixture)
-add_test(NAME qml_light_editor_test COMMAND qml_light_editor_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_light_editor.qml)
-set_tests_properties(qml_light_editor_test PROPERTIES
-    # Keep the QML contract suite hermetic.  On this Windows build the native
-    # platform plugin can fail before QuickTest starts, whereas its layout and
-    # state assertions do not require a desktop compositor.
-    TIMEOUT 120
+agplayer_enable_warnings(qml_audio_tools_test)
+add_dependencies(qml_audio_tools_test decoder_fixture)
+
+add_test(NAME qml_format_converter_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
+set_tests_properties(qml_format_converter_test PROPERTIES
+    TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
+
+add_test(NAME qml_filename_process_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_filename_process.qml)
+set_tests_properties(qml_filename_process_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_test(NAME metadata_editor_layout_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/metadata_editor_layout_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR})
+
+add_test(NAME format_converter_reference_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/format_converter_reference_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR})
+set_tests_properties(format_converter_reference_contract_test PROPERTIES
+    TIMEOUT 10)
 
 
 target_include_directories(import_controller_test PRIVATE

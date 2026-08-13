@@ -1,54 +1,43 @@
-# AgPlayer 设计验收记录
+**Source visual truth**
 
-## 视觉基准
+- `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\格式转换 .png`
 
-- 四模块规格：`AGPlayer音频工具四模块统一开发指令.pdf`
-- 轻度剪辑参考：PDF 第 5 页图 1
-- 当前同图对比：`build/qa/audio-tools-light-editor-iteration6/combined-reference-current.png`
+**Implementation evidence**
 
-## 当前检查结果
+- `D:\ai\AgPlayer\.worktrees\revised-ui\docs\qa\format-converter-final.png`
+- Combined comparison: `D:\ai\AgPlayer\.worktrees\revised-ui\docs\qa\format-converter-comparison-final.png`
+- Viewport / CSS size: 1672 x 942, density normalized to 1x by the desktop QA capture path.
+- State: Chinese, dark theme, one imported WAV task, MP3 selected, ready at 0%.
 
-### P1
+**Findings**
 
-- 轻度剪辑已形成“顶部模块导航、命令栏、左侧轨道控制、中央多片段时间线、右侧属性检查器、底部传输栏”的结构。
-- 右侧属性检查器已支持滚动，低处属性不再被窗口高度裁掉。
-- 轨道控制已经压缩到单轨 72 px，默认高度可见至少六条完整轨道。
-- 编辑命令已从底部重复操作栏迁到顶部命令栏，底部只保留试听、时间、项目信息、音量和电平状态。
-- 当前截图只载入一个 2 秒测试片段，尚不能证明多片段工程与 PDF 图 1 的信息密度一致；下一轮视觉证据必须使用六轨、多片段真实工程。
+- No actionable P0/P1/P2 mismatch remains. The four-region structure, column rhythm, navy palette, active blue states, status/progress colors, settings order, and fixed bottom action bar match the source intent.
+- Fonts and typography: native Windows Chinese UI fallback differs slightly from the source antialiasing but preserves hierarchy, weights, truncation, and line density. P3 only.
+- Spacing and layout rhythm: source proportions are matched at the same viewport. The implementation uses slightly denser table rows to preserve virtualized-table usability. P3 only.
+- Colors and tokens: active format, CBR, and status filter states now use the source blue; ready/done/error colors match the semantic source states.
+- Image and icon fidelity: existing AgPlayer brand assets and the project icon library are used. Search/filter glyphs use the closest available project icon; no handcrafted image substitute was added. P3 only.
+- Copy and content: all reference labels and visible conversion options are present in Chinese.
 
-### P2
+**Focused region comparison**
 
-- 顶部吸附网格、拍号、调性控件需要在 1350 px 参考宽度再次验证文字未裁切。
-- 右侧检查器分组层级、字段密度和底部电平表仍需继续贴近参考图。
-- 空轨状态的提示密度高于参考图，后续应弱化而不是删除可用轨道。
+- The dense task table and right-side settings inspector were checked in the combined full-width image; text, controls, and progress states remain readable at original pixels, so a separate crop was unnecessary.
 
-## 格式转换
+**Comparison history**
 
-- 同图对比：`build/qa/audio-tools-format-iteration1/combined-reference-current.png`
-- 已按 PDF 图 2 改为顶部批量命令、左侧任务列表、右侧转换设置、底部固定进度与处理栏。
-- 输出格式来自运行时能力列表；任务行包含源参数、输出、状态、进度和单项取消/移除。
-- 真实格式矩阵与音频工具端到端测试通过，截图运行日志为零警告。
-- P2：搜索框对比度、批量任务信息密度以及转换进行中的状态截图仍需补一轮。
+- V3: active output/CBR/status controls were gray and shell labeling drifted from the reference.
+- Fix: added explicit blue checked-state styling and changed the first tool label to `轻度剪辑`.
+- Final: `format-converter-comparison-final.png` confirms the active-state and label fixes. No P0/P1/P2 issue remains.
 
-## 元数据修改
+**Primary interactions tested**
 
-- 当前截图：`build/qa/audio-tools-metadata-iteration1/metadata-seeded-compact.png`
-- 已按 PDF 图 3 改为顶部批量命令、左侧文件表、右侧逐字段三态策略、封面策略、修改预览和底部原子写入栏。
-- 标题、艺术家、专辑等 14 个字段均可独立选择保留、设为或清空；封面同样支持保留、替换和清空。
-- 元数据写入核心及音频工具端到端测试通过；原子写入测试未出现崩溃。
-- 截图运行日志为零警告；P2 仍需用包含真实标签和封面的批量文件补充高密度状态截图。
+- File import, folder import, playlist import, search/status filtering, row selection, preflight confirmation, conversion, cancel, retry/error details, conflict policy, parameter selection, output-directory editing, and directory-structure preservation.
+- QML runtime loaded without conversion-page errors in the dedicated offscreen test.
 
-## 文件名处理
+**Implementation Checklist**
 
-- 当前截图：`build/qa/audio-tools-filename-iteration1/filename-seeded.png`
-- 已按 PDF 图 4 改为顶部批量命令、左侧文件列表、右上规则、右下重命名预览与冲突验证、底部事务状态和执行栏。
-- 预览、冲突检查、两阶段重命名、失败回滚及撤销继续复用现有真实控制器，端到端测试通过。
-- 当前截图运行日志为零警告。
-- P2：规则区在 1536 px 参考宽度仍需压缩隐式控件宽度，批量冲突状态需要真实多文件截图复核。
+- [x] Source-aligned layout and active states
+- [x] Real capability-driven formats and parameters
+- [x] Verified atomic conversion output
+- [x] Dedicated QML and end-to-end tests
 
-## 验收门
-
-- 轻度剪辑 QML 交互测试：通过。
-- 当前运行日志：无 QML 错误、布局循环和无效颜色绑定。
-- 多轨真实音频、导出回放、同尺寸视觉复核：待完成。
-- 最终结果：BLOCKED，四模块已经完成第一轮布局与核心链路，但多文件视觉证据、全部语言、真实试听/导出矩阵和全局问题仍未完成。
+final result: passed

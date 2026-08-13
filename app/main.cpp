@@ -3,6 +3,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QIcon>
@@ -34,10 +35,12 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <propkey.h>
 #include <shobjidl.h>
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
 #include "equalizer_controller.hpp"
 #include "filename_processor.hpp"
 #include "format_converter.hpp"
@@ -45,7 +48,6 @@
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
-#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
@@ -53,6 +55,7 @@
 #include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "runtime_log.hpp"
+#include "rename_journal_store.hpp"
 #include "settings_controller.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
@@ -61,6 +64,60 @@
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
 
 ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
+
+#ifdef Q_OS_WIN
+namespace {
+
+constexpr wchar_t kAgPlayerAppUserModelId[] = L"AgPlayer.Desktop";
+
+void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
+{
+    if (window == nullptr) {
+        return;
+    }
+    window->setIcon(icon);
+    const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    if (hwnd == nullptr) {
+        return;
+    }
+
+    IPropertyStore* properties = nullptr;
+    if (FAILED(SHGetPropertyStoreForWindow(
+            hwnd, __uuidof(IPropertyStore),
+            reinterpret_cast<void**>(&properties)))) {
+        return;
+    }
+    PROPVARIANT appId{};
+    appId.vt = VT_LPWSTR;
+    appId.pwszVal = const_cast<wchar_t*>(kAgPlayerAppUserModelId);
+    properties->SetValue(PKEY_AppUserModel_ID, appId);
+    properties->Commit();
+    properties->Release();
+}
+
+class WindowsShellIdentityFilter final : public QObject {
+public:
+    explicit WindowsShellIdentityFilter(QIcon icon, QObject* parent = nullptr)
+        : QObject(parent), icon_(std::move(icon))
+    {
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::Show
+            || event->type() == QEvent::WinIdChange) {
+            applyWindowsShellIdentity(qobject_cast<QWindow*>(watched), icon_);
+        }
+        return false;
+    }
+
+private:
+    QIcon icon_;
+};
+
+} // namespace
+#endif
 
 int main(int argc, char* argv[])
 {
@@ -76,8 +133,13 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
-    app.setWindowIcon(QIcon(QStringLiteral(
-        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico")));
+    const QIcon applicationIcon(QStringLiteral(
+        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
+    app.setWindowIcon(applicationIcon);
+#ifdef Q_OS_WIN
+    WindowsShellIdentityFilter shellIdentityFilter(applicationIcon, &app);
+    app.installEventFilter(&shellIdentityFilter);
+#endif
 
     // Development-only QA arguments. Parsed before ag_player_create so the
     // production player instance is reused (controllers are never bypassed).
@@ -175,6 +237,10 @@ int main(int argc, char* argv[])
     // Install logging before the single-instance handshake as it is the
     // earliest cross-process boundary and otherwise invisible on GUI builds.
     RuntimeLog::install(qaLogPath);
+    // Recover only once per process after QStandardPaths and the QA identity
+    // are finalized. Individual processor instances may be created by tests
+    // and auxiliary windows and must not rescan the persistent journal store.
+    agplayer::qt::RenameJournalStore::recoverIncomplete();
 
     std::unique_ptr<QLocalServer> singleInstanceServer;
     QString singleInstanceMailboxDirectory;
@@ -543,36 +609,26 @@ int main(int argc, char* argv[])
         });
 
         AudioToolsController audioTools;
+        AudioEditorController audioEditor;
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(qaTool);
         }
         MetadataEditor metadataEditor;
+        metadataEditor.setLibraryModel(&library);
         FilenameProcessor filenameProcessor;
         filenameProcessor.setLibraryModel(&library);
         FormatConverter formatConverter;
-        LightEditor lightEditor;
         if (!qaScreenshotTools.isEmpty() && !qaPlayPath.isEmpty()
             && QFileInfo::exists(qaPlayPath)) {
             const QList<QUrl> qaToolUrls{QUrl::fromLocalFile(qaPlayPath)};
             switch (qaTool) {
             case 0:
-                // Visual QA must exercise the actual multi-track/multi-clip
-                // layout instead of accepting an empty timeline screenshot.
-                // The seed stays behind the development-only screenshot flag.
-                for (int track = 0; track < 6; ++track) {
-                    for (int clip = 0; clip < 3; ++clip) {
-                        lightEditor.loadFileToTrack(track, qaToolUrls.constFirst());
-                    }
+                audioEditor.openFile(qaToolUrls.constFirst());
+                if (audioEditor.totalFrames() > 2'000) {
+                    audioEditor.setSelection(audioEditor.totalFrames() / 4,
+                                             audioEditor.totalFrames() / 2);
+                    audioEditor.seekMs(audioEditor.durationMs() / 3);
                 }
-                lightEditor.setTrackName(0, QStringLiteral("鼓组 Loop"));
-                lightEditor.setTrackName(1, QStringLiteral("贝斯"));
-                lightEditor.setTrackName(2, QStringLiteral("主旋律"));
-                lightEditor.setTrackName(3, QStringLiteral("人声采样"));
-                lightEditor.setTrackName(4, QStringLiteral("Pad"));
-                lightEditor.setTrackName(5, QStringLiteral("FX"));
-                lightEditor.setLoopStartMs(500);
-                lightEditor.setLoopEndMs(5'000);
-                lightEditor.setLoopEnabled(true);
                 break;
             case 1:
                 formatConverter.loadFiles(qaToolUrls);
@@ -590,7 +646,6 @@ int main(int argc, char* argv[])
         const auto applyOverwritePolicy = [&]() {
             const bool overwrite = settings.overwritePolicy() == 1;
             formatConverter.setOverwriteExisting(overwrite);
-            lightEditor.setOverwriteExisting(overwrite);
         };
         applyOverwritePolicy();
         QObject::connect(&settings, &SettingsController::overwritePolicyChanged,
@@ -599,8 +654,9 @@ int main(int argc, char* argv[])
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &filenameProcessor,
-                                    &lightEditor, &settings,
-                                    &waveformProvider, &playlists, &equalizer);
+                                    &settings,
+                                    &waveformProvider, &playlists, &equalizer,
+                                    &audioEditor);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
@@ -909,7 +965,8 @@ int main(int argc, char* argv[])
                         const bool isCustom = category != QStringLiteral("all")
                             && category != QStringLiteral("favorites")
                             && category != QStringLiteral("history")
-                            && category != QStringLiteral("library");
+                            && category != QStringLiteral("recentAdded")
+                            && category != QStringLiteral("neverPlayed");
                         if (listWindow != nullptr) {
                             listWindow->setProperty(
                                 "importTargetPlaylistId",
@@ -921,7 +978,7 @@ int main(int argc, char* argv[])
                     case NativeDropRouter::Target::AudioTools:
                         switch (audioTools.currentTool()) {
                         case 0:
-                            lightEditor.queueFiles(urls);
+                            audioEditor.openFile(urls.constFirst());
                             break;
                         case 1:
                             formatConverter.loadFiles(urls);
@@ -1077,12 +1134,16 @@ int main(int argc, char* argv[])
                 if (auto* toolsWin = qobject_cast<QWindow*>(audioToolsWindow)) {
                     toolsWin->show();
                 }
-                if (qaTool == 0) {
-                    if (QObject* editorPage = audioToolsWindow->findChild<QObject*>(
-                            QStringLiteral("lightEditPage"))) {
-                        editorPage->setProperty("zoomScale", 18.0);
-                        editorPage->setProperty("playheadMs", 2'500);
+                if (qaTool == 2 && !qaImportFolder.isEmpty()) {
+                    metadataEditor.loadFiles(
+                        {QUrl::fromLocalFile(qaImportFolder)});
+                } else if (qaTool == 3 && !qaImportFolder.isEmpty()) {
+                    if (QObject* filenamePage = audioToolsWindow->findChild<QObject*>(
+                            QStringLiteral("filenameProcessPage"))) {
+                        filenamePage->setProperty("qaReferenceMode", true);
                     }
+                    filenameProcessor.loadFiles(
+                        {QUrl::fromLocalFile(qaImportFolder)});
                 }
             }
             if (wantScreenshotList && listWindow != nullptr) {
@@ -1121,11 +1182,6 @@ int main(int argc, char* argv[])
                     }
                     targetWindow->setVisible(true);
                     targetWindow->requestActivate();
-                    if (QObject* editorPage = targetWindow->findChild<QObject*>(
-                            QStringLiteral("lightEditPage"))) {
-                        editorPage->setProperty("zoomScale", 18.0);
-                        editorPage->setProperty("playheadMs", 2'500);
-                    }
                     auto* const quickWin = qobject_cast<QQuickWindow*>(targetWindow);
                     if (quickWin != nullptr) {
                         quickWin->update();

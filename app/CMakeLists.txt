@@ -108,16 +108,17 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
         qml/AgPlayer/components/SearchFilter.qml
-        qml/AgPlayer/components/LibraryManagerPage.qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
+        qml/AgPlayer/components/tools/FormatTaskTable.qml
+        qml/AgPlayer/components/tools/FormatSettingsPanel.qml
+        qml/AgPlayer/components/tools/FormatPreflightDialog.qml
+        qml/AgPlayer/components/tools/FormatErrorDialog.qml
         qml/AgPlayer/components/tools/FilenameProcessPage.qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
         qml/AgPlayer/components/tools/MetadataEditPage.qml
-        qml/AgPlayer/components/tools/LightEditPage.qml
-        qml/AgPlayer/components/tools/MultiTrackWaveform.qml
         qml/AgPlayer/components/tools/AudioEditorPage.qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
         qml/AgPlayer/components/audioeditor/FileSummaryBar.qml

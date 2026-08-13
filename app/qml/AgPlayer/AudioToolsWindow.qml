@@ -45,7 +45,7 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: 48
                 color: "transparent"
 
                 RowLayout {
@@ -143,9 +143,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 38
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
+                Layout.preferredHeight: 55
                 window: window
                 currentTool: AudioToolsController.currentTool
                 onToolSelected: function(index) {
@@ -156,13 +154,13 @@ Window {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
-                Layout.bottomMargin: 8
+                Layout.leftMargin: 2
+                Layout.rightMargin: 2
+                Layout.bottomMargin: 3
                 color: Theme.background
-                border.color: Theme.border
-                border.width: 1
-                radius: Theme.radiusSm
+                border.color: "transparent"
+                border.width: 0
+                radius: 0
 
                 StackLayout {
                     anchors.fill: parent

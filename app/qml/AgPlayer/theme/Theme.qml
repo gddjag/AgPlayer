@@ -24,11 +24,11 @@ QtObject {
                                          : (mode === 1 ? 1 : 0)
     readonly property bool isLight: effectiveMode === 1
 
-    readonly property color background: isLight ? "#F3F3F3" : "#202020"
-    readonly property color panel: isLight ? "#FFFFFF" : "#252525"
-    readonly property color elevated: isLight ? "#F9F9F9" : "#2D2D2D"
-    readonly property color border: isLight ? "#D1D1D1" : "#3E3E3E"
-    readonly property color hoverSurface: isLight ? "#EAEAEA" : "#333333"
+    readonly property color background: isLight ? "#F3F3F3" : "#071018"
+    readonly property color panel: isLight ? "#FFFFFF" : "#0B1721"
+    readonly property color elevated: isLight ? "#F9F9F9" : "#101E28"
+    readonly property color border: isLight ? "#D1D1D1" : "#203340"
+    readonly property color hoverSurface: isLight ? "#EAEAEA" : "#172A37"
     readonly property color accent: systemPalette.highlight
     readonly property color activeSelection: systemPalette.highlight
     readonly property color activeSelectionText: systemPalette.highlightedText
