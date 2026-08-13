@@ -398,6 +398,9 @@ agplayer_enable_warnings(metadata_writer_test)
 add_test(NAME metadata_writer_test COMMAND metadata_writer_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(metadata_writer_test PROPERTIES
     TIMEOUT 30
+    # This suite performs atomic replacements and preflight probes next to the
+    # shared decoder fixture. Keep it isolated from QML metadata readers.
+    RUN_SERIAL TRUE
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
