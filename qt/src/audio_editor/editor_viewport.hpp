@@ -29,7 +29,7 @@ public:
     [[nodiscard]] qreal overviewWidthRatio() const noexcept;
 
     void setDocumentFrames(qint64 frames) noexcept;
-    void setViewportWidth(qreal width) noexcept;
+    Q_INVOKABLE void setViewportWidth(qreal width) noexcept;
     Q_INVOKABLE bool setVisibleRange(qint64 start, qint64 end) noexcept;
     Q_INVOKABLE void moveOverviewWindow(qreal startRatio) noexcept;
     Q_INVOKABLE void zoomAt(qreal factor, qreal anchorPixel) noexcept;

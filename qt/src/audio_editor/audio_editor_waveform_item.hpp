@@ -14,6 +14,10 @@ class AudioEditorWaveformItem : public QQuickItem {
                    NOTIFY channelPeaksChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
+    Q_PROPERTY(qreal visibleStartRatio READ visibleStartRatio WRITE setVisibleStartRatio
+                   NOTIFY visibleRangeChanged)
+    Q_PROPERTY(qreal visibleEndRatio READ visibleEndRatio WRITE setVisibleEndRatio
+                   NOTIFY visibleRangeChanged)
 
 public:
     explicit AudioEditorWaveformItem(QQuickItem* parent = nullptr);
@@ -22,10 +26,15 @@ public:
     void setChannelPeaks(const QVariantList& channels);
     [[nodiscard]] QColor waveformColor() const noexcept { return waveform_color_; }
     void setWaveformColor(const QColor& color);
+    [[nodiscard]] qreal visibleStartRatio() const noexcept { return visible_start_ratio_; }
+    void setVisibleStartRatio(qreal ratio);
+    [[nodiscard]] qreal visibleEndRatio() const noexcept { return visible_end_ratio_; }
+    void setVisibleEndRatio(qreal ratio);
 
 signals:
     void channelPeaksChanged();
     void waveformColorChanged();
+    void visibleRangeChanged();
 
 protected:
     void geometryChange(const QRectF& newGeometry,
@@ -43,4 +52,6 @@ private:
     std::shared_ptr<const Snapshot> snapshot_;
     std::uint64_t next_revision_{1};
     QColor waveform_color_{QStringLiteral("#36d1c4")};
+    qreal visible_start_ratio_{};
+    qreal visible_end_ratio_{1.0};
 };

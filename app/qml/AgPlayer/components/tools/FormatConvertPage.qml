@@ -14,16 +14,17 @@ Rectangle {
     property string outputDirectory: ""
 
     function addCurrentPlayerTrack() {
-        const paths = []
+        const urls = []
         const ids = PlaybackController.queueTrackIds.length > 0
                   ? PlaybackController.queueTrackIds
                   : [PlaybackController.currentTrackId]
         for (let i = 0; i < ids.length; ++i) {
             const track = LibraryModel.trackForId(ids[i])
             if (track && track.path)
-                paths.push(track.path)
+                urls.push(Qt.resolvedUrl("file:///" + encodeURI(
+                    String(track.path).replace(/\\/g, "/"))))
         }
-        converter.addPlaylistPaths(paths)
+        converter.loadFiles(urls)
     }
 
     function requestPlan() {

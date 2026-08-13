@@ -15,9 +15,17 @@ Window {
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: "AgPlayer · " + qsTr("音频工具")
+    function requestHide() {
+        if (AudioToolsController.currentTool === 0
+                && AudioEditorController.modified) {
+            unsavedCloseDialog.open()
+            return
+        }
+        WindowController.hideAudioTools()
+    }
     onClosing: function(close) {
         close.accepted = false
-        WindowController.hideAudioTools()
+        requestHide()
     }
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
@@ -29,6 +37,20 @@ Window {
     palette.highlight: Theme.cyan
     palette.highlightedText: Theme.accentText
     palette.mid: Theme.border
+
+    Dialog {
+        id: unsavedCloseDialog
+        parent: window.contentItem
+        anchors.centerIn: parent
+        title: qsTr("舍弃未保存更改？")
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: WindowController.hideAudioTools()
+        Label {
+            text: qsTr("当前音频尚未保存。关闭窗口将舍弃这些更改。")
+            color: Theme.primaryText
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -104,7 +126,7 @@ Window {
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.iconPrimary
-                        onClicked: WindowController.hideAudioTools()
+                        onClicked: window.requestHide()
                     }
                 }
 

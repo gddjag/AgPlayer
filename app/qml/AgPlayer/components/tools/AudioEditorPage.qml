@@ -27,11 +27,127 @@ Rectangle {
     }
     FileDialog {
         id: exportDialog
-        property bool selectionOnly: false
         fileMode: FileDialog.SaveFile
-        defaultSuffix: "wav"
-        nameFilters: saveDialog.nameFilters
-        onAccepted: AudioEditorController.exportTo(selectedFile, selectionOnly)
+        defaultSuffix: exportSettingsDialog.currentFormat.extension
+        nameFilters: [exportSettingsDialog.currentFormat.filter]
+        onAccepted: AudioEditorController.exportTo(
+            selectedFile,
+            exportRangeBox.currentIndex === 1,
+            exportSettingsDialog.currentFormat.codec,
+            exportSampleRateBox.currentValue,
+            exportChannelBox.currentValue,
+            exportBitRateBox.currentValue,
+            exportSettingsDialog.currentFormat.supportsMetadata === true
+                && exportMetadataCheck.checked,
+            exportVbrCheck.checked,
+            exportQualityBox.value)
+    }
+    Dialog {
+        id: exportSettingsDialog
+        objectName: "audioEditorExportDialog"
+        title: qsTr("导出音频")
+        modal: true
+        anchors.centerIn: parent
+        width: 430
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        property var formats: AudioEditorController.exportFormats
+        readonly property var currentFormat: formats.length > 0
+            ? formats[Math.max(0, exportFormatBox.currentIndex)]
+            : ({ extension: "", codec: "", filter: "", lossy: false,
+                 supportsMetadata: false, sampleRates: [] })
+        function sampleRateOptions() {
+            const options = [{ text: qsTr("保持原始"), value: 0 }]
+            const rates = currentFormat.sampleRates || []
+            for (let index = 0; index < rates.length; ++index) {
+                const rate = Number(rates[index])
+                options.push({ text: rate >= 1000
+                    ? (rate / 1000).toFixed(rate % 1000 === 0 ? 0 : 1) + " kHz"
+                    : rate + " Hz", value: rate })
+            }
+            return options
+        }
+        onAccepted: exportDialog.open()
+        contentItem: GridLayout {
+            columns: 2
+            rowSpacing: 8
+            columnSpacing: 12
+
+            Label { text: qsTr("导出范围") }
+            ComboBox {
+                id: exportRangeBox
+                Layout.fillWidth: true
+                model: [qsTr("完整文档"), qsTr("当前选区")]
+            }
+            Label { text: qsTr("输出格式") }
+            ComboBox {
+                id: exportFormatBox
+                Layout.fillWidth: true
+                model: exportSettingsDialog.formats
+                textRole: "text"
+                enabled: count > 0
+            }
+            Label { text: qsTr("采样率") }
+            ComboBox {
+                id: exportSampleRateBox
+                Layout.fillWidth: true
+                textRole: "text"
+                valueRole: "value"
+                model: exportSettingsDialog.sampleRateOptions()
+            }
+            Label { text: qsTr("声道") }
+            ComboBox {
+                id: exportChannelBox
+                Layout.fillWidth: true
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { text: qsTr("保持原始"), value: 0 },
+                    { text: qsTr("单声道"), value: 1 },
+                    { text: qsTr("立体声"), value: 2 }
+                ]
+            }
+            Label { text: qsTr("目标码率") }
+            ComboBox {
+                id: exportBitRateBox
+                Layout.fillWidth: true
+                enabled: exportSettingsDialog.currentFormat.lossy === true
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { text: qsTr("自动"), value: 0 },
+                    { text: "128 kbps", value: 128000 },
+                    { text: "192 kbps", value: 192000 },
+                    { text: "256 kbps", value: 256000 },
+                    { text: "320 kbps", value: 320000 }
+                ]
+            }
+            Label { text: qsTr("编码质量") }
+            SpinBox {
+                id: exportQualityBox
+                Layout.fillWidth: true
+                enabled: exportSettingsDialog.currentFormat.lossy === true
+                from: 0
+                to: 100
+                value: 80
+            }
+            Label { text: qsTr("可变码率") }
+            CheckBox {
+                id: exportVbrCheck
+                checked: true
+                enabled: exportSettingsDialog.currentFormat.lossy === true
+            }
+            Label { text: qsTr("保留元数据") }
+            CheckBox {
+                id: exportMetadataCheck
+                checked: true
+                enabled: exportSettingsDialog.currentFormat.supportsMetadata === true
+            }
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
     }
     Menu {
         id: moreMenu
@@ -42,9 +158,89 @@ Rectangle {
                 AudioEditorController.sampleRate) }
         MenuSeparator {}
         MenuItem {
+            text: qsTr("标记管理…")
+            enabled: AudioEditorController.markers.length > 0
+            onTriggered: markerManagementDialog.open()
+        }
+        Instantiator {
+            model: AudioEditorController.markers
+            delegate: MenuItem {
+                required property var modelData
+                text: modelData.name + "  "
+                      + editorTransportBar.timeText(modelData.positionMs)
+                onTriggered: AudioEditorController.seekMs(modelData.positionMs)
+            }
+            onObjectAdded: function(index, object) { moreMenu.insertItem(index + 5, object) }
+            onObjectRemoved: function(index, object) { moreMenu.removeItem(object) }
+        }
+        MenuSeparator {}
+        MenuItem {
             text: qsTr("导出选区…")
             enabled: AudioEditorController.selectionStart >= 0
-            onTriggered: { exportDialog.selectionOnly = true; exportDialog.open() }
+            onTriggered: {
+                exportRangeBox.currentIndex = 1
+                exportSettingsDialog.open()
+            }
+        }
+        MenuSeparator { visible: AudioEditorController.recording }
+        MenuItem {
+            text: qsTr("取消录音")
+            visible: AudioEditorController.recording
+            enabled: AudioEditorController.recording
+            onTriggered: AudioEditorController.cancelRecording()
+        }
+    }
+    Dialog {
+        id: markerManagementDialog
+        objectName: "markerManagementDialog"
+        title: qsTr("标记管理")
+        modal: true
+        anchors.centerIn: parent
+        width: 420
+        height: Math.min(420, 116 + AudioEditorController.markers.length * 42)
+        standardButtons: Dialog.Close
+        contentItem: ListView {
+            id: markerList
+            clip: true
+            spacing: 4
+            model: AudioEditorController.markers
+            delegate: RowLayout {
+                required property int index
+                required property var modelData
+                width: markerList.width
+                height: 38
+                TextField {
+                    Layout.fillWidth: true
+                    text: modelData.name
+                    selectByMouse: true
+                    onEditingFinished: AudioEditorController.renameMarker(index, text)
+                }
+                Label {
+                    text: editorTransportBar.timeText(modelData.positionMs)
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
+                }
+                ToolButton {
+                    icon.source: Theme.icon("skip-forward-fill")
+                    Accessible.name: qsTr("跳转")
+                    ToolTip.visible: hovered
+                    ToolTip.text: Accessible.name
+                    onClicked: AudioEditorController.seekMs(modelData.positionMs)
+                }
+                ToolButton {
+                    icon.source: Theme.icon("delete-bin-line")
+                    icon.color: Theme.waveformRed
+                    Accessible.name: qsTr("删除标记")
+                    ToolTip.visible: hovered
+                    ToolTip.text: Accessible.name
+                    onClicked: AudioEditorController.removeMarker(index)
+                }
+            }
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
         }
     }
     Dialog {
@@ -59,15 +255,29 @@ Rectangle {
             Label { text: "dB" }
         }
     }
+    Dialog {
+        id: discardOpenDialog
+        title: qsTr("舍弃未保存更改？")
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: AudioEditorController.confirmDiscardAndOpen()
+        onRejected: AudioEditorController.cancelDiscardAndOpen()
+        Label {
+            text: qsTr("当前音频尚未保存。继续将舍弃这些更改。")
+            color: Theme.primaryText
+        }
+    }
     Connections {
         target: AudioEditorController
         function onOpenRequested() { openDialog.open() }
+        function onNewRecordingRequested() { recordingInspector.requestRecording(true) }
         function onSaveAsRequested() { saveDialog.open() }
         function onExportRequested() {
-            exportDialog.selectionOnly = false
-            exportDialog.open()
+            exportRangeBox.currentIndex = 0
+            exportSettingsDialog.open()
         }
         function onMoreMenuRequested() { moreMenu.popup() }
+        function onDiscardConfirmationRequested() { discardOpenDialog.open() }
     }
 
     focus: true
@@ -82,9 +292,38 @@ Rectangle {
         else if (control && event.key === Qt.Key_V) AudioEditorController.triggerAction("editor.paste")
         else if (event.key === Qt.Key_Delete) AudioEditorController.triggerAction("editor.deleteSelection")
         else if (event.key === Qt.Key_Space) AudioEditorController.playPause()
-        else if (event.key === Qt.Key_Escape) AudioEditorController.stopPlayback()
+        else if (event.key === Qt.Key_Escape) {
+            if (AudioEditorController.recording) AudioEditorController.cancelRecording()
+            else if (AudioEditorController.busy) AudioEditorController.cancelOperation()
+            else AudioEditorController.stopPlayback()
+        }
         else return
         event.accepted = true
+    }
+
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 36
+        z: 50
+        visible: AudioEditorController.busy
+        width: 300
+        height: 62
+        radius: Theme.radiusSm
+        color: Theme.elevated
+        border.color: Theme.border
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            ProgressBar {
+                Layout.fillWidth: true
+                value: AudioEditorController.progress
+            }
+            Button {
+                text: qsTr("取消")
+                onClicked: AudioEditorController.cancelOperation()
+            }
+        }
     }
 
     ColumnLayout {
@@ -128,9 +367,11 @@ Rectangle {
                 }
 
                 EditorTransportBar {
+                    id: editorTransportBar
                     objectName: "editorTransportBar"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 104
+                    onRecordingRequested: recordingInspector.requestRecording(false)
                 }
             }
 
@@ -152,12 +393,14 @@ Rectangle {
                     contentWidth: availableWidth
                     clip: true
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
                     ColumnLayout {
                         width: inspector.width
                         spacing: 10
 
                         RecordingInspectorSection {
+                            id: recordingInspector
                             objectName: "recordingInspector"
                             Layout.fillWidth: true
                         }

@@ -554,7 +554,7 @@ target_link_libraries(audio_editor_controller_test PRIVATE agplayer_qt Qt6::Test
 agplayer_enable_warnings(audio_editor_controller_test)
 add_test(NAME audio_editor_controller_test COMMAND audio_editor_controller_test)
 set_tests_properties(audio_editor_controller_test PROPERTIES
-    TIMEOUT 10
+    TIMEOUT 30
     ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"

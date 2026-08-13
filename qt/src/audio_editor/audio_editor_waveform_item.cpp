@@ -27,6 +27,8 @@ public:
     std::uint64_t revision_{};
     qreal width_{};
     qreal height_{};
+    qreal visible_start_ratio_{};
+    qreal visible_end_ratio_{1.0};
     QColor color_;
 };
 
@@ -98,6 +100,24 @@ void AudioEditorWaveformItem::setWaveformColor(const QColor& color)
     emit waveformColorChanged();
 }
 
+void AudioEditorWaveformItem::setVisibleStartRatio(const qreal ratio)
+{
+    const qreal bounded = std::clamp(ratio, 0.0, 1.0);
+    if (qFuzzyCompare(visible_start_ratio_, bounded)) return;
+    visible_start_ratio_ = bounded;
+    update();
+    emit visibleRangeChanged();
+}
+
+void AudioEditorWaveformItem::setVisibleEndRatio(const qreal ratio)
+{
+    const qreal bounded = std::clamp(ratio, 0.0, 1.0);
+    if (qFuzzyCompare(visible_end_ratio_, bounded)) return;
+    visible_end_ratio_ = bounded;
+    update();
+    emit visibleRangeChanged();
+}
+
 void AudioEditorWaveformItem::geometryChange(const QRectF& newGeometry,
                                              const QRectF& oldGeometry)
 {
@@ -125,7 +145,14 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         delete oldNode;
         return nullptr;
     }
-    const std::size_t vertex_count = pair_count * 2U * snapshot->channels.size();
+    const std::size_t first_pair = std::min(pair_count - 1U,
+        static_cast<std::size_t>(std::floor(visible_start_ratio_ * pair_count)));
+    const std::size_t end_pair = std::clamp(
+        static_cast<std::size_t>(std::ceil(visible_end_ratio_ * pair_count)),
+        first_pair + 1U, pair_count);
+    const std::size_t visible_pair_count = end_pair - first_pair;
+    const std::size_t vertex_count = visible_pair_count * 2U
+        * snapshot->channels.size();
     if (vertex_count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         delete oldNode;
         return nullptr;
@@ -136,7 +163,9 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
     }
     if (node->revision_ != snapshot->revision
         || !qFuzzyCompare(node->width_, width())
-        || !qFuzzyCompare(node->height_, height())) {
+        || !qFuzzyCompare(node->height_, height())
+        || !qFuzzyCompare(node->visible_start_ratio_, visible_start_ratio_)
+        || !qFuzzyCompare(node->visible_end_ratio_, visible_end_ratio_)) {
         node->geometry_.allocate(static_cast<int>(vertex_count));
         auto* vertices = node->geometry_.vertexDataAsPoint2D();
         const qreal channel_height = height()
@@ -148,10 +177,11 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
             const qreal center = (static_cast<qreal>(channel_index) + 0.5)
                 * channel_height;
             const qreal half_height = channel_height * 0.46;
-            for (std::size_t index = 0; index < pair_count; ++index) {
-                const qreal x = pair_count == 1U ? width() * 0.5
-                    : static_cast<qreal>(index) * width()
-                        / static_cast<qreal>(pair_count - 1U);
+            for (std::size_t index = first_pair; index < end_pair; ++index) {
+                const std::size_t visible_index = index - first_pair;
+                const qreal x = visible_pair_count == 1U ? width() * 0.5
+                    : static_cast<qreal>(visible_index) * width()
+                        / static_cast<qreal>(visible_pair_count - 1U);
                 vertices[vertex++].set(static_cast<float>(x),
                     static_cast<float>(center + peaks[index * 2U] * half_height));
                 vertices[vertex++].set(static_cast<float>(x),
@@ -161,6 +191,8 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         node->revision_ = snapshot->revision;
         node->width_ = width();
         node->height_ = height();
+        node->visible_start_ratio_ = visible_start_ratio_;
+        node->visible_end_ratio_ = visible_end_ratio_;
         node->markDirty(QSGNode::DirtyGeometry);
     }
     if (node->color_ != waveform_color_) {

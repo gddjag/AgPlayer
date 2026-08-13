@@ -45,6 +45,25 @@ private slots:
         QCOMPARE(node, nullptr);
     }
 
+    void visibleRangeRendersOnlyRequestedPeakWindow()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(100.0);
+        item.setHeight(40.0);
+        QVariantList channels;
+        channels.append(QVariant(QVariantList{
+            -1.0, 1.0, -0.8, 0.8, -0.6, 0.6, -0.4, 0.4}));
+        item.setChannelPeaks(channels);
+        item.setVisibleStartRatio(0.25);
+        item.setVisibleEndRatio(0.75);
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 4);
+        delete node;
+    }
+
     void rejectsOddAndNonFinitePeakPairs()
     {
         AudioEditorWaveformItem item;

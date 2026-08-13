@@ -6,6 +6,14 @@ class EditorViewportTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void viewportWidthSetterIsInvokableFromQml()
+    {
+        EditorViewport viewport;
+        QVERIFY(QMetaObject::invokeMethod(&viewport, "setViewportWidth",
+                                          Q_ARG(qreal, 640.0)));
+        QCOMPARE(viewport.viewportWidth(), 640.0);
+    }
+
     void overviewAndMainViewShareOneRange()
     {
         EditorViewport viewport;

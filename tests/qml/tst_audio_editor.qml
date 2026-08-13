@@ -58,6 +58,17 @@ TestCase {
         verify(findChild(page, "editorWaveformCanvas"))
     }
 
+    function test_transportPrioritizesMarkerActionsWithoutDuplicateAudioControls() {
+        const transport = findChild(page, "editorTransportBar")
+        verify(transport)
+        verify(findChild(transport, "transportAddMarker"))
+        verify(findChild(transport, "transportPreviousMarker"))
+        verify(findChild(transport, "transportNextMarker"))
+        verify(findChild(page, "markerManagementDialog"))
+        compare(findChild(transport, "transportVolumeControl"), null)
+        compare(findChild(transport, "transportZoomControl"), null)
+    }
+
     function test_noPageLevelHorizontalOverflow_data() {
         return [
             {tag: "1280x720", w: 1280, h: 720},

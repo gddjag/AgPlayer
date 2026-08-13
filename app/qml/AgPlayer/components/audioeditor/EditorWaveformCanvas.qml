@@ -8,11 +8,21 @@ Rectangle {
     border.color: Theme.border
     radius: Theme.radiusSm
     clip: true
+    onWidthChanged: AudioEditorController.viewport.setViewportWidth(
+        Math.max(1, width - 38))
+    Component.onCompleted: AudioEditorController.viewport.setViewportWidth(
+        Math.max(1, width - 38))
 
     function frameAt(x) {
-        return Math.round(Math.max(0, Math.min(waveArea.width, x))
-                          / Math.max(1, waveArea.width)
-                          * AudioEditorController.totalFrames)
+        const ratio = Math.max(0, Math.min(waveArea.width - 38, x))
+            / Math.max(1, waveArea.width - 38)
+        return Math.round(AudioEditorController.viewport.visibleStartFrame
+            + ratio * AudioEditorController.viewport.visibleFrameCount)
+    }
+    function xAtFrame(frame) {
+        return 26 + (waveArea.width - 38)
+            * (frame - AudioEditorController.viewport.visibleStartFrame)
+            / Math.max(1, AudioEditorController.viewport.visibleFrameCount)
     }
     function timeText(frame) {
         if (AudioEditorController.sampleRate <= 0)
@@ -52,8 +62,9 @@ Rectangle {
                             anchors.leftMargin: 2
                             anchors.verticalCenter: parent.verticalCenter
                             text: AudioEditorController.hasDocument
-                                  ? canvas.timeText(AudioEditorController.totalFrames
-                                                    * index / 8) : "--:--"
+                                  ? canvas.timeText(AudioEditorController.viewport.visibleStartFrame
+                                      + AudioEditorController.viewport.visibleFrameCount
+                                      * index / 8) : "--:--"
                             color: Theme.secondaryText
                             font.pixelSize: 10
                         }
@@ -87,16 +98,17 @@ Rectangle {
                 anchors.bottomMargin: 10
                 channelPeaks: AudioEditorController.channelPeaks
                 waveformColor: Theme.isLight ? "#169B97" : "#39C7C0"
+                visibleStartRatio: AudioEditorController.viewport.overviewStartRatio
+                visibleEndRatio: AudioEditorController.viewport.overviewStartRatio
+                    + AudioEditorController.viewport.overviewWidthRatio
             }
 
             Rectangle {
                 visible: AudioEditorController.selectionStart >= 0
-                x: 26 + (waveArea.width - 38)
-                   * AudioEditorController.selectionStart
-                   / Math.max(1, AudioEditorController.totalFrames)
+                x: canvas.xAtFrame(AudioEditorController.selectionStart)
                 width: (waveArea.width - 38)
                        * AudioEditorController.selectionFrames
-                       / Math.max(1, AudioEditorController.totalFrames)
+                       / Math.max(1, AudioEditorController.viewport.visibleFrameCount)
                 anchors.top: parent.top
                 anchors.topMargin: 10
                 anchors.bottom: parent.bottom
@@ -106,11 +118,49 @@ Rectangle {
                 border.width: 1
             }
 
+            Repeater {
+                model: AudioEditorController.markers
+                Item {
+                    visible: modelData.frame >= AudioEditorController.viewport.visibleStartFrame
+                        && modelData.frame <= AudioEditorController.viewport.visibleEndFrame
+                    x: canvas.xAtFrame(modelData.frame) - 50
+                    y: 4
+                    width: 100
+                    height: waveArea.height - 8
+                    z: 3
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 1
+                        height: parent.height
+                        color: Theme.ratingGold
+                        opacity: 0.8
+                    }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 1
+                        width: 8
+                        height: 8
+                        rotation: 45
+                        color: Theme.ratingGold
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 11
+                        text: modelData.name
+                        color: Theme.ratingGold
+                        font.pixelSize: 9
+                    }
+                }
+            }
+
             Rectangle {
+                x: canvas.xAtFrame(AudioEditorController.positionMs
+                    * AudioEditorController.sampleRate / 1000)
                 visible: AudioEditorController.hasDocument
-                x: 26 + (waveArea.width - 38)
-                   * AudioEditorController.positionMs
-                   / Math.max(1, AudioEditorController.durationMs)
+                    && AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000
+                        >= AudioEditorController.viewport.visibleStartFrame
+                    && AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000
+                        <= AudioEditorController.viewport.visibleEndFrame
                 y: 4
                 width: 1
                 height: waveArea.height - 8

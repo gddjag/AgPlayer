@@ -7,10 +7,17 @@ $ErrorActionPreference = 'Stop'
 $toolsRoot = Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools'
 $audioEditor = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'AudioEditorPage.qml')
 $formatPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatConvertPage.qml')
+$formatSettings = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatSettingsPanel.qml')
+$formatTable = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatTaskTable.qml')
+$formatSurface = $formatPage + "`n" + $formatSettings + "`n" + $formatTable
 $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
+$recordingInspector = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml')
+$transportBar = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml')
 
 foreach ($control in @(
     'editorCommandBar', 'fileSummaryBar', 'editorWaveformCanvas',
@@ -43,6 +50,66 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s
 if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
     throw 'The new single-track editor must not retain legacy multitrack concepts.'
 }
+if ($recordingInspector -match 'text:\s*.*qsTr\("开始录音"\)') {
+    throw 'The recording inspector configures recording but must not contain a hidden start button.'
+}
+foreach ($behavior in @('recordingRequested', 'pauseRecording', 'resumeRecording')) {
+    if ($transportBar -notmatch $behavior) {
+        throw "The transport bar is missing recording behavior: $behavior."
+    }
+}
+foreach ($control in @(
+    'transportAddMarker', 'transportPreviousMarker', 'transportNextMarker')) {
+    if ($transportBar -notmatch ('objectName:\s*"?' + $control + '"?')) {
+        throw "The transport bar is missing the primary marker control: $control."
+    }
+}
+foreach ($duplicate in @('volume-up-fill', 'setVolume\(', '波形缩放')) {
+    if ($transportBar -match $duplicate) {
+        throw "The transport bar still contains a duplicate player/overview control: $duplicate."
+    }
+}
+if ($transportBar -match 'Slider\s*\{\s*Layout\.preferredWidth:\s*90;\s*value:\s*0\.5;\s*enabled:\s*false') {
+    throw 'The transport zoom control must be connected to the live editor viewport.'
+}
+if ($audioEditor -notmatch 'AudioEditorController\.cancelRecording\(\)') {
+    throw 'The recording state machine cancel action must be reachable from the editor UI.'
+}
+if (($audioEditor | Select-String -Pattern 'text:\s*qsTr\("取消录音"\)' -AllMatches).Matches.Count -ne 1) {
+    throw 'The editor must expose exactly one cancel-recording menu action.'
+}
+foreach ($exportControl in @(
+    'exportSettingsDialog', 'exportRangeBox', 'exportFormatBox',
+    'exportSampleRateBox', 'exportChannelBox', 'exportQualityBox')) {
+    if ($audioEditor -notmatch ('id:\s*' + $exportControl)) {
+        throw "The independent export dialog is missing $exportControl."
+    }
+}
+if ($audioEditor -notmatch 'AudioEditorController\.exportTo\([\s\S]{0,520}exportQualityBox\.value') {
+    throw 'The independent export parameters must be passed to DocumentWriter through the controller.'
+}
+if ($audioEditor -notmatch 'AudioEditorController\.exportFormats') {
+    throw 'Export formats must come from the current FFmpeg build capabilities.'
+}
+$timePitchInspector = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/TimePitchInspectorSection.qml')
+if ($timePitchInspector -notmatch 'id:\s*originalBpmControl' -or
+    $timePitchInspector -notmatch 'AudioEditorController\.setOriginalBpm\(value\)') {
+    throw 'Original BPM must support validated manual input.'
+}
+foreach ($preference in @(
+    'recordingDeviceId', 'recordingSampleRate',
+    'recordingChannels', 'recordingMonitor')) {
+    if ($recordingInspector -notmatch ('AudioEditorController\.' + $preference)) {
+        throw "The recording inspector is not restoring $preference."
+    }
+}
+$audioEditorComponents = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml')
+if ($audioEditorComponents -notmatch 'Accessible\.name:\s*label' -or
+    $audioEditorComponents -notmatch 'ToolTip\.text:\s*label') {
+    throw 'Audio editor command actions need accessible names and tooltips.'
+}
 foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
     if ($page -match 'text:\s*qsTr\("从播放器添加"\)[\s\S]{0,220}enabled:\s*false') {
         throw 'A visible player-import button must never be permanently disabled.'
@@ -64,7 +131,7 @@ if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,160}Layou
 if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(480, page\.width \* 0\.36\)') {
     throw 'The metadata editor needs a complete batch-edit workbench at desktop width.'
 }
-if ($formatPage -notmatch 'enabled:\s*!converter\.busy\s*&&\s*PlaybackController\.currentTrackId\.length > 0') {
+if ($formatPage -notmatch 'enabled:\s*!converter\.busy[\s\S]{0,140}PlaybackController\.currentTrackId\.length > 0') {
     throw 'The converter player-import action must only be enabled while its controller can accept work.'
 }
 foreach ($control in @(
@@ -72,11 +139,11 @@ foreach ($control in @(
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
     'formatOutputFormatGroup', 'formatEncodingSettingsGroup',
     'formatOutputOptionsGroup', 'formatTotalProgress')) {
-    if ($formatPage -notmatch ('objectName:\s*"' + $control + '"')) {
+    if ($formatSurface -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The reference conversion workbench is missing $control."
     }
 }
-if ($formatPage -notmatch 'converter\.previewSelected\(' -or $formatPage -notmatch 'formatPreflightDialog') {
+if ($formatPage -notmatch 'converter\.(previewSelected|buildPreflight)\(' -or $formatPage -notmatch '(formatPreflightDialog|FormatPreflightDialog)') {
     throw 'The converter must show real preflight differences before starting a changed plan.'
 }
 if ($metadataPage -notmatch 'enabled:\s*!MetadataEditor\.busy\s*&&\s*PlaybackController\.currentTrackId\.length > 0') {

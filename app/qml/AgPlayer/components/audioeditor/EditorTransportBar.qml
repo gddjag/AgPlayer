@@ -4,6 +4,8 @@ import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
+    id: transport
+    signal recordingRequested()
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
@@ -20,35 +22,112 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 28
-        anchors.rightMargin: 28
-        spacing: 18
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        spacing: 10
 
         Repeater {
-            model: [qsTr("录音"), qsTr("停止"), qsTr("上一标记"), qsTr("下一标记")]
+            model: [
+                { key: "record", label: AudioEditorController.recording
+                    ? (AudioEditorController.recordingPaused ? qsTr("继续") : qsTr("暂停"))
+                    : qsTr("录音"), icon: "checkbox-blank-circle-fill",
+                  objectName: "transportRecord" },
+                { key: "stop", label: qsTr("停止"), icon: "checkbox-blank-line",
+                  objectName: "transportStop" }
+            ]
             ColumnLayout {
+                required property var modelData
+                Layout.preferredWidth: 46
                 spacing: 3
                 ToolButton {
-                    icon.source: Theme.icon(index === 0
-                        ? "checkbox-blank-circle-fill"
-                        : index === 1 ? "checkbox-blank-line"
-                        : index === 2 ? "skip-back-fill" : "skip-forward-fill")
-                    icon.color: index === 0 ? Theme.waveformRed : Theme.iconPrimary
-                    enabled: index === 0
-                        ? !AudioEditorController.recording
-                        : index === 1
+                    objectName: modelData.objectName
+                    Layout.alignment: Qt.AlignHCenter
+                    icon.source: Theme.icon(modelData.icon)
+                    icon.color: modelData.key === "record" ? Theme.waveformRed : Theme.iconPrimary
+                    enabled: modelData.key === "record"
+                        ? !AudioEditorController.busy
+                        : modelData.key === "stop"
                           ? AudioEditorController.playing || AudioEditorController.recording
-                          : AudioEditorController.hasDocument
+                          : false
+                    Accessible.name: modelData.label
+                    ToolTip.visible: hovered
+                    ToolTip.text: modelData.label
                     onClicked: {
-                        if (index === 0) AudioEditorController.triggerAction("editor.newRecording")
-                        else if (index === 1) {
+                        if (modelData.key === "record") {
+                            if (!AudioEditorController.recording) transport.recordingRequested()
+                            else if (AudioEditorController.recordingPaused) AudioEditorController.resumeRecording()
+                            else AudioEditorController.pauseRecording()
+                        } else if (modelData.key === "stop") {
                             if (AudioEditorController.recording) AudioEditorController.stopRecording()
                             else AudioEditorController.stopPlayback()
                         }
                     }
                 }
-                Label { text: modelData; font.pixelSize: 11; Layout.alignment: Qt.AlignHCenter }
+                Label {
+                    text: modelData.label
+                    font.pixelSize: 10
+                    Layout.alignment: Qt.AlignHCenter
+                }
             }
+        }
+
+        ColumnLayout {
+            Layout.preferredWidth: 54
+            spacing: 3
+            ToolButton {
+                objectName: "transportAddMarker"
+                Layout.alignment: Qt.AlignHCenter
+                icon.source: Theme.icon("pushpin-fill")
+                icon.color: Theme.ratingGold
+                enabled: AudioEditorController.hasDocument
+                    && !AudioEditorController.recording
+                    && !AudioEditorController.busy
+                Accessible.name: qsTr("添加标记")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: AudioEditorController.addMarker(
+                    qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
+                    AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
+            }
+            Label { text: qsTr("添加标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
+        }
+
+        ColumnLayout {
+            Layout.preferredWidth: 46
+            spacing: 3
+            ToolButton {
+                objectName: "transportPreviousMarker"
+                Layout.alignment: Qt.AlignHCenter
+                icon.source: Theme.icon("skip-back-fill")
+                icon.color: Theme.iconPrimary
+                enabled: AudioEditorController.hasDocument
+                    && !AudioEditorController.recording
+                    && !AudioEditorController.busy
+                Accessible.name: qsTr("上一标记")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: AudioEditorController.seekPreviousMarker()
+            }
+            Label { text: qsTr("上一标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
+        }
+
+        ColumnLayout {
+            Layout.preferredWidth: 46
+            spacing: 3
+            ToolButton {
+                objectName: "transportNextMarker"
+                Layout.alignment: Qt.AlignHCenter
+                icon.source: Theme.icon("skip-forward-fill")
+                icon.color: Theme.iconPrimary
+                enabled: AudioEditorController.hasDocument
+                    && !AudioEditorController.recording
+                    && !AudioEditorController.busy
+                Accessible.name: qsTr("下一标记")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: AudioEditorController.seekNextMarker()
+            }
+            Label { text: qsTr("下一标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
         }
 
         ToolButton {
@@ -57,9 +136,12 @@ Rectangle {
             icon.width: 36
             icon.height: 36
             enabled: AudioEditorController.hasDocument
+            Accessible.name: AudioEditorController.playing ? qsTr("暂停") : qsTr("播放")
+            ToolTip.visible: hovered
+            ToolTip.text: Accessible.name
             onClicked: AudioEditorController.playPause()
-            Layout.preferredWidth: 76
-            Layout.preferredHeight: 76
+            Layout.preferredWidth: 64
+            Layout.preferredHeight: 64
         }
         ColumnLayout {
             ToolButton {
@@ -68,9 +150,12 @@ Rectangle {
                 icon.source: Theme.icon("repeat-fill")
                 icon.color: checked ? Theme.cyan : Theme.iconPrimary
                 enabled: AudioEditorController.hasDocument
+                Accessible.name: qsTr("循环")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
                 onToggled: AudioEditorController.setLoopEnabled(checked)
             }
-            Label { text: qsTr("循环"); font.pixelSize: 11 }
+            Label { text: qsTr("循环"); font.pixelSize: 10 }
         }
         ToolSeparator {}
 
@@ -82,29 +167,17 @@ Rectangle {
                 {label: qsTr("总时长"), value: timeText(AudioEditorController.durationMs)}
             ]
             ColumnLayout {
-                Layout.preferredWidth: 112
-                Label { text: modelData.value; color: index === 0 ? Theme.waveformGreen : Theme.primaryText; font.pixelSize: 16 }
+                Layout.fillWidth: true
+                Layout.minimumWidth: 96
+                Layout.maximumWidth: 156
+                Label {
+                    text: modelData.value
+                    color: index === 0 ? Theme.waveformGreen : Theme.primaryText
+                    font.pixelSize: 16
+                    Layout.alignment: Qt.AlignHCenter
+                }
                 Label { text: modelData.label; color: Theme.secondaryText; font.pixelSize: 11 }
             }
         }
-
-        Item { Layout.fillWidth: true }
-        ThemedIcon {
-            source: Theme.icon("volume-up-fill")
-            tint: Theme.iconPrimary
-            sourceSize.width: 18
-            sourceSize.height: 18
-            Layout.preferredWidth: 18
-            Layout.preferredHeight: 18
-        }
-        Slider {
-            Layout.preferredWidth: 90
-            from: 0; to: 1
-            value: AudioEditorController.volume
-            onMoved: AudioEditorController.setVolume(value)
-        }
-        Label { text: Math.round(AudioEditorController.volume * 100) + "%"; font.pixelSize: 11 }
-        Slider { Layout.preferredWidth: 90; value: 0.5; enabled: false }
-        Label { text: "×1.00"; font.pixelSize: 11 }
     }
 }

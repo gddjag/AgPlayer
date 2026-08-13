@@ -9,9 +9,30 @@ Rectangle {
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
-    implicitHeight: collapsed ? 42 : 372
+    implicitHeight: collapsed ? 38 : 360
     property bool collapsed: false
     property url recordingTarget
+    property bool forceNewRecording: false
+    function requestRecording(forceNew) {
+        forceNewRecording = forceNew === true
+        if (AudioEditorController.modified
+                && (forceNewRecording || newMode.checked))
+            discardRecordingDialog.open()
+        else
+            recordingFileDialog.open()
+    }
+
+    Dialog {
+        id: discardRecordingDialog
+        title: qsTr("舍弃未保存更改？")
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: recordingFileDialog.open()
+        Label {
+            text: qsTr("新建录音将舍弃当前未保存的音频。")
+            color: Theme.primaryText
+        }
+    }
 
     FileDialog {
         id: recordingFileDialog
@@ -26,17 +47,18 @@ Rectangle {
                 Number(sampleRateCombo.currentValue),
                 Number(channelCombo.currentValue),
                 monitorSwitch.checked,
-                insertMode.checked)
+                !section.forceNewRecording && insertMode.checked)
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
+        anchors.margins: 8
+        spacing: 5
 
         ToolButton {
             Layout.fillWidth: true
+            Layout.preferredHeight: 30
             text: (section.collapsed ? "▸  " : "▾  ") + qsTr("录音")
             font.bold: true
             onClicked: section.collapsed = !section.collapsed
@@ -46,7 +68,7 @@ Rectangle {
             columns: 2
             Layout.fillWidth: true
             columnSpacing: 8
-            rowSpacing: 6
+            rowSpacing: 3
 
             Label { text: qsTr("输入设备") }
             ComboBox {
@@ -57,6 +79,14 @@ Rectangle {
                 model: AudioEditorController.recordingDevices
                 enabled: count > 0 && !AudioEditorController.recording
                 displayText: count > 0 ? currentText : qsTr("未检测到设备")
+                Component.onCompleted: {
+                    for (let index = 0; index < count; ++index) {
+                        if (valueAt(index) === AudioEditorController.recordingDeviceId) {
+                            currentIndex = index
+                            break
+                        }
+                    }
+                }
             }
             Label { text: qsTr("输入声道") }
             ComboBox {
@@ -65,7 +95,7 @@ Rectangle {
                 textRole: "text"; valueRole: "value"
                 model: [{text: qsTr("单声道"), value: 1},
                         {text: qsTr("立体声"), value: 2}]
-                currentIndex: 1
+                currentIndex: AudioEditorController.recordingChannels === 1 ? 0 : 1
                 enabled: !AudioEditorController.recording
             }
             Label { text: qsTr("采样率") }
@@ -75,7 +105,7 @@ Rectangle {
                 textRole: "text"; valueRole: "value"
                 model: [{text: "44100 Hz", value: 44100},
                         {text: "48000 Hz", value: 48000}]
-                currentIndex: 1
+                currentIndex: AudioEditorController.recordingSampleRate === 44100 ? 0 : 1
                 enabled: !AudioEditorController.recording
             }
             Label { text: qsTr("输入电平") }
@@ -88,6 +118,7 @@ Rectangle {
             RowLayout {
                 ButtonGroup { id: recordingMode }
                 RadioButton {
+                    id: newMode
                     text: qsTr("新建录音"); checked: true
                     ButtonGroup.group: recordingMode
                 }
@@ -101,7 +132,7 @@ Rectangle {
             Label { text: qsTr("监听") }
             Switch {
                 id: monitorSwitch
-                checked: false
+                checked: AudioEditorController.recordingMonitor
                 enabled: !AudioEditorController.recording
             }
             Label { text: qsTr("输出格式") }
@@ -112,26 +143,6 @@ Rectangle {
                 readOnly: true
                 text: section.recordingTarget.toString().replace("file:///", "")
                 placeholderText: qsTr("开始录音时选择")
-            }
-        }
-        RowLayout {
-            visible: !section.collapsed
-            Layout.fillWidth: true
-            Button {
-                Layout.fillWidth: true
-                text: !AudioEditorController.recording ? qsTr("开始录音")
-                    : AudioEditorController.recordingPaused ? qsTr("继续") : qsTr("暂停")
-                enabled: AudioEditorController.recordingDevices.length > 0
-                onClicked: {
-                    if (!AudioEditorController.recording) recordingFileDialog.open()
-                    else if (AudioEditorController.recordingPaused) AudioEditorController.resumeRecording()
-                    else AudioEditorController.pauseRecording()
-                }
-            }
-            Button {
-                text: qsTr("停止")
-                enabled: AudioEditorController.recording
-                onClicked: AudioEditorController.stopRecording()
             }
         }
     }

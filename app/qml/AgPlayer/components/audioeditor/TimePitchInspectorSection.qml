@@ -8,16 +8,17 @@ Rectangle {
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
-    implicitHeight: collapsed ? 42 : 350
+    implicitHeight: collapsed ? 38 : 292
     property bool collapsed: false
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 7
+        anchors.margins: 8
+        spacing: 4
 
         ToolButton {
             Layout.fillWidth: true
+            Layout.preferredHeight: 30
             text: (section.collapsed ? "▸  " : "▾  ") + qsTr("速度与音高")
             font.bold: true
             onClicked: section.collapsed = !section.collapsed
@@ -26,7 +27,11 @@ Rectangle {
             visible: !section.collapsed
             columns: 2
             Layout.fillWidth: true
-            rowSpacing: 5
+            rowSpacing: 2
+
+            component CompactSpinBox: SpinBox {
+                implicitHeight: 28
+            }
 
             Button {
                 text: qsTr("BPM 检测")
@@ -39,13 +44,22 @@ Rectangle {
                 horizontalAlignment: Text.AlignRight
             }
             Label { text: qsTr("原始 BPM") }
-            Label {
-                text: AudioEditorController.originalBpm > 0
-                    ? AudioEditorController.originalBpm.toFixed(2) : "--"
-                horizontalAlignment: Text.AlignRight
+            CompactSpinBox {
+                id: originalBpmControl
+                from: 0; to: 400
+                value: Math.round(AudioEditorController.originalBpm)
+                enabled: AudioEditorController.hasDocument
+                textFromValue: function(value) {
+                    return value > 0 ? value.toString() : "--"
+                }
+                valueFromText: function(text) {
+                    const parsed = Number.fromLocaleString(locale, text)
+                    return isNaN(parsed) ? 0 : parsed
+                }
+                onValueModified: AudioEditorController.setOriginalBpm(value)
             }
             Label { text: qsTr("目标 BPM") }
-            SpinBox {
+            CompactSpinBox {
                 from: 20; to: 400
                 value: Math.round(AudioEditorController.targetBpm > 0
                     ? AudioEditorController.targetBpm : 100)
@@ -54,7 +68,7 @@ Rectangle {
                 onValueModified: AudioEditorController.setTargetBpm(value)
             }
             Label { text: qsTr("速度") }
-            SpinBox {
+            CompactSpinBox {
                 from: 50; to: 200
                 value: Math.round(AudioEditorController.speedPercent)
                 enabled: AudioEditorController.hasDocument
@@ -67,14 +81,14 @@ Rectangle {
                 onToggled: AudioEditorController.setKeepPitch(checked)
             }
             Label { text: qsTr("升降半音") }
-            SpinBox {
+            CompactSpinBox {
                 id: semitoneControl
                 from: -12; to: 12; value: 0
                 enabled: AudioEditorController.hasDocument
                 onValueModified: AudioEditorController.setPitch(value, centsControl.value)
             }
             Label { text: qsTr("音分微调") }
-            SpinBox {
+            CompactSpinBox {
                 id: centsControl
                 from: -99; to: 99; value: 0
                 enabled: AudioEditorController.hasDocument
@@ -84,7 +98,9 @@ Rectangle {
         Button {
             visible: !section.collapsed
             Layout.fillWidth: true
-            text: qsTr("应用处理")
+            Layout.preferredHeight: 28
+            text: AudioEditorController.timePitchPreviewActive
+                ? qsTr("预览中 · 应用处理") : qsTr("应用处理")
             enabled: AudioEditorController.hasDocument
             onClicked: AudioEditorController.applyTimePitch()
         }

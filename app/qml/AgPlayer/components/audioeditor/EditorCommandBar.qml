@@ -20,6 +20,7 @@ Rectangle {
         implicitWidth: Math.max(60, contentRow.implicitWidth + 18)
         implicitHeight: 44
         onClicked: AudioEditorController.triggerAction(actionId)
+        Accessible.name: label
         ToolTip.visible: hovered
         ToolTip.text: label
         contentItem: RowLayout {

@@ -5,14 +5,18 @@
 #include "editor_viewport.hpp"
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
 #include "../../../core/src/audio_editor/recording_session.hpp"
+#include "../../../core/src/audio_editor/document_writer.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <QObject>
+#include <QFutureWatcher>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+
+#include <atomic>
 
 enum class EditorSessionState {
     Empty,
@@ -64,10 +68,23 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(bool timePitchPreviewActive READ timePitchPreviewActive
                    NOTIFY timePitchChanged)
     Q_PROPERTY(QVariantList recordingDevices READ recordingDevices NOTIFY recordingDevicesChanged)
+    Q_PROPERTY(QVariantList exportFormats READ exportFormats CONSTANT)
+    Q_PROPERTY(QString recordingDeviceId READ recordingDeviceId
+                   NOTIFY recordingPreferencesChanged)
+    Q_PROPERTY(int recordingSampleRate READ recordingSampleRate
+                   NOTIFY recordingPreferencesChanged)
+    Q_PROPERTY(int recordingChannels READ recordingChannels
+                   NOTIFY recordingPreferencesChanged)
+    Q_PROPERTY(bool recordingMonitor READ recordingMonitor
+                   NOTIFY recordingPreferencesChanged)
+    Q_PROPERTY(QString recordingDirectory READ recordingDirectory
+                   NOTIFY recordingPreferencesChanged)
     Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(bool recordingPaused READ recordingPaused NOTIFY recordingChanged)
     Q_PROPERTY(double inputLevel READ inputLevel NOTIFY recordingChanged)
     Q_PROPERTY(qint64 recordingFrames READ recordingFrames NOTIFY recordingChanged)
+    Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList markers READ markers NOTIFY documentChanged)
 
 public:
     explicit AudioEditorController(
@@ -107,10 +124,18 @@ public:
     [[nodiscard]] bool timePitchPreviewActive() const noexcept
     { return time_pitch_preview_active_; }
     [[nodiscard]] QVariantList recordingDevices() const { return recording_devices_; }
+    [[nodiscard]] QVariantList exportFormats() const;
+    [[nodiscard]] QString recordingDeviceId() const { return recording_device_id_; }
+    [[nodiscard]] int recordingSampleRate() const noexcept { return recording_sample_rate_; }
+    [[nodiscard]] int recordingChannels() const noexcept { return recording_channels_; }
+    [[nodiscard]] bool recordingMonitor() const noexcept { return recording_monitor_; }
+    [[nodiscard]] QString recordingDirectory() const { return recording_directory_; }
     [[nodiscard]] bool recording() const noexcept;
     [[nodiscard]] bool recordingPaused() const noexcept;
     [[nodiscard]] double inputLevel() const noexcept;
     [[nodiscard]] qint64 recordingFrames() const noexcept;
+    [[nodiscard]] bool busy() const noexcept;
+    [[nodiscard]] QVariantList markers() const;
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
@@ -119,13 +144,22 @@ public:
     Q_INVOKABLE bool createUntitledDocument(
         quint32 sampleRate, quint32 channels, qint64 frames);
     Q_INVOKABLE bool openFile(const QUrl& source);
+    Q_INVOKABLE bool confirmDiscardAndOpen();
+    Q_INVOKABLE void cancelDiscardAndOpen();
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(const QUrl& target);
     Q_INVOKABLE bool exportTo(const QUrl& target, bool selectionOnly = false,
-                              const QString& codecName = QString());
+                              const QString& codecName = QString(),
+                              int sampleRate = 0, int channels = 0,
+                              qint64 bitRate = 0, bool keepMetadata = true,
+                              bool variableBitRate = true, int quality = 80);
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
     Q_INVOKABLE bool addMarker(const QString& name, qint64 frame);
+    Q_INVOKABLE bool renameMarker(int index, const QString& name);
+    Q_INVOKABLE bool removeMarker(int index);
+    Q_INVOKABLE bool seekPreviousMarker();
+    Q_INVOKABLE bool seekNextMarker();
     Q_INVOKABLE bool insertSilence(qint64 frame, qint64 frameCount);
     Q_INVOKABLE bool applyGain(double decibels);
     Q_INVOKABLE bool normalize();
@@ -153,6 +187,8 @@ public:
     Q_INVOKABLE bool pauseRecording();
     Q_INVOKABLE bool resumeRecording();
     Q_INVOKABLE bool stopRecording();
+    Q_INVOKABLE bool cancelRecording();
+    Q_INVOKABLE void cancelOperation();
 
 signals:
     void stateChanged();
@@ -163,12 +199,14 @@ signals:
     void progressChanged();
     void timePitchChanged();
     void recordingDevicesChanged();
+    void recordingPreferencesChanged();
     void recordingChanged();
     void openRequested();
     void saveAsRequested();
     void exportRequested();
     void newRecordingRequested();
     void moreMenuRequested();
+    void discardConfirmationRequested();
 
 private:
     void refreshActions();
@@ -190,6 +228,7 @@ private:
     QTemporaryDir preview_directory_;
     QString source_path_;
     QString playback_path_;
+    QUrl pending_open_url_;
     QString format_name_;
     int sample_rate_{};
     int channels_{};
@@ -208,9 +247,18 @@ private:
     double progress_{};
     agplayer::editor::TimePitchSession time_pitch_;
     agplayer::editor::RecordingSession recording_session_;
+    QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};
+    QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
+    std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
+    QString recording_device_id_;
+    QString recording_directory_;
+    int recording_sample_rate_{48'000};
+    int recording_channels_{2};
+    bool recording_monitor_{};
     QTimer recording_timer_;
     bool insert_recording_at_cursor_{};
     bool time_pitch_preview_active_{};
+    bool allow_document_replace_{};
     qint64 recording_insert_frame_{};
 };

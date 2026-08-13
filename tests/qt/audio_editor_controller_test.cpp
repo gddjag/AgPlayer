@@ -89,11 +89,64 @@ private slots:
         const QString output = directory.filePath(QStringLiteral("edited.wav"));
         QVERIFY2(controller.saveAs(QUrl::fromLocalFile(output)),
                  qPrintable(controller.errorMessage()));
-        QVERIFY(QFileInfo::exists(output));
-        QVERIFY(!controller.modified());
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(output), 10'000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.modified(), 10'000);
         QVERIFY(controller.playPause());
         QTRY_VERIFY_WITH_TIMEOUT(controller.playing(), 2'000);
         QVERIFY(controller.stopPlayback());
+    }
+
+    void rejectsInvalidIndependentExportParameters()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
+        const QUrl output = QUrl::fromLocalFile(
+            directory.filePath(QStringLiteral("invalid.wav")));
+        QVERIFY(!controller.exportTo(output, false, QStringLiteral("pcm_s24le"),
+                                     1, 2, 0, true, false, 80));
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
+    void exposesOnlyAvailableExportFormats()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        const QVariantList formats = controller.exportFormats();
+        QVERIFY(!formats.isEmpty());
+        for (const QVariant& value : formats) {
+            const QVariantMap format = value.toMap();
+            QVERIFY(!format.value(QStringLiteral("text")).toString().isEmpty());
+            QVERIFY(!format.value(QStringLiteral("extension")).toString().isEmpty());
+            const QByteArray codec = format.value(QStringLiteral("codec"))
+                                         .toString().toLatin1();
+            QVERIFY(!codec.isEmpty());
+            QCOMPARE(ag_encoder_available(codec.constData()), 1);
+        }
+    }
+
+    void independentExportAppliesRequestedSampleRateAndChannels()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        const QString output = directory.filePath(QStringLiteral("export.flac"));
+        QVERIFY2(controller.exportTo(QUrl::fromLocalFile(output), false,
+                                     QStringLiteral("flac"), 48'000, 1,
+                                     0, true, false, 80),
+                 qPrintable(controller.errorMessage()));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
+        QVERIFY2(QFileInfo::exists(output), qPrintable(controller.errorMessage()));
+        ag_metadata* metadata = nullptr;
+        const QByteArray path = output.toUtf8();
+        QCOMPARE(ag_metadata_open(path.constData(), &metadata), AG_OK);
+        QVERIFY(metadata != nullptr);
+        QCOMPARE(ag_metadata_sample_rate(metadata), 48'000);
+        QCOMPARE(ag_metadata_channels(metadata), 1);
+        ag_metadata_destroy(metadata);
     }
 
     void timePitchParametersStayBidirectionalAndApplyAsOneEdit()
@@ -111,7 +164,7 @@ private slots:
         QVERIFY(controller.setPitch(3, 25));
         QCOMPARE(controller.pitchCents(), 325);
         QVERIFY2(controller.applyTimePitch(), qPrintable(controller.errorMessage()));
-        QVERIFY(controller.totalFrames() > originalFrames);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.totalFrames() > originalFrames, 10'000);
         QVERIFY(controller.modified());
         QVERIFY(controller.triggerAction(QStringLiteral("editor.undo")));
         QCOMPARE(controller.totalFrames(), originalFrames);
@@ -134,6 +187,53 @@ private slots:
         QVERIFY(controller.stopPlayback());
     }
 
+    void markerNavigationUsesTheNearestMarker()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 192'000));
+        QVERIFY(controller.addMarker(QStringLiteral("A"), 48'000));
+        QVERIFY(controller.addMarker(QStringLiteral("B"), 144'000));
+        QVERIFY(controller.seekMs(2'000));
+        QVERIFY(controller.seekPreviousMarker());
+        QCOMPARE(controller.positionMs(), qint64{1'000});
+        QVERIFY(controller.seekNextMarker());
+        QCOMPARE(controller.positionMs(), qint64{3'000});
+    }
+
+    void markerManagementIsExposedToTheEditorUi()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 192'000));
+        QVERIFY(controller.addMarker(QStringLiteral("A"), 48'000));
+        QVERIFY(controller.renameMarker(0, QStringLiteral("Intro")));
+        QCOMPARE(controller.markers().at(0).toMap().value(QStringLiteral("name")),
+                 QStringLiteral("Intro"));
+        QVERIFY(controller.removeMarker(0));
+        QVERIFY(controller.markers().isEmpty());
+        QVERIFY(!controller.renameMarker(0, QStringLiteral("Missing")));
+        QVERIFY(!controller.removeMarker(0));
+    }
+
+    void openingAnotherFileRequiresDiscardConfirmation()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
+        QVERIFY(controller.setSelection(100, 1'000));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        const qint64 editedFrames = controller.totalFrames();
+        QSignalSpy confirmation(&controller,
+            &AudioEditorController::discardConfirmationRequested);
+        QVERIFY(!controller.openFile(QUrl::fromLocalFile(fixture)));
+        QCOMPARE(confirmation.count(), 1);
+        QCOMPARE(controller.totalFrames(), editedFrames);
+        QVERIFY(controller.modified());
+        QVERIFY(controller.confirmDiscardAndOpen());
+        QVERIFY(!controller.modified());
+        QCOMPARE(controller.fileName(), QFileInfo(fixture).fileName());
+    }
+
     void exposesRealRecordingDevicesAndRejectsInvalidRecordingPath()
     {
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
@@ -149,6 +249,6 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(AudioEditorControllerTest)
+QTEST_GUILESS_MAIN(AudioEditorControllerTest)
 
 #include "audio_editor_controller_test.moc"

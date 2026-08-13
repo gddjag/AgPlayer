@@ -48,6 +48,9 @@ Rectangle {
         ToolButton {
             icon.source: Theme.icon("subtract-line")
             Layout.preferredWidth: 30
+            Accessible.name: qsTr("缩小")
+            ToolTip.visible: hovered
+            ToolTip.text: Accessible.name
             onClicked: AudioEditorController.viewport.zoomAt(0.8, overview.width / 2)
         }
         Slider {
@@ -59,6 +62,9 @@ Rectangle {
         ToolButton {
             icon.source: Theme.icon("add-line")
             Layout.preferredWidth: 30
+            Accessible.name: qsTr("放大")
+            ToolTip.visible: hovered
+            ToolTip.text: Accessible.name
             onClicked: AudioEditorController.viewport.zoomAt(1.25, overview.width / 2)
         }
         ComboBox {
