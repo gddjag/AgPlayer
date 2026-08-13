@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "runtimeId": "indextts25-isolated",
+  "ready": false,
+  "python": { "version": ">=3.10,<3.12" },
+  "source": {
+    "repository": "https://github.com/index-tts/index-tts",
+    "revision": "4f8792ff120cd3ea470dd511e997a17c86cddd10"
+  },
+  "models": [
+    { "id": "IndexTeam/IndexTTS-2.5", "revision": "c39ce5ba981572cb187443877ff559dfb246ce63" }
+  ],
+  "dependencyConstraints": [
+    "torch==2.8.*",
+    "torchaudio==2.8.*",
+    "transformers==4.52.1",
+    "modelscope==1.27.0",
+    "numpy==2.2.6"
+  ],
+  "artifacts": [],
+  "notices": [
+    {
+      "name": "IndexTTS-2.5",
+      "license": "bilibili Model Use License Agreement",
+      "sourceUrl": "https://github.com/index-tts/index-tts",
+      "licenseFile": "source/LICENSE"
+    }
+  ],
+  "unresolved": [
+    "Resolve the official Python 3.10 or 3.11 runtime artifact and SHA-256.",
+    "Resolve the CUDA 12.8 Windows wheelhouse and record every artifact SHA-256.",
+    "Complete the custom-license and transitive dependency notice audit."
+  ]
+}

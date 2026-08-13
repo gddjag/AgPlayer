@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "runtimeId": "qwen-shared",
+  "ready": false,
+  "python": { "version": "3.12.x" },
+  "source": {
+    "repository": "https://github.com/QwenLM/Qwen3-TTS",
+    "revision": "022e286b98fbec7e1e916cb940cdf532cd9f488e"
+  },
+  "models": [
+    { "id": "Qwen/Qwen3-TTS-12Hz-0.6B-Base", "revision": "5d83992436eae1d760afd27aff78a71d676296fc" },
+    { "id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "revision": "fd4b254389122332181a7c3db7f27e918eec64e3" }
+  ],
+  "dependencyConstraints": [
+    "qwen-tts==0.1.1",
+    "transformers==4.57.3",
+    "accelerate==1.12.0"
+  ],
+  "artifacts": [],
+  "notices": [
+    {
+      "name": "Qwen3-TTS",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/QwenLM/Qwen3-TTS",
+      "licenseFile": "source/LICENSE"
+    }
+  ],
+  "unresolved": [
+    "Pin the CPython 3.12 embeddable artifact and SHA-256.",
+    "Resolve a Windows x64 wheelhouse and record every artifact SHA-256.",
+    "Audit and cache every transitive dependency license file."
+  ]
+}
