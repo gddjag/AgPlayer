@@ -13,11 +13,16 @@
 #include <QSysInfo>
 #include <QVersionNumber>
 
+#include <cmath>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 namespace {
 
 constexpr auto kManifestFileName = "agplayer-voice-clone.json";
 constexpr auto kPluginId = "agplayer.voice-clone";
-constexpr auto kPlayerVersion = "1.0.0";
 constexpr int kProtocolVersion = 1;
 
 QString currentPlatform()
@@ -73,6 +78,61 @@ bool isValidVersion(const QString& value)
     qsizetype suffixIndex = 0;
     const QVersionNumber version = QVersionNumber::fromString(value, &suffixIndex);
     return !version.isNull() && suffixIndex == value.size();
+}
+
+bool jsonIntegerEquals(const QJsonValue& value, const int expected)
+{
+    if (!value.isDouble()) return false;
+    const double number = value.toDouble();
+    return std::isfinite(number) && std::trunc(number) == number
+           && number == static_cast<double>(expected);
+}
+
+bool pathIsWithin(const QString& root, const QString& candidate)
+{
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
+#endif
+    return candidate.compare(root, sensitivity) == 0
+           || candidate.startsWith(root + QLatin1Char('/'), sensitivity);
+}
+
+bool isReparsePoint(const QFileInfo& info)
+{
+#ifdef Q_OS_WIN
+    const std::wstring path =
+        QDir::toNativeSeparators(info.absoluteFilePath()).toStdWString();
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES
+           && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    return info.isSymLink();
+#endif
+}
+
+bool pathTraversesReparsePoint(const QString& path)
+{
+    QString current = QDir::fromNativeSeparators(
+        QFileInfo(path).absoluteFilePath());
+    while (!current.isEmpty()) {
+        const QFileInfo info(current);
+        if ((info.exists() || info.isSymLink()) && isReparsePoint(info)) {
+            return true;
+        }
+        const QString parent = QDir::fromNativeSeparators(info.absolutePath());
+        if (parent == current) break;
+        current = parent;
+    }
+    return false;
+}
+
+QString currentPlayerVersion()
+{
+    const QString applicationVersion = QCoreApplication::applicationVersion();
+    return applicationVersion.isEmpty() ? QStringLiteral(AGPLAYER_VERSION)
+                                        : applicationVersion;
 }
 
 } // namespace
@@ -146,12 +206,51 @@ void VoiceCloneHostController::refresh()
     resetDiscovery();
 
     const QString root = pluginRoot();
-    const QString manifestPath = QDir(root).filePath(QLatin1String(kManifestFileName));
-    QFile manifestFile(manifestPath);
-    if (!manifestFile.exists()) {
+    const QFileInfo rootInfo(root);
+    if (pathTraversesReparsePoint(rootInfo.absoluteFilePath())) {
+        setState(Invalid, QStringLiteral("Plugin root contains a link or reparse point"));
+        return;
+    }
+    if (!rootInfo.exists()) {
         setState(Absent);
         return;
     }
+    if (!rootInfo.isDir()) {
+        setState(Invalid, QStringLiteral("Plugin root contains a link or reparse point"));
+        return;
+    }
+    const QString canonicalRoot =
+        QDir::fromNativeSeparators(rootInfo.canonicalFilePath());
+    if (canonicalRoot.isEmpty()) {
+        setState(Invalid, QStringLiteral("Plugin root could not be canonicalized"));
+        return;
+    }
+
+    const QFileInfo manifestInfo(
+        QDir(canonicalRoot).filePath(QLatin1String(kManifestFileName)));
+    if (pathTraversesReparsePoint(manifestInfo.absoluteFilePath())) {
+        setState(Invalid,
+                 QStringLiteral("Plugin manifest contains a link or reparse point"));
+        return;
+    }
+    if (!manifestInfo.exists()) {
+        setState(Absent);
+        return;
+    }
+    if (!manifestInfo.isFile()) {
+        setState(Invalid,
+                 QStringLiteral("Plugin manifest contains a link or reparse point"));
+        return;
+    }
+    const QString canonicalManifest =
+        QDir::fromNativeSeparators(manifestInfo.canonicalFilePath());
+    if (canonicalManifest.isEmpty()
+        || !pathIsWithin(canonicalRoot, canonicalManifest)) {
+        setState(Invalid,
+                 QStringLiteral("Plugin manifest canonical path escapes plugin root"));
+        return;
+    }
+    QFile manifestFile(canonicalManifest);
     if (!manifestFile.open(QIODevice::ReadOnly)) {
         setState(Invalid, QStringLiteral("Cannot read plugin manifest"));
         return;
@@ -169,7 +268,7 @@ void VoiceCloneHostController::refresh()
         setState(Invalid, QStringLiteral("Unknown plugin manifest field: %1").arg(extraField));
         return;
     }
-    if (manifest.value(QStringLiteral("schemaVersion")).toInt(-1) != 1) {
+    if (!jsonIntegerEquals(manifest.value(QStringLiteral("schemaVersion")), 1)) {
         setState(Invalid, QStringLiteral("Unsupported plugin manifest schema"));
         return;
     }
@@ -179,7 +278,16 @@ void VoiceCloneHostController::refresh()
     }
 
     pluginVersion_ = manifest.value(QStringLiteral("version")).toString();
-    availableVersion_ = manifest.value(QStringLiteral("availableVersion")).toString();
+    const QJsonValue availableVersion =
+        manifest.value(QStringLiteral("availableVersion"));
+    if (!availableVersion.isUndefined() && !availableVersion.isString()) {
+        setState(Invalid, QStringLiteral("Invalid plugin or player version"));
+        return;
+    }
+    availableVersion_ = availableVersion.toString();
+    if (availableVersion.isUndefined() || availableVersion_.trimmed().isEmpty()) {
+        availableVersion_ = pluginVersion_;
+    }
     const QString minimumPlayer =
         manifest.value(QStringLiteral("minimumPlayerVersion")).toString();
     if (!isValidVersion(pluginVersion_) || !isValidVersion(availableVersion_)
@@ -197,27 +305,41 @@ void VoiceCloneHostController::refresh()
         return;
     }
     if (QVersionNumber::compare(QVersionNumber::fromString(minimumPlayer),
-                                QVersionNumber::fromString(QLatin1String(kPlayerVersion))) > 0) {
+                                QVersionNumber::fromString(currentPlayerVersion())) > 0) {
         setState(Invalid, QStringLiteral("Plugin requires a newer player version"));
         return;
     }
-    manifestProtocolVersion_ = manifest.value(QStringLiteral("protocolVersion")).toInt(-1);
-    if (manifestProtocolVersion_ != kProtocolVersion) {
+    const QJsonValue protocolVersion = manifest.value(QStringLiteral("protocolVersion"));
+    if (!jsonIntegerEquals(protocolVersion, kProtocolVersion)) {
         setState(Invalid, QStringLiteral("Plugin protocol is incompatible"));
         return;
     }
+    manifestProtocolVersion_ = kProtocolVersion;
 
     const QString library = manifest.value(QStringLiteral("library")).toString();
     if (!isSimpleFileName(library)) {
         setState(Invalid, QStringLiteral("Plugin library path is invalid"));
         return;
     }
-    const QFileInfo libraryInfo(QDir(root).filePath(library));
+    const QFileInfo libraryInfo(QDir(canonicalRoot).filePath(library));
+    if (pathTraversesReparsePoint(libraryInfo.absoluteFilePath())) {
+        setState(Invalid,
+                 QStringLiteral("Plugin library contains a link or reparse point"));
+        return;
+    }
     if (!libraryInfo.isFile()) {
         setState(Invalid, QStringLiteral("Plugin library is missing"));
         return;
     }
-    libraryPath_ = libraryInfo.absoluteFilePath();
+    const QString canonicalLibrary =
+        QDir::fromNativeSeparators(libraryInfo.canonicalFilePath());
+    if (canonicalLibrary.isEmpty()
+        || !pathIsWithin(canonicalRoot, canonicalLibrary)) {
+        setState(Invalid,
+                 QStringLiteral("Plugin library canonical path escapes plugin root"));
+        return;
+    }
+    libraryPath_ = canonicalLibrary;
 
     const bool updateAvailable =
         QVersionNumber::compare(QVersionNumber::fromString(availableVersion_),
@@ -230,7 +352,9 @@ bool VoiceCloneHostController::openPlugin()
     if (pluginLoaded()) return true;
     if (state_ != Compatible && state_ != UpdateAvailable) return false;
 
-    loader_ = std::make_unique<QPluginLoader>(libraryPath_);
+    loader_ = std::make_unique<QPluginLoader>();
+    loader_->setLoadHints(QLibrary::ResolveAllSymbolsHint);
+    loader_->setFileName(libraryPath_);
     QObject* instance = loader_->instance();
     if (instance == nullptr) {
         const QString detail = loader_->errorString();

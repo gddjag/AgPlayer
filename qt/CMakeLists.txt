@@ -115,6 +115,9 @@ target_link_libraries(agplayer_qt
     PRIVATE
         Qt6::Concurrent
 )
+target_compile_definitions(agplayer_qt PUBLIC
+    AGPLAYER_VERSION="${PROJECT_VERSION}"
+)
 
 if(WIN32)
     target_link_libraries(agplayer_qt PRIVATE dwmapi shell32)
