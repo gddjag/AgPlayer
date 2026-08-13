@@ -133,7 +133,7 @@ def with_defaults(schema: dict, values: dict) -> dict:
     return result
 
 
-def validate_parameters(schema: dict, values: object) -> dict:
+def validate_parameters(schema: dict, values: object, allow_hidden_defaults: bool = False) -> dict:
     if not isinstance(values, dict):
         raise WorkerError("INVALID_PARAMETERS", "parameters must be an object")
     controls = {item["key"]: item for item in schema["parameters"]}
@@ -144,7 +144,13 @@ def validate_parameters(schema: dict, values: object) -> dict:
     for key, control in controls.items():
         visible_when = control.get("visibleWhen")
         visible = not visible_when or merged.get(visible_when["key"]) == visible_when["equals"]
-        if not visible and key in values:
+        hidden_default = (
+            allow_hidden_defaults
+            and key in values
+            and type(values[key]) is type(control["default"])
+            and values[key] == control["default"]
+        )
+        if not visible and key in values and not hidden_default:
             raise WorkerError("INVALID_PARAMETERS", f"{key} is not available in the selected mode")
         if not visible:
             continue
@@ -338,7 +344,9 @@ class WorkerServer:
                 requested_path = existing_directory(requested_root, "modelRoot")
                 if requested_path != self.model_root:
                     raise WorkerError("INVALID_PATH", "load modelRoot does not match the launch root")
-            parameters = validate_parameters(self.schema, payload.get("parameters", {}))
+            parameters = validate_parameters(
+                self.schema, payload.get("parameters", {}), allow_hidden_defaults=True
+            )
             if self.args.contract_test:
                 self._loaded = True
                 self.respond(operation, request_id, {"loaded": True})

@@ -9,11 +9,50 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Assert-NoReparseAncestors([string]$Path, [string]$Label) {
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $current = $full
+    while ($true) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "$Label contains a link or reparse-point ancestor"
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrEmpty($parent) -or $parent -eq $current) { break }
+        $current = $parent
+    }
+}
+
+function Remove-TreeSafely([string]$Path, [string]$ExpectedParent, [string]$Label) {
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $parentPrefix = [System.IO.Path]::GetFullPath($ExpectedParent).TrimEnd('\') + '\'
+    if (-not $full.StartsWith($parentPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label cleanup escaped its canonical parent"
+    }
+    Assert-NoReparseAncestors $full $Label
+    $directories = [System.Collections.Generic.Stack[string]]::new()
+    $directories.Push($full)
+    while ($directories.Count -gt 0) {
+        $directory = $directories.Pop()
+        foreach ($child in @(Get-ChildItem -LiteralPath $directory -Force)) {
+            if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "$Label cleanup refused a reparse point: $($child.FullName)"
+            }
+            if ($child.PSIsContainer) { $directories.Push($child.FullName) }
+        }
+    }
+    Remove-Item -LiteralPath $full -Recurse -Force
+}
+
 function Resolve-ExistingDirectory([string]$Path, [string]$Label) {
     if ([string]::IsNullOrWhiteSpace($Path) -or -not [System.IO.Path]::IsPathRooted($Path)) {
         throw "$Label must be an absolute path"
     }
-    $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+    $full = [System.IO.Path]::GetFullPath($Path)
+    Assert-NoReparseAncestors $full $Label
+    $item = Get-Item -LiteralPath $full -ErrorAction Stop
     if (-not $item.PSIsContainer -or ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw "$Label must be a real directory, not a link or reparse point"
     }
@@ -34,6 +73,7 @@ function Resolve-RelativePath([string]$Root, [string]$RelativePath, [string]$Lab
     if (-not $candidate.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label escapes its root"
     }
+    Assert-NoReparseAncestors $candidate $Label
     return $candidate
 }
 
@@ -73,6 +113,61 @@ function Get-RelativePath([string]$Root, [string]$Path) {
     $rootUri = [System.Uri]::new($Root.TrimEnd('\') + '\')
     $pathUri = [System.Uri]::new($Path)
     return [System.Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pathUri).ToString()).Replace('/', '\')
+}
+
+function Normalize-DistributionName([string]$Name) {
+    return ($Name.ToLowerInvariant() -replace '[-_.]+', '-')
+}
+
+function Get-CompatibleWheel([string]$Wheelhouse, [string]$Name, [string]$Version,
+                             [string]$PythonVersion, [string]$RequirementsText) {
+    $normalizedName = Normalize-DistributionName $Name
+    $versionParts = $PythonVersion.Split('.')
+    $pythonTag = "$($versionParts[0])$($versionParts[1])"
+    $pythonMinor = [int]$versionParts[1]
+    $candidates = @()
+    foreach ($wheel in @(Get-ChildItem -LiteralPath $Wheelhouse -Filter '*.whl' -File)) {
+        $stem = $wheel.Name.Substring(0, $wheel.Name.Length - 4)
+        $parts = $stem.Split('-')
+        if ($parts.Count -lt 5) { throw "Invalid wheel filename: $($wheel.Name)" }
+        $distribution = Normalize-DistributionName $parts[0]
+        $wheelVersion = $parts[1].Replace('_', '-')
+        $pyTags = $parts[$parts.Count - 3].Split('.')
+        $abiTags = $parts[$parts.Count - 2].Split('.')
+        $platformTags = $parts[$parts.Count - 1].Split('.')
+        $pythonCompatible = $false
+        foreach ($tag in $pyTags) {
+            if ($tag -eq 'py3' -or $tag -eq "py$pythonTag" -or $tag -eq "cp$pythonTag") {
+                $pythonCompatible = $true
+                break
+            }
+            $stableAbiMatch = [regex]::Match($tag, '^cp3(\d+)$')
+            if ($abiTags -contains 'abi3' -and $stableAbiMatch.Success -and
+                [int]$stableAbiMatch.Groups[1].Value -le $pythonMinor) {
+                $pythonCompatible = $true
+                break
+            }
+        }
+        $abiCompatible = @($abiTags | Where-Object {
+            $_ -eq 'none' -or $_ -eq 'abi3' -or $_ -eq "cp$pythonTag"
+        }).Count -gt 0
+        $platformCompatible = @($platformTags | Where-Object {
+            $_ -eq 'any' -or $_ -eq 'win_amd64'
+        }).Count -gt 0
+        if ($distribution -eq $normalizedName -and $wheelVersion -eq $Version -and
+            $pythonCompatible -and $abiCompatible -and $platformCompatible) {
+            $candidates += $wheel
+        }
+    }
+    if ($candidates.Count -ne 1) {
+        throw "RUNTIME_CACHE_AMBIGUOUS: $Name $Version has $($candidates.Count) compatible wheel candidates"
+    }
+    $wheelName = $candidates[0].Name
+    $hash = (Get-FileHash -LiteralPath $candidates[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($RequirementsText -notmatch [regex]::Escape("--hash=sha256:$hash")) {
+        throw "RUNTIME_CACHE_UNTRUSTED: $wheelName hash is absent from the dependency lock"
+    }
+    return [ordered]@{ file = $wheelName; sha256 = $hash; name = $Name; version = $Version }
 }
 
 function Export-Source([object]$Descriptor, [string]$CacheRoot, [string]$StagingRoot, [string]$ToolRoot, [string]$Label) {
@@ -145,10 +240,8 @@ $outputFull = if ($outputIsAbsolute) { [System.IO.Path]::GetFullPath($OutputRoot
 if (-not $outputIsAbsolute -or $outputFull -eq [System.IO.Path]::GetPathRoot($outputFull) -or (Test-Path -LiteralPath $outputFull)) {
     throw 'OutputRoot must be an absolute, non-root path that does not already exist'
 }
+Assert-NoReparseAncestors $outputFull 'OutputRoot'
 $outputParentPath = Split-Path -Parent $outputFull
-if (-not (Test-Path -LiteralPath $outputParentPath -PathType Container)) {
-    New-Item -ItemType Directory -Path $outputParentPath -Force | Out-Null
-}
 $outputParent = Resolve-ExistingDirectory $outputParentPath 'Output parent'
 $staging = Join-Path $outputParent ('.agplayer-runtime-' + [guid]::NewGuid().ToString('N'))
 $toolRoot = Join-Path $staging '.build-tools'
@@ -201,6 +294,16 @@ try {
         $pthLines += 'import site'
         [System.IO.File]::WriteAllLines($pthFile.FullName, $pthLines, [System.Text.UTF8Encoding]::new($false))
     }
+    if (-not [string]::IsNullOrWhiteSpace($lock.source.pythonPath)) {
+        [System.IO.File]::WriteAllText(
+            (Join-Path $sitePackages 'agplayer-runtime-source.pth'),
+            "import sys; sys.path.insert(0, sys.prefix + r'\$($lock.source.pythonPath.Replace('/', '\'))')`n",
+            [System.Text.UTF8Encoding]::new($false))
+    }
+    $baselineMetadata = @{}
+    foreach ($metadataFile in @(Get-ChildItem -LiteralPath $sitePackages -Filter 'METADATA' -File -Recurse)) {
+        $baselineMetadata[$metadataFile.FullName.ToLowerInvariant()] = $true
+    }
 
     $dependencyLines = @(Get-Content -LiteralPath $requirementsPath | Where-Object {
         -not [string]::IsNullOrWhiteSpace($_) -and -not $_.TrimStart().StartsWith('#')
@@ -211,6 +314,12 @@ try {
         if (@(Get-ChildItem -LiteralPath $wheelhousePath -File).Count -eq 0) {
             throw 'RUNTIME_CACHE_INCOMPLETE: wheelhouse is empty'
         }
+        $nonWheels = @(Get-ChildItem -LiteralPath $wheelhousePath -File | Where-Object {
+            $_.Extension -ne '.whl'
+        })
+        if ($nonWheels.Count -gt 0) {
+            throw "RUNTIME_CACHE_UNTRUSTED: source distributions are forbidden: $($nonWheels[0].Name)"
+        }
         $resolverRoot = Join-Path $toolRoot 'resolver'
         Expand-Archive -LiteralPath $resolverArchive -DestinationPath $resolverRoot -Force
         $resolverExecutable = Get-ChildItem -LiteralPath $resolverRoot -Filter 'uv.exe' -File -Recurse | Select-Object -First 1
@@ -218,7 +327,8 @@ try {
             throw 'Resolver archive does not contain uv.exe'
         }
         & $resolverExecutable.FullName pip install --python $pythonExecutable --offline --no-index `
-            --find-links $wheelhousePath --require-hashes --no-deps --requirements $requirementsPath
+            --find-links $wheelhousePath --require-hashes --no-deps --only-binary ':all:' `
+            --requirements $requirementsPath
         if ($LASTEXITCODE -ne 0) {
             throw 'RUNTIME_CACHE_INCOMPLETE: locked dependencies could not be installed offline'
         }
@@ -251,14 +361,19 @@ try {
     }
 
     $distributions = @()
+    $wheels = @()
+    $requirementsText = Get-Content -Raw -LiteralPath $requirementsPath
     foreach ($metadataFile in @(Get-ChildItem -LiteralPath $sitePackages -Filter 'METADATA' -File -Recurse | Where-Object {
-        $_.Directory.Name.EndsWith('.dist-info', [System.StringComparison]::OrdinalIgnoreCase)
+        $_.Directory.Name.EndsWith('.dist-info', [System.StringComparison]::OrdinalIgnoreCase) -and
+        -not $baselineMetadata.ContainsKey($_.FullName.ToLowerInvariant())
     })) {
         $metadata = Get-Content -LiteralPath $metadataFile.FullName
         $nameLine = $metadata | Where-Object { $_ -like 'Name: *' } | Select-Object -First 1
         $versionLine = $metadata | Where-Object { $_ -like 'Version: *' } | Select-Object -First 1
         $distributionName = if ($nameLine) { $nameLine.Substring(6).Trim() } else { $metadataFile.Directory.BaseName }
         $distributionVersion = if ($versionLine) { $versionLine.Substring(9).Trim() } else { 'unknown' }
+        $wheels += Get-CompatibleWheel $wheelhousePath $distributionName $distributionVersion `
+            $lock.python.version $requirementsText
         $licenseFiles = @(Get-ChildItem -LiteralPath $metadataFile.Directory.FullName -File -Recurse | Where-Object {
             $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE)' -or $_.Directory.Name -eq 'licenses'
         })
@@ -275,6 +390,22 @@ try {
         $distributions += [ordered]@{ name = $distributionName; version = $distributionVersion; licenses = $licenseInventory }
     }
 
+    $probe = $lock.source.importProbe
+    if ([string]::IsNullOrWhiteSpace($probe.module) -or [string]::IsNullOrWhiteSpace($probe.expectedRoot)) {
+        throw 'Runtime source import probe is incomplete'
+    }
+    $probeCommand = "import $($probe.module); print($($probe.module).__file__)"
+    $oldPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $importOrigin = (& $pythonExecutable -I -s -c $probeCommand 2>&1 | Out-String).Trim()
+    $probeExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $oldPreference
+    $expectedImportRoot = (Resolve-RelativePath $staging $probe.expectedRoot 'Import probe expectedRoot').TrimEnd('\') + '\'
+    if ($probeExitCode -ne 0 -or
+        -not [System.IO.Path]::GetFullPath($importOrigin).StartsWith($expectedImportRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Runtime source import did not resolve from the locked Git tree: $importOrigin"
+    }
+
     [System.IO.File]::WriteAllText((Join-Path $staging 'THIRD_PARTY_NOTICES.txt'),
         ($noticeSections -join "`r`n`r`n---`r`n`r`n"), [System.Text.UTF8Encoding]::new($false))
 
@@ -288,6 +419,7 @@ try {
         artifacts = @($lock.artifacts)
         models = @($lock.models)
         distributions = $distributions
+        wheels = $wheels
     }
     [System.IO.File]::WriteAllText((Join-Path $staging 'runtime-manifest.json'),
         ($manifest | ConvertTo-Json -Depth 12), [System.Text.UTF8Encoding]::new($false))
@@ -298,7 +430,7 @@ try {
         ($toolItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw 'Build tool cleanup target escaped staging'
     }
-    Remove-Item -LiteralPath $toolItem.FullName -Recurse -Force
+    Remove-TreeSafely $toolItem.FullName $staging 'Build tool directory'
 
     $finalVersion = & $pythonExecutable --version 2>&1
     if ($LASTEXITCODE -ne 0 -or $finalVersion -ne "Python $($lock.python.version)") {
@@ -312,7 +444,7 @@ catch {
     if ($stagingItem -and
         $stagingItem.FullName.StartsWith($outputParent.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase) -and
         -not ($stagingItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-        Remove-Item -LiteralPath $stagingItem.FullName -Recurse -Force
+        Remove-TreeSafely $stagingItem.FullName $outputParent 'Runtime staging directory'
     }
     throw
 }

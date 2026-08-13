@@ -24,14 +24,21 @@
     "tree": "33e4644dc5a698874fa035630d1878aa453b564c",
     "cachePath": "sources/Qwen3-TTS",
     "installPath": "source/Qwen3-TTS",
-    "pythonPath": "source/Qwen3-TTS/src"
+    "pythonPath": "source/Qwen3-TTS",
+    "importProbe": {
+      "module": "qwen_tts",
+      "expectedRoot": "source/Qwen3-TTS"
+    }
   },
   "requirements": {
     "path": "locks/qwen-win-x64-py312.requirements.txt",
-    "sha256": "cb8b1c8f3003a01080a9e069033976dac088a6352f161d5ac5ff8dcf2b946622",
-    "generatedFrom": "https://pypi.org/project/qwen-tts/0.1.1/",
+    "sha256": "54a9260d7975115a06af3a384fddcb4945425af203eb98939666c5a5073f6dd9",
+    "generatedFrom": "https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/pyproject.toml",
     "generator": "uv 0.11.29 pip compile --python-version 3.12 --python-platform x86_64-pc-windows-msvc --generate-hashes",
-    "inputs": ["qwen-tts==0.1.1"]
+    "inputs": [
+      "transformers==4.57.3", "accelerate==1.12.0", "gradio", "librosa",
+      "torchaudio", "soundfile", "sox", "onnxruntime", "einops"
+    ]
   },
   "models": [
     { "id": "Qwen/Qwen3-TTS-12Hz-0.6B-Base", "revision": "5d83992436eae1d760afd27aff78a71d676296fc" },
@@ -40,7 +47,7 @@
   "artifacts": [
     { "kind": "python-archive", "cachePath": "downloads/python-3.12.9-embed-amd64.zip", "sha256": "615861fb801e8b04c847598db4e1e46e4b046295017caa37cb5486dde72b5865" },
     { "kind": "resolver-archive", "cachePath": "downloads/uv-x86_64-pc-windows-msvc-0.12.4.zip", "sha256": "4f3b7d63cd81fca0da5a655d973d20affca89ce6e5f9a29fd0183cc4204a7639" },
-    { "kind": "dependency-lock", "path": "locks/qwen-win-x64-py312.requirements.txt", "sha256": "cb8b1c8f3003a01080a9e069033976dac088a6352f161d5ac5ff8dcf2b946622" },
+    { "kind": "dependency-lock", "path": "locks/qwen-win-x64-py312.requirements.txt", "sha256": "54a9260d7975115a06af3a384fddcb4945425af203eb98939666c5a5073f6dd9" },
     { "kind": "source-tree", "cachePath": "sources/Qwen3-TTS", "revision": "022e286b98fbec7e1e916cb940cdf532cd9f488e", "tree": "33e4644dc5a698874fa035630d1878aa453b564c" }
   ],
   "notices": [

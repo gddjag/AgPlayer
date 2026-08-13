@@ -24,7 +24,11 @@
     "tree": "9693ab42c202cefd9031fb413816c54b05191e83",
     "cachePath": "sources/index-tts",
     "installPath": "source/index-tts",
-    "pythonPath": "source/index-tts"
+    "pythonPath": "source/index-tts",
+    "importProbe": {
+      "module": "indextts",
+      "expectedRoot": "source/index-tts"
+    }
   },
   "requirements": {
     "path": "locks/indextts25-win-x64-py311.requirements.txt",

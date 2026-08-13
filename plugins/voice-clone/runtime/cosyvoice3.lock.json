@@ -25,6 +25,10 @@
     "cachePath": "sources/CosyVoice",
     "installPath": "source/CosyVoice",
     "pythonPath": "source/CosyVoice",
+    "importProbe": {
+      "module": "cosyvoice",
+      "expectedRoot": "source/CosyVoice"
+    },
     "submodules": [
       {
         "repository": "https://github.com/shivammehta25/Matcha-TTS",

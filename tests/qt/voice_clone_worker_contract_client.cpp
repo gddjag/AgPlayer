@@ -149,10 +149,32 @@ int main(int argc, char* argv[])
     const auto validation = validateCapabilitySchema(schema);
     if (!validation.isValid()) fail(QStringLiteral("Invalid schema: %1").arg(validation.errorString()));
     bool foundExpectedParameter = false;
+    QJsonObject completeDefaults;
     for (const QJsonValue& value : schema.value(QStringLiteral("parameters")).toArray()) {
-        foundExpectedParameter |= value.toObject().value(QStringLiteral("key")) == expectedParameter;
+        const QJsonObject control = value.toObject();
+        foundExpectedParameter |= control.value(QStringLiteral("key")) == expectedParameter;
+        completeDefaults.insert(control.value(QStringLiteral("key")).toString(),
+                                control.value(QStringLiteral("default")));
     }
     if (!foundExpectedParameter) fail(QStringLiteral("Missing baseline parameter %1").arg(expectedParameter));
+
+    if (adapterId == QStringLiteral("indextts25") || adapterId == QStringLiteral("cosyvoice3")) {
+        QJsonObject invalidHiddenDefaults = completeDefaults;
+        invalidHiddenDefaults.insert(adapterId == QStringLiteral("indextts25")
+                                         ? QStringLiteral("emotionAudioPath")
+                                         : QStringLiteral("instruction"),
+                                     QStringLiteral("not-a-default"));
+        response = transact(
+            socket,
+            request(QStringLiteral("load"), QStringLiteral("load-hidden-nondefault"), adapterId,
+                    QJsonObject{{QStringLiteral("modelRoot"), modelRoot.path()},
+                                {QStringLiteral("parameters"), invalidHiddenDefaults}}));
+        if (response.value(QStringLiteral("kind")) != QStringLiteral("error")
+            || response.value(QStringLiteral("error")).toObject()
+                   .value(QStringLiteral("code")) != QStringLiteral("INVALID_PARAMETERS")) {
+            fail(QStringLiteral("Load accepted a non-default hidden parameter"));
+        }
+    }
 
     response = transact(
         socket,
@@ -165,7 +187,11 @@ int main(int argc, char* argv[])
         fail(QStringLiteral("Invalid model root did not produce a protocol error"));
     }
 
-    response = transact(socket, request(QStringLiteral("load"), QStringLiteral("load-1"), adapterId));
+    response = transact(
+        socket,
+        request(QStringLiteral("load"), QStringLiteral("load-1"), adapterId,
+                QJsonObject{{QStringLiteral("modelRoot"), modelRoot.path()},
+                            {QStringLiteral("parameters"), completeDefaults}}));
     if (response.value(QStringLiteral("kind")) != QStringLiteral("response")
         || !response.value(QStringLiteral("payload")).toObject()
                 .value(QStringLiteral("loaded")).toBool()) {
