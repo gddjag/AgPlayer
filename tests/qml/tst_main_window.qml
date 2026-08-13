@@ -1478,7 +1478,7 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 920)
+        compare(settingsWindow.width, 860)
         verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
                "settings window must fit the available desktop")
         const page = findChild(mainWindow, "settingsPage")
@@ -1496,7 +1496,7 @@ TestCase {
         var headerDragArea = findChild(page, "settingsHeaderDragArea")
         verify(headerDragArea, "settings header must expose a full-width native drag surface")
         verify(headerDragArea.width > settingsWindow.width * 0.50)
-        compare(sidebar.width, 208)
+        compare(sidebar.width, 184)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
         verify(contentColumn.x >= 24,
