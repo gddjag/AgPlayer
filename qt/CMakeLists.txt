@@ -94,6 +94,10 @@ add_library(agplayer_qt STATIC
     src/voice_clone/voice_clone_worker_protocol.hpp
     src/voice_clone/voice_clone_host_controller.cpp
     src/voice_clone/voice_clone_host_controller.hpp
+    src/voice_clone/voice_clone_package_manifest.cpp
+    src/voice_clone/voice_clone_package_manifest.hpp
+    src/voice_clone/voice_clone_package_manager.cpp
+    src/voice_clone/voice_clone_package_manager.hpp
     src/plugins/voice_clone_plugin_interface.hpp
 )
 
@@ -114,6 +118,7 @@ target_link_libraries(agplayer_qt
         agplayer_core
     PRIVATE
         Qt6::Concurrent
+        Qt6::Network
 )
 target_compile_definitions(agplayer_qt PUBLIC
     AGPLAYER_VERSION="${PROJECT_VERSION}"
