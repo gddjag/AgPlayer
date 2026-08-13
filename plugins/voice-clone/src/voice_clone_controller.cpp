@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QUrl>
 #include <QUuid>
 
@@ -199,6 +200,133 @@ bool copyVerifiedPartToNewFile(const QString& partPath,
     return true;
 }
 
+bool copyPublishedResultSafely(const QString& sourcePath,
+                               const QString& destinationPath,
+                               QString* error)
+{
+    QSaveFile destination(destinationPath);
+#ifdef Q_OS_WIN
+    const std::wstring nativeSource = QDir::toNativeSeparators(sourcePath).toStdWString();
+    const HANDLE source = CreateFileW(nativeSource.c_str(), GENERIC_READ,
+                                      FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                      FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN,
+                                      nullptr);
+    if (source == INVALID_HANDLE_VALUE) {
+        *error = QStringLiteral("Could not open the generated result safely");
+        return false;
+    }
+    FILE_ATTRIBUTE_TAG_INFO tagInfo{};
+    LARGE_INTEGER before{};
+    if (!GetFileInformationByHandleEx(source, FileAttributeTagInfo, &tagInfo, sizeof(tagInfo))
+        || (tagInfo.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) != 0
+        || !GetFileSizeEx(source, &before) || before.QuadPart <= 0
+        || !destination.open(QIODevice::WriteOnly)) {
+        CloseHandle(source);
+        *error = QStringLiteral("Generated result is not a regular readable file");
+        return false;
+    }
+    qint64 copied = 0;
+    QByteArray chunk(64 * 1024, Qt::Uninitialized);
+    bool ok = true;
+    while (true) {
+        DWORD read = 0;
+        if (!ReadFile(source, chunk.data(), static_cast<DWORD>(chunk.size()), &read, nullptr)) {
+            ok = false;
+            break;
+        }
+        if (read == 0) break;
+        if (destination.write(chunk.constData(), static_cast<qint64>(read))
+            != static_cast<qint64>(read)) {
+            ok = false;
+            break;
+        }
+        copied += read;
+    }
+    LARGE_INTEGER after{};
+    ok = ok && GetFileSizeEx(source, &after) && before.QuadPart == after.QuadPart
+         && copied == before.QuadPart;
+    CloseHandle(source);
+#else
+    const QByteArray nativeSource = QFile::encodeName(sourcePath);
+    const int fd = ::open(nativeSource.constData(), O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) {
+        *error = QStringLiteral("Could not open the generated result safely");
+        return false;
+    }
+    struct stat before{};
+    QFile source;
+    if (::fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size <= 0
+        || !source.open(fd, QIODevice::ReadOnly, QFileDevice::DontCloseHandle)
+        || !destination.open(QIODevice::WriteOnly)) {
+        source.close();
+        ::close(fd);
+        *error = QStringLiteral("Generated result is not a regular readable file");
+        return false;
+    }
+    qint64 copied = 0;
+    bool ok = true;
+    while (!source.atEnd()) {
+        const QByteArray chunk = source.read(64 * 1024);
+        if ((chunk.isEmpty() && source.error() != QFile::NoError)
+            || destination.write(chunk) != chunk.size()) {
+            ok = false;
+            break;
+        }
+        copied += chunk.size();
+    }
+    struct stat after{};
+    ok = ok && ::fstat(fd, &after) == 0 && before.st_dev == after.st_dev
+         && before.st_ino == after.st_ino && before.st_size == after.st_size
+         && copied == before.st_size;
+    source.close();
+    ::close(fd);
+#endif
+    if (!ok || !destination.commit()) {
+        destination.cancelWriting();
+        *error = QStringLiteral("Generated result changed or could not be saved atomically");
+        return false;
+    }
+    return true;
+}
+
+bool removePublishedResultSafely(const QString& path)
+{
+#ifdef Q_OS_WIN
+    const std::wstring nativePath = QDir::toNativeSeparators(path).toStdWString();
+    const HANDLE file = CreateFileW(nativePath.c_str(), GENERIC_READ | DELETE,
+                                    FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                    FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    FILE_ATTRIBUTE_TAG_INFO tagInfo{};
+    LARGE_INTEGER size{};
+    const bool regular = GetFileInformationByHandleEx(
+                             file, FileAttributeTagInfo, &tagInfo, sizeof(tagInfo))
+                         && (tagInfo.FileAttributes
+                             & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) == 0
+                         && GetFileSizeEx(file, &size) && size.QuadPart > 0;
+    FILE_DISPOSITION_INFO disposition{TRUE};
+    const bool removed = regular
+                         && SetFileInformationByHandle(file, FileDispositionInfo,
+                                                       &disposition, sizeof(disposition)) != 0;
+    CloseHandle(file);
+    return removed;
+#else
+    const QByteArray nativePath = QFile::encodeName(path);
+    const int fd = ::open(nativePath.constData(), O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) return false;
+    struct stat opened{};
+    struct stat current{};
+    const bool sameRegularFile = ::fstat(fd, &opened) == 0 && S_ISREG(opened.st_mode)
+                                 && opened.st_size > 0
+                                 && ::lstat(nativePath.constData(), &current) == 0
+                                 && opened.st_dev == current.st_dev
+                                 && opened.st_ino == current.st_ino;
+    const bool removed = sameRegularFile && ::unlink(nativePath.constData()) == 0;
+    ::close(fd);
+    return removed;
+#endif
+}
+
 } // namespace
 
 VoiceCloneController::VoiceCloneController(QString pluginRoot,
@@ -360,7 +488,17 @@ void VoiceCloneController::refreshModels()
         modelEntries_.append(model);
         models_.append(QVariantMap{{QStringLiteral("stableId"), model.stableId},
                                    {QStringLiteral("displayName"), model.displayName},
+                                   {QStringLiteral("description"), model.description},
+                                   {QStringLiteral("provider"), model.source.provider},
                                    {QStringLiteral("adapterId"), model.adapterId},
+                                   {QStringLiteral("capabilityPreview"), model.capabilityPreview},
+                                   {QStringLiteral("licenseName"), model.license.name},
+                                   {QStringLiteral("licenseUrl"), model.license.url},
+                                   {QStringLiteral("officialProjectUrl"), model.officialProjectUrl},
+                                   {QStringLiteral("huggingFaceUrl"), model.huggingFaceUrl},
+                                   {QStringLiteral("modelScopeUrl"), model.modelScopeUrl},
+                                   {QStringLiteral("requiresLicenseAcceptance"),
+                                    model.requiresLicenseAcceptance},
                                    {QStringLiteral("installState"), model.installState.isEmpty()
                                                                         ? QStringLiteral("built-in")
                                                                         : model.installState}});
@@ -488,6 +626,58 @@ bool VoiceCloneController::cancel(const QString& requestId)
     }
     worker_.abandonRequest(requestId);
     cancelTargets_.insert(cancelId, requestId);
+    return true;
+}
+
+bool VoiceCloneController::saveResult(const QString& outputPath,
+                                      const QString& destinationPath)
+{
+    const QString sourcePath = QDir::fromNativeSeparators(
+        QFileInfo(outputPath).absoluteFilePath());
+    const QString absoluteDestination = QDir::fromNativeSeparators(
+        QFileInfo(destinationPath).absoluteFilePath());
+    const QFileInfo sourceInfo(sourcePath);
+    if (!publishedResults_.contains(sourcePath) || destinationPath.isEmpty()
+        || !sourceInfo.isFile() || isReparsePoint(sourceInfo)
+        || !isSafeContainedDirectory(outputRoot_, sourceInfo.dir().absolutePath())) {
+        setError(QStringLiteral("Only a published generated result can be saved"));
+        return false;
+    }
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
+#endif
+    if (sourcePath.compare(absoluteDestination, sensitivity) == 0) {
+        setError(QStringLiteral("Save destination must differ from the managed result"));
+        return false;
+    }
+    QString error;
+    if (!copyPublishedResultSafely(sourcePath, absoluteDestination, &error)) {
+        setError(error);
+        return false;
+    }
+    setError({});
+    return true;
+}
+
+bool VoiceCloneController::deleteResult(const QString& outputPath)
+{
+    const QString path = QDir::fromNativeSeparators(
+        QFileInfo(outputPath).absoluteFilePath());
+    const QFileInfo info(path);
+    if (!publishedResults_.contains(path) || !info.isFile() || isReparsePoint(info)
+        || !isSafeContainedDirectory(outputRoot_, info.dir().absolutePath())) {
+        setError(QStringLiteral("Only a published generated result can be deleted"));
+        return false;
+    }
+    if (!removePublishedResultSafely(path)) {
+        setError(QStringLiteral("Could not delete the generated result"));
+        return false;
+    }
+    publishedResults_.remove(path);
+    QDir().rmdir(info.dir().absolutePath());
+    setError({});
     return true;
 }
 
@@ -637,6 +827,8 @@ bool VoiceCloneController::finalizeGeneration(const QString& requestId,
         *error = QStringLiteral("Generated WAV commit was not safe");
         return false;
     }
+    publishedResults_.insert(QDir::fromNativeSeparators(
+        QFileInfo(files.finalPath).absoluteFilePath()));
     *outputPath = files.finalPath;
     return true;
 }

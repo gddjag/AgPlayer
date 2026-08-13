@@ -395,12 +395,28 @@ void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
     invalidManifest.close();
     VoiceClonePackageManager licenses(layout.packagesRoot);
     VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(controller.metaObject()->indexOfMethod("selectModel(QString)") >= 0);
+    QVERIFY(controller.metaObject()->indexOfMethod(
+                "generate(QString,QString,QJsonObject)") >= 0);
     bool foundInvalid = false;
+    bool foundModelMetadata = false;
     for (const QVariant& value : controller.models()) {
-        if (value.toMap().value(QStringLiteral("installState")) == QStringLiteral("invalid"))
+        const QVariantMap model = value.toMap();
+        if (model.value(QStringLiteral("installState")) == QStringLiteral("invalid"))
             foundInvalid = true;
+        if (model.value(QStringLiteral("stableId")) == modelId) {
+            QVERIFY(!model.value(QStringLiteral("description")).toString().isEmpty());
+            QVERIFY(!model.value(QStringLiteral("licenseName")).toString().isEmpty());
+            QVERIFY(model.contains(QStringLiteral("officialProjectUrl")));
+            QVERIFY(model.contains(QStringLiteral("huggingFaceUrl")));
+            QVERIFY(model.contains(QStringLiteral("modelScopeUrl")));
+            QVERIFY(model.contains(QStringLiteral("capabilityPreview")));
+            QVERIFY(model.contains(QStringLiteral("requiresLicenseAcceptance")));
+            foundModelMetadata = true;
+        }
     }
     QVERIFY(foundInvalid);
+    QVERIFY(foundModelMetadata);
     controller.setRequestTimeoutMs(2000);
     QVERIFY2(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")),
              qPrintable(controller.errorString()));
@@ -433,6 +449,14 @@ void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
         QVERIFY(QFileInfo::exists(output));
         QVERIFY(!QFileInfo::exists(output + QStringLiteral(".part")));
     }
+    const QString managedOutput = finished.at(0).at(1).toString();
+    const QString savedCopy = layout.root.filePath(QStringLiteral("saved-result.wav"));
+    QVERIFY(controller.saveResult(managedOutput, savedCopy));
+    QVERIFY(QFileInfo::exists(savedCopy));
+    QCOMPARE(QFileInfo(savedCopy).size(), QFileInfo(managedOutput).size());
+    QVERIFY(!controller.deleteResult(savedCopy));
+    QVERIFY(controller.deleteResult(managedOutput));
+    QVERIFY(!QFileInfo::exists(managedOutput));
 
     const QString canceled = controller.generate(QStringLiteral("hang"), {},
                                                   {{QStringLiteral("seed"), 4},
@@ -748,6 +772,10 @@ void VoiceCloneControllerTest::shutdownUsesProtocolAndModuleLoadsThroughHost()
     QVERIFY2(host.openPlugin(), qPrintable(host.errorString()));
     QVERIFY(host.pluginController() != nullptr);
     QVERIFY(host.mainQmlUrl().isValid());
+    QCOMPARE(host.mainQmlUrl().scheme(), QStringLiteral("qrc"));
+    QFile workspace(QStringLiteral(":") + host.mainQmlUrl().path());
+    QVERIFY2(workspace.open(QIODevice::ReadOnly), qPrintable(workspace.errorString()));
+    QVERIFY(workspace.readAll().contains("VoiceCloneModelBar"));
     host.closePlugin();
     QCOMPARE(host.state(), VoiceCloneHostController::Compatible);
     qunsetenv("AGPLAYER_VOICE_CLONE_ROOT");

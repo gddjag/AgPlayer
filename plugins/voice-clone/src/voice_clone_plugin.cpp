@@ -42,7 +42,7 @@ QObject* VoiceClonePlugin::controller()
 
 QUrl VoiceClonePlugin::mainQmlUrl() const
 {
-    return QUrl(QStringLiteral("qrc:/AgPlayer/VoiceClone/VoiceClonePage.qml"));
+    return QUrl(QStringLiteral("qrc:/AgPlayer/VoiceClone/VoiceCloneWorkspace.qml"));
 }
 
 int VoiceClonePlugin::protocolVersion() const

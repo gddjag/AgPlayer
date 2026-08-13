@@ -120,6 +120,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
         qml/AgPlayer/components/tools/MetadataEditPage.qml
         qml/AgPlayer/components/tools/AudioEditorPage.qml
+        qml/AgPlayer/components/tools/VoiceCloneHostPage.qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
         qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
         qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml

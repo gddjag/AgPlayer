@@ -790,6 +790,15 @@ set_tests_properties(qml_filename_process_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_test(NAME qml_voice_clone_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_voice_clone.qml)
+set_tests_properties(qml_voice_clone_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_test(NAME metadata_editor_layout_contract_test
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
         -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/metadata_editor_layout_contract_test.ps1

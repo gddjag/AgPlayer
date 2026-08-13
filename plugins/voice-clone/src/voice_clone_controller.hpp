@@ -33,18 +33,21 @@ public:
     bool configureAdapter(const QString& adapterId,
                           const QString& adapterVersion,
                           const QString& launcherId = {});
-    bool selectModel(const QString& stableId);
+    Q_INVOKABLE bool selectModel(const QString& stableId);
     Q_INVOKABLE void refreshModels();
     Q_INVOKABLE bool openModelDirectory();
 
-    bool startWorker();
-    bool restartWorker();
-    bool loadModel();
-    bool unloadModel();
-    QString generate(const QString& text,
-                     const QString& referenceAudioPath,
-                     const QJsonObject& parameters);
-    bool cancel(const QString& requestId);
+    Q_INVOKABLE bool startWorker();
+    Q_INVOKABLE bool restartWorker();
+    Q_INVOKABLE bool loadModel();
+    Q_INVOKABLE bool unloadModel();
+    Q_INVOKABLE QString generate(const QString& text,
+                                 const QString& referenceAudioPath,
+                                 const QJsonObject& parameters);
+    Q_INVOKABLE bool cancel(const QString& requestId);
+    Q_INVOKABLE bool saveResult(const QString& outputPath,
+                                const QString& destinationPath);
+    Q_INVOKABLE bool deleteResult(const QString& outputPath);
     void shutdown();
 
     void setRequestTimeoutMs(int timeoutMs);
@@ -105,6 +108,7 @@ private:
     QHash<QString, GenerationFiles> generations_;
     QHash<QString, QString> pendingCleanup_;
     QHash<QString, QString> cancelTargets_;
+    QSet<QString> publishedResults_;
     QString loadRequestId_;
     QString error_;
     int requestTimeoutMs_ = 10000;

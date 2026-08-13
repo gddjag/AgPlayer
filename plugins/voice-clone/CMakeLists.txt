@@ -23,6 +23,24 @@ add_library(agplayer_voice_clone_plugin MODULE
     src/voice_clone_plugin.cpp
     src/voice_clone_plugin.hpp
 )
+
+set(VOICE_CLONE_QML_FILES
+    qml/VoiceCloneWorkspace.qml
+    qml/VoiceCloneModelBar.qml
+    qml/VoiceCloneReferencePanel.qml
+    qml/VoiceCloneTextPanel.qml
+    qml/VoiceCloneOutputPanel.qml
+    qml/VoiceCloneParameterPanel.qml
+    qml/VoiceCloneResultPanel.qml
+)
+foreach(qml_file IN LISTS VOICE_CLONE_QML_FILES)
+    get_filename_component(qml_alias "${qml_file}" NAME)
+    set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${qml_alias}")
+endforeach()
+qt_add_resources(agplayer_voice_clone_plugin voice_clone_qml
+    PREFIX "/AgPlayer/VoiceClone"
+    FILES ${VOICE_CLONE_QML_FILES}
+)
 set_target_properties(agplayer_voice_clone_plugin PROPERTIES
     AUTOMOC ON
     PREFIX ""
