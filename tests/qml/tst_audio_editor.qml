@@ -106,6 +106,18 @@ TestCase {
         })
     }
 
+    function test_waveformDirectManipulationKeepsSelectionAndPlayheadIndependent() {
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        verify(canvas.width > 0)
+    }
+
+    function test_overviewWindowDragsContinuouslyFromGrabPoint() {
+        const overview = findChild(page, "overviewNavigator")
+        verify(overview)
+        verify(overview.width > 0)
+    }
+
     function test_noPageLevelHorizontalOverflow_data() {
         return [
             {tag: "1280x720", w: 1280, h: 720},

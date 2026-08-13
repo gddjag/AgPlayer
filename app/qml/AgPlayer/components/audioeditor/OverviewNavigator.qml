@@ -4,6 +4,9 @@ import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
+    id: root
+    function beginInteraction(ratio) { overviewInteraction.beginDrag(ratio) }
+    function updateInteraction(ratio) { overviewInteraction.dragTo(ratio) }
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
@@ -29,6 +32,7 @@ Rectangle {
                 waveformColor: Theme.isLight ? "#2B9692" : "#297E7B"
             }
             Rectangle {
+                id: viewportWindow
                 x: parent.width * AudioEditorController.viewport.overviewStartRatio
                 width: parent.width * AudioEditorController.viewport.overviewWidthRatio
                 anchors.top: parent.top
@@ -38,10 +42,39 @@ Rectangle {
                 border.width: 1
             }
             MouseArea {
+                id: overviewInteraction
+                objectName: "overviewInteraction"
                 anchors.fill: parent
                 enabled: AudioEditorController.hasDocument
-                onClicked: mouse => AudioEditorController.viewport.moveOverviewWindow(
-                               mouse.x / Math.max(1, width))
+                cursorShape: Qt.SizeHorCursor
+                property real pressRatio: 0
+                property real initialStartRatio: 0
+                property bool grabbedWindow: false
+                function beginDrag(ratio) {
+                    pressRatio = ratio
+                    initialStartRatio = AudioEditorController.viewport.overviewStartRatio
+                    const windowEnd = initialStartRatio
+                        + AudioEditorController.viewport.overviewWidthRatio
+                    grabbedWindow = pressRatio >= initialStartRatio
+                        && pressRatio <= windowEnd
+                    if (!grabbedWindow) {
+                        AudioEditorController.viewport.moveOverviewWindow(
+                            pressRatio
+                            - AudioEditorController.viewport.overviewWidthRatio / 2)
+                        initialStartRatio = AudioEditorController.viewport.overviewStartRatio
+                        grabbedWindow = true
+                    }
+                }
+                function dragTo(ratio) {
+                    if (!grabbedWindow) return
+                    AudioEditorController.viewport.moveOverviewWindow(
+                        initialStartRatio + ratio - pressRatio)
+                }
+                onPressed: mouse => beginDrag(mouse.x / Math.max(1, width))
+                onPositionChanged: mouse => {
+                    if (pressed)
+                        dragTo(mouse.x / Math.max(1, width))
+                }
             }
         }
 
