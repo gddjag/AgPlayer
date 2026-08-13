@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $toolsRoot = Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools'
 $audioEditor = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'AudioEditorPage.qml')
 $formatPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatConvertPage.qml')
+$formatSettings = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatSettingsPanel.qml')
 $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
@@ -70,13 +71,19 @@ if ($formatPage -notmatch 'enabled:\s*!converter\.busy\s*&&\s*\(modelData\.actio
 foreach ($control in @(
     'formatToolbar', 'formatSearchField', 'formatStatusFilters',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
-    'formatOutputFormatGroup', 'formatEncodingSettingsGroup',
-    'formatOutputOptionsGroup', 'formatTotalProgress')) {
+    'formatTotalProgress')) {
     if ($formatPage -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The reference conversion workbench is missing $control."
     }
 }
-if ($formatPage -notmatch 'converter\.previewSelected\(' -or $formatPage -notmatch 'formatPreflightDialog') {
+foreach ($control in @(
+    'formatOutputFormatGroup', 'formatEncodingSettingsGroup',
+    'formatOutputOptionsGroup')) {
+    if ($formatSettings -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The conversion settings panel is missing $control."
+    }
+}
+if ($formatPage -notmatch 'converter\.buildPreflight\(' -or $formatPage -notmatch 'FormatPreflightDialog') {
     throw 'The converter must show real preflight differences before starting a changed plan.'
 }
 if ($metadataPage -notmatch 'enabled:\s*!MetadataEditor\.busy\s*&&\s*PlaybackController\.currentTrackId\.length > 0') {
@@ -89,13 +96,15 @@ foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
     if ($page -notmatch 'function addCurrentPlayerTrack\(\)') {
         throw 'Each file tool must import the active player file through its real controller.'
     }
-    if ($page -notmatch 'file:///') {
-        throw 'Player file paths must be converted to explicit local-file URLs on Windows.'
-    }
     if ($page -notmatch 'PlaybackController\.queueTrackIds') {
         throw 'The player import action must accept the active playback queue, not only one track.'
     }
+}
+if ($formatPage -notmatch 'converter\.addPlaylistPaths\(paths\)') {
+    throw 'The converter must receive canonical native paths from the active playback queue.'
+}
+foreach ($page in @($metadataPage, $filenamePage)) {
     if ($page -notmatch 'Qt\.resolvedUrl\("file:///"') {
-        throw 'The player import action must hand the native controller QUrl values, not bare file strings.'
+        throw 'Metadata and filename controllers must receive explicit local-file URLs on Windows.'
     }
 }

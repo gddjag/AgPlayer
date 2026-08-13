@@ -196,6 +196,7 @@ Rectangle {
 
         Menu {
             id: filterMenu
+            objectName: "formatStatusFilters"
             Repeater {
                 model: ["All", "Converting", "Done", "Error", "Cancelled"]
                 MenuItem {
