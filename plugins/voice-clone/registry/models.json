@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "stableId": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+      "displayName": "Qwen3-TTS 0.6B Base",
+      "description": "Relative lightweight multilingual voice cloning model.",
+      "provider": "Qwen",
+      "revision": "main",
+      "adapterId": "qwen",
+      "runtimeId": "qwen",
+      "stable": true,
+      "requiresLicenseAcceptance": false,
+      "license": {
+        "name": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+      },
+      "officialUrls": {
+        "project": "https://github.com/QwenLM/Qwen3-TTS",
+        "huggingFace": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "modelScope": "https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+      },
+      "capabilityPreview": ["voice-clone", "multilingual"]
+    },
+    {
+      "stableId": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+      "displayName": "Qwen3-TTS 1.7B Base",
+      "description": "Higher-quality multilingual voice cloning model.",
+      "provider": "Qwen",
+      "revision": "main",
+      "adapterId": "qwen",
+      "runtimeId": "qwen",
+      "stable": true,
+      "requiresLicenseAcceptance": false,
+      "license": {
+        "name": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+      },
+      "officialUrls": {
+        "project": "https://github.com/QwenLM/Qwen3-TTS",
+        "huggingFace": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "modelScope": "https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+      },
+      "capabilityPreview": ["voice-clone", "multilingual", "higher-quality"]
+    },
+    {
+      "stableId": "IndexTeam/IndexTTS-2.5",
+      "displayName": "IndexTTS 2.5",
+      "description": "Experimental expressive multilingual voice cloning model.",
+      "provider": "IndexTeam",
+      "revision": "main",
+      "adapterId": "indextts25",
+      "runtimeId": "indextts25",
+      "stable": true,
+      "requiresLicenseAcceptance": true,
+      "license": {
+        "name": "bilibili Model Use License Agreement",
+        "url": "https://huggingface.co/IndexTeam/IndexTTS-2.5"
+      },
+      "officialUrls": {
+        "project": "https://github.com/index-tts/index-tts",
+        "huggingFace": "https://huggingface.co/IndexTeam/IndexTTS-2.5",
+        "modelScope": "https://modelscope.cn/models/IndexTeam/IndexTTS-2.5"
+      },
+      "capabilityPreview": ["voice-clone", "multilingual", "expressive"]
+    },
+    {
+      "stableId": "FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+      "displayName": "Fun-CosyVoice3 0.5B 2512",
+      "description": "Multilingual and Chinese dialect voice cloning model.",
+      "provider": "FunAudioLLM",
+      "revision": "main",
+      "adapterId": "cosyvoice3",
+      "runtimeId": "cosyvoice3",
+      "stable": true,
+      "requiresLicenseAcceptance": false,
+      "license": {
+        "name": "Apache-2.0",
+        "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
+      },
+      "officialUrls": {
+        "project": "https://github.com/FunAudioLLM/CosyVoice",
+        "huggingFace": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+        "modelScope": "https://www.modelscope.cn/models/FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
+      },
+      "capabilityPreview": ["voice-clone", "multilingual", "chinese-dialects"]
+    }
+  ]
+}

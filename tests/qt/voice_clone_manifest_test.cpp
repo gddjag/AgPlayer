@@ -448,10 +448,14 @@ void VoiceCloneManifestTest::rejectsAbsoluteTraversalAndLinkedPaths()
     QVERIFY(outsideFile.open(QIODevice::WriteOnly));
     outsideFile.close();
     const QString junction = QDir(modelDirectory).filePath(QStringLiteral("escape"));
-    const QString command = QStringLiteral("mklink /J \"%1\" \"%2\"")
-                                .arg(QDir::toNativeSeparators(junction),
-                                     QDir::toNativeSeparators(outsideDirectory));
-    QCOMPARE(QProcess::execute(QStringLiteral("cmd.exe"), {QStringLiteral("/c"), command}), 0);
+    QCOMPARE(QProcess::execute(QStringLiteral("cmd.exe"),
+                               {QStringLiteral("/d"),
+                                QStringLiteral("/c"),
+                                QStringLiteral("mklink"),
+                                QStringLiteral("/J"),
+                                QDir::toNativeSeparators(junction),
+                                QDir::toNativeSeparators(outsideDirectory)}),
+             0);
     files[0] = QJsonObject{{QStringLiteral("path"), QStringLiteral("escape/escaped.json")},
                            {QStringLiteral("sha256"), QLatin1String(kEmptySha256)}};
     manifest.insert(QStringLiteral("files"), files);
