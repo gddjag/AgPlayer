@@ -153,7 +153,7 @@ target_link_libraries(AgPlayer PRIVATE
     agplayer_app_qmlplugin
 )
 if(WIN32)
-    target_link_libraries(AgPlayer PRIVATE shell32)
+    target_link_libraries(AgPlayer PRIVATE shell32 propsys)
 endif()
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)
