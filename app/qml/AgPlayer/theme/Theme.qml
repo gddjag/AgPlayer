@@ -37,7 +37,7 @@ QtObject {
     readonly property color cyan: accent
     readonly property color violet: accent
     readonly property color favoriteRed: "#FF334D"
-    readonly property color ratingGold: "#FFD700"
+    readonly property color ratingGold: "#FF9800"
     readonly property color primaryText: isLight ? "#1B1B1B" : "#FFFFFF"
     readonly property color secondaryText: isLight ? "#5D5D5D" : "#CFCFCF"
     readonly property color onCyanText: systemPalette.highlightedText
@@ -79,7 +79,6 @@ QtObject {
     readonly property string iconPrefix: "qrc:/qt/qml/AgPlayer/assets/icons/"
     function icon(name) { return iconPrefix + name + ".svg" }
     function ratingColor(index) {
-        return ["#FFF4B8", "#FFE98A", "#FFE05C", "#FFD62E", "#FFCC00"][
-                    Math.max(0, Math.min(4, index))]
+        return ratingGold
     }
 }

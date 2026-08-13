@@ -62,8 +62,11 @@ if ($mainSource -notmatch 'SetCurrentProcessExplicitAppUserModelID') {
 }
 if ($mainSource -notmatch 'SHGetPropertyStoreForWindow' -or
     $mainSource -notmatch 'PKEY_AppUserModel_ID' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchCommand' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchDisplayNameResource' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchIconResource' -or
     $mainSource -notmatch 'window->setIcon') {
-    throw "Every native top-level window must publish the stable taskbar identity and icon"
+    throw "Every native top-level window must publish stable taskbar identity, relaunch metadata, and icon"
 }
 if ($installer -notmatch 'AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Installed shortcuts must share the stable taskbar AppUserModelID"

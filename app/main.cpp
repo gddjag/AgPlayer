@@ -70,6 +70,17 @@ namespace {
 
 constexpr wchar_t kAgPlayerAppUserModelId[] = L"AgPlayer.Desktop";
 
+HRESULT setWindowStringProperty(IPropertyStore* properties,
+                                const PROPERTYKEY& key,
+                                const QString& value)
+{
+    const std::wstring storage = value.toStdWString();
+    PROPVARIANT property{};
+    property.vt = VT_LPWSTR;
+    property.pwszVal = const_cast<wchar_t*>(storage.c_str());
+    return properties->SetValue(key, property);
+}
+
 void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
 {
     if (window == nullptr) {
@@ -87,11 +98,28 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
             reinterpret_cast<void**>(&properties)))) {
         return;
     }
-    PROPVARIANT appId{};
-    appId.vt = VT_LPWSTR;
-    appId.pwszVal = const_cast<wchar_t*>(kAgPlayerAppUserModelId);
-    properties->SetValue(PKEY_AppUserModel_ID, appId);
-    properties->Commit();
+    const QString executable = QDir::toNativeSeparators(
+        QCoreApplication::applicationFilePath());
+    const QString relaunchCommand = QStringLiteral("\"") + executable
+        + QStringLiteral("\"");
+    const QString displayNameResource = QStringLiteral("@") + executable
+        + QStringLiteral(",-102");
+    const QString iconResource = executable + QStringLiteral(",-101");
+
+    const HRESULT identityResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_ID,
+        QString::fromWCharArray(kAgPlayerAppUserModelId));
+    const HRESULT commandResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_RelaunchCommand, relaunchCommand);
+    const HRESULT displayResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_RelaunchDisplayNameResource,
+        displayNameResource);
+    const HRESULT iconResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_RelaunchIconResource, iconResource);
+    if (SUCCEEDED(identityResult) && SUCCEEDED(commandResult)
+        && SUCCEEDED(displayResult) && SUCCEEDED(iconResult)) {
+        properties->Commit();
+    }
     properties->Release();
 }
 

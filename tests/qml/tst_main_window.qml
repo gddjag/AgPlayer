@@ -1774,6 +1774,12 @@ TestCase {
         SettingsController.themeMode = previousMode
     }
 
+    function test_rating_stars_use_one_solid_orange_color() {
+        compare(Theme.ratingGold.toString(), "#ff9800")
+        for (var index = 0; index < 5; ++index)
+            compare(Theme.ratingColor(index).toString(), "#ff9800")
+    }
+
     function test_title_buttons_use_compact_chinese_labels() {
         var settings = findChild(mainWindow, "settingsButton")
         var minimize = findChild(mainWindow, "minimizeButton")
