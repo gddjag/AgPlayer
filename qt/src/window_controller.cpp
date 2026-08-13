@@ -140,6 +140,7 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
             ? static_cast<quintptr>(mainWindow->winId()) : 0;
         mainWindow_ = mainWindow;
         mainWindowHandle_ = nativeHandle;
+        rememberNativePixelSize(mainWindow_);
         mainWindow_->installEventFilter(this);
         connect(mainWindow_, &QWindow::windowStateChanged, this,
                 [this](const Qt::WindowState state) {
@@ -206,6 +207,7 @@ void WindowController::setListWindow(QWindow* listWindow)
         ? static_cast<quintptr>(listWindow->winId()) : 0;
     listWindow_ = listWindow;
     listWindowHandle_ = nativeHandle;
+    rememberNativePixelSize(listWindow_);
 
     listWindow_->installEventFilter(this);
     setListDockEdge(listWindowDetached_ ? QStringLiteral("none") : listDockEdge_);
@@ -729,9 +731,13 @@ void WindowController::repositionDockedListWindow()
     // native windows. Never fit it back into a single monitor: doing so on a
     // seam mutates the user's position or size as Windows changes screens.
     updatingWindowGeometry_ = true;
-    const QPoint position = computeSnapForEdge(listDockEdge_);
-    listWindow_->setPosition(position);
+    // Keep docking in Qt's screen-independent coordinate space. Mixing HWND
+    // outer-frame pixels with QWindow client geometry introduces a border/DPI
+    // offset and makes the pair drift at monitor seams. WM_DPICHANGED below
+    // independently preserves each native window's pixel size.
+    listWindow_->setPosition(computeSnapForEdge(listDockEdge_));
     updatingWindowGeometry_ = false;
+    const QPoint position = listWindow_->position();
     setListWindowX(position.x());
     setListWindowY(position.y());
     scheduleWindowStateSync();
@@ -816,8 +822,57 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
 {
     Q_UNUSED(result);
 #ifdef Q_OS_WIN
-    if (eventType == QByteArrayLiteral("windows_generic_MSG")) {
+    if (eventType == QByteArrayLiteral("windows_generic_MSG")
+        || eventType == QByteArrayLiteral("windows_dispatcher_MSG")) {
         const auto* msg = static_cast<MSG*>(message);
+        if (msg != nullptr && msg->message == WM_DPICHANGED
+            && (msg->hwnd == reinterpret_cast<HWND>(mainWindowHandle_)
+                || msg->hwnd == reinterpret_cast<HWND>(listWindowHandle_))) {
+            const bool mainChanged =
+                msg->hwnd == reinterpret_cast<HWND>(mainWindowHandle_);
+            const auto* suggestedRect = reinterpret_cast<RECT*>(msg->lParam);
+            RECT currentRect{};
+            if (suggestedRect != nullptr && GetWindowRect(msg->hwnd, &currentRect)) {
+                const QRect currentGeometry(
+                    currentRect.left, currentRect.top,
+                    currentRect.right - currentRect.left,
+                    currentRect.bottom - currentRect.top);
+                const QRect suggestedGeometry(
+                    suggestedRect->left, suggestedRect->top,
+                    suggestedRect->right - suggestedRect->left,
+                    suggestedRect->bottom - suggestedRect->top);
+                QRect adjusted = geometryForDpiChange(
+                    currentGeometry, suggestedGeometry);
+                const QSize preservedSize = mainChanged
+                    ? mainNativePixelSize_ : listNativePixelSize_;
+                if (preservedSize.isValid()) adjusted.setSize(preservedSize);
+                const HWND changedWindow = msg->hwnd;
+                const qreal newDpr = qreal(LOWORD(msg->wParam)) / 96.0;
+                // Let Qt consume WM_DPICHANGED first so its screen/DPR state is
+                // current, then restore the user's native-pixel rectangle. Qt
+                // otherwise preserves logical size and enlarges the window on
+                // a higher-DPI monitor.
+                QTimer::singleShot(0, this,
+                                   [this, changedWindow, adjusted,
+                                    mainChanged, newDpr]() {
+                    if (!IsWindow(changedWindow)) return;
+                    if (mainChanged) {
+                        mainTrackedDpr_ = newDpr;
+                    } else {
+                        listTrackedDpr_ = newDpr;
+                    }
+                    updatingWindowGeometry_ = true;
+                    SetWindowPos(changedWindow, nullptr,
+                                 adjusted.x(), adjusted.y(),
+                                 adjusted.width(), adjusted.height(),
+                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                    updatingWindowGeometry_ = false;
+                    if (mainChanged && !listWindowDetached_) {
+                        repositionDockedListWindow();
+                    }
+                });
+            }
+        }
         if (msg != nullptr && mainWindow_ != nullptr
             && msg->hwnd == reinterpret_cast<HWND>(mainWindowHandle_)
             && msg->message == WM_ACTIVATE
@@ -839,6 +894,26 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
     Q_UNUSED(message);
 #endif
     return false;
+}
+
+void WindowController::rememberNativePixelSize(QWindow* window)
+{
+#ifdef Q_OS_WIN
+    if (window == nullptr) return;
+    const HWND handle = reinterpret_cast<HWND>(window->winId());
+    RECT rect{};
+    if (handle == nullptr || !GetWindowRect(handle, &rect)) return;
+    const QSize size(rect.right - rect.left, rect.bottom - rect.top);
+    if (window == mainWindow_) {
+        mainNativePixelSize_ = size;
+        mainTrackedDpr_ = window->devicePixelRatio();
+    } else if (window == listWindow_) {
+        listNativePixelSize_ = size;
+        listTrackedDpr_ = window->devicePixelRatio();
+    }
+#else
+    Q_UNUSED(window);
+#endif
 }
 
 QString WindowController::snapEdgeForPosition(int x, int y) const
@@ -1014,6 +1089,17 @@ QString WindowController::edgeForPreference(int edge)
     }
 }
 
+QRect WindowController::geometryForDpiChange(
+    const QRect& currentGeometry, const QRect& suggestedGeometry)
+{
+    if (!currentGeometry.isValid() || !suggestedGeometry.isValid()) {
+        return suggestedGeometry;
+    }
+    QRect adjusted = suggestedGeometry;
+    adjusted.setSize(currentGeometry.size());
+    return adjusted;
+}
+
 QPoint WindowController::computeSnappedPosition(int x, int y) const
 {
     const QString edge = magneticSnapEnabled_ ? snapEdgeForPosition(x, y)
@@ -1048,6 +1134,12 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == mainWindow_) {
         if (event->type() == QEvent::Move || event->type() == QEvent::Resize) {
+#ifdef Q_OS_WIN
+            if (event->type() == QEvent::Resize
+                && qFuzzyCompare(mainTrackedDpr_, mainWindow_->devicePixelRatio())) {
+                rememberNativePixelSize(mainWindow_);
+            }
+#endif
             scheduleWindowStateSync();
             if (!updatingWindowGeometry_ && !listWindowDetached_) {
                 repositionDockedListWindow();
@@ -1091,6 +1183,12 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
         applyPlatformWindowStyle(qobject_cast<QWindow*>(watched));
     } else if (watched == listWindow_
                && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
+#ifdef Q_OS_WIN
+        if (event->type() == QEvent::Resize
+            && qFuzzyCompare(listTrackedDpr_, listWindow_->devicePixelRatio())) {
+            rememberNativePixelSize(listWindow_);
+        }
+#endif
         if (!updatingWindowGeometry_ && magneticSnapEnabled_
             && mainWindow_ != nullptr) {
             if (listWindowDetached_) {

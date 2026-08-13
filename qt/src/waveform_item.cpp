@@ -777,7 +777,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         std::vector<float> mixValues = hasMix
                                                  ? resampleValues(snapshot->mix->values, peakCount)
                                                   : std::vector<float>{};
-        const std::vector<float> heldSpectrumValues = visualMode_ == 2
+        std::vector<float> heldSpectrumValues = visualMode_ == 2
             && snapshot->spectrumPeakHold
             && !snapshot->spectrumPeakHold->values.empty()
             ? resampleValues(snapshot->spectrumPeakHold->values, peakCount)
@@ -795,9 +795,14 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         if (visualMode_ == 2 && !mixValues.empty()) {
             const float peak = *std::max_element(mixValues.begin(), mixValues.end());
             if (peak > 0.0F) {
-                for (float& value : mixValues) {
-                    value = std::pow(std::clamp(value / peak, 0.0F, 1.0F), 0.58F);
-                }
+                const auto normalizeSpectrum = [peak](std::vector<float>& values) {
+                    for (float& value : values) {
+                        value = std::pow(
+                            std::clamp(value / peak, 0.0F, 1.0F), 0.58F);
+                    }
+                };
+                normalizeSpectrum(mixValues);
+                normalizeSpectrum(heldSpectrumValues);
             }
         }
 

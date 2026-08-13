@@ -17,6 +17,18 @@ Item {
 
     visible: active
 
+    function dismissErrors() {
+        if (controller && typeof controller.clearErrors === "function")
+            controller.clearErrors()
+    }
+
+    Timer {
+        interval: 8000
+        running: root.showingErrors
+        repeat: false
+        onTriggered: root.dismissErrors()
+    }
+
     ColumnLayout {
         id: importProgress
         objectName: "importProgress"
@@ -47,13 +59,40 @@ Item {
         spacing: Theme.spacingSm
         visible: root.showingErrors
 
-        Text {
-            text: qsTr("Some files could not be imported")
-            color: Theme.favoriteRed
-            font.family: Theme.fontPrimary
-            font.pixelSize: 15
-            font.weight: Font.Medium
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
+            spacing: Theme.spacingSm
+
+            Text {
+                text: qsTr("Some files could not be imported")
+                color: Theme.favoriteRed
+                font.family: Theme.fontPrimary
+                font.pixelSize: 15
+                font.weight: Font.Medium
+            }
+
+            Button {
+                objectName: "dismissImportErrorsButton"
+                text: "×"
+                flat: true
+                implicitWidth: 30
+                implicitHeight: 30
+                focusPolicy: Qt.StrongFocus
+                Accessible.name: qsTr("Dismiss import errors")
+                onClicked: root.dismissErrors()
+
+                background: Rectangle {
+                    radius: Theme.radiusSm
+                    color: parent.hovered ? Theme.hoverSurface : "transparent"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: Theme.primaryText
+                    font.pixelSize: 20
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
         }
 
         Repeater {

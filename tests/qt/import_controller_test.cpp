@@ -2,6 +2,7 @@
 #include "library_model.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSemaphore>
 #include <QSignalSpy>
@@ -30,6 +31,16 @@ private slots:
     void leavesBpmZeroWhenAutoReadDisabled();
     void probeObservesDynamicAnalyzeBpmFlag();
     void importsSupportedAudioRecursivelyFromFolder();
+    void droppedFolderAndChinesePathAreExpanded();
+    void folderDiscoveryRunsOffModelThreadAndReturnsImmediately();
+    void importsEightyThreeTracksProgressivelyWithinBudget();
+    void probesFilesWithBoundedParallelism();
+    void batchesModelNotificationsForLargeImports();
+    void errorsCanBeDismissedWithoutStartingAnotherImport();
+    void queuesDropsReceivedWhileAnImportIsBusy();
+    void importsTenThousandLightweightRecordsWithinBudget();
+    void alreadyImportedTracksAreSkippedWithoutFalseSuccess();
+    void importedTracksAppearFirstInDiscoveryOrder();
 };
 
 namespace {
@@ -83,12 +94,18 @@ void ImportControllerTest::deduplicatesCanonicalPathsAndContinuesAfterFailure()
     QVERIFY(importer.errors().front().contains(QStringLiteral("decode failed")));
     QCOMPARE(importer.progress(), 1.0);
     QVERIFY(!importer.busy());
+    QCOMPARE(importer.importedTrackIds().size(), 1);
+    QCOMPARE(importer.importedTrackIds().front(),
+             model.tracks().front().trackId);
 
     finished.clear();
-    importer.importUrls({QUrl::fromLocalFile(goodPath)});
+    importer.importPaths({goodPath});
     QVERIFY(finished.wait(3000));
-    QCOMPARE(probeCalls.load(), 2);
+    QCOMPARE(probeCalls.load(), 3);
     QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(importer.importedTrackIds().size(), 1);
+    QCOMPARE(importer.importedTrackIds().front(),
+             model.tracks().front().trackId);
 }
 
 void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
@@ -124,6 +141,192 @@ void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
     QVERIFY(probedPaths.contains(canonicalLibraryPath(rootTrack)));
     QVERIFY(probedPaths.contains(canonicalLibraryPath(nestedTrack)));
     QVERIFY(!probedPaths.contains(canonicalLibraryPath(ignoredFile)));
+}
+
+void ImportControllerTest::droppedFolderAndChinesePathAreExpanded()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString folder = dir.filePath(QStringLiteral("中文歌单"));
+    QVERIFY(QDir().mkpath(folder));
+    const QString trackPath = QDir(folder).filePath(QStringLiteral("测试歌曲.wav"));
+    createFile(trackPath);
+
+    LibraryModel model;
+    ImportController importer(&model, [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(folder)});
+
+    QVERIFY(finished.wait(3000));
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.tracks().front().path, canonicalLibraryPath(trackPath));
+}
+
+void ImportControllerTest::folderDiscoveryRunsOffModelThreadAndReturnsImmediately()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString trackPath = dir.filePath(QStringLiteral("background.wav"));
+    createFile(trackPath);
+
+    QSemaphore discoveryEntered;
+    QSemaphore releaseDiscovery;
+    std::atomic_bool discoveryRanOffModelThread{false};
+    LibraryModel model;
+    const DiscoveryFunction discovery =
+        [&discoveryEntered, &releaseDiscovery, &discoveryRanOffModelThread,
+         &model, trackPath](const QList<QUrl>&) {
+            discoveryRanOffModelThread.store(
+                QThread::currentThread() != model.thread());
+            discoveryEntered.release();
+            releaseDiscovery.acquire();
+            return QStringList{trackPath};
+        };
+    const ProbeFunction probe = [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = QStringLiteral("Background");
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(&model, probe, discovery);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(dir.path())});
+
+    QVERIFY2(discoveryEntered.tryAcquire(1, 1000),
+             "importUrls must return while discovery continues off-thread");
+    QVERIFY(importer.busy());
+    QVERIFY(discoveryRanOffModelThread.load());
+    releaseDiscovery.release();
+    QVERIFY(finished.wait(3000));
+    QCOMPARE(model.rowCount(), 1);
+}
+
+void ImportControllerTest::importsEightyThreeTracksProgressivelyWithinBudget()
+{
+    const QString fixture = QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
+    QVERIFY2(!fixture.isEmpty(), "AGPLAYER_TEST_AUDIO must name the generated WAV fixture");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    for (int index = 0; index < 83; ++index) {
+        const QString path = dir.filePath(QStringLiteral("track-%1.wav").arg(index, 2, 10,
+                                                                              QLatin1Char('0')));
+        QVERIFY2(QFile::copy(fixture, path), qPrintable(path));
+    }
+
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QElapsedTimer timer;
+    timer.start();
+
+    importer.importFolder(QUrl::fromLocalFile(dir.path()));
+
+    QTRY_VERIFY_WITH_TIMEOUT(model.rowCount() > 0, 1000);
+    QVERIFY2(timer.elapsed() <= 1000, "the first imported track must be visible within one second");
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QCOMPARE(model.rowCount(), 83);
+    QVERIFY2(timer.elapsed() <= 5000, "83-track import must finish within five seconds");
+}
+
+void ImportControllerTest::probesFilesWithBoundedParallelism()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    for (int index = 0; index < 12; ++index) {
+        createFile(dir.filePath(QStringLiteral("parallel-%1.wav").arg(index)));
+    }
+
+    std::atomic_int active{0};
+    std::atomic_int maximum{0};
+    const ProbeFunction probe = [&active, &maximum](const QString& path) {
+        const int now = active.fetch_add(1) + 1;
+        int observed = maximum.load();
+        while (observed < now
+               && !maximum.compare_exchange_weak(observed, now)) {
+        }
+        QThread::msleep(80);
+        active.fetch_sub(1);
+
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+
+    LibraryModel model;
+    ImportController importer(&model, probe);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    importer.importFolder(QUrl::fromLocalFile(dir.path()));
+
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(model.rowCount(), 12);
+    QVERIFY2(maximum.load() >= 2, "metadata probes must overlap");
+    QVERIFY2(maximum.load() <= 4, "metadata probing must be capped at four workers");
+}
+
+void ImportControllerTest::batchesModelNotificationsForLargeImports()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QStringList paths;
+    for (int index = 0; index < 240; ++index) {
+        const QString path = dir.filePath(QStringLiteral("batch-%1.wav").arg(index));
+        createFile(path);
+        paths.append(path);
+    }
+
+    const ProbeFunction probe = [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, std::move(track), {}};
+    };
+    LibraryModel model;
+    ImportController importer(&model, probe);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QSignalSpy rowsInserted(&model, &QAbstractItemModel::rowsInserted);
+
+    importer.importPaths(paths);
+
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(model.rowCount(), 240);
+    QVERIFY2(rowsInserted.count() <= 8,
+             "large imports must update the model in bounded batches");
+}
+
+void ImportControllerTest::errorsCanBeDismissedWithoutStartingAnotherImport()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("broken.wav"));
+    createFile(path);
+
+    LibraryModel model;
+    ImportController importer(
+        &model, [](const QString&) {
+            return ProbeResult{AG_DECODE_ERROR, {}, QStringLiteral("decode failed")};
+        });
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QSignalSpy errorsChanged(&importer, &ImportController::errorsChanged);
+    importer.importPaths({path});
+    QVERIFY(finished.wait(3000));
+    QVERIFY(!importer.errors().isEmpty());
+
+    importer.clearErrors();
+
+    QVERIFY(importer.errors().isEmpty());
+    QVERIFY(errorsChanged.count() >= 2);
 }
 
 void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
@@ -335,6 +538,151 @@ void ImportControllerTest::probeObservesDynamicAnalyzeBpmFlag()
         QCOMPARE(model.rowCount(), 1);
         QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
     }
+}
+
+void ImportControllerTest::queuesDropsReceivedWhileAnImportIsBusy()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString firstPath = dir.filePath(QStringLiteral("first.wav"));
+    const QString secondPath = dir.filePath(QStringLiteral("second.wav"));
+    createFile(firstPath);
+    createFile(secondPath);
+
+    QSemaphore firstEntered;
+    QSemaphore releaseFirst;
+    const ProbeFunction probe = [&](const QString& path) {
+        if (path == QDir::cleanPath(firstPath)) {
+            firstEntered.release();
+            releaseFirst.acquire();
+        }
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).baseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+
+    LibraryModel model;
+    ImportController importer(&model, probe);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importPaths({firstPath});
+    QVERIFY(firstEntered.tryAcquire(1, 3000));
+    importer.importPaths({secondPath});
+    releaseFirst.release();
+
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+    QCOMPARE(model.rowCount(), 2);
+    QVERIFY(model.indexForLocalFile(firstPath) >= 0);
+    QVERIFY(model.indexForLocalFile(secondPath) >= 0);
+}
+
+void ImportControllerTest::importsTenThousandLightweightRecordsWithinBudget()
+{
+    QStringList paths;
+    paths.reserve(10000);
+    for (int index = 0; index < 10000; ++index) {
+        paths.append(QDir::temp().filePath(
+            QStringLiteral("agplayer-index-%1.mp3").arg(index)));
+    }
+    const DiscoveryFunction discovery = [paths](const QList<QUrl>&) {
+        return paths;
+    };
+    const ProbeFunction probe = [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).baseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+
+    LibraryModel model;
+    ImportController importer(&model, probe, discovery);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QElapsedTimer timer;
+    timer.start();
+    importer.importUrls({QUrl::fromLocalFile(QDir::tempPath())});
+
+    QVERIFY(finished.wait(30000));
+    QCOMPARE(model.rowCount(), 10000);
+    QVERIFY2(timer.elapsed() <= 30000,
+             qPrintable(QStringLiteral("10K indexing took %1 ms")
+                            .arg(timer.elapsed())));
+}
+
+void ImportControllerTest::alreadyImportedTracksAreSkippedWithoutFalseSuccess()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("already-there.wav"));
+    createFile(path);
+
+    TrackRecord existing;
+    existing.path = path;
+    existing.title = QStringLiteral("Existing");
+    existing.available = true;
+    LibraryModel model;
+    QVERIFY(model.append(existing));
+
+    ImportController importer(&model, [](const QString& candidate) {
+        TrackRecord track;
+        track.path = candidate;
+        track.title = QStringLiteral("Duplicate probe");
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importPaths({path});
+
+    QVERIFY(finished.wait(3000));
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(importer.errors().isEmpty());
+    QCOMPARE(importer.property("skippedCount").toInt(), 1);
+    QCOMPARE(importer.importedTrackIds().size(), 1);
+    QCOMPARE(importer.importedTrackIds().front(), model.tracks().front().trackId);
+}
+
+void ImportControllerTest::importedTracksAppearFirstInDiscoveryOrder()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString firstPath = dir.filePath(QStringLiteral("01-first.wav"));
+    const QString secondPath = dir.filePath(QStringLiteral("02-second.wav"));
+    createFile(firstPath);
+    createFile(secondPath);
+
+    TrackRecord oldTrack;
+    oldTrack.trackId = QStringLiteral("old");
+    oldTrack.path = dir.filePath(QStringLiteral("old.wav"));
+    oldTrack.title = QStringLiteral("Old");
+    oldTrack.available = true;
+    createFile(oldTrack.path);
+    LibraryModel model;
+    QVERIFY(model.append(oldTrack));
+
+    const DiscoveryFunction discovery = [firstPath, secondPath](const QList<QUrl>&) {
+        return QStringList{firstPath, secondPath};
+    };
+    const ProbeFunction probe = [firstPath](const QString& path) {
+        if (path == canonicalLibraryPath(firstPath)) QThread::msleep(80);
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(&model, probe, discovery);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(dir.path())});
+
+    QVERIFY(finished.wait(3000));
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.tracks().at(0).path, canonicalLibraryPath(firstPath));
+    QCOMPARE(model.tracks().at(1).path, canonicalLibraryPath(secondPath));
+    QCOMPARE(model.tracks().at(2).trackId, QStringLiteral("old"));
 }
 
 QTEST_GUILESS_MAIN(ImportControllerTest)

@@ -6,6 +6,8 @@
 #include <QFileInfo>
 
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 namespace {
 QString normalizedCanonicalKey(const QString& canonicalPath)
@@ -111,6 +113,24 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.playCount;
     case LastPlayedAtRole:
         return track.lastPlayedAtMs;
+    case TagsRole:
+        return track.tags;
+    case AddedAtRole:
+        return track.addedAtMs;
+    case FileStatusRole:
+        return track.fileStatus;
+    case ContentHashRole:
+        return track.contentHash;
+    case AudioFingerprintRole:
+        return track.audioFingerprint;
+    case ReplayGainScannedRole:
+        return track.replayGainScanned;
+    case ReplayGainTrackDbRole:
+        return track.replayGainTrackDb;
+    case ReplayGainAlbumDbRole:
+        return track.replayGainAlbumDb;
+    case ReplayPeakRole:
+        return track.replayPeak;
     default:
         return {};
     }
@@ -137,31 +157,86 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {ImportErrorRole, "importError"},
             {LyricsRole, "lyrics"},
             {PlayCountRole, "playCount"},
-            {LastPlayedAtRole, "lastPlayedAtMs"}};
+            {LastPlayedAtRole, "lastPlayedAtMs"},
+            {TagsRole, "tags"},
+            {AddedAtRole, "addedAtMs"},
+            {FileStatusRole, "fileStatus"},
+            {ContentHashRole, "contentHash"},
+            {AudioFingerprintRole, "audioFingerprint"},
+            {ReplayGainScannedRole, "replayGainScanned"},
+            {ReplayGainTrackDbRole, "replayGainTrackDb"},
+            {ReplayGainAlbumDbRole, "replayGainAlbumDb"},
+            {ReplayPeakRole, "replayPeak"}};
 }
 
 bool LibraryModel::append(TrackRecord track)
 {
-    track.path = canonicalLibraryPath(track.path);
-    const QString key = normalizedCanonicalKey(track.path);
-    if (pathKeys_.contains(key)) {
-        return false;
+    return !appendBatch({std::move(track)}).isEmpty();
+}
+
+QStringList LibraryModel::appendBatch(QList<TrackRecord> tracks)
+{
+    return insertBatch(tracks_.size(), std::move(tracks));
+}
+
+QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
+{
+    QList<TrackRecord> accepted;
+    accepted.reserve(tracks.size());
+    QSet<QString> batchKeys;
+    for (TrackRecord& track : tracks) {
+        track.path = canonicalLibraryPath(track.path);
+        const QString key = normalizedCanonicalKey(track.path);
+        if (pathKeys_.contains(key) || batchKeys.contains(key)) {
+            continue;
+        }
+        if (track.trackId.isEmpty()) {
+            track.trackId = trackIdForPath(track.path);
+        }
+        batchKeys.insert(key);
+        accepted.append(std::move(track));
     }
-    if (track.trackId.isEmpty()) {
-        track.trackId = trackIdForPath(track.path);
+    if (accepted.isEmpty()) {
+        return {};
     }
-    const int row = tracks_.size();
-    beginInsertRows({}, row, row);
-    const QString trackId = track.trackId;
-    tracks_.append(std::move(track));
-    pathKeys_.insert(key);
-    trackRows_.insert(trackId, tracks_.size() - 1);
+
+    const int firstRow = qBound(0, row, tracks_.size());
+    const int lastRow = firstRow + accepted.size() - 1;
+    bool favoriteAdded = false;
+    QStringList insertedIds;
+    insertedIds.reserve(accepted.size());
+    beginInsertRows({}, firstRow, lastRow);
+    for (const TrackRecord& track : std::as_const(accepted)) {
+        favoriteAdded = favoriteAdded || track.favorite;
+        insertedIds.append(track.trackId);
+    }
+    // A complete batch must move the existing tail once. Repeated individual
+    // inserts at row zero made large folder imports quadratic on the GUI
+    // thread and caused the visible freeze reported during library imports.
+    tracks_.reserve(tracks_.size() + accepted.size());
+    for (TrackRecord& track : accepted) {
+        tracks_.append(std::move(track));
+    }
+    std::rotate(tracks_.begin() + firstRow,
+                tracks_.end() - accepted.size(), tracks_.end());
+    pathKeys_.clear();
+    pathRows_.clear();
+    trackRows_.clear();
+    pathKeys_.reserve(tracks_.size());
+    pathRows_.reserve(tracks_.size());
+    trackRows_.reserve(tracks_.size());
+    for (int index = 0; index < tracks_.size(); ++index) {
+        const QString key = normalizedCanonicalKey(tracks_.at(index).path);
+        pathKeys_.insert(key);
+        pathRows_.insert(key, index);
+        trackRows_.insert(tracks_.at(index).trackId, index);
+    }
     endInsertRows();
     emit countChanged();
-    if (tracks_.back().favorite) {
+    if (favoriteAdded) {
         emit favoriteCountChanged();
     }
-    return true;
+    return insertedIds;
 }
 
 void LibraryModel::replaceAll(QList<TrackRecord> tracks)
@@ -170,9 +245,11 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
     beginResetModel();
     tracks_.clear();
     pathKeys_.clear();
+    pathRows_.clear();
     trackRows_.clear();
     tracks_.reserve(tracks.size());
     pathKeys_.reserve(tracks.size());
+    pathRows_.reserve(tracks.size());
     trackRows_.reserve(tracks.size());
     for (TrackRecord& track : tracks) {
         track.path = canonicalLibraryPath(track.path);
@@ -185,6 +262,7 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
         }
         pathKeys_.insert(key);
         tracks_.append(std::move(track));
+        pathRows_.insert(key, tracks_.size() - 1);
         trackRows_.insert(tracks_.back().trackId, tracks_.size() - 1);
     }
     endResetModel();
@@ -200,6 +278,12 @@ const QList<TrackRecord>& LibraryModel::tracks() const noexcept
     return tracks_;
 }
 
+const TrackRecord* LibraryModel::recordForId(const QString& trackId) const noexcept
+{
+    const int row = trackRows_.value(trackId, -1);
+    return row >= 0 && row < tracks_.size() ? &tracks_.at(row) : nullptr;
+}
+
 bool LibraryModel::containsPath(const QString& path) const
 {
     return pathKeys_.contains(pathKey(path));
@@ -207,26 +291,67 @@ bool LibraryModel::containsPath(const QString& path) const
 
 int LibraryModel::indexForLocalFile(const QString& localFilePath) const
 {
-    const QFileInfo targetInfo(localFilePath);
-    const QString canonicalTarget = targetInfo.canonicalFilePath();
-
-    for (int i = 0; i < static_cast<int>(tracks_.size()); ++i) {
-        if (tracks_[i].path == localFilePath) {
-            return i;
-        }
-        if (!canonicalTarget.isEmpty()) {
-            const QFileInfo candidateInfo(tracks_[i].path);
-            if (candidateInfo.canonicalFilePath() == canonicalTarget) {
-                return i;
-            }
-        }
-    }
-    return -1;
+    return pathRows_.value(pathKey(localFilePath), -1);
 }
 
 int LibraryModel::indexForTrackId(const QString& trackId) const
 {
     return trackRows_.value(trackId, -1);
+}
+
+QVariantMap LibraryModel::trackForId(const QString& trackId) const
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) {
+        return {};
+    }
+    const QModelIndex modelIndex = index(row, 0);
+    QVariantMap values;
+    const QHash<int, QByteArray> roles = roleNames();
+    for (auto it = roles.cbegin(); it != roles.cend(); ++it) {
+        values.insert(QString::fromLatin1(it.value()), data(modelIndex, it.key()));
+    }
+    return values;
+}
+
+bool LibraryModel::removeTrack(const QString& trackId)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) {
+        return false;
+    }
+
+    const TrackRecord removed = tracks_.at(row);
+    beginRemoveRows({}, row, row);
+    tracks_.removeAt(row);
+    pathKeys_.remove(pathKey(removed.path));
+    pathRows_.remove(pathKey(removed.path));
+    trackRows_.remove(trackId);
+    for (int index = row; index < tracks_.size(); ++index) {
+        pathRows_.insert(pathKey(tracks_.at(index).path), index);
+        trackRows_.insert(tracks_.at(index).trackId, index);
+    }
+    endRemoveRows();
+
+    emit countChanged();
+    if (removed.favorite) {
+        emit favoriteCountChanged();
+    }
+    if (removed.playCount > 0) {
+        emit historyCountChanged();
+    }
+    emit trackRemoved(trackId);
+    emit flushRequested();
+    return true;
+}
+
+QUrl LibraryModel::containingFolderUrl(const QString& trackId) const
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) {
+        return {};
+    }
+    return QUrl::fromLocalFile(QFileInfo(tracks_.at(row).path).absolutePath());
 }
 
 bool LibraryModel::setFavorite(int row, bool favorite)
@@ -260,6 +385,195 @@ bool LibraryModel::setRating(int row, int rating)
     return true;
 }
 
+bool LibraryModel::setTags(const QString& trackId, const QStringList& tags)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) {
+        return false;
+    }
+
+    QStringList normalized;
+    QSet<QString> keys;
+    for (const QString& tag : tags) {
+        const QString trimmed = tag.trimmed();
+        const QString key = trimmed.toCaseFolded();
+        if (!trimmed.isEmpty() && !keys.contains(key)) {
+            keys.insert(key);
+            normalized.append(trimmed);
+        }
+    }
+    if (tracks_[row].tags == normalized) {
+        return false;
+    }
+
+    tracks_[row].tags = std::move(normalized);
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {TagsRole});
+    emit flushRequested();
+    return true;
+}
+
+bool LibraryModel::moveTrack(int fromRow, int toRow)
+{
+    if (fromRow < 0 || fromRow >= tracks_.size()
+        || toRow < 0 || toRow >= tracks_.size() || fromRow == toRow) {
+        return false;
+    }
+
+    const int destination = toRow > fromRow ? toRow + 1 : toRow;
+    beginMoveRows({}, fromRow, fromRow, {}, destination);
+    tracks_.move(fromRow, toRow);
+    endMoveRows();
+    for (int row = 0; row < tracks_.size(); ++row) {
+        pathRows_.insert(pathKey(tracks_.at(row).path), row);
+        trackRows_.insert(tracks_.at(row).trackId, row);
+    }
+    emit flushRequested();
+    return true;
+}
+
+int LibraryModel::reorderTracks(const QStringList& trackIds,
+                                const QString& beforeTrackId)
+{
+    QSet<QString> requested;
+    for (const QString& id : trackIds) {
+        if (trackRows_.contains(id)) requested.insert(id);
+    }
+    if (requested.isEmpty()) return 0;
+
+    QList<TrackRecord> selected;
+    QList<TrackRecord> remaining;
+    selected.reserve(requested.size());
+    remaining.reserve(tracks_.size() - requested.size());
+    for (const TrackRecord& track : tracks_) {
+        (requested.contains(track.trackId) ? selected : remaining).append(track);
+    }
+    int destination = remaining.size();
+    for (int row = 0; row < remaining.size(); ++row) {
+        if (remaining.at(row).trackId == beforeTrackId) {
+            destination = row;
+            break;
+        }
+    }
+    for (int index = 0; index < selected.size(); ++index) {
+        remaining.insert(destination + index, selected.at(index));
+    }
+
+    beginResetModel();
+    tracks_ = std::move(remaining);
+    pathRows_.clear();
+    trackRows_.clear();
+    for (int row = 0; row < tracks_.size(); ++row) {
+        pathRows_.insert(pathKey(tracks_.at(row).path), row);
+        trackRows_.insert(tracks_.at(row).trackId, row);
+    }
+    endResetModel();
+    emit flushRequested();
+    return selected.size();
+}
+
+bool LibraryModel::applyMaintenanceResult(const QString& trackId, bool available,
+                                          const QString& fileStatus,
+                                          const QString& contentHash)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) {
+        return false;
+    }
+    TrackRecord& track = tracks_[row];
+    if (track.available == available && track.fileStatus == fileStatus
+        && track.contentHash == contentHash) {
+        return false;
+    }
+    track.available = available;
+    track.fileStatus = fileStatus;
+    track.contentHash = contentHash;
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed,
+                     {AvailableRole, FileStatusRole, ContentHashRole});
+    emit flushRequested();
+    return true;
+}
+
+int LibraryModel::applyMaintenanceResults(const QVariantList& results)
+{
+    int changedCount = 0;
+    int firstChangedRow = tracks_.size();
+    int lastChangedRow = -1;
+    for (const QVariant& value : results) {
+        const QVariantMap result = value.toMap();
+        const int row = indexForTrackId(
+            result.value(QStringLiteral("trackId")).toString());
+        if (row < 0) continue;
+
+        TrackRecord& track = tracks_[row];
+        const bool available = result.value(QStringLiteral("exists")).toBool();
+        const QString status = result.value(QStringLiteral("status")).toString();
+        const QString hash = result.value(QStringLiteral("hash")).toString();
+        if (track.available == available && track.fileStatus == status
+            && track.contentHash == hash) {
+            continue;
+        }
+        track.available = available;
+        track.fileStatus = status;
+        track.contentHash = hash;
+        firstChangedRow = qMin(firstChangedRow, row);
+        lastChangedRow = qMax(lastChangedRow, row);
+        ++changedCount;
+    }
+    if (changedCount == 0) return 0;
+    emit dataChanged(index(firstChangedRow, 0), index(lastChangedRow, 0),
+                     {AvailableRole, FileStatusRole, ContentHashRole});
+    emit flushRequested();
+    return changedCount;
+}
+
+bool LibraryModel::applyReplayGainResult(const QString& trackId,
+                                         double trackGainDb,
+                                         double albumGainDb,
+                                         double peak)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0 || !std::isfinite(trackGainDb) || !std::isfinite(albumGainDb)
+        || !std::isfinite(peak) || peak < 0.0) {
+        return false;
+    }
+    TrackRecord& track = tracks_[row];
+    track.replayGainScanned = true;
+    track.replayGainTrackDb = trackGainDb;
+    track.replayGainAlbumDb = albumGainDb;
+    track.replayPeak = peak;
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed,
+                     {ReplayGainScannedRole, ReplayGainTrackDbRole,
+                      ReplayGainAlbumDbRole, ReplayPeakRole});
+    emit flushRequested();
+    return true;
+}
+
+bool LibraryModel::updateTrackPath(const QString& trackId, const QString& newPath)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0) return false;
+    const QString canonical = canonicalLibraryPath(newPath);
+    const QString newKey = normalizedCanonicalKey(canonical);
+    const QString oldKey = pathKey(tracks_.at(row).path);
+    if (newKey != oldKey && pathKeys_.contains(newKey)) return false;
+    pathKeys_.remove(oldKey);
+    pathRows_.remove(oldKey);
+    pathKeys_.insert(newKey);
+    pathRows_.insert(newKey, row);
+    TrackRecord& track = tracks_[row];
+    track.path = canonical;
+    track.available = QFileInfo::exists(canonical);
+    track.fileStatus = track.available ? QStringLiteral("normal")
+                                       : QStringLiteral("missing");
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+    emit flushRequested();
+    return true;
+}
+
 bool LibraryModel::markPlayed(const QString& trackId, qint64 playedAtMs)
 {
     const int row = indexForTrackId(trackId);
@@ -276,6 +590,22 @@ bool LibraryModel::markPlayed(const QString& trackId, qint64 playedAtMs)
     if (firstPlay) {
         emit historyCountChanged();
     }
+    return true;
+}
+
+bool LibraryModel::removeFromHistory(const QString& trackId)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0 || tracks_[row].playCount == 0) {
+        return false;
+    }
+    TrackRecord& track = tracks_[row];
+    track.playCount = 0;
+    track.lastPlayedAtMs = 0;
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {PlayCountRole, LastPlayedAtRole});
+    emit historyCountChanged();
+    emit flushRequested();
     return true;
 }
 

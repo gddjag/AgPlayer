@@ -9,6 +9,89 @@ TestCase {
 
     property var mainWindow: null
 
+    Component {
+        id: fileDropAreaComponent
+        FileDropArea {}
+    }
+
+    Component {
+        id: trackListComponent
+        TrackList {
+            width: 1100
+            height: 500
+        }
+    }
+
+    Component {
+        id: listWindowComponent
+        ListWindow {
+            visible: true
+            width: 1000
+            height: 620
+        }
+    }
+
+    Component {
+        id: defaultListWindowComponent
+        ListWindow { visible: true }
+    }
+
+    Component {
+        id: sideNavigationComponent
+        SideNavigation {
+            width: 208
+            height: 500
+            property int renameRequestCount: 0
+            property int exportRequestCount: 0
+            property int deleteRequestCount: 0
+            property string lastRequestedPlaylistId: ""
+            onRenamePlaylistRequested: function(playlistId) {
+                renameRequestCount += 1
+                lastRequestedPlaylistId = playlistId
+            }
+            onExportPlaylistRequested: function(playlistId) {
+                exportRequestCount += 1
+                lastRequestedPlaylistId = playlistId
+            }
+            onRemovePlaylistRequested: function(playlistId) {
+                deleteRequestCount += 1
+                lastRequestedPlaylistId = playlistId
+            }
+        }
+    }
+
+    Component {
+        id: dockedWindowFrameComponent
+        DockedWindowFrame {
+            width: 320
+            height: 180
+        }
+    }
+
+    Component {
+        id: searchFilterComponent
+        SearchFilter {
+            width: 900
+            height: 54
+        }
+    }
+
+    Component {
+        id: libraryManagerComponent
+        LibraryManagerPage {
+            width: 1200
+            height: 760
+        }
+    }
+
+    Component {
+        id: emptyLibraryComponent
+        EmptyLibrary {
+            width: 900
+            height: 420
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -18,6 +101,30 @@ TestCase {
 
     function init() {
         failOnWarning(/.?/)
+    }
+
+    function test_docked_window_frame_removes_shared_edge_and_contact_corners() {
+        var mainFrame = dockedWindowFrameComponent.createObject(mainWindow.contentItem, {
+            "dockEdge": "bottom",
+            "windowRole": "main"
+        })
+        verify(mainFrame)
+        compare(mainFrame.topLeftRadius, mainFrame.windowRadius)
+        compare(mainFrame.bottomLeftRadius, 0)
+        compare(mainFrame.bottomRightRadius, 0)
+        compare(mainFrame.bottomBorderVisible, false)
+
+        var listFrame = dockedWindowFrameComponent.createObject(mainWindow.contentItem, {
+            "dockEdge": "bottom",
+            "windowRole": "list"
+        })
+        verify(listFrame)
+        compare(listFrame.topLeftRadius, 0)
+        compare(listFrame.topRightRadius, 0)
+        compare(listFrame.topBorderVisible, false)
+
+        mainFrame.destroy()
+        listFrame.destroy()
     }
 
     function cleanupTestCase() {
@@ -34,13 +141,18 @@ TestCase {
         verify(findChild(mainWindow, "miniPlayerButton"), "miniPlayerButton should exist")
         verify(findChild(mainWindow, "settingsButton"), "settingsButton should exist in Phase 2 settings task")
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
+        verify(findChild(mainWindow, "equalizerButton"),
+               "equalizerButton should expose the real ten-band EQ")
         verify(findChild(mainWindow, "listWindowButton"), "listWindowButton should exist")
         verify(findChild(mainWindow, "playerCover"), "player cover should exist")
         verify(findChild(mainWindow, "playerCoverImage").source.toString().length > 0,
                "player cover should always have a fallback source")
         var trackTitle = findChild(mainWindow, "trackTitle")
+        var titleViewport = findChild(mainWindow, "trackTitleViewport")
         var favoriteButton = findChild(mainWindow, "favoriteButton")
         verify(trackTitle, "track title should exist")
+        verify(titleViewport && titleViewport.clip,
+               "long titles must scroll inside a clipped hover viewport")
         verify(favoriteButton, "favorite button should exist")
         verify(favoriteButton.background === null,
                "favorite button should not render a platform-style square")
@@ -49,6 +161,63 @@ TestCase {
         verify(findChild(mainWindow, "trackArtistAlbum"), "artist and album should exist")
         verify(findChild(mainWindow, "trackRating"), "track rating should exist")
         verify(findChild(mainWindow, "mainWaveform"), "main waveform should exist")
+        compare(findChild(mainWindow, "playerCover").radius, 14)
+    }
+
+    function test_equalizer_opens_compact_real_control_window() {
+        var button = findChild(mainWindow, "equalizerButton")
+        verify(button)
+        mouseClick(button)
+        var window = findChild(mainWindow, "equalizerWindow")
+        tryVerify(function() { return window && window.visible }, 1000)
+        compare(window.width, 520)
+        compare(window.height, 307)
+        compare(window.minimumWidth, 520)
+        compare(window.minimumHeight, 307)
+        var equalizerTitle = findChild(window, "equalizerTitle")
+        var equalizerContent = findChild(window, "equalizerContent")
+        verify(equalizerTitle,
+               "compact EQ must retain system-readable title text")
+        verify(equalizerContent,
+               "EQ must lay out at native size instead of shrinking a large canvas")
+        compare(equalizerContent.scale, 1)
+        verify(equalizerTitle.font.pixelSize >= 15)
+        compare(button.contentItem.rotation, 90)
+        var previousThemeMode = Theme.mode
+        Theme.mode = 0
+        compare(button.icon.color, "#ffffff")
+        Theme.mode = 1
+        compare(button.icon.color, "#000000")
+        Theme.mode = previousThemeMode
+        verify(findChild(window, "equalizerResponseCurve"))
+        var bands = findChild(window, "equalizerBandRepeater")
+        verify(bands)
+        compare(bands.count, 10)
+        verify(findChild(window, "equalizerPreampSlider"))
+        verify(findChild(window, "equalizerAutoProtection"))
+        verify(findChild(window, "equalizerBypassButton"))
+        verify(findChild(window, "equalizerResetButton"))
+        EqualizerController.resetAll()
+        var firstBand = bands.itemAt(0)
+        verify(firstBand)
+        firstBand.setGain(3.2)
+        tryCompare(firstBand, "gainDb", 3.2)
+        compare(EqualizerController.bandGain(0), 3.2)
+        var firstBandControl = findChild(firstBand, "eqBandSlider-0-control")
+        verify(firstBandControl)
+        firstBand.setGain(12)
+        tryCompare(firstBandControl, "value", 12)
+        verify(firstBandControl.visualPosition < 0.05,
+               "+12 dB must map to the top of a vertical EQ slider")
+        firstBand.setGain(-12)
+        tryCompare(firstBandControl, "value", -12)
+        verify(firstBandControl.visualPosition > 0.95,
+               "-12 dB must map to the bottom of a vertical EQ slider")
+        EqualizerController.bypassed = true
+        tryCompare(findChild(window, "equalizerBypassButton"), "checked", true)
+        EqualizerController.resetAll()
+        EqualizerController.bypassed = false
+        window.hide()
     }
 
     function test_empty_library_shows_startup_actions() {
@@ -65,6 +234,17 @@ TestCase {
                "playlist action should be visible in the bottom control bar")
         verify(!findChild(mainWindow, "miniPlayerButton").visible,
                "empty startup must not expose the mini player action")
+    }
+
+    function test_empty_playlist_shows_centered_import_action_and_formats() {
+        var empty = emptyLibraryComponent.createObject(mainWindow.contentItem, {
+            "playlistMode": true
+        })
+        verify(empty)
+        compare(findChild(empty, "emptyLibraryTitle").text, "Import music")
+        verify(findChild(empty, "emptyLibraryFormats").text.indexOf("MP3") >= 0)
+        compare(findChild(empty, "emptyImportButton").text, "Import music")
+        empty.destroy()
     }
 
     function test_failed_import_surfaces_status_in_main() {
@@ -90,20 +270,997 @@ TestCase {
         tryVerify(function() { return LibraryModel.count === 1 }, 5000)
     }
 
+    function test_loaded_player_keeps_brand_and_balanced_controls() {
+        var brand = findChild(mainWindow, "titleBrand")
+        var center = findChild(mainWindow, "centerPlaybackControls")
+        var listButton = findChild(mainWindow, "listWindowButton")
+        var miniButton = findChild(mainWindow, "miniPlayerButton")
+        verify(brand && brand.visible, "brand must remain visible after loading a track")
+        verify(center && listButton && miniButton)
+        compare(Math.round(center.y + center.height / 2),
+                Math.round(listButton.y + listButton.height / 2))
+        compare(Math.round(center.y + center.height / 2),
+                Math.round(miniButton.y + miniButton.height / 2))
+    }
+
+    function test_library_manager_summary_cards_are_real_filters() {
+        var page = libraryManagerComponent.createObject(mainWindow.contentItem)
+        verify(page)
+        var manager = findChild(page, "libraryManagerController")
+        var backup = findChild(page, "libraryBackupButton")
+        var backupMenu = findChild(page, "libraryBackupMenu")
+        var backupAction = findChild(page, "libraryBackupAction")
+        var importAction = findChild(page, "libraryImportBackupAction")
+        verify(manager && backup && backupMenu && backupAction && importAction,
+               "library manager must expose backup and import actions")
+        compare(backup.text, "备份/导入")
+        compare(backupAction.text, "备份曲库")
+        compare(importAction.text, "导入备份")
+        verify(manager.defaultBackupUrl.toString().endsWith(".db"))
+        var storage = findChild(page, "librarySummaryCard-storage")
+        var missing = findChild(page, "librarySummaryCard-missing")
+        verify(storage)
+        verify(missing)
+        mouseClick(storage)
+        tryCompare(storage.border, "color", Theme.accent)
+        mouseClick(missing)
+        tryCompare(missing.border, "color", Theme.accent)
+        verify(storage.border.color.toString() !== Theme.accent.toString())
+        mouseClick(storage)
+        tryCompare(storage.border, "color", Theme.accent)
+
+        var trackView = findChild(page, "libraryManagerTrackList")
+        verify(trackView)
+        tryVerify(function() {
+            return !manager.scanning && trackView.count > 0
+        }, 5000)
+        var firstRow = trackView.itemAtIndex(0)
+        verify(firstRow)
+        var favoriteButton = findChild(firstRow, "libraryTrackFavorite")
+        var ratingStar = findChild(firstRow, "libraryTrackRatingStar")
+        verify(favoriteButton && ratingStar)
+        var favoriteTrackId = firstRow.trackId
+        var favoriteBefore = firstRow.favorite
+        mouseClick(favoriteButton)
+        tryVerify(function() {
+            var refreshed = trackView.itemAtIndex(0)
+            return refreshed && refreshed.trackId === favoriteTrackId
+                   && refreshed.favorite !== favoriteBefore
+        }, 500)
+        firstRow = trackView.itemAtIndex(0)
+        favoriteButton = findChild(firstRow, "libraryTrackFavorite")
+        mouseClick(favoriteButton)
+        tryVerify(function() {
+            var refreshed = trackView.itemAtIndex(0)
+            return refreshed && refreshed.trackId === favoriteTrackId
+                   && refreshed.favorite === favoriteBefore
+        }, 500)
+        firstRow = trackView.itemAtIndex(0)
+        ratingStar = findChild(firstRow, "libraryTrackRatingStar")
+        var ratingBefore = ratingStar.icon.source.toString()
+        mouseClick(ratingStar)
+        tryVerify(function() {
+            var refreshed = trackView.itemAtIndex(0)
+            var refreshedStar = refreshed
+                    ? findChild(refreshed, "libraryTrackRatingStar") : null
+            return refreshedStar
+                   && refreshedStar.icon.source.toString() !== ratingBefore
+        }, 500)
+        mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                   Qt.RightButton)
+        var trackMenu = findChild(page, "libraryManagerTrackMenu")
+        tryVerify(function() { return trackMenu && trackMenu.visible }, 500)
+        var expectedActions = [
+            "libraryTrackPlay", "libraryTrackPlayNext",
+            "libraryTrackAddToPlaylist", "libraryTrackAudioTools",
+            "libraryTrackShowFolder", "libraryTrackCopyPath",
+            "libraryTrackTag",
+            "libraryTrackRename", "libraryTrackMoveFile",
+            "libraryTrackCopyFile", "libraryTrackRemove",
+            "libraryTrackTrash", "libraryTrackRelocate"
+        ]
+        for (var actionIndex = 0; actionIndex < expectedActions.length;
+             ++actionIndex) {
+            verify(findChild(trackMenu, expectedActions[actionIndex]),
+                   "missing library context action "
+                   + expectedActions[actionIndex])
+        }
+        trackMenu.close()
+
+        var detailsPanel = findChild(page, "libraryTrackDetailsPanel")
+        var detailsContent = findChild(page, "libraryTrackDetailsContent")
+        verify(detailsPanel && detailsContent,
+               "library track details must be a non-scrolling full-height panel")
+        verify(detailsContent.height <= detailsPanel.height,
+               "library details must fit without an internal scrollbar")
+        verify(!findChild(page, "libraryDetailsPlay"))
+        verify(!findChild(page, "libraryDetailsQueue"))
+        verify(!findChild(page, "libraryDetailsFavorite"))
+        verify(findChild(page, "libraryDetailsFormat"))
+        verify(findChild(page, "libraryDetailsBitrate"))
+        verify(page.preferredWindowHeight >= 840)
+        verify(page.preferredWindowHeight
+               >= detailsContent.implicitHeight + 250,
+               "library window height must follow the complete details content")
+        var managerBpmRange = findChild(page, "libraryManagerBpmRange")
+        verify(managerBpmRange)
+        compare(managerBpmRange.first.handle.width, 12)
+        compare(managerBpmRange.second.handle.width, 12)
+        page.destroy()
+    }
+
+    function test_native_qt_drop_reaches_the_real_import_controller() {
+        var previousCount = LibraryModel.count
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio && copiedAudio.toString().length > 0)
+        verify(nativeDropHelper.sendUrls(mainWindow, [copiedAudio]),
+               "the native top-level window must accept a real URL drop")
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        verify(ImportController.errors.length === 0)
+        verify(LibraryModel.count > previousCount,
+               "the routed drop must import the audio without a QML shortcut")
+        tryVerify(function() {
+            return ImportController.importedTrackIds.length > 0
+                    && PlaybackController.currentTrackId
+                    === ImportController.importedTrackIds[0]
+        }, 3000)
+    }
+
+    // Run after the interaction suite: importing a real file deliberately
+    // starts background metadata/waveform work and must not perturb unrelated
+    // pointer-animation checks.
+    function test_zz_main_window_has_a_qml_drop_fallback_for_shell_drag_routes() {
+        var dropFallback = findChild(mainWindow, "mainFileDropFallback")
+        verify(dropFallback,
+               "the main window must retain a Qt drop fallback when Explorer does not send WM_DROPFILES")
+
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio && copiedAudio.toString().length > 0)
+        var previousCount = LibraryModel.count
+        verify(dropFallback.submitUrls([copiedAudio]))
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        verify(ImportController.errors.length === 0)
+        verify(LibraryModel.count > previousCount,
+               "the QML fallback must reach the real asynchronous importer")
+    }
+
+    function test_zzz_list_window_has_a_qml_drop_fallback_for_shell_drag_routes() {
+        const listWindow = createTemporaryObject(listWindowComponent, testCase)
+        verify(listWindow)
+        tryVerify(function() { return listWindow.visible }, 1000)
+
+        const dropFallback = findChild(listWindow, "listFileDropFallback")
+        verify(dropFallback)
+        const copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio && copiedAudio.toString().length > 0)
+        const previousCount = LibraryModel.count
+        verify(dropFallback.submitUrls([copiedAudio]))
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        verify(ImportController.errors.length === 0)
+        verify(LibraryModel.count > previousCount,
+               "the list fallback must reach the real asynchronous importer")
+        listWindow.destroy()
+    }
+
+    function test_zzzz_main_window_accepts_a_real_windows_dropfiles_message() {
+        if (!nativeDropHelper.supportsWindowsDropFiles()) {
+            skip("WM_DROPFILES requires the native qwindows platform plugin")
+            return
+        }
+        const copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio && copiedAudio.toString().length > 0)
+        const previousCount = LibraryModel.count
+        verify(nativeDropHelper.sendWindowsDropFiles(mainWindow, [copiedAudio]),
+               "the production main window must accept WM_DROPFILES")
+        tryVerify(function() { return LibraryModel.count > previousCount },
+                  5000, "WM_DROPFILES must reach the real asynchronous importer")
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        verify(ImportController.errors.length === 0)
+    }
+
+    function test_track_list_supports_native_select_all_and_submenu() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        verify(LibraryModel.count > 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        mainWindow.requestActivate()
+        wait(20)
+        list.forceActiveFocus()
+        wait(10)
+        verify(list.activeFocus)
+        keyClick(Qt.Key_A, Qt.ControlModifier)
+        compare(list.selectedTrackIds.length, LibraryModel.count)
+        verify(findChild(list, "moveTracksMenu"))
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow, "a visible track row should exist")
+        var dragProxy = findChild(firstRow, "trackDragProxy")
+        verify(dragProxy)
+        verify(dragProxy.Drag.keys.indexOf("application/x-agplayer-track-ids") >= 0,
+               "track rows must advertise the same drag key accepted by playlists")
+        var contextMenu = findChild(list, "trackContextMenu")
+        verify(contextMenu, "track context menu must remain available")
+        mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return contextMenu.visible }, 500)
+        contextMenu.close()
+        list.visible = false
+        list.destroy()
+        wait(10)
+    }
+
+    function test_track_context_menu_keeps_exact_action_order_and_labels() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow)
+        mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(list, "trackContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+
+        var expected = [
+            ["trackMenuPlay", "播放"],
+            ["trackMenuPlayNext", "下一首播放"],
+            ["moveTracksMenu", "加入歌单"],
+            ["audioToolsTrackMenu", "使用音频工具打开"],
+            ["trackMenuShowFolder", "在文件夹中显示"],
+            ["trackMenuCopyPath", "复制文件路径"],
+            ["trackMenuTag", "打标签"],
+            ["trackMenuRename", "重命名"],
+            ["trackMenuMoveFile", "移动到指定文件夹"],
+            ["trackMenuCopyFile", "复制到指定文件夹"],
+            ["trackMenuRemove", "从列表删除"],
+            ["trackMenuTrash", "彻底删除至回收站"],
+            ["trackMenuRelocate", "重新定位文件"]
+        ]
+        for (var index = 0; index < expected.length; ++index) {
+            var action = findChild(menu, expected[index][0])
+            verify(action, "missing context action " + expected[index][0])
+            compare(action.text !== undefined ? action.text : action.title,
+                    expected[index][1])
+        }
+        menu.close()
+        list.destroy()
+    }
+
+    function test_track_header_stays_visible_while_rows_scroll() {
+        var sortableIds = nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem,
+                                                   { width: 760, height: 90 })
+        verify(list)
+        compare(list.headerPositioning, ListView.OverlayHeader)
+        verify(list.headerItem)
+        verify(list.headerItem.z > 0)
+        list.positionViewAtEnd()
+        wait(30)
+        verify(list.headerItem.y >= list.contentY - 1,
+               "the table header must remain over the scrolled rows")
+        list.destroy()
+    }
+
+    function test_zzzzz_default_queue_density_keeps_ten_rows_visible() {
+        nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem,
+                                                   { width: 960, height: 460 })
+        verify(list)
+        compare(list.rowHeight, 42)
+        verify(list.headerItem)
+        verify(Math.floor((list.height - list.headerItem.height)
+                          / list.rowHeight) >= 10,
+               "the default queue viewport must show ten full songs")
+        list.destroy()
+    }
+
+    function test_list_window_default_height_keeps_ten_songs_visible() {
+        var listWindow = createTemporaryObject(defaultListWindowComponent,
+                                               testCase)
+        verify(listWindow)
+        compare(listWindow.height, 570)
+        listWindow.destroy()
+    }
+
+    function test_library_manager_uses_ten_row_scroll_viewport() {
+        var manager = libraryManagerComponent.createObject(mainWindow.contentItem)
+        verify(manager)
+        manager.height = manager.preferredWindowHeight
+        compare(manager.visibleRowCount, 10)
+        compare(manager.trackRowHeight, 42)
+        compare(manager.preferredTrackViewportHeight, 420)
+        var trackView = findChild(manager, "libraryManagerTrackList")
+        verify(trackView)
+        tryCompare(trackView, "height", manager.preferredTrackViewportHeight)
+        manager.destroy()
+    }
+
+    function test_track_context_play_action_uses_real_mouse_click() {
+        mainWindow.importFiles([testAudioUrl])
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        var playablePath = decodeURIComponent(testAudioUrl.toString()
+                                              .replace(/^file:\/\/\//, ""))
+        var playableIndex = -1
+        for (var row = 0; row < LibraryModel.count; ++row) {
+            var path = String(LibraryModel.data(LibraryModel.index(row, 0),
+                                                LibraryModel.PathRole))
+                    .replace(/\\/g, "/")
+            if (path.toLowerCase() === playablePath.toLowerCase()) {
+                playableIndex = row
+                break
+            }
+        }
+        verify(playableIndex >= 0)
+        var trackId = LibraryModel.data(LibraryModel.index(playableIndex, 0),
+                                        LibraryModel.TrackIdRole)
+
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        list.positionViewAtIndex(playableIndex, ListView.Center)
+        wait(30)
+        var rowItem = list.itemAtIndex(playableIndex)
+        verify(rowItem)
+        mouseClick(rowItem, rowItem.width / 2, rowItem.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(list, "trackContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var playAction = findChild(menu, "trackMenuPlay")
+        verify(playAction && playAction.enabled)
+        verify(playAction.width > 20 && playAction.height > 20,
+               "visible menu actions need a clickable hit target")
+        mouseClick(playAction, playAction.width / 2,
+                   playAction.height / 2)
+        tryCompare(PlaybackController, "currentTrackId", trackId, 1000)
+        list.destroy()
+    }
+
+    function test_track_context_audio_tool_opens_the_real_tool_window() {
+        WindowController.hideAudioTools()
+        AudioToolsController.selectTool(0)
+        compare(WindowController.audioToolsVisible, false)
+        compare(AudioToolsController.currentTool, 0)
+        mainWindow.importFiles([testAudioUrl])
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        var playablePath = decodeURIComponent(testAudioUrl.toString()
+                                              .replace(/^file:\/\/\//, ""))
+        var playableIndex = -1
+        for (var row = 0; row < LibraryModel.count; ++row) {
+            var path = String(LibraryModel.data(LibraryModel.index(row, 0),
+                                                LibraryModel.PathRole))
+                    .replace(/\\/g, "/")
+            if (path.toLowerCase() === playablePath.toLowerCase()) {
+                playableIndex = row
+                break
+            }
+        }
+        verify(playableIndex >= 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        list.positionViewAtIndex(playableIndex, ListView.Center)
+        wait(30)
+        var rowItem = list.itemAtIndex(playableIndex)
+        verify(rowItem)
+        mouseClick(rowItem, rowItem.width / 2, rowItem.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(list, "trackContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var toolsMenu = findChild(menu, "audioToolsTrackMenu")
+        verify(toolsMenu)
+        var toolsMenuEntry = menu.itemAt(3)
+        verify(toolsMenuEntry,
+               "the audio-tools submenu must expose a visible parent action")
+        compare(toolsMenuEntry.subMenu, toolsMenu)
+        verify(toolsMenuEntry.arrow.visible)
+        mouseMove(toolsMenuEntry, toolsMenuEntry.width / 2,
+                  toolsMenuEntry.height / 2)
+        if (!toolsMenu.visible)
+            toolsMenu.open()
+        tryVerify(function() { return toolsMenu.visible }, 500)
+        var editorAction = findChild(toolsMenu, "trackMenuLightEditor")
+        verify(editorAction && editorAction.enabled)
+        // Qt Quick renders nested menus in a separate popup window under the
+        // test platform; invoke the visible child after the real row
+        // right-click and native submenu-chain checks above.
+        editorAction.triggered()
+        tryCompare(AudioToolsController, "currentTool", 0)
+        tryCompare(WindowController, "audioToolsVisible", true)
+        tryCompare(LightEditor, "hasInput", true, 2000)
+        verify(LightEditor.inputFileName.length > 0,
+               "the context-menu action must load the selected audio file")
+        toolsMenu.close()
+        menu.close()
+        WindowController.hideAudioTools()
+        list.destroy()
+    }
+
+    function test_long_track_title_scrolls_only_while_hovered() {
+        var trackId = nativeDropHelper.ensureLongTitleTrack()
+        verify(trackId.length > 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem,
+                                                   { width: 760, height: 260 })
+        verify(list)
+        var rowIndex = LibraryModel.indexForTrackId(trackId)
+        list.positionViewAtIndex(rowIndex, ListView.Center)
+        wait(30)
+        var rowItem = list.itemAtIndex(rowIndex)
+        verify(rowItem)
+        var marquee = findChild(rowItem, "trackTitleMarquee")
+        verify(marquee, "long titles need a dedicated clipped marquee surface")
+        verify(marquee.overflowing)
+        compare(marquee.textOffset, 0)
+        mouseMove(marquee, marquee.width / 2, marquee.height / 2)
+        tryVerify(function() { return marquee.textOffset < -1 }, 2500)
+        mouseMove(list, 2, list.height - 2)
+        tryCompare(marquee, "textOffset", 0, 500)
+        list.destroy()
+    }
+
+    function test_z_album_and_artist_use_fixed_hover_marquee_columns() {
+        var trackId = nativeDropHelper.ensureLongAlbumArtistTrack()
+        var rowIndex = LibraryModel.indexForTrackId(trackId)
+        verify(rowIndex >= 0)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        list.positionViewAtIndex(rowIndex, ListView.Center)
+        wait(30)
+        var row = list.itemAtIndex(rowIndex)
+        verify(row)
+        var album = findChild(row, "trackAlbumMarquee")
+        var artist = findChild(row, "trackArtistMarquee")
+        verify(album && artist)
+        compare(Math.round(album.width), 136)
+        compare(Math.round(artist.width), 130)
+        verify(album.overflowing && artist.overflowing)
+        compare(album.textOffset, 0)
+        mouseMove(album, album.width / 2, album.height / 2)
+        // This animation starts with a deliberate hover pause.  The parent
+        // ApplicationWindow may have lost activation to a prior tool/settings
+        // test, so activate it before supplying the real pointer move.
+        tryVerify(function() { return album.textOffset < -1 }, 4500)
+        mouseMove(list, 2, list.height - 2)
+        tryCompare(album, "textOffset", 0, 500)
+        list.destroy()
+    }
+
+    function test_z_fixed_track_columns_share_header_axis() {
+        var list = trackListComponent.createObject(mainWindow.contentItem,
+                                                   { width: 1050, height: 320 })
+        verify(list)
+        tryVerify(function() { return list.count > 0 })
+        var row = list.itemAtIndex(0)
+        verify(row)
+        var names = ["Index", "Favorite", "Album", "Artist", "Rating", "Bpm", "Duration"]
+        for (var i = 0; i < names.length; ++i) {
+            var header = findChild(list, "trackHeader" + names[i])
+            var cell = findChild(row, "track" + names[i] + "Cell")
+            verify(header && cell, "missing fixed column " + names[i])
+            compare(Math.round(header.mapToItem(list, 0, 0).x),
+                    Math.round(cell.mapToItem(list, 0, 0).x))
+            compare(Math.round(header.width), Math.round(cell.width))
+        }
+        compare(Math.round(findChild(row, "trackAlbumCell").width), 136)
+        compare(Math.round(findChild(row, "trackArtistCell").width), 130)
+        list.destroy()
+    }
+
+    function test_track_context_add_to_playlist_uses_real_submenu_click() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        verify(ids.length > 0)
+        var playlistId = PlaylistModel.createPlaylist(
+                    "Context add " + Date.now())
+        verify(playlistId.length > 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        var rowIndex = LibraryModel.indexForTrackId(ids[0])
+        list.positionViewAtIndex(rowIndex, ListView.Center)
+        wait(30)
+        var rowItem = list.itemAtIndex(rowIndex)
+        verify(rowItem)
+        mouseClick(rowItem, rowItem.width / 2, rowItem.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(list, "trackContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var moveMenu = findChild(menu, "moveTracksMenu")
+        verify(moveMenu && moveMenu.enabled)
+        var moveMenuEntry = menu.itemAt(2)
+        verify(moveMenuEntry,
+               "the playlist submenu must expose a visible parent action")
+        compare(moveMenuEntry.contentItem.color.toString(),
+                Theme.primaryText.toString())
+        compare(moveMenuEntry.subMenu, moveMenu)
+        verify(moveMenuEntry.arrow.visible)
+        mouseMove(moveMenuEntry, moveMenuEntry.width / 2,
+                  moveMenuEntry.height / 2)
+        if (!moveMenu.visible)
+            moveMenu.open()
+        tryVerify(function() { return moveMenu.visible }, 500)
+        var targetAction = findChild(moveMenu,
+                                     "playlistMoveTarget-" + playlistId)
+        verify(targetAction && targetAction.enabled)
+        targetAction.triggered()
+        tryVerify(function() {
+            return PlaylistModel.containsTrack(playlistId, ids[0])
+        }, 500)
+        moveMenu.close()
+        menu.close()
+        PlaylistModel.removePlaylist(playlistId)
+        list.destroy()
+    }
+
+    function test_track_rows_reorder_with_real_mouse_drag() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        compare(ids.length, 3)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        tryCompare(list, "count", LibraryModel.count, 500)
+
+        var fromIndex = LibraryModel.indexForTrackId(ids[0])
+        var targetIndex = LibraryModel.indexForTrackId(ids[2])
+        verify(fromIndex >= 0 && targetIndex > fromIndex)
+        list.positionViewAtIndex(fromIndex, ListView.Beginning)
+        wait(30)
+        var fromRow = list.itemAtIndex(fromIndex)
+        var targetRow = list.itemAtIndex(targetIndex)
+        verify(fromRow && targetRow)
+        verify(fromRow.available, "seeded drag row must be enabled")
+        var dragArea = findChild(fromRow, "trackRowDragArea")
+        verify(dragArea, "track title must expose a real drag surface")
+
+        var deltaY = targetRow.mapToItem(fromRow, 0, targetRow.height / 2).y
+        mouseDrag(dragArea, dragArea.width / 2, dragArea.height / 2,
+                  0, deltaY - dragArea.height / 2, Qt.LeftButton,
+                  Qt.NoModifier, 30)
+
+        tryVerify(function() {
+            return LibraryModel.indexForTrackId(ids[0]) + 1
+                   === LibraryModel.indexForTrackId(ids[2])
+        }, 500)
+        list.destroy()
+    }
+
+    function test_track_title_surface_honors_ctrl_selection_and_double_click() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        list.positionViewAtBeginning()
+        wait(30)
+        var first = list.itemAtIndex(LibraryModel.indexForTrackId(ids[0]))
+        var second = list.itemAtIndex(LibraryModel.indexForTrackId(ids[1]))
+        verify(first && second)
+        var firstArea = findChild(first, "trackRowDragArea")
+        var secondArea = findChild(second, "trackRowDragArea")
+        verify(firstArea && secondArea)
+        mouseClick(firstArea, firstArea.width / 2, firstArea.height / 2)
+        mouseClick(secondArea, secondArea.width / 2, secondArea.height / 2,
+                   Qt.LeftButton, Qt.ControlModifier)
+        compare(list.selectedTrackIds.length, 2)
+        var playablePath = decodeURIComponent(testAudioUrl.toString()
+                                              .replace(/^file:\/\/\//, ""))
+        var playableIndex = -1
+        for (var rowIndex = 0; rowIndex < LibraryModel.count; ++rowIndex) {
+            var rowPath = String(LibraryModel.data(
+                                     LibraryModel.index(rowIndex, 0),
+                                     LibraryModel.PathRole)).replace(/\\/g, "/")
+            if (rowPath.toLowerCase() === playablePath.toLowerCase()) {
+                playableIndex = rowIndex
+                break
+            }
+        }
+        verify(playableIndex >= 0)
+        list.positionViewAtIndex(playableIndex, ListView.Center)
+        wait(30)
+        var playable = list.itemAtIndex(playableIndex)
+        verify(playable)
+        var playableArea = findChild(playable, "trackRowDragArea")
+        verify(playableArea)
+        mouseDoubleClickSequence(playableArea, playableArea.width / 2,
+                                 playableArea.height / 2)
+        tryCompare(PlaybackController, "currentTrackId",
+                   LibraryModel.data(LibraryModel.index(playableIndex, 0),
+                                     LibraryModel.TrackIdRole))
+        list.destroy()
+    }
+
+    function test_selected_tracks_drag_into_playlist_with_real_mouse() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        compare(ids.length, 3)
+        var playlistId = PlaylistModel.createPlaylist(
+                    "QML drag target " + Date.now())
+        verify(playlistId.length > 0)
+
+        var navigation = sideNavigationComponent.createObject(
+                    mainWindow.contentItem, { "x": 0, "y": 0 })
+        var list = trackListComponent.createObject(
+                    mainWindow.contentItem, { "x": 220, "y": 0 })
+        verify(navigation && list)
+        mainWindow.requestActivate()
+        wait(50)
+
+        var firstIndex = LibraryModel.indexForTrackId(ids[0])
+        var secondIndex = LibraryModel.indexForTrackId(ids[1])
+        list.positionViewAtIndex(firstIndex, ListView.Beginning)
+        wait(30)
+        var firstRow = list.itemAtIndex(firstIndex)
+        var secondRow = list.itemAtIndex(secondIndex)
+        verify(firstRow && secondRow)
+        var firstArea = findChild(firstRow, "trackRowDragArea")
+        var secondArea = findChild(secondRow, "trackRowDragArea")
+        verify(firstArea && secondArea)
+        mouseClick(firstArea, firstArea.width / 2, firstArea.height / 2)
+        mouseClick(secondArea, secondArea.width / 2, secondArea.height / 2,
+                   Qt.LeftButton, Qt.ControlModifier)
+        compare(list.selectedTrackIds.length, 2)
+
+        var target = findChild(navigation,
+                               "playlistDropTarget-" + playlistId)
+        verify(target, "custom playlists must expose a stable drop target")
+        var targetPoint = target.mapToItem(firstArea,
+                                           target.width / 2,
+                                           target.height / 2)
+        var proxy = findChild(firstRow, "trackDragProxy")
+        verify(proxy)
+        mousePress(firstArea, firstArea.width / 2, firstArea.height / 2,
+                   Qt.LeftButton)
+        mouseMove(firstArea, firstArea.width / 2 - 12,
+                  firstArea.height / 2, 20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        mouseMove(firstArea, targetPoint.x, targetPoint.y,
+                  60, Qt.LeftButton)
+        tryVerify(function() { return target.containsDrag }, 500)
+        mouseRelease(firstArea, targetPoint.x, targetPoint.y,
+                     Qt.LeftButton)
+
+        tryVerify(function() {
+            return PlaylistModel.containsTrack(playlistId, ids[0])
+        }, 500)
+        verify(PlaylistModel.containsTrack(playlistId, ids[1]),
+               "all Ctrl-selected rows must arrive in the target playlist")
+        PlaylistModel.removePlaylist(playlistId)
+        list.destroy()
+        navigation.destroy()
+    }
+
+    function test_playlist_context_actions_use_real_mouse_and_keep_playlist_id() {
+        var playlistId = PlaylistModel.createPlaylist(
+                    "QML context target " + Date.now())
+        verify(playlistId.length > 0)
+        var navigation = sideNavigationComponent.createObject(mainWindow.contentItem)
+        verify(navigation)
+        var category = findChild(navigation, "playlistCategory-" + playlistId)
+        verify(category, "custom playlist needs a stable context target")
+        mouseClick(category, category.width / 2, category.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(navigation, "playlistContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var renameAction = findChild(menu, "playlistMenuRename")
+        verify(renameAction && renameAction.enabled)
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        tryCompare(navigation, "renameRequestCount", 1)
+        compare(navigation.lastRequestedPlaylistId, playlistId)
+
+        mouseClick(category, category.width / 2, category.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var exportAction = findChild(menu, "playlistMenuExport")
+        verify(exportAction && exportAction.enabled)
+        mouseClick(exportAction, exportAction.width / 2,
+                   exportAction.height / 2)
+        tryCompare(navigation, "exportRequestCount", 1)
+        compare(navigation.lastRequestedPlaylistId, playlistId)
+
+        mouseClick(category, category.width / 2, category.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var deleteAction = findChild(menu, "playlistMenuDelete")
+        verify(deleteAction && deleteAction.enabled)
+        mouseClick(deleteAction, deleteAction.width / 2,
+                   deleteAction.height / 2)
+        tryCompare(navigation, "deleteRequestCount", 1)
+        compare(navigation.lastRequestedPlaylistId, playlistId)
+
+        PlaylistModel.removePlaylist(playlistId)
+        navigation.destroy()
+    }
+
+    function test_z_delete_key_uses_current_view_semantics() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        compare(ids.length, 3)
+        var playlistId = PlaylistModel.createPlaylist(
+                    "Delete semantics " + Date.now())
+        verify(playlistId.length > 0)
+        compare(PlaylistModel.addTracks(playlistId, [ids[0]]), 1)
+
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        mainWindow.requestActivate()
+        list.forceActiveFocus()
+        wait(30)
+
+        list.selectedCategory = playlistId
+        var firstIndex = LibraryModel.indexForTrackId(ids[0])
+        list.positionViewAtIndex(firstIndex, ListView.Beginning)
+        wait(20)
+        var firstArea = findChild(list.itemAtIndex(firstIndex),
+                                  "trackRowDragArea")
+        verify(firstArea)
+        mouseClick(firstArea, firstArea.width / 2, firstArea.height / 2)
+        keyClick(Qt.Key_Delete)
+        tryVerify(function() {
+            return !PlaylistModel.containsTrack(playlistId, ids[0])
+        }, 500)
+        verify(LibraryModel.indexForTrackId(ids[0]) >= 0,
+               "playlist Delete must not remove the library record")
+
+        var secondIndex = LibraryModel.indexForTrackId(ids[1])
+        verify(LibraryModel.setFavorite(secondIndex, true))
+        list.selectedCategory = "favorites"
+        list.positionViewAtIndex(secondIndex, ListView.Center)
+        wait(20)
+        var secondArea = findChild(list.itemAtIndex(secondIndex),
+                                   "trackRowDragArea")
+        verify(secondArea)
+        mouseClick(secondArea, secondArea.width / 2, secondArea.height / 2)
+        keyClick(Qt.Key_Delete)
+        tryVerify(function() {
+            var row = LibraryModel.indexForTrackId(ids[1])
+            return row >= 0 && !LibraryModel.data(
+                        LibraryModel.index(row, 0), LibraryModel.FavoriteRole)
+        }, 500)
+
+        var thirdIndex = LibraryModel.indexForTrackId(ids[2])
+        list.selectedCategory = "all"
+        list.positionViewAtIndex(thirdIndex, ListView.Center)
+        wait(20)
+        var thirdArea = findChild(list.itemAtIndex(thirdIndex),
+                                  "trackRowDragArea")
+        verify(thirdArea)
+        mouseClick(thirdArea, thirdArea.width / 2, thirdArea.height / 2)
+        keyClick(Qt.Key_Delete)
+        tryVerify(function() {
+            return LibraryModel.indexForTrackId(ids[2]) < 0
+        }, 500)
+
+        PlaylistModel.removePlaylist(playlistId)
+        list.destroy()
+    }
+
     function test_waveform_click_seeks_real_playback_controller() {
         var waveform = findChild(mainWindow, "mainWaveform")
+        var seekSurface = findChild(mainWindow, "waveformHoverSurface")
         verify(waveform, "main waveform should exist after importing audio")
+        verify(seekSurface, "visible waveform surface should own seeking")
 
-        PlaybackController.playRow(0)
+        var playablePath = decodeURIComponent(testAudioUrl.toString()
+                                              .replace(/^file:\/\/\//, ""))
+        var playableIndex = -1
+        for (var row = 0; row < LibraryModel.count; ++row) {
+            var path = String(LibraryModel.data(LibraryModel.index(row, 0),
+                                                LibraryModel.PathRole))
+                    .replace(/\\/g, "/")
+            if (path.toLowerCase() === playablePath.toLowerCase()) {
+                playableIndex = row
+                break
+            }
+        }
+        verify(playableIndex >= 0)
+        PlaybackController.playRow(playableIndex)
         tryVerify(function() {
             return PlaybackController.durationMs > 0 && waveform.width > 0
         }, 5000)
 
         var expected = Math.round(PlaybackController.durationMs * 0.75)
-        mouseClick(waveform, waveform.width * 0.75, waveform.height / 2)
+        PlaybackController.pause()
+        mouseClick(seekSurface, seekSurface.width * 0.75,
+                   seekSurface.height / 2)
         tryVerify(function() {
             return Math.abs(PlaybackController.positionMs - expected) < 150
-        }, 1000)
+        }, 1000, "seek mismatch: actual=" + PlaybackController.positionMs
+                 + ", expected=" + expected
+                 + ", width=" + seekSurface.width)
+        var guide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(guide)
+        var expectedWidth = waveform.width * waveform.position
+                            / waveform.duration
+        verify(Math.abs(waveform.position - expected) < 150,
+               "rendered waveform and playback controller must share one position")
+        verify(Math.abs(guide.x - Math.round(expectedWidth - guide.width / 2)) < 2)
+        var originalWidth = mainWindow.width
+        mainWindow.width = Math.max(mainWindow.minimumWidth, originalWidth - 160)
+        wait(30)
+        expectedWidth = waveform.width * waveform.position
+                        / waveform.duration
+        verify(Math.abs(waveform.position - PlaybackController.positionMs) < 2,
+               "waveform position must remain authoritative after resizing")
+        verify(Math.abs(guide.x - Math.round(expectedWidth - guide.width / 2)) < 2,
+               "playback guide must stay aligned after resizing")
+        mainWindow.width = originalWidth
+    }
+
+    function test_waveform_time_axis_prefers_exact_decoded_waveform_duration() {
+        var pane = findChild(mainWindow, "playerPane")
+        verify(pane)
+        verify(PlaybackController.durationMs > 0)
+        // Decoder/playback duration is authoritative. Analysis duration can
+        // differ for VBR padding and must never create a seekable visual tail.
+        pane.waveformDurationMs = PlaybackController.durationMs * 1.25
+        compare(pane.effectiveDurationMs, PlaybackController.durationMs)
+        var guide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(guide)
+        compare(guide.width, 1)
+        compare(guide.color, "#002fa7")
+    }
+
+    function test_waveform_mode_button_cycles_the_live_setting() {
+        var button = findChild(mainWindow, "waveformModeButton")
+        verify(button)
+        verify(button.icon.source.toString().endsWith("/waveform-switch.svg"),
+               "waveform switch must use the supplied waveform icon")
+        var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 0
+        button.clicked()
+        tryCompare(SettingsController, "waveformMode", 1)
+        SettingsController.waveformMode = previousMode
+    }
+
+    function test_playback_modes_use_distinct_system_tinted_line_icons() {
+        var button = findChild(mainWindow, "modeButton")
+        verify(button)
+        var previousMode = PlaybackController.mode
+        var cases = [
+            { mode: PlaybackController.Sequential, icon: "/play-order-line.svg" },
+            { mode: PlaybackController.Shuffle, icon: "/shuffle-arrows-line.svg" },
+            { mode: PlaybackController.RepeatOne, icon: "/repeat-one-line-alt.svg" },
+            { mode: PlaybackController.RepeatAll, icon: "/repeat-list-line.svg" }
+        ]
+
+        for (var index = 0; index < cases.length; ++index) {
+            PlaybackController.setMode(cases[index].mode)
+            tryCompare(PlaybackController, "mode", cases[index].mode)
+            verify(button.icon.source.toString().endsWith(cases[index].icon),
+                   "each playback mode must use its own line icon")
+            compare(button.icon.color.toString(), Theme.iconPrimary.toString())
+        }
+        PlaybackController.setMode(previousMode)
+    }
+
+    function test_player_controls_use_reference_scale_and_green_hover_guide() {
+        var previous = findChild(mainWindow, "previousButton")
+        var next = findChild(mainWindow, "nextButton")
+        var mode = findChild(mainWindow, "modeButton")
+        var play = findChild(mainWindow, "playPauseButton")
+        var hoverGuide = findChild(mainWindow, "waveformHoverGuide")
+        verify(previous)
+        verify(next)
+        verify(mode)
+        verify(play)
+        verify(hoverGuide)
+        verify(findChild(mainWindow, "waveformProgressFeather"))
+        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(playbackGuide)
+        compare(playbackGuide.width, 1)
+        compare(playbackGuide.color.toString(), "#002fa7")
+        compare(previous.icon.width, 24)
+        compare(next.icon.width, 24)
+        compare(mode.icon.width, 24)
+        compare(play.width, 52)
+        compare(play.height, 52)
+        compare(play.icon.width, 24)
+        compare(hoverGuide.color.toString(), "#54ff84")
+        var hoverSurface = findChild(mainWindow, "waveformHoverSurface")
+        verify(hoverSurface,
+               "the full waveform canvas must own hover preview input")
+        compare(hoverSurface.cursorShape, Qt.ArrowCursor)
+    }
+
+    function test_waveform_hover_surface_covers_played_and_unplayed_regions() {
+        var previousPreview = SettingsController.waveformHoverTimePreview
+        SettingsController.waveformHoverTimePreview = true
+        var surface = findChild(mainWindow, "waveformHoverSurface")
+        var guide = findChild(mainWindow, "waveformHoverGuide")
+        verify(surface)
+        verify(guide)
+        verify(surface.enabled)
+        verify(surface.hoverEnabled)
+
+        surface.updatePreview(Math.max(2, surface.width * 0.15))
+        tryVerify(function() { return guide.visible && guide.x < surface.width * 0.30 })
+
+        surface.updatePreview(Math.max(2, surface.width * 0.85))
+        tryVerify(function() { return guide.visible && guide.x > surface.width * 0.70 })
+        SettingsController.waveformHoverTimePreview = previousPreview
+    }
+
+    function test_play_button_uses_system_solid_style_without_rgb_runtime() {
+        var play = findChild(mainWindow, "playPauseButton")
+        var ring = findChild(mainWindow, "playButtonRgbRing")
+        var glow = findChild(mainWindow, "playButtonRgbGlow")
+        var body = findChild(mainWindow, "playButtonBody")
+        verify(play)
+        verify(!ring)
+        verify(!glow)
+        verify(body)
+        compare(play.width, 52)
+        compare(play.height, 52)
+        compare(body.color.toString(), Theme.panel.toString())
+        compare(body.border.width, 3)
+        compare(body.border.color.toString(),
+                (PlaybackController.state === PlaybackController.Playing
+                 ? Theme.playRingPlaying : Theme.playRingPaused).toString())
+        compare(typeof SettingsController.playButtonRgbGlow, "undefined")
+    }
+
+    function test_volume_control_uses_compact_white_handle_and_percentage() {
+        var mute = findChild(mainWindow, "muteButton")
+        var slider = findChild(mainWindow, "volumeSlider")
+        var percent = findChild(mainWindow, "volumePercentLabel")
+        verify(mute)
+        verify(slider)
+        verify(percent)
+        compare(mute.icon.color.toString(), Theme.iconPrimary.toString())
+        compare(mute.icon.width, 24)
+        verify(slider.handle.width <= 10)
+
+        var previousVolume = PlaybackController.volume
+        PlaybackController.setVolume(0.42)
+        tryCompare(percent, "text", "42%")
+        PlaybackController.setVolume(previousVolume)
+    }
+
+    function test_spectrum_source_is_mirrored_before_responsive_rendering() {
+        var pane = findChild(mainWindow, "playerPane")
+        verify(pane)
+        var shaped = pane.shapeSpectrum([1, 1, 1, 1])
+        compare(shaped.length, 128)
+        compare(shaped[0], shaped[shaped.length - 1])
+        compare(shaped[31], shaped[shaped.length - 32])
+    }
+
+    function test_spectrum_uses_responsive_five_pixel_bottom_bars() {
+        var waveform = findChild(mainWindow, "mainWaveform")
+        verify(waveform)
+        var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 2
+        tryCompare(waveform, "visualMode", 2)
+        compare(waveform.lineWidth, 3)
+        compare(waveform.spectrumBarCount, 128)
+        compare(waveform.spectrumBarWidth, 5)
+        compare(waveform.spectrumBarGap, 2)
+        compare(waveform.spectrumMaxHeight, 72)
+        fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
+        fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
+        fuzzyCompare(waveform.spectrumPeakFallSeconds, 0.75, 0.001)
+        fuzzyCompare(waveform.amplitudeScale, 1.0, 0.001)
+        var pane = findChild(mainWindow, "playerPane")
+        var shaped = pane.shapeSpectrum([1, 1, 1, 1])
+        compare(shaped.length, 128)
+        SettingsController.waveformMode = previousMode
+    }
+
+    function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
+        var filter = searchFilterComponent.createObject(mainWindow.contentItem)
+        verify(filter)
+        compare(findChild(filter, "keywordModule").width, 184)
+        compare(findChild(filter, "librarySearchField").placeholderText,
+                "歌曲/艺术家/专辑/标签/")
+        compare(findChild(filter, "bpmModule").width, 216)
+        compare(findChild(filter, "bpmRange").first.handle.width, 12)
+        compare(findChild(filter, "bpmRange").second.handle.width, 12)
+        var minimum = findChild(filter, "minimumBpmField")
+        var maximum = findChild(filter, "maximumBpmField")
+        verify(minimum)
+        verify(maximum)
+        minimum.text = "72"
+        maximum.text = "155"
+        minimum.editingFinished()
+        maximum.editingFinished()
+        compare(filter.pendingMinBpm, 72)
+        compare(filter.pendingMaxBpm, 155)
+        filter.destroy()
     }
 
     function test_waveform_modes_use_offline_waveform_and_live_spectrum() {
@@ -134,7 +1291,9 @@ TestCase {
         PlaybackController.play()
         SettingsController.waveformMode = 2
         tryVerify(function() {
-            if (waveform.visualMode !== 2 || waveform.peaks.length !== 64)
+            if (waveform.visualMode !== 2
+                    || waveform.peaks.length < 16
+                    || waveform.peaks.length % 2 !== 0)
                 return false
             for (var index = 0; index < waveform.peaks.length; ++index) {
                 if (waveform.peaks[index] > 0.05)
@@ -167,9 +1326,52 @@ TestCase {
         LibraryModel.setFavorite(row, false)
     }
 
+    function test_z_playing_row_uses_three_independent_spectrum_bars() {
+        verify(PlaybackController.currentTrackId.length > 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        tryVerify(function() { return list.count > 0 })
+
+        var indicator = findChild(list, "playingBarsIndicator")
+        verify(indicator)
+        var currentRow = findChild(list, "currentTrackRow")
+        verify(currentRow)
+        compare(currentRow.color.toString(), Theme.activeSelection.toString())
+        compare(indicator.barCount, 3)
+        compare(indicator.barColor.toString(), Theme.waveformMagenta.toString())
+        verify(findChild(indicator, "playingBar0"))
+        verify(findChild(indicator, "playingBar1"))
+        verify(findChild(indicator, "playingBar2"))
+        list.destroy()
+    }
+
+    function test_z_track_columns_and_search_modules_follow_stable_grid() {
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        compare(findChild(list, "trackHeaderIndex").width, 42)
+        compare(findChild(list, "trackHeaderFavorite").width, 52)
+        compare(findChild(list, "trackHeaderAlbum").width, 136)
+        compare(findChild(list, "trackHeaderArtist").width, 130)
+        compare(findChild(list, "trackHeaderRating").width, 110)
+        compare(findChild(list, "trackHeaderBpm").width, 64)
+        compare(findChild(list, "trackHeaderDuration").width, 72)
+        compare(findChild(list, "trackHeaderFavoriteAlbumGap").width, 10)
+        verify(!findChild(list, "trackRowOptionsButton"),
+               "the duration column must be the final visible column")
+        list.destroy()
+
+        var filter = searchFilterComponent.createObject(mainWindow.contentItem)
+        verify(filter)
+        compare(findChild(filter, "keywordModule").width, 184)
+        compare(findChild(filter, "ratingModule").width, 132)
+        compare(findChild(filter, "bpmModule").width, 216)
+        compare(findChild(filter, "bpmRange").width, 104)
+        filter.destroy()
+    }
+
     function test_empty_startup_uses_compact_reference_structure() {
-        compare(mainWindow.width, 1228)
-        compare(mainWindow.height, 399)
+        compare(mainWindow.width, 1104)
+        compare(mainWindow.height, 342)
 
         var startup = findChild(mainWindow, "emptyStartup")
         var controls = findChild(mainWindow, "playerControls")
@@ -177,12 +1379,47 @@ TestCase {
         verify(controls.emptyMode)
         verify(findChild(mainWindow, "titleBrand").visible,
                "brand should be visible in the empty title bar")
+        compare(findChild(mainWindow, "titleBrandText").font.italic, false)
         verify(findChild(startup, "startupTitle"),
                "compact startup title should exist")
         verify(findChild(startup, "startupActionArea"),
                "compact startup actions should exist")
         verify(!findChild(startup, "startupHeroArtwork"),
                "the superseded hero artwork should not exist")
+    }
+
+    function test_main_window_allows_a_smaller_responsive_native_size() {
+        compare(mainWindow.minimumWidth, 612)
+        compare(mainWindow.minimumHeight, 228)
+    }
+
+    function test_main_window_keeps_player_content_visible_at_minimum_size() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        var oldWidth = mainWindow.width
+        var oldHeight = mainWindow.height
+        mainWindow.width = mainWindow.minimumWidth
+        mainWindow.height = mainWindow.minimumHeight
+        wait(50)
+
+        var pane = findChild(mainWindow, "playerPane")
+        var controls = findChild(mainWindow, "playerControls")
+        var cover = findChild(mainWindow, "playerCover")
+        var waveform = findChild(mainWindow, "mainWaveform")
+        verify(pane && controls && cover && waveform)
+        tryVerify(function() { return pane.visible }, 1000)
+        verify(pane.y + pane.height <= controls.y + 1,
+               "player metadata/waveform must not cover playback controls")
+        verify(controls.y + controls.height <= mainWindow.contentItem.height + 1,
+               "playback controls must remain inside the small window")
+        verify(cover.height <= pane.height,
+               "cover must scale with the available player height")
+        verify(waveform.height >= 32,
+               "responsive layout must keep the waveform usable")
+
+        mainWindow.width = oldWidth
+        mainWindow.height = oldHeight
+        wait(20)
     }
 
     function test_settings_page_is_lazy_until_requested() {
@@ -194,11 +1431,37 @@ TestCase {
         tryVerify(function() {
             return findChild(mainWindow, "settingsPage") !== null
         })
+        const settingsWindow = findChild(mainWindow, "settingsWindow")
+        verify(settingsWindow, "settings must open in its own window")
+        compare(settingsWindow.width, 1228)
+        verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
+               "settings window must fit the available desktop")
         const page = findChild(mainWindow, "settingsPage")
+        tryVerify(function() { return page.visible })
+        compare(page.editResolved, false,
+                "opening settings must start a cancellable edit session")
         const scroll = findChild(page, "settingsScroll")
         const sectionList = findChild(page, "settingsSectionList")
+        const sidebar = findChild(page, "settingsSidebar")
+        const contentColumn = findChild(page, "settingsContentColumn")
         verify(scroll, "settings content must expose a scroll viewport")
         verify(sectionList, "settings navigation must expose a scrollable list")
+        verify(sidebar, "settings navigation must use the compact sidebar")
+        verify(contentColumn, "settings must expose the single content column")
+        var headerDragArea = findChild(page, "settingsHeaderDragArea")
+        verify(headerDragArea, "settings header must expose a full-width native drag surface")
+        verify(headerDragArea.width > settingsWindow.width * 0.60)
+        compare(sidebar.width, 208)
+        verify(contentColumn.width <= 760,
+               "settings content must remain a readable single column")
+        verify(contentColumn.x >= 24,
+               "settings content must keep balanced horizontal breathing room")
+        verify(contentColumn.spacing <= 6,
+               "settings sections must use compact PC spacing")
+        const generalSection = findChild(page, "generalSettingsSection")
+        verify(generalSection, "general settings section must exist")
+        verify(generalSection.spacing <= 6,
+               "settings controls must not leave oversized vertical gaps")
         verify(scroll.contentHeight > scroll.availableHeight,
                "settings content must remain reachable in the compact main window")
         compare(sectionList.count, 7,
@@ -210,10 +1473,12 @@ TestCase {
         const oggAssociation = findChild(page, "oggAssociationCheck")
         verify(associationFlow, "file associations must expose their layout")
         verify(oggAssociation, "the final OGG association must be reachable")
-        verify(oggAssociation.x + oggAssociation.width <= associationFlow.width + 0.5,
-               "all file associations must fit without horizontal clipping")
+        tryVerify(function() {
+            return oggAssociation.x + oggAssociation.width
+                    <= associationFlow.width + 0.5
+        }, 1000)
         SettingsController.themeMode = 2
-        page.close()
+        findChild(page, "settingsCancelButton").clicked()
         tryCompare(SettingsController, "themeMode", 1)
 
         page.open()
@@ -228,7 +1493,7 @@ TestCase {
         verify(page, "settings page should already be loaded")
         page.open()
         page.selectedSection = 1
-        wait(50)
+        wait(250)
         var combo = findChild(page, "outputDeviceCombo")
         var exclusive = findChild(page, "exclusiveModeSwitch")
         var sampleRate = findChild(page, "matchTrackSampleRateSwitch")
@@ -239,6 +1504,9 @@ TestCase {
         verify(sampleRate, "sample-rate matching control should exist")
         verify(fallback, "exclusive fallback status should exist")
         verify(fade, "transition fade selector should exist")
+        compare(combo.contentItem.elide, Text.ElideRight)
+        verify(combo.contentItem.rightPadding > 0,
+               "long localized device names must not overlap the indicator")
         SettingsController.transitionFadeMs = 500
         tryCompare(fade, "currentValue", 500)
         SettingsController.transitionFadeMs = 0
@@ -257,10 +1525,106 @@ TestCase {
 
         SettingsController.exclusiveMode = false
         verify(exclusive.visible, "exclusive mode control should be visible")
+        var exclusiveKnob = exclusive.indicator.children[0]
+        var exclusiveOffX = exclusiveKnob.x
         mouseClick(exclusive, exclusive.width / 2, exclusive.height / 2)
         tryCompare(SettingsController, "exclusiveMode", true)
+        tryVerify(function() { return exclusiveKnob.x > exclusiveOffX },
+                  500, "enabled switch knob must slide right")
+        compare(exclusive.indicator.color, Theme.cyan)
         mouseClick(exclusive, exclusive.width / 2, exclusive.height / 2)
         tryCompare(SettingsController, "exclusiveMode", false)
+        tryCompare(exclusiveKnob, "x", exclusiveOffX)
+        page.close()
+    }
+
+    function test_settings_transcode_controls_are_split_and_scroll_tracks_section() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page)
+        page.open()
+        page.selectedSection = 3
+        wait(250)
+
+        var formatCombo = findChild(page, "transcodeFormatCombo")
+        var bitrateCombo = findChild(page, "transcodeBitrateCombo")
+        var sampleRateCombo = findChild(page, "transcodeSampleRateCombo")
+        var channelCombo = findChild(page, "transcodeChannelCombo")
+        verify(formatCombo)
+        verify(bitrateCombo)
+        verify(sampleRateCombo)
+        verify(channelCombo)
+        compare(formatCombo.valueModel.length, 3)
+        compare(bitrateCombo.valueModel.length, 4)
+        compare(sampleRateCombo.valueModel.length, 6)
+        compare(sampleRateCombo.valueModel[0].value, 44100)
+        compare(sampleRateCombo.valueModel[5].value, 192000)
+        compare(channelCombo.valueModel.length, 2)
+
+        SettingsController.transcodeFormat = "FLAC"
+        tryCompare(bitrateCombo, "enabled", false)
+        SettingsController.transcodeFormat = "MP3"
+        tryCompare(bitrateCombo, "enabled", true)
+
+        const scroll = findChild(page, "settingsScroll")
+        scroll.contentItem.contentY = Math.max(
+                    0, scroll.contentHeight - scroll.availableHeight)
+        tryCompare(page, "selectedSection", 6)
+        page.close()
+    }
+
+    function test_settings_x_cache_limit_accepts_gigabytes_and_actions_share_one_row() {
+        var page = findChild(mainWindow, "settingsPage")
+        if (!page) {
+            findChild(mainWindow, "settingsButton").clicked()
+            tryVerify(function() {
+                return findChild(mainWindow, "settingsPage") !== null
+            })
+            page = findChild(mainWindow, "settingsPage")
+        }
+        verify(page)
+        page.open()
+        page.selectedSection = 5
+        wait(250)
+        var limit = findChild(page, "cacheSizeLimitField")
+        var waveform = findChild(page, "clearWaveformCacheButton")
+        var covers = findChild(page, "clearCoverCacheButton")
+        var temp = findChild(page, "clearTempCacheButton")
+        var all = findChild(page, "clearAllCacheButton")
+        verify(limit && waveform && covers && temp && all)
+        limit.text = "20"
+        limit.editingFinished()
+        tryCompare(SettingsController, "cacheSizeLimitMB", 20480)
+        compare(waveform.parent, covers.parent)
+        compare(waveform.parent, temp.parent)
+        compare(waveform.parent, all.parent)
+        page.close()
+    }
+
+    function test_settings_x_audio_presets_share_one_compact_row() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page)
+        page.open()
+        page.selectedSection = 3
+        wait(250)
+        var keepPitch = findChild(page, "keepPitchPresetSwitch")
+        var protectVoice = findChild(page, "vocalProtectionPresetSwitch")
+        verify(keepPitch && protectVoice)
+        compare(keepPitch.parent, protectVoice.parent)
+        page.close()
+    }
+
+    function test_settings_y_about_uses_one_name_and_version_line() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page)
+        page.open()
+        page.selectedSection = 6
+        wait(250)
+        var productLine = findChild(page, "aboutProductLine")
+        verify(productLine)
+        compare(productLine.text, "AgPlayer v1.0")
+        verify(productLine.font.weight >= Font.Bold)
+        verify(!findChild(page, "aboutStandaloneVersion"),
+               "about page must not repeat the product or version")
         page.close()
     }
 
@@ -271,14 +1635,14 @@ TestCase {
         page.selectedSection = 2
         wait(50)
 
-        var heightCombo = findChild(page, "waveformHeightCombo")
-        var densityCombo = findChild(page, "waveformDensityCombo")
-        var thicknessCombo = findChild(page, "waveformThicknessCombo")
+        var heightStepper = findChild(page, "waveformHeightStepper")
+        var densityStepper = findChild(page, "waveformDensityStepper")
+        var thicknessStepper = findChild(page, "waveformThicknessStepper")
         var aggregationCombo = findChild(page, "waveformAggregationCombo")
         var resetButton = findChild(page, "waveformResetButton")
-        verify(heightCombo)
-        verify(densityCombo)
-        verify(thicknessCombo)
+        verify(heightStepper)
+        verify(densityStepper)
+        verify(thicknessStepper)
         verify(aggregationCombo)
         verify(resetButton)
 
@@ -286,16 +1650,44 @@ TestCase {
         SettingsController.waveformDensity = 3.5
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
-        tryCompare(heightCombo, "currentValue", 1.2)
-        tryCompare(densityCombo, "currentValue", 3.5)
-        tryCompare(thicknessCombo, "currentValue", 2.2)
+        tryCompare(heightStepper, "value", 1.2)
+        tryCompare(densityStepper, "value", 3.5)
+        tryCompare(thicknessStepper, "value", 2.2)
         tryCompare(aggregationCombo, "currentValue", 1)
+
+        heightStepper.increase()
+        densityStepper.decrease()
+        thicknessStepper.increase()
+        tryCompare(SettingsController, "waveformHeight", 1.3)
+        tryCompare(SettingsController, "waveformDensity", 3.0)
+        tryCompare(SettingsController, "waveformThickness", 2.3)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
         tryCompare(SettingsController, "waveformDensity", 2.0)
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
+        page.close()
+    }
+
+    function test_settings_y_feedback_dialog_is_actionable() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page)
+        page.open()
+        page.selectedSection = 6
+        wait(500)
+        var button = findChild(page, "feedbackButton")
+        var dialog = findChild(page, "feedbackDialog")
+        var message = findChild(page, "feedbackMessage")
+        verify(button)
+        verify(dialog)
+        verify(message)
+        mouseClick(button)
+        tryVerify(function() { return dialog.visible })
+        compare(message.text, "建议反馈请发邮件：agplayer@foxmail.com")
+        verify(findChild(dialog, "feedbackEmailField"))
+        verify(findChild(dialog, "copyFeedbackEmailButton"))
+        dialog.close()
         page.close()
     }
 
@@ -306,25 +1698,49 @@ TestCase {
         tryCompare(Theme, "isLight", false)
         var darkBackground = Theme.background.toString()
         var darkText = Theme.primaryText.toString()
+        compare(darkBackground, "#202020")
+        compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
+                (PlaybackController.state === PlaybackController.Playing
+                 ? Theme.playRingPlaying : Theme.playRingPaused).toString())
 
         SettingsController.themeMode = 1
         compare(SettingsController.themeMode, 1)
         tryCompare(Theme, "isLight", true)
-        verify(Theme.onBrandGradientText.toString()
-               !== Theme.onCyanText.toString(),
-               "brand gradients and solid cyan controls need separate text colors")
+        compare(Theme.accentText.toString(), Theme.onCyanText.toString())
         verify(Theme.background.toString() !== darkBackground,
                "light mode should replace the dark surface")
         verify(Theme.primaryText.toString() !== darkText,
                "light mode should replace the dark text color")
         compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
                 Theme.iconSecondary.toString())
+        compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
+                (PlaybackController.state === PlaybackController.Playing
+                 ? Theme.playRingPlaying : Theme.playRingPaused).toString())
 
         SettingsController.themeMode = 2
         tryCompare(Theme, "followsSystem", true)
+        compare(Theme.requestedMode, 2)
+        compare(Theme.effectiveMode, Theme.systemIsLight ? 1 : 0)
         compare(Theme.background.toString(),
-                Theme.systemPalette.window.toString())
+                Theme.systemIsLight ? "#f3f3f3" : "#202020")
+        compare(Theme.cyan.toString(), Theme.accent.toString())
+        compare(Theme.waveformCyan.toString(), "#00d4ff")
 
         SettingsController.themeMode = previousMode
+    }
+
+    function test_title_buttons_use_compact_chinese_labels() {
+        var settings = findChild(mainWindow, "settingsButton")
+        var minimize = findChild(mainWindow, "minimizeButton")
+        var maximize = findChild(mainWindow, "maximizeButton")
+        var close = findChild(mainWindow, "closeButton")
+        verify(settings && minimize && maximize && close)
+        compare(settings.icon.width, 16)
+        compare(minimize.icon.width, 16)
+        compare(maximize.icon.width, 16)
+        compare(close.icon.width, 16)
+        compare(settings.text, "设置")
+        compare(minimize.text, "最小化")
+        compare(close.text, "关闭")
     }
 }

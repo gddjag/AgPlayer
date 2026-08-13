@@ -5,55 +5,93 @@ import AgPlayer
 
 Rectangle {
     id: root
-    color: Theme.background
+    color: "transparent"
     property bool emptyMode: false
+    property bool volumeExpanded: false
+    signal openEqualizerRequested()
+
+    function playbackModeName() {
+        switch (PlaybackController.mode) {
+        case PlaybackController.Sequential:
+            return qsTr("顺序播放")
+        case PlaybackController.Shuffle:
+            return qsTr("随机播放")
+        case PlaybackController.RepeatOne:
+            return qsTr("单曲循环")
+        default:
+            return qsTr("列表循环")
+        }
+    }
+
+    Timer {
+        id: volumeOpenTimer
+        interval: 120
+        onTriggered: root.volumeExpanded = true
+    }
+
+    Timer {
+        id: volumeCloseTimer
+        interval: 280
+        onTriggered: {
+            if (!volumeSlider.pressed && !volumeSlider.activeFocus)
+                root.volumeExpanded = false
+        }
+    }
+
+    ToolButton {
+        id: listWindowButton
+        objectName: "listWindowButton"
+        anchors.left: parent.left
+        anchors.leftMargin: 24
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        flat: true
+        icon.source: Theme.icon("list-unordered")
+        icon.color: WindowController.listWindowVisible
+                    ? Theme.iconAccent : Theme.iconPrimary
+        icon.width: 24
+        icon.height: 24
+        Accessible.name: WindowController.listWindowVisible
+                         ? qsTr("Hide playlist window")
+                         : qsTr("Show playlist window")
+        onClicked: WindowController.toggleListWindow()
+        ToolTip.text: Accessible.name
+        ToolTip.visible: hovered
+        background: null
+    }
 
     RowLayout {
-        anchors.fill: parent
-        anchors.bottomMargin: root.emptyMode ? 24 : 0
-        anchors.leftMargin: root.emptyMode ? 24 : Theme.spacingXl
-        anchors.rightMargin: root.emptyMode ? 32 : Theme.spacingXl
-        spacing: Theme.spacingLg
-
-        ToolButton {
-            id: listWindowButton
-            objectName: "listWindowButton"
-            flat: true
-            icon.source: Theme.icon("list-unordered")
-            icon.color: WindowController.listWindowVisible ? Theme.iconAccent : Theme.iconPrimary
-            icon.width: 32
-            icon.height: 32
-            Accessible.name: WindowController.listWindowVisible
-                             ? qsTr("Hide playlist window")
-                             : qsTr("Show playlist window")
-            focusPolicy: Qt.StrongFocus
-            onClicked: WindowController.toggleListWindow()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        Item { Layout.fillWidth: true }
-
-        Item {
-            Layout.preferredWidth: centerControls.implicitWidth
-            Layout.fillHeight: true
-
-        RowLayout {
-            id: centerControls
-            anchors.fill: parent
-            spacing: root.emptyMode ? 44 : 24
+        id: centerControls
+        objectName: "centerPlaybackControls"
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        spacing: root.emptyMode ? 28 : 16
 
         ToolButton {
             objectName: "audioToolsButton"
             flat: true
             icon.source: Theme.icon("briefcase-4-line")
             icon.color: Theme.iconPrimary
-            icon.width: 34
-            icon.height: 34
+            icon.width: root.emptyMode ? 28 : 24
+            icon.height: root.emptyMode ? 28 : 24
             Accessible.name: qsTr("Open audio tools")
-            focusPolicy: Qt.StrongFocus
             onClicked: WindowController.showAudioTools()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            objectName: "equalizerButton"
+            flat: true
+            icon.source: Theme.icon("equalizer-line")
+            icon.color: Theme.isLight ? "#000000" : "#ffffff"
+            icon.width: root.emptyMode ? 28 : 24
+            icon.height: root.emptyMode ? 28 : 24
+            contentItem.rotation: 90
+            Accessible.name: qsTr("十段图形均衡器")
+            onClicked: root.openEqualizerRequested()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -62,14 +100,13 @@ Rectangle {
         ToolButton {
             objectName: "waveformModeButton"
             flat: true
-            icon.source: Theme.icon("voiceprint-line")
-            icon.color: Theme.iconAccent
-            icon.width: 34
-            icon.height: 34
+            icon.source: Theme.icon("waveform-switch")
+            icon.color: Theme.iconPrimary
+            icon.width: root.emptyMode ? 28 : 24
+            icon.height: root.emptyMode ? 28 : 24
             Accessible.name: qsTr("Change waveform mode")
-            focusPolicy: Qt.StrongFocus
-            onClicked: SettingsController.setWaveformMode(
-                           (SettingsController.waveformMode + 1) % 3)
+            onClicked: SettingsController.waveformMode =
+                       (SettingsController.waveformMode + 1) % 3
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -77,249 +114,247 @@ Rectangle {
 
         ToolButton {
             objectName: "previousButton"
+            flat: true
             icon.source: Theme.icon("skip-back-fill")
             icon.color: Theme.iconPrimary
-            icon.width: 30
-            icon.height: 30
+            icon.width: 24
+            icon.height: 24
             Accessible.name: qsTr("Previous track")
-            focusPolicy: Qt.StrongFocus
             onClicked: PlaybackController.previous()
-            ToolTip.text: qsTr("Previous")
+            ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
+            background: null
         }
 
         ToolButton {
+            id: playPauseButton
             objectName: "playPauseButton"
+            Layout.preferredWidth: 52
+            Layout.preferredHeight: 52
+            flat: true
             icon.source: PlaybackController.state === PlaybackController.Playing
                          ? Theme.icon("pause-fill")
                          : Theme.icon("play-fill")
             icon.color: Theme.iconPrimary
-            icon.width: 34
-            icon.height: 34
-            Layout.preferredWidth: root.emptyMode ? 104 : 72
-            Layout.preferredHeight: root.emptyMode ? 104 : 72
-            Layout.topMargin: -8
+            icon.width: 24
+            icon.height: 24
+            scale: down ? 0.95 : hovered ? 1.05 : 1.0
             Accessible.name: PlaybackController.state === PlaybackController.Playing
-                             ? qsTr("Pause")
-                             : qsTr("Play")
-            focusPolicy: Qt.StrongFocus
+                             ? qsTr("Pause") : qsTr("Play")
             onClicked: PlaybackController.togglePlayback()
-            ToolTip.text: PlaybackController.state === PlaybackController.Playing
-                          ? qsTr("Pause")
-                          : qsTr("Play")
+            ToolTip.text: Accessible.name
             ToolTip.visible: hovered
 
+            Behavior on scale {
+                NumberAnimation {
+                    duration: playPauseButton.down ? 150 : 200
+                    easing.type: Easing.OutCubic
+                }
+            }
+
             background: Rectangle {
-                color: "transparent"
+                id: playButtonBody
+                objectName: "playButtonBody"
                 radius: width / 2
-
-                Rectangle {
-                    id: cyanGlow
-                    anchors.fill: parent
-                    anchors.margins: -10
-                    opacity: SettingsController.playButtonRgbGlow ? 0.08 : 0
-                    color: Theme.cyan
-                    radius: width / 2
-
-                    SequentialAnimation on opacity {
-                        running: SettingsController.playButtonRgbGlow
-                        loops: Animation.Infinite
-                        NumberAnimation { from: 0.05; to: 0.18; duration: 1100; easing.type: Easing.InOutSine }
-                        NumberAnimation { from: 0.18; to: 0.05; duration: 1100; easing.type: Easing.InOutSine }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -5
-                    opacity: SettingsController.playButtonRgbGlow ? 0.12 : 0
-                    color: Theme.waveformViolet
-                    radius: width / 2
-
-                    SequentialAnimation on scale {
-                        running: SettingsController.playButtonRgbGlow
-                        loops: Animation.Infinite
-                        NumberAnimation { from: 0.96; to: 1.08; duration: 1100; easing.type: Easing.InOutSine }
-                        NumberAnimation { from: 1.08; to: 0.96; duration: 1100; easing.type: Easing.InOutSine }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 3
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: Theme.waveformBlue }
-                        GradientStop { position: 1.0; color: Theme.waveformMagenta }
-                    }
-                    radius: width / 2
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    color: Theme.panel
-                    border.color: Theme.waveformViolet
-                    border.width: 1
-                    radius: width / 2
-                }
+                color: playPauseButton.hovered ? Theme.hoverSurface : Theme.panel
+                border.width: 3
+                border.color: PlaybackController.state === PlaybackController.Playing
+                              ? Theme.playRingPlaying : Theme.playRingPaused
+                Behavior on color { ColorAnimation { duration: 120 } }
             }
         }
 
         ToolButton {
             objectName: "nextButton"
+            flat: true
             icon.source: Theme.icon("skip-forward-fill")
             icon.color: Theme.iconPrimary
-            icon.width: 30
-            icon.height: 30
+            icon.width: 24
+            icon.height: 24
             Accessible.name: qsTr("Next track")
-            focusPolicy: Qt.StrongFocus
             onClicked: PlaybackController.next()
-            ToolTip.text: qsTr("Next")
+            ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
+            background: null
         }
 
         ToolButton {
             objectName: "modeButton"
+            flat: true
             icon.source: {
                 switch (PlaybackController.mode) {
+                case PlaybackController.Sequential:
+                    return Theme.icon("play-order-line")
                 case PlaybackController.RepeatOne:
-                    return Theme.icon("repeat-one-fill")
+                    return Theme.icon("repeat-one-line-alt")
                 case PlaybackController.Shuffle:
-                    return Theme.icon("shuffle-fill")
-                case PlaybackController.RepeatAll:
-                    return Theme.icon("repeat-fill")
+                    return Theme.icon("shuffle-arrows-line")
                 default:
-                    return Theme.icon("repeat-fill")
+                    return Theme.icon("repeat-list-line")
                 }
             }
-            icon.color: PlaybackController.mode === PlaybackController.Sequential
-                        ? Theme.iconSecondary
-                        : Theme.iconAccent
-            icon.width: 30
-            icon.height: 30
-            Accessible.name: {
-                switch (PlaybackController.mode) {
-                case PlaybackController.RepeatOne:
-                    return qsTr("Repeat one")
-                case PlaybackController.Shuffle:
-                    return qsTr("Shuffle")
-                case PlaybackController.RepeatAll:
-                    return qsTr("Repeat all")
-                default:
-                    return qsTr("Sequential")
-                }
-            }
-            focusPolicy: Qt.StrongFocus
+            icon.color: Theme.iconPrimary
+            icon.width: 24
+            icon.height: 24
+            Accessible.name: root.playbackModeName()
             onClicked: PlaybackController.cycleMode()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
+            background: null
         }
-
-        ToolButton {
-            id: muteButton
-            objectName: "muteButton"
-            icon.source: PlaybackController.muted
-                         ? Theme.icon("volume-mute-fill")
-                         : Theme.icon("volume-up-fill")
-            icon.color: Theme.iconSecondary
-            icon.width: root.emptyMode ? 30 : 20
-            icon.height: root.emptyMode ? 30 : 20
-            Accessible.name: PlaybackController.muted
-                             ? qsTr("Unmute")
-                             : qsTr("Mute")
-            focusPolicy: Qt.StrongFocus
-            onClicked: PlaybackController.toggleMuted()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
-                border.width: parent.visualFocus ? 2 : 0
-                radius: Theme.radiusSm
-            }
-        }
-
-        Slider {
-            objectName: "volumeSlider"
-            visible: !root.emptyMode
-                     && (muteButton.hovered || hovered || activeFocus || pressed)
-            from: 0
-            to: 1
-            onMoved: PlaybackController.setVolume(value)
-            Layout.preferredWidth: visible ? 140 : 0
-            Accessible.name: qsTr("Volume")
-            focusPolicy: Qt.StrongFocus
-
-            Binding on value {
-                value: PlaybackController.muted ? 0 : PlaybackController.volume
-                restoreMode: Binding.RestoreBindingOrValue
-            }
-        }
-
-        }
-        }
-
-        Item { Layout.fillWidth: true }
 
         Item {
-            Layout.preferredWidth: listWindowButton.implicitWidth
-            Layout.fillHeight: true
+            id: volumeControl
+            Layout.preferredWidth: root.emptyMode
+                                   ? 44 : 44 + volumeSlider.width
+                                          + volumePercent.width
+            Layout.preferredHeight: 44
+            clip: false
+
+            HoverHandler {
+                onHoveredChanged: {
+                    if (hovered) {
+                        volumeCloseTimer.stop()
+                        volumeOpenTimer.restart()
+                    } else {
+                        volumeOpenTimer.stop()
+                        volumeCloseTimer.restart()
+                    }
+                }
+            }
 
             ToolButton {
-                objectName: "miniPlayerButton"
-                anchors.centerIn: parent
-                visible: !root.emptyMode
+                id: muteButton
+                objectName: "muteButton"
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 44
+                height: 44
                 flat: true
-                icon.source: Theme.icon("picture-in-picture-2-line")
+                icon.source: PlaybackController.muted
+                             ? Theme.icon("volume-mute-line")
+                             : Theme.icon("volume-up-fill")
                 icon.color: Theme.iconPrimary
-                icon.width: 30
-                icon.height: 30
-                Accessible.name: qsTr("Switch to mini player")
-                focusPolicy: Qt.StrongFocus
-                onClicked: WindowController.showMini()
+                icon.width: 24
+                icon.height: 24
+                Accessible.name: PlaybackController.muted
+                                 ? qsTr("Unmute") : qsTr("Mute")
+                onClicked: PlaybackController.toggleMuted()
                 ToolTip.text: Accessible.name
                 ToolTip.visible: hovered
                 background: null
             }
+
+            Slider {
+                id: volumeSlider
+                objectName: "volumeSlider"
+                anchors.left: muteButton.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: !root.emptyMode && root.volumeExpanded ? 108 : 0
+                opacity: width > 0 ? 1 : 0
+                visible: !root.emptyMode
+                from: 0
+                to: 1
+                onPressedChanged: {
+                    if (pressed) {
+                        volumeCloseTimer.stop()
+                        root.volumeExpanded = true
+                    } else {
+                        volumeCloseTimer.restart()
+                    }
+                }
+                onMoved: PlaybackController.setVolume(value)
+                Binding on value {
+                    value: PlaybackController.muted
+                           ? 0 : PlaybackController.volume
+                    restoreMode: Binding.RestoreBindingOrValue
+                }
+                Behavior on width {
+                    NumberAnimation {
+                        duration: root.volumeExpanded ? 160 : 220
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: 140 }
+                }
+
+                background: Rectangle {
+                    x: volumeSlider.leftPadding
+                    y: volumeSlider.topPadding
+                       + volumeSlider.availableHeight / 2 - height / 2
+                    width: volumeSlider.availableWidth
+                    height: 3
+                    radius: 1.5
+                    color: Theme.border
+
+                    Rectangle {
+                        width: volumeSlider.visualPosition * parent.width
+                        height: parent.height
+                        radius: parent.radius
+                        color: Theme.cyan
+                    }
+                }
+
+                handle: Rectangle {
+                    objectName: "volumeSliderHandle"
+                    x: volumeSlider.leftPadding
+                       + volumeSlider.visualPosition
+                         * (volumeSlider.availableWidth - width)
+                    y: volumeSlider.topPadding
+                       + volumeSlider.availableHeight / 2 - height / 2
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: "#ffffff"
+                    border.width: 1
+                    border.color: Theme.border
+                }
+            }
+
+            Label {
+                id: volumePercent
+                objectName: "volumePercentLabel"
+                anchors.left: volumeSlider.right
+                anchors.leftMargin: width > 0 ? 6 : 0
+                anchors.verticalCenter: parent.verticalCenter
+                width: !root.emptyMode && root.volumeExpanded ? 38 : 0
+                opacity: width > 0 ? 1 : 0
+                visible: !root.emptyMode
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(PlaybackController.volume * 100) + "%"
+                color: Theme.primaryText
+                font.pixelSize: 12
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: root.volumeExpanded ? 160 : 220
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: 140 }
+                }
+            }
         }
+    }
+
+    ToolButton {
+        objectName: "miniPlayerButton"
+        anchors.right: parent.right
+        anchors.rightMargin: 24
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: -8
+        visible: !root.emptyMode
+        flat: true
+        icon.source: Theme.icon("picture-in-picture-2-line")
+        icon.color: Theme.iconPrimary
+        icon.width: 24
+        icon.height: 24
+        Accessible.name: qsTr("Switch to mini player")
+        onClicked: WindowController.showMini()
+        ToolTip.text: Accessible.name
+        ToolTip.visible: hovered
+        background: null
     }
 }

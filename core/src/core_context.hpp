@@ -26,6 +26,9 @@ public:
     ag_result previous() noexcept;
     ag_result set_mode(PlaybackMode mode) noexcept;
     ag_result set_volume(float volume) noexcept;
+    ag_result set_equalizer(const GraphicEqSettings& settings,
+                            std::uint64_t revision) noexcept;
+    [[nodiscard]] EqualizerStatus equalizer_status() const noexcept;
     void set_muted(bool muted) noexcept;
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
     ag_result spectrum(float* bins, std::size_t bin_count) noexcept;

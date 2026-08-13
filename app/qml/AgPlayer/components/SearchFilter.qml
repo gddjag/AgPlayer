@@ -5,18 +5,20 @@ import AgPlayer
 
 Rectangle {
     id: root
-    color: Theme.panel
-    border.color: Theme.border
-    border.width: 1
-    radius: Theme.radiusMd
+    color: "transparent"
+    border.width: 0
     implicitHeight: 54
 
     property string searchText: ""
-    property int minRating: 0
+    property int exactRating: 0
     property double minBpm: 60
     property double maxBpm: 160
     property double pendingMinBpm: minBpm
     property double pendingMaxBpm: maxBpm
+    readonly property color moduleColor: Qt.rgba(
+        Theme.elevated.r, Theme.elevated.g, Theme.elevated.b, 0.42)
+    readonly property color moduleBorder: Qt.rgba(
+        Theme.border.r, Theme.border.g, Theme.border.b, 0.34)
 
     Timer {
         id: bpmDebounce
@@ -36,7 +38,7 @@ Rectangle {
         bpmDebounce.stop()
         searchField.clear()
         searchText = ""
-        minRating = 0
+        exactRating = 0
         pendingMinBpm = 60
         pendingMaxBpm = 160
         minBpm = 60
@@ -45,169 +47,168 @@ Rectangle {
 
     onMinBpmChanged: if (!bpmDebounce.running) pendingMinBpm = minBpm
     onMaxBpmChanged: if (!bpmDebounce.running) pendingMaxBpm = maxBpm
+    onPendingMinBpmChanged: if (!minimumBpmField.activeFocus)
+                                minimumBpmField.text = Math.round(pendingMinBpm).toString()
+    onPendingMaxBpmChanged: if (!maximumBpmField.activeFocus)
+                                maximumBpmField.text = Math.round(pendingMaxBpm).toString()
 
     RowLayout {
         anchors.fill: parent
         anchors.margins: Theme.spacingSm
-        spacing: Theme.spacingSm
+        spacing: 14
 
-        TextField {
-            id: searchField
-            objectName: "librarySearchField"
-            Layout.preferredWidth: 210
+        Rectangle {
+            objectName: "keywordModule"
+            Layout.preferredWidth: 184
             Layout.fillHeight: true
-            placeholderText: qsTr("搜索歌曲、歌手或专辑")
-            text: root.searchText
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 12
-            onTextChanged: root.searchText = text
-            background: Rectangle {
-                color: Theme.background
-                border.color: parent.activeFocus ? Theme.cyan : Theme.border
-                border.width: 1
-                radius: Theme.radiusSm
+            color: root.moduleColor
+            border.color: root.moduleBorder
+            border.width: 1
+            radius: Theme.radiusSm
+            TextField {
+                id: searchField
+                objectName: "librarySearchField"
+                anchors.fill: parent
+                placeholderText: qsTr("歌曲/艺术家/专辑/标签/")
+                text: root.searchText
+                color: Theme.primaryText
+                placeholderTextColor: Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 12
+                onTextChanged: root.searchText = text
+                background: null
             }
         }
 
-        Label {
-            text: qsTr("评分")
+        Rectangle {
+            objectName: "ratingModule"
+            Layout.preferredWidth: visible ? 132 : 0
+            Layout.fillHeight: true
             visible: SettingsController.autoReadRating
-            color: Theme.secondaryText
-            font.pixelSize: 12
+            color: root.moduleColor
+            border.color: root.moduleBorder
+            border.width: 1
+            radius: Theme.radiusSm
+            onVisibleChanged: if (!visible) root.exactRating = 0
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 5
+                Label { text: qsTr("评分"); color: Theme.secondaryText; font.pixelSize: 12 }
+                RowLayout {
+                    spacing: 1
+                    Repeater {
+                        model: 5
+                        delegate: ThemedIcon {
+                            required property int index
+                            source: index < root.exactRating
+                                    ? Theme.icon("star-fill") : Theme.icon("star-line")
+                            tint: index < root.exactRating
+                                  ? Theme.ratingColor(index) : Theme.iconSecondary
+                            sourceSize.width: 14
+                            sourceSize.height: 14
+                            Layout.preferredWidth: 15
+                            Layout.preferredHeight: 16
+                            TapHandler {
+                                onTapped: {
+                                    var next = index + 1
+                                    root.exactRating = root.exactRating === next ? 0 : next
+                                }
+                            }
+                        }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
         }
 
-        RowLayout {
-            spacing: 1
-            visible: SettingsController.autoReadRating
-            onVisibleChanged: if (!visible) root.minRating = 0
-            Repeater {
-                model: 5
-                delegate: ThemedIcon {
-                    required property int index
-                    source: index < root.minRating
-                            ? Theme.icon("star-fill") : Theme.icon("star-line")
-                    tint: index < root.minRating
-                          ? Theme.ratingColor(index) : Theme.iconSecondary
-                    sourceSize.width: 16
-                    sourceSize.height: 16
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 18
-                    TapHandler {
-                        onTapped: {
-                            var next = index + 1
-                            root.minRating = root.minRating === next ? 0 : next
+        Rectangle {
+            objectName: "bpmModule"
+        Layout.preferredWidth: 216
+            Layout.fillHeight: true
+            color: root.moduleColor
+            border.color: root.moduleBorder
+            border.width: 1
+            radius: Theme.radiusSm
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 4
+                anchors.rightMargin: 4
+                spacing: 2
+                Label { text: "BPM"; color: Theme.secondaryText; font.pixelSize: 11; Layout.preferredWidth: 24 }
+                TextField {
+                    id: minimumBpmField
+                    objectName: "minimumBpmField"
+                    Layout.preferredWidth: 34
+                    text: Math.round(root.pendingMinBpm).toString()
+                    color: Theme.primaryText
+                    font.pixelSize: 11
+                    horizontalAlignment: TextInput.AlignHCenter
+                    validator: IntValidator { bottom: 60; top: 160 }
+                    background: null
+                    onEditingFinished: {
+                        var value = Math.max(60, Math.min(Number(text) || 60,
+                                                         root.pendingMaxBpm))
+                        root.pendingMinBpm = value
+                        text = Math.round(value).toString()
+                        bpmDebounce.restart()
+                    }
+                }
+                RangeSlider {
+                    id: bpmRange
+                    objectName: "bpmRange"
+                    Layout.preferredWidth: 104
+                    Layout.minimumWidth: 104
+                    Layout.maximumWidth: 104
+                    from: 60; to: 160; stepSize: 1
+                    first.value: root.pendingMinBpm
+                    second.value: root.pendingMaxBpm
+                    first.onMoved: { root.pendingMinBpm = Math.min(first.value, root.pendingMaxBpm); bpmDebounce.restart() }
+                    second.onMoved: { root.pendingMaxBpm = Math.max(second.value, root.pendingMinBpm); bpmDebounce.restart() }
+                    background: Rectangle {
+                        x: bpmRange.leftPadding
+                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
+                        width: bpmRange.availableWidth; height: 3; radius: 1.5; color: Theme.border
+                        Rectangle {
+                            x: bpmRange.first.visualPosition * parent.width
+                            width: (bpmRange.second.visualPosition - bpmRange.first.visualPosition) * parent.width
+                            height: parent.height; radius: parent.radius; color: Theme.accent
                         }
+                    }
+                    first.handle: Rectangle {
+                        x: bpmRange.leftPadding + bpmRange.first.visualPosition * (bpmRange.availableWidth - width)
+                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
+                        width: 12; height: 12; radius: 6; color: Theme.primaryText; border.color: Theme.accent
+                    }
+                    second.handle: Rectangle {
+                        x: bpmRange.leftPadding + bpmRange.second.visualPosition * (bpmRange.availableWidth - width)
+                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
+                        width: 12; height: 12; radius: 6; color: Theme.primaryText; border.color: Theme.accent
+                    }
+                }
+                TextField {
+                    id: maximumBpmField
+                    objectName: "maximumBpmField"
+                    Layout.preferredWidth: 34
+                    text: Math.round(root.pendingMaxBpm).toString()
+                    color: Theme.primaryText
+                    font.pixelSize: 11
+                    horizontalAlignment: TextInput.AlignHCenter
+                    validator: IntValidator { bottom: 60; top: 160 }
+                    background: null
+                    onEditingFinished: {
+                        var value = Math.min(160, Math.max(Number(text) || 160,
+                                                          root.pendingMinBpm))
+                        root.pendingMaxBpm = value
+                        text = Math.round(value).toString()
+                        bpmDebounce.restart()
                     }
                 }
             }
         }
 
-        Label {
-            text: "BPM"
-            color: Theme.secondaryText
-            font.pixelSize: 12
-        }
-
-        TextField {
-            Layout.preferredWidth: 42
-            text: Math.round(root.pendingMinBpm)
-            color: Theme.primaryText
-            horizontalAlignment: Text.AlignHCenter
-            validator: IntValidator { bottom: 0; top: 300 }
-            background: Rectangle {
-                color: Theme.background
-                border.color: Theme.border
-                border.width: 1
-                radius: Theme.radiusSm
-            }
-            onEditingFinished: {
-                var parsed = parseInt(text, 10)
-                if (!isNaN(parsed)) {
-                    root.pendingMinBpm = Math.max(
-                        0, Math.min(parsed, root.pendingMaxBpm))
-                    bpmDebounce.restart()
-                }
-            }
-        }
-
-        RangeSlider {
-            id: bpmRange
-            Layout.fillWidth: true
-            Layout.minimumWidth: 140
-            from: 0
-            to: 300
-            stepSize: 1
-            first.value: root.pendingMinBpm
-            second.value: root.pendingMaxBpm
-            first.onMoved: {
-                root.pendingMinBpm = Math.min(first.value, root.pendingMaxBpm)
-                bpmDebounce.restart()
-            }
-            second.onMoved: {
-                root.pendingMaxBpm = Math.max(second.value, root.pendingMinBpm)
-                bpmDebounce.restart()
-            }
-            background: Rectangle {
-                x: bpmRange.leftPadding
-                y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                width: bpmRange.availableWidth
-                height: 4
-                radius: 2
-                color: Theme.border
-
-                Rectangle {
-                    x: bpmRange.first.visualPosition * parent.width
-                    width: (bpmRange.second.visualPosition
-                            - bpmRange.first.visualPosition) * parent.width
-                    height: parent.height
-                    radius: parent.radius
-                    color: Theme.cyan
-                }
-            }
-            first.handle: Rectangle {
-                x: bpmRange.leftPadding + bpmRange.first.visualPosition
-                   * (bpmRange.availableWidth - width)
-                y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                width: 14
-                height: 14
-                radius: 7
-                color: Theme.primaryText
-                border.color: Theme.cyan
-            }
-            second.handle: Rectangle {
-                x: bpmRange.leftPadding + bpmRange.second.visualPosition
-                   * (bpmRange.availableWidth - width)
-                y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                width: 14
-                height: 14
-                radius: 7
-                color: Theme.primaryText
-                border.color: Theme.cyan
-            }
-        }
-
-        TextField {
-            Layout.preferredWidth: 42
-            text: Math.round(root.pendingMaxBpm)
-            color: Theme.primaryText
-            horizontalAlignment: Text.AlignHCenter
-            validator: IntValidator { bottom: 0; top: 300 }
-            background: Rectangle {
-                color: Theme.background
-                border.color: Theme.border
-                border.width: 1
-                radius: Theme.radiusSm
-            }
-            onEditingFinished: {
-                var parsed = parseInt(text, 10)
-                if (!isNaN(parsed)) {
-                    root.pendingMaxBpm = Math.max(
-                        root.pendingMinBpm, Math.min(parsed, 300))
-                    bpmDebounce.restart()
-                }
-            }
-        }
+        Item { Layout.fillWidth: true }
 
         Button {
             text: qsTr("清空")

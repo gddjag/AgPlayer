@@ -4,55 +4,51 @@ import QtQuick
 QtObject {
     id: root
 
+    property SystemPalette systemPalette: SystemPalette {
+        colorGroup: SystemPalette.Active
+    }
+    property SystemPalette inactiveSystemPalette: SystemPalette {
+        colorGroup: SystemPalette.Inactive
+    }
+
     // Main.qml synchronizes this value from the runtime-registered settings
     // singleton. Keeping the palette state here makes every window update at once.
     property int mode: 0
 
+    readonly property int requestedMode: mode
     readonly property bool followsSystem: mode === 2
-    readonly property bool systemIsLight: Application.styleHints.colorScheme === Qt.Light
-                                          || (Application.styleHints.colorScheme === Qt.Unknown
-                                              && systemPalette.window.hslLightness > 0.5)
-    readonly property bool isLight: mode === 1
-                                    || (followsSystem && systemIsLight)
-    readonly property SystemPalette systemPalette: SystemPalette {
-        colorGroup: SystemPalette.Active
-    }
+    readonly property bool systemIsLight:
+        Application.styleHints.colorScheme === Qt.Light
+    readonly property int effectiveMode: followsSystem
+                                         ? (systemIsLight ? 1 : 0)
+                                         : (mode === 1 ? 1 : 0)
+    readonly property bool isLight: effectiveMode === 1
 
-    readonly property color background: followsSystem
-                                        ? systemPalette.window
-                                        : isLight ? "#F3F3F3" : "#050914"
-    readonly property color panel: followsSystem
-                                   ? systemPalette.base
-                                   : isLight ? "#FFFFFF" : "#07101F"
-    readonly property color elevated: followsSystem
-                                      ? systemPalette.button
-                                      : isLight ? "#F9FAFC" : "#0B1627"
-    readonly property color border: followsSystem
-                                    ? systemPalette.mid
-                                    : isLight ? "#C7CDD7" : "#454A55"
-    readonly property color hoverSurface: followsSystem
-                                          ? systemPalette.alternateBase
-                                          : isLight ? "#E7EBF1" : "#152238"
-    readonly property color cyan: followsSystem
-                                  ? systemPalette.highlight
-                                  : "#00D4FF"
-    readonly property color violet: "#7B2FF7"
+    readonly property color background: isLight ? "#F3F3F3" : "#202020"
+    readonly property color panel: isLight ? "#FFFFFF" : "#252525"
+    readonly property color elevated: isLight ? "#F9F9F9" : "#2D2D2D"
+    readonly property color border: isLight ? "#D1D1D1" : "#3E3E3E"
+    readonly property color hoverSurface: isLight ? "#EAEAEA" : "#333333"
+    readonly property color accent: systemPalette.highlight
+    readonly property color activeSelection: systemPalette.highlight
+    readonly property color activeSelectionText: systemPalette.highlightedText
+    readonly property color inactiveSelection: inactiveSystemPalette.highlight
+    readonly property color inactiveSelectionText: inactiveSystemPalette.highlightedText
+    readonly property color cyan: accent
+    readonly property color violet: accent
     readonly property color favoriteRed: "#FF334D"
     readonly property color ratingGold: "#FFD700"
-    readonly property color primaryText: followsSystem
-                                         ? systemPalette.windowText
-                                         : isLight ? "#17181A" : "#F5F7FA"
-    readonly property color secondaryText: followsSystem
-                                           ? systemPalette.placeholderText
-                                           : isLight ? "#5E6570" : "#9AA4B2"
-    readonly property color onCyanText: followsSystem
-                                        ? systemPalette.highlightedText
-                                        : "#0A0A0F"
+    readonly property color primaryText: isLight ? "#1B1B1B" : "#FFFFFF"
+    readonly property color secondaryText: isLight ? "#5D5D5D" : "#CFCFCF"
+    readonly property color onCyanText: systemPalette.highlightedText
     readonly property color onBrandGradientText: "#FFFFFF"
-    readonly property color accentText: onCyanText
+    readonly property color accentText: systemPalette.highlightedText
     readonly property color iconPrimary: primaryText
     readonly property color iconSecondary: secondaryText
     readonly property color iconAccent: cyan
+    readonly property color playButtonBorder: isLight ? "#1B1B1B" : "#FFFFFF"
+    readonly property color playRingPlaying: waveformGreen
+    readonly property color playRingPaused: "#FFB020"
 
     readonly property int radiusSm: 8
     readonly property int radiusMd: 12
@@ -68,8 +64,10 @@ QtObject {
     readonly property int spacingXl: 24
     readonly property int spacing2Xl: 32
 
-    readonly property string fontPrimary: "Microsoft YaHei UI"
-    readonly property string fontFallback: "Segoe UI"
+    readonly property string fontPrimary: Qt.application.font.family
+    readonly property string fontFallback: Qt.platform.os === "windows"
+                                           ? "Microsoft YaHei UI"
+                                           : Qt.application.font.family
 
     readonly property color waveformCyan: "#00D4FF"
     readonly property color waveformBlue: "#1688FF"
@@ -81,7 +79,7 @@ QtObject {
     readonly property string iconPrefix: "qrc:/qt/qml/AgPlayer/assets/icons/"
     function icon(name) { return iconPrefix + name + ".svg" }
     function ratingColor(index) {
-        return ["#00D4FF", "#1688FF", "#7B2FF7", "#E62E9B", "#FFDD00"][
+        return ["#FFF4B8", "#FFE98A", "#FFE05C", "#FFD62E", "#FFCC00"][
                     Math.max(0, Math.min(4, index))]
     }
 }

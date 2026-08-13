@@ -6,6 +6,7 @@ import AgPlayer
 Rectangle {
     id: root
     color: Theme.panel
+    property bool playlistMode: false
 
     signal importRequested()
 
@@ -26,7 +27,9 @@ Rectangle {
         }
 
         Text {
-            text: qsTr("Your library is empty")
+            objectName: "emptyLibraryTitle"
+            text: root.playlistMode ? qsTr("Import music")
+                                    : qsTr("Your library is empty")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 18
@@ -35,7 +38,10 @@ Rectangle {
         }
 
         Text {
-            text: qsTr("Drag audio files into the window or click below to import")
+            objectName: "emptyLibraryFormats"
+            text: root.playlistMode
+                  ? qsTr("Supports MP3, WAV, FLAC, AAC, M4A, OGG, OPUS and WMA")
+                  : qsTr("Drag audio files into the window or click below to import")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 13
@@ -47,7 +53,7 @@ Rectangle {
 
         Button {
             objectName: "emptyImportButton"
-            text: qsTr("Import audio")
+            text: root.playlistMode ? qsTr("Import music") : qsTr("Import audio")
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: Theme.spacingSm
             focusPolicy: Qt.StrongFocus

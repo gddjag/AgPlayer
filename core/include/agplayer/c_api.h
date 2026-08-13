@@ -60,6 +60,29 @@ typedef struct ag_playback_snapshot {
     ag_playback_mode mode;
 } ag_playback_snapshot;
 
+#define AG_EQUALIZER_BAND_COUNT 10
+
+typedef struct ag_equalizer_settings {
+    unsigned long long revision;
+    int enabled;
+    int bypassed;
+    int auto_clip_protection;
+    double preamp_db;
+    double band_gain_db[AG_EQUALIZER_BAND_COUNT];
+    double q;
+    double transition_ms;
+} ag_equalizer_settings;
+
+typedef struct ag_equalizer_status {
+    unsigned long long revision;
+    int enabled;
+    int bypassed;
+    int auto_clip_protection;
+    int sample_rate;
+    int active;
+    double protection_db;
+} ag_equalizer_status;
+
 ag_result ag_player_create(ag_player** out_player);
 ag_result ag_player_create_with_config(const ag_player_config* config,
                                        ag_player** out_player);
@@ -81,6 +104,10 @@ ag_result ag_player_next(ag_player* player);
 ag_result ag_player_previous(ag_player* player);
 ag_result ag_player_set_mode(ag_player* player, ag_playback_mode mode);
 ag_result ag_player_set_volume(ag_player* player, float volume);
+ag_result ag_player_set_equalizer(ag_player* player,
+                                  const ag_equalizer_settings* settings);
+ag_result ag_player_equalizer_status(const ag_player* player,
+                                     ag_equalizer_status* status);
 ag_result ag_player_set_muted(ag_player* player, int muted);
 ag_result ag_player_snapshot(const ag_player* player,
                              ag_playback_snapshot* snapshot);

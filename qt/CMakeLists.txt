@@ -1,10 +1,14 @@
 add_library(agplayer_qt STATIC
+    src/audio_file_discovery.cpp
+    src/audio_file_discovery.hpp
     src/audio_preview_controller.cpp
     src/audio_preview_controller.hpp
     src/file_association_controller.cpp
     src/file_association_controller.hpp
     src/editor_timeline_math.cpp
     src/editor_timeline_math.hpp
+    src/equalizer_controller.cpp
+    src/equalizer_controller.hpp
     src/audio_tools_controller.cpp
     src/audio_tools_controller.hpp
     src/bpm_analyzer.cpp
@@ -19,8 +23,12 @@ add_library(agplayer_qt STATIC
     src/import_controller.hpp
     src/library_filter_model.cpp
     src/library_filter_model.hpp
+    src/library_file_operations.cpp
+    src/library_file_operations.hpp
     src/library_model.cpp
     src/library_model.hpp
+    src/library_manager_controller.cpp
+    src/library_manager_controller.hpp
     src/library_store.cpp
     src/library_store.hpp
     src/light_editor_controller.cpp
@@ -68,5 +76,9 @@ target_link_libraries(agplayer_qt
     PRIVATE
         Qt6::Concurrent
 )
+
+if(WIN32)
+    target_link_libraries(agplayer_qt PRIVATE dwmapi shell32)
+endif()
 
 agplayer_enable_warnings(agplayer_qt)

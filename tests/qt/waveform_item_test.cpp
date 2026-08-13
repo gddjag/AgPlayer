@@ -46,6 +46,7 @@ private slots:
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
+    void spectrumPeakCapsNeverFallInsideTheirBars();
     void spectrumRecolorsBarsAndPeakCapsAfterSeek();
     void zeroPositionLeavesCompleteWaveformUnplayed();
     void silentTailRemainsVisibleAtTheTimelineEnd();
@@ -258,6 +259,31 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     QCOMPARE(data[capVertex].y, data[centerBarVertex].y);
     QCOMPARE(data[capVertex + 1].y, data[centerBarVertex].y);
     QVERIFY(data[capVertex].x < data[capVertex + 1].x);
+    delete node;
+}
+
+void WaveformItemTest::spectrumPeakCapsNeverFallInsideTheirBars()
+{
+    TestableWaveformItem item;
+    item.setWidth(70);
+    item.setHeight(48);
+    item.setVisualMode(2);
+    item.setPeaks(peaks({0.10, 1.0, 0.10, 1.0}));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* data = vertices(node);
+    constexpr int barCount = 10;
+    constexpr int strokeCopies = 5;
+    constexpr int lowBar = 0;
+    const int barTopVertex = lowBar * 2;
+    const int capVertex = barCount * 2 * strokeCopies + lowBar * 2;
+
+    QVERIFY2(data[capVertex].y <= data[barTopVertex].y + 0.01F,
+             "peak-hold cap must stay at or above the rendered bar top");
+    compareColor(data[capVertex], data[barTopVertex].r,
+                 data[barTopVertex].g, data[barTopVertex].b,
+                 data[barTopVertex].a);
     delete node;
 }
 

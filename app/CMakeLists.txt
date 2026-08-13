@@ -54,6 +54,7 @@ set(ICON_FILES
 )
 
 set(BRAND_FILES
+    ${CMAKE_SOURCE_DIR}/assets/brand/agplayer.ico
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-lockup.png
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
@@ -85,19 +86,29 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/MiniPlayerWindow.qml
         qml/AgPlayer/ListWindow.qml
         qml/AgPlayer/AudioToolsWindow.qml
+        qml/AgPlayer/EqualizerWindow.qml
+        qml/AgPlayer/SettingsWindow.qml
         qml/AgPlayer/SettingsPage.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
+        qml/AgPlayer/components/EqualizerBandSlider.qml
+        qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml
         qml/AgPlayer/components/EmptyLibrary.qml
         qml/AgPlayer/components/EmptyStartup.qml
         qml/AgPlayer/components/ImportStatusPanel.qml
+        qml/AgPlayer/components/FileDropArea.qml
+        qml/AgPlayer/components/DockedWindowFrame.qml
+        qml/AgPlayer/components/WindowResizeHandles.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
         qml/AgPlayer/components/SearchFilter.qml
+        qml/AgPlayer/components/LibraryManagerPage.qml
+        qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
+        qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
         qml/AgPlayer/components/tools/InfoEditPage.qml
@@ -119,11 +130,36 @@ target_link_libraries(agplayer_app_qml
         agplayer_qt
 )
 
-qt_add_executable(AgPlayer main.cpp)
+qt_add_executable(AgPlayer
+    main.cpp
+    agplayer.rc
+    agplayer.manifest
+)
 target_link_libraries(AgPlayer PRIVATE
     Qt6::Widgets
     agplayer_app_qml
     agplayer_app_qmlplugin
 )
+if(WIN32)
+    target_link_libraries(AgPlayer PRIVATE shell32)
+endif()
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)
+
+if(WIN32)
+    get_filename_component(AGPLAYER_QT_PREFIX "${Qt6_DIR}/../../.." ABSOLUTE)
+    find_program(AGPLAYER_WINDEPLOYQT_EXECUTABLE
+        NAMES windeployqt
+        HINTS "${AGPLAYER_QT_PREFIX}/bin"
+        REQUIRED
+    )
+    add_custom_command(TARGET AgPlayer POST_BUILD
+        COMMAND "${AGPLAYER_WINDEPLOYQT_EXECUTABLE}"
+            "$<IF:$<CONFIG:Debug>,--debug,--release>"
+            --no-translations --no-system-d3d-compiler --no-opengl-sw
+            --skip-plugin-types qmltooling --force
+            "$<TARGET_FILE:AgPlayer>"
+        COMMENT "Deploying AgPlayer Qt runtime"
+        VERBATIM
+    )
+endif()

@@ -16,11 +16,11 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: 10
+        anchors.verticalCenterOffset: 0
         height: parent.height
-        anchors.leftMargin: 32
-        anchors.rightMargin: 24
-        spacing: 20
+        anchors.leftMargin: 20
+        anchors.rightMargin: 12
+        spacing: 6
 
         RowLayout {
             objectName: "titleBrand"
@@ -29,20 +29,21 @@ Rectangle {
 
             Image {
                 source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                sourceSize.width: 30
-                sourceSize.height: 30
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
+                sourceSize.width: 24
+                sourceSize.height: 24
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
                 fillMode: Image.PreserveAspectFit
             }
 
             Text {
+                objectName: "titleBrandText"
                 text: "AgPlayer"
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
-                font.italic: true
+                font.italic: false
             }
         }
 
@@ -50,14 +51,18 @@ Rectangle {
 
         ToolButton {
             objectName: "settingsButton"
+            text: qsTr("设置")
+            display: AbstractButton.IconOnly
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
             icon.source: Theme.icon("settings-3-fill")
             icon.color: Theme.iconSecondary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("Open settings")
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
             focusPolicy: Qt.StrongFocus
             onClicked: titleBar.openSettings()
-            ToolTip.text: qsTr("Settings")
+            ToolTip.text: text
             ToolTip.visible: hovered
 
             background: Rectangle {
@@ -74,14 +79,18 @@ Rectangle {
 
         ToolButton {
             objectName: "minimizeButton"
+            text: qsTr("最小化")
+            display: AbstractButton.IconOnly
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
             icon.source: Theme.icon("subtract-line")
             icon.color: Theme.iconSecondary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: "Minimize"
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
             focusPolicy: Qt.StrongFocus
             onClicked: window.showMinimized()
-            ToolTip.text: "Minimize"
+            ToolTip.text: Accessible.name
             ToolTip.visible: hovered
 
             background: Rectangle {
@@ -98,13 +107,17 @@ Rectangle {
 
         ToolButton {
             objectName: "maximizeButton"
+            text: window.visibility === Window.Maximized ? qsTr("还原") : qsTr("最大化")
+            display: AbstractButton.IconOnly
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
             icon.source: window.visibility === Window.Maximized
                        ? Theme.icon("fullscreen-exit-fill")
                        : Theme.icon("checkbox-blank-line")
             icon.color: Theme.iconSecondary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: window.visibility === Window.Maximized ? "Restore" : "Maximize"
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
             focusPolicy: Qt.StrongFocus
             onClicked: {
                 if (window.visibility === Window.Maximized)
@@ -112,7 +125,7 @@ Rectangle {
                 else
                     window.showMaximized()
             }
-            ToolTip.text: window.visibility === Window.Maximized ? "Restore" : "Maximize"
+            ToolTip.text: Accessible.name
             ToolTip.visible: hovered
 
             background: Rectangle {
@@ -129,14 +142,18 @@ Rectangle {
 
         ToolButton {
             objectName: "closeButton"
+            text: qsTr("关闭")
+            display: AbstractButton.IconOnly
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
             icon.source: Theme.icon("close-fill")
             icon.color: Theme.iconSecondary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: "Close"
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
             focusPolicy: Qt.StrongFocus
             onClicked: WindowController.requestClose()
-            ToolTip.text: "Close"
+            ToolTip.text: Accessible.name
             ToolTip.visible: hovered
 
             background: Rectangle {

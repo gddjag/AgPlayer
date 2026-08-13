@@ -251,6 +251,52 @@ ag_result ag_player_set_volume(ag_player* player, const float volume)
                : guard_result([&] { return player->context.set_volume(volume); });
 }
 
+ag_result ag_player_set_equalizer(
+    ag_player* player,
+    const ag_equalizer_settings* settings)
+{
+    if (player == nullptr || settings == nullptr
+        || (settings->enabled != 0 && settings->enabled != 1)
+        || (settings->bypassed != 0 && settings->bypassed != 1)
+        || (settings->auto_clip_protection != 0
+            && settings->auto_clip_protection != 1)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        agplayer::GraphicEqSettings value;
+        value.enabled = settings->enabled != 0;
+        value.bypassed = settings->bypassed != 0;
+        value.auto_clip_protection = settings->auto_clip_protection != 0;
+        value.preamp_db = settings->preamp_db;
+        std::copy(std::begin(settings->band_gain_db),
+                  std::end(settings->band_gain_db),
+                  value.band_gain_db.begin());
+        value.q = settings->q;
+        value.transition_ms = settings->transition_ms;
+        return player->context.set_equalizer(value, settings->revision);
+    });
+}
+
+ag_result ag_player_equalizer_status(const ag_player* player,
+                                     ag_equalizer_status* status)
+{
+    if (player == nullptr || status == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const agplayer::EqualizerStatus value =
+            player->context.equalizer_status();
+        status->revision = value.revision;
+        status->enabled = value.enabled ? 1 : 0;
+        status->bypassed = value.bypassed ? 1 : 0;
+        status->auto_clip_protection = value.auto_clip_protection ? 1 : 0;
+        status->sample_rate = value.sample_rate;
+        status->active = value.active ? 1 : 0;
+        status->protection_db = value.protection_db;
+        return AG_OK;
+    });
+}
+
 ag_result ag_player_set_muted(ag_player* player, const int muted)
 {
     if (player == nullptr || (muted != 0 && muted != 1)) {

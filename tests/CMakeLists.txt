@@ -184,6 +184,17 @@ agplayer_enable_warnings(audio_engine_test)
 add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
 
+add_executable(graphic_equalizer_test
+    core/graphic_equalizer_test.cpp
+)
+target_include_directories(graphic_equalizer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(graphic_equalizer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(graphic_equalizer_test)
+add_test(NAME graphic_equalizer_test COMMAND graphic_equalizer_test)
+set_tests_properties(graphic_equalizer_test PROPERTIES TIMEOUT 10)
+
 add_executable(transcoder_test
     core/transcoder_test.cpp
 )
@@ -318,6 +329,8 @@ foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
     playlist_model_test
+    library_manager_controller_test
+    library_file_operations_test
     import_controller_test
     library_filter_model_test
     playback_controller_test
@@ -334,6 +347,7 @@ foreach(qt_test IN ITEMS
     light_editor_controller_test
     audio_tools_end_to_end_test
     file_association_controller_test
+    equalizer_controller_test
 )
     add_executable(${qt_test} "qt/${qt_test}.cpp")
     set_target_properties(${qt_test} PROPERTIES AUTOMOC ON)
