@@ -46,7 +46,10 @@ QJsonObject builtInModel(const QString& stableId,
         {QStringLiteral("requiresLicenseAcceptance"), requiresLicenseAcceptance},
         {QStringLiteral("license"),
          QJsonObject{{QStringLiteral("name"), licenseName},
-                     {QStringLiteral("url"), huggingFaceUrl}}},
+                     {QStringLiteral("url"), huggingFaceUrl},
+                     {QStringLiteral("revision"),
+                      requiresLicenseAcceptance ? QStringLiteral("license-2026-08-13")
+                                                : QString{}}}},
         {QStringLiteral("officialUrls"),
          QJsonObject{{QStringLiteral("project"), projectUrl},
                      {QStringLiteral("huggingFace"), huggingFaceUrl},
@@ -521,7 +524,9 @@ void VoiceCloneManifestTest::appliesIndexLicenseGateToLocalModels()
                     QJsonObject{{QStringLiteral("name"),
                                  QStringLiteral("bilibili Model Use License Agreement")},
                                 {QStringLiteral("url"),
-                                 QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")}});
+                                 QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")},
+                                {QStringLiteral("revision"),
+                                 QStringLiteral("license-2026-08-13")}});
     writeManifest(manifestPath, manifest);
 
     const auto discovery = VoiceCloneRegistry::discoverUserModels(
@@ -529,6 +534,8 @@ void VoiceCloneManifestTest::appliesIndexLicenseGateToLocalModels()
     QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
     QCOMPARE(discovery.models.size(), 1);
     QVERIFY(discovery.models.front().requiresLicenseAcceptance);
+    QCOMPARE(discovery.models.front().licenseRevision,
+             QStringLiteral("license-2026-08-13"));
 
     QJsonObject wrongLicense = readJson(manifestPath);
     QJsonObject license = wrongLicense.value(QStringLiteral("license")).toObject();
@@ -539,6 +546,18 @@ void VoiceCloneManifestTest::appliesIndexLicenseGateToLocalModels()
         temporary.path(), {QStringLiteral("indextts25")});
     QVERIFY(!rejected.isValid());
     QVERIFY(rejected.errorString().contains(QStringLiteral("license"), Qt::CaseInsensitive));
+
+    QJsonObject missingRevision = readJson(manifestPath);
+    QJsonObject requiredLicense = missingRevision.value(QStringLiteral("license")).toObject();
+    requiredLicense.insert(QStringLiteral("name"),
+                           QStringLiteral("bilibili Model Use License Agreement"));
+    requiredLicense.remove(QStringLiteral("revision"));
+    missingRevision.insert(QStringLiteral("license"), requiredLicense);
+    writeManifest(manifestPath, missingRevision);
+    const auto missing = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("indextts25")});
+    QVERIFY(!missing.isValid());
+    QVERIFY(missing.errorString().contains(QStringLiteral("revision"), Qt::CaseInsensitive));
 }
 
 void VoiceCloneManifestTest::mergesBuiltInAndUserLayersWithoutReplacement()

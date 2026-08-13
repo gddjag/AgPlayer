@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QObject>
 #include <QVariantList>
+#include <QSet>
 
 namespace agplayer::voice_clone {
 
@@ -23,16 +24,16 @@ class VoiceCloneController final : public QObject {
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
 
 public:
-    explicit VoiceCloneController(QString portableRoot,
-                                  QString builtInRegistryPath,
+    explicit VoiceCloneController(QString pluginRoot,
+                                  QString modelsRoot,
                                   VoiceClonePackageManager* licenseManager,
                                   QObject* parent = nullptr);
     ~VoiceCloneController() override;
 
-    bool configureAdapter(const QString& manifestPath,
-                          const QString& adapterPackRoot,
+    bool configureAdapter(const QString& adapterId,
+                          const QString& adapterVersion,
                           const QString& launcherId = {});
-    bool selectModel(const QString& stableId, const QString& modelRoot);
+    bool selectModel(const QString& stableId);
     Q_INVOKABLE void refreshModels();
     Q_INVOKABLE bool openModelDirectory();
 
@@ -57,6 +58,7 @@ public:
     QVariantList advancedParameters() const;
     bool advancedSettingsAvailable() const;
     QVariantList models() const;
+    int pendingCleanupCount() const;
 
 signals:
     void capabilitiesChanged();
@@ -80,9 +82,12 @@ private:
     void updateCapabilities(const QJsonObject& schema);
     bool finalizeGeneration(const QString& requestId, QString* outputPath, QString* error);
     void cleanupGeneration(const QString& requestId, bool keepFinal = false);
+    void cleanupDirectory(const QString& requestId, const QString& directory);
+    void retryPendingCleanup();
     void updateSelectedModelStatus(const QString& state, const QString& diagnostic = {});
 
-    QString portableRoot_;
+    QString pluginRoot_;
+    QString modelsRoot_;
     QString registryPath_;
     QString outputRoot_;
     VoiceClonePackageManager* licenseManager_ = nullptr;
@@ -98,6 +103,8 @@ private:
     QVariantList advancedParameters_;
     QVariantList models_;
     QHash<QString, GenerationFiles> generations_;
+    QHash<QString, QString> pendingCleanup_;
+    QHash<QString, QString> cancelTargets_;
     QString loadRequestId_;
     QString error_;
     int requestTimeoutMs_ = 10000;

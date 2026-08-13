@@ -704,10 +704,17 @@ void VoiceClonePackageManagerTest::derivesLicenseGateFromIndexLicenseIdentity()
     index.requiresLicenseAcceptance = false;
     index.modelId = QStringLiteral("IndexTeam/IndexTTS-2.5");
     index.adapterId = QStringLiteral("indextts25");
-    index.licenseUrl = QUrl(QStringLiteral("https://licenses.example.test/not-an-index-url"));
+    index.licenseUrl = QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5"));
+    index.licenseRevision = QStringLiteral("license-2026-08-13");
     VoiceClonePackageManager manager(root.path());
     manager.start(index);
     QCOMPARE(manager.state(), VoiceClonePackageManager::LicenseRequired);
+    auto wrongLicenseUrl = index;
+    wrongLicenseUrl.licenseUrl = QUrl(QStringLiteral("https://licenses.example.test/not-index"));
+    QVERIFY(!wrongLicenseUrl.isValid());
+    auto wrongLicenseRevision = index;
+    wrongLicenseRevision.licenseRevision = QStringLiteral("arbitrary-revision");
+    QVERIFY(!wrongLicenseRevision.isValid());
 
     auto qwen = packageManifest(QStringLiteral("qwen-model"), QStringLiteral("file.bin"),
                                 server.url(QStringLiteral("/index-derived")), body);
@@ -750,8 +757,8 @@ void VoiceClonePackageManagerTest::rejectsCorruptLicenseAcceptanceStoreWithoutOv
                                         server.url(QStringLiteral("/strict-license")), body);
         manifest.modelId = QStringLiteral("IndexTeam/IndexTTS-2.5");
         manifest.adapterId = QStringLiteral("indextts25");
-        manifest.licenseUrl = QUrl(QStringLiteral("https://license.example.test/index"));
-        manifest.licenseRevision = QStringLiteral("license-r7");
+        manifest.licenseUrl = QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5"));
+        manifest.licenseRevision = QStringLiteral("license-2026-08-13");
         return manifest;
     }();
     const QJsonObject validRecord{

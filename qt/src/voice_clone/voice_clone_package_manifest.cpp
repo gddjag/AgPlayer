@@ -14,13 +14,16 @@ struct ApprovedModelIdentity {
     const char* modelId;
     const char* adapterId;
     bool requiresLicenseAcceptance;
+    const char* licenseUrl;
+    const char* licenseRevision;
 };
 
 constexpr ApprovedModelIdentity kApprovedModels[] = {
-    {"Qwen/Qwen3-TTS-12Hz-0.6B-Base", "qwen", false},
-    {"Qwen/Qwen3-TTS-12Hz-1.7B-Base", "qwen", false},
-    {"IndexTeam/IndexTTS-2.5", "indextts25", true},
-    {"FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "cosyvoice3", false},
+    {"Qwen/Qwen3-TTS-12Hz-0.6B-Base", "qwen", false, nullptr, nullptr},
+    {"Qwen/Qwen3-TTS-12Hz-1.7B-Base", "qwen", false, nullptr, nullptr},
+    {"IndexTeam/IndexTTS-2.5", "indextts25", true,
+     "https://huggingface.co/IndexTeam/IndexTTS-2.5", "license-2026-08-13"},
+    {"FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "cosyvoice3", false, nullptr, nullptr},
 };
 
 QString unknownField(const QJsonObject& object, const QSet<QString>& allowed)
@@ -189,13 +192,19 @@ QString VoiceClonePackageManifest::validationError() const
     if (version.trimmed().isEmpty() || revision.trimmed().isEmpty()) {
         return QStringLiteral("missing package version or revision");
     }
-    if (approvedIdentity(modelId, adapterId) == nullptr) {
+    const ApprovedModelIdentity* approved = approvedIdentity(modelId, adapterId);
+    if (approved == nullptr) {
         return QStringLiteral("unapproved modelId/adapterId package identity");
     }
     if (!licenseUrl.isValid()
         || licenseUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0
         || licenseUrl.host().isEmpty() || licenseRevision.trimmed().isEmpty()) {
         return QStringLiteral("invalid package license URL or revision");
+    }
+    if (approved->requiresLicenseAcceptance
+        && (licenseUrl.toString(QUrl::FullyEncoded) != QLatin1String(approved->licenseUrl)
+            || licenseRevision != QLatin1String(approved->licenseRevision))) {
+        return QStringLiteral("package license identity does not match the approved Registry identity");
     }
     if (files.isEmpty()) return QStringLiteral("package has no files");
 

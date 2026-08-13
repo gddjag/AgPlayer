@@ -14,11 +14,12 @@ VoiceClonePlugin::VoiceClonePlugin()
     if (root.isEmpty())
         root = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("plugins/voice-clone"));
     root = QDir::fromNativeSeparators(QDir(root).absolutePath());
+    const QString modelsRoot = QDir(root).filePath(QStringLiteral("models/voice-clone"));
+    QDir().mkpath(modelsRoot);
     packageManager_ = std::make_unique<VoiceClonePackageManager>(
         QDir(root).filePath(QStringLiteral("packages")));
     controller_ = std::make_unique<VoiceCloneController>(
-        root,
-        QDir(root).filePath(QStringLiteral("registry/models.json")),
+        root, modelsRoot,
         packageManager_.get());
 }
 

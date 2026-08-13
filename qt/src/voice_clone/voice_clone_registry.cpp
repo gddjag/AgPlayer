@@ -22,6 +22,7 @@ struct ApprovedBuiltIn {
     const char* runtimeId;
     bool licenseGate;
     const char* licenseName;
+    const char* licenseRevision;
     const char* projectUrl;
     const char* huggingFaceUrl;
     const char* modelScopeUrl;
@@ -32,7 +33,7 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "qwen",
      "qwen",
      false,
-     "Apache-2.0",
+     "Apache-2.0", "",
      "https://github.com/QwenLM/Qwen3-TTS",
      "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base",
      "https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-0.6B-Base"},
@@ -40,7 +41,7 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "qwen",
      "qwen",
      false,
-     "Apache-2.0",
+     "Apache-2.0", "",
      "https://github.com/QwenLM/Qwen3-TTS",
      "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base",
      "https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-1.7B-Base"},
@@ -48,7 +49,7 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "indextts25",
      "indextts25",
      true,
-     "bilibili Model Use License Agreement",
+     "bilibili Model Use License Agreement", "license-2026-08-13",
      "https://github.com/index-tts/index-tts",
      "https://huggingface.co/IndexTeam/IndexTTS-2.5",
      "https://modelscope.cn/models/IndexTeam/IndexTTS-2.5"},
@@ -56,7 +57,7 @@ constexpr ApprovedBuiltIn kApprovedBuiltIns[] = {
      "cosyvoice3",
      "cosyvoice3",
      false,
-     "Apache-2.0",
+     "Apache-2.0", "",
      "https://github.com/FunAudioLLM/CosyVoice",
      "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
      "https://www.modelscope.cn/models/FunAudioLLM/Fun-CosyVoice3-0.5B-2512"},
@@ -161,7 +162,7 @@ QString validateBuiltIn(const QJsonObject& object, VoiceCloneModel* model)
     const QJsonObject license = object.value(QStringLiteral("license")).toObject();
     const QJsonObject urls = object.value(QStringLiteral("officialUrls")).toObject();
     const QString licenseUnknown = unknownField(
-        license, {QStringLiteral("name"), QStringLiteral("url")});
+        license, {QStringLiteral("name"), QStringLiteral("url"), QStringLiteral("revision")});
     const QString urlsUnknown = unknownField(
         urls,
         {QStringLiteral("project"),
@@ -204,6 +205,8 @@ QString validateBuiltIn(const QJsonObject& object, VoiceCloneModel* model)
                                 == QLatin1String(approved->licenseName)
                          && license.value(QStringLiteral("url")).toString()
                                 == QLatin1String(approved->huggingFaceUrl)
+                         && license.value(QStringLiteral("revision")).toString()
+                                == QLatin1String(approved->licenseRevision)
                          && urls.value(QStringLiteral("project")).toString()
                                 == QLatin1String(approved->projectUrl)
                          && urls.value(QStringLiteral("huggingFace")).toString()
@@ -224,6 +227,7 @@ QString validateBuiltIn(const QJsonObject& object, VoiceCloneModel* model)
     model->requiresLicenseAcceptance = approved->licenseGate;
     model->license = {QLatin1String(approved->licenseName),
                       QLatin1String(approved->huggingFaceUrl)};
+    model->licenseRevision = QLatin1String(approved->licenseRevision);
     model->officialProjectUrl = QLatin1String(approved->projectUrl);
     model->huggingFaceUrl = QLatin1String(approved->huggingFaceUrl);
     model->modelScopeUrl = QLatin1String(approved->modelScopeUrl);
@@ -382,11 +386,6 @@ VoiceCloneDiscovery VoiceCloneRegistry::discoverUserModels(
             continue;
         }
         VoiceCloneModel& model = parsed.model;
-        if (approvedBuiltIn(model.stableId)) {
-            addDiagnostic(&result, manifestPath,
-                          QStringLiteral("user model cannot replace built-in ID: %1").arg(model.stableId));
-            continue;
-        }
         if (discoveredIds.contains(model.stableId)) {
             addDiagnostic(&result, manifestPath,
                           QStringLiteral("duplicate stable ID: %1").arg(model.stableId));
@@ -410,6 +409,7 @@ VoiceCloneDiscovery VoiceCloneRegistry::discoverUserModels(
             addDiagnostic(&result, manifestPath, QStringLiteral("manifest escapes model root"));
             continue;
         }
+        model.modelDirectory = modelDirectory;
         bool allHashed = true;
         bool filesValid = true;
         for (const VoiceCloneRequiredFile& required : model.files) {
@@ -508,6 +508,24 @@ VoiceCloneRegistry VoiceCloneRegistry::mergeUserModels(
     for (const VoiceCloneModel& model : result.models_) ids.insert(model.stableId);
     for (const VoiceCloneModel& model : discovery.models) {
         if (ids.contains(model.stableId)) {
+            bool enriched = false;
+            for (VoiceCloneModel& builtIn : result.models_) {
+                if (builtIn.stableId != model.stableId) continue;
+                if (builtIn.adapterId == model.adapterId
+                    && builtIn.runtimeId == model.runtimeId
+                    && builtIn.revision == model.revision
+                    && builtIn.license.name == model.license.name
+                    && builtIn.license.url == model.license.url
+                    && builtIn.licenseRevision == model.licenseRevision
+                    && !model.modelDirectory.isEmpty()) {
+                    builtIn.installState = model.installState;
+                    builtIn.modelDirectory = model.modelDirectory;
+                    builtIn.files = model.files;
+                    enriched = true;
+                }
+                break;
+            }
+            if (enriched) continue;
             result.error_ = QStringLiteral("user model cannot replace or duplicate model ID: %1")
                                 .arg(model.stableId);
             return result;

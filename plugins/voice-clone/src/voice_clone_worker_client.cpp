@@ -14,6 +14,8 @@
 namespace agplayer::voice_clone {
 namespace {
 
+constexpr qsizetype kMaximumFrameBytes = 1024 * 1024;
+
 bool isReparsePoint(const QFileInfo& info)
 {
 #ifdef Q_OS_WIN
@@ -170,12 +172,18 @@ bool VoiceCloneWorkerClient::restart()
 void VoiceCloneWorkerClient::shutdown()
 {
     shuttingDown_ = true;
+    if (ready_ && socket_ && socket_->state() == QLocalSocket::ConnectedState
+        && process_.state() != QProcess::NotRunning) {
+        sendRequest(WorkerOperation::Shutdown);
+        process_.waitForFinished(500);
+    }
     const bool wasReady = ready_;
     ready_ = false;
     for (auto it = pending_.begin(); it != pending_.end(); ++it) {
         if (it->timer) it->timer->deleteLater();
     }
     pending_.clear();
+    retiredRequestIds_.clear();
     if (process_.state() != QProcess::NotRunning) {
         process_.terminate();
         if (!process_.waitForFinished(1000)) {
@@ -234,6 +242,7 @@ bool VoiceCloneWorkerClient::abandonRequest(const QString& requestId)
 {
     if (!pending_.contains(requestId)) return false;
     finishPending(requestId);
+    retiredRequestIds_.insert(requestId);
     return true;
 }
 
@@ -258,24 +267,48 @@ void VoiceCloneWorkerClient::acceptConnection()
 
 void VoiceCloneWorkerClient::readFrames()
 {
-    inputBuffer_ += socket_->readAll();
-    while (true) {
-        const qsizetype newline = inputBuffer_.indexOf('\n');
-        if (newline < 0) return;
-        const QByteArray frame = inputBuffer_.left(newline);
-        inputBuffer_.remove(0, newline + 1);
-        if (frame.isEmpty()) continue;
-        const auto decoded = decodeWorkerMessage(frame, outputRoot_);
-        if (!decoded.isValid()) {
-            failWorker(QStringLiteral("protocol-error"), decoded.error);
+    while (socket_ && socket_->bytesAvailable() > 0) {
+        const qsizetype capacity = kMaximumFrameBytes + 1 - inputBuffer_.size();
+        if (capacity <= 0) {
+            failWorker(QStringLiteral("frame-too-large"),
+                       QStringLiteral("Worker IPC frame exceeded the 1 MiB limit"));
             return;
         }
-        handleMessage(decoded.message);
+        inputBuffer_ += socket_->read(qMin(socket_->bytesAvailable(), capacity));
+        while (true) {
+            const qsizetype newline = inputBuffer_.indexOf('\n');
+            if (newline < 0) {
+                if (inputBuffer_.size() > kMaximumFrameBytes)
+                    failWorker(QStringLiteral("frame-too-large"),
+                               QStringLiteral("Worker IPC frame exceeded the 1 MiB limit"));
+                break;
+            }
+            if (newline > kMaximumFrameBytes) {
+                failWorker(QStringLiteral("frame-too-large"),
+                           QStringLiteral("Worker IPC frame exceeded the 1 MiB limit"));
+                return;
+            }
+            const QByteArray frame = inputBuffer_.left(newline);
+            inputBuffer_.remove(0, newline + 1);
+            if (frame.isEmpty()) continue;
+            const auto decoded = decodeWorkerMessage(frame, outputRoot_);
+            if (!decoded.isValid()) {
+                failWorker(QStringLiteral("protocol-error"), decoded.error);
+                return;
+            }
+            handleMessage(decoded.message);
+            if (!socket_) return;
+        }
     }
 }
 
 void VoiceCloneWorkerClient::handleMessage(const VoiceCloneWorkerMessage& message)
 {
+    if (retiredRequestIds_.contains(message.requestId)) {
+        if (message.kind != WorkerMessageKind::Progress)
+            retiredRequestIds_.remove(message.requestId);
+        return;
+    }
     if (message.adapterId != manifest_.adapterId
         || message.adapterVersion != manifest_.adapterVersion
         || message.protocolVersion != manifest_.protocolVersion) {

@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QObject>
 #include <QProcess>
+#include <QSet>
 
 class QLocalServer;
 class QLocalSocket;
@@ -72,6 +73,7 @@ private:
     QProcess process_;
     QByteArray inputBuffer_;
     QHash<QString, PendingRequest> pending_;
+    QSet<QString> retiredRequestIds_;
     QString error_;
     QString helloRequestId_;
     QString capabilitiesRequestId_;

@@ -498,7 +498,9 @@ target_link_libraries(voice_clone_controller_test PRIVATE Qt6::Network)
 target_link_libraries(voice_clone_controller_test PRIVATE agplayer_voice_clone_controller)
 target_compile_definitions(voice_clone_controller_test PRIVATE
     AGPLAYER_VOICE_CLONE_REGISTRY_PATH="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/models.json"
+    AGPLAYER_VOICE_CLONE_PLUGIN="$<TARGET_FILE:agplayer_voice_clone_plugin>"
 )
+add_dependencies(voice_clone_controller_test agplayer_voice_clone_plugin)
 set_tests_properties(voice_clone_controller_test PROPERTIES TIMEOUT 30)
 
 add_library(voice_clone_test_plugin MODULE

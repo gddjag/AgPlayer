@@ -42,6 +42,8 @@ struct VoiceCloneModel {
     QStringList capabilityPreview;
     VoiceCloneSource source;
     VoiceCloneLicense license;
+    QString licenseRevision;
+    QString modelDirectory;
     QVector<VoiceCloneRequiredFile> files;
     VoiceCloneReferenceAudioRules referenceAudio;
     QJsonObject capabilitySchema;

@@ -146,9 +146,10 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
 
     const QJsonObject license = root.value(QStringLiteral("license")).toObject();
     const QString licenseUnknown = unknownField(
-        license, {QStringLiteral("name"), QStringLiteral("url")});
+        license, {QStringLiteral("name"), QStringLiteral("url"), QStringLiteral("revision")});
     model.license = {license.value(QStringLiteral("name")).toString(),
                      license.value(QStringLiteral("url")).toString()};
+    model.licenseRevision = license.value(QStringLiteral("revision")).toString();
     if (!licenseUnknown.isEmpty() || model.license.name.trimmed().isEmpty()
         || !isHttpsUrl(model.license.url)
         || !isOfficialUrlForAdapter(model.license.url, model.adapterId)) {
@@ -163,6 +164,11 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
                                         : QStringLiteral("Apache-2.0");
     if (model.license.name != expectedLicense) {
         result.error = QStringLiteral("license name does not match adapter %1").arg(model.adapterId);
+        return result;
+    }
+    if (model.adapterId == QStringLiteral("indextts25")
+        && model.licenseRevision.trimmed().isEmpty()) {
+        result.error = QStringLiteral("Index license revision is required");
         return result;
     }
 

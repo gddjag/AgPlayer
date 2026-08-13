@@ -13,7 +13,8 @@
       "requiresLicenseAcceptance": false,
       "license": {
         "name": "Apache-2.0",
-        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "revision": ""
       },
       "officialUrls": {
         "project": "https://github.com/QwenLM/Qwen3-TTS",
@@ -34,7 +35,8 @@
       "requiresLicenseAcceptance": false,
       "license": {
         "name": "Apache-2.0",
-        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "revision": ""
       },
       "officialUrls": {
         "project": "https://github.com/QwenLM/Qwen3-TTS",
@@ -55,7 +57,8 @@
       "requiresLicenseAcceptance": true,
       "license": {
         "name": "bilibili Model Use License Agreement",
-        "url": "https://huggingface.co/IndexTeam/IndexTTS-2.5"
+        "url": "https://huggingface.co/IndexTeam/IndexTTS-2.5",
+        "revision": "license-2026-08-13"
       },
       "officialUrls": {
         "project": "https://github.com/index-tts/index-tts",
@@ -76,7 +79,8 @@
       "requiresLicenseAcceptance": false,
       "license": {
         "name": "Apache-2.0",
-        "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
+        "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+        "revision": ""
       },
       "officialUrls": {
         "project": "https://github.com/FunAudioLLM/CosyVoice",

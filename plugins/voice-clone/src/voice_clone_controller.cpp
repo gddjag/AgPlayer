@@ -9,12 +9,16 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
-#include <QSaveFile>
+#include <QRegularExpression>
 #include <QUrl>
 #include <QUuid>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace agplayer::voice_clone {
@@ -86,27 +90,140 @@ QVariantMap parameterMap(const QJsonObject& object)
     return object.toVariantMap();
 }
 
+bool copyVerifiedPartToNewFile(const QString& partPath,
+                               const QString& finalPath,
+                               QString* error)
+{
+    QFile destination(finalPath);
+#ifdef Q_OS_WIN
+    const std::wstring nativePart = QDir::toNativeSeparators(partPath).toStdWString();
+    const HANDLE source = CreateFileW(nativePart.c_str(), GENERIC_READ | DELETE,
+                                      FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                      FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN,
+                                      nullptr);
+    if (source == INVALID_HANDLE_VALUE) {
+        *error = QStringLiteral("Could not open the generated temporary WAV handle");
+        return false;
+    }
+    FILE_ATTRIBUTE_TAG_INFO tagInfo{};
+    LARGE_INTEGER before{};
+    if (!GetFileInformationByHandleEx(source, FileAttributeTagInfo, &tagInfo, sizeof(tagInfo))
+        || (tagInfo.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) != 0
+        || !GetFileSizeEx(source, &before) || before.QuadPart <= 0) {
+        CloseHandle(source);
+        *error = QStringLiteral("Generated temporary WAV is not a regular non-reparse file");
+        return false;
+    }
+    if (!destination.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+        CloseHandle(source);
+        *error = QStringLiteral("Could not create the generated WAV exclusively");
+        return false;
+    }
+    qint64 copied = 0;
+    QByteArray chunk(64 * 1024, Qt::Uninitialized);
+    bool ok = true;
+    while (true) {
+        DWORD read = 0;
+        if (!ReadFile(source, chunk.data(), static_cast<DWORD>(chunk.size()), &read, nullptr)) {
+            ok = false;
+            break;
+        }
+        if (read == 0) break;
+        if (destination.write(chunk.constData(), static_cast<qint64>(read))
+            != static_cast<qint64>(read)) {
+            ok = false;
+            break;
+        }
+        copied += read;
+    }
+    LARGE_INTEGER after{};
+    ok = ok && GetFileSizeEx(source, &after) && before.QuadPart == after.QuadPart
+         && copied == before.QuadPart && destination.flush();
+    if (ok) {
+        FILE_DISPOSITION_INFO disposition{TRUE};
+        ok = SetFileInformationByHandle(source, FileDispositionInfo,
+                                        &disposition, sizeof(disposition)) != 0;
+    }
+    destination.close();
+    CloseHandle(source);
+#else
+    const QByteArray nativePart = QFile::encodeName(partPath);
+    const int fd = ::open(nativePart.constData(), O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) {
+        *error = QStringLiteral("Could not open the generated temporary WAV handle");
+        return false;
+    }
+    struct stat before{};
+    if (::fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size <= 0) {
+        ::close(fd);
+        *error = QStringLiteral("Generated temporary WAV is not a regular non-link file");
+        return false;
+    }
+    QFile source;
+    if (!source.open(fd, QIODevice::ReadOnly, QFileDevice::DontCloseHandle)
+        || !destination.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+        source.close();
+        ::close(fd);
+        *error = QStringLiteral("Could not open generated WAV files safely");
+        return false;
+    }
+    qint64 copied = 0;
+    bool ok = true;
+    while (!source.atEnd()) {
+        const QByteArray chunk = source.read(64 * 1024);
+        if (chunk.isEmpty() && source.error() != QFile::NoError) {
+            ok = false;
+            break;
+        }
+        if (destination.write(chunk) != chunk.size()) {
+            ok = false;
+            break;
+        }
+        copied += chunk.size();
+    }
+    struct stat after{};
+    ok = ok && ::fstat(fd, &after) == 0 && before.st_dev == after.st_dev
+         && before.st_ino == after.st_ino && before.st_size == after.st_size
+         && copied == before.st_size && destination.flush();
+    source.close();
+    destination.close();
+    if (ok) ok = ::unlink(nativePart.constData()) == 0;
+    ::close(fd);
+#endif
+    if (!ok) {
+        destination.close();
+        QFile::remove(finalPath);
+        *error = QStringLiteral("Generated WAV changed or could not be copied atomically");
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
-VoiceCloneController::VoiceCloneController(QString portableRoot,
-                                           QString builtInRegistryPath,
+VoiceCloneController::VoiceCloneController(QString pluginRoot,
+                                           QString modelsRoot,
                                            VoiceClonePackageManager* licenseManager,
                                            QObject* parent)
     : QObject(parent),
-      portableRoot_(QDir::fromNativeSeparators(QDir(portableRoot).absolutePath())),
-      registryPath_(std::move(builtInRegistryPath)),
+      pluginRoot_(QDir::fromNativeSeparators(QFileInfo(pluginRoot).canonicalFilePath())),
+      modelsRoot_(QDir::fromNativeSeparators(QFileInfo(modelsRoot).canonicalFilePath())),
       licenseManager_(licenseManager)
 {
-    const QFileInfo portableInfo(portableRoot_);
-    if (!portableInfo.exists() || !portableInfo.isDir()
-        || hasReparseAncestor(portableInfo.absoluteFilePath())) {
-        setError(QStringLiteral("Portable voice-clone root is not a safe directory"));
+    const QFileInfo pluginInfo(pluginRoot_);
+    const QFileInfo modelsInfo(modelsRoot_);
+    if (pluginRoot_.isEmpty() || modelsRoot_.isEmpty()
+        || !pluginInfo.isDir() || !modelsInfo.isDir()
+        || hasReparseAncestor(pluginInfo.absoluteFilePath())
+        || hasReparseAncestor(modelsInfo.absoluteFilePath())) {
+        setError(QStringLiteral("Voice-clone plugin and model roots must be safe existing directories"));
         return;
     }
-    outputRoot_ = QDir(portableRoot_).filePath(QStringLiteral("cache/voice-clone"));
+    registryPath_ = QDir(pluginRoot_).filePath(QStringLiteral("registry/models.json"));
+    outputRoot_ = QDir(pluginRoot_).filePath(QStringLiteral("cache"));
     QDir().mkpath(QDir(outputRoot_).filePath(QStringLiteral("requests")));
     outputRoot_ = QDir::fromNativeSeparators(QFileInfo(outputRoot_).canonicalFilePath());
-    if (!isSafeContainedDirectory(portableRoot_, outputRoot_)) {
+    if (!isSafeContainedDirectory(pluginRoot_, outputRoot_)) {
         outputRoot_.clear();
         setError(QStringLiteral("Voice-clone output root failed containment checks"));
         return;
@@ -118,8 +235,11 @@ VoiceCloneController::VoiceCloneController(QString portableRoot,
     connect(&worker_, &VoiceCloneWorkerClient::requestFailed,
             this, &VoiceCloneController::handleFailure);
     connect(&worker_, &VoiceCloneWorkerClient::workerTerminated, this, [this](const QString&) {
+        loadRequestId_.clear();
+        cancelTargets_.clear();
         const auto ids = generations_.keys();
         for (const QString& id : ids) cleanupGeneration(id);
+        retryPendingCleanup();
         if (modelLoaded_) {
             modelLoaded_ = false;
             emit modelLoadedChanged();
@@ -133,10 +253,20 @@ VoiceCloneController::~VoiceCloneController()
     shutdown();
 }
 
-bool VoiceCloneController::configureAdapter(const QString& manifestPath,
-                                            const QString& adapterPackRoot,
+bool VoiceCloneController::configureAdapter(const QString& adapterId,
+                                            const QString& adapterVersion,
                                             const QString& launcherId)
 {
+    static const QRegularExpression identifier(
+        QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
+    if (!identifier.match(adapterId).hasMatch()
+        || !identifier.match(adapterVersion).hasMatch()) {
+        setError(QStringLiteral("Adapter identity is invalid"));
+        return false;
+    }
+    const QString adapterPackRoot = QDir(pluginRoot_).filePath(
+        QStringLiteral("adapters/%1/%2").arg(adapterId, adapterVersion));
+    const QString manifestPath = QDir(adapterPackRoot).filePath(QStringLiteral("adapter.json"));
     if (hasReparseAncestor(adapterPackRoot) || hasReparseAncestor(manifestPath)) {
         setError(QStringLiteral("Adapter Pack paths must not contain links or reparse points"));
         return false;
@@ -149,6 +279,11 @@ bool VoiceCloneController::configureAdapter(const QString& manifestPath,
     const auto parsed = parseAdapterManifest(file.readAll());
     if (!parsed.isValid()) {
         setError(parsed.error);
+        return false;
+    }
+    if (parsed.manifest.adapterId != adapterId
+        || parsed.manifest.adapterVersion != adapterVersion) {
+        setError(QStringLiteral("Installed Adapter manifest identity mismatch"));
         return false;
     }
     const QString selectedLauncher = launcherId.isEmpty() ? parsed.manifest.defaultLauncherId : launcherId;
@@ -164,8 +299,12 @@ bool VoiceCloneController::configureAdapter(const QString& manifestPath,
     return true;
 }
 
-bool VoiceCloneController::selectModel(const QString& stableId, const QString& modelRoot)
+bool VoiceCloneController::selectModel(const QString& stableId)
 {
+    if (!loadRequestId_.isEmpty()) {
+        worker_.abandonRequest(loadRequestId_);
+        loadRequestId_.clear();
+    }
     auto selected = modelEntries_.constEnd();
     for (auto it = modelEntries_.constBegin(); it != modelEntries_.constEnd(); ++it) {
         if (it->stableId == stableId) {
@@ -173,9 +312,14 @@ bool VoiceCloneController::selectModel(const QString& stableId, const QString& m
             break;
         }
     }
-    const QFileInfo rootInfo(modelRoot);
-    if (selected == modelEntries_.constEnd() || !rootInfo.exists() || !rootInfo.isDir()) {
+    if (selected == modelEntries_.constEnd() || selected->modelDirectory.isEmpty()) {
         setError(QStringLiteral("Selected model or model root is invalid"));
+        return false;
+    }
+    const QFileInfo rootInfo(selected->modelDirectory);
+    if (!rootInfo.exists() || !rootInfo.isDir()
+        || !isSafeContainedDirectory(modelsRoot_, rootInfo.absoluteFilePath())) {
+        setError(QStringLiteral("Selected model directory was not confirmed by refresh"));
         return false;
     }
     if (!adapterManifest_.adapterId.isEmpty() && selected->adapterId != adapterManifest_.adapterId) {
@@ -183,7 +327,7 @@ bool VoiceCloneController::selectModel(const QString& stableId, const QString& m
         return false;
     }
     selectedModel_ = *selected;
-    selectedModelRoot_ = QDir::fromNativeSeparators(rootInfo.canonicalFilePath());
+    selectedModelRoot_ = selected->modelDirectory;
     modelLoaded_ = false;
     emit modelLoadedChanged();
     setError({});
@@ -200,7 +344,8 @@ void VoiceCloneController::refreshModels()
     const QStringList knownAdapters{QStringLiteral("qwen"),
                                     QStringLiteral("indextts25"),
                                     QStringLiteral("cosyvoice3")};
-    const VoiceCloneDiscovery discovered = VoiceCloneRegistry::discoverUserModels(portableRoot_, knownAdapters);
+    const QString portableRoot = QDir(modelsRoot_).absoluteFilePath(QStringLiteral("../.."));
+    const VoiceCloneDiscovery discovered = VoiceCloneRegistry::discoverUserModels(portableRoot, knownAdapters);
     VoiceCloneDiscovery validDiscovery;
     validDiscovery.models = discovered.models;
     const VoiceCloneRegistry merged = builtIn.mergeUserModels(validDiscovery);
@@ -253,6 +398,7 @@ bool VoiceCloneController::startWorker()
 
 bool VoiceCloneController::restartWorker()
 {
+    retryPendingCleanup();
     modelLoaded_ = false;
     emit modelLoadedChanged();
     const bool restarted = worker_.restart();
@@ -293,7 +439,7 @@ QString VoiceCloneController::generate(const QString& text,
             || !licenseManager_->hasLicenseAcceptance(selectedModel_.stableId,
                                                       selectedModel_.adapterId,
                                                       QUrl(selectedModel_.license.url),
-                                                      selectedModel_.revision))) {
+                                                      selectedModel_.licenseRevision))) {
         setError(QStringLiteral("Model license acceptance is required before generation"));
         return {};
     }
@@ -306,13 +452,11 @@ QString VoiceCloneController::generate(const QString& text,
         return {};
     }
     const QString finalPath = QDir(directory).filePath(QStringLiteral("generated.wav"));
-    QFile reservation(finalPath);
-    if (!reservation.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+    if (QFileInfo::exists(finalPath)) {
         removeTreeNoLinks(directory);
         setError(QStringLiteral("Could not reserve a unique output file"));
         return {};
     }
-    reservation.close();
     const QString partialPath = finalPath + QStringLiteral(".part");
     generations_.insert(requestId, {directory, partialPath, finalPath});
     QJsonObject payload{{QStringLiteral("text"), text},
@@ -335,17 +479,26 @@ bool VoiceCloneController::cancel(const QString& requestId)
     if (!generations_.contains(requestId) || !worker_.hasPendingRequest(requestId)) return false;
     const QString cancelId = worker_.sendRequest(
         WorkerOperation::Cancel, {{QStringLiteral("targetRequestId"), requestId}});
-    if (cancelId.isEmpty()) return false;
+    if (cancelId.isEmpty()) {
+        worker_.abandonRequest(requestId);
+        worker_.shutdown();
+        cleanupGeneration(requestId);
+        retryPendingCleanup();
+        return false;
+    }
     worker_.abandonRequest(requestId);
-    cleanupGeneration(requestId);
+    cancelTargets_.insert(cancelId, requestId);
     return true;
 }
 
 void VoiceCloneController::shutdown()
 {
+    worker_.shutdown();
+    loadRequestId_.clear();
+    cancelTargets_.clear();
     const auto ids = generations_.keys();
     for (const QString& id : ids) cleanupGeneration(id);
-    worker_.shutdown();
+    retryPendingCleanup();
     if (modelLoaded_) {
         modelLoaded_ = false;
         emit modelLoadedChanged();
@@ -363,6 +516,7 @@ bool VoiceCloneController::modelLoaded() const { return modelLoaded_; }
 bool VoiceCloneController::hasPendingRequest(const QString& requestId) const { return worker_.hasPendingRequest(requestId); }
 QString VoiceCloneController::requestDirectory(const QString& requestId) const
 {
+    if (pendingCleanup_.contains(requestId)) return pendingCleanup_.value(requestId);
     return generations_.contains(requestId)
                ? generations_.value(requestId).directory
                : QDir(outputRoot_).filePath(QStringLiteral("requests/%1").arg(requestId));
@@ -372,12 +526,14 @@ QVariantList VoiceCloneController::basicParameters() const { return basicParamet
 QVariantList VoiceCloneController::advancedParameters() const { return advancedParameters_; }
 bool VoiceCloneController::advancedSettingsAvailable() const { return !advancedParameters_.isEmpty(); }
 QVariantList VoiceCloneController::models() const { return models_; }
+int VoiceCloneController::pendingCleanupCount() const { return pendingCleanup_.size(); }
 
 void VoiceCloneController::handleResponse(const VoiceCloneWorkerMessage& message)
 {
     if (message.operation == WorkerOperation::Capabilities) {
         updateCapabilities(message.payload.value(QStringLiteral("schema")).toObject());
     } else if (message.operation == WorkerOperation::Load) {
+        if (message.requestId != loadRequestId_) return;
         const bool loaded = message.payload.value(QStringLiteral("loaded")).toBool();
         if (message.requestId == loadRequestId_) loadRequestId_.clear();
         if (modelLoaded_ != loaded) {
@@ -390,6 +546,13 @@ void VoiceCloneController::handleResponse(const VoiceCloneWorkerMessage& message
         if (modelLoaded_) {
             modelLoaded_ = false;
             emit modelLoadedChanged();
+        }
+    } else if (message.operation == WorkerOperation::Cancel) {
+        const QString target = cancelTargets_.take(message.requestId);
+        cleanupGeneration(target);
+        if (pendingCleanup_.contains(target)) {
+            worker_.shutdown();
+            retryPendingCleanup();
         }
     } else if (message.operation == WorkerOperation::Generate) {
         QString output;
@@ -406,10 +569,16 @@ void VoiceCloneController::handleFailure(const QString& requestId,
                                          const QString& code,
                                          const QString& message)
 {
+    const QString cancelTarget = cancelTargets_.take(requestId);
+    if (!cancelTarget.isEmpty()) cleanupGeneration(cancelTarget);
     cleanupGeneration(requestId);
     if (requestId == loadRequestId_) {
         loadRequestId_.clear();
         updateSelectedModelStatus(QStringLiteral("invalid"), message);
+    }
+    if (pendingCleanup_.contains(requestId) || pendingCleanup_.contains(cancelTarget)) {
+        worker_.shutdown();
+        retryPendingCleanup();
     }
     setError(message);
     emit requestFailed(requestId, code, message);
@@ -452,46 +621,22 @@ bool VoiceCloneController::finalizeGeneration(const QString& requestId,
     }
     const GenerationFiles files = generations_.take(requestId);
     const QFileInfo directoryInfo(files.directory);
-    const QFileInfo partialInfo(files.partialPath);
-    const QFileInfo finalInfo(files.finalPath);
     if (!directoryInfo.exists() || !isSafeContainedDirectory(outputRoot_, files.directory)
-        || !partialInfo.exists() || !partialInfo.isFile() || isReparsePoint(partialInfo)
-        || isReparsePoint(finalInfo)) {
-        removeTreeNoLinks(files.directory);
-        *error = QStringLiteral("Worker output failed the reparse-point safety check");
+        || QFileInfo::exists(files.finalPath)) {
+        cleanupDirectory(requestId, files.directory);
+        *error = QStringLiteral("Worker output failed the exclusive-output safety check");
         return false;
     }
-    QFile source(files.partialPath);
-    QSaveFile destination(files.finalPath);
-    if (!source.open(QIODevice::ReadOnly) || !destination.open(QIODevice::WriteOnly)) {
-        removeTreeNoLinks(files.directory);
-        *error = QStringLiteral("Could not open the generated temporary WAV safely");
+    if (!copyVerifiedPartToNewFile(files.partialPath, files.finalPath, error)) {
+        cleanupDirectory(requestId, files.directory);
         return false;
     }
-    while (!source.atEnd()) {
-        const QByteArray chunk = source.read(64 * 1024);
-        if (chunk.isEmpty() && source.error() != QFile::NoError) {
-            destination.cancelWriting();
-            removeTreeNoLinks(files.directory);
-            *error = QStringLiteral("Could not read the generated temporary WAV");
-            return false;
-        }
-        if (destination.write(chunk) != chunk.size()) {
-            destination.cancelWriting();
-            removeTreeNoLinks(files.directory);
-            *error = QStringLiteral("Could not commit the generated WAV");
-            return false;
-        }
-    }
-    source.close();
-    if (!destination.commit()
-        || !isSafeContainedDirectory(outputRoot_, files.directory)
+    if (!isSafeContainedDirectory(outputRoot_, files.directory)
         || isReparsePoint(QFileInfo(files.finalPath))) {
-        removeTreeNoLinks(files.directory);
+        cleanupDirectory(requestId, files.directory);
         *error = QStringLiteral("Generated WAV commit was not safe");
         return false;
     }
-    QFile::remove(files.partialPath);
     *outputPath = files.finalPath;
     return true;
 }
@@ -501,7 +646,26 @@ void VoiceCloneController::cleanupGeneration(const QString& requestId, const boo
     if (!generations_.contains(requestId)) return;
     const GenerationFiles files = generations_.take(requestId);
     QFile::remove(files.partialPath);
-    if (!keepFinal) removeTreeNoLinks(files.directory);
+    if (!keepFinal) cleanupDirectory(requestId, files.directory);
+}
+
+void VoiceCloneController::cleanupDirectory(const QString& requestId, const QString& directory)
+{
+    if (!removeTreeNoLinks(directory)) {
+        pendingCleanup_.insert(requestId, directory);
+        setError(QStringLiteral("Temporary output cleanup is pending: %1").arg(directory));
+    }
+}
+
+void VoiceCloneController::retryPendingCleanup()
+{
+    const auto ids = pendingCleanup_.keys();
+    for (const QString& id : ids) {
+        if (removeTreeNoLinks(pendingCleanup_.value(id))) pendingCleanup_.remove(id);
+    }
+    if (!pendingCleanup_.isEmpty())
+        setError(QStringLiteral("Temporary output cleanup remains pending for %1 request(s)")
+                     .arg(pendingCleanup_.size()));
 }
 
 void VoiceCloneController::updateSelectedModelStatus(const QString& state,

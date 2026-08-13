@@ -1,18 +1,25 @@
 #include "voice_clone_controller.hpp"
 #include "voice_clone_package_manager.hpp"
+#include "voice_clone_package_manifest.hpp"
 #include "voice_clone_worker_protocol.hpp"
+#include "voice_clone_host_controller.hpp"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 using namespace agplayer::voice_clone;
 
@@ -95,6 +102,8 @@ int runWorker(const QStringList& arguments)
 
     QByteArray input;
     QString delayed;
+    QString cancelFailureTarget;
+    VoiceCloneWorkerMessage delayedLoad;
     QObject::connect(&socket, &QLocalSocket::readyRead, &socket, [&] {
         input += socket.readAll();
         while (true) {
@@ -109,6 +118,27 @@ int runWorker(const QStringList& arguments)
             }
             const auto& request = decoded.message;
             const QString text = request.payload.value(QStringLiteral("text")).toString();
+            if (request.operation == WorkerOperation::Shutdown) {
+                QFile marker(QDir(outputRoot).filePath(QStringLiteral("shutdown.marker")));
+                if (marker.open(QIODevice::WriteOnly)) marker.write("shutdown");
+                socket.write(encodeWorkerMessage(responseFor(request)) + '\n');
+                socket.flush();
+                QCoreApplication::exit(0);
+                return;
+            }
+            if (request.operation == WorkerOperation::Load
+                && QFileInfo(request.payload.value(QStringLiteral("modelRoot")).toString()).fileName()
+                       == QStringLiteral("slow-load")) {
+                delayedLoad = request;
+                continue;
+            }
+            if (request.operation == WorkerOperation::Load && !delayedLoad.requestId.isEmpty()) {
+                socket.write(encodeWorkerMessage(responseFor(request)) + '\n');
+                socket.write(encodeWorkerMessage(responseFor(delayedLoad)) + '\n');
+                delayedLoad = {};
+                socket.flush();
+                continue;
+            }
             if (request.operation == WorkerOperation::Load
                 && QFileInfo(modelRoot).fileName() == QStringLiteral("reject-load")) {
                 VoiceCloneWorkerMessage error = responseFor(request);
@@ -124,6 +154,17 @@ int runWorker(const QStringList& arguments)
                 return;
             }
             if (request.operation == WorkerOperation::Generate && text == QStringLiteral("hang")) continue;
+            if (request.operation == WorkerOperation::Cancel
+                && request.payload.value(QStringLiteral("targetRequestId")).toString()
+                       == cancelFailureTarget) {
+                VoiceCloneWorkerMessage error = responseFor(request);
+                error.kind = WorkerMessageKind::Error;
+                error.workerError = {QStringLiteral("cancel-failed"),
+                                     QStringLiteral("worker rejected cancellation"), false, {}};
+                socket.write(encodeWorkerMessage(error) + '\n');
+                socket.flush();
+                continue;
+            }
             if (request.operation == WorkerOperation::Generate && text == QStringLiteral("oom")) {
                 VoiceCloneWorkerMessage error = responseFor(request);
                 error.kind = WorkerMessageKind::Error;
@@ -140,9 +181,67 @@ int runWorker(const QStringList& arguments)
                 socket.flush();
                 continue;
             }
+            if (request.operation == WorkerOperation::Generate
+                && text == QStringLiteral("oversize-frame")) {
+                socket.write(QByteArray(1024 * 1024 + 1, 'x'));
+                socket.flush();
+                continue;
+            }
             if (request.operation == WorkerOperation::Generate) {
                 const QString relative = request.payload.value(QStringLiteral("outputPath")).toString();
-                QFile wav(QDir(outputRoot).filePath(relative));
+                const QString path = QDir(outputRoot).filePath(relative);
+                if (text == QStringLiteral("symlink-part")) {
+                    const QString target = QDir(outputRoot).filePath(QStringLiteral("symlink-target.wav"));
+                    QFile targetFile(target);
+                    if (!targetFile.open(QIODevice::WriteOnly) || targetFile.write("RIFF-link") < 0) {
+                        QCoreApplication::exit(93);
+                        return;
+                    }
+                    targetFile.close();
+#ifdef Q_OS_WIN
+                    bool linked = CreateSymbolicLinkW(
+                        QDir::toNativeSeparators(path).toStdWString().c_str(),
+                        QDir::toNativeSeparators(target).toStdWString().c_str(), 0) != 0;
+                    if (!linked) {
+                        const QString targetDirectory = QDir(outputRoot).filePath(
+                            QStringLiteral("symlink-target-directory"));
+                        QDir().mkpath(targetDirectory);
+                        linked = QProcess::execute(QStringLiteral("cmd.exe"),
+                                                   {QStringLiteral("/d"), QStringLiteral("/c"),
+                                                    QStringLiteral("mklink"), QStringLiteral("/J"),
+                                                    QDir::toNativeSeparators(path),
+                                                    QDir::toNativeSeparators(targetDirectory)}) == 0;
+                    }
+#else
+                    const bool linked = QFile::link(target, path);
+#endif
+                    if (!linked) {
+                        VoiceCloneWorkerMessage error = responseFor(request);
+                        error.kind = WorkerMessageKind::Error;
+                        error.workerError = {QStringLiteral("symlink-unavailable"),
+                                             QStringLiteral("symlink unavailable"), false, {}};
+                        socket.write(encodeWorkerMessage(error) + '\n');
+                    } else {
+                        socket.write(encodeWorkerMessage(responseFor(request)) + '\n');
+                    }
+                    socket.flush();
+                    continue;
+                }
+#ifdef Q_OS_WIN
+                if (text == QStringLiteral("hold-cancel")) {
+                    const HANDLE held = CreateFileW(QDir::toNativeSeparators(path).toStdWString().c_str(),
+                                                    GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+                    if (held == INVALID_HANDLE_VALUE) {
+                        QCoreApplication::exit(94);
+                        return;
+                    }
+                    DWORD written = 0;
+                    WriteFile(held, "RIFF-held", 9, &written, nullptr);
+                    continue;
+                }
+#endif
+                QFile wav(path);
                 QDir().mkpath(QFileInfo(wav).absolutePath());
                 if (!wav.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
                     QCoreApplication::exit(92);
@@ -150,8 +249,9 @@ int runWorker(const QStringList& arguments)
                 }
                 wav.write("RIFFtest-WAVE");
                 wav.close();
-                if (text == QStringLiteral("slow")) {
+                if (text == QStringLiteral("slow") || text == QStringLiteral("cancel-error")) {
                     delayed = request.requestId;
+                    if (text == QStringLiteral("cancel-error")) cancelFailureTarget = request.requestId;
                     continue;
                 }
             }
@@ -171,8 +271,10 @@ int runWorker(const QStringList& arguments)
     return QCoreApplication::exec();
 }
 
-bool writeAdapterPack(const QString& root, const QString& adapterId = QStringLiteral("qwen"))
+bool writeAdapterPack(const QString& pluginRoot, const QString& adapterId = QStringLiteral("qwen"))
 {
+    const QString root = QDir(pluginRoot).filePath(
+        QStringLiteral("adapters/%1/1.0.0").arg(adapterId));
     const QString launcherRelative = QStringLiteral("workers/test-worker.exe");
     if (!QDir(root).mkpath(QStringLiteral("workers"))) return false;
     const QString launcher = QDir(root).filePath(launcherRelative);
@@ -197,6 +299,69 @@ bool writeAdapterPack(const QString& root, const QString& adapterId = QStringLit
     return true;
 }
 
+bool copyRegistry(const QString& pluginRoot)
+{
+    const QString target = QDir(pluginRoot).filePath(QStringLiteral("registry/models.json"));
+    if (!QDir().mkpath(QFileInfo(target).absolutePath())) return false;
+    return QFile::copy(QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH), target);
+}
+
+QString writeModel(const QString& modelsRoot,
+                   const QString& stableId,
+                   const QString& adapterId,
+                   const QString& leaf = QStringLiteral("model"),
+                   const QString& licenseRevision = QStringLiteral("license-2026-08-13"))
+{
+    const QString directory = QDir(modelsRoot).filePath(
+        QStringLiteral("installed/%1").arg(leaf));
+    if (!QDir().mkpath(directory)) return {};
+    QFile data(QDir(directory).filePath(QStringLiteral("config.json")));
+    if (!data.open(QIODevice::WriteOnly) || data.write("{}") != 2) return {};
+    const bool index = adapterId == QStringLiteral("indextts25");
+    const QString url = index
+                            ? QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")
+                            : QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base");
+    QJsonObject license{{QStringLiteral("name"),
+                         index ? QStringLiteral("bilibili Model Use License Agreement")
+                               : QStringLiteral("Apache-2.0")},
+                        {QStringLiteral("url"), url}};
+    if (index) license.insert(QStringLiteral("revision"), licenseRevision);
+    const QJsonObject manifest{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("stableId"), stableId},
+        {QStringLiteral("displayName"), stableId},
+        {QStringLiteral("description"), QStringLiteral("test model")},
+        {QStringLiteral("adapterId"), adapterId},
+        {QStringLiteral("runtimeId"), adapterId},
+        {QStringLiteral("revision"), QStringLiteral("main")},
+        {QStringLiteral("source"), QJsonObject{{QStringLiteral("provider"), QStringLiteral("official")},
+                                                {QStringLiteral("url"), url}}},
+        {QStringLiteral("license"), license},
+        {QStringLiteral("files"), QJsonArray{QJsonObject{{QStringLiteral("path"), QStringLiteral("config.json")}}}}
+    };
+    QFile file(QDir(directory).filePath(QStringLiteral("agplayer-model.json")));
+    if (!file.open(QIODevice::WriteOnly)) return {};
+    file.write(QJsonDocument(manifest).toJson());
+    return directory;
+}
+
+struct TestLayout {
+    QTemporaryDir root;
+    QString pluginRoot;
+    QString modelsRoot;
+    QString packagesRoot;
+
+    TestLayout()
+        : pluginRoot(root.filePath(QStringLiteral("plugin"))),
+          modelsRoot(root.filePath(QStringLiteral("data/models/voice-clone"))),
+          packagesRoot(root.filePath(QStringLiteral("packages")))
+    {
+        QDir().mkpath(pluginRoot);
+        QDir().mkpath(modelsRoot);
+        copyRegistry(pluginRoot);
+    }
+};
+
 } // namespace
 
 class VoiceCloneControllerTest final : public QObject {
@@ -207,26 +372,29 @@ private slots:
     void rejectsInvalidDynamicParametersAndUnacceptedIndexLicense();
     void handlesOomCrashTimeoutAndRestartWithoutKillingHost();
     void lazyLoadProbeMarksRejectedModelInvalid();
+    void rejectsExternalAdapterAndModelRoots();
+    void canceledLateResponseAndStaleLoadAreIgnored();
+    void lockedTemporaryOutputIsCleanedAfterWorkerStops();
+    void rejectsOversizedFrameAndSymlinkPart();
+    void shutdownUsesProtocolAndModuleLoadsThroughHost();
 };
 
 void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
 {
-    QTemporaryDir root;
-    QVERIFY(root.isValid());
-    const QString pack = root.filePath(QStringLiteral("pack"));
-    const QString model = root.filePath(QStringLiteral("model"));
-    QVERIFY(QDir().mkpath(pack));
-    QVERIFY(QDir().mkpath(model));
-    QVERIFY(writeAdapterPack(pack));
-    const QString invalidDirectory = root.filePath(
-        QStringLiteral("models/voice-clone/invalid/model"));
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/qwen-test");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    const QString invalidDirectory = QDir(layout.modelsRoot).filePath(
+        QStringLiteral("invalid/model"));
     QVERIFY(QDir().mkpath(invalidDirectory));
     QFile invalidManifest(QDir(invalidDirectory).filePath(QStringLiteral("agplayer-model.json")));
     QVERIFY(invalidManifest.open(QIODevice::WriteOnly));
     invalidManifest.write("{}");
     invalidManifest.close();
-    VoiceClonePackageManager licenses(root.filePath(QStringLiteral("packages")));
-    VoiceCloneController controller(root.path(), QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH), &licenses);
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
     bool foundInvalid = false;
     for (const QVariant& value : controller.models()) {
         if (value.toMap().value(QStringLiteral("installState")) == QStringLiteral("invalid"))
@@ -234,9 +402,9 @@ void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
     }
     QVERIFY(foundInvalid);
     controller.setRequestTimeoutMs(2000);
-    QVERIFY2(controller.configureAdapter(QDir(pack).filePath(QStringLiteral("adapter.json")), pack),
+    QVERIFY2(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")),
              qPrintable(controller.errorString()));
-    QVERIFY(controller.selectModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"), model));
+    QVERIFY(controller.selectModel(modelId));
 
     QSignalSpy ready(&controller, &VoiceCloneController::workerReadyChanged);
     QVERIFY(controller.startWorker());
@@ -271,7 +439,7 @@ void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
                                                    {QStringLiteral("mode"), QStringLiteral("fast")}});
     QVERIFY(controller.cancel(canceled));
     QTRY_VERIFY_WITH_TIMEOUT(!controller.hasPendingRequest(canceled), 3000);
-    QVERIFY(!QFileInfo::exists(controller.requestDirectory(canceled)));
+    QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(controller.requestDirectory(canceled)), 3000);
     QVERIFY(controller.unloadModel());
     QTRY_VERIFY_WITH_TIMEOUT(!controller.modelLoaded(), 3000);
     controller.shutdown();
@@ -280,15 +448,16 @@ void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
 
 void VoiceCloneControllerTest::rejectsInvalidDynamicParametersAndUnacceptedIndexLicense()
 {
-    QTemporaryDir root;
-    QVERIFY(root.isValid());
-    const QString pack = root.filePath(QStringLiteral("pack"));
-    QVERIFY(QDir().mkpath(pack));
-    QVERIFY(writeAdapterPack(pack, QStringLiteral("indextts25")));
-    VoiceClonePackageManager licenses(root.filePath(QStringLiteral("packages")));
-    VoiceCloneController controller(root.path(), QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH), &licenses);
-    QVERIFY(controller.configureAdapter(QDir(pack).filePath(QStringLiteral("adapter.json")), pack));
-    QVERIFY(controller.selectModel(QStringLiteral("IndexTeam/IndexTTS-2.5"), root.path()));
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot, QStringLiteral("indextts25")));
+    const QString indexId = QStringLiteral("IndexTeam/IndexTTS-2.5");
+    QVERIFY(!writeModel(layout.modelsRoot, indexId, QStringLiteral("indextts25"),
+                        QStringLiteral("index")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(controller.configureAdapter(QStringLiteral("indextts25"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(indexId));
     QVERIFY(controller.startWorker());
     QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
     QVERIFY(controller.loadModel());
@@ -310,20 +479,39 @@ void VoiceCloneControllerTest::rejectsInvalidDynamicParametersAndUnacceptedIndex
                                 {{QStringLiteral("seed"), 1},
                                  {QStringLiteral("mode"), QStringLiteral("fast")}}).isEmpty());
     QVERIFY(controller.errorString().contains(QStringLiteral("license"), Qt::CaseInsensitive));
+
+    VoiceClonePackageManifest package;
+    package.packageId = QStringLiteral("index-test");
+    package.modelId = indexId;
+    package.adapterId = QStringLiteral("indextts25");
+    package.version = QStringLiteral("1");
+    package.revision = QStringLiteral("main");
+    package.licenseUrl = QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5"));
+    package.licenseRevision = QStringLiteral("license-2026-08-13");
+    package.files.append({QStringLiteral("model.bin"), QUrl(QStringLiteral("https://example.com/model.bin")),
+                          QByteArray(64, 'a')});
+    licenses.start(package);
+    QCOMPARE(licenses.state(), VoiceClonePackageManager::LicenseRequired);
+    QVERIFY(!licenses.acceptLicense(package.licenseUrl, QStringLiteral("wrong-revision")));
+    QVERIFY(licenses.acceptLicense(package.licenseUrl, package.licenseRevision));
+    const QString accepted = controller.generate(QStringLiteral("accepted"), {},
+                                                 {{QStringLiteral("seed"), 1},
+                                                  {QStringLiteral("mode"), QStringLiteral("fast")}});
+    QVERIFY(!accepted.isEmpty());
 }
 
 void VoiceCloneControllerTest::handlesOomCrashTimeoutAndRestartWithoutKillingHost()
 {
-    QTemporaryDir root;
-    QVERIFY(root.isValid());
-    const QString pack = root.filePath(QStringLiteral("pack"));
-    QVERIFY(QDir().mkpath(pack));
-    QVERIFY(writeAdapterPack(pack));
-    VoiceClonePackageManager licenses(root.filePath(QStringLiteral("packages")));
-    VoiceCloneController controller(root.path(), QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH), &licenses);
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/qwen-failure-test");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
     controller.setRequestTimeoutMs(250);
-    QVERIFY(controller.configureAdapter(QDir(pack).filePath(QStringLiteral("adapter.json")), pack));
-    QVERIFY(controller.selectModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"), root.path()));
+    QVERIFY(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(modelId));
     QVERIFY(controller.startWorker());
     QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
     QVERIFY(controller.loadModel());
@@ -369,18 +557,16 @@ void VoiceCloneControllerTest::handlesOomCrashTimeoutAndRestartWithoutKillingHos
 
 void VoiceCloneControllerTest::lazyLoadProbeMarksRejectedModelInvalid()
 {
-    QTemporaryDir root;
-    QVERIFY(root.isValid());
-    const QString pack = root.filePath(QStringLiteral("pack"));
-    const QString model = root.filePath(QStringLiteral("reject-load"));
-    QVERIFY(QDir().mkpath(pack));
-    QVERIFY(QDir().mkpath(model));
-    QVERIFY(writeAdapterPack(pack));
-    VoiceClonePackageManager licenses(root.filePath(QStringLiteral("packages")));
-    VoiceCloneController controller(root.path(), QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH), &licenses);
-    QVERIFY(controller.configureAdapter(QDir(pack).filePath(QStringLiteral("adapter.json")), pack));
-    const QString modelId = QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base");
-    QVERIFY(controller.selectModel(modelId, model));
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/qwen-reject-test");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen"),
+                        QStringLiteral("reject-load")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(modelId));
     QVERIFY(controller.startWorker());
     QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
     QSignalSpy failed(&controller, &VoiceCloneController::requestFailed);
@@ -398,6 +584,175 @@ void VoiceCloneControllerTest::lazyLoadProbeMarksRejectedModelInvalid()
         }
     }
     QVERIFY(invalid);
+}
+
+void VoiceCloneControllerTest::rejectsExternalAdapterAndModelRoots()
+{
+    TestLayout layout;
+    QTemporaryDir external;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(external.isValid());
+    QVERIFY(writeAdapterPack(external.path()));
+    QVERIFY(!writeModel(external.path(), QStringLiteral("local/external"),
+                        QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(!controller.configureAdapter(QStringLiteral("../external"), QStringLiteral("1.0.0")));
+    QVERIFY(!controller.selectModel(QStringLiteral("local/external")));
+}
+
+void VoiceCloneControllerTest::canceledLateResponseAndStaleLoadAreIgnored()
+{
+    TestLayout layout;
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString slowId = QStringLiteral("local/slow-load");
+    const QString fastId = QStringLiteral("local/fast-load");
+    QVERIFY(!writeModel(layout.modelsRoot, slowId, QStringLiteral("qwen"),
+                        QStringLiteral("slow-load")).isEmpty());
+    QVERIFY(!writeModel(layout.modelsRoot, fastId, QStringLiteral("qwen"),
+                        QStringLiteral("fast-load")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(slowId));
+    QVERIFY(controller.startWorker());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    QVERIFY(controller.loadModel());
+    QVERIFY(controller.selectModel(fastId));
+    QVERIFY(controller.loadModel());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
+    QVERIFY(controller.workerRunning());
+
+    QSignalSpy finished(&controller, &VoiceCloneController::generationFinished);
+    const QJsonObject parameters{{QStringLiteral("seed"), 1},
+                                 {QStringLiteral("mode"), QStringLiteral("fast")}};
+    const QString retired = controller.generate(QStringLiteral("slow"), {}, parameters);
+    QVERIFY(controller.cancel(retired));
+    const QString current = controller.generate(QStringLiteral("fast"), {}, parameters);
+    QTRY_VERIFY_WITH_TIMEOUT(finished.count() >= 1, 3000);
+    QCOMPARE(finished.last().at(0).toString(), current);
+    QVERIFY(controller.workerRunning());
+    QVERIFY(!QFileInfo::exists(controller.requestDirectory(retired)));
+
+    QSignalSpy failed(&controller, &VoiceCloneController::requestFailed);
+    const QString cancelError = controller.generate(QStringLiteral("cancel-error"), {}, parameters);
+    const QString cancelErrorDirectory = controller.requestDirectory(cancelError);
+    QVERIFY(controller.cancel(cancelError));
+    QTRY_VERIFY_WITH_TIMEOUT(failed.count() >= 1, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(cancelErrorDirectory), 3000);
+}
+
+void VoiceCloneControllerTest::lockedTemporaryOutputIsCleanedAfterWorkerStops()
+{
+#ifndef Q_OS_WIN
+    QSKIP("Windows locked-file semantics test");
+#else
+    TestLayout layout;
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/held-output");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(modelId));
+    QVERIFY(controller.startWorker());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    QVERIFY(controller.loadModel());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
+    const QJsonObject parameters{{QStringLiteral("seed"), 1},
+                                 {QStringLiteral("mode"), QStringLiteral("fast")}};
+    const QString request = controller.generate(QStringLiteral("hold-cancel"), {}, parameters);
+    const QString directory = controller.requestDirectory(request);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(directory), 1000);
+    QVERIFY(controller.cancel(request));
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.workerRunning(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(directory), 3000);
+    QCOMPARE(controller.pendingCleanupCount(), 0);
+#endif
+}
+
+void VoiceCloneControllerTest::rejectsOversizedFrameAndSymlinkPart()
+{
+    TestLayout layout;
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/security-output");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    controller.setRequestTimeoutMs(2000);
+    QVERIFY(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(modelId));
+    QVERIFY(controller.startWorker());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    QVERIFY(controller.loadModel());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
+    QSignalSpy failed(&controller, &VoiceCloneController::requestFailed);
+    const QJsonObject parameters{{QStringLiteral("seed"), 1},
+                                 {QStringLiteral("mode"), QStringLiteral("fast")}};
+    controller.generate(QStringLiteral("oversize-frame"), {}, parameters);
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.workerRunning(), 3000);
+    QVERIFY(failed.last().at(1).toString().contains(QStringLiteral("frame")));
+
+    QVERIFY(controller.restartWorker());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    QVERIFY(controller.loadModel());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
+    const int before = failed.count();
+    controller.generate(QStringLiteral("symlink-part"), {}, parameters);
+    QTRY_VERIFY_WITH_TIMEOUT(failed.count() > before, 3000);
+    if (failed.last().at(1).toString() == QStringLiteral("symlink-unavailable"))
+        QSKIP("Symbolic-link privilege is unavailable");
+    QCOMPARE(failed.last().at(1).toString(), QStringLiteral("unsafe-output"));
+}
+
+void VoiceCloneControllerTest::shutdownUsesProtocolAndModuleLoadsThroughHost()
+{
+    TestLayout layout;
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/shutdown");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY(controller.configureAdapter(QStringLiteral("qwen"), QStringLiteral("1.0.0")));
+    QVERIFY(controller.selectModel(modelId));
+    QVERIFY(controller.startWorker());
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    controller.shutdown();
+    QVERIFY(QFileInfo::exists(QDir(layout.pluginRoot).filePath(
+        QStringLiteral("cache/shutdown.marker"))));
+
+    QTemporaryDir moduleRoot;
+    QVERIFY(moduleRoot.isValid());
+    const QString source = QString::fromUtf8(AGPLAYER_VOICE_CLONE_PLUGIN);
+    const QString library = QFileInfo(source).fileName();
+    QVERIFY(QFile::copy(source, moduleRoot.filePath(library)));
+    QVERIFY(copyRegistry(moduleRoot.path()));
+    QVERIFY(QDir().mkpath(moduleRoot.filePath(QStringLiteral("models/voice-clone"))));
+    QFile manifest(moduleRoot.filePath(QStringLiteral("agplayer-voice-clone.json")));
+    QVERIFY(manifest.open(QIODevice::WriteOnly));
+    manifest.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("pluginId"), QStringLiteral("agplayer.voice-clone")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("availableVersion"), QStringLiteral("1.0.0")},
+        {QStringLiteral("platform"), QStringLiteral("windows")},
+        {QStringLiteral("architecture"), QStringLiteral("x86_64")},
+        {QStringLiteral("minimumPlayerVersion"), QStringLiteral("1.0.0")},
+        {QStringLiteral("protocolVersion"), 1},
+        {QStringLiteral("library"), library}}).toJson());
+    manifest.close();
+    qputenv("AGPLAYER_VOICE_CLONE_ROOT", moduleRoot.path().toUtf8());
+    VoiceCloneHostController host;
+    host.refresh();
+    QCOMPARE(host.state(), VoiceCloneHostController::Compatible);
+    QVERIFY2(host.openPlugin(), qPrintable(host.errorString()));
+    QVERIFY(host.pluginController() != nullptr);
+    QVERIFY(host.mainQmlUrl().isValid());
+    host.closePlugin();
+    QCOMPARE(host.state(), VoiceCloneHostController::Compatible);
+    qunsetenv("AGPLAYER_VOICE_CLONE_ROOT");
+    QVERIFY(QFile::rename(moduleRoot.filePath(library),
+                          moduleRoot.filePath(library + QStringLiteral(".unloaded"))));
 }
 
 int main(int argc, char** argv)
