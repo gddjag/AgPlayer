@@ -10,12 +10,16 @@ $settings = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlay
 $combined = $page + "`n" + $table + "`n" + $settings
 
 foreach ($control in @(
-    'formatToolbar', 'formatFilterButton', 'formatSelectAllCheck',
+    'formatToolbar', 'formatStatusFilters', 'formatSelectAllCheck',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
     'formatEncoderBox', 'formatOutputDirectoryRow', 'formatSummaryCard')) {
     if ($combined -notmatch [regex]::Escape($control)) {
         throw "The reference format-conversion workbench is missing $control."
     }
+}
+
+if ($page -match 'formatSearchField|converterParallelJobsBox') {
+    throw 'Search and concurrency controls must not remain in the format workbench.'
 }
 
 if ($combined -notmatch 'key:\s*"Converting"') {

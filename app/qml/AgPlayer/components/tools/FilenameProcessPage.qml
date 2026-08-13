@@ -14,7 +14,6 @@ Rectangle {
     property var previewRows: []
     property int selectionAnchor: -1
     property int entryRevision: 0
-    property string searchText: ""
     property bool issueFilterEnabled: false
     property bool qaReferenceMode: false
 
@@ -84,11 +83,7 @@ Rectangle {
             const preview = previewForIndex(index)
             if (!preview || preview.severity === 0) return false
         }
-        const query = searchText.trim().toLowerCase()
-        if (query.length === 0) return true
-        const item = entry(index)
-        return String(item.fileName || "").toLowerCase().indexOf(query) >= 0
-                || String(item.path || "").toLowerCase().indexOf(query) >= 0
+        return true
     }
     function selectIndex(index, modifiers) {
         let next = selectedIndices.slice()
@@ -274,53 +269,19 @@ Rectangle {
                 onClicked: FilenameProcessor.clear()
             }
             Item { Layout.fillWidth: true }
-            TextField {
-                Layout.preferredWidth: 330
-                Layout.preferredHeight: 40
-                leftPadding: 38
-                rightPadding: 40
-                placeholderText: qsTr("搜索文件名、所在目录...")
-                onTextChanged: page.searchText = text
-                Item {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 18
-                    height: 18
-                    Rectangle {
-                        width: 12
-                        height: 12
-                        radius: 6
-                        color: "transparent"
-                        border.color: Theme.iconSecondary
-                        border.width: 1.5
-                    }
-                    Rectangle {
-                        x: 11
-                        y: 11
-                        width: 7
-                        height: 1.5
-                        radius: 1
-                        rotation: 45
-                        transformOrigin: Item.Left
-                        color: Theme.iconSecondary
-                    }
-                }
-                ToolButton {
-                    objectName: "filenameIssueFilterButton"
-                    anchors.right: parent.right
-                    anchors.rightMargin: 4
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 34
-                    height: 34
+            ButtonGroup { id: filenameFilterGroup }
+            Repeater {
+                model: [
+                    { label: qsTr("全部"), issues: false },
+                    { label: qsTr("警告 / 错误"), issues: true }
+                ]
+                Button {
+                    objectName: index === 1 ? "filenameIssueFilterButton" : ""
                     checkable: true
-                    checked: page.issueFilterEnabled
-                    icon.source: Theme.icon("equalizer-line")
-                    icon.color: checked ? Theme.cyan : Theme.iconPrimary
-                    ToolTip.visible: hovered
-                    ToolTip.text: checked ? qsTr("显示全部文件")
-                                              : qsTr("仅显示警告和错误")
-                    onToggled: page.issueFilterEnabled = checked
+                    checked: page.issueFilterEnabled === modelData.issues
+                    ButtonGroup.group: filenameFilterGroup
+                    text: modelData.label
+                    onClicked: page.issueFilterEnabled = modelData.issues
                 }
             }
             }

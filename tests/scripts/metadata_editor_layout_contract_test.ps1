@@ -8,13 +8,17 @@ $page = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/c
 
 foreach ($control in @(
     'metadataFilePanel', 'metadataInspectorPanel', 'metadataBottomBar',
-    'metadataSearchField', 'metadataStatusFilter',
+    'metadataStatusFilter',
     'metadataExportCurrentListButton', 'metadataPreflightDecisionDialog',
     'metadataPreflightButton', 'metadataExportResultsButton',
     'metadataApplyButton', 'metadataCoverSection', 'metadataChangePreview')) {
-    if ($page -notmatch ('objectName:\s*"' + $control + '"')) {
+    if ($page -notmatch ('objectName:\s*(?:index\s*===\s*0\s*\?\s*)?"' + $control + '"')) {
         throw "Missing reference metadata control: $control"
     }
+}
+
+if ($page -match 'metadataSearchField') {
+    throw 'Metadata status filters must be directly visible without a search field.'
 }
 
 foreach ($field in @('title', 'artist', 'album', 'albumArtist', 'genre',

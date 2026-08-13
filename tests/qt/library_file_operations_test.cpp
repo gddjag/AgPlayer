@@ -9,6 +9,7 @@ class LibraryFileOperationsTest final : public QObject {
     Q_OBJECT
 private slots:
     void renamesCopiesMovesAndRelocatesWithoutSilentOverwrite();
+    void trashTracksReportsPartialFailureWithoutDroppingLibraryRows();
 };
 
 void LibraryFileOperationsTest::renamesCopiesMovesAndRelocatesWithoutSilentOverwrite()
@@ -64,6 +65,38 @@ void LibraryFileOperationsTest::renamesCopiesMovesAndRelocatesWithoutSilentOverw
     QCOMPARE(library.trackForId(QStringLiteral("track"))
                  .value(QStringLiteral("path")).toString(),
              QDir::fromNativeSeparators(QFileInfo(relocated).absoluteFilePath()));
+}
+
+void LibraryFileOperationsTest::trashTracksReportsPartialFailureWithoutDroppingLibraryRows()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString removable = dir.filePath(QStringLiteral("trash-me.mp3"));
+    QFile file(removable);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("audio"), qint64{5});
+    file.close();
+
+    TrackRecord good;
+    good.trackId = QStringLiteral("good");
+    good.path = removable;
+    good.available = true;
+    TrackRecord missing;
+    missing.trackId = QStringLiteral("missing");
+    missing.path = dir.filePath(QStringLiteral("missing.mp3"));
+    missing.available = false;
+    LibraryModel library;
+    library.replaceAll({good, missing});
+    LibraryFileOperations operations;
+    operations.setLibraryModel(&library);
+
+    const QVariantMap result = operations.trashTracks(
+        {QStringLiteral("good"), QStringLiteral("missing")});
+    QCOMPARE(result.value(QStringLiteral("successCount")).toInt(), 1);
+    QCOMPARE(result.value(QStringLiteral("failureCount")).toInt(), 1);
+    QCOMPARE(result.value(QStringLiteral("failures")).toList().size(), 1);
+    QVERIFY(library.trackForId(QStringLiteral("good")).isEmpty());
+    QVERIFY(!library.trackForId(QStringLiteral("missing")).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(LibraryFileOperationsTest)

@@ -13,7 +13,6 @@ Rectangle {
     property var selectedIndices: []
     property int selectionAnchor: -1
     property int entryRevision: 0
-    property string searchText: ""
     property string sortKey: "fileName"
     property bool sortAscending: true
     property string statusFilter: "all"
@@ -67,15 +66,6 @@ Rectangle {
         }
         return null
     }
-    function matchesSearch(index) {
-        const query = searchText.trim().toLowerCase()
-        if (query.length === 0) return true
-        const item = entry(index)
-        return String(item.fileName || "").toLowerCase().indexOf(query) >= 0
-                || String(item.title || "").toLowerCase().indexOf(query) >= 0
-                || String(item.artist || "").toLowerCase().indexOf(query) >= 0
-                || String(item.album || "").toLowerCase().indexOf(query) >= 0
-    }
     function rowStatus(index) {
         const item = entry(index)
         const result = resultForPath(item.path)
@@ -89,7 +79,6 @@ Rectangle {
         entryRevision
         const rows = []
         for (let index = 0; index < MetadataEditor.fileCount; ++index) {
-            if (!matchesSearch(index)) continue
             if (statusFilter !== "all" && rowStatus(index) !== statusFilter) continue
             rows.push(index)
         }
@@ -395,28 +384,23 @@ Rectangle {
                 onClicked: MetadataEditor.clear()
             }
             Item { Layout.fillWidth: true }
-            TextField {
-                objectName: "metadataSearchField"
-                Layout.preferredWidth: 260
-                placeholderText: qsTr("搜索文件名、标题、艺术家或专辑")
-                leftPadding: 12
-                rightPadding: 12
-                onTextChanged: page.searchText = text
-            }
-            ComboBox {
-                id: metadataStatusFilter
-                objectName: "metadataStatusFilter"
-                Layout.preferredWidth: 116
-                textRole: "text"
-                valueRole: "value"
+            ButtonGroup { id: metadataStatusFilterGroup }
+            Repeater {
                 model: [
-                    { text: qsTr("全部状态"), value: "all" },
+                    { text: qsTr("全部"), value: "all" },
                     { text: qsTr("就绪"), value: "ready" },
                     { text: qsTr("支持"), value: "supported" },
                     { text: qsTr("已修改"), value: "modified" },
                     { text: qsTr("失败"), value: "failed" }
                 ]
-                onCurrentValueChanged: page.statusFilter = currentValue || "all"
+                Button {
+                    objectName: index === 0 ? "metadataStatusFilter" : ""
+                    checkable: true
+                    checked: page.statusFilter === modelData.value
+                    ButtonGroup.group: metadataStatusFilterGroup
+                    text: modelData.text
+                    onClicked: page.statusFilter = modelData.value
+                }
             }
         }
 

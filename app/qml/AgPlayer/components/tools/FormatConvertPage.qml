@@ -11,7 +11,7 @@ Rectangle {
     focus: true
 
     property var converter: FormatConverter
-    property string outputDirectory: ""
+    property string outputDirectory: SettingsController.defaultOutputDirectory
 
     function addCurrentPlayerTrack() {
         const urls = []
@@ -86,6 +86,7 @@ Rectangle {
         FolderDialog {
             onAccepted: {
                 page.outputDirectory = selectedFolder.toString().replace(/^file:\/+/, "")
+                SettingsController.defaultOutputDirectory = page.outputDirectory
                 destroy()
             }
             onRejected: destroy()
@@ -167,32 +168,20 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
-
-                TextField {
-                    id: searchField
-                    objectName: "formatSearchField"
-                    Layout.preferredWidth: 360
-                    Layout.preferredHeight: 40
-                    placeholderText: qsTr("搜索文件名、格式或标签...")
-                    color: "#d7e0e6"
-                    onTextChanged: converter.filteredTaskModel.query = text
-                    background: Rectangle {
-                        color: "#09141c"
-                        border.color: searchField.activeFocus ? "#1688ff" : "#263b49"
-                        radius: 6
-                    }
-                    leftPadding: 16
-                }
-                ToolButton {
-                    objectName: "formatFilterButton"
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    icon.source: Theme.icon("equalizer-line")
-                    onClicked: filterMenu.open()
-                    background: Rectangle {
-                        color: parent.hovered ? "#172a37" : "#09141c"
-                        border.color: "#263b49"
-                        radius: 6
+                Repeater {
+                    model: [
+                        { key: "All", label: qsTr("全部") },
+                        { key: "Converting", label: qsTr("转换中") },
+                        { key: "Done", label: qsTr("已完成") },
+                        { key: "Error", label: qsTr("失败") },
+                        { key: "Cancelled", label: qsTr("已取消") }
+                    ]
+                    Button {
+                        objectName: index === 0 ? "formatStatusFilters" : ""
+                        checkable: true
+                        checked: converter.filteredTaskModel.statusFilter === modelData.key
+                        text: modelData.label
+                        onClicked: converter.filteredTaskModel.statusFilter = modelData.key
                     }
                 }
             }
@@ -286,27 +275,6 @@ Rectangle {
                 }
 
                 Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: "#263b49" }
-
-                ComboBox {
-                    id: parallelBox
-                    objectName: "converterParallelJobsBox"
-                    Layout.preferredWidth: 160
-                    Layout.preferredHeight: 46
-                    model: [1, 2, 4]
-                    currentIndex: 2
-                    displayText: qsTr("并发  %1").arg(currentValue)
-                    onActivated: converter.parallelJobs = currentValue
-                }
-
-                Button {
-                    Layout.preferredWidth: 310
-                    Layout.preferredHeight: 46
-                    text: page.outputDirectory.length > 0
-                          ? qsTr("输出目录  %1").arg(page.outputDirectory)
-                          : qsTr("选择输出目录")
-                    icon.source: Theme.icon("folder-open-line")
-                    onClicked: outputDialogComponent.createObject(page).open()
-                }
 
                 Item { Layout.fillWidth: true }
 

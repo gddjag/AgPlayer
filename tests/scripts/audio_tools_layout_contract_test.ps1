@@ -171,7 +171,7 @@ if ($formatPage -notmatch 'enabled:\s*!converter\.busy[\s\S]{0,140}PlaybackContr
     throw 'The converter player-import action must only be enabled while its controller can accept work.'
 }
 foreach ($control in @(
-    'formatToolbar', 'formatSearchField', 'formatStatusFilters',
+    'formatToolbar', 'formatStatusFilters',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
     'formatOutputFormatGroup', 'formatEncodingSettingsGroup',
     'formatOutputOptionsGroup', 'formatTotalProgress')) {
