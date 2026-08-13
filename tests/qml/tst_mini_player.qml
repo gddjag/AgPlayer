@@ -236,6 +236,20 @@ TestCase {
         SettingsController.waveformMode = previousMode
     }
 
+    function test_mini_volume_flyout_retracts_after_two_seconds_even_after_slider_focus() {
+        var control = findChild(miniPlayer, "miniVolumeControl")
+        var slider = findChild(miniPlayer, "miniVolumeSlider")
+        var closeTimer = findChild(miniPlayer, "miniVolumeCloseTimer")
+        verify(control && slider && closeTimer)
+        control.expandedForQa = true
+        slider.forceActiveFocus()
+        closeTimer.restart()
+        wait(1600)
+        verify(control.expandedForQa)
+        wait(550)
+        tryVerify(function() { return !control.expandedForQa }, 300)
+    }
+
     function test_native_close_routes_through_window_controller() {
         miniPlayer.visible = true
         var before = windowController.closeCalls

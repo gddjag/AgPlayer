@@ -326,16 +326,21 @@ Rectangle {
                     Layout.preferredHeight: root.minimalHeight ? 13 : 18
                     visible: true
 
-                    Row {
+                    Item {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width
-                        spacing: Theme.spacingMd
+                        height: parent.height
 
                         Item {
-                            width: Math.max(0, parent.width
-                                            - (root.minimalHeight ? 55 : 75)
-                                            - parent.spacing)
+                            id: artistAlbumClip
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(
+                                       artistAlbumText.implicitWidth,
+                                       Math.max(0, parent.width
+                                                - trackRating.implicitWidth
+                                                - Theme.spacingMd))
                             height: artistAlbumText.implicitHeight
                             clip: true
                             Text {
@@ -357,7 +362,11 @@ Rectangle {
                         }
 
                         Row {
+                            id: trackRating
                             objectName: "trackRating"
+                            anchors.left: artistAlbumClip.right
+                            anchors.leftMargin: Theme.spacingMd
+                            anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
                             visible: true
 
@@ -515,6 +524,28 @@ Rectangle {
                     density: waveform.density
                     lineWidth: waveform.lineWidth
                 }
+            }
+
+            MouseArea {
+                id: waveformInteractionSurface
+                objectName: "waveformInteractionSurface"
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                z: 5
+
+                function updatePreview(mouse) {
+                    waveform.setHoverPositionForInteraction(
+                                waveform.timeForX(mouse.x))
+                }
+
+                onPositionChanged: mouse => updatePreview(mouse)
+                onPressed: mouse => updatePreview(mouse)
+                onReleased: mouse => {
+                    updatePreview(mouse)
+                    PlaybackController.seek(waveform.timeForX(mouse.x))
+                }
+                onExited: waveform.setHoverPositionForInteraction(-1)
             }
 
             Rectangle {

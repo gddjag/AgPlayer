@@ -28,7 +28,7 @@ private slots:
     void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
     void waveformAppearanceSettingsClampPersistAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
-    void migratesRetiredLibraryData();
+    void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
     void editSessionCanCommitOrCancel();
@@ -243,7 +243,8 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformSolidBaseColor(), QStringLiteral("#9098a6"));
         QCOMPARE(settings.waveformSolidProgressColor(), QStringLiteral("#d27722"));
         QCOMPARE(settings.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
-        QCOMPARE(settings.waveformPlaybackGuide(), true);
+        QCOMPARE(settings.waveformMode(), 0);
+        QCOMPARE(settings.waveformPlaybackGuide(), false);
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
@@ -278,7 +279,8 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformSolidBaseColor(), QStringLiteral("#9098a6"));
     QCOMPARE(reloaded.waveformSolidProgressColor(), QStringLiteral("#d27722"));
     QCOMPARE(reloaded.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
-    QCOMPARE(reloaded.waveformPlaybackGuide(), true);
+    QCOMPARE(reloaded.waveformMode(), 0);
+    QCOMPARE(reloaded.waveformPlaybackGuide(), false);
     persisted.clear();
 }
 
@@ -324,7 +326,7 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
     persisted.clear();
 }
 
-void SettingsControllerTest::migratesRetiredLibraryData()
+void SettingsControllerTest::retiresLegacySmartPlaylists()
 {
     const QDir appData(
         QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
@@ -332,33 +334,18 @@ void SettingsControllerTest::migratesRetiredLibraryData()
     const QString smart =
         appData.filePath(QStringLiteral("smart-playlists.json"));
     const QString retired = smart + QStringLiteral(".retired.bak");
-    const QString oldMaintenance =
-        appData.filePath(QStringLiteral("library-maintenance.json"));
-    const QString manager =
-        appData.filePath(QStringLiteral("library-manager.json"));
     QFile::remove(smart);
     QFile::remove(retired);
-    QFile::remove(oldMaintenance);
-    QFile::remove(manager);
 
     QFile smartFile(smart);
     QVERIFY(smartFile.open(QIODevice::WriteOnly));
     QCOMPARE(smartFile.write("{\"legacy\":true}"), 15);
     smartFile.close();
-    QFile maintenanceFile(oldMaintenance);
-    QVERIFY(maintenanceFile.open(QIODevice::WriteOnly));
-    QCOMPARE(maintenanceFile.write("{\"folders\":[]}"), 14);
-    maintenanceFile.close();
-
     SettingsController settings;
     QVERIFY(!QFile::exists(smart));
     QVERIFY(QFile::exists(retired));
-    QVERIFY(QFile::exists(manager));
-    QCOMPARE(settings.libraryManagerPath(), manager);
 
     QFile::remove(retired);
-    QFile::remove(oldMaintenance);
-    QFile::remove(manager);
 }
 
 void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()

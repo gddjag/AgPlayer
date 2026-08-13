@@ -60,6 +60,11 @@ if ($mainSource -notmatch 'assets/brand/agplayer\.ico') {
 if ($mainSource -notmatch 'SetCurrentProcessExplicitAppUserModelID') {
     throw "Windows taskbar identity must use a stable AppUserModelID"
 }
+if ($mainSource -notmatch 'SHGetPropertyStoreForWindow' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_ID' -or
+    $mainSource -notmatch 'window->setIcon') {
+    throw "Every native top-level window must publish the stable taskbar identity and icon"
+}
 if ($installer -notmatch 'AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Installed shortcuts must share the stable taskbar AppUserModelID"
 }

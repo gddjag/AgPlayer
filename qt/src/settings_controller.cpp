@@ -39,19 +39,11 @@ QString normalizedColor(const QString& value)
     return color.isValid() ? color.name(QColor::HexRgb) : QString();
 }
 
-void migrateRetiredLibraryData()
+void retireLegacySmartPlaylists()
 {
     const QDir appData(
         QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     QDir().mkpath(appData.path());
-
-    const QString oldMaintenance =
-        appData.filePath(QStringLiteral("library-maintenance.json"));
-    const QString libraryManager =
-        appData.filePath(QStringLiteral("library-manager.json"));
-    if (QFile::exists(oldMaintenance) && !QFile::exists(libraryManager)) {
-        QFile::copy(oldMaintenance, libraryManager);
-    }
 
     const QString smartPlaylists =
         appData.filePath(QStringLiteral("smart-playlists.json"));
@@ -68,7 +60,7 @@ SettingsController::SettingsController(QObject* parent)
       settings_(this),
       fileAssociationController_(std::make_unique<FileAssociationController>(this))
 {
-    migrateRetiredLibraryData();
+    retireLegacySmartPlaylists();
     load();
     applyAutoStartWithWindows();
     applyFileAssociations();
@@ -155,12 +147,6 @@ int SettingsController::currentCacheSizeMB() const noexcept { return currentCach
 // About getters
 QString SettingsController::version() const { return QStringLiteral("v1.0"); }
 QString SettingsController::releaseDate() const { return QStringLiteral("2026.10"); }
-QString SettingsController::libraryManagerPath() const
-{
-    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
-        .filePath(QStringLiteral("library-manager.json"));
-}
-
 // General setters
 void SettingsController::setAutoStartWithWindows(bool value)
 {
@@ -799,7 +785,7 @@ void SettingsController::resetToDefaults()
 
 void SettingsController::resetWaveformDefaults()
 {
-    setWaveformMode(1);
+    setWaveformMode(0);
     setWaveformHeight(0.8);
     setWaveformDensity(2.0);
     setWaveformThickness(1.0);
@@ -811,7 +797,7 @@ void SettingsController::resetWaveformDefaults()
     setWaveformRgbMiddleColor(QStringLiteral("#7b2ff7"));
     setWaveformRgbEndColor(QStringLiteral("#e62e9b"));
     setWaveformRgbProgress(true);
-    setWaveformPlaybackGuide(true);
+    setWaveformPlaybackGuide(false);
     setWaveformCanvasHeight(78);
     setWaveformCanvasLocked(true);
     setSpectrumColorMode(0);
@@ -1530,7 +1516,7 @@ void SettingsController::restoreDefaults()
 
     themeMode_ = 0;
     glassEffect_ = true;
-    waveformMode_ = 1;
+    waveformMode_ = 0;
     waveformHeight_ = 0.8;
     waveformDensity_ = 2.0;
     waveformThickness_ = 1.0;
@@ -1543,7 +1529,7 @@ void SettingsController::restoreDefaults()
     waveformRgbEndColor_ = QStringLiteral("#e62e9b");
     waveformRgbProgress_ = false;
     waveformHoverTimePreview_ = true;
-    waveformPlaybackGuide_ = true;
+    waveformPlaybackGuide_ = false;
     waveformCanvasHeight_ = 78;
     waveformCanvasLocked_ = true;
     spectrumColorMode_ = 0;

@@ -297,6 +297,8 @@ Rectangle {
                 }
                 Item {
                     id: volumeControl
+                    objectName: "miniVolumeControl"
+                    property alias expandedForQa: volumeControl.expanded
                     Layout.preferredWidth: 28
                     Layout.preferredHeight: 28
                     property bool expanded: false
@@ -313,8 +315,7 @@ Rectangle {
                         // mute button to the right-hand volume slider.
                         interval: 2000
                         onTriggered: {
-                            if (!volumeSlider.pressed && !volumeSlider.activeFocus
-                                    && !flyoutHover.hovered)
+                            if (!volumeSlider.pressed && !flyoutHover.hovered)
                                 volumeControl.expanded = false
                         }
                     }
