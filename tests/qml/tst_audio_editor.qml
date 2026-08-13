@@ -69,6 +69,43 @@ TestCase {
         compare(findChild(transport, "transportZoomControl"), null)
     }
 
+    function test_editCommandsExposeMouseHelpAndConventionalShortcuts() {
+        const commandBar = findChild(page, "editorCommandBar")
+        verify(commandBar)
+        const crop = findChild(commandBar, "editorCommand_cropToSelection")
+        const silence = findChild(commandBar, "editorCommand_silenceSelection")
+        const fadeIn = findChild(commandBar, "editorCommand_fadeIn")
+        const fadeOut = findChild(commandBar, "editorCommand_fadeOut")
+        verify(crop && silence && fadeIn && fadeOut)
+        compare(crop.shortcutText, "Ctrl+T")
+        compare(silence.shortcutText, "Ctrl+L")
+        compare(fadeIn.shortcutText, "Ctrl+Alt+I")
+        compare(fadeOut.shortcutText, "Ctrl+Alt+O")
+        verify(crop.hoverText.indexOf(crop.label) >= 0)
+        verify(crop.hoverText.indexOf(crop.shortcutText) >= 0)
+        verify(silence.hoverText.indexOf(silence.shortcutText) >= 0)
+    }
+
+    function test_keyboardAndMouseEditingInteractions() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        page.forceActiveFocus()
+        keyClick(Qt.Key_A, Qt.ControlModifier)
+        compare(AudioEditorController.selectionFrames, 96000)
+        keyClick(Qt.Key_M, Qt.ControlModifier)
+        compare(AudioEditorController.markers.length, 1)
+        keyClick(Qt.Key_L, Qt.ControlModifier)
+        verify(AudioEditorController.modified)
+
+        const interaction = findChild(page, "editorWaveformInteraction")
+        verify(interaction)
+        const before = AudioEditorController.viewport.visibleFrameCount
+        mouseWheel(interaction, interaction.width / 2, interaction.height / 2,
+                   0, 120, Qt.NoButton, Qt.ControlModifier)
+        tryVerify(function() {
+            return AudioEditorController.viewport.visibleFrameCount < before
+        })
+    }
+
     function test_noPageLevelHorizontalOverflow_data() {
         return [
             {tag: "1280x720", w: 1280, h: 720},

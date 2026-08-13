@@ -124,7 +124,7 @@ public:
     [[nodiscard]] bool timePitchPreviewActive() const noexcept
     { return time_pitch_preview_active_; }
     [[nodiscard]] QVariantList recordingDevices() const { return recording_devices_; }
-    [[nodiscard]] QVariantList exportFormats() const;
+    [[nodiscard]] QVariantList exportFormats() const { return export_formats_; }
     [[nodiscard]] QString recordingDeviceId() const { return recording_device_id_; }
     [[nodiscard]] int recordingSampleRate() const noexcept { return recording_sample_rate_; }
     [[nodiscard]] int recordingChannels() const noexcept { return recording_channels_; }
@@ -210,6 +210,7 @@ signals:
 
 private:
     void refreshActions();
+    [[nodiscard]] QVariantList buildExportFormats() const;
     void rebuildEditorPeaks();
     bool preparePlayback();
     bool runDocumentCommand(const agplayer::editor::EditCommand& command,
@@ -251,6 +252,7 @@ private:
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
+    QVariantList export_formats_;
     QString recording_device_id_;
     QString recording_directory_;
     int recording_sample_rate_{48'000};

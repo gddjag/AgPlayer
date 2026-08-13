@@ -84,6 +84,7 @@ AudioEditorController::AudioEditorController(
         (void)agplayer::editor::RecordingSession::recoverIncomplete(
             std::filesystem::path(recording_directory_.toStdWString()));
     }
+    export_formats_ = buildExportFormats();
     refreshRecordingDevices();
     refreshActions();
 }
@@ -125,7 +126,7 @@ qint64 AudioEditorController::recordingFrames() const noexcept
     return recording_session_.framesCaptured();
 }
 
-QVariantList AudioEditorController::exportFormats() const
+QVariantList AudioEditorController::buildExportFormats() const
 {
     struct Candidate final {
         const char* key;

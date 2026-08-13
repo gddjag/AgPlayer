@@ -283,15 +283,38 @@ Rectangle {
     focus: true
     Keys.onPressed: event => {
         const control = (event.modifiers & Qt.ControlModifier) !== 0
-        if (control && event.key === Qt.Key_O) openDialog.open()
+        const alt = (event.modifiers & Qt.AltModifier) !== 0
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        if (control && alt && event.key === Qt.Key_I) AudioEditorController.triggerAction("editor.fadeIn")
+        else if (control && alt && event.key === Qt.Key_O) AudioEditorController.triggerAction("editor.fadeOut")
+        else if (control && shift && event.key === Qt.Key_E) AudioEditorController.triggerAction("editor.export")
+        else if (control && event.key === Qt.Key_O) openDialog.open()
+        else if (control && event.key === Qt.Key_R) AudioEditorController.triggerAction("editor.newRecording")
         else if (control && event.key === Qt.Key_S) AudioEditorController.save()
         else if (control && event.key === Qt.Key_Z) AudioEditorController.triggerAction("editor.undo")
         else if (control && event.key === Qt.Key_Y) AudioEditorController.triggerAction("editor.redo")
         else if (control && event.key === Qt.Key_X) AudioEditorController.triggerAction("editor.cut")
         else if (control && event.key === Qt.Key_C) AudioEditorController.triggerAction("editor.copy")
         else if (control && event.key === Qt.Key_V) AudioEditorController.triggerAction("editor.paste")
+        else if (control && event.key === Qt.Key_T) AudioEditorController.triggerAction("editor.cropToSelection")
+        else if (control && event.key === Qt.Key_L) AudioEditorController.triggerAction("editor.silenceSelection")
+        else if (control && event.key === Qt.Key_M) AudioEditorController.addMarker(
+            qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
+            AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
+        else if (control && event.key === Qt.Key_A) AudioEditorController.setSelection(
+            0, AudioEditorController.totalFrames)
+        else if (control && event.key === Qt.Key_Left) AudioEditorController.seekPreviousMarker()
+        else if (control && event.key === Qt.Key_Right) AudioEditorController.seekNextMarker()
         else if (event.key === Qt.Key_Delete) AudioEditorController.triggerAction("editor.deleteSelection")
         else if (event.key === Qt.Key_Space) AudioEditorController.playPause()
+        else if (event.key === Qt.Key_Left) AudioEditorController.seekMs(
+            Math.max(0, AudioEditorController.positionMs - (shift ? 1000 : 10)))
+        else if (event.key === Qt.Key_Right) AudioEditorController.seekMs(
+            Math.min(AudioEditorController.durationMs,
+                     AudioEditorController.positionMs + (shift ? 1000 : 10)))
+        else if (event.key === Qt.Key_Home) AudioEditorController.seekMs(0)
+        else if (event.key === Qt.Key_End) AudioEditorController.seekMs(
+            AudioEditorController.durationMs)
         else if (event.key === Qt.Key_Escape) {
             if (AudioEditorController.recording) AudioEditorController.cancelRecording()
             else if (AudioEditorController.busy) AudioEditorController.cancelOperation()

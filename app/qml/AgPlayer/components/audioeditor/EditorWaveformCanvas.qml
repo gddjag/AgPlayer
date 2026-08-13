@@ -189,12 +189,14 @@ Rectangle {
             }
 
             MouseArea {
+                objectName: "editorWaveformInteraction"
                 anchors.fill: parent
                 anchors.leftMargin: 26
                 anchors.rightMargin: 12
                 enabled: AudioEditorController.hasDocument
                 property real pressX: 0
                 onPressed: mouse => {
+                    canvas.forceActiveFocus()
                     pressX = mouse.x
                     AudioEditorController.seekMs(
                         canvas.frameAt(mouse.x) * 1000
@@ -209,6 +211,22 @@ Rectangle {
                             Math.min(first, last), Math.max(first, last))
                 }
                 onDoubleClicked: AudioEditorController.clearSelection()
+                onWheel: wheel => {
+                    if ((wheel.modifiers & Qt.ControlModifier) === 0)
+                        return
+                    const total = Math.max(1, AudioEditorController.totalFrames)
+                    const current = Math.max(1,
+                        AudioEditorController.viewport.visibleFrameCount)
+                    const factor = wheel.angleDelta.y > 0 ? 0.8 : 1.25
+                    const next = Math.max(256, Math.min(total,
+                        Math.round(current * factor)))
+                    const anchorFrame = canvas.frameAt(wheel.x)
+                    const anchorRatio = wheel.x / Math.max(1, width)
+                    const start = Math.max(0, Math.min(total - next,
+                        Math.round(anchorFrame - next * anchorRatio)))
+                    AudioEditorController.viewport.setVisibleRange(start, start + next)
+                    wheel.accepted = true
+                }
             }
         }
     }

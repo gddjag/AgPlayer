@@ -4,109 +4,109 @@
 <context>
     <name>AudioEditorController</name>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="138"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="139"/>
         <source>WAV PCM 24-bit</source>
         <translation>WAV PCM 24-bit</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="139"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="140"/>
         <source>WAV 音频 (*.wav)</source>
         <translation>WAV 音频 (*.wav)</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="140"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="141"/>
         <source>FLAC 无损</source>
         <translation>FLAC 无损</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="141"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="142"/>
         <source>FLAC 音频 (*.flac)</source>
         <translation>FLAC 音频 (*.flac)</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="143"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="144"/>
         <source>MP3 音频 (*.mp3)</source>
         <translation>MP3 音频 (*.mp3)</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="145"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="146"/>
         <source>AAC 音频 (*.m4a)</source>
         <translation>AAC 音频 (*.m4a)</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="148"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="149"/>
         <source>Opus 音频 (*.opus)</source>
         <translation>Opus 音频 (*.opus)</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="216"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="217"/>
         <source>未命名音频</source>
         <translation>未命名音频</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="264"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="265"/>
         <source>请选择本地音频文件</source>
         <translation>请选择本地音频文件</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="327"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="328"/>
         <source>保存路径无效</source>
         <translation>保存路径无效</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="349"/>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="425"/>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="644"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="350"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="426"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="645"/>
         <source>操作已取消</source>
         <translation>操作已取消</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="381"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="382"/>
         <source>导出范围或路径无效</source>
         <translation>导出范围或路径无效</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="390"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="391"/>
         <source>导出参数无效</source>
         <translation>导出参数无效</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="560"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="561"/>
         <source>BPM 检测失败</source>
         <translation>BPM 检测失败</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="652"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="653"/>
         <source>无法提交速度与音高处理结果</source>
         <translation>无法提交速度与音高处理结果</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="710"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="711"/>
         <source>请选择录音保存位置</source>
         <translation>请选择录音保存位置</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="724"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="725"/>
         <source>无法启动录音设备，请检查设备与权限</source>
         <translation>无法启动录音设备，请检查设备与权限</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="786"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="787"/>
         <source>录音完成，但无法插入当前文档</source>
         <translation>录音完成，但无法插入当前文档</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="824"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="825"/>
         <source>录音已取消</source>
         <translation>录音已取消</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="909"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="910"/>
         <source>无法创建预览目录</source>
         <translation>无法创建预览目录</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="940"/>
+        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="941"/>
         <source>无法载入编辑预览</source>
         <translation>无法载入编辑预览</translation>
     </message>
@@ -252,22 +252,22 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="161"/>
         <source>标记管理…</source>
-        <translation type="unfinished"></translation>
+        <translation>标记管理…</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="196"/>
         <source>标记管理</source>
-        <translation type="unfinished"></translation>
+        <translation>标记管理</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="225"/>
         <source>跳转</source>
-        <translation type="unfinished"></translation>
+        <translation>跳转</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="233"/>
         <source>删除标记</source>
-        <translation type="unfinished"></translation>
+        <translation>删除标记</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="248"/>
@@ -290,7 +290,12 @@
         <translation>当前音频尚未保存。继续将舍弃这些更改。</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="323"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="302"/>
+        <source>标记 %1</source>
+        <translation>标记 %1</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="346"/>
         <source>取消</source>
         <translation>取消</translation>
     </message>
@@ -365,77 +370,77 @@
 <context>
     <name>EditorCommandBar</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="56"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="61"/>
         <source>打开</source>
         <translation>打开</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="57"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="62"/>
         <source>新建录音</source>
         <translation>新建录音</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="58"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="63"/>
         <source>保存</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="60"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="65"/>
         <source>撤销</source>
         <translation>撤销</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="61"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="66"/>
         <source>重做</source>
         <translation>重做</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="63"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="68"/>
         <source>剪切</source>
         <translation>剪切</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="64"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="69"/>
         <source>复制</source>
         <translation>复制</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="65"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="70"/>
         <source>粘贴</source>
         <translation>粘贴</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="66"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="71"/>
         <source>删除</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="68"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="73"/>
         <source>裁剪</source>
         <translation>裁剪</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="69"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="74"/>
         <source>静音</source>
         <translation>静音</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="70"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="75"/>
         <source>淡入</source>
         <translation>淡入</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="71"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="76"/>
         <source>淡出</source>
         <translation>淡出</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="72"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="77"/>
         <source>更多</source>
         <translation>更多</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="74"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="79"/>
         <source>导出</source>
         <translation>导出</translation>
     </message>
@@ -482,7 +487,7 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="32"/>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="139"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="140"/>
         <source>暂停</source>
         <translation>暂停</translation>
     </message>
@@ -497,51 +502,51 @@
         <translation>停止</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="85"/>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="92"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="86"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="93"/>
         <source>添加标记</source>
-        <translation type="unfinished">添加标记</translation>
+        <translation>添加标记</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="89"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="90"/>
         <source>标记 %1</source>
-        <translation type="unfinished">标记 %1</translation>
+        <translation>标记 %1</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="106"/>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="111"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="107"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="112"/>
         <source>上一标记</source>
         <translation>上一标记</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="125"/>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="130"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="126"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="131"/>
         <source>下一标记</source>
         <translation>下一标记</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="139"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="140"/>
         <source>播放</source>
         <translation>播放</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="153"/>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="158"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="154"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="159"/>
         <source>循环</source>
         <translation>循环</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="164"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="165"/>
         <source>当前位置</source>
         <translation>当前位置</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="165"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="166"/>
         <source>选区长度</source>
         <translation>选区长度</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="167"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml" line="168"/>
         <source>总时长</source>
         <translation>总时长</translation>
     </message>
@@ -3643,7 +3648,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/TimePitchInspectorSection.qml" line="103"/>
         <source>预览中 · 应用处理</source>
-        <translation type="unfinished"></translation>
+        <translation>预览中 · 应用处理</translation>
     </message>
 </context>
 <context>

@@ -18,6 +18,10 @@ $recordingInspector = Get-Content -Raw -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml')
 $transportBar = Get-Content -Raw -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/EditorTransportBar.qml')
+$commandBar = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml')
+$waveformCanvas = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml')
 
 foreach ($control in @(
     'editorCommandBar', 'fileSummaryBar', 'editorWaveformCanvas',
@@ -69,6 +73,18 @@ foreach ($duplicate in @('volume-up-fill', 'setVolume\(', '波形缩放')) {
         throw "The transport bar still contains a duplicate player/overview control: $duplicate."
     }
 }
+foreach ($shortcut in @('Ctrl\+T', 'Ctrl\+L', 'Ctrl\+Alt\+I', 'Ctrl\+Alt\+O')) {
+    if ($commandBar -notmatch $shortcut) {
+        throw "The editor command bar is missing the shortcut: $shortcut."
+    }
+}
+if ($commandBar -notmatch 'ToolTip\.text:\s*hoverText') {
+    throw 'Editor command buttons must show function help and shortcut on hover.'
+}
+if ($waveformCanvas -notmatch 'onWheel:' -or
+    $waveformCanvas -notmatch 'Qt\.ControlModifier') {
+    throw 'The waveform canvas must support conventional Ctrl+wheel zoom.'
+}
 if ($transportBar -match 'Slider\s*\{\s*Layout\.preferredWidth:\s*90;\s*value:\s*0\.5;\s*enabled:\s*false') {
     throw 'The transport zoom control must be connected to the live editor viewport.'
 }
@@ -107,7 +123,7 @@ foreach ($preference in @(
 $audioEditorComponents = Get-Content -Raw -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml')
 if ($audioEditorComponents -notmatch 'Accessible\.name:\s*label' -or
-    $audioEditorComponents -notmatch 'ToolTip\.text:\s*label') {
+    $audioEditorComponents -notmatch 'ToolTip\.text:\s*hoverText') {
     throw 'Audio editor command actions need accessible names and tooltips.'
 }
 foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {

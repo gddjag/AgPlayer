@@ -31,9 +31,9 @@ Rectangle {
                 { key: "record", label: AudioEditorController.recording
                     ? (AudioEditorController.recordingPaused ? qsTr("继续") : qsTr("暂停"))
                     : qsTr("录音"), icon: "checkbox-blank-circle-fill",
-                  objectName: "transportRecord" },
+                  objectName: "transportRecord", shortcut: "Ctrl+R" },
                 { key: "stop", label: qsTr("停止"), icon: "checkbox-blank-line",
-                  objectName: "transportStop" }
+                  objectName: "transportStop", shortcut: "" }
             ]
             ColumnLayout {
                 required property var modelData
@@ -51,7 +51,8 @@ Rectangle {
                           : false
                     Accessible.name: modelData.label
                     ToolTip.visible: hovered
-                    ToolTip.text: modelData.label
+                    ToolTip.text: modelData.label + (modelData.shortcut.length > 0
+                        ? "  (" + modelData.shortcut + ")" : "")
                     onClicked: {
                         if (modelData.key === "record") {
                             if (!AudioEditorController.recording) transport.recordingRequested()
@@ -84,7 +85,7 @@ Rectangle {
                     && !AudioEditorController.busy
                 Accessible.name: qsTr("添加标记")
                 ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                ToolTip.text: Accessible.name + "  (Ctrl+M)"
                 onClicked: AudioEditorController.addMarker(
                     qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
                     AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
@@ -105,7 +106,7 @@ Rectangle {
                     && !AudioEditorController.busy
                 Accessible.name: qsTr("上一标记")
                 ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                ToolTip.text: Accessible.name + "  (Ctrl+←)"
                 onClicked: AudioEditorController.seekPreviousMarker()
             }
             Label { text: qsTr("上一标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
@@ -124,7 +125,7 @@ Rectangle {
                     && !AudioEditorController.busy
                 Accessible.name: qsTr("下一标记")
                 ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                ToolTip.text: Accessible.name + "  (Ctrl+→)"
                 onClicked: AudioEditorController.seekNextMarker()
             }
             Label { text: qsTr("下一标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
@@ -167,9 +168,7 @@ Rectangle {
                 {label: qsTr("总时长"), value: timeText(AudioEditorController.durationMs)}
             ]
             ColumnLayout {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 96
-                Layout.maximumWidth: 156
+                Layout.preferredWidth: 104
                 Label {
                     text: modelData.value
                     color: index === 0 ? Theme.waveformGreen : Theme.primaryText

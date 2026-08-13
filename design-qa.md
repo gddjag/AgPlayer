@@ -25,7 +25,7 @@
 **Comparison history**
 
 - V3: active output/CBR/status controls were gray and shell labeling drifted from the reference.
-- Fix: added explicit blue checked-state styling and changed the first tool label to `轻度剪辑`.
+- Fix: added explicit blue checked-state styling and corrected the shell labeling used by that historical comparison.
 - Final: `format-converter-comparison-final.png` confirms the active-state and label fixes. No P0/P1/P2 issue remains.
 
 **Primary interactions tested**
@@ -50,7 +50,8 @@ final result: passed
 
 **Implementation evidence**
 
-- `D:\ai\AgPlayer\.worktrees\revised-ui\build\qa-audio-editor\audio-editor-final-v5-1672x942.png`
+- `D:\ai\AgPlayer\.worktrees\revised-ui\build\qa-audio-editor\audio-editor-final-v11-1672x942.png`
+- Combined comparison: `D:\ai\AgPlayer\.worktrees\revised-ui\build\qa-audio-editor\audio-editor-comparison-v11.png`
 - Viewport: 1672 x 942, Chinese, dark theme, real stereo WAV.
 
 **Findings**
@@ -58,7 +59,11 @@ final result: passed
 - Navigation order, command bar, one-line summary, single-track stereo waveform, selection, playhead, overview, transport and status bar match the reference hierarchy.
 - The right inspector contains only Recording and Speed/Pitch, both fully visible without page-level horizontal overflow.
 - Command actions use project icons, tooltips and accessible names; visible controls are live or correctly disabled.
+- The transport now prioritizes Add/Previous/Next Marker and removes duplicate volume/zoom controls; time readouts remain compact and readable.
+- Standard editing shortcuts and Ctrl+wheel waveform zoom are live and covered by QML interaction tests.
 - Font rendering and compact control metrics follow native Qt/Windows rather than pixel-copying the source image. P3 only.
-- Release gate remains open because the machine has no capture endpoint for real microphone QA and the unrelated main-window QML suite is not green.
+- The approved deviations from the reference are limited to removing bottom volume/duplicate zoom controls and adding direct marker controls.
+- No actionable P0/P1/P2 mismatch remains in the same-viewport combined comparison.
+- Release gates remain tracked separately: no capture endpoint is available for real microphone QA, and two unrelated full-suite tests are not green.
 
-final result: implementation passed; release acceptance blocked
+final result: passed
