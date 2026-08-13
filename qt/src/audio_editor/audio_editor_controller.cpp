@@ -50,6 +50,11 @@ QString local_path(const QUrl& url)
 
 } // namespace
 
+struct AudioEditorController::RecordingFinalizeResult final {
+    agplayer::editor::RecordingResult recording;
+    AudioFileAnalysis analysis;
+};
+
 AudioEditorController::AudioEditorController(
     const ag_audio_backend backend, QObject* parent)
     : QObject(parent), actions_(this), viewport_(this), backend_(backend)
@@ -94,6 +99,8 @@ AudioEditorController::~AudioEditorController()
     cancelOperation();
     if (write_watcher_) write_watcher_->future().waitForFinished();
     if (time_pitch_watcher_) time_pitch_watcher_->future().waitForFinished();
+    if (recording_start_watcher_) recording_start_watcher_->future().waitForFinished();
+    if (recording_stop_watcher_) recording_stop_watcher_->future().waitForFinished();
     if (recording()) (void)recording_session_.stop();
     if (player_) {
         ag_player_stop(player_);
@@ -711,7 +718,7 @@ bool AudioEditorController::startRecording(
         setError(tr("请选择录音保存位置"));
         return false;
     }
-    if (recording()) return false;
+    if (recording() || recording_start_watcher_ || recording_stop_watcher_) return false;
     stopPlayback();
     agplayer::editor::RecordingConfig config;
     config.output_path = std::filesystem::path(path.toStdWString());
@@ -721,28 +728,45 @@ bool AudioEditorController::startRecording(
     config.monitor = monitor;
     insert_recording_at_cursor_ = insertAtCursor && has_document_;
     recording_insert_frame_ = position_ms_ * sample_rate_ / 1'000;
-    if (!recording_session_.start(config)) {
-        setError(tr("无法启动录音设备，请检查设备与权限"));
-        return false;
-    }
-    QSettings settings;
-    settings.beginGroup(QStringLiteral("audioEditor"));
-    recording_directory_ = QFileInfo(path).absolutePath();
-    recording_device_id_ = deviceId;
-    recording_sample_rate_ = recordingSampleRate;
-    recording_channels_ = recordingChannels;
-    recording_monitor_ = monitor;
-    settings.setValue(QStringLiteral("recordingDirectory"), recording_directory_);
-    settings.setValue(QStringLiteral("recordingDeviceId"), recording_device_id_);
-    settings.setValue(QStringLiteral("recordingSampleRate"), recording_sample_rate_);
-    settings.setValue(QStringLiteral("recordingChannels"), recording_channels_);
-    settings.setValue(QStringLiteral("recordingMonitor"), recording_monitor_);
-    settings.endGroup();
-    emit recordingPreferencesChanged();
-    recording_timer_.start();
-    setState(EditorSessionState::Recording);
     setError({});
+    setState(EditorSessionState::Processing);
     emit recordingChanged();
+    auto* watcher = new QFutureWatcher<bool>(this);
+    recording_start_watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<bool>::finished, this,
+            [this, watcher, path, deviceId, recordingSampleRate,
+             recordingChannels, monitor] {
+        recording_start_watcher_ = nullptr;
+        const bool started = watcher->result();
+        watcher->deleteLater();
+        if (!started) {
+            setState(has_document_ ? EditorSessionState::Ready
+                                   : EditorSessionState::Empty);
+            setError(tr("无法启动录音设备，请检查设备与权限"));
+            emit recordingChanged();
+            return;
+        }
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("audioEditor"));
+        recording_directory_ = QFileInfo(path).absolutePath();
+        recording_device_id_ = deviceId;
+        recording_sample_rate_ = recordingSampleRate;
+        recording_channels_ = recordingChannels;
+        recording_monitor_ = monitor;
+        settings.setValue(QStringLiteral("recordingDirectory"), recording_directory_);
+        settings.setValue(QStringLiteral("recordingDeviceId"), recording_device_id_);
+        settings.setValue(QStringLiteral("recordingSampleRate"), recording_sample_rate_);
+        settings.setValue(QStringLiteral("recordingChannels"), recording_channels_);
+        settings.setValue(QStringLiteral("recordingMonitor"), recording_monitor_);
+        settings.endGroup();
+        emit recordingPreferencesChanged();
+        recording_timer_.start();
+        setState(EditorSessionState::Recording);
+        emit recordingChanged();
+    });
+    watcher->setFuture(QtConcurrent::run([this, config] {
+        return recording_session_.start(config);
+    }));
     return true;
 }
 
@@ -764,54 +788,66 @@ bool AudioEditorController::resumeRecording()
 
 bool AudioEditorController::stopRecording()
 {
-    if (!recording()) return false;
+    if (!recording() || recording_stop_watcher_) return false;
     setState(EditorSessionState::Finalizing);
     recording_timer_.stop();
-    const auto result = recording_session_.stop();
-    if (!result.success) {
-        setState(EditorSessionState::Error);
-        setError(QString::fromStdString(result.message));
-        emit recordingChanged();
-        return false;
-    }
-    const auto analysis = AudioFileAnalyzer::analyze(result.path, 2'048);
-    if (!analysis.success) {
-        setState(EditorSessionState::Error);
-        setError(QString::fromStdString(analysis.message));
-        emit recordingChanged();
-        return false;
-    }
-    if (insert_recording_at_cursor_) {
-        if (!document_.insertSource(analysis.source, recording_insert_frame_)) {
+    auto* watcher = new QFutureWatcher<RecordingFinalizeResult>(this);
+    recording_stop_watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<RecordingFinalizeResult>::finished, this,
+            [this, watcher] {
+        recording_stop_watcher_ = nullptr;
+        const RecordingFinalizeResult outcome = watcher->result();
+        watcher->deleteLater();
+        const auto& result = outcome.recording;
+        const auto& analysis = outcome.analysis;
+        if (!result.success || !analysis.success) {
             setState(EditorSessionState::Error);
-            setError(tr("录音完成，但无法插入当前文档"));
+            setError(QString::fromStdString(result.success
+                ? analysis.message : result.message));
             emit recordingChanged();
-            return false;
+            return;
         }
-        modified_ = true;
-        playback_path_.clear();
-        viewport_.setDocumentFrames(document_.totalFrames());
-        rebuildEditorPeaks();
-    } else {
-        document_ = AudioDocument::fromSource(analysis.source);
-        source_path_ = QString::fromStdWString(result.path.wstring());
-        playback_path_ = source_path_;
-        format_name_ = QStringLiteral("WAV");
-        sample_rate_ = static_cast<int>(analysis.source.sample_rate);
-        channels_ = static_cast<int>(analysis.source.channels);
-        bits_per_sample_ = 24;
-        bit_rate_ = sample_rate_ * channels_ * bits_per_sample_;
-        source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
-        channel_peaks_ = source_channel_peaks_;
-        has_document_ = true;
-        modified_ = false;
-        viewport_.setDocumentFrames(document_.totalFrames());
-    }
-    setState(EditorSessionState::Ready);
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
-    emit recordingChanged();
+        if (insert_recording_at_cursor_) {
+            if (!document_.insertSource(analysis.source, recording_insert_frame_)) {
+                setState(EditorSessionState::Error);
+                setError(tr("录音完成，但无法插入当前文档"));
+                emit recordingChanged();
+                return;
+            }
+            modified_ = true;
+            playback_path_.clear();
+            viewport_.setDocumentFrames(document_.totalFrames());
+            rebuildEditorPeaks();
+        } else {
+            document_ = AudioDocument::fromSource(analysis.source);
+            source_path_ = QString::fromStdWString(result.path.wstring());
+            playback_path_ = source_path_;
+            format_name_ = QStringLiteral("WAV");
+            sample_rate_ = static_cast<int>(analysis.source.sample_rate);
+            channels_ = static_cast<int>(analysis.source.channels);
+            bits_per_sample_ = 24;
+            bit_rate_ = sample_rate_ * channels_ * bits_per_sample_;
+            source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
+            channel_peaks_ = source_channel_peaks_;
+            has_document_ = true;
+            modified_ = false;
+            viewport_.setDocumentFrames(document_.totalFrames());
+        }
+        setState(EditorSessionState::Ready);
+        refreshActions();
+        emit waveformChanged();
+        emit documentChanged();
+        emit recordingChanged();
+    });
+    watcher->setFuture(QtConcurrent::run([this] {
+        RecordingFinalizeResult outcome;
+        outcome.recording = recording_session_.stop();
+        if (outcome.recording.success) {
+            outcome.analysis = AudioFileAnalyzer::analyze(
+                outcome.recording.path, 2'048);
+        }
+        return outcome;
+    }));
     return true;
 }
 

@@ -209,6 +209,7 @@ signals:
     void discardConfirmationRequested();
 
 private:
+    struct RecordingFinalizeResult;
     void refreshActions();
     [[nodiscard]] QVariantList buildExportFormats() const;
     void rebuildEditorPeaks();
@@ -250,6 +251,8 @@ private:
     agplayer::editor::RecordingSession recording_session_;
     QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
+    QFutureWatcher<bool>* recording_start_watcher_{};
+    QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
     QVariantList export_formats_;

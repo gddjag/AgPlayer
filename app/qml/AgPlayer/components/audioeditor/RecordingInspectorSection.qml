@@ -6,11 +6,13 @@ import AgPlayer
 
 Rectangle {
     id: section
+    objectName: "recordingInspectorSection"
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
-    implicitHeight: collapsed ? 38 : 360
+    implicitHeight: collapsed ? 38 : 420
     property bool collapsed: false
+    readonly property int recordingActionCount: 4
     property url recordingTarget
     property bool forceNewRecording: false
     function requestRecording(forceNew) {
@@ -20,6 +22,12 @@ Rectangle {
             discardRecordingDialog.open()
         else
             recordingFileDialog.open()
+    }
+    function pauseOrResume() {
+        if (AudioEditorController.recordingPaused)
+            AudioEditorController.resumeRecording()
+        else
+            AudioEditorController.pauseRecording()
     }
 
     Dialog {
@@ -143,6 +151,42 @@ Rectangle {
                 readOnly: true
                 text: section.recordingTarget.toString().replace("file:///", "")
                 placeholderText: qsTr("开始录音时选择")
+            }
+            Button {
+                objectName: "recordingRefreshDevicesButton"
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                text: qsTr("刷新输入设备")
+                enabled: !AudioEditorController.recording
+                onClicked: AudioEditorController.refreshRecordingDevices()
+            }
+            RowLayout {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                Button {
+                    objectName: "recordingStartButton"
+                    Layout.fillWidth: true
+                    text: qsTr("开始录音")
+                    enabled: !AudioEditorController.recording
+                             && !AudioEditorController.busy
+                             && deviceCombo.count > 0
+                    onClicked: section.requestRecording(false)
+                }
+                Button {
+                    objectName: "recordingPauseResumeButton"
+                    Layout.fillWidth: true
+                    text: AudioEditorController.recordingPaused
+                          ? qsTr("继续") : qsTr("暂停")
+                    enabled: AudioEditorController.recording
+                    onClicked: section.pauseOrResume()
+                }
+                Button {
+                    objectName: "recordingStopButton"
+                    Layout.fillWidth: true
+                    text: qsTr("停止")
+                    enabled: AudioEditorController.recording
+                    onClicked: AudioEditorController.stopRecording()
+                }
             }
         }
     }

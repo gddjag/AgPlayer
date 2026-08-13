@@ -1,6 +1,7 @@
 #include "audio_editor/audio_editor_controller.hpp"
 
 #include <QFileInfo>
+#include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -245,6 +246,25 @@ private slots:
         }
         QVERIFY(!controller.startRecording(QUrl(), QString(), 48'000, 2,
                                            false, false));
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
+    void recordingDeviceStartupFailureReturnsAsynchronously()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(directory.filePath(QStringLiteral("capture.wav"))),
+            QStringLiteral("capture:missing-device"), 48'000, 2,
+            false, false));
+        QVERIFY2(elapsed.elapsed() < 250,
+                 "recording device startup must not block the GUI thread");
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.state() != EditorSessionState::Processing, 5'000);
         QVERIFY(!controller.errorMessage().isEmpty());
     }
 };

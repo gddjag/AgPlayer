@@ -5,11 +5,13 @@ import AgPlayer
 
 Rectangle {
     id: section
+    objectName: "timePitchInspectorSection"
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
-    implicitHeight: collapsed ? 38 : 292
+    implicitHeight: collapsed ? 38 : 340
     property bool collapsed: false
+    readonly property int timePitchActionCount: 3
 
     ColumnLayout {
         anchors.fill: parent
@@ -46,6 +48,7 @@ Rectangle {
             Label { text: qsTr("原始 BPM") }
             CompactSpinBox {
                 id: originalBpmControl
+                objectName: "timePitchOriginalBpm"
                 from: 0; to: 400
                 value: Math.round(AudioEditorController.originalBpm)
                 enabled: AudioEditorController.hasDocument
@@ -60,6 +63,8 @@ Rectangle {
             }
             Label { text: qsTr("目标 BPM") }
             CompactSpinBox {
+                id: targetBpmControl
+                objectName: "timePitchTargetBpm"
                 from: 20; to: 400
                 value: Math.round(AudioEditorController.targetBpm > 0
                     ? AudioEditorController.targetBpm : 100)
@@ -69,6 +74,8 @@ Rectangle {
             }
             Label { text: qsTr("速度") }
             CompactSpinBox {
+                id: speedControl
+                objectName: "timePitchSpeed"
                 from: 50; to: 200
                 value: Math.round(AudioEditorController.speedPercent)
                 enabled: AudioEditorController.hasDocument
@@ -83,19 +90,25 @@ Rectangle {
             Label { text: qsTr("升降半音") }
             CompactSpinBox {
                 id: semitoneControl
-                from: -12; to: 12; value: 0
+                objectName: "timePitchSemitones"
+                from: -12; to: 12
+                value: Math.trunc(AudioEditorController.pitchCents / 100)
                 enabled: AudioEditorController.hasDocument
                 onValueModified: AudioEditorController.setPitch(value, centsControl.value)
             }
             Label { text: qsTr("音分微调") }
             CompactSpinBox {
                 id: centsControl
-                from: -99; to: 99; value: 0
+                objectName: "timePitchCents"
+                from: -99; to: 99
+                value: AudioEditorController.pitchCents
+                       - Math.trunc(AudioEditorController.pitchCents / 100) * 100
                 enabled: AudioEditorController.hasDocument
                 onValueModified: AudioEditorController.setPitch(semitoneControl.value, value)
             }
         }
         Button {
+            objectName: "timePitchApplyButton"
             visible: !section.collapsed
             Layout.fillWidth: true
             Layout.preferredHeight: 28
@@ -103,6 +116,32 @@ Rectangle {
                 ? qsTr("预览中 · 应用处理") : qsTr("应用处理")
             enabled: AudioEditorController.hasDocument
             onClicked: AudioEditorController.applyTimePitch()
+        }
+        RowLayout {
+            visible: !section.collapsed
+            Layout.fillWidth: true
+            Button {
+                objectName: "timePitchPreviewButton"
+                Layout.fillWidth: true
+                text: AudioEditorController.timePitchPreviewActive
+                      ? qsTr("停止预览") : qsTr("预览")
+                enabled: AudioEditorController.hasDocument
+                onClicked: AudioEditorController.timePitchPreviewActive
+                           ? AudioEditorController.stopPlayback()
+                           : AudioEditorController.playPause()
+            }
+            Button {
+                objectName: "timePitchResetButton"
+                Layout.fillWidth: true
+                text: qsTr("复位")
+                enabled: AudioEditorController.hasDocument
+                onClicked: {
+                    AudioEditorController.setSpeedPercent(100)
+                    AudioEditorController.setPitch(0, 0)
+                    semitoneControl.value = 0
+                    centsControl.value = 0
+                }
+            }
         }
         Item { Layout.fillHeight: true }
     }
