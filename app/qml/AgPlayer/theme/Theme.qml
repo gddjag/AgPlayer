@@ -34,6 +34,14 @@ QtObject {
     readonly property color activeSelectionText: systemPalette.highlightedText
     readonly property color inactiveSelection: inactiveSystemPalette.highlight
     readonly property color inactiveSelectionText: inactiveSystemPalette.highlightedText
+    readonly property color currentTrackSelection: Qt.rgba(
+        activeSelection.r, activeSelection.g, activeSelection.b, 0.28)
+    readonly property color selectedTrackSelection: Qt.rgba(
+        activeSelection.r, activeSelection.g, activeSelection.b, 0.18)
+    readonly property color currentTrackSelectionInactive: Qt.rgba(
+        inactiveSelection.r, inactiveSelection.g, inactiveSelection.b, 0.28)
+    readonly property color selectedTrackSelectionInactive: Qt.rgba(
+        inactiveSelection.r, inactiveSelection.g, inactiveSelection.b, 0.18)
     readonly property color cyan: accent
     readonly property color violet: accent
     readonly property color favoriteRed: "#FF334D"

@@ -139,8 +139,9 @@ Window {
                 }
                 Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 24; color: Theme.border }
                 Label { text: qsTr("预设"); color: Theme.secondaryText }
-                ComboBox {
+                ThemedComboBox {
                     id: presetBox
+                    objectName: "equalizerPresetBox"
                     Layout.preferredWidth: 88
                     model: EqualizerController.presetNames
                     currentIndex: Math.max(0, EqualizerController.presetIds.indexOf(
@@ -339,7 +340,7 @@ Window {
         ColumnLayout {
             width: parent.width
             Label { text: qsTr("管理自定义预设"); color: Theme.primaryText; font.weight: Font.DemiBold }
-            ComboBox {
+            ThemedComboBox {
                 id: customPresetBox
                 Layout.fillWidth: true
                 textRole: "text"

@@ -43,52 +43,6 @@ Item {
         closed()
     }
 
-    Dialog {
-        id: feedbackDialog
-        objectName: "feedbackDialog"
-        anchors.centerIn: parent
-        width: 420
-        modal: true
-        title: qsTr("反馈")
-        standardButtons: Dialog.Ok
-        contentItem: ColumnLayout {
-            spacing: 10
-            Text {
-                objectName: "feedbackMessage"
-                text: qsTr("建议反馈请发邮件：agplayer@foxmail.com")
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 13
-                wrapMode: Text.Wrap
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                TextField {
-                    id: feedbackEmailField
-                    objectName: "feedbackEmailField"
-                    Layout.fillWidth: true
-                    text: "agplayer@foxmail.com"
-                    readOnly: true
-                    selectByMouse: true
-                }
-                Button {
-                    objectName: "copyFeedbackEmailButton"
-                    text: qsTr("复制邮箱")
-                    onClicked: {
-                        feedbackEmailField.selectAll()
-                        feedbackEmailField.copy()
-                    }
-                }
-            }
-        }
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.border
-            border.width: 1
-            radius: Theme.radiusMd
-        }
-    }
-
     Keys.onEscapePressed: cancelAndClose()
 
     function shortcutText(event) {
@@ -2408,31 +2362,6 @@ Item {
                         }
                     }
 
-                    Button {
-                        objectName: "feedbackButton"
-                        text: qsTr("反馈")
-                        onClicked: feedbackDialog.open()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 96
-                            implicitHeight: 36
-                        }
-                    }
                 }
             }
         }

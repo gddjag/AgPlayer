@@ -334,12 +334,16 @@ ListView {
         required property string fileStatus
 
         objectName: root.isCurrentTrack(trackId) ? "currentTrackRow" : "trackRow"
-        readonly property bool systemHighlighted:
-            root.isCurrentTrack(trackId) || root.isSelected(trackId)
+        readonly property bool currentTrack: root.isCurrentTrack(trackId)
+        readonly property bool selectedTrack: root.isSelected(trackId)
+        readonly property bool systemHighlighted: currentTrack || selectedTrack
         readonly property color systemHighlightColor:
-            root.windowActive ? Theme.activeSelection : Theme.inactiveSelection
-        readonly property color systemHighlightText:
-            root.windowActive ? Theme.activeSelectionText : Theme.inactiveSelectionText
+            root.windowActive
+            ? (currentTrack ? Theme.currentTrackSelection
+                            : Theme.selectedTrackSelection)
+            : (currentTrack ? Theme.currentTrackSelectionInactive
+                            : Theme.selectedTrackSelectionInactive)
+        readonly property color systemHighlightText: Theme.primaryText
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
         width: root.width; height: root.rowHeight
@@ -608,6 +612,7 @@ ListView {
         palette.highlight: Theme.activeSelection
         palette.highlightedText: Theme.activeSelectionText
         palette.mid: Theme.border
+        delegate: ThemedMenuItem {}
         background: Rectangle {
             color: Theme.elevated
             border.color: Theme.border
@@ -629,6 +634,7 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             palette.mid: Theme.border
+            delegate: ThemedMenuItem {}
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
             objectName: "moveTracksMenu"
             title: qsTr("加入歌单")
@@ -667,6 +673,7 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             palette.mid: Theme.border
+            delegate: ThemedMenuItem {}
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
             SystemMenuItem { objectName: "trackMenuAudioEditor"; text: qsTr("音频编辑"); onClicked: root.openInAudioTool(0) }
             SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
@@ -690,27 +697,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuRelocate"; text: qsTr("重新定位文件"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: relocateDialog.open() }
     }
 
-    component SystemMenuItem: MenuItem {
-        id: systemMenuItem
-        width: 230
-        implicitWidth: 230
-        implicitHeight: 34
-        contentItem: Text {
-            text: systemMenuItem.text
-            color: systemMenuItem.highlighted || systemMenuItem.hovered
-                   ? Theme.activeSelectionText
-                   : systemMenuItem.enabled ? Theme.primaryText : Theme.secondaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        background: Rectangle {
-            color: systemMenuItem.highlighted || systemMenuItem.hovered
-                   ? Theme.activeSelection : "transparent"
-            radius: Theme.radiusSm
-        }
-    }
+    component SystemMenuItem: ThemedMenuItem { width: 230 }
 
     Popup {
         id: detailsPanel
