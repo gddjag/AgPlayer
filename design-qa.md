@@ -41,3 +41,24 @@
 - [x] Dedicated QML and end-to-end tests
 
 final result: passed
+
+## Audio Editor V2 — 2026-08-13
+
+**Source visual truth**
+
+- `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频编辑.png`
+
+**Implementation evidence**
+
+- `D:\ai\AgPlayer\.worktrees\revised-ui\build\qa-audio-editor\audio-editor-final-v5-1672x942.png`
+- Viewport: 1672 x 942, Chinese, dark theme, real stereo WAV.
+
+**Findings**
+
+- Navigation order, command bar, one-line summary, single-track stereo waveform, selection, playhead, overview, transport and status bar match the reference hierarchy.
+- The right inspector contains only Recording and Speed/Pitch, both fully visible without page-level horizontal overflow.
+- Command actions use project icons, tooltips and accessible names; visible controls are live or correctly disabled.
+- Font rendering and compact control metrics follow native Qt/Windows rather than pixel-copying the source image. P3 only.
+- Release gate remains open because the machine has no capture endpoint for real microphone QA and the unrelated main-window QML suite is not green.
+
+final result: implementation passed; release acceptance blocked
