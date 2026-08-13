@@ -150,6 +150,26 @@ Rectangle {
         }
         return result
     }
+    function rowForField(key) {
+        for (let index = 0; index < fieldRepeater.count; ++index) {
+            const row = fieldRepeater.itemAt(index)
+            if (row && row.fieldKey === key)
+                return row
+        }
+        return null
+    }
+    function setFieldValue(key, value) {
+        const row = rowForField(key)
+        if (row) row.setValue(value)
+    }
+    function setFieldMode(key, mode) {
+        const row = rowForField(key)
+        if (row) row.selectMode(mode)
+    }
+    function fieldMode(key) {
+        const row = rowForField(key)
+        return row ? row.selectedMode : ""
+    }
     function conversionTargetUrls() {
         const urls = []
         let indexes = []
@@ -741,20 +761,30 @@ Rectangle {
                             id: fieldRepeater
                             model: page.fieldDefinitions
                             delegate: RowLayout {
+                                id: fieldRow
                                 required property var modelData
                                 property string fieldKey: modelData.key
                                 property string fieldLabel: modelData.label
                                 property string selectedMode: "keep"
                                 property string valueText: valueField.text
+                                function selectMode(mode) {
+                                    selectedMode = mode
+                                    if (mode === "clear")
+                                        valueField.clear()
+                                }
+                                function setValue(value) {
+                                    valueField.text = value
+                                    selectMode("set")
+                                }
                                 function descriptor() {
-                                    return { mode: selectedMode,
+                                    return { mode: fieldRow.selectedMode,
                                              value: valueField.text }
                                 }
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 24
                                 spacing: 4
                                 Label {
-                                    text: modelData.label
+                                    text: fieldRow.fieldLabel
                                     color: Theme.secondaryText
                                     Layout.preferredWidth: 72
                                     elide: Text.ElideRight
@@ -768,30 +798,31 @@ Rectangle {
                                     ]
                                     delegate: ToolButton {
                                          required property var modelData
-                                         objectName: "metadataModeButton_" + fieldKey
+                                         objectName: "metadataModeButton_" + fieldRow.fieldKey
                                                      + "_" + modelData.value
                                         text: modelData.text
                                         checkable: true
-                                        checked: modelData.value === selectedMode
+                                        checked: modelData.value === fieldRow.selectedMode
                                         ButtonGroup.group: fieldModeGroup
                                         Layout.preferredWidth: 42
                                         Layout.preferredHeight: 22
                                         font.pixelSize: 10
-                                        onClicked: selectedMode = modelData.value
+                                        onClicked: fieldRow.selectMode(modelData.value)
                                     }
                                 }
                                 TextField {
                                     id: valueField
-                                    objectName: "metadataValueField_" + fieldKey
+                                    objectName: "metadataValueField_" + fieldRow.fieldKey
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 22
-                                    enabled: selectedMode === "set"
+                                    enabled: fieldRow.selectedMode !== "clear"
                                     font.pixelSize: 11
-                                    placeholderText: selectedMode === "set"
+                                    placeholderText: fieldRow.selectedMode === "set"
                                                      ? qsTr("输入新值")
-                                                     : (page.isMixedField(fieldKey)
+                                                     : (page.isMixedField(fieldRow.fieldKey)
                                                         ? qsTr("多个值")
                                                         : qsTr("保留原值"))
+                                    onTextEdited: fieldRow.selectMode("set")
                                 }
                             }
                         }
