@@ -27,6 +27,7 @@ private slots:
     void unavailableRowsAreExcludedFromQueueIndices();
     void queuesSelectedTrackNextWithoutRestartingPlayback();
     void restoresSavedQueueOrderAndFiltersUnavailableTracks();
+    void startsPlaybackFromVisibleListScope();
     void exactWaveformDurationAlignsPlaybackTimeline();
     void loadsRowWithoutStartingPlayback();
     void nullCoreReportsStableErrors();
@@ -467,6 +468,59 @@ void PlaybackControllerTest::restoresSavedQueueOrderAndFiltersUnavailableTracks(
         QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("third"));
         QCOMPARE(controller.trackIndex(), 0);
         QCOMPARE(controller.state(), PlaybackController::Stopped);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::startsPlaybackFromVisibleListScope()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    LibraryModel model;
+    for (int index = 0; index < 7; ++index) {
+        const QString id = QStringLiteral("track-%1").arg(index);
+        const QString path = directory.filePath(id + QStringLiteral(".wav"));
+        QVERIFY(QFile::copy(fixture, path));
+        TrackRecord track;
+        track.trackId = id;
+        track.path = path;
+        track.available = true;
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        QVERIFY(controller.playTrackIds(
+            {QStringLiteral("track-1"), QStringLiteral("track-2"),
+             QStringLiteral("track-3"), QStringLiteral("track-4"),
+             QStringLiteral("track-5")},
+            QStringLiteral("track-3")));
+        QCOMPARE(controller.queueTrackIds(),
+                 QStringList({QStringLiteral("track-3"),
+                              QStringLiteral("track-4"),
+                              QStringLiteral("track-5"),
+                              QStringLiteral("track-1"),
+                              QStringLiteral("track-2")}));
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("track-3"));
+
+        QVERIFY(controller.playTrackIds(
+            {QStringLiteral("track-2"), QStringLiteral("track-3"),
+             QStringLiteral("track-4"), QStringLiteral("missing")},
+            QStringLiteral("track-3")));
+        QCOMPARE(controller.queueTrackIds(),
+                 QStringList({QStringLiteral("track-3"),
+                              QStringLiteral("track-4"),
+                              QStringLiteral("track-2"),
+                              QStringLiteral("track-0"),
+                              QStringLiteral("track-1"),
+                              QStringLiteral("track-5"),
+                              QStringLiteral("track-6")}));
     }
     ag_player_destroy(core);
 }

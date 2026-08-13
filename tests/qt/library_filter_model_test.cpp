@@ -2,6 +2,7 @@
 #include "library_model.hpp"
 #include "playlist_model.hpp"
 
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -16,6 +17,7 @@ private slots:
     void combinesExactRatingBpmAndFavoriteFilters();
     void filtersExactRatingInsteadOfMinimumRating();
     void filtersAndSortsPlaybackHistory();
+    void filtersRecentAndNeverPlayedCategories();
     void writesRatingThroughProxyRows();
     void filtersPlaylistMembershipAndTracksLiveChanges();
     void preservesCustomPlaylistOrder();
@@ -165,6 +167,34 @@ void LibraryFilterModelTest::filtersAndSortsPlaybackHistory()
              QStringLiteral("beta"));
     QCOMPARE(filter.data(filter.index(2, 0), LibraryModel::TrackIdRole).toString(),
              QStringLiteral("alpha"));
+}
+
+void LibraryFilterModelTest::filtersRecentAndNeverPlayedCategories()
+{
+    QList<TrackRecord> tracks = sampleTracks();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    tracks[0].addedAtMs = now - 1000;
+    tracks[1].addedAtMs = now - (31LL * 24 * 60 * 60 * 1000);
+    tracks[2].addedAtMs = now - 2000;
+    tracks[3].addedAtMs = 0;
+
+    LibraryModel source;
+    source.replaceAll(tracks);
+    QVERIFY(source.markPlayed(QStringLiteral("alpha"), now));
+
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.setCategory(QStringLiteral("recentAdded"));
+    QCOMPARE(filter.count(), 2);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("alpha"));
+
+    filter.setCategory(QStringLiteral("neverPlayed"));
+    QCOMPARE(filter.count(), 3);
+    for (int row = 0; row < filter.count(); ++row) {
+        QVERIFY(filter.data(filter.index(row, 0), LibraryModel::TrackIdRole).toString()
+                != QStringLiteral("alpha"));
+    }
 }
 
 void LibraryFilterModelTest::writesRatingThroughProxyRows()

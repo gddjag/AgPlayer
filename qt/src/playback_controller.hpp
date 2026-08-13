@@ -85,6 +85,8 @@ public:
     Q_INVOKABLE bool queueNext(const QString& trackId);
     Q_INVOKABLE bool restoreQueue(const QStringList& trackIds,
                                   const QString& currentTrackId);
+    Q_INVOKABLE bool playTrackIds(const QStringList& trackIds,
+                                  const QString& currentTrackId);
     Q_INVOKABLE void setVolume(float volume);
     Q_INVOKABLE void volumeUp(float step = 0.05F);
     Q_INVOKABLE void volumeDown(float step = 0.05F);

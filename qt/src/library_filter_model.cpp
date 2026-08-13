@@ -2,6 +2,7 @@
 #include "playlist_model.hpp"
 
 #include <QAbstractItemModel>
+#include <QDateTime>
 
 #include <algorithm>
 
@@ -99,8 +100,12 @@ void LibraryFilterModel::setCategory(const QString& category)
     if (category_ == QStringLiteral("history")) {
         setSortRole(LibraryModel::LastPlayedAtRole);
         sort(0, Qt::DescendingOrder);
+    } else if (category_ == QStringLiteral("recentAdded")) {
+        setSortRole(LibraryModel::AddedAtRole);
+        sort(0, Qt::DescendingOrder);
     } else if (category_ == QStringLiteral("all")
-               || category_ == QStringLiteral("favorites")) {
+               || category_ == QStringLiteral("favorites")
+               || category_ == QStringLiteral("neverPlayed")) {
         sort(-1);
     } else {
         sort(0, Qt::AscendingOrder);
@@ -216,6 +221,19 @@ bool LibraryFilterModel::rowMatchesCategory(int sourceRow) const
         const QModelIndex idx = model->index(sourceRow, 0);
         return model->data(idx, LibraryModel::PlayCountRole).toInt() > 0;
     }
+    if (category_ == QStringLiteral("recentAdded")) {
+        const QModelIndex idx = sourceModel()->index(sourceRow, 0);
+        const qint64 addedAt = sourceModel()
+                                   ->data(idx, LibraryModel::AddedAtRole)
+                                   .toLongLong();
+        constexpr qint64 dayMs = 24LL * 60 * 60 * 1000;
+        return addedAt > 0
+            && addedAt >= QDateTime::currentMSecsSinceEpoch() - 30 * dayMs;
+    }
+    if (category_ == QStringLiteral("neverPlayed")) {
+        const QModelIndex idx = sourceModel()->index(sourceRow, 0);
+        return sourceModel()->data(idx, LibraryModel::PlayCountRole).toInt() == 0;
+    }
     if (category_ == QStringLiteral("all")) {
         return true;
     }
@@ -231,6 +249,12 @@ bool LibraryFilterModel::rowMatchesCategory(int sourceRow) const
 bool LibraryFilterModel::lessThan(const QModelIndex& sourceLeft,
                                   const QModelIndex& sourceRight) const
 {
+    if (category_ == QStringLiteral("recentAdded")) {
+        return sourceModel()
+            ->data(sourceLeft, LibraryModel::AddedAtRole).toLongLong()
+            < sourceModel()
+                  ->data(sourceRight, LibraryModel::AddedAtRole).toLongLong();
+    }
     if (category_ == QStringLiteral("history")) {
         return sourceModel()
             ->data(sourceLeft, LibraryModel::LastPlayedAtRole).toLongLong()
@@ -238,7 +262,9 @@ bool LibraryFilterModel::lessThan(const QModelIndex& sourceLeft,
                   ->data(sourceRight, LibraryModel::LastPlayedAtRole).toLongLong();
     }
     if (playlistModel_ != nullptr && category_ != QStringLiteral("all")
-        && category_ != QStringLiteral("favorites")) {
+        && category_ != QStringLiteral("favorites")
+        && category_ != QStringLiteral("recentAdded")
+        && category_ != QStringLiteral("neverPlayed")) {
         const QString leftId = sourceModel()
                                    ->data(sourceLeft, LibraryModel::TrackIdRole)
                                    .toString();
