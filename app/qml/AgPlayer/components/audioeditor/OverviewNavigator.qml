@@ -14,6 +14,7 @@ Rectangle {
         spacing: 12
 
         Rectangle {
+            id: overview
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: Theme.isLight ? "#EAF2F2" : "#132124"
@@ -24,7 +25,7 @@ Rectangle {
             AudioEditorWaveformItem {
                 anchors.fill: parent
                 anchors.margins: 4
-                channelPeaks: []
+                channelPeaks: AudioEditorController.channelPeaks
                 waveformColor: Theme.isLight ? "#2B9692" : "#297E7B"
             }
             Rectangle {
@@ -32,15 +33,43 @@ Rectangle {
                 width: parent.width * AudioEditorController.viewport.overviewWidthRatio
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: "transparent"
+                color: "#121BCBC3"
                 border.color: Theme.cyan
                 border.width: 1
             }
+            MouseArea {
+                anchors.fill: parent
+                enabled: AudioEditorController.hasDocument
+                onClicked: mouse => AudioEditorController.viewport.moveOverviewWindow(
+                               mouse.x / Math.max(1, width))
+            }
         }
 
-        ToolButton { text: "−"; Layout.preferredWidth: 30; onClicked: AudioEditorController.viewport.zoomAt(0.8, width / 2) }
-        Slider { Layout.preferredWidth: 110; from: 0; to: 1; value: 0.5 }
-        ToolButton { text: "+"; Layout.preferredWidth: 30; onClicked: AudioEditorController.viewport.zoomAt(1.25, width / 2) }
-        ComboBox { Layout.preferredWidth: 92; model: [qsTr("缩放级别"), "100%", "200%", "400%"] }
+        ToolButton {
+            icon.source: Theme.icon("subtract-line")
+            Layout.preferredWidth: 30
+            onClicked: AudioEditorController.viewport.zoomAt(0.8, overview.width / 2)
+        }
+        Slider {
+            Layout.preferredWidth: 110
+            from: 0; to: 1
+            value: AudioEditorController.viewport.overviewStartRatio
+            onMoved: AudioEditorController.viewport.moveOverviewWindow(value)
+        }
+        ToolButton {
+            icon.source: Theme.icon("add-line")
+            Layout.preferredWidth: 30
+            onClicked: AudioEditorController.viewport.zoomAt(1.25, overview.width / 2)
+        }
+        ComboBox {
+            Layout.preferredWidth: 92
+            model: [qsTr("缩放级别"), "100%", "200%", "400%"]
+            onActivated: {
+                if (currentIndex > 0)
+                    AudioEditorController.viewport.setVisibleRange(
+                        0, AudioEditorController.totalFrames
+                           / Math.pow(2, currentIndex - 1))
+            }
+        }
     }
 }

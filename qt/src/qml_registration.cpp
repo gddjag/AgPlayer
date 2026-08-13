@@ -11,8 +11,6 @@
 #include "library_filter_model.hpp"
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
-#include "library_manager_controller.hpp"
-#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "replay_gain_scanner.hpp"
@@ -32,11 +30,11 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  MetadataEditor* metadataEditor,
                                  FormatConverter* formatConverter,
                                  FilenameProcessor* filenameProcessor,
-                                 LightEditor* lightEditor,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
-                                 EqualizerController* equalizer)
+                                 EqualizerController* equalizer,
+                                 AudioEditorController* audioEditor)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -48,16 +46,19 @@ void register_agplayer_qml_types(LibraryModel* library,
             return new AudioPreviewController(
                 AG_AUDIO_BACKEND_DEFAULT, playback);
         });
-    qmlRegisterSingletonType<AudioEditorController>(
-        "AgPlayer", 1, 0, "AudioEditorController",
-        [](QQmlEngine*, QJSEngine*) -> QObject* {
-            return new AudioEditorController();
-        });
+    if (audioEditor != nullptr) {
+        qmlRegisterSingletonInstance(
+            "AgPlayer", 1, 0, "AudioEditorController", audioEditor);
+    } else {
+        qmlRegisterSingletonType<AudioEditorController>(
+            "AgPlayer", 1, 0, "AudioEditorController",
+            [](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new AudioEditorController();
+            });
+    }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
-    qmlRegisterType<LibraryManagerController>("AgPlayer", 1, 0,
-                                               "LibraryManagerController");
     qmlRegisterType<LibraryFileOperations>("AgPlayer", 1, 0,
                                            "LibraryFileOperations");
     qmlRegisterSingletonType<ReplayGainScanner>(
@@ -72,7 +73,6 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "MetadataEditor", metadataEditor);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FormatConverter", formatConverter);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FilenameProcessor", filenameProcessor);
-    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LightEditor", lightEditor);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SettingsController", settings);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "EqualizerController",
                                  equalizer != nullptr ? equalizer
