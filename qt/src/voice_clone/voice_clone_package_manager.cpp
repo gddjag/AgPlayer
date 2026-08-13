@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QDirIterator>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -65,18 +66,67 @@ bool pathTraversesReparsePoint(const QString& path)
     return false;
 }
 
+bool prepareInstallRoot(const QString& path, QString* error)
+{
+    const QString absolute = normalizedAbsolute(path);
+    if (pathTraversesReparsePoint(absolute)) {
+        *error = QStringLiteral("Install root ancestor contains a link or reparse point");
+        return false;
+    }
+    QString existingPath = absolute;
+    while (!QFileInfo::exists(existingPath)) {
+        const QString parent = normalizedAbsolute(QFileInfo(existingPath).absolutePath());
+        if (parent == existingPath) break;
+        existingPath = parent;
+    }
+    const QFileInfo existingInfo(existingPath);
+    const QString canonicalExisting = QDir::fromNativeSeparators(
+        existingInfo.canonicalFilePath());
+    if (!existingInfo.isDir() || canonicalExisting.isEmpty()
+        || pathTraversesReparsePoint(existingPath)) {
+        *error = QStringLiteral("Install root has no safe canonical ancestor");
+        return false;
+    }
+    if (!QDir().mkpath(absolute) || pathTraversesReparsePoint(absolute)) {
+        *error = QStringLiteral("Cannot create safe install root");
+        return false;
+    }
+    const QString canonicalRoot = QDir::fromNativeSeparators(
+        QFileInfo(absolute).canonicalFilePath());
+    if (canonicalRoot.isEmpty() || !pathIsWithin(canonicalExisting, canonicalRoot)) {
+        *error = QStringLiteral("Install root canonical path escapes its safe ancestor");
+        return false;
+    }
+    return true;
+}
+
 bool removeDirectoryTree(const QString& path)
 {
     const QFileInfo info(path);
     if (!info.exists()) return true;
     if (!info.isDir() || pathTraversesReparsePoint(path)) return false;
-    QDirIterator iterator(path, QDir::AllEntries | QDir::NoDotAndDotDot,
+    QDirIterator iterator(path, QDir::AllEntries | QDir::Hidden | QDir::System
+                                    | QDir::NoDotAndDotDot,
                           QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
         iterator.next();
         if (isReparsePoint(iterator.fileInfo())) return false;
     }
     return QDir(path).removeRecursively();
+}
+
+bool directoryTreeContainsReparsePoint(const QString& path)
+{
+    const QFileInfo rootInfo(path);
+    if (pathTraversesReparsePoint(path) || isReparsePoint(rootInfo)) return true;
+    QDirIterator iterator(path, QDir::AllEntries | QDir::Hidden | QDir::System
+                                    | QDir::NoDotAndDotDot,
+                          QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        if (isReparsePoint(iterator.fileInfo())) return true;
+    }
+    return false;
 }
 
 bool hashMatches(const QString& path, const QByteArray& expected)
@@ -93,24 +143,102 @@ QString normalizedRelativePath(const QString& path)
     return QDir::cleanPath(QDir::fromNativeSeparators(path));
 }
 
-bool requiresIndexLicense(const VoiceClonePackageManifest& manifest)
+QString unknownField(const QJsonObject& object, const QSet<QString>& allowed)
 {
-    return manifest.licenseUrl.host().compare(QStringLiteral("huggingface.co"),
-                                              Qt::CaseInsensitive) == 0
-           && manifest.licenseUrl.path().startsWith(
-               QStringLiteral("/IndexTeam/IndexTTS-2.5"), Qt::CaseInsensitive);
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!allowed.contains(it.key())) return it.key();
+    }
+    return {};
+}
+
+QString readLicenseRecords(const QString& path, QJsonArray* records)
+{
+    *records = {};
+    const QFileInfo info(path);
+    if (!info.exists()) return {};
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QStringLiteral("cannot read license acceptance store");
+    }
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        return QStringLiteral("corrupt license acceptance JSON");
+    }
+    const QJsonObject root = document.object();
+    if (!unknownField(root,
+                      {QStringLiteral("schemaVersion"), QStringLiteral("records")})
+             .isEmpty()
+        || !root.value(QStringLiteral("schemaVersion")).isDouble()
+        || root.value(QStringLiteral("schemaVersion")).toDouble() != 1.0
+        || !root.value(QStringLiteral("records")).isArray()) {
+        return QStringLiteral("invalid license acceptance store schema");
+    }
+    const QSet<QString> recordFields{
+        QStringLiteral("modelId"), QStringLiteral("adapterId"),
+        QStringLiteral("licenseUrl"), QStringLiteral("revision"),
+        QStringLiteral("acceptedAt")};
+    for (const QJsonValue& value : root.value(QStringLiteral("records")).toArray()) {
+        if (!value.isObject()) return QStringLiteral("invalid license acceptance record");
+        const QJsonObject record = value.toObject();
+        if (!unknownField(record, recordFields).isEmpty()
+            || record.size() != recordFields.size()) {
+            return QStringLiteral("invalid license acceptance record fields");
+        }
+        for (const QString& field : recordFields) {
+            if (!record.value(field).isString() || record.value(field).toString().isEmpty()) {
+                return QStringLiteral("invalid license acceptance record type");
+            }
+        }
+        const QUrl licenseUrl(record.value(QStringLiteral("licenseUrl")).toString());
+        if (!licenseUrl.isValid()
+            || licenseUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0
+            || licenseUrl.host().isEmpty()
+            || !QDateTime::fromString(record.value(QStringLiteral("acceptedAt")).toString(),
+                                      Qt::ISODateWithMs)
+                    .isValid()) {
+            return QStringLiteral("invalid license acceptance record value");
+        }
+    }
+    *records = root.value(QStringLiteral("records")).toArray();
+    return {};
 }
 
 } // namespace
 
 VoiceClonePackageManager::VoiceClonePackageManager(QString installRoot, QObject* parent)
-    : QObject(parent), installRoot_(normalizedAbsolute(std::move(installRoot)))
+    : VoiceClonePackageManager(std::move(installRoot), nullptr, {}, parent)
+{
+}
+
+VoiceClonePackageManager::VoiceClonePackageManager(
+    QString installRoot,
+    QNetworkAccessManager* networkAccessManager,
+    QObject* parent)
+    : VoiceClonePackageManager(std::move(installRoot), networkAccessManager, {}, parent)
+{
+}
+
+VoiceClonePackageManager::VoiceClonePackageManager(
+    QString installRoot,
+    QNetworkAccessManager* networkAccessManager,
+    DeploymentOperations deploymentOperations,
+    QObject* parent)
+    : QObject(parent),
+      installRoot_(normalizedAbsolute(std::move(installRoot))),
+      ownedNetwork_(networkAccessManager == nullptr
+                        ? std::make_unique<QNetworkAccessManager>()
+                        : nullptr),
+      network_(networkAccessManager != nullptr ? networkAccessManager
+                                               : ownedNetwork_.get()),
+      deploymentOperations_(std::move(deploymentOperations))
 {
 }
 
 VoiceClonePackageManager::~VoiceClonePackageManager()
 {
     pauseRequested_ = true;
+    ++operationGeneration_;
     if (reply_ != nullptr) reply_->abort();
     partialFile_.close();
 }
@@ -147,10 +275,7 @@ void VoiceClonePackageManager::setState(const State state, const QString& error)
 
 bool VoiceClonePackageManager::preparePaths(QString* error)
 {
-    if (!QDir().mkpath(installRoot_) || pathTraversesReparsePoint(installRoot_)) {
-        *error = QStringLiteral("Install root contains a link or reparse point");
-        return false;
-    }
+    if (!prepareInstallRoot(installRoot_, error)) return false;
     const QString stagingRoot = QDir(installRoot_).filePath(QStringLiteral(".staging"));
     stagingDirectory_ = QDir(stagingRoot).filePath(manifest_.packageId);
     targetDirectory_ = QDir(installRoot_).filePath(manifest_.packageId);
@@ -177,7 +302,8 @@ bool VoiceClonePackageManager::preparePaths(QString* error)
         allowed.insert(base + QStringLiteral(".resume.json"));
     }
     QVector<QString> directories;
-    QDirIterator iterator(stagingDirectory_, QDir::AllEntries | QDir::NoDotAndDotDot,
+    QDirIterator iterator(stagingDirectory_, QDir::AllEntries | QDir::Hidden | QDir::System
+                                                 | QDir::NoDotAndDotDot,
                           QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
         const QString absolute = iterator.next();
@@ -207,7 +333,8 @@ bool VoiceClonePackageManager::validateStaging(QString* error) const
         expected.insert(normalizedRelativePath(file.relativePath), file.sha256);
     }
     QSet<QString> observed;
-    QDirIterator iterator(stagingDirectory_, QDir::AllEntries | QDir::NoDotAndDotDot,
+    QDirIterator iterator(stagingDirectory_, QDir::AllEntries | QDir::Hidden | QDir::System
+                                                 | QDir::NoDotAndDotDot,
                           QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
         const QString absolute = iterator.next();
@@ -240,7 +367,8 @@ void VoiceClonePackageManager::start(const VoiceClonePackageManifest& manifest)
         return;
     }
     manifest_ = manifest;
-    manifest_.requiresLicenseAcceptance = requiresIndexLicense(manifest_);
+    ++operationGeneration_;
+    manifest_.requiresLicenseAcceptance = manifest_.licenseAcceptanceRequired();
     error_.clear();
     pauseRequested_ = false;
     cancelRequested_ = false;
@@ -262,8 +390,14 @@ void VoiceClonePackageManager::start(const VoiceClonePackageManifest& manifest)
         setState(Failed, pathError);
         return;
     }
-    if (requiresIndexLicense(manifest_) && !hasAcceptedCurrentLicense()) {
-        setState(LicenseRequired, QStringLiteral("License acceptance is required"));
+    QString licenseError;
+    if (manifest_.licenseAcceptanceRequired()
+        && !hasAcceptedCurrentLicense(&licenseError)) {
+        setState(LicenseRequired,
+                 licenseError.isEmpty()
+                     ? QStringLiteral("License acceptance is required")
+                     : QStringLiteral("Invalid license acceptance store: %1")
+                           .arg(licenseError));
         return;
     }
     setState(Resolving);
@@ -280,10 +414,15 @@ void VoiceClonePackageManager::resolveNextFile()
     QNetworkRequest request(manifest_.files.at(currentIndex_).url);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
-    reply_ = network_.head(request);
+    reply_ = network_->head(request);
     QNetworkReply* const currentReply = reply_;
-    connect(currentReply, &QNetworkReply::finished, this, [this, currentReply] {
-        if (reply_ == currentReply) reply_ = nullptr;
+    const quint64 generation = operationGeneration_;
+    connect(currentReply, &QNetworkReply::finished, this, [this, currentReply, generation] {
+        if (reply_ != currentReply || operationGeneration_ != generation) {
+            currentReply->deleteLater();
+            return;
+        }
+        reply_ = nullptr;
         currentReply->deleteLater();
         if (pauseRequested_ || cancelRequested_) return;
         if (currentReply->error() != QNetworkReply::NoError) {
@@ -366,13 +505,14 @@ void VoiceClonePackageManager::downloadNextFile()
             fail(commitError);
             return;
         }
-        if (!commitStagingDirectory(stagingDirectory_, targetDirectory_, &commitError)) {
+        if (!commitStagingDirectory(stagingDirectory_, targetDirectory_, &commitError,
+                                    deploymentOperations_)) {
             fail(commitError);
             return;
         }
         transferredBytes_ = totalBytes_ >= 0 ? totalBytes_ : completedBytes_;
         emit progressChanged();
-        setState(Completed);
+        setState(Completed, commitError);
         return;
     }
 
@@ -410,6 +550,10 @@ void VoiceClonePackageManager::downloadNextFile()
     if (!resumeMetadataMatches(entry)) removeCurrentPartial();
     currentResumeOffset_ = QFileInfo(partialFilePath_).size();
     const qint64 expectedSize = resolvedSizes_.value(currentIndex_, -1);
+    if (expectedSize < 0 && currentResumeOffset_ > 0) {
+        removeCurrentPartial();
+        currentResumeOffset_ = 0;
+    }
     if (expectedSize >= 0 && currentResumeOffset_ > expectedSize) {
         removeCurrentPartial();
         currentResumeOffset_ = 0;
@@ -440,16 +584,20 @@ void VoiceClonePackageManager::downloadNextFile()
     }
     setState(Downloading);
     updateProgress(currentResumeOffset_);
-    reply_ = network_.get(request);
+    reply_ = network_->get(request);
     QNetworkReply* const currentReply = reply_;
-    connect(currentReply, &QIODevice::readyRead, this, [this, currentReply] {
-        if (reply_ == currentReply && !pauseRequested_ && !cancelRequested_) consumeReplyData();
+    const quint64 generation = operationGeneration_;
+    connect(currentReply, &QIODevice::readyRead, this, [this, currentReply, generation] {
+        if (reply_ != currentReply || operationGeneration_ != generation) return;
+        if (!pauseRequested_ && !cancelRequested_) consumeReplyData();
     });
-    connect(currentReply, &QNetworkReply::finished, this, [this, currentReply] {
-        if (reply_ == currentReply) {
-            if (!pauseRequested_ && !cancelRequested_) consumeReplyData();
-            reply_ = nullptr;
+    connect(currentReply, &QNetworkReply::finished, this, [this, currentReply, generation] {
+        if (reply_ != currentReply || operationGeneration_ != generation) {
+            currentReply->deleteLater();
+            return;
         }
+        if (!pauseRequested_ && !cancelRequested_) consumeReplyData();
+        reply_ = nullptr;
         partialFile_.flush();
         partialFile_.close();
         currentReply->deleteLater();
@@ -532,7 +680,9 @@ bool VoiceClonePackageManager::pause()
     if (state_ != Resolving && state_ != Downloading) return false;
     pauseRequested_ = true;
     if (state_ == Downloading) consumeReplyData();
-    if (reply_ != nullptr) reply_->abort();
+    ++operationGeneration_;
+    QNetworkReply* const activeReply = std::exchange(reply_, nullptr);
+    if (activeReply != nullptr) activeReply->abort();
     partialFile_.flush();
     partialFile_.close();
     setState(Paused);
@@ -544,7 +694,9 @@ void VoiceClonePackageManager::cancel()
     if (state_ == Completed || state_ == Canceled || state_ == Idle) return;
     cancelRequested_ = true;
     if (state_ == Downloading) consumeReplyData();
-    if (reply_ != nullptr) reply_->abort();
+    ++operationGeneration_;
+    QNetworkReply* const activeReply = std::exchange(reply_, nullptr);
+    if (activeReply != nullptr) activeReply->abort();
     partialFile_.close();
     removeStagingSafely();
     partialFilePath_.clear();
@@ -582,25 +734,28 @@ void VoiceClonePackageManager::removeStagingSafely()
     }
 }
 
-bool VoiceClonePackageManager::hasAcceptedCurrentLicense() const
+bool VoiceClonePackageManager::hasAcceptedCurrentLicense(QString* error) const
 {
-    return hasLicenseAcceptance(manifest_.packageId, manifest_.licenseUrl,
+    QJsonArray records;
+    const QString readError = readLicenseRecords(licenseAcceptancePath(), &records);
+    if (error != nullptr) *error = readError;
+    if (!readError.isEmpty()) return false;
+    return hasLicenseAcceptance(manifest_.modelId, manifest_.adapterId, manifest_.licenseUrl,
                                 manifest_.licenseRevision);
 }
 
-bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& packageId,
+bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& modelId,
+                                                    const QString& adapterId,
                                                     const QUrl& licenseUrl,
                                                     const QString& revision) const
 {
     if (pathTraversesReparsePoint(licenseAcceptancePath())) return false;
-    QFile file(licenseAcceptancePath());
-    if (!file.open(QIODevice::ReadOnly)) return false;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
-    if (!document.isObject()) return false;
-    for (const QJsonValue& value :
-         document.object().value(QStringLiteral("acceptances")).toArray()) {
+    QJsonArray records;
+    if (!readLicenseRecords(licenseAcceptancePath(), &records).isEmpty()) return false;
+    for (const QJsonValue& value : std::as_const(records)) {
         const QJsonObject acceptance = value.toObject();
-        if (acceptance.value(QStringLiteral("packageId")).toString() == packageId
+        if (acceptance.value(QStringLiteral("modelId")).toString() == modelId
+            && acceptance.value(QStringLiteral("adapterId")).toString() == adapterId
             && acceptance.value(QStringLiteral("licenseUrl")).toString()
                    == licenseUrl.toString()
             && acceptance.value(QStringLiteral("revision")).toString()
@@ -617,28 +772,36 @@ bool VoiceClonePackageManager::hasLicenseAcceptance(const QString& packageId,
 bool VoiceClonePackageManager::acceptLicense(const QUrl& licenseUrl,
                                              const QString& revision)
 {
-    if (!requiresIndexLicense(manifest_) || licenseUrl != manifest_.licenseUrl
+    if (!manifest_.licenseAcceptanceRequired() || licenseUrl != manifest_.licenseUrl
         || revision != manifest_.licenseRevision) {
         return false;
     }
     if (pathTraversesReparsePoint(licenseAcceptancePath())) return false;
-    QJsonArray acceptances;
-    QFile existing(licenseAcceptancePath());
-    if (existing.open(QIODevice::ReadOnly)) {
-        const QJsonDocument document = QJsonDocument::fromJson(existing.readAll());
-        if (document.isObject()) {
-            acceptances = document.object().value(QStringLiteral("acceptances")).toArray();
-        }
+    QJsonArray records;
+    const QString readError = readLicenseRecords(licenseAcceptancePath(), &records);
+    if (!readError.isEmpty()) {
+        error_ = QStringLiteral("Invalid license acceptance store: %1").arg(readError);
+        emit stateChanged();
+        return false;
     }
     QJsonArray retained;
-    for (const QJsonValue& value : std::as_const(acceptances)) {
+    for (const QJsonValue& value : std::as_const(records)) {
         const QJsonObject object = value.toObject();
-        if (object.value(QStringLiteral("packageId")).toString() != manifest_.packageId) {
+        const bool sameKey = object.value(QStringLiteral("modelId")).toString()
+                                 == manifest_.modelId
+                             && object.value(QStringLiteral("adapterId")).toString()
+                                 == manifest_.adapterId
+                             && object.value(QStringLiteral("licenseUrl")).toString()
+                                 == manifest_.licenseUrl.toString()
+                             && object.value(QStringLiteral("revision")).toString()
+                                 == manifest_.licenseRevision;
+        if (!sameKey) {
             retained.append(object);
         }
     }
     retained.append(QJsonObject{
-        {QStringLiteral("packageId"), manifest_.packageId},
+        {QStringLiteral("modelId"), manifest_.modelId},
+        {QStringLiteral("adapterId"), manifest_.adapterId},
         {QStringLiteral("licenseUrl"), manifest_.licenseUrl.toString()},
         {QStringLiteral("revision"), manifest_.licenseRevision},
         {QStringLiteral("acceptedAt"),
@@ -647,15 +810,17 @@ bool VoiceClonePackageManager::acceptLicense(const QUrl& licenseUrl,
     if (!file.open(QIODevice::WriteOnly)) return false;
     const QByteArray bytes = QJsonDocument(
         QJsonObject{{QStringLiteral("schemaVersion"), 1},
-                    {QStringLiteral("acceptances"), retained}})
+                    {QStringLiteral("records"), retained}})
                                  .toJson(QJsonDocument::Compact);
     return file.write(bytes) == bytes.size() && file.commit();
 }
 
 bool VoiceClonePackageManager::commitStagingDirectory(const QString& stagingDirectory,
                                                       const QString& targetDirectory,
-                                                      QString* error)
+                                                      QString* error,
+                                                      const DeploymentOperations& operations)
 {
+    if (error != nullptr) error->clear();
     auto reject = [error](const QString& message) {
         if (error != nullptr) *error = message;
         return false;
@@ -667,37 +832,51 @@ bool VoiceClonePackageManager::commitStagingDirectory(const QString& stagingDire
         return reject(QStringLiteral("Staging and target must share one install root"));
     }
     const QString backup = target + QStringLiteral(".rollback");
+    const auto renameDirectory = [&operations](const QString& source,
+                                               const QString& destination) {
+        return operations.renameDirectory
+                   ? operations.renameDirectory(source, destination)
+                   : QDir().rename(source, destination);
+    };
+    const auto removeDirectory = [&operations](const QString& path) {
+        return operations.removeDirectory ? operations.removeDirectory(path)
+                                          : removeDirectoryTree(path);
+    };
     if (QFileInfo::exists(backup)) {
         if (!QFileInfo::exists(target) && QFileInfo(backup).isDir()
-            && !pathTraversesReparsePoint(backup) && QDir().rename(backup, target)) {
+            && !directoryTreeContainsReparsePoint(backup)
+            && renameDirectory(backup, target)) {
             return reject(QStringLiteral("Interrupted package commit recovered previous version"));
         }
         return reject(QStringLiteral("Rollback directory already exists"));
     }
     const QFileInfo stagingInfo(staging);
     if (!stagingInfo.exists() || !stagingInfo.isDir()
-        || pathTraversesReparsePoint(staging)) {
+        || directoryTreeContainsReparsePoint(staging)) {
         return reject(QStringLiteral("Staging directory is missing or contains a reparse point"));
     }
     const QFileInfo targetInfo(target);
     if (targetInfo.exists() && !targetInfo.isDir()) {
         return reject(QStringLiteral("Target package path is not a directory"));
     }
-    if (targetInfo.exists() && pathTraversesReparsePoint(target)) {
+    if (targetInfo.exists() && directoryTreeContainsReparsePoint(target)) {
         return reject(QStringLiteral("Target directory contains a reparse point"));
     }
     const bool hadTarget = QFileInfo::exists(target);
-    if (hadTarget && !QDir().rename(target, backup)) {
+    if (hadTarget && !renameDirectory(target, backup)) {
         return reject(QStringLiteral("Cannot preserve installed package for rollback"));
     }
-    if (!QDir().rename(staging, target)) {
-        if (hadTarget && !QDir().rename(backup, target)) {
+    if (!renameDirectory(staging, target)) {
+        if (hadTarget && !renameDirectory(backup, target)) {
             return reject(QStringLiteral("Package commit failed and rollback failed"));
         }
         return reject(QStringLiteral("Package commit failed; previous version restored"));
     }
-    if (hadTarget && !removeDirectoryTree(backup)) {
-        return reject(QStringLiteral("Package committed but rollback cleanup failed"));
+    if (hadTarget && !removeDirectory(backup)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Package committed; backup cleanup deferred");
+        }
+        return true;
     }
     return true;
 }

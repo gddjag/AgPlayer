@@ -10,6 +10,19 @@
 namespace agplayer::voice_clone {
 namespace {
 
+struct ApprovedModelIdentity {
+    const char* modelId;
+    const char* adapterId;
+    bool requiresLicenseAcceptance;
+};
+
+constexpr ApprovedModelIdentity kApprovedModels[] = {
+    {"Qwen/Qwen3-TTS-12Hz-0.6B-Base", "qwen", false},
+    {"Qwen/Qwen3-TTS-12Hz-1.7B-Base", "qwen", false},
+    {"IndexTeam/IndexTTS-2.5", "indextts25", true},
+    {"FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "cosyvoice3", false},
+};
+
 QString unknownField(const QJsonObject& object, const QSet<QString>& allowed)
 {
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
@@ -70,6 +83,18 @@ bool hasUnsafeWindowsComponent(const QString& path)
     return false;
 }
 
+const ApprovedModelIdentity* approvedIdentity(const QString& modelId,
+                                              const QString& adapterId)
+{
+    for (const ApprovedModelIdentity& approved : kApprovedModels) {
+        if (modelId == QLatin1String(approved.modelId)
+            && adapterId == QLatin1String(approved.adapterId)) {
+            return &approved;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject& object)
@@ -78,6 +103,7 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
     const QString rootUnknown = unknownField(
         object,
         {QStringLiteral("schemaVersion"), QStringLiteral("packageId"),
+         QStringLiteral("modelId"), QStringLiteral("adapterId"),
          QStringLiteral("version"), QStringLiteral("revision"),
          QStringLiteral("license"), QStringLiteral("files")});
     if (!rootUnknown.isEmpty()) {
@@ -90,6 +116,8 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
         return result;
     }
     if (!object.value(QStringLiteral("packageId")).isString()
+        || !object.value(QStringLiteral("modelId")).isString()
+        || !object.value(QStringLiteral("adapterId")).isString()
         || !object.value(QStringLiteral("version")).isString()
         || !object.value(QStringLiteral("revision")).isString()
         || !object.value(QStringLiteral("license")).isObject()
@@ -99,17 +127,17 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
     }
 
     result.packageId = object.value(QStringLiteral("packageId")).toString();
+    result.modelId = object.value(QStringLiteral("modelId")).toString();
+    result.adapterId = object.value(QStringLiteral("adapterId")).toString();
     result.version = object.value(QStringLiteral("version")).toString();
     result.revision = object.value(QStringLiteral("revision")).toString();
     const QJsonObject license = object.value(QStringLiteral("license")).toObject();
     const QString licenseUnknown = unknownField(
         license,
-        {QStringLiteral("url"), QStringLiteral("revision"),
-         QStringLiteral("requiresAcceptance")});
+        {QStringLiteral("url"), QStringLiteral("revision")});
     if (!licenseUnknown.isEmpty()
         || !license.value(QStringLiteral("url")).isString()
-        || !license.value(QStringLiteral("revision")).isString()
-        || !license.value(QStringLiteral("requiresAcceptance")).isBool()) {
+        || !license.value(QStringLiteral("revision")).isString()) {
         result.parseError_ = licenseUnknown.isEmpty()
                                  ? QStringLiteral("invalid license metadata")
                                  : QStringLiteral("unknown license field: %1").arg(licenseUnknown);
@@ -117,8 +145,7 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
     }
     result.licenseUrl = QUrl(license.value(QStringLiteral("url")).toString());
     result.licenseRevision = license.value(QStringLiteral("revision")).toString();
-    result.requiresLicenseAcceptance =
-        license.value(QStringLiteral("requiresAcceptance")).toBool();
+    result.requiresLicenseAcceptance = result.licenseAcceptanceRequired();
 
     for (const QJsonValue& value : object.value(QStringLiteral("files")).toArray()) {
         if (!value.isObject()) {
@@ -149,13 +176,21 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
 
 QString VoiceClonePackageManifest::validationError() const
 {
+    const QString foldedPackageId = packageId.toCaseFolded();
     if (packageId.trimmed().isEmpty() || QFileInfo(packageId).fileName() != packageId
         || QDir::isAbsolutePath(packageId) || packageId == QStringLiteral(".")
-        || packageId == QStringLiteral("..")) {
+        || packageId == QStringLiteral("..") || hasUnsafeWindowsComponent(packageId)
+        || foldedPackageId == QStringLiteral(".staging")
+        || foldedPackageId == QStringLiteral(".rollback")
+        || foldedPackageId.endsWith(QStringLiteral(".rollback"))
+        || foldedPackageId == QStringLiteral("license-acceptances.json")) {
         return QStringLiteral("invalid packageId");
     }
     if (version.trimmed().isEmpty() || revision.trimmed().isEmpty()) {
         return QStringLiteral("missing package version or revision");
+    }
+    if (approvedIdentity(modelId, adapterId) == nullptr) {
+        return QStringLiteral("unapproved modelId/adapterId package identity");
     }
     if (!licenseUrl.isValid()
         || licenseUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0
@@ -199,6 +234,12 @@ bool VoiceClonePackageManifest::isValid() const
 QString VoiceClonePackageManifest::errorString() const
 {
     return parseError_.isEmpty() ? validationError() : parseError_;
+}
+
+bool VoiceClonePackageManifest::licenseAcceptanceRequired() const
+{
+    const ApprovedModelIdentity* approved = approvedIdentity(modelId, adapterId);
+    return approved != nullptr && approved->requiresLicenseAcceptance;
 }
 
 } // namespace agplayer::voice_clone

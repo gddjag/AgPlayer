@@ -20,8 +20,11 @@ public:
 
     bool isValid() const;
     QString errorString() const;
+    bool licenseAcceptanceRequired() const;
 
     QString packageId;
+    QString modelId;
+    QString adapterId;
     QString version;
     QString revision;
     QUrl licenseUrl;
