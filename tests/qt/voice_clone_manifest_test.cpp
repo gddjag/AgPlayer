@@ -25,6 +25,7 @@ QString forbiddenProductName()
 }
 
 QJsonObject builtInModel(const QString& stableId,
+                         const QString& description,
                          const QString& adapterId,
                          const QString& runtimeId,
                          const bool requiresLicenseAcceptance,
@@ -35,6 +36,7 @@ QJsonObject builtInModel(const QString& stableId,
 {
     return {
         {QStringLiteral("stableId"), stableId},
+        {QStringLiteral("description"), description},
         {QStringLiteral("adapterId"), adapterId},
         {QStringLiteral("runtimeId"), runtimeId},
         {QStringLiteral("stable"), true},
@@ -56,6 +58,7 @@ QJsonObject approvedBuiltInRegistry()
         {QStringLiteral("models"),
          QJsonArray{
              builtInModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+                          QStringLiteral("Relative lightweight multilingual voice cloning model."),
                           QStringLiteral("qwen"),
                           QStringLiteral("qwen"),
                           false,
@@ -64,6 +67,7 @@ QJsonObject approvedBuiltInRegistry()
                           QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
                           QStringLiteral("https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-0.6B-Base")),
              builtInModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+                          QStringLiteral("Higher-quality multilingual voice cloning model."),
                           QStringLiteral("qwen"),
                           QStringLiteral("qwen"),
                           false,
@@ -72,6 +76,7 @@ QJsonObject approvedBuiltInRegistry()
                           QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
                           QStringLiteral("https://www.modelscope.cn/models/Qwen/Qwen3-TTS-12Hz-1.7B-Base")),
              builtInModel(QStringLiteral("IndexTeam/IndexTTS-2.5"),
+                          QStringLiteral("Experimental expressive multilingual voice cloning model."),
                           QStringLiteral("indextts25"),
                           QStringLiteral("indextts25"),
                           true,
@@ -80,6 +85,7 @@ QJsonObject approvedBuiltInRegistry()
                           QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5"),
                           QStringLiteral("https://modelscope.cn/models/IndexTeam/IndexTTS-2.5")),
              builtInModel(QStringLiteral("FunAudioLLM/Fun-CosyVoice3-0.5B-2512"),
+                          QStringLiteral("Multilingual and Chinese dialect voice cloning model."),
                           QStringLiteral("cosyvoice3"),
                           QStringLiteral("cosyvoice3"),
                           false,
@@ -195,6 +201,7 @@ void VoiceCloneManifestTest::builtInRegistryContainsOnlyApprovedStableModels()
         QCOMPARE(model.adapterId, QString::fromLatin1(expected.adapterId));
         QCOMPARE(model.runtimeId, QString::fromLatin1(expected.runtimeId));
         QCOMPARE(model.requiresLicenseAcceptance, expected.licenseGate);
+        QVERIFY(!model.description.trimmed().isEmpty());
         QVERIFY(model.officialProjectUrl.startsWith(QStringLiteral("https://")));
         QVERIFY(model.huggingFaceUrl.startsWith(QStringLiteral("https://")));
         QVERIFY(model.modelScopeUrl.startsWith(QStringLiteral("https://")));

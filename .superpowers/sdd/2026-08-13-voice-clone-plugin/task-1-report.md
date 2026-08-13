@@ -72,3 +72,20 @@ ctest --test-dir build/msvc-debug -C Debug -R "voice_clone_(manifest|capability_
 - Manifest 目标：按预期 RED，`voice_clone_registry.hpp` 缺失，MSVC `fatal error C1083`。
 - Capability 目标：按预期 RED，`voice_clone_capability_schema.hpp` 缺失，MSVC `fatal error C1083`。
 - CTest：两个测试已注册；因 RED 构建未产生可执行文件，`0% tests passed, 2 tests failed out of 2`，两项均 `Not Run`。
+
+## Fix round 2
+
+- 正常 Registry 基线的四条模型记录均加入合法、非空且不含禁用产品名的 `description`；成功加载后逐条断言 `model.description` 非空。
+- 禁用名负例只把第一条合法记录的 `description` 替换为禁用产品名，其他字段与正常基线完全一致，并要求 `loadBuiltIn` 失败；因此“拒绝所有带 description 的 Registry”不能通过正例。
+- 未修改生产代码或 QML。
+
+### RED
+
+```powershell
+cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build build/msvc-debug --target voice_clone_manifest_test'
+ctest --test-dir build/msvc-debug -C Debug -R "voice_clone_(manifest|capability_schema)_test" --output-on-failure
+```
+
+- VS 2022 x64 环境确认：`where cl` 指向 `Hostx64\x64\cl.exe`。
+- Manifest 构建按预期 RED：`voice_clone_registry.hpp` 缺失，MSVC `fatal error C1083`。
+- CTest 仍发现两个测试但无可执行文件：两项 `Not Run`，退出码 8；这与生产接口尚未实现的预期 RED 一致。
