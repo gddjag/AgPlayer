@@ -17,6 +17,7 @@ enum class WriteError {
     Cancelled,
     RenderFailed,
     EncodeFailed,
+    MetadataFailed,
     VerificationFailed,
     CommitFailed
 };
@@ -25,6 +26,7 @@ struct WriteRequest final {
     DocumentSnapshot snapshot;
     std::filesystem::path output_path;
     std::string codec_name;
+    std::filesystem::path metadata_source_path;
     long long bit_rate{};
     int sample_rate{};
     int channels{};

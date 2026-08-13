@@ -149,6 +149,25 @@ bool AudioDocument::addMarker(Marker marker)
     return true;
 }
 
+bool AudioDocument::renameMarker(const std::size_t index, std::string name)
+{
+    if (index >= state_.markers.size()) {
+        return false;
+    }
+    state_.markers[index].name = std::move(name);
+    return true;
+}
+
+bool AudioDocument::removeMarker(const std::size_t index)
+{
+    if (index >= state_.markers.size()) {
+        return false;
+    }
+    state_.markers.erase(state_.markers.begin()
+                         + static_cast<std::ptrdiff_t>(index));
+    return true;
+}
+
 bool AudioDocument::insertSource(AudioSource source, const SampleFrame frame)
 {
     if (frame < 0 || frame > totalFrames() || source.sample_rate == 0

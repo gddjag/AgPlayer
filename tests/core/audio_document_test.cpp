@@ -119,6 +119,21 @@ private slots:
         QCOMPARE(doc.markers().at(1).frame, SampleFrame{50'000});
     }
 
+    void markerManagementRenamesAndRemovesByStableIndex()
+    {
+        auto doc = document(100'000);
+        QVERIFY(doc.addMarker({"first", 10'000}));
+        QVERIFY(doc.addMarker({"second", 80'000}));
+
+        QVERIFY(doc.renameMarker(0, "intro"));
+        QCOMPARE(doc.markers().at(0).name, std::string{"intro"});
+        QVERIFY(!doc.renameMarker(2, "outside"));
+        QVERIFY(doc.removeMarker(1));
+        QCOMPARE(doc.markers().size(), std::size_t{1});
+        QCOMPARE(doc.markers().front().name, std::string{"intro"});
+        QVERIFY(!doc.removeMarker(1));
+    }
+
     void repeatedUndoRedoPreservesDocument()
     {
         auto doc = document(10'000);

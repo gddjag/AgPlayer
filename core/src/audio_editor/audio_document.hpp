@@ -63,6 +63,8 @@ public:
     bool setSelection(Selection selection) noexcept;
     bool clearSelection() noexcept;
     bool addMarker(Marker marker);
+    bool renameMarker(std::size_t index, std::string name);
+    bool removeMarker(std::size_t index);
     bool insertSource(AudioSource source, SampleFrame frame);
     bool replaceRangeWithSource(AudioSource source, Selection range);
     bool apply(const EditCommand& command);

@@ -105,6 +105,27 @@ int main(const int argc, char** argv)
                            metadata.channels) == 1'000,
             "selection frame count mismatch");
 
+    const fs::path parameter_output = input.parent_path() / "writer-parameters.flac";
+    fs::remove(parameter_output);
+    WriteRequest parameters;
+    parameters.snapshot = document.snapshot();
+    parameters.output_path = parameter_output;
+    parameters.codec_name = "flac";
+    parameters.sample_rate = 48'000;
+    parameters.channels = 1;
+    parameters.range = Selection{0, 44'100};
+    const WriteResult parameter_result = writer.write(parameters);
+    if (!parameter_result.ok()) std::cerr << parameter_result.message << '\n';
+    require(parameter_result.ok(), "parameterized write failed");
+    agplayer::MediaMetadata parameter_metadata;
+    require(agplayer::probe_media_metadata(
+                parameter_output.u8string(), parameter_metadata) == AG_OK,
+            "parameterized output probe failed");
+    require(parameter_metadata.sample_rate == 48'000,
+            "requested export sample rate was not applied");
+    require(parameter_metadata.channels == 1,
+            "requested export channel count was not applied");
+
     struct OutputCase final {
         const char* name;
         const char* codec;
@@ -142,6 +163,7 @@ int main(const int argc, char** argv)
         fs::remove(output);
     }
     fs::remove(selection_output);
+    fs::remove(parameter_output);
     fs::remove(protected_output);
     return 0;
 }

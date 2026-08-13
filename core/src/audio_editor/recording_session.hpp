@@ -48,6 +48,7 @@ public:
     [[nodiscard]] bool pause() noexcept;
     [[nodiscard]] bool resume() noexcept;
     [[nodiscard]] RecordingResult stop();
+    [[nodiscard]] bool cancel();
     [[nodiscard]] std::size_t pushCapturedFrames(
         const float* interleaved, std::size_t frames) noexcept;
 

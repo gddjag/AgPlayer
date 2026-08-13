@@ -105,6 +105,24 @@ int main()
     require(fs::exists(recovered), "recovered recording is missing");
     require(!fs::exists(staged) && !fs::exists(journal),
             "recording recovery did not clean staged files");
+
+    const fs::path cancelled = fs::temp_directory_path()
+        / "agplayer-recording-cancelled.wav";
+    fs::remove(cancelled, ignored);
+    RecordingConfig cancel_config = config;
+    cancel_config.output_path = cancelled;
+    RecordingSession cancelled_session;
+    require(cancelled_session.startManual(cancel_config),
+            "cancel recording start failed");
+    require(cancelled_session.pushCapturedFrames(block.data(), 480) == 480,
+            "cancel recording did not accept frames");
+    require(cancelled_session.cancel(), "recording cancel failed");
+    require(!fs::exists(cancelled), "cancelled recording was committed");
+    require(!fs::exists(fs::path(cancelled.u8string()
+                + ".agplayer-recording.tmp"))
+            && !fs::exists(fs::path(cancelled.u8string()
+                + ".agplayer-recording.journal")),
+            "cancelled recording left recovery artifacts");
     fs::remove(output, ignored);
     fs::remove(recovered, ignored);
     return 0;

@@ -20,7 +20,9 @@
 #include <thread>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <Windows.h>
 #endif
 
@@ -303,6 +305,24 @@ public:
         return result;
     }
 
+    bool cancel()
+    {
+        if (state.load() == RecordingState::Idle) return false;
+        state.store(RecordingState::Finalizing);
+        if (device_started) ma_device_stop(&device);
+        device_started = false;
+        if (device_ready) ma_device_uninit(&device);
+        device_ready = false;
+        if (context_ready) ma_context_uninit(&context);
+        context_ready = false;
+        writer_exit.store(true, std::memory_order_release);
+        if (writer.joinable()) writer.join();
+        cleanup_files();
+        ring.reset();
+        state.store(RecordingState::Idle);
+        return true;
+    }
+
     static void data_callback(ma_device* device_ptr, void* output,
                               const void* input, ma_uint32 frames)
     {
@@ -508,6 +528,8 @@ bool RecordingSession::resume() noexcept
 }
 
 RecordingResult RecordingSession::stop() { return impl_->stop(); }
+
+bool RecordingSession::cancel() { return impl_->cancel(); }
 
 std::size_t RecordingSession::pushCapturedFrames(
     const float* interleaved, const std::size_t frames) noexcept

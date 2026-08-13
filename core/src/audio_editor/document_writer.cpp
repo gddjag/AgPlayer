@@ -1,6 +1,7 @@
 #include "document_writer.hpp"
 
 #include "../decoder.hpp"
+#include "../metadata_writer.hpp"
 #include "document_renderer.hpp"
 #include "../transcoder.hpp"
 
@@ -14,7 +15,9 @@ extern "C" {
 #include <system_error>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <Windows.h>
 #endif
 
@@ -103,6 +106,46 @@ bool commit_file(const std::filesystem::path& staged,
 #endif
 }
 
+std::optional<std::string> present_value(const char* value)
+{
+    return value != nullptr && value[0] != '\0'
+        ? std::optional<std::string>{value} : std::nullopt;
+}
+
+bool copy_metadata(const std::filesystem::path& source,
+                   const std::filesystem::path& target,
+                   std::string& message)
+{
+    ag_metadata* metadata = nullptr;
+    const std::string source_utf8 = source.u8string();
+    if (ag_metadata_open(source_utf8.c_str(), &metadata) != AG_OK
+        || metadata == nullptr) {
+        if (metadata != nullptr) ag_metadata_destroy(metadata);
+        message = "source metadata cannot be read";
+        return false;
+    }
+    agplayer::MetadataUpdate update;
+    update.title = present_value(ag_metadata_title(metadata));
+    update.artist = present_value(ag_metadata_artist(metadata));
+    update.album = present_value(ag_metadata_album(metadata));
+    update.album_artist = present_value(ag_metadata_album_artist(metadata));
+    update.track = present_value(ag_metadata_track(metadata));
+    update.disc = present_value(ag_metadata_disc(metadata));
+    update.composer = present_value(ag_metadata_composer(metadata));
+    update.comment = present_value(ag_metadata_comment(metadata));
+    update.bpm = present_value(ag_metadata_bpm_tag(metadata));
+    update.copyright = present_value(ag_metadata_copyright(metadata));
+    update.encoder = present_value(ag_metadata_encoder(metadata));
+    update.year = present_value(ag_metadata_year(metadata));
+    update.genre = present_value(ag_metadata_genre(metadata));
+    update.lyrics = present_value(ag_metadata_lyrics(metadata));
+    const std::string target_utf8 = target.u8string();
+    const ag_result result = agplayer::write_metadata(
+        target_utf8, update, message);
+    ag_metadata_destroy(metadata);
+    return result == AG_OK;
+}
+
 } // namespace
 
 WriteResult DocumentWriter::write(
@@ -170,6 +213,15 @@ WriteResult DocumentWriter::write(
         return {encoded == AG_CANCELLED ? WriteError::Cancelled
                                        : WriteError::EncodeFailed,
                 encode_error, rendered.frames};
+    }
+    if (request.keep_metadata && !request.metadata_source_path.empty()) {
+        std::string metadata_error;
+        if (!copy_metadata(request.metadata_source_path, staged_path,
+                           metadata_error)) {
+            cleanup();
+            return {WriteError::MetadataFailed, metadata_error,
+                    rendered.frames};
+        }
     }
 
     const SampleFrame expected = static_cast<SampleFrame>(std::llround(
