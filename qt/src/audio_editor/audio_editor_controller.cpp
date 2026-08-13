@@ -4,6 +4,7 @@
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/document_renderer.hpp"
 #include "audio_editor/document_writer.hpp"
+#include "audio_editor/noise_reducer.hpp"
 #include "bpm_analyzer.hpp"
 #include "transcode_capability.hpp"
 
@@ -24,6 +25,7 @@ using agplayer::editor::AudioSource;
 using agplayer::editor::DocumentRenderer;
 using agplayer::editor::DocumentWriter;
 using agplayer::editor::EditCommand;
+using agplayer::editor::NoiseReducer;
 using agplayer::editor::Selection;
 using agplayer::editor::WriteRequest;
 
@@ -56,6 +58,14 @@ struct AudioEditorController::RecordingFinalizeResult final {
     AudioFileAnalysis analysis;
 };
 
+struct AudioEditorController::PreviewRenderResult final {
+    bool success{};
+    bool processed{};
+    std::uint64_t generation{};
+    QString path;
+    QString error;
+};
+
 AudioEditorController::AudioEditorController(
     const ag_audio_backend backend, QObject* parent)
     : QObject(parent), actions_(this), viewport_(this), backend_(backend)
@@ -71,6 +81,22 @@ AudioEditorController::AudioEditorController(
             this, &AudioEditorController::pollPlayback);
     recording_timer_.setInterval(33);
     connect(&recording_timer_, &QTimer::timeout, this, [this] {
+        QVariantList points;
+        const std::vector<float> peaks = recording_session_.recentPeaks(640);
+        points.reserve(static_cast<qsizetype>(peaks.size() * 2));
+        for (const float peak : peaks) {
+            points.append(-peak);
+            points.append(peak);
+        }
+        live_recording_peaks_.clear();
+        for (int channel = 0; channel < (std::max)(1, recording_channels_); ++channel) {
+            live_recording_peaks_.append(QVariant::fromValue(points));
+        }
+        position_ms_ = recording_sample_rate_ > 0
+            ? recordingFrames() * 1'000 / recording_sample_rate_ : 0;
+        viewport_.setDocumentFrames((std::max<qint64>)(1, recordingFrames()));
+        emit waveformChanged();
+        emit playbackChanged();
         emit recordingChanged();
     });
     QSettings settings;
@@ -103,6 +129,8 @@ AudioEditorController::~AudioEditorController()
     if (recording_start_watcher_) recording_start_watcher_->future().waitForFinished();
     if (recording_stop_watcher_) recording_stop_watcher_->future().waitForFinished();
     if (bpm_watcher_) bpm_watcher_->future().waitForFinished();
+    if (noise_reduction_watcher_) noise_reduction_watcher_->future().waitForFinished();
+    if (preview_watcher_) preview_watcher_->future().waitForFinished();
     if (recording()) (void)recording_session_.stop();
     if (player_) {
         ag_player_stop(player_);
@@ -133,6 +161,12 @@ double AudioEditorController::inputLevel() const noexcept
 qint64 AudioEditorController::recordingFrames() const noexcept
 {
     return recording_session_.framesCaptured();
+}
+
+QVariantList AudioEditorController::channelPeaks() const
+{
+    return recording() && !live_recording_peaks_.isEmpty()
+        ? live_recording_peaks_ : channel_peaks_;
 }
 
 QVariantList AudioEditorController::buildExportFormats() const
@@ -190,19 +224,6 @@ bool AudioEditorController::busy() const noexcept
         || state_ == EditorSessionState::Finalizing;
 }
 
-QVariantList AudioEditorController::markers() const
-{
-    QVariantList result;
-    for (const auto& marker : document_.markers()) {
-        result.append(QVariantMap{
-            {QStringLiteral("name"), QString::fromStdString(marker.name)},
-            {QStringLiteral("frame"), marker.frame},
-            {QStringLiteral("positionMs"), sample_rate_ > 0
-                ? marker.frame * 1'000 / sample_rate_ : 0}});
-    }
-    return result;
-}
-
 qint64 AudioEditorController::selectionStart() const noexcept
 {
     const auto selection = document_.snapshot().selection;
@@ -250,7 +271,17 @@ bool AudioEditorController::createUntitledDocument(
     bits_per_sample_ = 24;
     bit_rate_ = 0;
     source_channel_peaks_.clear();
+    QVariantList flat;
+    constexpr int silent_points = 2'048;
+    flat.reserve(silent_points * 2);
+    for (int point = 0; point < silent_points; ++point) {
+        flat.append(0.0F);
+        flat.append(0.0F);
+    }
     channel_peaks_.clear();
+    for (quint32 channel = 0; channel < channels; ++channel) {
+        channel_peaks_.append(QVariant::fromValue(flat));
+    }
     has_document_ = true;
     modified_ = false;
     viewport_.setDocumentFrames(frames);
@@ -472,67 +503,10 @@ bool AudioEditorController::clearSelection()
     return true;
 }
 
-bool AudioEditorController::addMarker(const QString& name, const qint64 frame)
-{
-    if (!has_document_ || !document_.addMarker({name.toStdString(), frame})) {
-        return false;
-    }
-    modified_ = true;
-    refreshActions();
-    emit documentChanged();
-    return true;
-}
-
-bool AudioEditorController::renameMarker(const int index, const QString& name)
-{
-    const QString normalized = name.trimmed();
-    if (!has_document_ || index < 0 || normalized.isEmpty()
-        || !document_.renameMarker(static_cast<std::size_t>(index),
-                                   normalized.toStdString())) {
-        return false;
-    }
-    modified_ = true;
-    refreshActions();
-    emit documentChanged();
-    return true;
-}
-
-bool AudioEditorController::removeMarker(const int index)
-{
-    if (!has_document_ || index < 0
-        || !document_.removeMarker(static_cast<std::size_t>(index))) {
-        return false;
-    }
-    modified_ = true;
-    refreshActions();
-    emit documentChanged();
-    return true;
-}
-
-bool AudioEditorController::seekPreviousMarker()
-{
-    const qint64 current = position_ms_ * sample_rate_ / 1'000;
-    const auto& items = document_.markers();
-    auto match = std::lower_bound(items.begin(), items.end(), current,
-        [](const auto& marker, const qint64 frame) { return marker.frame < frame; });
-    if (match == items.begin()) return false;
-    --match;
-    return seekMs(match->frame * 1'000 / sample_rate_);
-}
-
-bool AudioEditorController::seekNextMarker()
-{
-    const qint64 current = position_ms_ * sample_rate_ / 1'000;
-    const auto& items = document_.markers();
-    const auto match = std::upper_bound(items.begin(), items.end(), current,
-        [](const qint64 frame, const auto& marker) { return frame < marker.frame; });
-    return match != items.end()
-        && seekMs(match->frame * 1'000 / sample_rate_);
-}
-
 void AudioEditorController::cancelOperation()
 {
     operation_cancelled_.store(true, std::memory_order_release);
+    preview_generation_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 bool AudioEditorController::insertSilence(
@@ -550,16 +524,73 @@ bool AudioEditorController::applyGain(const double decibels)
         static_cast<float>(std::pow(10.0, decibels / 20.0))));
 }
 
-bool AudioEditorController::normalize()
+bool AudioEditorController::reduceNoise()
 {
-    float peak = 0.0F;
-    for (const QVariant& channelValue : channel_peaks_) {
-        for (const QVariant& value : channelValue.toList()) {
-            peak = std::max(peak, static_cast<float>(std::abs(value.toDouble())));
+    if (!has_document_ || busy() || noise_reduction_watcher_
+        || !preview_directory_.isValid()) return false;
+    stopPlayback();
+    const auto snapshot = document_.snapshot();
+    const auto range = snapshot.selection;
+    const Selection replacement = range.value_or(
+        Selection{0, document_.totalFrames()});
+    const QString output = preview_directory_.filePath(
+        QStringLiteral("noise-reduced-%1.wav").arg(
+            QDateTime::currentMSecsSinceEpoch()));
+    operation_cancelled_.store(false, std::memory_order_release);
+    setProgress(0.0);
+    setError({});
+    setState(EditorSessionState::Processing);
+    auto* watcher = new QFutureWatcher<agplayer::editor::NoiseReductionResult>(this);
+    noise_reduction_watcher_ = watcher;
+    connect(watcher,
+            &QFutureWatcher<agplayer::editor::NoiseReductionResult>::finished,
+            this, [this, watcher, replacement] {
+        noise_reduction_watcher_ = nullptr;
+        const auto result = watcher->result();
+        watcher->deleteLater();
+        if (!result.success) {
+            const bool was_cancelled = operation_cancelled_.load(
+                std::memory_order_acquire);
+            setState(EditorSessionState::Ready);
+            setError(was_cancelled ? tr("操作已取消")
+                : QString::fromStdString(result.message));
+            return;
         }
-    }
-    return peak > 0.0F && runDocumentCommand(
-        EditCommand::gain(0.89125094F / peak));
+        AudioSource source{result.output_path, result.sample_rate,
+                           result.channels, result.frames};
+        if (!document_.replaceRangeWithSource(source, replacement)) {
+            setState(EditorSessionState::Error);
+            setError(tr("无法提交降噪结果"));
+            return;
+        }
+        const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(
+            result.output_path, 2'048);
+        if (analysis.success) {
+            source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
+        }
+        modified_ = true;
+        playback_path_.clear();
+        viewport_.setDocumentFrames(document_.totalFrames());
+        rebuildEditorPeaks();
+        setProgress(1.0);
+        setState(EditorSessionState::Ready);
+        refreshActions();
+        emit waveformChanged();
+        emit documentChanged();
+    });
+    const QPointer<AudioEditorController> guard(this);
+    watcher->setFuture(QtConcurrent::run(
+        [this, snapshot, range, output, guard] {
+        return NoiseReducer::reduce(snapshot, range,
+            std::filesystem::path(output.toStdWString()),
+            &operation_cancelled_, [guard](const float value) {
+                if (guard) QMetaObject::invokeMethod(
+                    guard, [guard, value] {
+                        if (guard) guard->setProgress(value);
+                    }, Qt::QueuedConnection);
+            });
+    }));
+    return true;
 }
 
 bool AudioEditorController::detectBpm()
@@ -1009,6 +1040,7 @@ bool AudioEditorController::preparePlayback()
 {
     if (!has_document_ || !player_) return false;
     if (playback_path_.isEmpty()) {
+        if (preview_watcher_) return true;
         if (!preview_directory_.isValid()) {
             setError(tr("无法创建预览目录"));
             return false;
@@ -1018,27 +1050,54 @@ bool AudioEditorController::preparePlayback()
         const QString path = preview_directory_.filePath(
             processed ? QStringLiteral("time-pitch-preview.wav")
                       : QStringLiteral("preview.wav"));
-        if (processed) {
-            const auto result = time_pitch_.process(
-                document_.snapshot(), std::filesystem::path(path.toStdWString()));
+        const std::uint64_t generation = preview_generation_.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+        const auto snapshot = document_.snapshot();
+        const auto parameters = time_pitch_;
+        setState(EditorSessionState::Processing);
+        auto* watcher = new QFutureWatcher<PreviewRenderResult>(this);
+        preview_watcher_ = watcher;
+        connect(watcher, &QFutureWatcher<PreviewRenderResult>::finished,
+                this, [this, watcher] {
+            preview_watcher_ = nullptr;
+            const PreviewRenderResult result = watcher->result();
+            watcher->deleteLater();
+            if (result.generation != preview_generation_.load(
+                    std::memory_order_acquire)) {
+                setState(EditorSessionState::Ready);
+                return;
+            }
             if (!result.success) {
-                setError(QString::fromStdString(result.message));
-                return false;
+                setState(EditorSessionState::Error);
+                setError(result.error);
+                return;
             }
-        } else {
-            const auto rendered = DocumentRenderer{}.renderFloatWav(
-                document_.snapshot(), std::nullopt,
-                std::filesystem::path(path.toStdWString()));
-            if (!rendered.success) {
-                setError(QString::fromStdString(rendered.message));
-                return false;
-            }
-        }
-        playback_path_ = path;
-        if (time_pitch_preview_active_ != processed) {
-            time_pitch_preview_active_ = processed;
+            playback_path_ = result.path;
+            time_pitch_preview_active_ = result.processed;
             emit timePitchChanged();
-        }
+            startPreparedPlayback();
+        });
+        watcher->setFuture(QtConcurrent::run(
+            [snapshot, parameters, path, processed, generation] {
+            PreviewRenderResult result;
+            result.generation = generation;
+            result.processed = processed;
+            result.path = path;
+            if (processed) {
+                const auto outcome = parameters.process(
+                    snapshot, std::filesystem::path(path.toStdWString()));
+                result.success = outcome.success;
+                result.error = QString::fromStdString(outcome.message);
+            } else {
+                const auto outcome = DocumentRenderer{}.renderFloatWav(
+                    snapshot, std::nullopt,
+                    std::filesystem::path(path.toStdWString()));
+                result.success = outcome.success;
+                result.error = QString::fromStdString(outcome.message);
+            }
+            return result;
+        }));
+        return true;
     }
     if (ag_player_load(player_, playback_path_.toUtf8().constData()) != AG_OK) {
         setError(tr("无法载入编辑预览"));
@@ -1076,6 +1135,7 @@ bool AudioEditorController::playPause()
     if (ag_player_snapshot(player_, &snapshot) != AG_OK
         || snapshot.state == AG_STOPPED || snapshot.state == AG_ERROR) {
         if (!preparePlayback()) return false;
+        if (preview_watcher_) return true;
     }
     if (ag_player_play(player_) != AG_OK) return false;
     playing_ = true;
@@ -1083,6 +1143,32 @@ bool AudioEditorController::playPause()
     setState(EditorSessionState::Playing);
     emit playbackChanged();
     return true;
+}
+
+void AudioEditorController::startPreparedPlayback()
+{
+    if (!player_ || playback_path_.isEmpty()) return;
+    if (ag_player_load(player_, playback_path_.toUtf8().constData()) != AG_OK) {
+        setState(EditorSessionState::Error);
+        setError(tr("无法载入编辑预览"));
+        return;
+    }
+    ag_player_set_volume(player_, static_cast<float>(volume_));
+    const qint64 preview_position = time_pitch_preview_active_
+        ? static_cast<qint64>(std::llround(
+            static_cast<double>(position_ms_) * 100.0
+            / time_pitch_.speedPercent()))
+        : position_ms_;
+    if (preview_position > 0) ag_player_seek(player_, preview_position);
+    if (ag_player_play(player_) != AG_OK) {
+        setState(EditorSessionState::Error);
+        setError(tr("无法开始编辑预览"));
+        return;
+    }
+    playing_ = true;
+    playback_timer_.start();
+    setState(EditorSessionState::Playing);
+    emit playbackChanged();
 }
 
 void AudioEditorController::setMainPlaybackController(
@@ -1094,6 +1180,9 @@ void AudioEditorController::setMainPlaybackController(
 bool AudioEditorController::stopPlayback()
 {
     if (!player_) return false;
+    if (preview_watcher_) {
+        preview_generation_.fetch_add(1, std::memory_order_acq_rel);
+    }
     const bool wasActive = playing_ || position_ms_ != 0;
     ag_player_stop(player_);
     playback_timer_.stop();
@@ -1153,7 +1242,7 @@ void AudioEditorController::pollPlayback()
         const qint64 start = selection->start * 1'000 / sample_rate_;
         const qint64 end = selection->end * 1'000 / sample_rate_;
         if (position_ms_ >= end) {
-            if (loop_enabled_) {
+            {
                 const qint64 previewStart = time_pitch_preview_active_
                     ? static_cast<qint64>(std::llround(
                         static_cast<double>(start) * 100.0
@@ -1161,12 +1250,6 @@ void AudioEditorController::pollPlayback()
                     : start;
                 ag_player_seek(player_, previewStart);
                 position_ms_ = start;
-            } else {
-                ag_player_pause(player_);
-                position_ms_ = end;
-                playing_ = false;
-                playback_timer_.stop();
-                setState(EditorSessionState::Ready);
             }
         }
     }

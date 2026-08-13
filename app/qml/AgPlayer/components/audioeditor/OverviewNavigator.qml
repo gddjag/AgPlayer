@@ -32,7 +32,7 @@ Rectangle {
             id: overview
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: Theme.isLight ? "#EAF2F2" : "#132124"
+            color: Theme.editorOverview
             radius: 4
             border.color: Theme.border
             clip: true
@@ -41,7 +41,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 4
                 channelPeaks: AudioEditorController.channelPeaks
-                waveformColor: Theme.isLight ? "#2B9692" : "#297E7B"
+                waveformColor: Theme.editorOverviewWaveform
             }
             Rectangle {
                 id: viewportWindow
@@ -49,7 +49,7 @@ Rectangle {
                 width: parent.width * AudioEditorController.viewport.overviewWidthRatio
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: "#121BCBC3"
+                color: Theme.editorOverviewSelection
                 border.color: Theme.cyan
                 border.width: 1
             }

@@ -151,7 +151,11 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         static_cast<std::size_t>(std::ceil(visible_end_ratio_ * pair_count)),
         first_pair + 1U, pair_count);
     const std::size_t visible_pair_count = end_pair - first_pair;
-    const std::size_t vertex_count = visible_pair_count * 2U
+    const bool detailed = visible_pair_count > 1U
+        && static_cast<qreal>(visible_pair_count) <= width() * 4.0;
+    const std::size_t vertices_per_channel = detailed
+        ? (visible_pair_count - 1U) * 2U : visible_pair_count * 2U;
+    const std::size_t vertex_count = vertices_per_channel
         * snapshot->channels.size();
     if (vertex_count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         delete oldNode;
@@ -177,15 +181,33 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
             const qreal center = (static_cast<qreal>(channel_index) + 0.5)
                 * channel_height;
             const qreal half_height = channel_height * 0.46;
-            for (std::size_t index = first_pair; index < end_pair; ++index) {
-                const std::size_t visible_index = index - first_pair;
-                const qreal x = visible_pair_count == 1U ? width() * 0.5
-                    : static_cast<qreal>(visible_index) * width()
+            if (detailed) {
+                for (std::size_t index = first_pair; index + 1U < end_pair; ++index) {
+                    const std::size_t visible_index = index - first_pair;
+                    const qreal x1 = static_cast<qreal>(visible_index) * width()
                         / static_cast<qreal>(visible_pair_count - 1U);
-                vertices[vertex++].set(static_cast<float>(x),
-                    static_cast<float>(center + peaks[index * 2U] * half_height));
-                vertices[vertex++].set(static_cast<float>(x),
-                    static_cast<float>(center + peaks[index * 2U + 1U] * half_height));
+                    const qreal x2 = static_cast<qreal>(visible_index + 1U) * width()
+                        / static_cast<qreal>(visible_pair_count - 1U);
+                    const float sample1 = (peaks[index * 2U]
+                        + peaks[index * 2U + 1U]) * 0.5F;
+                    const float sample2 = (peaks[(index + 1U) * 2U]
+                        + peaks[(index + 1U) * 2U + 1U]) * 0.5F;
+                    vertices[vertex++].set(static_cast<float>(x1),
+                        static_cast<float>(center + sample1 * half_height));
+                    vertices[vertex++].set(static_cast<float>(x2),
+                        static_cast<float>(center + sample2 * half_height));
+                }
+            } else {
+                for (std::size_t index = first_pair; index < end_pair; ++index) {
+                    const std::size_t visible_index = index - first_pair;
+                    const qreal x = visible_pair_count == 1U ? width() * 0.5
+                        : static_cast<qreal>(visible_index) * width()
+                            / static_cast<qreal>(visible_pair_count - 1U);
+                    vertices[vertex++].set(static_cast<float>(x),
+                        static_cast<float>(center + peaks[index * 2U] * half_height));
+                    vertices[vertex++].set(static_cast<float>(x),
+                        static_cast<float>(center + peaks[index * 2U + 1U] * half_height));
+                }
             }
         }
         node->revision_ = snapshot->revision;

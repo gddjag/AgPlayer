@@ -5,7 +5,8 @@ import AgPlayer
 
 Rectangle {
     id: bar
-    signal exportSelectionRequested()
+    signal exportRequested(bool selectionOnly)
+    signal gainRequested()
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
@@ -110,26 +111,18 @@ Rectangle {
         CommandButton { actionId: "editor.fadeIn"; label: qsTr("淡入"); shortcutText: "Ctrl+Alt+I"; iconName: "restore-line" }
         CommandButton { actionId: "editor.fadeOut"; label: qsTr("淡出"); shortcutText: "Ctrl+Alt+O"; iconName: "restore-line" }
         DirectButton {
-            commandName: "normalize"; label: qsTr("标准化"); iconName: "equalizer-line"
-            onInvoked: AudioEditorController.normalize()
+            commandName: "noiseReduction"; label: qsTr("噪音消除"); iconName: "equalizer-line"
+            onInvoked: AudioEditorController.reduceNoise()
+        }
+        DirectButton {
+            commandName: "gain"; label: qsTr("增益"); iconName: "equalizer-line"
+            onInvoked: bar.gainRequested()
         }
         DirectButton {
             commandName: "insertSilence"; label: qsTr("插入静音"); iconName: "volume-mute-line"
             onInvoked: AudioEditorController.insertSilence(
                 AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000,
                 AudioEditorController.sampleRate)
-        }
-        DirectButton {
-            commandName: "addMarker"; label: qsTr("标记"); shortcutText: "Ctrl+M"; iconName: "pushpin-fill"
-            onInvoked: AudioEditorController.addMarker(
-                qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
-                AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
-        }
-        DirectButton {
-            commandName: "exportSelection"; label: qsTr("导出选区"); iconName: "download-line"
-            commandEnabled: AudioEditorController.selectionStart >= 0
-                && !AudioEditorController.busy
-            onInvoked: bar.exportSelectionRequested()
         }
         DirectButton {
             commandName: "clearSelection"; label: qsTr("取消选区"); shortcutText: "Ctrl+Shift+A"; iconName: "close-fill"
@@ -141,6 +134,22 @@ Rectangle {
             onInvoked: AudioEditorController.clearDocument()
         }
         Item { Layout.fillWidth: true }
-        CommandButton { actionId: "editor.export"; label: qsTr("导出"); shortcutText: "Ctrl+Shift+E"; iconName: "download-line" }
+        ToolButton {
+            id: exportButton
+            objectName: "editorCommand_exportMenu"
+            text: qsTr("导出")
+            icon.source: Theme.icon("download-line")
+            enabled: AudioEditorController.hasDocument && !AudioEditorController.busy
+            onClicked: exportMenu.open()
+            Menu {
+                id: exportMenu
+                ThemedMenuItem { text: qsTr("导出整曲"); onTriggered: bar.exportRequested(false) }
+                ThemedMenuItem {
+                    text: qsTr("导出选区")
+                    enabled: AudioEditorController.selectionStart >= 0
+                    onTriggered: bar.exportRequested(true)
+                }
+            }
+        }
     }
 }

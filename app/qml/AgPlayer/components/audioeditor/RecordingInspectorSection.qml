@@ -188,6 +188,13 @@ Rectangle {
                     enabled: AudioEditorController.recording
                     onClicked: AudioEditorController.stopRecording()
                 }
+                Button {
+                    objectName: "recordingCancelButton"
+                    Layout.fillWidth: true
+                    text: qsTr("取消录音")
+                    enabled: AudioEditorController.recording
+                    onClicked: AudioEditorController.cancelRecording()
+                }
             }
         }
     }

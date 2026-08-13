@@ -82,10 +82,10 @@ foreach ($behavior in @('recordingRequested', 'pauseRecording', 'resumeRecording
         throw "The transport bar is missing recording behavior: $behavior."
     }
 }
-foreach ($control in @(
+foreach ($obsoleteMarkerControl in @(
     'transportAddMarker', 'transportPreviousMarker', 'transportNextMarker')) {
-    if ($transportBar -notmatch ('objectName:\s*"?' + $control + '"?')) {
-        throw "The transport bar is missing the primary marker control: $control."
+    if ($transportBar -match ('objectName:\s*"?' + $obsoleteMarkerControl + '"?')) {
+        throw "The editor must not retain obsolete marker control: $obsoleteMarkerControl."
     }
 }
 foreach ($duplicate in @('volume-up-fill', 'setVolume\(', '波形缩放')) {
@@ -111,8 +111,8 @@ if ($transportBar -match 'Slider\s*\{\s*Layout\.preferredWidth:\s*90;\s*value:\s
 if ($audioEditor -notmatch 'AudioEditorController\.cancelRecording\(\)') {
     throw 'The recording state machine cancel action must be reachable from the editor UI.'
 }
-if (($audioEditor | Select-String -Pattern 'text:\s*qsTr\("取消录音"\)' -AllMatches).Matches.Count -ne 1) {
-    throw 'The editor must expose exactly one cancel-recording menu action.'
+if ((($audioEditor + "`n" + $recordingInspector) | Select-String -Pattern 'text:\s*qsTr\("取消录音"\)' -AllMatches).Matches.Count -ne 1) {
+    throw 'The editor must expose exactly one visible cancel-recording action.'
 }
 foreach ($exportControl in @(
     'exportSettingsDialog', 'exportRangeBox', 'exportFormatBox',

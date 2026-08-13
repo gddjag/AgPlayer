@@ -226,7 +226,7 @@ private slots:
         QVERIFY(controller.stopPlayback());
     }
 
-    void selectionPreviewStartsInsideSelectionAndStopsAtItsEnd()
+    void selectionPreviewLoopsInsideSelectionByDefault()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
@@ -238,8 +238,11 @@ private slots:
         QVERIFY(controller.seekMs(0));
         QVERIFY(controller.playPause());
         QCOMPARE(controller.positionMs(), qint64{100});
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.playing(), 2'000);
-        QCOMPARE(controller.positionMs(), qint64{300});
+        QTest::qWait(550);
+        QVERIFY(controller.playing());
+        QVERIFY(controller.positionMs() >= 100);
+        QVERIFY(controller.positionMs() < 300);
+        QVERIFY(controller.stopPlayback());
     }
 
     void bpmAnalysisRunsOffTheGuiThreadAgainstTheEditedDocument()
@@ -258,31 +261,35 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
     }
 
-    void markerNavigationUsesTheNearestMarker()
+    void noiseReductionRunsOffTheGuiThreadAndIsUndoable()
     {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 192'000));
-        QVERIFY(controller.addMarker(QStringLiteral("A"), 48'000));
-        QVERIFY(controller.addMarker(QStringLiteral("B"), 144'000));
-        QVERIFY(controller.seekMs(2'000));
-        QVERIFY(controller.seekPreviousMarker());
-        QCOMPARE(controller.positionMs(), qint64{1'000});
-        QVERIFY(controller.seekNextMarker());
-        QCOMPARE(controller.positionMs(), qint64{3'000});
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.setSelection(0, controller.sampleRate() / 2));
+        const qint64 frames = controller.totalFrames();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.reduceNoise());
+        QVERIFY2(elapsed.elapsed() < 250,
+                 "noise reduction must not block the GUI thread");
+        QVERIFY(controller.noiseReductionActive());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 15'000);
+        QVERIFY2(controller.errorMessage().isEmpty(),
+                 qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.totalFrames(), frames);
+        QVERIFY(controller.modified());
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.undo")));
+        QCOMPARE(controller.totalFrames(), frames);
     }
 
-    void markerManagementIsExposedToTheEditorUi()
+    void removedMarkerAndNormalizeInterfacesStayAbsent()
     {
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 192'000));
-        QVERIFY(controller.addMarker(QStringLiteral("A"), 48'000));
-        QVERIFY(controller.renameMarker(0, QStringLiteral("Intro")));
-        QCOMPARE(controller.markers().at(0).toMap().value(QStringLiteral("name")),
-                 QStringLiteral("Intro"));
-        QVERIFY(controller.removeMarker(0));
-        QVERIFY(controller.markers().isEmpty());
-        QVERIFY(!controller.renameMarker(0, QStringLiteral("Missing")));
-        QVERIFY(!controller.removeMarker(0));
+        const QMetaObject& meta = AudioEditorController::staticMetaObject;
+        QCOMPARE(meta.indexOfMethod("normalize()"), -1);
+        QCOMPARE(meta.indexOfMethod("addMarker(QString,qint64)"), -1);
+        QCOMPARE(meta.indexOfProperty("markers"), -1);
     }
 
     void openingAnotherFileRequiresDiscardConfirmation()

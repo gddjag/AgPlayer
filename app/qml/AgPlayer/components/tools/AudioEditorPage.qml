@@ -10,6 +10,29 @@ Rectangle {
     color: Theme.background
     clip: true
 
+    function textInputHasFocus() {
+        const active = page.Window.window ? page.Window.window.activeFocusItem : null
+        return active && (active.inputMethodComposing !== undefined
+            || active.selectedText !== undefined)
+    }
+    Shortcut {
+        sequence: "Space"
+        context: Qt.WindowShortcut
+        enabled: page.visible && !page.textInputHasFocus()
+        onActivated: AudioEditorController.playPause()
+    }
+    Shortcut {
+        sequence: "R"
+        context: Qt.WindowShortcut
+        enabled: page.visible && !page.textInputHasFocus()
+        onActivated: {
+            if (AudioEditorController.recording)
+                AudioEditorController.stopRecording()
+            else
+                recordingInspector.requestRecording(false)
+        }
+    }
+
     FileDialog {
         id: openDialog
         fileMode: FileDialog.OpenFile
@@ -149,100 +172,6 @@ Rectangle {
             radius: Theme.radiusMd
         }
     }
-    Menu {
-        id: moreMenu
-        MenuItem { text: qsTr("增益…"); onTriggered: gainDialog.open() }
-        MenuItem { text: qsTr("峰值归一化"); onTriggered: AudioEditorController.normalize() }
-        MenuItem { text: qsTr("插入 1 秒静音"); onTriggered: AudioEditorController.insertSilence(
-                AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000,
-                AudioEditorController.sampleRate) }
-        MenuSeparator {}
-        MenuItem {
-            text: qsTr("标记管理…")
-            enabled: AudioEditorController.markers.length > 0
-            onTriggered: markerManagementDialog.open()
-        }
-        Instantiator {
-            model: AudioEditorController.markers
-            delegate: MenuItem {
-                required property var modelData
-                text: modelData.name + "  "
-                      + editorTransportBar.timeText(modelData.positionMs)
-                onTriggered: AudioEditorController.seekMs(modelData.positionMs)
-            }
-            onObjectAdded: function(index, object) { moreMenu.insertItem(index + 5, object) }
-            onObjectRemoved: function(index, object) { moreMenu.removeItem(object) }
-        }
-        MenuSeparator {}
-        MenuItem {
-            text: qsTr("导出选区…")
-            enabled: AudioEditorController.selectionStart >= 0
-            onTriggered: {
-                exportRangeBox.currentIndex = 1
-                exportSettingsDialog.open()
-            }
-        }
-        MenuSeparator { visible: AudioEditorController.recording }
-        MenuItem {
-            text: qsTr("取消录音")
-            visible: AudioEditorController.recording
-            enabled: AudioEditorController.recording
-            onTriggered: AudioEditorController.cancelRecording()
-        }
-    }
-    Dialog {
-        id: markerManagementDialog
-        objectName: "markerManagementDialog"
-        title: qsTr("标记管理")
-        modal: true
-        anchors.centerIn: parent
-        width: 420
-        height: Math.min(420, 116 + AudioEditorController.markers.length * 42)
-        standardButtons: Dialog.Close
-        contentItem: ListView {
-            id: markerList
-            clip: true
-            spacing: 4
-            model: AudioEditorController.markers
-            delegate: RowLayout {
-                required property int index
-                required property var modelData
-                width: markerList.width
-                height: 38
-                TextField {
-                    Layout.fillWidth: true
-                    text: modelData.name
-                    selectByMouse: true
-                    onEditingFinished: AudioEditorController.renameMarker(index, text)
-                }
-                Label {
-                    text: editorTransportBar.timeText(modelData.positionMs)
-                    color: Theme.secondaryText
-                    font.pixelSize: 11
-                }
-                ToolButton {
-                    icon.source: Theme.icon("skip-forward-fill")
-                    Accessible.name: qsTr("跳转")
-                    ToolTip.visible: hovered
-                    ToolTip.text: Accessible.name
-                    onClicked: AudioEditorController.seekMs(modelData.positionMs)
-                }
-                ToolButton {
-                    icon.source: Theme.icon("delete-bin-line")
-                    icon.color: Theme.waveformRed
-                    Accessible.name: qsTr("删除标记")
-                    ToolTip.visible: hovered
-                    ToolTip.text: Accessible.name
-                    onClicked: AudioEditorController.removeMarker(index)
-                }
-            }
-        }
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.border
-            radius: Theme.radiusMd
-        }
-    }
     Dialog {
         id: gainDialog
         title: qsTr("调整增益")
@@ -276,7 +205,6 @@ Rectangle {
             exportRangeBox.currentIndex = 0
             exportSettingsDialog.open()
         }
-        function onMoreMenuRequested() { moreMenu.popup() }
         function onDiscardConfirmationRequested() { discardOpenDialog.open() }
     }
 
@@ -298,18 +226,11 @@ Rectangle {
         else if (control && event.key === Qt.Key_V) AudioEditorController.triggerAction("editor.paste")
         else if (control && event.key === Qt.Key_T) AudioEditorController.triggerAction("editor.cropToSelection")
         else if (control && event.key === Qt.Key_L) AudioEditorController.triggerAction("editor.silenceSelection")
-        else if (control && event.key === Qt.Key_M) AudioEditorController.addMarker(
-            qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
-            AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
         else if (control && shift && event.key === Qt.Key_A) AudioEditorController.clearSelection()
         else if (control && event.key === Qt.Key_W) AudioEditorController.clearDocument()
         else if (control && event.key === Qt.Key_A) AudioEditorController.setSelection(
             0, AudioEditorController.totalFrames)
-        else if (control && event.key === Qt.Key_Left) AudioEditorController.seekPreviousMarker()
-        else if (control && event.key === Qt.Key_Right) AudioEditorController.seekNextMarker()
         else if (event.key === Qt.Key_Delete) AudioEditorController.triggerAction("editor.deleteSelection")
-        else if (event.key === Qt.Key_Space) AudioEditorController.playPause()
-        else if (event.key === Qt.Key_R) recordingInspector.requestRecording(false)
         else if (event.key === Qt.Key_Left) AudioEditorController.seekMs(
             Math.max(0, AudioEditorController.positionMs - (shift ? 1000 : 10)))
         else if (event.key === Qt.Key_Right) AudioEditorController.seekMs(
@@ -360,10 +281,11 @@ Rectangle {
             objectName: "editorCommandBar"
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            onExportSelectionRequested: {
-                exportRangeBox.currentIndex = 1
+            onExportRequested: selectionOnly => {
+                exportRangeBox.currentIndex = selectionOnly ? 1 : 0
                 exportSettingsDialog.open()
             }
+            onGainRequested: gainDialog.open()
         }
 
         FileSummaryBar {
@@ -396,12 +318,35 @@ Rectangle {
                     Layout.preferredHeight: 66
                 }
 
-                EditorTransportBar {
-                    id: editorTransportBar
-                    objectName: "editorTransportBar"
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 104
-                    onRecordingRequested: recordingInspector.requestRecording(false)
+                    spacing: 12
+                    EditorTransportBar {
+                        id: editorTransportBar
+                        objectName: "editorTransportBar"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        onRecordingRequested: recordingInspector.requestRecording(false)
+                    }
+                    Rectangle {
+                        objectName: "editorShortcutCard"
+                        Layout.preferredWidth: page.width >= 1500 ? 300 : 220
+                        Layout.fillHeight: true
+                        color: Theme.elevated
+                        border.color: Theme.border
+                        radius: Theme.radiusSm
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+                            Label { text: qsTr("快捷键"); font.bold: true }
+                            Label { text: qsTr("Space  播放 / 暂停"); color: Theme.secondaryText }
+                            Label { text: qsTr("R  开始 / 停止录音"); color: Theme.secondaryText }
+                            Label { text: qsTr("Ctrl+Shift+A  取消选区"); color: Theme.secondaryText }
+                            Label { text: qsTr("Ctrl+W  清空当前文件"); color: Theme.secondaryText }
+                        }
+                    }
                 }
             }
 
@@ -409,6 +354,7 @@ Rectangle {
                 id: inspector
                 objectName: "editorInspector"
                 readonly property int businessSectionCount: 2
+                readonly property bool compact: page.height < 880 || page.width < 1350
                 Layout.preferredWidth: page.width < 1100 ? 248 : 284
                 Layout.minimumWidth: 224
                 Layout.maximumWidth: 304
@@ -418,26 +364,33 @@ Rectangle {
                 border.color: Theme.border
                 radius: Theme.radiusSm
 
-                ScrollView {
+                ColumnLayout {
                     anchors.fill: parent
-                    contentWidth: availableWidth
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
-
-                    ColumnLayout {
-                        width: inspector.width
-                        spacing: 10
-
-                        RecordingInspectorSection {
-                            id: recordingInspector
-                            objectName: "recordingInspector"
-                            Layout.fillWidth: true
-                        }
-                        TimePitchInspectorSection {
-                            objectName: "timePitchInspector"
-                            Layout.fillWidth: true
-                        }
+                    anchors.margins: 8
+                    spacing: 8
+                    TabBar {
+                        id: inspectorTabs
+                        objectName: "editorInspectorTabs"
+                        visible: inspector.compact
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: visible ? 36 : 0
+                        TabButton { text: qsTr("录音") }
+                        TabButton { text: qsTr("速度与音高") }
+                    }
+                    RecordingInspectorSection {
+                        id: recordingInspector
+                        objectName: "recordingInspector"
+                        visible: !inspector.compact || inspectorTabs.currentIndex === 0
+                        Layout.fillWidth: true
+                        Layout.fillHeight: inspector.compact
+                        collapsed: false
+                    }
+                    TimePitchInspectorSection {
+                        objectName: "timePitchInspector"
+                        visible: !inspector.compact || inspectorTabs.currentIndex === 1
+                        Layout.fillWidth: true
+                        Layout.fillHeight: inspector.compact
+                        collapsed: false
                     }
                 }
             }

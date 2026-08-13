@@ -72,65 +72,6 @@ Rectangle {
             }
         }
 
-        ColumnLayout {
-            Layout.preferredWidth: 54
-            spacing: 3
-            ToolButton {
-                objectName: "transportAddMarker"
-                Layout.alignment: Qt.AlignHCenter
-                icon.source: Theme.icon("pushpin-fill")
-                icon.color: Theme.ratingGold
-                enabled: AudioEditorController.hasDocument
-                    && !AudioEditorController.recording
-                    && !AudioEditorController.busy
-                Accessible.name: qsTr("添加标记")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name + "  (Ctrl+M)"
-                onClicked: AudioEditorController.addMarker(
-                    qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
-                    AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
-            }
-            Label { text: qsTr("添加标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
-        }
-
-        ColumnLayout {
-            Layout.preferredWidth: 46
-            spacing: 3
-            ToolButton {
-                objectName: "transportPreviousMarker"
-                Layout.alignment: Qt.AlignHCenter
-                icon.source: Theme.icon("skip-back-fill")
-                icon.color: Theme.iconPrimary
-                enabled: AudioEditorController.hasDocument
-                    && !AudioEditorController.recording
-                    && !AudioEditorController.busy
-                Accessible.name: qsTr("上一标记")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name + "  (Ctrl+←)"
-                onClicked: AudioEditorController.seekPreviousMarker()
-            }
-            Label { text: qsTr("上一标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
-        }
-
-        ColumnLayout {
-            Layout.preferredWidth: 46
-            spacing: 3
-            ToolButton {
-                objectName: "transportNextMarker"
-                Layout.alignment: Qt.AlignHCenter
-                icon.source: Theme.icon("skip-forward-fill")
-                icon.color: Theme.iconPrimary
-                enabled: AudioEditorController.hasDocument
-                    && !AudioEditorController.recording
-                    && !AudioEditorController.busy
-                Accessible.name: qsTr("下一标记")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name + "  (Ctrl+→)"
-                onClicked: AudioEditorController.seekNextMarker()
-            }
-            Label { text: qsTr("下一标记"); font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
-        }
-
         ToolButton {
             icon.source: Theme.icon(AudioEditorController.playing ? "pause-fill" : "play-fill")
             icon.color: Theme.waveformGreen

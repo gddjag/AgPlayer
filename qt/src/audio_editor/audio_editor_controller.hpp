@@ -6,6 +6,7 @@
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
 #include "../../../core/src/audio_editor/recording_session.hpp"
 #include "../../../core/src/audio_editor/document_writer.hpp"
+#include "../../../core/src/audio_editor/noise_reducer.hpp"
 #include "../bpm_analyzer.hpp"
 
 #include <agplayer/c_api.h>
@@ -88,7 +89,7 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(double inputLevel READ inputLevel NOTIFY recordingChanged)
     Q_PROPERTY(qint64 recordingFrames READ recordingFrames NOTIFY recordingChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
-    Q_PROPERTY(QVariantList markers READ markers NOTIFY documentChanged)
+    Q_PROPERTY(bool noiseReductionActive READ noiseReductionActive NOTIFY stateChanged)
 
 public:
     explicit AudioEditorController(
@@ -101,18 +102,21 @@ public:
     [[nodiscard]] EditorSessionState state() const noexcept { return state_; }
     [[nodiscard]] bool hasDocument() const noexcept { return has_document_; }
     [[nodiscard]] bool modified() const noexcept { return modified_; }
-    [[nodiscard]] qint64 totalFrames() const noexcept { return document_.totalFrames(); }
+    [[nodiscard]] qint64 totalFrames() const noexcept
+    { return recording() ? recordingFrames() : document_.totalFrames(); }
     [[nodiscard]] qint64 selectionStart() const noexcept;
     [[nodiscard]] qint64 selectionEnd() const noexcept;
     [[nodiscard]] qint64 selectionFrames() const noexcept;
     [[nodiscard]] QString filePath() const { return source_path_; }
     [[nodiscard]] QString fileName() const;
     [[nodiscard]] QString formatName() const { return format_name_; }
-    [[nodiscard]] int sampleRate() const noexcept { return sample_rate_; }
-    [[nodiscard]] int channels() const noexcept { return channels_; }
+    [[nodiscard]] int sampleRate() const noexcept
+    { return recording() ? recording_sample_rate_ : sample_rate_; }
+    [[nodiscard]] int channels() const noexcept
+    { return recording() ? recording_channels_ : channels_; }
     [[nodiscard]] int bitsPerSample() const noexcept { return bits_per_sample_; }
     [[nodiscard]] qint64 bitRate() const noexcept { return bit_rate_; }
-    [[nodiscard]] QVariantList channelPeaks() const { return channel_peaks_; }
+    [[nodiscard]] QVariantList channelPeaks() const;
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] qint64 positionMs() const noexcept { return position_ms_; }
     [[nodiscard]] qint64 durationMs() const noexcept;
@@ -139,7 +143,8 @@ public:
     [[nodiscard]] double inputLevel() const noexcept;
     [[nodiscard]] qint64 recordingFrames() const noexcept;
     [[nodiscard]] bool busy() const noexcept;
-    [[nodiscard]] QVariantList markers() const;
+    [[nodiscard]] bool noiseReductionActive() const noexcept
+    { return noise_reduction_watcher_ != nullptr; }
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
@@ -162,14 +167,9 @@ public:
                               bool variableBitRate = true, int quality = 80);
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
-    Q_INVOKABLE bool addMarker(const QString& name, qint64 frame);
-    Q_INVOKABLE bool renameMarker(int index, const QString& name);
-    Q_INVOKABLE bool removeMarker(int index);
-    Q_INVOKABLE bool seekPreviousMarker();
-    Q_INVOKABLE bool seekNextMarker();
     Q_INVOKABLE bool insertSilence(qint64 frame, qint64 frameCount);
     Q_INVOKABLE bool applyGain(double decibels);
-    Q_INVOKABLE bool normalize();
+    Q_INVOKABLE bool reduceNoise();
     Q_INVOKABLE bool actionEnabled(const QString& id) const noexcept;
     Q_INVOKABLE bool triggerAction(const QString& id);
     Q_INVOKABLE bool playPause();
@@ -215,15 +215,16 @@ signals:
     void saveAsRequested();
     void exportRequested();
     void newRecordingRequested();
-    void moreMenuRequested();
     void discardConfirmationRequested();
 
 private:
     struct RecordingFinalizeResult;
+    struct PreviewRenderResult;
     void refreshActions();
     [[nodiscard]] QVariantList buildExportFormats() const;
     void rebuildEditorPeaks();
     bool preparePlayback();
+    void startPreparedPlayback();
     bool runDocumentCommand(const agplayer::editor::EditCommand& command,
                             bool modifiesDocument = true);
     void pollPlayback();
@@ -264,6 +265,8 @@ private:
     QFutureWatcher<bool>* recording_start_watcher_{};
     QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
+    QFutureWatcher<agplayer::editor::NoiseReductionResult>* noise_reduction_watcher_{};
+    QFutureWatcher<PreviewRenderResult>* preview_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
     QVariantList export_formats_;
@@ -273,9 +276,11 @@ private:
     int recording_channels_{2};
     bool recording_monitor_{};
     QTimer recording_timer_;
+    QVariantList live_recording_peaks_;
     bool insert_recording_at_cursor_{};
     bool time_pitch_preview_active_{};
     bool allow_document_replace_{};
     qint64 recording_insert_frame_{};
     QPointer<PlaybackController> main_playback_;
+    std::atomic_uint64_t preview_generation_{0};
 };

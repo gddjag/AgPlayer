@@ -62,6 +62,11 @@ int main()
     require(session.resume(), "recording resume failed");
     require(session.pushCapturedFrames(block.data(), 480) == 480,
             "resumed recording rejected frames");
+    const auto live_peaks = session.recentPeaks(32);
+    require(!live_peaks.empty() && live_peaks.size() <= 32,
+            "live recording peak snapshot was not published");
+    require(live_peaks.back() > 0.0F,
+            "live recording peak snapshot lost the captured signal");
     const RecordingResult result = session.stop();
     require(result.success, "recording stop failed");
     require(result.frames == 960, "recorded frame count mismatch");

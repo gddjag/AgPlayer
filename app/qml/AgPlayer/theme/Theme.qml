@@ -29,6 +29,15 @@ QtObject {
     readonly property color elevated: isLight ? "#F9F9F9" : "#101E28"
     readonly property color border: isLight ? "#D1D1D1" : "#203340"
     readonly property color hoverSurface: isLight ? "#EAEAEA" : "#172A37"
+    readonly property color editorCanvas: isLight ? "#F7FAFA" : "#11191B"
+    readonly property color editorRuler: isLight ? "#EEF3F3" : "#151F21"
+    readonly property color editorOverview: isLight ? "#EAF2F2" : "#132124"
+    readonly property color editorWaveform: isLight ? "#169B97" : "#39C7C0"
+    readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
+    readonly property color editorSelection: Qt.rgba(
+        editorWaveform.r, editorWaveform.g, editorWaveform.b, 0.15)
+    readonly property color editorOverviewSelection: Qt.rgba(
+        editorWaveform.r, editorWaveform.g, editorWaveform.b, 0.07)
     readonly property color accent: systemPalette.highlight
     readonly property color activeSelection: systemPalette.highlight
     readonly property color activeSelectionText: systemPalette.highlightedText

@@ -176,6 +176,8 @@ public:
             return false;
         }
         peak_value.store(0.0F);
+        peak_write_index.store(0, std::memory_order_release);
+        for (auto& peak_sample : recent_peaks) peak_sample.store(0.0F);
         captured.store(0);
         written.store(0);
         dropped.store(0);
@@ -251,12 +253,17 @@ public:
             || ring == nullptr) {
             return 0;
         }
-        float local_peak = peak_value.load(std::memory_order_relaxed);
+        float local_peak = 0.0F;
         const std::size_t samples = frames * config.channels;
         for (std::size_t index = 0; index < samples; ++index) {
             local_peak = (std::max)(local_peak, std::abs(input[index]));
         }
-        peak_value.store(local_peak, std::memory_order_release);
+        peak_value.store((std::max)(peak_value.load(std::memory_order_relaxed),
+                                    local_peak), std::memory_order_release);
+        const std::uint64_t peak_index = peak_write_index.fetch_add(
+            1, std::memory_order_acq_rel);
+        recent_peaks[peak_index % recent_peaks.size()].store(
+            local_peak, std::memory_order_release);
         const std::size_t accepted = ring->write(input, frames);
         captured.fetch_add(static_cast<SampleFrame>(accepted));
         dropped.fetch_add(frames - accepted);
@@ -423,6 +430,8 @@ public:
     std::atomic<SampleFrame> written{0};
     std::atomic<std::uint64_t> dropped{0};
     std::atomic<bool> rerouted{false};
+    std::array<std::atomic<float>, 2'048> recent_peaks{};
+    std::atomic<std::uint64_t> peak_write_index{0};
     ma_context context{};
     ma_device device{};
     bool context_ready{};
@@ -541,5 +550,23 @@ RecordingState RecordingSession::state() const noexcept { return impl_->state.lo
 float RecordingSession::peak() const noexcept { return impl_->peak_value.load(); }
 SampleFrame RecordingSession::framesCaptured() const noexcept { return impl_->captured.load(); }
 std::uint64_t RecordingSession::droppedFrames() const noexcept { return impl_->dropped.load(); }
+
+std::vector<float> RecordingSession::recentPeaks(const std::size_t maximum) const
+{
+    if (maximum == 0) return {};
+    const std::uint64_t end = impl_->peak_write_index.load(
+        std::memory_order_acquire);
+    const std::size_t count = (std::min)({maximum, impl_->recent_peaks.size(),
+        static_cast<std::size_t>((std::min<std::uint64_t>)(
+            end, impl_->recent_peaks.size()))});
+    std::vector<float> result;
+    result.reserve(count);
+    for (std::size_t offset = count; offset > 0; --offset) {
+        result.push_back(impl_->recent_peaks[
+            (end - offset) % impl_->recent_peaks.size()].load(
+                std::memory_order_acquire));
+    }
+    return result;
+}
 
 } // namespace agplayer::editor
