@@ -1,7 +1,9 @@
 # AG Player 人声克隆模型许可与定位审计
 
-审计日期：2026-08-13  
-范围：Qwen3-TTS 0.6B Base、Qwen3-TTS 1.7B Base、IndexTTS-2.5、Fun-CosyVoice3-0.5B-2512、Microsoft VibeVoice-1.5B  
+审计日期：2026-08-13
+
+范围：Qwen3-TTS 0.6B Base、Qwen3-TTS 1.7B Base、IndexTTS-2.5、Fun-CosyVoice3-0.5B-2512、Microsoft VibeVoice-1.5B
+
 方法：仅核对模型作者维护的 GitHub、Hugging Face、ModelScope 与项目自带许可证。本文是产品/工程合规审计，不代替正式法律意见。
 
 ## 结论
@@ -93,4 +95,3 @@
 3. IndexTTS-2.5 使用独立确认页，保存用户接受的许可版本；不在 AG Player CDN 镜像权重。
 4. VibeVoice-1.5B 保持禁用，直到 Microsoft 恢复官方 TTS 推理路径并书面澄清模型卡与 MIT 元数据的冲突。
 5. 所有模型首次使用时继续要求“仅克隆本人或已取得明确授权的声音”，并在本地记录确认；这不替代用户对肖像权、声音权、隐私和内容合法性的责任。
-
