@@ -13,6 +13,7 @@ class FilenameProcessingTest final : public QObject {
 private slots:
     void transformsStemWithoutChangingExtension();
     void blankAffixesRemoveRecognizableAffixesAndSequence();
+    void removesExplicitLiteralAffixesAndEdgeSequenceOnly();
     void keepsHiddenFilesAndExtensionlessNamesWellDefined();
     void reportsUnsafeWindowsNames();
     void plansInternalCollisionsInImportOrder();
@@ -48,6 +49,30 @@ void FilenameProcessingTest::blankAffixesRemoveRecognizableAffixesAndSequence()
     QCOMPARE(FilenameTransformEngine::transform(
                  u"003 - 东京之夜 - Demo.wav"_s, rules, 0),
              u"东京之夜.wav"_s);
+}
+
+void FilenameProcessingTest::removesExplicitLiteralAffixesAndEdgeSequenceOnly()
+{
+    FilenameRuleSet rules;
+    rules.removePrefix = u"DJ-"_s;
+    rules.removeSuffix = u"-Promo"_s;
+    rules.removeSequenceAtStart = true;
+    rules.removePrefixWhenEmpty = false;
+    rules.removeSuffixWhenEmpty = false;
+    rules.removeSequenceWhenEmpty = false;
+
+    QCOMPARE(FilenameTransformEngine::transform(
+                 u"007 - DJ-Sunrise-Promo.mp3"_s, rules, 0),
+             u"Sunrise.mp3"_s);
+    QCOMPARE(FilenameTransformEngine::transform(
+                 u"DJ-007 Sunrise-Promo.mp3"_s, rules, 0),
+             u"007 Sunrise.mp3"_s);
+
+    rules.removeSequenceAtStart = false;
+    rules.removeSequenceAtEnd = true;
+    QCOMPARE(FilenameTransformEngine::transform(
+                 u"DJ-Sunrise-Promo - 09.flac"_s, rules, 0),
+             u"Sunrise.flac"_s);
 }
 
 void FilenameProcessingTest::keepsHiddenFilesAndExtensionlessNamesWellDefined()

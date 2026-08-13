@@ -121,6 +121,8 @@ Rectangle {
         return {
             prefix: prefixField.text,
             suffix: suffixField.text,
+            removePrefix: removePrefixField.text,
+            removeSuffix: removeSuffixField.text,
             replaceSpaces: replaceSpacesCheck.checked,
             spaceReplacement: spaceReplacementField.text,
             caseMode: caseBox.currentValue,
@@ -128,6 +130,8 @@ Rectangle {
             removePrefixWhenEmpty: removeAffixesWhenBlankCheck.checked,
             removeSuffixWhenEmpty: removeAffixesWhenBlankCheck.checked,
             removeSequenceWhenEmpty: removeAffixesWhenBlankCheck.checked,
+            removeSequenceAtStart: removeLeadingSequenceCheck.checked,
+            removeSequenceAtEnd: removeTrailingSequenceCheck.checked,
             autoNumber: autoNumberCheck.checked,
             numberStart: numberStartSpin.value,
             numberDigits: numberDigitsSpin.value,
@@ -532,6 +536,22 @@ Rectangle {
                                     ToolTip.text: qsTr("填写则添加；留空则删除文件名末尾的尾标和标签")
                                     onTextChanged: page.refreshPreview()
                                 }
+                                Label { text: qsTr("删除前缀"); color: Theme.secondaryText }
+                                TextField {
+                                    id: removePrefixField
+                                    objectName: "filenameRemovePrefixField"
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("精确匹配文件名开头")
+                                    onTextChanged: page.refreshPreview()
+                                }
+                                Label { text: qsTr("删除后缀"); color: Theme.secondaryText }
+                                TextField {
+                                    id: removeSuffixField
+                                    objectName: "filenameRemoveSuffixField"
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("精确匹配扩展名前的结尾")
+                                    onTextChanged: page.refreshPreview()
+                                }
                                 Label { text: qsTr("大小写规则"); color: Theme.secondaryText }
                                 ComboBox {
                                     id: caseBox
@@ -566,12 +586,25 @@ Rectangle {
                                 }
                                 CheckBox {
                                     id: removeAffixesWhenBlankCheck
-                                    visible: false
-                                    text: qsTr("留空时移除原有前后缀与序号")
-                                    checked: true
+                                    text: qsTr("自动识别并删除常见前后缀")
+                                    checked: false
                                     onToggled: page.refreshPreview()
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("前缀或后缀留空时，自动清理文件名中可识别的标签、尾标和序号")
+                                }
+                                CheckBox {
+                                    id: removeLeadingSequenceCheck
+                                    objectName: "filenameRemoveLeadingSequence"
+                                    text: qsTr("删除开头序号")
+                                    checked: false
+                                    onToggled: page.refreshPreview()
+                                }
+                                CheckBox {
+                                    id: removeTrailingSequenceCheck
+                                    objectName: "filenameRemoveTrailingSequence"
+                                    text: qsTr("删除结尾序号")
+                                    checked: false
+                                    onToggled: page.refreshPreview()
                                 }
                                 RowLayout {
                                     visible: false
