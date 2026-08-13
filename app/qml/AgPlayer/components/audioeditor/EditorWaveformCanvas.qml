@@ -239,7 +239,7 @@ Rectangle {
                 id: playheadHandle
                 objectName: "editorPlayheadHandle"
                 z: 6
-                width: 14
+                width: 24
                 height: waveArea.height
                 x: playheadLine.x - width / 2
                 enabled: playheadLine.visible
@@ -270,7 +270,7 @@ Rectangle {
                 z: 5
                 visible: selectionOverlay.visible
                 enabled: visible
-                width: 14
+                width: 24
                 height: selectionOverlay.height
                 x: selectionOverlay.x - width / 2
                 y: selectionOverlay.y
@@ -299,7 +299,7 @@ Rectangle {
                 z: 5
                 visible: selectionOverlay.visible
                 enabled: visible
-                width: 14
+                width: 24
                 height: selectionOverlay.height
                 x: selectionOverlay.x + selectionOverlay.width - width / 2
                 y: selectionOverlay.y

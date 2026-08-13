@@ -301,12 +301,15 @@ Rectangle {
         else if (control && event.key === Qt.Key_M) AudioEditorController.addMarker(
             qsTr("标记 %1").arg(AudioEditorController.markers.length + 1),
             AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000)
+        else if (control && shift && event.key === Qt.Key_A) AudioEditorController.clearSelection()
+        else if (control && event.key === Qt.Key_W) AudioEditorController.clearDocument()
         else if (control && event.key === Qt.Key_A) AudioEditorController.setSelection(
             0, AudioEditorController.totalFrames)
         else if (control && event.key === Qt.Key_Left) AudioEditorController.seekPreviousMarker()
         else if (control && event.key === Qt.Key_Right) AudioEditorController.seekNextMarker()
         else if (event.key === Qt.Key_Delete) AudioEditorController.triggerAction("editor.deleteSelection")
         else if (event.key === Qt.Key_Space) AudioEditorController.playPause()
+        else if (event.key === Qt.Key_R) recordingInspector.requestRecording(false)
         else if (event.key === Qt.Key_Left) AudioEditorController.seekMs(
             Math.max(0, AudioEditorController.positionMs - (shift ? 1000 : 10)))
         else if (event.key === Qt.Key_Right) AudioEditorController.seekMs(
@@ -357,6 +360,10 @@ Rectangle {
             objectName: "editorCommandBar"
             Layout.fillWidth: true
             Layout.preferredHeight: 56
+            onExportSelectionRequested: {
+                exportRangeBox.currentIndex = 1
+                exportSettingsDialog.open()
+            }
         }
 
         FileSummaryBar {

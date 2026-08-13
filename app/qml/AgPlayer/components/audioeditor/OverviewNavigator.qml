@@ -10,6 +10,18 @@ Rectangle {
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
+    property real pendingOverviewRatio: -1
+    Timer {
+        id: overviewFrameTimer
+        interval: 16
+        repeat: false
+        onTriggered: {
+            if (root.pendingOverviewRatio >= 0) {
+                overviewInteraction.applyDrag(root.pendingOverviewRatio)
+                root.pendingOverviewRatio = -1
+            }
+        }
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -66,6 +78,12 @@ Rectangle {
                     }
                 }
                 function dragTo(ratio) {
+                    if (!grabbedWindow) return
+                    root.pendingOverviewRatio = ratio
+                    if (!overviewFrameTimer.running)
+                        overviewFrameTimer.start()
+                }
+                function applyDrag(ratio) {
                     if (!grabbedWindow) return
                     AudioEditorController.viewport.moveOverviewWindow(
                         initialStartRatio + ratio - pressRatio)

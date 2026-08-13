@@ -20,8 +20,23 @@ Rectangle {
         if (AudioEditorController.modified
                 && (forceNewRecording || newMode.checked))
             discardRecordingDialog.open()
+        else if (forceNewRecording)
+            createBlankRecordingDocument()
         else
-            recordingFileDialog.open()
+            beginRecording()
+    }
+    function createBlankRecordingDocument() {
+        AudioEditorController.createRecordingDocument(
+            Number(sampleRateCombo.currentValue),
+            Number(channelCombo.currentValue))
+    }
+    function beginRecording() {
+        AudioEditorController.startRecordingToTemporaryFile(
+            deviceCombo.currentValue || "",
+            Number(sampleRateCombo.currentValue),
+            Number(channelCombo.currentValue),
+            monitorSwitch.checked,
+            insertMode.checked && AudioEditorController.hasDocument)
     }
     function pauseOrResume() {
         if (AudioEditorController.recordingPaused)
@@ -35,27 +50,12 @@ Rectangle {
         title: qsTr("舍弃未保存更改？")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: recordingFileDialog.open()
+        onAccepted: forceNewRecording
+            ? section.createBlankRecordingDocument()
+            : section.beginRecording()
         Label {
             text: qsTr("新建录音将舍弃当前未保存的音频。")
             color: Theme.primaryText
-        }
-    }
-
-    FileDialog {
-        id: recordingFileDialog
-        fileMode: FileDialog.SaveFile
-        defaultSuffix: "wav"
-        nameFilters: [qsTr("WAV 音频 (*.wav)")]
-        onAccepted: {
-            section.recordingTarget = selectedFile
-            AudioEditorController.startRecording(
-                selectedFile,
-                deviceCombo.currentValue || "",
-                Number(sampleRateCombo.currentValue),
-                Number(channelCombo.currentValue),
-                monitorSwitch.checked,
-                !section.forceNewRecording && insertMode.checked)
         }
     }
 
@@ -145,12 +145,13 @@ Rectangle {
             }
             Label { text: qsTr("输出格式") }
             ComboBox { Layout.fillWidth: true; model: ["WAV (PCM 24 bit)"]; enabled: false }
-            Label { text: qsTr("保存位置") }
+            Label { text: qsTr("录音文件") }
             TextField {
                 Layout.fillWidth: true
                 readOnly: true
-                text: section.recordingTarget.toString().replace("file:///", "")
-                placeholderText: qsTr("开始录音时选择")
+                text: AudioEditorController.recording
+                    ? qsTr("临时 WAV · 保存时选择位置") : ""
+                placeholderText: qsTr("使用私有临时 WAV")
             }
             Button {
                 objectName: "recordingRefreshDevicesButton"

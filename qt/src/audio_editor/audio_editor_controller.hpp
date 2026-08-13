@@ -6,6 +6,7 @@
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
 #include "../../../core/src/audio_editor/recording_session.hpp"
 #include "../../../core/src/audio_editor/document_writer.hpp"
+#include "../bpm_analyzer.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -147,6 +148,8 @@ public:
 
     Q_INVOKABLE bool createUntitledDocument(
         quint32 sampleRate, quint32 channels, qint64 frames);
+    Q_INVOKABLE bool createRecordingDocument(quint32 sampleRate, quint32 channels);
+    Q_INVOKABLE bool clearDocument();
     Q_INVOKABLE bool openFile(const QUrl& source);
     Q_INVOKABLE bool confirmDiscardAndOpen();
     Q_INVOKABLE void cancelDiscardAndOpen();
@@ -188,6 +191,9 @@ public:
                                     int recordingChannels,
                                     bool monitor,
                                     bool insertAtCursor);
+    Q_INVOKABLE bool startRecordingToTemporaryFile(
+        const QString& deviceId, int recordingSampleRate,
+        int recordingChannels, bool monitor, bool insertAtCursor);
     Q_INVOKABLE bool pauseRecording();
     Q_INVOKABLE bool resumeRecording();
     Q_INVOKABLE bool stopRecording();
@@ -257,6 +263,7 @@ private:
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
     QFutureWatcher<bool>* recording_start_watcher_{};
     QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
+    QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
     QVariantList export_formats_;

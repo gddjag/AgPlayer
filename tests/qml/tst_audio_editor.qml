@@ -26,6 +26,8 @@ TestCase {
     property var page
 
     function init() {
+        if (AudioEditorController.hasDocument && !AudioEditorController.busy)
+            AudioEditorController.clearDocument()
         host = createTemporaryObject(pageComponent, testCase)
         verify(host)
         page = host.editorPage
@@ -84,6 +86,13 @@ TestCase {
         verify(crop.hoverText.indexOf(crop.label) >= 0)
         verify(crop.hoverText.indexOf(crop.shortcutText) >= 0)
         verify(silence.hoverText.indexOf(silence.shortcutText) >= 0)
+        verify(findChild(commandBar, "editorCommand_normalize"))
+        verify(findChild(commandBar, "editorCommand_insertSilence"))
+        verify(findChild(commandBar, "editorCommand_addMarker"))
+        verify(findChild(commandBar, "editorCommand_exportSelection"))
+        verify(findChild(commandBar, "editorCommand_clearSelection"))
+        verify(findChild(commandBar, "editorCommand_clearDocument"))
+        compare(findChild(commandBar, "editorCommand_moreMenu"), null)
     }
 
     function test_keyboardAndMouseEditingInteractions() {
@@ -110,6 +119,25 @@ TestCase {
         const canvas = findChild(page, "editorWaveformCanvas")
         verify(canvas)
         verify(canvas.width > 0)
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setSelection(12000, 36000))
+        const startHandle = findChild(canvas, "editorSelectionStartHandle")
+        const endHandle = findChild(canvas, "editorSelectionEndHandle")
+        const playhead = findChild(canvas, "editorPlayheadHandle")
+        verify(startHandle && endHandle && playhead)
+        verify(startHandle.width >= 24)
+        verify(endHandle.width >= 24)
+        verify(playhead.width >= 24)
+    }
+
+    function test_cancelSelectionAndClearDocumentShortcuts() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setSelection(12000, 36000))
+        page.forceActiveFocus()
+        keyClick(Qt.Key_A, Qt.ControlModifier | Qt.ShiftModifier)
+        compare(AudioEditorController.selectionStart, -1)
+        keyClick(Qt.Key_W, Qt.ControlModifier)
+        compare(AudioEditorController.hasDocument, false)
     }
 
     function test_overviewWindowDragsContinuouslyFromGrabPoint() {

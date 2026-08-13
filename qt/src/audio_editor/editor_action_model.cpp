@@ -33,8 +33,6 @@ std::vector<EditorAction> defaultActions()
             "Ctrl+Alt+I", "chart-line"},
         {"editor.fadeOut", QStringLiteral("淡出"), QStringLiteral("选区淡出"),
             "Ctrl+Alt+O", "chart-line"},
-        {"editor.moreMenu", QStringLiteral("更多"), QStringLiteral("更多处理"),
-            {}, "more-line"},
         {"editor.export", QStringLiteral("导出"), QStringLiteral("导出音频"),
             "Ctrl+Shift+E", "upload-2-line"}
     };

@@ -79,8 +79,21 @@ private slots:
             "editor.undo", "editor.redo", "editor.cut", "editor.copy",
             "editor.paste", "editor.deleteSelection", "editor.cropToSelection",
             "editor.silenceSelection", "editor.fadeIn", "editor.fadeOut",
-            "editor.moreMenu", "editor.export"};
+            "editor.export"};
         QCOMPARE(controller.actions()->ids(), expected);
+    }
+
+    void recordingDocumentAndClearUseAnUntitledLifecycle()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createRecordingDocument(48'000, 2));
+        QVERIFY(controller.hasDocument());
+        QVERIFY(controller.filePath().isEmpty());
+        QVERIFY(controller.totalFrames() > 0);
+        QVERIFY(controller.clearDocument());
+        QVERIFY(!controller.hasDocument());
+        QCOMPARE(controller.state(), EditorSessionState::Empty);
+        QCOMPARE(controller.totalFrames(), qint64{0});
     }
 
     void opensRealAudioAndPublishesSummaryAndWaveform()
@@ -206,11 +219,43 @@ private slots:
         QVERIFY(controller.setSpeedPercent(125.0));
         QVERIFY(controller.setPitch(2, 0));
         QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
-        QVERIFY(controller.timePitchPreviewActive());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.timePitchPreviewActive(), 10'000);
         QCOMPARE(controller.totalFrames(), originalFrames);
         QVERIFY(!controller.modified());
         QVERIFY(controller.playing());
         QVERIFY(controller.stopPlayback());
+    }
+
+    void selectionPreviewStartsInsideSelectionAndStopsAtItsEnd()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        const qint64 startFrame = controller.sampleRate() / 10;
+        const qint64 endFrame = controller.sampleRate() * 3 / 10;
+        QVERIFY(controller.setSelection(startFrame, endFrame));
+        QVERIFY(controller.seekMs(0));
+        QVERIFY(controller.playPause());
+        QCOMPARE(controller.positionMs(), qint64{100});
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.playing(), 2'000);
+        QCOMPARE(controller.positionMs(), qint64{300});
+    }
+
+    void bpmAnalysisRunsOffTheGuiThreadAgainstTheEditedDocument()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.setSelection(0, controller.sampleRate() / 2));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.detectBpm());
+        QVERIFY2(elapsed.elapsed() < 250,
+                 "BPM analysis must not block the GUI thread");
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
     }
 
     void markerNavigationUsesTheNearestMarker()
@@ -270,7 +315,7 @@ private slots:
             QVERIFY(!item.value(QStringLiteral("name")).toString().isEmpty());
         }
         QVERIFY(!controller.startRecording(QUrl(), QString(), 48'000, 2,
-                                           false, false));
+                                            false, false));
         QVERIFY(!controller.errorMessage().isEmpty());
     }
 
