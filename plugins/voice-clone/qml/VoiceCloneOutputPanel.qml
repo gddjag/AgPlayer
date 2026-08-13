@@ -12,6 +12,7 @@ Rectangle {
     property bool canGenerate: false
     property bool running: false
     property string errorText: ""
+    property string statusText: ""
     signal generateRequested()
     signal cancelRequested()
 
@@ -24,6 +25,13 @@ Rectangle {
             color: Theme.primaryText
             font.pixelSize: 17
             font.weight: Font.DemiBold
+        }
+        Label {
+            Layout.fillWidth: true
+            visible: root.statusText !== ""
+            text: root.statusText
+            color: Theme.secondaryText
+            wrapMode: Text.Wrap
         }
         Label { text: qsTr("输出格式"); color: Theme.secondaryText }
         TextField {

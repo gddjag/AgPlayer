@@ -15,6 +15,8 @@ class QNetworkReply;
 
 namespace agplayer::voice_clone {
 
+class VoiceCloneController;
+
 class VoiceClonePackageManager final : public QObject {
     Q_OBJECT
 
@@ -81,6 +83,11 @@ signals:
     void progressChanged();
 
 private:
+    friend class VoiceCloneController;
+    bool acceptLicenseIdentity(const QString& modelId,
+                               const QString& adapterId,
+                               const QUrl& licenseUrl,
+                               const QString& revision);
     void setState(State state, const QString& error = {});
     void resolveNextFile();
     void beginDownloads();

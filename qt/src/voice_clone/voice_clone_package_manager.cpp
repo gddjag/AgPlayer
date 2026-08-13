@@ -776,6 +776,26 @@ bool VoiceClonePackageManager::acceptLicense(const QUrl& licenseUrl,
         || revision != manifest_.licenseRevision) {
         return false;
     }
+    return acceptLicenseIdentity(manifest_.modelId, manifest_.adapterId,
+                                 manifest_.licenseUrl, manifest_.licenseRevision);
+}
+
+bool VoiceClonePackageManager::acceptLicenseIdentity(const QString& modelId,
+                                                     const QString& adapterId,
+                                                     const QUrl& licenseUrl,
+                                                     const QString& revision)
+{
+    if (modelId.trimmed().isEmpty() || adapterId.trimmed().isEmpty()
+        || revision.trimmed().isEmpty() || !licenseUrl.isValid()
+        || licenseUrl.scheme() != QStringLiteral("https")) {
+        return false;
+    }
+    QString pathError;
+    if (!prepareInstallRoot(installRoot_, &pathError)) {
+        error_ = pathError;
+        emit stateChanged();
+        return false;
+    }
     if (pathTraversesReparsePoint(licenseAcceptancePath())) return false;
     QJsonArray records;
     const QString readError = readLicenseRecords(licenseAcceptancePath(), &records);
@@ -788,22 +808,22 @@ bool VoiceClonePackageManager::acceptLicense(const QUrl& licenseUrl,
     for (const QJsonValue& value : std::as_const(records)) {
         const QJsonObject object = value.toObject();
         const bool sameKey = object.value(QStringLiteral("modelId")).toString()
-                                 == manifest_.modelId
+                                 == modelId
                              && object.value(QStringLiteral("adapterId")).toString()
-                                 == manifest_.adapterId
+                                 == adapterId
                              && object.value(QStringLiteral("licenseUrl")).toString()
-                                 == manifest_.licenseUrl.toString()
+                                 == licenseUrl.toString()
                              && object.value(QStringLiteral("revision")).toString()
-                                 == manifest_.licenseRevision;
+                                 == revision;
         if (!sameKey) {
             retained.append(object);
         }
     }
     retained.append(QJsonObject{
-        {QStringLiteral("modelId"), manifest_.modelId},
-        {QStringLiteral("adapterId"), manifest_.adapterId},
-        {QStringLiteral("licenseUrl"), manifest_.licenseUrl.toString()},
-        {QStringLiteral("revision"), manifest_.licenseRevision},
+        {QStringLiteral("modelId"), modelId},
+        {QStringLiteral("adapterId"), adapterId},
+        {QStringLiteral("licenseUrl"), licenseUrl.toString()},
+        {QStringLiteral("revision"), revision},
         {QStringLiteral("acceptedAt"),
          QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}});
     QSaveFile file(licenseAcceptancePath());

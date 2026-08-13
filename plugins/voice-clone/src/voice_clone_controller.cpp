@@ -356,13 +356,26 @@ VoiceCloneController::VoiceCloneController(QString pluginRoot,
         setError(QStringLiteral("Voice-clone output root failed containment checks"));
         return;
     }
-    connect(&worker_, &VoiceCloneWorkerClient::readyChanged,
-            this, &VoiceCloneController::workerReadyChanged);
+    connect(&worker_, &VoiceCloneWorkerClient::readyChanged, this, [this] {
+        emit workerReadyChanged();
+        if (!activationInProgress_ || !worker_.isReady()
+            || activationState_ != QStringLiteral("starting-worker")) {
+            return;
+        }
+        setActivation(QStringLiteral("loading-model"),
+                      QStringLiteral("Worker ready; loading selected model"));
+        if (!loadModel()) {
+            activationInProgress_ = false;
+            const QString message = QStringLiteral("Worker was ready but the model could not be loaded");
+            setError(message);
+            setActivation(QStringLiteral("error"), message);
+        }
+    });
     connect(&worker_, &VoiceCloneWorkerClient::responseReceived,
             this, &VoiceCloneController::handleResponse);
     connect(&worker_, &VoiceCloneWorkerClient::requestFailed,
             this, &VoiceCloneController::handleFailure);
-    connect(&worker_, &VoiceCloneWorkerClient::workerTerminated, this, [this](const QString&) {
+    connect(&worker_, &VoiceCloneWorkerClient::workerTerminated, this, [this](const QString& reason) {
         loadRequestId_.clear();
         cancelTargets_.clear();
         const auto ids = generations_.keys();
@@ -371,6 +384,10 @@ VoiceCloneController::VoiceCloneController(QString pluginRoot,
         if (modelLoaded_) {
             modelLoaded_ = false;
             emit modelLoadedChanged();
+        }
+        if (activationInProgress_) {
+            activationInProgress_ = false;
+            setActivation(QStringLiteral("error"), reason);
         }
     });
     refreshModels();
@@ -427,6 +444,64 @@ bool VoiceCloneController::configureAdapter(const QString& adapterId,
     return true;
 }
 
+bool VoiceCloneController::activateModel(const QString& stableId)
+{
+    shutdown();
+    adapterManifest_ = {};
+    launcher_ = {};
+    adapterPackRoot_.clear();
+    setActivation(QStringLiteral("selecting"), QStringLiteral("Selecting model"));
+    auto requested = modelEntries_.constEnd();
+    for (auto it = modelEntries_.constBegin(); it != modelEntries_.constEnd(); ++it) {
+        if (it->stableId == stableId) {
+            requested = it;
+            break;
+        }
+    }
+    if (requested != modelEntries_.constEnd() && requested->modelDirectory.isEmpty()) {
+        selectedModel_ = *requested;
+        selectedModelRoot_.clear();
+        if (modelLoaded_) {
+            modelLoaded_ = false;
+            emit modelLoadedChanged();
+        }
+        emit licenseChanged();
+        const QString message = QStringLiteral(
+            "Model files are not installed or not ready; download them before activation");
+        setError(message);
+        updateSelectedModelStatus(QStringLiteral("needs-download"), message);
+        setActivation(QStringLiteral("needs-download"), message);
+        return false;
+    }
+    if (!selectModel(stableId)) {
+        setActivation(QStringLiteral("error"), error_);
+        return false;
+    }
+
+    const QString versionsRoot = QDir(pluginRoot_).filePath(
+        QStringLiteral("adapters/%1").arg(selectedModel_.adapterId));
+    const QFileInfoList versions = QDir(versionsRoot).entryInfoList(
+        QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed);
+    for (const QFileInfo& version : versions) {
+        if (!QFileInfo::exists(QDir(version.absoluteFilePath()).filePath(
+                QStringLiteral("adapter.json")))) {
+            continue;
+        }
+        if (!configureAdapter(selectedModel_.adapterId, version.fileName())) continue;
+        activationInProgress_ = true;
+        setActivation(QStringLiteral("starting-worker"),
+                      QStringLiteral("Starting model Worker"));
+        if (startWorker()) return true;
+        activationInProgress_ = false;
+    }
+    const QString message = QStringLiteral(
+        "Adapter runtime is not installed or not ready; download it before using this model");
+    setError(message);
+    updateSelectedModelStatus(QStringLiteral("needs-download"), message);
+    setActivation(QStringLiteral("needs-download"), message);
+    return false;
+}
+
 bool VoiceCloneController::selectModel(const QString& stableId)
 {
     if (!loadRequestId_.isEmpty()) {
@@ -458,8 +533,37 @@ bool VoiceCloneController::selectModel(const QString& stableId)
     selectedModelRoot_ = selected->modelDirectory;
     modelLoaded_ = false;
     emit modelLoadedChanged();
+    emit licenseChanged();
     setError({});
     return !selectedModelRoot_.isEmpty();
+}
+
+bool VoiceCloneController::acceptSelectedLicense()
+{
+    return acceptSelectedLicenseIdentity(selectedModel_.stableId, selectedModel_.adapterId,
+                                         QUrl(selectedModel_.license.url),
+                                         selectedModel_.licenseRevision);
+}
+
+bool VoiceCloneController::acceptSelectedLicenseIdentity(const QString& modelId,
+                                                         const QString& adapterId,
+                                                         const QUrl& licenseUrl,
+                                                         const QString& revision)
+{
+    if (!selectedModel_.requiresLicenseAcceptance || licenseManager_ == nullptr
+        || modelId != selectedModel_.stableId || adapterId != selectedModel_.adapterId
+        || licenseUrl != QUrl(selectedModel_.license.url)
+        || revision != selectedModel_.licenseRevision) {
+        setError(QStringLiteral("Selected license identity does not match the active model"));
+        return false;
+    }
+    if (!licenseManager_->acceptLicenseIdentity(modelId, adapterId, licenseUrl, revision)) {
+        setError(QStringLiteral("Could not persist selected model license acceptance"));
+        return false;
+    }
+    setError({});
+    emit licenseChanged();
+    return true;
 }
 
 void VoiceCloneController::refreshModels()
@@ -683,6 +787,7 @@ bool VoiceCloneController::deleteResult(const QString& outputPath)
 
 void VoiceCloneController::shutdown()
 {
+    activationInProgress_ = false;
     worker_.shutdown();
     loadRequestId_.clear();
     cancelTargets_.clear();
@@ -712,6 +817,22 @@ QString VoiceCloneController::requestDirectory(const QString& requestId) const
                : QDir(outputRoot_).filePath(QStringLiteral("requests/%1").arg(requestId));
 }
 QString VoiceCloneController::errorString() const { return error_; }
+QString VoiceCloneController::activationState() const { return activationState_; }
+QString VoiceCloneController::activationMessage() const { return activationMessage_; }
+bool VoiceCloneController::licenseAcceptanceRequired() const
+{
+    if (!selectedModel_.requiresLicenseAcceptance) return false;
+    return licenseManager_ == nullptr
+           || !licenseManager_->hasLicenseAcceptance(
+               selectedModel_.stableId, selectedModel_.adapterId,
+               QUrl(selectedModel_.license.url), selectedModel_.licenseRevision);
+}
+QString VoiceCloneController::currentLicenseName() const { return selectedModel_.license.name; }
+QUrl VoiceCloneController::currentLicenseUrl() const { return QUrl(selectedModel_.license.url); }
+QString VoiceCloneController::currentLicenseRevision() const
+{
+    return selectedModel_.licenseRevision;
+}
 QVariantList VoiceCloneController::basicParameters() const { return basicParameters_; }
 QVariantList VoiceCloneController::advancedParameters() const { return advancedParameters_; }
 bool VoiceCloneController::advancedSettingsAvailable() const { return !advancedParameters_.isEmpty(); }
@@ -732,6 +853,17 @@ void VoiceCloneController::handleResponse(const VoiceCloneWorkerMessage& message
         }
         updateSelectedModelStatus(loaded ? QStringLiteral("ready") : QStringLiteral("invalid"),
                                   loaded ? QString{} : QStringLiteral("Adapter did not load the model"));
+        if (activationInProgress_) {
+            activationInProgress_ = false;
+            if (loaded) {
+                setError({});
+                setActivation(QStringLiteral("ready"), QStringLiteral("Model ready"));
+            } else {
+                const QString diagnostic = QStringLiteral("Adapter did not load the model");
+                setError(diagnostic);
+                setActivation(QStringLiteral("error"), diagnostic);
+            }
+        }
     } else if (message.operation == WorkerOperation::Unload) {
         if (modelLoaded_) {
             modelLoaded_ = false;
@@ -765,6 +897,10 @@ void VoiceCloneController::handleFailure(const QString& requestId,
     if (requestId == loadRequestId_) {
         loadRequestId_.clear();
         updateSelectedModelStatus(QStringLiteral("invalid"), message);
+        if (activationInProgress_) {
+            activationInProgress_ = false;
+            setActivation(QStringLiteral("error"), message);
+        }
     }
     if (pendingCleanup_.contains(requestId) || pendingCleanup_.contains(cancelTarget)) {
         worker_.shutdown();
@@ -779,6 +915,14 @@ void VoiceCloneController::setError(const QString& error)
     if (error_ == error) return;
     error_ = error;
     emit errorChanged();
+}
+
+void VoiceCloneController::setActivation(const QString& state, const QString& message)
+{
+    if (activationState_ == state && activationMessage_ == message) return;
+    activationState_ = state;
+    activationMessage_ = message;
+    emit activationChanged();
 }
 
 void VoiceCloneController::updateCapabilities(const QJsonObject& schema)

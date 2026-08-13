@@ -81,10 +81,18 @@ TestCase {
             { key: "lexicon", label: "Lexicon", description: "Optional lexicon", type: "file", group: "basic", default: "", extensions: ["txt"] }
         ]
         property var advancedParameters: []
+        property var initialBasicParameters: basicParameters
         property bool advancedSettingsAvailable: advancedParameters.length > 0
         property bool workerReady: true
         property bool modelLoaded: true
         property string errorString: ""
+        property string activationState: "ready"
+        property string activationMessage: "Model ready"
+        property bool licenseAcceptanceRequired: false
+        property string currentLicenseName: ""
+        property url currentLicenseUrl: ""
+        property string currentLicenseRevision: ""
+        property bool licenseIdentityValid: true
         property int refreshCalls: 0
         property int openDirectoryCalls: 0
         property int selectCalls: 0
@@ -92,16 +100,36 @@ TestCase {
         property int cancelCalls: 0
         property int saveCalls: 0
         property int deleteCalls: 0
-        property int sendCalls: 0
+        property int acceptLicenseCalls: 0
         property string lastSelectedId: ""
         property var lastParameters: ({})
 
         signal generationFinished(string requestId, string outputPath)
         signal requestFailed(string requestId, string code, string message)
+        signal capabilitiesChanged()
+        signal activationChanged()
+        signal licenseChanged()
 
         function refreshModels() { ++refreshCalls }
         function openModelDirectory() { ++openDirectoryCalls; return true }
-        function selectModel(stableId) { ++selectCalls; lastSelectedId = stableId; return true }
+        function activateModel(stableId) {
+            ++selectCalls
+            lastSelectedId = stableId
+            licenseAcceptanceRequired = stableId === "IndexTeam/IndexTTS-2.5"
+            currentLicenseName = licenseAcceptanceRequired
+                    ? "bilibili Model Use License Agreement" : "Apache-2.0"
+            currentLicenseUrl = licenseAcceptanceRequired
+                    ? "https://huggingface.co/IndexTeam/IndexTTS-2.5" : ""
+            currentLicenseRevision = licenseAcceptanceRequired
+                    ? "license-2026-08-13" : ""
+            return true
+        }
+        function acceptSelectedLicense() {
+            ++acceptLicenseCalls
+            if (!licenseIdentityValid) return false
+            licenseAcceptanceRequired = false
+            return true
+        }
         function generate(text, referencePath, parameters) {
             ++generateCalls
             lastParameters = parameters
@@ -113,7 +141,6 @@ TestCase {
             return path !== "" && destinationPath !== ""
         }
         function deleteResult(path) { ++deleteCalls; return path !== "" }
-        function sendResultToEditor(path) { ++sendCalls; return path !== "" }
     }
 
     QtObject {
@@ -147,7 +174,23 @@ TestCase {
         }
     }
 
+    Component {
+        id: realHostPageComponent
+        VoiceCloneHostPage {
+            width: 1200
+            height: 700
+            hostController: realVoiceCloneHost
+            workspaceUrl: realVoiceCloneHost.mainQmlUrl
+        }
+    }
+
+    Component {
+        id: activationSpyComponent
+        SignalSpy { signalName: "activationChanged" }
+    }
+
     function init() {
+        fakeController.basicParameters = fakeController.initialBasicParameters
         fakeController.advancedParameters = []
         fakeController.refreshCalls = 0
         fakeController.openDirectoryCalls = 0
@@ -156,13 +199,19 @@ TestCase {
         fakeController.cancelCalls = 0
         fakeController.saveCalls = 0
         fakeController.deleteCalls = 0
-        fakeController.sendCalls = 0
+        fakeController.acceptLicenseCalls = 0
+        fakeController.licenseAcceptanceRequired = false
+        fakeController.licenseIdentityValid = true
         fakeController.lastSelectedId = ""
         fakeHost.state = 0
         fakeHost.pluginLoaded = false
         fakeHost.refreshCalls = 0
         fakeHost.openCalls = 0
         workspace.resetUiState()
+    }
+
+    function audioFixturePath() {
+        return decodeURIComponent(testAudioUrl.toString().replace(/^file:\/\/\//, ""))
     }
 
     function test_stableToolIdSelectsVoiceCloneWithoutChangingLegacyIds() {
@@ -208,13 +257,93 @@ TestCase {
         compare(fakeController.openDirectoryCalls, 1)
     }
 
+    function test_realPluginHostLoadsWorkspaceAndClickedModelBecomesReady() {
+        compare(realVoiceCloneStageError, "")
+        verify(realVoiceCloneHost)
+        realVoiceCloneHost.refresh()
+        compare(realVoiceCloneHost.state, 2)
+        verify(realVoiceCloneHost.openPlugin())
+        compare(realVoiceCloneHost.pluginLoaded, true)
+        verify(realVoiceCloneHost.mainQmlUrl.toString().indexOf("qrc:/AgPlayer/VoiceClone/") === 0)
+
+        const host = createTemporaryObject(realHostPageComponent, testCase)
+        verify(host)
+        const loader = findChild(host, "voiceCloneWorkspaceLoader")
+        tryVerify(function() { return loader.item !== null })
+        compare(loader.item.controller, realVoiceCloneHost.pluginController)
+        compare(loader.item.controller.models[0].stableId,
+                "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+        compare(loader.item.controller.models[0].installState, "local-unverified")
+        tryCompare(loader.item, "selectedModelIndex", 0)
+        compare(loader.item.selectedModel.stableId,
+                "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+        tryVerify(function() {
+            return realVoiceCloneHost.pluginController.workerReady
+                    && realVoiceCloneHost.pluginController.modelLoaded
+        }, 8000)
+        const activationSpy = createTemporaryObject(
+                    activationSpyComponent, testCase,
+                    { target: realVoiceCloneHost.pluginController })
+        verify(activationSpy)
+        activationSpy.clear()
+        mouseClick(findChild(loader.item, "voiceCloneModelCard0"))
+        verify(activationSpy.count >= 2)
+        compare(realVoiceCloneHost.pluginController.activationState, "starting-worker")
+        compare(realVoiceCloneHost.pluginController.modelLoaded, false)
+        tryVerify(function() {
+            return realVoiceCloneHost.pluginController.workerReady
+                    && realVoiceCloneHost.pluginController.modelLoaded
+        }, 8000)
+        compare(realVoiceCloneHost.pluginController.activationMessage, "Model ready")
+        compare(realVoiceCloneHost.pluginController.activationState, "ready")
+        compare(realVoiceCloneHost.pluginController.workerReady, true)
+        compare(realVoiceCloneHost.pluginController.modelLoaded, true)
+
+        loader.active = false
+        tryCompare(loader, "item", null)
+        host.destroy()
+        wait(20)
+    }
+
     function test_schemaDelegatesAllTypesAndOnlyDisclosesLiveAdvancedFields() {
-        verify(findChild(workspace, "voiceCloneParameter_bool"))
-        verify(findChild(workspace, "voiceCloneParameter_enum"))
-        verify(findChild(workspace, "voiceCloneParameter_int"))
-        verify(findChild(workspace, "voiceCloneParameter_double"))
-        verify(findChild(workspace, "voiceCloneParameter_string"))
-        verify(findChild(workspace, "voiceCloneParameter_file"))
+        const normalizeControl = findChild(workspace, "voiceCloneParameterControl_normalize")
+        const languageControl = findChild(workspace, "voiceCloneParameterControl_language")
+        const seedControlBeforeSwitch = findChild(workspace, "voiceCloneParameterControl_seed")
+        const speedControl = findChild(workspace, "voiceCloneParameterControl_speed")
+        const styleControl = findChild(workspace, "voiceCloneParameterControl_style")
+        const lexiconControl = findChild(workspace, "voiceCloneParameterControl_lexicon")
+        verify(normalizeControl && languageControl && seedControlBeforeSwitch
+               && speedControl && styleControl && lexiconControl)
+        compare(normalizeControl.checked, true)
+        compare(languageControl.currentIndex, 0)
+        compare(seedControlBeforeSwitch.value, 7)
+        compare(speedControl.value, 1000)
+        compare(styleControl.text, "")
+
+        const edited = Object.assign({}, workspace.parameterValues)
+        edited.normalize = false
+        edited.language = "en"
+        edited.seed = 19
+        edited.speed = 1.25
+        edited.style = "warm"
+        edited.lexicon = "C:/fixtures/lexicon.txt"
+        workspace.parameterValues = edited
+        tryCompare(normalizeControl, "checked", false)
+        tryCompare(languageControl, "currentIndex", 1)
+        tryCompare(seedControlBeforeSwitch, "value", 19)
+        tryCompare(speedControl, "value", 1250)
+        tryCompare(styleControl, "text", "warm")
+        const lexiconText = findChild(lexiconControl, "voiceCloneParameterFileText_lexicon")
+        verify(lexiconText)
+        tryCompare(lexiconText, "text", "C:/fixtures/lexicon.txt")
+
+        workspace.resetParameterDefaults()
+        tryCompare(normalizeControl, "checked", true)
+        tryCompare(languageControl, "currentIndex", 0)
+        tryCompare(seedControlBeforeSwitch, "value", 7)
+        tryCompare(speedControl, "value", 1000)
+        tryCompare(styleControl, "text", "")
+        tryCompare(lexiconText, "text", "")
         compare(findChild(workspace, "voiceCloneAdvancedButton").visible, false)
 
         fakeController.advancedParameters = [
@@ -227,10 +356,48 @@ TestCase {
         const conditional = findChild(workspace, "voiceCloneAdvancedParameter_conditionalStyle")
         verify(conditional)
         compare(conditional.visible, false)
+        workspace.resetParameterDefaults()
+        compare(workspace.parameterValues.conditionalStyle, undefined)
+
+        workspace.referenceAudioPath = "C:/fixtures/reference.wav"
+        workspace.cloneText = "hidden parameter payload"
+        workspace.startGeneration()
+        compare(fakeController.generateCalls, 1)
+        compare(fakeController.lastParameters.conditionalStyle, undefined)
+
         const values = Object.assign({}, workspace.parameterValues)
         values.normalize = false
         workspace.parameterValues = values
         tryCompare(conditional, "visible", true)
+
+        fakeController.basicParameters = [
+            { key: "seed", label: "Seed", description: "Random seed", type: "int", group: "basic", default: 42, minimum: 0, maximum: 99, step: 1 }
+        ]
+        fakeController.advancedParameters = []
+        fakeController.capabilitiesChanged()
+        tryVerify(function() { return workspace.parameterValues.seed === 42 })
+        const seedDelegate = findChild(workspace, "voiceCloneParameter_int")
+        verify(seedDelegate)
+        tryCompare(seedDelegate, "renderedValue", 42)
+        const seedControl = findChild(seedDelegate, "voiceCloneParameterControl_seed")
+        verify(seedControl)
+        tryCompare(seedControl, "value", 42)
+    }
+
+    function test_switchingModelClearsActiveGenerationState() {
+        workspace.referenceAudioPath = "C:/fixtures/reference.wav"
+        workspace.cloneText = "switch during generation"
+        workspace.startGeneration()
+        compare(workspace.activeRequestId, "request-1")
+        compare(workspace.running, true)
+
+        mouseClick(findChild(workspace, "voiceCloneModelCard2"))
+        compare(workspace.activeRequestId, "")
+        compare(workspace.running, false)
+        compare(workspace.canGenerate, true)
+        workspace.startGeneration()
+        compare(fakeController.generateCalls, 2)
+        compare(workspace.activeRequestId, "request-1")
     }
 
     function test_indexLicenseGateGenerationCancelAndResultActions() {
@@ -242,6 +409,12 @@ TestCase {
         workspace.cloneText = "测试人声克隆"
         compare(workspace.canGenerate, false)
         mouseClick(gate)
+        const licenseDialog = findChild(workspace, "voiceCloneLicenseDialog")
+        verify(licenseDialog)
+        tryCompare(licenseDialog, "visible", true)
+        mouseClick(findChild(workspace, "voiceCloneLicenseDialogAuthorityCheck"))
+        licenseDialog.accept()
+        compare(fakeController.acceptLicenseCalls, 1)
         compare(workspace.canGenerate, true)
 
         const generateButton = findChild(workspace, "voiceCloneGenerateButton")
@@ -255,7 +428,7 @@ TestCase {
         const resultPanel = findChild(workspace, "voiceCloneResultPanel")
         compare(resultPanel.hasResult, false)
         mouseClick(generateButton)
-        fakeController.generationFinished("request-1", "C:/results/generated.wav")
+        fakeController.generationFinished("request-1", audioFixturePath())
         tryCompare(resultPanel, "hasResult", true)
         wait(20)
         mouseClick(findChild(workspace, "voiceCloneSaveResultButton"))
@@ -264,9 +437,12 @@ TestCase {
         tryCompare(saveDialog, "visible", true)
         resultPanel.saveTo("C:/results/saved.wav")
         mouseClick(findChild(workspace, "voiceCloneSendToEditorButton"))
+        tryCompare(AudioEditorController, "hasDocument", true)
+        compare(AudioEditorController.filePath.replace(/\\/g, "/"),
+                audioFixturePath().replace(/\\/g, "/"))
+        compare(AudioToolsController.currentToolId, "audio-editor")
         mouseClick(findChild(workspace, "voiceCloneDeleteResultButton"))
         compare(fakeController.saveCalls, 1)
-        compare(fakeController.sendCalls, 1)
         compare(fakeController.deleteCalls, 1)
         compare(resultPanel.hasResult, false)
     }

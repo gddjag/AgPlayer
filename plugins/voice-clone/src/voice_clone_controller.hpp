@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QVariantList>
 #include <QSet>
+#include <QUrl>
 
 namespace agplayer::voice_clone {
 
@@ -22,6 +23,12 @@ class VoiceCloneController final : public QObject {
     Q_PROPERTY(bool workerReady READ workerReady NOTIFY workerReadyChanged)
     Q_PROPERTY(bool modelLoaded READ modelLoaded NOTIFY modelLoadedChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
+    Q_PROPERTY(QString activationState READ activationState NOTIFY activationChanged)
+    Q_PROPERTY(QString activationMessage READ activationMessage NOTIFY activationChanged)
+    Q_PROPERTY(bool licenseAcceptanceRequired READ licenseAcceptanceRequired NOTIFY licenseChanged)
+    Q_PROPERTY(QString currentLicenseName READ currentLicenseName NOTIFY licenseChanged)
+    Q_PROPERTY(QUrl currentLicenseUrl READ currentLicenseUrl NOTIFY licenseChanged)
+    Q_PROPERTY(QString currentLicenseRevision READ currentLicenseRevision NOTIFY licenseChanged)
 
 public:
     explicit VoiceCloneController(QString pluginRoot,
@@ -33,7 +40,13 @@ public:
     bool configureAdapter(const QString& adapterId,
                           const QString& adapterVersion,
                           const QString& launcherId = {});
+    Q_INVOKABLE bool activateModel(const QString& stableId);
     Q_INVOKABLE bool selectModel(const QString& stableId);
+    Q_INVOKABLE bool acceptSelectedLicense();
+    bool acceptSelectedLicenseIdentity(const QString& modelId,
+                                       const QString& adapterId,
+                                       const QUrl& licenseUrl,
+                                       const QString& revision);
     Q_INVOKABLE void refreshModels();
     Q_INVOKABLE bool openModelDirectory();
 
@@ -57,6 +70,12 @@ public:
     bool hasPendingRequest(const QString& requestId) const;
     QString requestDirectory(const QString& requestId) const;
     QString errorString() const;
+    QString activationState() const;
+    QString activationMessage() const;
+    bool licenseAcceptanceRequired() const;
+    QString currentLicenseName() const;
+    QUrl currentLicenseUrl() const;
+    QString currentLicenseRevision() const;
     QVariantList basicParameters() const;
     QVariantList advancedParameters() const;
     bool advancedSettingsAvailable() const;
@@ -69,6 +88,8 @@ signals:
     void workerReadyChanged();
     void modelLoadedChanged();
     void errorChanged();
+    void activationChanged();
+    void licenseChanged();
     void generationFinished(const QString& requestId, const QString& outputPath);
     void requestFailed(const QString& requestId, const QString& code, const QString& message);
 
@@ -88,6 +109,7 @@ private:
     void cleanupDirectory(const QString& requestId, const QString& directory);
     void retryPendingCleanup();
     void updateSelectedModelStatus(const QString& state, const QString& diagnostic = {});
+    void setActivation(const QString& state, const QString& message = {});
 
     QString pluginRoot_;
     QString modelsRoot_;
@@ -111,8 +133,11 @@ private:
     QSet<QString> publishedResults_;
     QString loadRequestId_;
     QString error_;
+    QString activationState_ = QStringLiteral("idle");
+    QString activationMessage_;
     int requestTimeoutMs_ = 10000;
     bool modelLoaded_ = false;
+    bool activationInProgress_ = false;
 };
 
 } // namespace agplayer::voice_clone

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -14,10 +16,11 @@ Rectangle {
     property int selectedIndex: models.length > 0 ? 0 : -1
     property var selectedModel: selectedIndex >= 0 && selectedIndex < models.length
                                 ? models[selectedIndex] : ({})
-    property bool legalAuthorityConfirmed: false
+    property bool licenseAcceptanceRequired: false
     signal modelSelected(int index, string stableId)
     signal refreshRequested()
     signal openDirectoryRequested()
+    signal licenseAcceptanceRequested()
 
     ColumnLayout {
         anchors.fill: parent
@@ -32,39 +35,44 @@ Rectangle {
                 model: root.models
 
                 Button {
-                    objectName: "voiceCloneModelCard" + index
+                    id: modelCard
+                    required property int index
+                    required property var modelData
+                    objectName: "voiceCloneModelCard" + modelCard.index
                     Layout.fillWidth: true
                     Layout.preferredHeight: 68
-                    checked: index === root.selectedIndex
+                    checked: modelCard.index === root.selectedIndex
                     checkable: true
                     focusPolicy: Qt.StrongFocus
-                    onClicked: root.modelSelected(index, modelData.stableId || "")
+                    onClicked: root.modelSelected(modelCard.index,
+                                                  modelCard.modelData.stableId || "")
 
                     contentItem: ColumnLayout {
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
-                            text: modelData.displayName || qsTr("未命名模型")
+                            text: modelCard.modelData.displayName || qsTr("未命名模型")
                             elide: Text.ElideRight
-                            color: checked ? Theme.primaryText : Theme.secondaryText
+                            color: modelCard.checked ? Theme.primaryText : Theme.secondaryText
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
                         }
                         Label {
                             Layout.fillWidth: true
-                            text: (modelData.provider || "") + "  ·  "
-                                  + (modelData.installState || qsTr("未知状态"))
+                            text: (modelCard.modelData.provider || "") + "  ·  "
+                                  + (modelCard.modelData.installState || qsTr("未知状态"))
                             elide: Text.ElideRight
-                            color: modelData.installState === "ready"
+                            color: modelCard.modelData.installState === "ready"
                                    ? Theme.waveformGreen : Theme.secondaryText
                             font.pixelSize: 11
                         }
                     }
                     background: Rectangle {
-                        color: checked ? Qt.rgba(Theme.accent.r, Theme.accent.g,
-                                                Theme.accent.b, 0.16)
-                                       : (parent.hovered ? Theme.hoverSurface : Theme.elevated)
-                        border.color: checked ? Theme.accent : Theme.border
+                        color: modelCard.checked ? Qt.rgba(Theme.accent.r, Theme.accent.g,
+                                                          Theme.accent.b, 0.16)
+                                                 : (modelCard.hovered
+                                                    ? Theme.hoverSurface : Theme.elevated)
+                        border.color: modelCard.checked ? Theme.accent : Theme.border
                         radius: Theme.radiusSm
                     }
                 }
@@ -100,8 +108,11 @@ Rectangle {
                 objectName: "voiceCloneLicenseAuthorityCheck"
                 visible: !!root.selectedModel.requiresLicenseAcceptance
                 text: qsTr("我已阅读许可并确认拥有合法授权")
-                checked: root.legalAuthorityConfirmed
-                onToggled: root.legalAuthorityConfirmed = checked
+                checked: visible && !root.licenseAcceptanceRequired
+                enabled: root.licenseAcceptanceRequired
+                nextCheckState: function() { return Qt.Unchecked }
+                onClicked: if (root.licenseAcceptanceRequired)
+                               root.licenseAcceptanceRequested()
                 Accessible.name: text
             }
             Button {

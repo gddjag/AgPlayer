@@ -1,10 +1,14 @@
 #include "voice_clone_controller.hpp"
 #include "voice_clone_package_manager.hpp"
-#include "voice_clone_package_manifest.hpp"
 #include "voice_clone_worker_protocol.hpp"
 #include "voice_clone_host_controller.hpp"
+#include "audio_tools_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
+
+#include <agplayer/c_api.h>
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -16,12 +20,20 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QGuiApplication>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QScopedPointer>
+#include <QtPlugin>
+#include <qqml.h>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
 
 using namespace agplayer::voice_clone;
+
+Q_IMPORT_PLUGIN(AgPlayerPlugin)
 
 namespace {
 
@@ -368,6 +380,9 @@ class VoiceCloneControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void activateModelResolvesInstalledAdapterAndLoadsWorker();
+    void activateModelReportsMissingRuntimeWithoutPretendingReady();
+    void selectedIndexLicenseAcceptanceUsesExactIdentity();
     void lifecycleCorrelationAndCleanup();
     void rejectsInvalidDynamicParametersAndUnacceptedIndexLicense();
     void handlesOomCrashTimeoutAndRestartWithoutKillingHost();
@@ -378,6 +393,89 @@ private slots:
     void rejectsOversizedFrameAndSymlinkPart();
     void shutdownUsesProtocolAndModuleLoadsThroughHost();
 };
+
+void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWorker()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/activated-qwen");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+
+    QSignalSpy activationChanged(&controller, &VoiceCloneController::activationChanged);
+    QVERIFY2(controller.activateModel(modelId), qPrintable(controller.errorString()));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
+    QCOMPARE(controller.activationState(), QStringLiteral("ready"));
+    QVERIFY(activationChanged.count() >= 2);
+}
+
+void VoiceCloneControllerTest::activateModelReportsMissingRuntimeWithoutPretendingReady()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    const QString modelId = QStringLiteral("local/missing-runtime");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+
+    QVERIFY(!controller.activateModel(
+        QStringLiteral("Qwen/Qwen3-TTS-12Hz-1.7B-Base")));
+    QCOMPARE(controller.activationState(), QStringLiteral("needs-download"));
+    QVERIFY(controller.activationMessage().contains(QStringLiteral("not ready"),
+                                                     Qt::CaseInsensitive));
+    QVERIFY(!controller.activateModel(modelId));
+    QCOMPARE(controller.activationState(), QStringLiteral("needs-download"));
+    QVERIFY(controller.activationMessage().contains(QStringLiteral("not ready"),
+                                                     Qt::CaseInsensitive));
+    QVERIFY(!controller.workerReady());
+    QVERIFY(!controller.modelLoaded());
+}
+
+void VoiceCloneControllerTest::selectedIndexLicenseAcceptanceUsesExactIdentity()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot, QStringLiteral("indextts25")));
+    const QString modelId = QStringLiteral("IndexTeam/IndexTTS-2.5");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("indextts25"),
+                        QStringLiteral("index")).isEmpty());
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+
+    QVERIFY(controller.selectModel(modelId));
+    QVERIFY(controller.licenseAcceptanceRequired());
+    QCOMPARE(controller.currentLicenseUrl(),
+             QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")));
+    QCOMPARE(controller.currentLicenseRevision(), QStringLiteral("license-2026-08-13"));
+    QVERIFY(!controller.acceptSelectedLicenseIdentity(
+        QStringLiteral("wrong/model"), QStringLiteral("indextts25"),
+        controller.currentLicenseUrl(), controller.currentLicenseRevision()));
+    QVERIFY(controller.licenseAcceptanceRequired());
+    QVERIFY(controller.acceptSelectedLicense());
+    QVERIFY(!controller.licenseAcceptanceRequired());
+    QVERIFY(licenses.hasLicenseAcceptance(
+        modelId, QStringLiteral("indextts25"), controller.currentLicenseUrl(),
+        controller.currentLicenseRevision()));
+
+    QFile acceptance(licenses.licenseAcceptancePath());
+    QVERIFY(acceptance.open(QIODevice::ReadOnly));
+    const QJsonArray records = QJsonDocument::fromJson(acceptance.readAll())
+                                   .object().value(QStringLiteral("records")).toArray();
+    QCOMPARE(records.size(), 1);
+    const QJsonObject record = records.at(0).toObject();
+    QCOMPARE(record.value(QStringLiteral("modelId")).toString(), modelId);
+    QCOMPARE(record.value(QStringLiteral("adapterId")).toString(),
+             QStringLiteral("indextts25"));
+    QCOMPARE(record.value(QStringLiteral("licenseUrl")).toString(),
+             controller.currentLicenseUrl().toString());
+    QCOMPARE(record.value(QStringLiteral("revision")).toString(),
+             controller.currentLicenseRevision());
+    QVERIFY(QDateTime::fromString(record.value(QStringLiteral("acceptedAt")).toString(),
+                                  Qt::ISODateWithMs).isValid());
+}
 
 void VoiceCloneControllerTest::lifecycleCorrelationAndCleanup()
 {
@@ -504,20 +602,9 @@ void VoiceCloneControllerTest::rejectsInvalidDynamicParametersAndUnacceptedIndex
                                  {QStringLiteral("mode"), QStringLiteral("fast")}}).isEmpty());
     QVERIFY(controller.errorString().contains(QStringLiteral("license"), Qt::CaseInsensitive));
 
-    VoiceClonePackageManifest package;
-    package.packageId = QStringLiteral("index-test");
-    package.modelId = indexId;
-    package.adapterId = QStringLiteral("indextts25");
-    package.version = QStringLiteral("1");
-    package.revision = QStringLiteral("main");
-    package.licenseUrl = QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5"));
-    package.licenseRevision = QStringLiteral("license-2026-08-13");
-    package.files.append({QStringLiteral("model.bin"), QUrl(QStringLiteral("https://example.com/model.bin")),
-                          QByteArray(64, 'a')});
-    licenses.start(package);
-    QCOMPARE(licenses.state(), VoiceClonePackageManager::LicenseRequired);
-    QVERIFY(!licenses.acceptLicense(package.licenseUrl, QStringLiteral("wrong-revision")));
-    QVERIFY(licenses.acceptLicense(package.licenseUrl, package.licenseRevision));
+    QVERIFY(controller.licenseAcceptanceRequired());
+    QVERIFY(controller.acceptSelectedLicense());
+    QVERIFY(!controller.licenseAcceptanceRequired());
     const QString accepted = controller.generate(QStringLiteral("accepted"), {},
                                                  {{QStringLiteral("seed"), 1},
                                                   {QStringLiteral("mode"), QStringLiteral("fast")}});
@@ -776,6 +863,46 @@ void VoiceCloneControllerTest::shutdownUsesProtocolAndModuleLoadsThroughHost()
     QFile workspace(QStringLiteral(":") + host.mainQmlUrl().path());
     QVERIFY2(workspace.open(QIODevice::ReadOnly), qPrintable(workspace.errorString()));
     QVERIFY(workspace.readAll().contains("VoiceCloneModelBar"));
+
+    AudioToolsController audioTools;
+    AudioEditorController audioEditor(AG_AUDIO_BACKEND_NULL);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioToolsController", &audioTools);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioEditorController", &audioEditor);
+    {
+        QQmlEngine engine;
+        engine.addImportPath(QStringLiteral("qrc:/"));
+        QQmlComponent loaderComponent(&engine);
+        loaderComponent.setData(R"QML(
+            import QtQuick
+            Item {
+                property url workspaceUrl
+                property var injectedController
+                Loader {
+                    objectName: "realVoiceCloneWorkspaceLoader"
+                    active: true
+                    source: parent.workspaceUrl
+                    onLoaded: item.controller = parent.injectedController
+                }
+            }
+        )QML", QUrl(QStringLiteral("qrc:/tests/voice-clone-loader.qml")));
+        QVERIFY2(loaderComponent.isReady(), qPrintable(loaderComponent.errorString()));
+        QScopedPointer<QObject> loaderRoot(loaderComponent.createWithInitialProperties(
+            {{QStringLiteral("workspaceUrl"), host.mainQmlUrl()},
+             {QStringLiteral("injectedController"),
+              QVariant::fromValue(host.pluginController())}}));
+        QVERIFY2(loaderRoot, qPrintable(loaderComponent.errorString()));
+        QObject* loader = loaderRoot->findChild<QObject*>(
+            QStringLiteral("realVoiceCloneWorkspaceLoader"));
+        QVERIFY(loader != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(loader->property("item").value<QObject*>() != nullptr, 3000);
+        QObject* loadedWorkspace = loader->property("item").value<QObject*>();
+        QCOMPARE(loadedWorkspace->property("controller").value<QObject*>(),
+                 host.pluginController());
+        loader->setProperty("active", false);
+        QTRY_VERIFY_WITH_TIMEOUT(loader->property("item").value<QObject*>() == nullptr, 3000);
+        loaderRoot.reset();
+        engine.clearComponentCache();
+    }
     host.closePlugin();
     QCOMPARE(host.state(), VoiceCloneHostController::Compatible);
     qunsetenv("AGPLAYER_VOICE_CLONE_ROOT");
@@ -785,7 +912,7 @@ void VoiceCloneControllerTest::shutdownUsesProtocolAndModuleLoadsThroughHost()
 
 int main(int argc, char** argv)
 {
-    QCoreApplication application(argc, argv);
+    QGuiApplication application(argc, argv);
     if (application.arguments().contains(QStringLiteral("--voice-clone-worker"))) {
         return runWorker(application.arguments());
     }

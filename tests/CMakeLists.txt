@@ -496,12 +496,20 @@ endforeach()
 target_link_libraries(voice_clone_package_manager_test PRIVATE Qt6::Network)
 target_link_libraries(voice_clone_controller_test PRIVATE Qt6::Network)
 target_link_libraries(voice_clone_controller_test PRIVATE agplayer_voice_clone_controller)
+target_link_libraries(voice_clone_controller_test PRIVATE
+    agplayer_app_qml
+    agplayer_app_qmlplugin
+    Qt6::Quick
+)
 target_compile_definitions(voice_clone_controller_test PRIVATE
     AGPLAYER_VOICE_CLONE_REGISTRY_PATH="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/models.json"
     AGPLAYER_VOICE_CLONE_PLUGIN="$<TARGET_FILE:agplayer_voice_clone_plugin>"
 )
 add_dependencies(voice_clone_controller_test agplayer_voice_clone_plugin)
-set_tests_properties(voice_clone_controller_test PROPERTIES TIMEOUT 30)
+set_tests_properties(voice_clone_controller_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+)
 
 add_library(voice_clone_test_plugin MODULE
     qt/voice_clone_test_plugin.cpp
@@ -768,9 +776,13 @@ target_link_libraries(qml_audio_tools_test PRIVATE
 )
 target_compile_definitions(qml_audio_tools_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+    AGPLAYER_VOICE_CLONE_REGISTRY_PATH="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/models.json"
+    AGPLAYER_VOICE_CLONE_PLUGIN="$<TARGET_FILE:agplayer_voice_clone_plugin>"
+    AGPLAYER_VOICE_CLONE_TEST_WORKER="$<TARGET_FILE:voice_clone_controller_test>"
 )
 agplayer_enable_warnings(qml_audio_tools_test)
-add_dependencies(qml_audio_tools_test decoder_fixture)
+add_dependencies(qml_audio_tools_test decoder_fixture agplayer_voice_clone_plugin
+                 voice_clone_controller_test)
 
 add_test(NAME qml_format_converter_test
     COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
@@ -791,10 +803,11 @@ set_tests_properties(qml_filename_process_test PROPERTIES
 )
 
 add_test(NAME qml_voice_clone_test
-    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_voice_clone.qml)
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_voice_clone.qml
+            -o ${CMAKE_BINARY_DIR}/tests/voice-clone-qtest-round1.txt,txt)
 set_tests_properties(qml_voice_clone_test PROPERTIES
     TIMEOUT 30
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )

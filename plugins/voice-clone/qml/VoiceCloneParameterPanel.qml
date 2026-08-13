@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -100,6 +102,7 @@ Rectangle {
             id: fieldRoot
             required property var modelData
             property var field: modelData
+            readonly property var renderedValue: controlLoader.fieldValue
             visible: root.fieldVisible(field)
             Layout.preferredWidth: Math.max(150, Math.min(250, field.type === "string" || field.type === "file" ? 220 : 170))
             objectName: (field.group === "advanced"
@@ -126,9 +129,23 @@ Rectangle {
                                : fieldData.type === "double" ? doubleControl
                                : fieldData.type === "file" ? fileControl
                                : stringControl
-                onLoaded: {
-                    item.fieldData = fieldData
-                    item.fieldValue = fieldValue
+                Binding {
+                    target: controlLoader.item
+                    property: "fieldData"
+                    value: controlLoader.fieldData
+                    when: controlLoader.item !== null
+                }
+                Binding {
+                    target: controlLoader.item
+                    property: "fieldValue"
+                    value: root.currentValue(fieldRoot.field)
+                    when: controlLoader.item !== null
+                }
+                Binding {
+                    target: controlLoader.item
+                    property: "objectName"
+                    value: "voiceCloneParameterControl_" + fieldRoot.field.key
+                    when: controlLoader.item !== null
                 }
             }
             Label {
@@ -208,6 +225,7 @@ Rectangle {
             property var fieldValue
             TextField {
                 id: filePathField
+                objectName: "voiceCloneParameterFileText_" + parent.fieldData.key
                 Layout.fillWidth: true
                 text: String(parent.fieldValue || "")
                 placeholderText: qsTr("本地文件路径")
