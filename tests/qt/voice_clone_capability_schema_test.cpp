@@ -118,6 +118,7 @@ private slots:
     void acceptsBasicAndAdvancedControlsWithValidDefaults();
     void rejectsOutOfRangeDefaultsAndProtocolMismatches();
     void validatesConditionalVisibilityAndRejectsUnknownParameters();
+    void rejectsInvalidIntEnumStringAndFileParameters();
 };
 
 void VoiceCloneCapabilitySchemaTest::acceptsBasicAndAdvancedControlsWithValidDefaults()
@@ -136,7 +137,9 @@ void VoiceCloneCapabilitySchemaTest::acceptsBasicAndAdvancedControlsWithValidDef
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const QString referenceAudio = temporary.filePath(QStringLiteral("reference.wav"));
-    QFile(referenceAudio).open(QIODevice::WriteOnly);
+    QFile referenceFile(referenceAudio);
+    QVERIFY(referenceFile.open(QIODevice::WriteOnly));
+    referenceFile.close();
     const auto parameters = validateParameters(schema, validParameters(referenceAudio));
     QVERIFY2(parameters.isValid(), qPrintable(parameters.errorString()));
 }
@@ -165,7 +168,9 @@ void VoiceCloneCapabilitySchemaTest::validatesConditionalVisibilityAndRejectsUnk
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const QString referenceAudio = temporary.filePath(QStringLiteral("reference.flac"));
-    QFile(referenceAudio).open(QIODevice::WriteOnly);
+    QFile referenceFile(referenceAudio);
+    QVERIFY(referenceFile.open(QIODevice::WriteOnly));
+    referenceFile.close();
 
     QJsonObject hiddenAdvanced = validParameters(referenceAudio);
     hiddenAdvanced.insert(QStringLiteral("enableAdvanced"), false);
@@ -184,6 +189,63 @@ void VoiceCloneCapabilitySchemaTest::validatesConditionalVisibilityAndRejectsUnk
     parameters = validateParameters(completeSchema(), unknown);
     QVERIFY(!parameters.isValid());
     QVERIFY(parameters.errorString().contains(QStringLiteral("workerOnlySecret")));
+}
+
+void VoiceCloneCapabilitySchemaTest::rejectsInvalidIntEnumStringAndFileParameters()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString referenceAudio = temporary.filePath(QStringLiteral("reference.wav"));
+    QFile referenceFile(referenceAudio);
+    QVERIFY(referenceFile.open(QIODevice::WriteOnly));
+    referenceFile.close();
+
+    QJsonObject values = validParameters(referenceAudio);
+    values.insert(QStringLiteral("seed"), 101);
+    auto validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("seed")));
+
+    values = validParameters(referenceAudio);
+    values.insert(QStringLiteral("seed"), 42.5);
+    validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("seed")));
+
+    values = validParameters(referenceAudio);
+    values.insert(QStringLiteral("language"), QStringLiteral("de"));
+    validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("language")));
+
+    values = validParameters(referenceAudio);
+    values.insert(QStringLiteral("prompt"), QString(161, QLatin1Char('x')));
+    validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("prompt")));
+
+    values = validParameters(referenceAudio);
+    values.remove(QStringLiteral("referenceAudio"));
+    validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("referenceAudio"))
+            || validation.errorString().contains(QStringLiteral("required"), Qt::CaseInsensitive));
+
+    values = validParameters(temporary.filePath(QStringLiteral("missing.wav")));
+    validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("referenceAudio"))
+            || validation.errorString().contains(QStringLiteral("exist"), Qt::CaseInsensitive));
+
+    const QString unsupportedAudio = temporary.filePath(QStringLiteral("reference.mp3"));
+    QFile unsupportedFile(unsupportedAudio);
+    QVERIFY(unsupportedFile.open(QIODevice::WriteOnly));
+    unsupportedFile.close();
+    values = validParameters(unsupportedAudio);
+    validation = validateParameters(completeSchema(), values);
+    QVERIFY(!validation.isValid());
+    QVERIFY(validation.errorString().contains(QStringLiteral("referenceAudio"))
+            || validation.errorString().contains(QStringLiteral("extension"), Qt::CaseInsensitive));
 }
 
 QTEST_APPLESS_MAIN(VoiceCloneCapabilitySchemaTest)

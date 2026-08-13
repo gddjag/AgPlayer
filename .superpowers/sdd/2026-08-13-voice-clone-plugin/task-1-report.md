@@ -46,3 +46,29 @@ ctest --test-dir build/msvc-debug -C Debug -R "voice_clone_(manifest|capability_
 - 这是刻意 RED 的测试先行提交，生产头和实现尚不存在，不能执行测试断言。
 - `loadBuiltIn(path)` 的严格白名单行为、发现结果类型以及校验结果访问器均由本测试定义；后续生产实现需要遵守这些形状，或连同测试以受审方式调整。
 - Windows junction 测试调用 `mklink /J`，在标准 Windows 测试环境中不需管理员权限；若企业策略禁用 `cmd.exe`，该个案需要替代的受控 junction 夹具机制。
+
+## Fix round 1
+
+### 追加覆盖
+
+- 对批准 Registry 的完整原始 JSON 字节串进行禁用产品名扫描，并增加“禁用名只藏在 description 字段”仍须拒绝的负例。
+- 逐项锁定四个模型的 `stableId / adapterId / runtimeId / requiresLicenseAcceptance` 元组；增加三个非 Index 模型误开许可门禁均被拒绝的负例。
+- 明确验证夹具空文件的正确 SHA-256 可进入 `ready`，随后篡改权重文件并断言发现失败或状态不再为 `ready`。
+- junction 目标改为独立 `QTemporaryDir`，通过 canonical path 断言其位于扫描 root 外，再验证链接逃逸被拒绝。
+- 用户 Manifest 顶层字段按严格 allowlist 处理：未知字段、`command`、`script`、`executable`、`launcher` 均为拒绝样例；文件列表另覆盖 `.exe`、`.bat`、`.ps1` 非数据文件拒绝。
+- Capability 参数增加 int 超范围/非整数、enum 非法值、string 超长、required 缺失、file 不存在和后缀不允许的拒绝边界；所有用于有效/无效文件样例的 `QFile::open` 均检查成功。
+- 未添加 QML 或生产实现。
+
+### RED 命令与输出
+
+```powershell
+cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && where cl && cmake --preset windows-msvc-debug -B build/msvc-debug'
+cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build build/msvc-debug --target voice_clone_manifest_test'
+cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build build/msvc-debug --target voice_clone_capability_schema_test'
+ctest --test-dir build/msvc-debug -C Debug -R "voice_clone_(manifest|capability_schema)_test" --output-on-failure
+```
+
+- 配置：成功，`where cl` 指向 VS 2022 `Hostx64\x64\cl.exe`。
+- Manifest 目标：按预期 RED，`voice_clone_registry.hpp` 缺失，MSVC `fatal error C1083`。
+- Capability 目标：按预期 RED，`voice_clone_capability_schema.hpp` 缺失，MSVC `fatal error C1083`。
+- CTest：两个测试已注册；因 RED 构建未产生可执行文件，`0% tests passed, 2 tests failed out of 2`，两项均 `Not Run`。
