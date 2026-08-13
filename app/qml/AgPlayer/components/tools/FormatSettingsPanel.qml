@@ -8,11 +8,15 @@ Rectangle {
     property var converter
     property string outputDirectory: ""
     property string outputFormat: converter.selectedFormat
-    property int bitRate: bitRateBox.currentValue || 320000
+    property string preset: presetBox.currentValue || "recommended"
+    property int bitRate: converter.currentCapability.lossy === true
+                          ? (bitRateBox.currentValue || 192000) : 0
     property int sampleRate: sampleRateBox.currentValue || 0
     property int channels: channelLayout === "mono" ? 1
                            : channelLayout === "stereo" ? 2 : 0
-    property string bitrateMode: cbrButton.checked ? "cbr" : "vbr"
+    property string bitrateMode: converter.currentCapability.lossy === true
+                                 ? (bitrateModeBox.currentValue || "cbr") : ""
+    property int quality: qualityBox.value
     property string conflictPolicy: conflictBox.currentValue || "auto-number"
     property string sampleFormat: sampleFormatBox.currentValue || ""
     property string channelLayout: channelBox.currentValue || ""
@@ -22,6 +26,47 @@ Rectangle {
     property bool extractAudio: extractAudioCheck.checked
     property bool volumeNormalize: false
     signal chooseOutputDirectory()
+
+    function indexForValue(model, key, value) {
+        for (let index = 0; index < model.length; ++index) {
+            if (model[index][key] === value)
+                return index
+        }
+        return 0
+    }
+
+    function selectedPresetMap() {
+        const presets = converter.currentCapability.presets || []
+        const index = presetBox.currentIndex
+        return index >= 0 && index < presets.length ? presets[index] : ({})
+    }
+
+    function applySelectedPreset() {
+        const selected = selectedPresetMap()
+        if (!selected || selected.key === "custom")
+            return
+        bitRateBox.currentIndex = indexForValue(bitRateBox.model, "value", selected.bitRate || 0)
+        bitrateModeBox.currentIndex = indexForValue(bitrateModeBox.model, "value", selected.bitrateMode || "")
+        sampleRateBox.currentIndex = indexForValue(sampleRateBox.model, "value", selected.sampleRate || 0)
+        qualityBox.value = selected.quality === undefined ? 85 : selected.quality
+    }
+
+    function selectCustomPreset() {
+        const presets = converter.currentCapability.presets || []
+        const customIndex = indexForValue(presets, "key", "custom")
+        if (presetBox.currentIndex !== customIndex)
+            presetBox.currentIndex = customIndex
+    }
+
+    Connections {
+        target: converter
+        function onCurrentCapabilityChanged() {
+            presetBox.currentIndex = 0
+            Qt.callLater(root.applySelectedPreset)
+        }
+    }
+
+    Component.onCompleted: Qt.callLater(root.applySelectedPreset)
 
     color: "#0b1721"
     border.color: "#203340"
@@ -104,44 +149,98 @@ Rectangle {
                 Text { text: qsTr("B. 编码参数"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
                 Text { text: qsTr("编码器"); color: "#aeb9c1" }
                 ComboBox { objectName: "formatEncoderBox"; Layout.fillWidth: true; model: [converter.currentCapability.encoderLabel || "--"] }
-                Text { text: qsTr("码率模式"); color: "#aeb9c1" }
-                RowLayout {
-                    Button {
-                        id: cbrButton; text: "CBR"; checkable: true; checked: true
-                        Layout.fillWidth: true; onClicked: vbrButton.checked = false
-                        background: Rectangle { color: parent.checked ? "#0c63c8" : "#0c1821"; border.color: parent.checked ? "#1688ff" : "#263b49"; radius: 5 }
-                        contentItem: Text { text: parent.text; color: "#eef3f6"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    }
-                    Button {
-                        id: vbrButton; text: "VBR"; checkable: true
-                        Layout.fillWidth: true; onClicked: cbrButton.checked = false
-                        background: Rectangle { color: parent.checked ? "#0c63c8" : "#0c1821"; border.color: parent.checked ? "#1688ff" : "#263b49"; radius: 5 }
-                        contentItem: Text { text: parent.text; color: "#eef3f6"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    }
+                Text { text: qsTr("转换预设"); color: "#aeb9c1" }
+                ComboBox {
+                    id: presetBox
+                    objectName: "formatPresetBox"
+                    Layout.fillWidth: true
+                    model: converter.currentCapability.presets || []
+                    textRole: "label"
+                    valueRole: "key"
+                    onActivated: root.applySelectedPreset()
+                }
+                Text { text: qsTr("高级参数"); color: "#aeb9c1" }
+                Switch {
+                    id: advancedToggle
+                    objectName: "formatAdvancedToggle"
+                    text: checked ? qsTr("已展开") : qsTr("按需展开")
+                }
+                Text { text: qsTr("码率模式"); color: "#aeb9c1"; visible: advancedToggle.checked }
+                ComboBox {
+                    id: bitrateModeBox
+                    objectName: "formatBitrateModeBox"
+                    Layout.fillWidth: true
+                    visible: advancedToggle.checked
+                    enabled: converter.currentCapability.lossy === true
+                    model: (converter.currentCapability.bitrateModes || []).map(function(value) {
+                        return { text: String(value).toUpperCase(), value: value }
+                    })
+                    textRole: "text"
+                    valueRole: "value"
+                    onActivated: root.selectCustomPreset()
                 }
                 Text { text: qsTr("目标码率"); color: "#aeb9c1" }
-                ComboBox { id: bitRateBox; Layout.fillWidth: true; enabled: converter.currentCapability.lossy === true; model: [{text:"128 kbps",value:128000},{text:"192 kbps",value:192000},{text:"256 kbps",value:256000},{text:"320 kbps",value:320000}]; textRole:"text"; valueRole:"value"; currentIndex:3 }
-                Text { text: qsTr("采样率"); color: "#aeb9c1" }
+                ComboBox {
+                    id: bitRateBox
+                    objectName: "formatBitRateBox"
+                    Layout.fillWidth: true
+                    enabled: converter.currentCapability.lossy === true
+                    model: (converter.currentCapability.bitRates || []).map(function(value) {
+                        return { text: (value / 1000) + " kbps", value: value }
+                    })
+                    textRole: "text"
+                    valueRole: "value"
+                    onActivated: root.selectCustomPreset()
+                }
+                Text { text: qsTr("质量"); color: "#aeb9c1"; visible: advancedToggle.checked }
+                SpinBox {
+                    id: qualityBox
+                    Layout.fillWidth: true
+                    visible: advancedToggle.checked
+                    enabled: converter.currentCapability.lossy === true
+                    from: 0
+                    to: 100
+                    value: 85
+                    onValueModified: root.selectCustomPreset()
+                }
+                Text { text: qsTr("采样率"); color: "#aeb9c1"; visible: advancedToggle.checked }
                 ComboBox {
                     id: sampleRateBox
                     Layout.fillWidth: true
+                    visible: advancedToggle.checked
                     model: [{text:qsTr("原始采样率（自动）"), value:0}].concat(
                         (converter.currentCapability.sampleRates || []).map(function(value) {
                             return { text: (value / 1000) + " kHz", value: value }
                         }))
                     textRole: "text"; valueRole: "value"
+                    onActivated: root.selectCustomPreset()
                 }
-                Text { text: qsTr("声道"); color: "#aeb9c1" }
-                ComboBox { id: channelBox; Layout.fillWidth: true; model: [{text:qsTr("自动"),value:""},{text:qsTr("单声道"),value:"mono"},{text:qsTr("立体声"),value:"stereo"}]; textRole:"text"; valueRole:"value"; currentIndex:2 }
-                Text { text: qsTr("位深 / 采样格式"); color: "#aeb9c1" }
+                Text { text: qsTr("声道"); color: "#aeb9c1"; visible: advancedToggle.checked }
+                ComboBox {
+                    id: channelBox
+                    objectName: "formatChannelBox"
+                    Layout.fillWidth: true
+                    visible: advancedToggle.checked
+                    model: [{text:qsTr("自动"),value:""}].concat(
+                        (converter.currentCapability.channelLayouts || []).map(function(value) {
+                            return { text: value === "mono" ? qsTr("单声道") : qsTr("立体声"), value: value }
+                        }))
+                    textRole: "text"
+                    valueRole: "value"
+                    currentIndex: 0
+                    onActivated: root.selectCustomPreset()
+                }
+                Text { text: qsTr("位深 / 采样格式"); color: "#aeb9c1"; visible: advancedToggle.checked }
                 ComboBox {
                     id: sampleFormatBox
                     Layout.fillWidth: true
+                    visible: advancedToggle.checked
                     model: [{text:qsTr("自动"), value:""}].concat(
                         (converter.currentCapability.sampleFormats || []).map(function(value) {
                             return { text: value, value: value }
                         }))
                     textRole: "text"; valueRole: "value"
+                    onActivated: root.selectCustomPreset()
                 }
             }
 

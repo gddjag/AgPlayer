@@ -34,11 +34,33 @@ TestCase {
         verify(findChild(page, "formatSearchField"))
         verify(findChild(page, "formatSelectAllCheck"))
         verify(findChild(page, "formatEncoderBox"))
+        verify(findChild(page, "formatPresetBox"))
+        verify(findChild(page, "formatBitrateModeBox"))
+        verify(findChild(page, "formatBitRateBox"))
+        verify(findChild(page, "formatAdvancedToggle"))
         verify(findChild(page, "formatOutputDirectoryRow"))
         verify(findChild(page, "formatTotalProgress"))
         const formatBox = findChild(page, "converterOutputFormatBox")
         verify(formatBox)
         compare(formatBox.count, 8)
+    }
+
+    function test_smart_profiles_keep_auto_channels_and_format_specific_rates() {
+        const preset = findChild(page, "formatPresetBox")
+        const bitRate = findChild(page, "formatBitRateBox")
+        const channel = findChild(page, "formatChannelBox")
+        verify(preset && bitRate && channel)
+        compare(preset.currentValue, "recommended")
+        compare(channel.currentValue, "")
+
+        FormatConverter.selectedFormat = "opus"
+        tryCompare(FormatConverter, "selectedFormat", "opus")
+        tryCompare(bitRate, "currentValue", 192000)
+        verify(bitRate.count >= 4)
+
+        FormatConverter.selectedFormat = "flac"
+        tryCompare(FormatConverter, "selectedFormat", "flac")
+        compare(bitRate.enabled, false)
     }
 
     function test_realImportSelectionAndPreflight() {

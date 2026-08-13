@@ -32,7 +32,10 @@ Rectangle {
         converter.conflictPolicy = settingsPanel.conflictPolicy
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
+            preset: settingsPanel.preset,
             bitRate: settingsPanel.bitRate,
+            bitrateMode: settingsPanel.bitrateMode,
+            quality: settingsPanel.quality,
             sampleRate: settingsPanel.sampleRate,
             channels: settingsPanel.channels,
             outputDir: outputDirectory,
