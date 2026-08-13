@@ -1,10 +1,10 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$SourceRoot
 )
 
 $ErrorActionPreference = 'Stop'
-$page = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/MetadataEditPage.qml')
+$page = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/MetadataEditPage.qml')
 
 foreach ($control in @(
     'metadataFilePanel', 'metadataInspectorPanel', 'metadataBottomBar',
@@ -28,9 +28,15 @@ foreach ($field in @('title', 'artist', 'album', 'albumArtist', 'genre',
     }
 }
 
-foreach ($mode in @('keep', 'set', 'clear')) {
-    if ($page -notmatch ('value:\s*"' + $mode + '"')) {
-        throw "Missing metadata three-state action: $mode"
+foreach ($obsoleteControl in @('metadataModeButton_', 'metadataThreeStateHelp',
+                                'coverModeBox')) {
+    if ($page -match [regex]::Escape($obsoleteControl)) {
+        throw "Obsolete metadata mode control remains: $obsoleteControl"
+    }
+}
+foreach ($directEditPhrase in @('不改动即保留', '留空即清除', '多个值')) {
+    if ($page -notmatch [regex]::Escape($directEditPhrase)) {
+        throw "Missing direct-edit metadata semantics: $directEditPhrase"
     }
 }
 

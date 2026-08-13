@@ -20,21 +20,26 @@ TestCase {
             MetadataEditor.clear()
     }
 
-    function test_directTypingSelectsSetModeAndClearIsExplicit() {
+    function test_directFieldsPreserveUntilEditedAndEmptyMeansClear() {
         MetadataEditor.loadFiles([testAudioUrl])
         tryVerify(function() { return !MetadataEditor.busy }, 5000)
         compare(MetadataEditor.fileCount, 1)
         page.selectedIndices = [0]
         page.selectionAnchor = 0
+        page.refreshFields()
 
         compare(page.fieldMode("title"), "keep")
+        compare(page.fieldValue("title"),
+                String(MetadataEditor.entryAt(0).title || ""))
+        compare(findChild(page, "metadataModeButton_title_keep"), null)
+
         page.setFieldValue("title", "New title")
         compare(page.fieldMode("title"), "set")
         compare(page.fieldPayload().title.value, "New title")
         verify(page.configuredEditCount() > 0)
         verify(page.targetCount() > 0)
 
-        page.setFieldMode("title", "clear")
+        page.setFieldValue("title", "")
         compare(page.fieldMode("title"), "clear")
         compare(page.fieldPayload().title.value, "")
     }

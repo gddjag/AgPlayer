@@ -15,7 +15,7 @@ Rectangle {
     property int channels: channelLayout === "mono" ? 1
                            : channelLayout === "stereo" ? 2 : 0
     property string bitrateMode: converter.currentCapability.lossy === true
-                                 ? (bitrateModeBox.currentValue || "cbr") : ""
+                                 ? String(bitrateModeBox.currentValue || "cbr") : ""
     property int quality: qualityBox.value
     property string conflictPolicy: conflictBox.currentValue || "auto-number"
     property string sampleFormat: sampleFormatBox.currentValue || ""

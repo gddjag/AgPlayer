@@ -132,7 +132,7 @@ Rectangle {
             onInvoked: bar.exportSelectionRequested()
         }
         DirectButton {
-            commandName: "clearSelection"; label: qsTr("取消选区"); shortcutText: "Ctrl+Shift+A"; iconName: "close-line"
+            commandName: "clearSelection"; label: qsTr("取消选区"); shortcutText: "Ctrl+Shift+A"; iconName: "close-fill"
             commandEnabled: AudioEditorController.selectionStart >= 0
             onInvoked: AudioEditorController.clearSelection()
         }
