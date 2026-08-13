@@ -191,6 +191,7 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
     QList<TrackRecord> accepted;
     accepted.reserve(tracks.size());
     QSet<QString> batchKeys;
+    const qint64 importedAtMs = QDateTime::currentMSecsSinceEpoch();
     for (TrackRecord& track : tracks) {
         track.path = canonicalLibraryPath(track.path);
         const QString key = normalizedCanonicalKey(track.path);
@@ -199,6 +200,9 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
         }
         if (track.trackId.isEmpty()) {
             track.trackId = trackIdForPath(track.path);
+        }
+        if (track.addedAtMs <= 0) {
+            track.addedAtMs = importedAtMs;
         }
         batchKeys.insert(key);
         accepted.append(std::move(track));

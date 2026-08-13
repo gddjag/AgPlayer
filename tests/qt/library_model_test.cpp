@@ -1,9 +1,10 @@
 #include "library_model.hpp"
 
+#include <QDateTime>
+#include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QFile>
 
 class LibraryModelTest final : public QObject {
     Q_OBJECT
@@ -23,7 +24,29 @@ private slots:
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
     void updatesRenamedPathsAsOneBatchWithoutChangingTrackIds();
+    void stampsNewImportsWithoutOverwritingExistingTimestamps();
 };
+
+void LibraryModelTest::stampsNewImportsWithoutOverwritingExistingTimestamps()
+{
+    TrackRecord first;
+    first.path = QStringLiteral("C:/music/new-a.wav");
+    TrackRecord second;
+    second.path = QStringLiteral("C:/music/new-b.wav");
+    TrackRecord preserved;
+    preserved.path = QStringLiteral("C:/music/known.wav");
+    preserved.addedAtMs = 123456;
+    const qint64 before = QDateTime::currentMSecsSinceEpoch();
+
+    LibraryModel model;
+    model.appendBatch({first, second, preserved});
+
+    QCOMPARE(model.rowCount(), 3);
+    QVERIFY(model.tracks().at(0).addedAtMs >= before);
+    QCOMPARE(model.tracks().at(1).addedAtMs,
+             model.tracks().at(0).addedAtMs);
+    QCOMPARE(model.tracks().at(2).addedAtMs, Q_INT64_C(123456));
+}
 
 void LibraryModelTest::appliesMaintenanceResultsWithSingleModelNotification()
 {
