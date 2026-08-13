@@ -11,6 +11,10 @@
 
 #include <utility>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 namespace agplayer::voice_clone {
 namespace {
 
@@ -49,6 +53,52 @@ bool pathIsWithin(const QString& root, const QString& candidate)
 #endif
     return candidate.compare(root, sensitivity) == 0
            || candidate.startsWith(root + QLatin1Char('/'), sensitivity);
+}
+
+bool isReparsePoint(const QFileInfo& info)
+{
+#ifdef Q_OS_WIN
+    const std::wstring path = QDir::toNativeSeparators(info.absoluteFilePath()).toStdWString();
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES
+           && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    return info.isSymLink();
+#endif
+}
+
+QString validateExistingPath(const QString& root,
+                             const QString& relativePath,
+                             QString* canonicalRoot)
+{
+    const QFileInfo rootInfo(root);
+    if (!rootInfo.exists() || !rootInfo.isDir()) {
+        return QStringLiteral("Adapter Pack root must be an existing directory");
+    }
+    if (isReparsePoint(rootInfo)) {
+        return QStringLiteral("Adapter Pack root must not be a link or reparse point");
+    }
+    *canonicalRoot = QDir::fromNativeSeparators(rootInfo.canonicalFilePath());
+    if (canonicalRoot->isEmpty()) {
+        return QStringLiteral("Adapter Pack root could not be canonicalized");
+    }
+
+    QString current = *canonicalRoot;
+    const QStringList components = QDir::fromNativeSeparators(relativePath).split(
+        QLatin1Char('/'), Qt::SkipEmptyParts);
+    for (const QString& component : components) {
+        current = QDir(current).filePath(component);
+        const QFileInfo info(current);
+        if (!info.exists() && !info.isSymLink()) break;
+        if (isReparsePoint(info)) {
+            return QStringLiteral("launcher path contains a link or reparse point");
+        }
+        const QString canonical = QDir::fromNativeSeparators(info.canonicalFilePath());
+        if (canonical.isEmpty() || !pathIsWithin(*canonicalRoot, canonical)) {
+            return QStringLiteral("launcher canonical path escapes the Adapter Pack root");
+        }
+    }
+    return {};
 }
 
 } // namespace
@@ -125,14 +175,20 @@ AdapterManifestParseResult parseAdapterManifest(const QByteArray& json)
         }
         const QJsonObject object = value.toObject();
         const QString launcherUnknown = unknownField(
-            object, {QStringLiteral("id"), QStringLiteral("kind"), QStringLiteral("path")});
+            object,
+            {QStringLiteral("id"),
+             QStringLiteral("kind"),
+             QStringLiteral("path"),
+             QStringLiteral("shared")});
         AdapterLauncher launcher{object.value(QStringLiteral("id")).toString(),
                                  object.value(QStringLiteral("kind")).toString(),
-                                 object.value(QStringLiteral("path")).toString()};
+                                 object.value(QStringLiteral("path")).toString(),
+                                 object.value(QStringLiteral("shared")).toBool()};
         if (!launcherUnknown.isEmpty() || !isIdentifier(launcher.id)
             || launcherIds.contains(launcher.id)
             || (launcher.kind != QStringLiteral("executable")
                 && launcher.kind != QStringLiteral("pythonModule"))
+            || !object.value(QStringLiteral("shared")).isBool()
             || !isSafeRelativePath(launcher.relativePath)) {
             result.error = launcherUnknown.isEmpty()
                                ? QStringLiteral("launcher must be uniquely listed with a trusted relative path")
@@ -170,9 +226,12 @@ AdapterLauncherResolution resolveAdapterLauncher(const VoiceCloneAdapterManifest
     }
 
     const QString root = QDir::fromNativeSeparators(QDir(adapterPackRoot).absolutePath());
+    QString canonicalRoot;
+    result.error = validateExistingPath(root, launcher->relativePath, &canonicalRoot);
+    if (!result.error.isEmpty()) return result;
     const QString candidate = QDir::fromNativeSeparators(
-        QDir::cleanPath(QDir(root).absoluteFilePath(launcher->relativePath)));
-    if (!pathIsWithin(root, candidate)) {
+        QDir::cleanPath(QDir(canonicalRoot).absoluteFilePath(launcher->relativePath)));
+    if (!pathIsWithin(canonicalRoot, candidate)) {
         result.error = QStringLiteral("launcher resolves outside the trusted Adapter Pack");
         return result;
     }

@@ -13,7 +13,8 @@
     {
       "id": "python-module",
       "kind": "pythonModule",
-      "path": "workers/qwen/worker.py"
+      "path": "workers/qwen/worker.py",
+      "shared": true
     }
   ]
 }

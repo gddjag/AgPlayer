@@ -13,7 +13,8 @@
     {
       "id": "python-module",
       "kind": "pythonModule",
-      "path": "workers/cosyvoice3/worker.py"
+      "path": "workers/cosyvoice3/worker.py",
+      "shared": false
     }
   ]
 }

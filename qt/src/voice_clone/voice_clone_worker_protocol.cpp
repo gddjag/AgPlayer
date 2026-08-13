@@ -1,5 +1,7 @@
 #include "voice_clone_worker_protocol.hpp"
 
+#include "voice_clone_capability_schema.hpp"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -8,6 +10,10 @@
 #include <QSet>
 
 #include <cmath>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace agplayer::voice_clone {
 namespace {
@@ -45,6 +51,14 @@ WorkerOperation workerOperation(const QString& name)
     return WorkerOperation::Unknown;
 }
 
+QString unknownField(const QJsonObject& object, const QSet<QString>& allowed)
+{
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!allowed.contains(it.key())) return it.key();
+    }
+    return {};
+}
+
 bool validIdentifier(const QString& value)
 {
     static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
@@ -70,7 +84,94 @@ bool pathIsWithin(const QString& root, const QString& candidate)
 #else
     constexpr Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
 #endif
-    return candidate.startsWith(root + QLatin1Char('/'), sensitivity);
+    return candidate.compare(root, sensitivity) == 0
+           || candidate.startsWith(root + QLatin1Char('/'), sensitivity);
+}
+
+bool isReparsePoint(const QFileInfo& info)
+{
+#ifdef Q_OS_WIN
+    const std::wstring path = QDir::toNativeSeparators(info.absoluteFilePath()).toStdWString();
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES
+           && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    return info.isSymLink();
+#endif
+}
+
+QString validateOutputPath(const QString& outputRoot,
+                           const QString& relativePath,
+                           QString* resolvedPath)
+{
+    const QFileInfo rootInfo(outputRoot);
+    if (!rootInfo.exists() || !rootInfo.isDir()) {
+        return QStringLiteral("outputRoot must be an existing directory");
+    }
+    if (isReparsePoint(rootInfo)) {
+        return QStringLiteral("outputRoot must not be a link or reparse point");
+    }
+    const QString canonicalRoot = QDir::fromNativeSeparators(rootInfo.canonicalFilePath());
+    if (canonicalRoot.isEmpty()) return QStringLiteral("outputRoot could not be canonicalized");
+
+    QString current = canonicalRoot;
+    const QStringList components = QDir::fromNativeSeparators(relativePath).split(
+        QLatin1Char('/'), Qt::SkipEmptyParts);
+    for (const QString& component : components) {
+        current = QDir(current).filePath(component);
+        const QFileInfo info(current);
+        if (!info.exists() && !info.isSymLink()) break;
+        if (isReparsePoint(info)) {
+            return QStringLiteral("outputPath contains a link or reparse point");
+        }
+        const QString canonical = QDir::fromNativeSeparators(info.canonicalFilePath());
+        if (canonical.isEmpty() || !pathIsWithin(canonicalRoot, canonical)) {
+            return QStringLiteral("outputPath canonical ancestor escapes outputRoot");
+        }
+    }
+
+    *resolvedPath = QDir::fromNativeSeparators(
+        QDir::cleanPath(QDir(canonicalRoot).absoluteFilePath(relativePath)));
+    if (!pathIsWithin(canonicalRoot, *resolvedPath)) {
+        resolvedPath->clear();
+        return QStringLiteral("generation outputPath escapes outputRoot");
+    }
+    return {};
+}
+
+QSet<QString> allowedPayloadFields(const WorkerMessageKind kind,
+                                   const WorkerOperation operation)
+{
+    if (kind == WorkerMessageKind::Request) {
+        switch (operation) {
+        case WorkerOperation::Hello:
+        case WorkerOperation::Capabilities:
+        case WorkerOperation::Unload:
+        case WorkerOperation::Shutdown: return {};
+        case WorkerOperation::Load:
+            return {QStringLiteral("modelRoot"), QStringLiteral("parameters")};
+        case WorkerOperation::Generate:
+            return {QStringLiteral("text"),
+                    QStringLiteral("referenceAudioPath"),
+                    QStringLiteral("outputPath"),
+                    QStringLiteral("parameters")};
+        case WorkerOperation::Cancel: return {QStringLiteral("targetRequestId")};
+        case WorkerOperation::Unknown: return {};
+        }
+    }
+    if (kind == WorkerMessageKind::Response) {
+        switch (operation) {
+        case WorkerOperation::Hello: return {QStringLiteral("workerVersion")};
+        case WorkerOperation::Capabilities: return {QStringLiteral("schema")};
+        case WorkerOperation::Load: return {QStringLiteral("loaded")};
+        case WorkerOperation::Generate: return {QStringLiteral("outputPath")};
+        case WorkerOperation::Cancel:
+        case WorkerOperation::Unload:
+        case WorkerOperation::Shutdown:
+        case WorkerOperation::Unknown: return {};
+        }
+    }
+    return {};
 }
 
 QString validateKindAndOperation(const VoiceCloneWorkerMessage& message)
@@ -148,6 +249,26 @@ WorkerMessageDecodeResult decodeWorkerMessage(const QByteArray& json, const QStr
 
     result.error = validateKindAndOperation(message);
     if (!result.error.isEmpty()) return result;
+
+    QSet<QString> allowedEnvelopeFields{QStringLiteral("kind"),
+                                        QStringLiteral("operation"),
+                                        QStringLiteral("requestId"),
+                                        QStringLiteral("adapterId"),
+                                        QStringLiteral("adapterVersion"),
+                                        QStringLiteral("protocolVersion")};
+    if (message.kind == WorkerMessageKind::Progress) {
+        allowedEnvelopeFields.insert(QStringLiteral("stage"));
+        allowedEnvelopeFields.insert(QStringLiteral("progress"));
+    } else if (message.kind == WorkerMessageKind::Error) {
+        allowedEnvelopeFields.insert(QStringLiteral("error"));
+    } else {
+        allowedEnvelopeFields.insert(QStringLiteral("payload"));
+    }
+    const QString envelopeUnknown = unknownField(object, allowedEnvelopeFields);
+    if (!envelopeUnknown.isEmpty()) {
+        result.error = QStringLiteral("unknown worker envelope field: %1").arg(envelopeUnknown);
+        return result;
+    }
     if (!validIdentifier(message.requestId) || !validIdentifier(message.adapterId)
         || !validIdentifier(message.adapterVersion) || message.protocolVersion != 1) {
         result.error = QStringLiteral("requestId and adapter identity triple are invalid");
@@ -183,6 +304,16 @@ WorkerMessageDecodeResult decodeWorkerMessage(const QByteArray& json, const QStr
             return result;
         }
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
+        const QString errorUnknown = unknownField(
+            error,
+            {QStringLiteral("code"),
+             QStringLiteral("message"),
+             QStringLiteral("retryable"),
+             QStringLiteral("details")});
+        if (!errorUnknown.isEmpty()) {
+            result.error = QStringLiteral("unknown structured error field: %1").arg(errorUnknown);
+            return result;
+        }
         message.workerError.code = error.value(QStringLiteral("code")).toString();
         message.workerError.message = error.value(QStringLiteral("message")).toString();
         message.workerError.retryable = error.value(QStringLiteral("retryable")).toBool();
@@ -202,11 +333,70 @@ WorkerMessageDecodeResult decodeWorkerMessage(const QByteArray& json, const QStr
         return result;
     }
     message.payload = object.value(QStringLiteral("payload")).toObject();
-    if (message.operation == WorkerOperation::Capabilities
-        && message.kind == WorkerMessageKind::Response
-        && !message.payload.value(QStringLiteral("schema")).isObject()) {
-        result.error = QStringLiteral("capabilities response requires a schema object");
+    const QString payloadUnknown = unknownField(
+        message.payload, allowedPayloadFields(message.kind, message.operation));
+    if (!payloadUnknown.isEmpty()) {
+        result.error = QStringLiteral("unknown %1 payload field: %2")
+                           .arg(workerOperationName(message.operation), payloadUnknown);
         return result;
+    }
+    if (message.kind == WorkerMessageKind::Request
+        && message.operation == WorkerOperation::Load) {
+        if ((message.payload.contains(QStringLiteral("modelRoot"))
+             && (message.payload.value(QStringLiteral("modelRoot")).toString().trimmed().isEmpty()))
+            || (message.payload.contains(QStringLiteral("parameters"))
+                && !message.payload.value(QStringLiteral("parameters")).isObject())) {
+            result.error = QStringLiteral("load payload fields have invalid types");
+            return result;
+        }
+    }
+    if (message.kind == WorkerMessageKind::Request
+        && message.operation == WorkerOperation::Generate) {
+        if (!message.payload.value(QStringLiteral("text")).isString()
+            || message.payload.value(QStringLiteral("text")).toString().trimmed().isEmpty()
+            || !message.payload.value(QStringLiteral("parameters")).isObject()
+            || (message.payload.contains(QStringLiteral("referenceAudioPath"))
+                && message.payload.value(QStringLiteral("referenceAudioPath"))
+                       .toString()
+                       .trimmed()
+                       .isEmpty())) {
+            result.error = QStringLiteral("generate requires text and parameters object payload fields");
+            return result;
+        }
+    }
+    if (message.kind == WorkerMessageKind::Response) {
+        if (message.operation == WorkerOperation::Hello
+            && message.payload.contains(QStringLiteral("workerVersion"))
+            && message.payload.value(QStringLiteral("workerVersion")).toString().trimmed().isEmpty()) {
+            result.error = QStringLiteral("hello workerVersion must be a non-empty string");
+            return result;
+        }
+        if (message.operation == WorkerOperation::Load
+            && message.payload.contains(QStringLiteral("loaded"))
+            && !message.payload.value(QStringLiteral("loaded")).isBool()) {
+            result.error = QStringLiteral("load response loaded must be bool");
+            return result;
+        }
+        if (message.operation == WorkerOperation::Generate
+            && message.payload.contains(QStringLiteral("outputPath"))
+            && message.payload.value(QStringLiteral("outputPath")).toString().trimmed().isEmpty()) {
+            result.error = QStringLiteral("generate response outputPath must be a non-empty string");
+            return result;
+        }
+    }
+    if (message.operation == WorkerOperation::Capabilities
+        && message.kind == WorkerMessageKind::Response) {
+        if (!message.payload.value(QStringLiteral("schema")).isObject()) {
+            result.error = QStringLiteral("capabilities response requires a schema object");
+            return result;
+        }
+        const auto validation = validateCapabilitySchema(
+            message.payload.value(QStringLiteral("schema")).toObject());
+        if (!validation.isValid()) {
+            result.error = QStringLiteral("invalid capabilities response: %1")
+                               .arg(validation.errorString());
+            return result;
+        }
     }
     if (message.operation == WorkerOperation::Cancel
         && message.kind == WorkerMessageKind::Request
@@ -225,13 +415,7 @@ WorkerMessageDecodeResult decodeWorkerMessage(const QByteArray& json, const QStr
             result.error = QStringLiteral("generation outputPath must be relative to outputRoot");
             return result;
         }
-        const QString root = QDir::fromNativeSeparators(QDir::cleanPath(outputRoot));
-        message.resolvedOutputPath = QDir::fromNativeSeparators(
-            QDir::cleanPath(QDir(root).absoluteFilePath(outputPath)));
-        if (!pathIsWithin(root, message.resolvedOutputPath)) {
-            result.error = QStringLiteral("generation outputPath escapes outputRoot");
-            message.resolvedOutputPath.clear();
-        }
+        result.error = validateOutputPath(outputRoot, outputPath, &message.resolvedOutputPath);
     }
     return result;
 }

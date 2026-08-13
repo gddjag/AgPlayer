@@ -3,9 +3,11 @@
 
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -51,9 +53,38 @@ QByteArray adapterManifest(const QString& launcherPath = QStringLiteral("workers
         {QStringLiteral("launchers"),
          QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("python-module")},
                                 {QStringLiteral("kind"), QStringLiteral("pythonModule")},
-                                {QStringLiteral("path"), launcherPath}}}},
+                                {QStringLiteral("path"), launcherPath},
+                                {QStringLiteral("shared"), true}}}},
     });
 }
+
+QJsonObject generateRequest(const QString& outputPath)
+{
+    QJsonObject request = envelope(QStringLiteral("request"),
+                                   QStringLiteral("generate"),
+                                   QStringLiteral("generate-secure"));
+    request.insert(QStringLiteral("payload"),
+                   QJsonObject{{QStringLiteral("text"), QStringLiteral("hello")},
+                               {QStringLiteral("outputPath"), outputPath},
+                               {QStringLiteral("parameters"),
+                                QJsonObject{{QStringLiteral("seed"), 42},
+                                            {QStringLiteral("adapterSpecificKnob"), true}}}});
+    return request;
+}
+
+#ifdef Q_OS_WIN
+bool createJunction(const QString& link, const QString& target)
+{
+    return QProcess::execute(QStringLiteral("cmd.exe"),
+                             {QStringLiteral("/d"),
+                              QStringLiteral("/c"),
+                              QStringLiteral("mklink"),
+                              QStringLiteral("/J"),
+                              QDir::toNativeSeparators(link),
+                              QDir::toNativeSeparators(target)})
+           == 0;
+}
+#endif
 
 } // namespace
 
@@ -63,6 +94,7 @@ class VoiceCloneWorkerProtocolTest final : public QObject {
 private slots:
     void parsesTrustedAdapterManifestAndResolvesListedLauncher();
     void rejectsUnlistedAndUnsafeLaunchers();
+    void rejectsReparseAdapterRootsAndLauncherAncestors();
     void parsesApprovedAdapterManifests();
     void roundTripsHelloIdentityAndRequestId();
     void acceptsUnifiedWorkerOperations_data();
@@ -70,6 +102,9 @@ private slots:
     void parsesCapabilitiesGenerationCancellationAndStructuredErrors();
     void preservesStagesAndIndeterminateProgress();
     void rejectsOutputPathsOutsideExplicitRoot();
+    void rejectsReparseOutputRootsAndOutputAncestors();
+    void rejectsUnknownEnvelopePayloadAndErrorFields();
+    void rejectsMalformedCapabilitySchemas();
 };
 
 void VoiceCloneWorkerProtocolTest::parsesTrustedAdapterManifestAndResolvesListedLauncher()
@@ -111,12 +146,49 @@ void VoiceCloneWorkerProtocolTest::rejectsUnlistedAndUnsafeLaunchers()
                  .isValid());
 }
 
+void VoiceCloneWorkerProtocolTest::rejectsReparseAdapterRootsAndLauncherAncestors()
+{
+#ifdef Q_OS_WIN
+    const auto parsed = parseAdapterManifest(adapterManifest());
+    QVERIFY(parsed.isValid());
+
+    QTemporaryDir holder;
+    QTemporaryDir realPack;
+    QVERIFY(holder.isValid());
+    QVERIFY(realPack.isValid());
+    const QString linkedRoot = holder.filePath(QStringLiteral("linked-pack"));
+    QVERIFY(createJunction(linkedRoot, realPack.path()));
+    auto resolution = resolveAdapterLauncher(parsed.manifest,
+                                             QStringLiteral("python-module"),
+                                             linkedRoot);
+    QVERIFY(!resolution.isValid());
+    QVERIFY(resolution.error.contains(QStringLiteral("link"), Qt::CaseInsensitive)
+            || resolution.error.contains(QStringLiteral("reparse"), Qt::CaseInsensitive));
+
+    QTemporaryDir pack;
+    QTemporaryDir outside;
+    QVERIFY(pack.isValid());
+    QVERIFY(outside.isValid());
+    const QString linkedAncestor = pack.filePath(QStringLiteral("workers"));
+    QVERIFY(createJunction(linkedAncestor, outside.path()));
+    resolution = resolveAdapterLauncher(parsed.manifest,
+                                        QStringLiteral("python-module"),
+                                        pack.path());
+    QVERIFY(!resolution.isValid());
+    QVERIFY(resolution.error.contains(QStringLiteral("link"), Qt::CaseInsensitive)
+            || resolution.error.contains(QStringLiteral("reparse"), Qt::CaseInsensitive));
+#else
+    QSKIP("Junction validation is a Windows-only contract.");
+#endif
+}
+
 void VoiceCloneWorkerProtocolTest::parsesApprovedAdapterManifests()
 {
     const QDir adapters(QStringLiteral(AGPLAYER_VOICE_CLONE_ADAPTERS_DIR));
     const QStringList ids{QStringLiteral("qwen"),
                           QStringLiteral("indextts25"),
                           QStringLiteral("cosyvoice3")};
+    QHash<QString, VoiceCloneAdapterManifest> manifests;
     for (const QString& id : ids) {
         QFile file(adapters.filePath(id + QStringLiteral("/adapter.json")));
         QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(file.errorString()));
@@ -125,7 +197,20 @@ void VoiceCloneWorkerProtocolTest::parsesApprovedAdapterManifests()
         QCOMPARE(parsed.manifest.adapterId, id);
         QCOMPARE(parsed.manifest.protocolVersion, 1);
         QVERIFY(!parsed.manifest.adapterVersion.isEmpty());
+        manifests.insert(id, parsed.manifest);
     }
+
+    const auto qwen = manifests.value(QStringLiteral("qwen"));
+    const auto index = manifests.value(QStringLiteral("indextts25"));
+    const auto cosy = manifests.value(QStringLiteral("cosyvoice3"));
+    QVERIFY(qwen.runtime.shared);
+    QVERIFY(qwen.launchers.front().shared);
+    QVERIFY(!index.runtime.shared);
+    QVERIFY(!index.launchers.front().shared);
+    QVERIFY(!cosy.runtime.shared);
+    QVERIFY(!cosy.launchers.front().shared);
+    QVERIFY(index.runtime.root != cosy.runtime.root);
+    QVERIFY(index.launchers.front().relativePath != cosy.launchers.front().relativePath);
 }
 
 void VoiceCloneWorkerProtocolTest::roundTripsHelloIdentityAndRequestId()
@@ -265,6 +350,128 @@ void VoiceCloneWorkerProtocolTest::rejectsOutputPathsOutsideExplicitRoot()
     decoded = decodeWorkerMessage(compact(generate));
     QVERIFY(!decoded.isValid());
     QVERIFY(decoded.error.contains(QStringLiteral("outputRoot"), Qt::CaseInsensitive));
+}
+
+void VoiceCloneWorkerProtocolTest::rejectsReparseOutputRootsAndOutputAncestors()
+{
+#ifdef Q_OS_WIN
+    QTemporaryDir holder;
+    QTemporaryDir realOutput;
+    QVERIFY(holder.isValid());
+    QVERIFY(realOutput.isValid());
+    const QString linkedRoot = holder.filePath(QStringLiteral("linked-output"));
+    QVERIFY(createJunction(linkedRoot, realOutput.path()));
+    auto decoded = decodeWorkerMessage(compact(generateRequest(QStringLiteral("safe.wav"))),
+                                       linkedRoot);
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("reparse"), Qt::CaseInsensitive)
+            || decoded.error.contains(QStringLiteral("link"), Qt::CaseInsensitive));
+
+    QTemporaryDir outputRoot;
+    QTemporaryDir outside;
+    QVERIFY(outputRoot.isValid());
+    QVERIFY(outside.isValid());
+    const QString linkedAncestor = outputRoot.filePath(QStringLiteral("jobs"));
+    QVERIFY(createJunction(linkedAncestor, outside.path()));
+    decoded = decodeWorkerMessage(compact(generateRequest(QStringLiteral("jobs/escaped.wav"))),
+                                  outputRoot.path());
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("reparse"), Qt::CaseInsensitive)
+            || decoded.error.contains(QStringLiteral("link"), Qt::CaseInsensitive));
+#else
+    QSKIP("Junction validation is a Windows-only contract.");
+#endif
+}
+
+void VoiceCloneWorkerProtocolTest::rejectsUnknownEnvelopePayloadAndErrorFields()
+{
+    QJsonObject hello = envelope(QStringLiteral("request"),
+                                 QStringLiteral("hello"),
+                                 QStringLiteral("hello-strict"));
+    hello.insert(QStringLiteral("payload"), QJsonObject{});
+    hello.insert(QStringLiteral("workerOnlySecret"), true);
+    auto decoded = decodeWorkerMessage(compact(hello));
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("workerOnlySecret")));
+
+    hello.remove(QStringLiteral("workerOnlySecret"));
+    hello.insert(QStringLiteral("payload"),
+                 QJsonObject{{QStringLiteral("unexpected"), true}});
+    decoded = decodeWorkerMessage(compact(hello));
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("unexpected")));
+
+    QTemporaryDir outputRoot;
+    QVERIFY(outputRoot.isValid());
+    QJsonObject generate = generateRequest(QStringLiteral("safe.wav"));
+    QJsonObject generatePayload = generate.value(QStringLiteral("payload")).toObject();
+    generatePayload.insert(QStringLiteral("workerOnlySecret"), true);
+    generate.insert(QStringLiteral("payload"), generatePayload);
+    decoded = decodeWorkerMessage(compact(generate), outputRoot.path());
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("workerOnlySecret")));
+
+    generatePayload.remove(QStringLiteral("workerOnlySecret"));
+    generate.insert(QStringLiteral("payload"), generatePayload);
+    decoded = decodeWorkerMessage(compact(generate), outputRoot.path());
+    QVERIFY2(decoded.isValid(), qPrintable(decoded.error));
+    QVERIFY(decoded.message.payload.value(QStringLiteral("parameters"))
+                .toObject()
+                .contains(QStringLiteral("adapterSpecificKnob")));
+
+    generatePayload.insert(QStringLiteral("parameters"), QStringLiteral("not-an-object"));
+    generate.insert(QStringLiteral("payload"), generatePayload);
+    decoded = decodeWorkerMessage(compact(generate), outputRoot.path());
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("parameters")));
+
+    QJsonObject error = envelope(QStringLiteral("error"),
+                                 QStringLiteral("load"),
+                                 QStringLiteral("load-strict"));
+    error.insert(QStringLiteral("error"),
+                 QJsonObject{{QStringLiteral("code"), QStringLiteral("LOAD_FAILED")},
+                             {QStringLiteral("message"), QStringLiteral("failed")},
+                             {QStringLiteral("retryable"), false},
+                             {QStringLiteral("details"), QJsonObject{}},
+                             {QStringLiteral("command"), QStringLiteral("cmd.exe")}});
+    decoded = decodeWorkerMessage(compact(error));
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("command")));
+}
+
+void VoiceCloneWorkerProtocolTest::rejectsMalformedCapabilitySchemas()
+{
+    QJsonObject capabilities = envelope(QStringLiteral("response"),
+                                        QStringLiteral("capabilities"),
+                                        QStringLiteral("caps-strict"));
+    const QJsonObject control{{QStringLiteral("key"), QStringLiteral("speed")},
+                              {QStringLiteral("label"), QStringLiteral("Speed")},
+                              {QStringLiteral("description"), QStringLiteral("Speed control")},
+                              {QStringLiteral("type"), QStringLiteral("double")},
+                              {QStringLiteral("group"), QStringLiteral("basic")},
+                              {QStringLiteral("default"), 1.0},
+                              {QStringLiteral("required"), false},
+                              {QStringLiteral("workerOnlySecret"), true}};
+    capabilities.insert(
+        QStringLiteral("payload"),
+        QJsonObject{{QStringLiteral("schema"),
+                     QJsonObject{{QStringLiteral("protocolVersion"), 1},
+                                 {QStringLiteral("groups"),
+                                  QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("basic")},
+                                                        {QStringLiteral("label"), QStringLiteral("Basic")}}}},
+                                 {QStringLiteral("parameters"), QJsonArray{control}}}}});
+    auto decoded = decodeWorkerMessage(compact(capabilities));
+    QVERIFY(!decoded.isValid());
+    QVERIFY(decoded.error.contains(QStringLiteral("workerOnlySecret")));
+
+    capabilities.insert(QStringLiteral("payload"),
+                        QJsonObject{{QStringLiteral("schema"),
+                                     QJsonObject{{QStringLiteral("protocolVersion"), 1},
+                                                 {QStringLiteral("groups"), QStringLiteral("not-an-array")},
+                                                 {QStringLiteral("parameters"), QJsonArray{}}}},
+                                    {QStringLiteral("extra"), true}});
+    decoded = decodeWorkerMessage(compact(capabilities));
+    QVERIFY(!decoded.isValid());
 }
 
 QTEST_APPLESS_MAIN(VoiceCloneWorkerProtocolTest)

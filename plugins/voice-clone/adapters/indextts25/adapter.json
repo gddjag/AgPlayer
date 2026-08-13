@@ -13,7 +13,8 @@
     {
       "id": "python-module",
       "kind": "pythonModule",
-      "path": "workers/indextts25/worker.py"
+      "path": "workers/indextts25/worker.py",
+      "shared": false
     }
   ]
 }

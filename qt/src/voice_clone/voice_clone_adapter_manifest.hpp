@@ -16,6 +16,7 @@ struct AdapterLauncher {
     QString id;
     QString kind;
     QString relativePath;
+    bool shared = false;
 };
 
 struct VoiceCloneAdapterManifest {

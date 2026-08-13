@@ -52,3 +52,23 @@ VS2022 Community x64 developer environment, `build/msvc-debug`:
 - Protocol version support is intentionally limited to version 1; negotiation or migrations need a later contract change.
 - Task 6 must re-check the selected manifest identity before launch and preserve output-root safety when it actually creates files, including race/symlink handling at the filesystem boundary.
 - The manifests declare pack-relative runtime/worker locations; actual runtime and worker assets remain the responsibility of later Adapter Pack installation work.
+
+## Fix Round 1
+
+### RED / GREEN
+
+- Added four security/strictness tests first. All four failed against the original implementation: Adapter Pack reparse paths, output reparse paths, unknown envelope/payload/error fields, and malformed capability schemas.
+- Added a separate manifest-semantics test first; compilation failed because `AdapterLauncher` had no `shared` contract.
+- Implemented the minimum validation changes, then reran the focused protocol suite GREEN.
+
+### Security and protocol tightening
+
+- Adapter launcher resolution now requires an existing real Adapter Pack directory, rejects Win32 reparse points in the root or every existing launcher path component, and checks every canonical existing component remains inside the canonical pack root.
+- Generation now requires an existing real, non-reparse output directory, rejects reparse points in every existing output path component, checks canonical containment, and returns a path resolved from the canonical output root.
+- Worker envelopes, structured errors, and operation-specific payloads now use strict field allowlists and type checks. Adapter-specific generation controls remain allowed only inside the `parameters` object.
+- Capability responses now run the existing `validateCapabilitySchema`; malformed schemas and unknown control fields are rejected.
+- Launcher manifests now explicitly declare `shared`. Tests lock Qwen to shared runtime/launcher and IndexTTS/CosyVoice to distinct isolated runtime/launcher paths.
+
+### Remaining concern
+
+- Validation protects the state observed before returning `resolvedOutputPath`; Task 6 still owns race-resistant file creation/opening to close the filesystem TOCTOU window.
