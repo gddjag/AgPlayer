@@ -92,6 +92,9 @@ add_library(agplayer_qt STATIC
     src/voice_clone/voice_clone_registry.hpp
     src/voice_clone/voice_clone_worker_protocol.cpp
     src/voice_clone/voice_clone_worker_protocol.hpp
+    src/voice_clone/voice_clone_host_controller.cpp
+    src/voice_clone/voice_clone_host_controller.hpp
+    src/plugins/voice_clone_plugin_interface.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)

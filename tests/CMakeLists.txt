@@ -473,6 +473,7 @@ foreach(qt_test IN ITEMS
     voice_clone_manifest_test
     voice_clone_capability_schema_test
     voice_clone_worker_protocol_test
+    voice_clone_host_controller_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -489,6 +490,23 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
     )
 endforeach()
+
+add_library(voice_clone_test_plugin MODULE
+    qt/voice_clone_test_plugin.cpp
+)
+set_target_properties(voice_clone_test_plugin PROPERTIES
+    AUTOMOC ON
+    PREFIX ""
+)
+target_include_directories(voice_clone_test_plugin PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(voice_clone_test_plugin PRIVATE Qt6::Core)
+agplayer_enable_warnings(voice_clone_test_plugin)
+add_dependencies(voice_clone_host_controller_test voice_clone_test_plugin)
+target_compile_definitions(voice_clone_host_controller_test PRIVATE
+    AGPLAYER_VOICE_CLONE_TEST_PLUGIN="$<TARGET_FILE:voice_clone_test_plugin>"
+)
 
 target_compile_definitions(voice_clone_manifest_test PRIVATE
     AGPLAYER_VOICE_CLONE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/voice-clone"
