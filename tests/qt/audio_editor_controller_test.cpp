@@ -218,7 +218,11 @@ private slots:
         const qint64 originalFrames = controller.totalFrames();
         QVERIFY(controller.setSpeedPercent(125.0));
         QVERIFY(controller.setPitch(2, 0));
+        QElapsedTimer elapsed;
+        elapsed.start();
         QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        QVERIFY2(elapsed.elapsed() < 50,
+                 "time/pitch preview must not block the GUI heartbeat");
         QTRY_VERIFY_WITH_TIMEOUT(controller.timePitchPreviewActive(), 10'000);
         QCOMPARE(controller.totalFrames(), originalFrames);
         QVERIFY(!controller.modified());
@@ -255,7 +259,7 @@ private slots:
         QElapsedTimer elapsed;
         elapsed.start();
         QVERIFY(controller.detectBpm());
-        QVERIFY2(elapsed.elapsed() < 250,
+        QVERIFY2(elapsed.elapsed() < 50,
                  "BPM analysis must not block the GUI thread");
         QCOMPARE(controller.state(), EditorSessionState::Processing);
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
@@ -272,7 +276,7 @@ private slots:
         QElapsedTimer elapsed;
         elapsed.start();
         QVERIFY(controller.reduceNoise());
-        QVERIFY2(elapsed.elapsed() < 250,
+        QVERIFY2(elapsed.elapsed() < 50,
                  "noise reduction must not block the GUI thread");
         QVERIFY(controller.noiseReductionActive());
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 15'000);
@@ -337,7 +341,7 @@ private slots:
             QUrl::fromLocalFile(directory.filePath(QStringLiteral("capture.wav"))),
             QStringLiteral("capture:missing-device"), 48'000, 2,
             false, false));
-        QVERIFY2(elapsed.elapsed() < 250,
+        QVERIFY2(elapsed.elapsed() < 50,
                  "recording device startup must not block the GUI thread");
         QCOMPARE(controller.state(), EditorSessionState::Processing);
         QTRY_VERIFY_WITH_TIMEOUT(

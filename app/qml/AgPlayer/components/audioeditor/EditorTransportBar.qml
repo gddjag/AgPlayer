@@ -6,6 +6,7 @@ import AgPlayer
 Rectangle {
     id: transport
     signal recordingRequested()
+    readonly property bool compact: width < 560
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
@@ -22,9 +23,9 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 18
-        anchors.rightMargin: 18
-        spacing: 10
+        anchors.leftMargin: transport.compact ? 6 : 18
+        anchors.rightMargin: transport.compact ? 6 : 18
+        spacing: transport.compact ? 4 : 10
 
         Repeater {
             model: [
@@ -37,7 +38,7 @@ Rectangle {
             ]
             ColumnLayout {
                 required property var modelData
-                Layout.preferredWidth: 46
+                Layout.preferredWidth: transport.compact ? 38 : 46
                 spacing: 3
                 ToolButton {
                     objectName: modelData.objectName
@@ -82,7 +83,7 @@ Rectangle {
             ToolTip.visible: hovered
             ToolTip.text: Accessible.name
             onClicked: AudioEditorController.playPause()
-            Layout.preferredWidth: 64
+            Layout.preferredWidth: transport.compact ? 48 : 64
             Layout.preferredHeight: 64
         }
         ColumnLayout {
@@ -99,7 +100,7 @@ Rectangle {
             }
             Label { text: qsTr("循环"); font.pixelSize: 10 }
         }
-        ToolSeparator {}
+        ToolSeparator { visible: !transport.compact }
 
         Repeater {
             model: [
@@ -109,7 +110,8 @@ Rectangle {
                 {label: qsTr("总时长"), value: timeText(AudioEditorController.durationMs)}
             ]
             ColumnLayout {
-                Layout.preferredWidth: 104
+                visible: !transport.compact || index === 0
+                Layout.preferredWidth: transport.compact ? 82 : 104
                 Label {
                     text: modelData.value
                     color: index === 0 ? Theme.waveformGreen : Theme.primaryText

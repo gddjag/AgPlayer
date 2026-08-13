@@ -9,6 +9,7 @@ Rectangle {
     objectName: "audioEditorPage"
     color: Theme.background
     clip: true
+    readonly property bool narrowLayout: width < 1100
 
     function textInputHasFocus() {
         const active = page.Window.window ? page.Window.window.activeFocusItem : null
@@ -332,6 +333,7 @@ Rectangle {
                     Rectangle {
                         objectName: "editorShortcutCard"
                         Layout.preferredWidth: page.width >= 1500 ? 300 : 220
+                        visible: !page.narrowLayout
                         Layout.fillHeight: true
                         color: Theme.elevated
                         border.color: Theme.border
@@ -355,8 +357,8 @@ Rectangle {
                 objectName: "editorInspector"
                 readonly property int businessSectionCount: 2
                 readonly property bool compact: page.height < 880 || page.width < 1350
-                Layout.preferredWidth: page.width < 1100 ? 248 : 284
-                Layout.minimumWidth: 224
+                Layout.preferredWidth: page.width < 1100 ? 224 : 284
+                Layout.minimumWidth: 208
                 Layout.maximumWidth: 304
                 Layout.fillHeight: true
                 Layout.rightMargin: 4

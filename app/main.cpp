@@ -232,6 +232,7 @@ int main(int argc, char* argv[])
     QString qaScreenshotMini;
     QString qaScreenshotTools;
     int qaTool = 0;
+    QSize qaToolsSize;
     QString qaScreenshotList;
     QString qaListCategory;
     bool qaShowTrackDetails = false;
@@ -268,6 +269,15 @@ int main(int argc, char* argv[])
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
                 if (ok && requestedTool >= 0 && requestedTool <= 3) {
                     qaTool = requestedTool;
+                }
+            } else if (arg == QStringLiteral("--qa-tools-size")
+                       && i + 2 < cliArgs.size()) {
+                bool widthOk = false;
+                bool heightOk = false;
+                const int width = cliArgs.at(++i).toInt(&widthOk);
+                const int height = cliArgs.at(++i).toInt(&heightOk);
+                if (widthOk && heightOk && width >= 880 && height >= 560) {
+                    qaToolsSize = QSize(width, height);
                 }
             } else if (arg == QStringLiteral("--qa-screenshot-list")
                        && i + 1 < cliArgs.size()) {
@@ -1209,6 +1219,9 @@ int main(int argc, char* argv[])
             }
             if (wantScreenshotTools && audioToolsWindow != nullptr) {
                 if (auto* toolsWin = qobject_cast<QWindow*>(audioToolsWindow)) {
+                    if (qaToolsSize.isValid()) {
+                        toolsWin->resize(qaToolsSize);
+                    }
                     toolsWin->show();
                 }
                 if (qaTool == 2 && !qaImportFolder.isEmpty()) {

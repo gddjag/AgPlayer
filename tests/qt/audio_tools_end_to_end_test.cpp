@@ -420,7 +420,7 @@ void AudioToolsEndToEndTest::formatConverterExportsAndReopensEveryExposedFormat(
 {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
-    const QString input = temp.filePath(QStringLiteral("all-formats.wav"));
+    const QString input = temp.filePath(QStringLiteral("中文 音频 all-formats.wav"));
     QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
 
     const QVariantList formats = FormatConverter().supportedOutputFormats();
@@ -430,7 +430,7 @@ void AudioToolsEndToEndTest::formatConverterExportsAndReopensEveryExposedFormat(
             continue;
         }
         const QString key = format.value(QStringLiteral("key")).toString();
-        const QString outputDir = temp.filePath(key);
+        const QString outputDir = temp.filePath(QStringLiteral("中文输出-") + key);
         QVERIFY(QDir().mkpath(outputDir));
         FormatConverter converter;
         converter.loadFiles({QUrl::fromLocalFile(input)});
