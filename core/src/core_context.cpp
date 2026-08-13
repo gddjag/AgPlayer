@@ -36,6 +36,17 @@ ag_result CoreContext::set_queue(std::vector<std::string> utf8_paths,
                   "queue change failed");
 }
 
+ag_result CoreContext::set_scoped_queue(std::vector<std::string> utf8_paths,
+                                        const std::size_t start_index,
+                                        const std::size_t scope_size,
+                                        const bool allow_fallback) noexcept
+{
+    return record(audio_engine_.set_scoped_queue(
+                      std::move(utf8_paths), start_index, scope_size,
+                      allow_fallback),
+                  "scoped queue change failed");
+}
+
 ag_result CoreContext::queue_next(std::string utf8_path) noexcept
 {
     return record(audio_engine_.queue_next(std::move(utf8_path)),

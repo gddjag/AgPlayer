@@ -18,6 +18,10 @@ public:
     ag_result load(const std::string& utf8_path) noexcept;
     ag_result set_queue(std::vector<std::string> utf8_paths,
                         std::size_t start_index) noexcept;
+    ag_result set_scoped_queue(std::vector<std::string> utf8_paths,
+                               std::size_t start_index,
+                               std::size_t scope_size,
+                               bool allow_fallback) noexcept;
     ag_result queue_next(std::string utf8_path) noexcept;
     ag_result play() noexcept;
     ag_result pause() noexcept;

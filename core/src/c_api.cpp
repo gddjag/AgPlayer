@@ -4,8 +4,6 @@
 #include "decoder.hpp"
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
-#include "light_editor.hpp"
-#include "multitrack_editor.hpp"
 #include "transcoder.hpp"
 
 #include <algorithm>
@@ -26,6 +24,8 @@ extern "C" {
 }
 
 namespace {
+
+thread_local std::string last_error;
 
 template <typename Operation>
 ag_result guard_result(Operation&& operation) noexcept
@@ -193,7 +193,32 @@ ag_result ag_player_set_queue(ag_player* player,
         return player->context.set_queue(std::move(paths), start_index);
     });
 }
+ag_result ag_player_set_scoped_queue(ag_player* player,
+                                     const char* const* utf8_paths,
+                                     const size_t count,
+                                     const size_t start_index,
+                                     const size_t scope_size,
+                                     const int allow_fallback)
+{
+    if (player == nullptr || utf8_paths == nullptr || count == 0U
+        || start_index >= count || scope_size == 0U || scope_size > count
+        || start_index >= scope_size) {
+        return AG_INVALID_ARGUMENT;
+    }
 
+    return guard_result([&] {
+        std::vector<std::string> paths;
+        paths.reserve(count);
+        for (size_t index = 0U; index < count; ++index) {
+            if (utf8_paths[index] == nullptr || utf8_paths[index][0] == '\0') {
+                return AG_INVALID_ARGUMENT;
+            }
+            paths.emplace_back(utf8_paths[index]);
+        }
+        return player->context.set_scoped_queue(
+            std::move(paths), start_index, scope_size, allow_fallback != 0);
+    });
+}
 ag_result ag_player_queue_next(ag_player* player, const char* utf8_path)
 {
     if (player == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
@@ -566,12 +591,12 @@ ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata)
     }
 
     try {
-        agplayer::Decoder decoder;
-        const ag_result result = decoder.open(utf8_path);
+        agplayer::MediaMetadata metadata;
+        const ag_result result = agplayer::probe_media_metadata(utf8_path, metadata);
         if (result != AG_OK) {
             return result;
         }
-        *out_metadata = new (std::nothrow) ag_metadata{decoder.metadata()};
+        *out_metadata = new (std::nothrow) ag_metadata{std::move(metadata)};
         return *out_metadata == nullptr ? AG_INTERNAL_ERROR : AG_OK;
     } catch (...) {
         return AG_INTERNAL_ERROR;
@@ -815,8 +840,10 @@ ag_result ag_transcode_ex(const char* input_path,
                           const ag_progress_callback progress_callback,
                           void* const user_data)
 {
+    last_error.clear();
     if (input_path == nullptr || input_path[0] == '\0'
         || output_path == nullptr || output_path[0] == '\0') {
+        last_error = "input or output path is empty";
         return AG_INVALID_ARGUMENT;
     }
 
@@ -845,11 +872,21 @@ ag_result ag_transcode_ex(const char* input_path,
         }
 
         std::string error;
-        return agplayer::transcode(input_path, config, cancelled,
-                                   std::move(cb), error);
+        const ag_result result = agplayer::transcode(input_path, config, cancelled,
+                                                      std::move(cb), error);
+        if (result != AG_OK) {
+            last_error = error;
+        }
+        return result;
     } catch (...) {
+        last_error = "unexpected exception in transcoder";
         return AG_INTERNAL_ERROR;
     }
+}
+
+const char* ag_last_error(void)
+{
+    return last_error.c_str();
 }
 
 ag_result ag_transcode(const char* input_path,
@@ -866,47 +903,6 @@ ag_result ag_transcode(const char* input_path,
                            sample_rate, channels, nullptr, cancel_token,
                            progress_callback, user_data);
 }
-
-int ag_encoder_available(const char* codec_name)
-{
-    return codec_name != nullptr && codec_name[0] != '\0'
-            && avcodec_find_encoder_by_name(codec_name) != nullptr
-        ? 1 : 0;
-}
-
-ag_result ag_pitch_shift_ex(const char* input_path,
-                            const char* output_path,
-                            const int pitch_cents,
-                            const int keep_tempo,
-                            const double tempo_ratio,
-                            const char* output_codec_name,
-                            const ag_pitch_shift_options* options,
-                            const ag_cancel_token* cancel_token,
-                            const ag_progress_callback progress_callback,
-                            void* const user_data)
-{
-    if (input_path == nullptr || input_path[0] == '\0'
-        || output_path == nullptr || output_path[0] == '\0') {
-        return AG_INVALID_ARGUMENT;
-    }
-
-    try {
-        agplayer::PitchShiftConfig config;
-        config.output_path = output_path;
-        config.pitch_cents = pitch_cents;
-        config.keep_tempo = keep_tempo != 0;
-        config.tempo_ratio = tempo_ratio;
-        if (output_codec_name != nullptr) {
-            config.output_codec_name = output_codec_name;
-        }
-        if (options != nullptr) {
-            config.vocal_protection = options->vocal_protection != 0;
-            config.smooth_transition = options->smooth_transition != 0;
-            config.output_sample_rate = options->output_sample_rate;
-        }
-
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
 
 ag_result ag_transcode_v2(const char* input_path,
                           const ag_transcode_request_v2* request,
@@ -969,6 +965,47 @@ ag_result ag_transcode_v2(const char* input_path,
     }
 }
 
+int ag_encoder_available(const char* codec_name)
+{
+    return codec_name != nullptr && codec_name[0] != '\0'
+            && avcodec_find_encoder_by_name(codec_name) != nullptr
+        ? 1 : 0;
+}
+
+ag_result ag_pitch_shift_ex(const char* input_path,
+                            const char* output_path,
+                            const int pitch_cents,
+                            const int keep_tempo,
+                            const double tempo_ratio,
+                            const char* output_codec_name,
+                            const ag_pitch_shift_options* options,
+                            const ag_cancel_token* cancel_token,
+                            const ag_progress_callback progress_callback,
+                            void* const user_data)
+{
+    if (input_path == nullptr || input_path[0] == '\0'
+        || output_path == nullptr || output_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::PitchShiftConfig config;
+        config.output_path = output_path;
+        config.pitch_cents = pitch_cents;
+        config.keep_tempo = keep_tempo != 0;
+        config.tempo_ratio = tempo_ratio;
+        if (output_codec_name != nullptr) {
+            config.output_codec_name = output_codec_name;
+        }
+        if (options != nullptr) {
+            config.vocal_protection = options->vocal_protection != 0;
+            config.smooth_transition = options->smooth_transition != 0;
+            config.output_sample_rate = options->output_sample_rate;
+        }
+
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
             cb = [progress_callback, user_data](float frac) {
@@ -996,49 +1033,6 @@ ag_result ag_pitch_shift(const char* input_path,
     return ag_pitch_shift_ex(input_path, output_path, pitch_cents, keep_tempo,
                              tempo_ratio, nullptr, nullptr, cancel_token,
                              progress_callback, user_data);
-}
-
-ag_result ag_light_edit(const char* input_path,
-                        const char* output_path,
-                        const long long trim_start_ms,
-                        const long long trim_end_ms,
-                        const int fade_in_ms,
-                        const int fade_out_ms,
-                        const double gain,
-                        const ag_cancel_token* cancel_token,
-                        const ag_progress_callback progress_callback,
-                        void* const user_data)
-{
-    if (input_path == nullptr || input_path[0] == '\0'
-        || output_path == nullptr || output_path[0] == '\0') {
-        return AG_INVALID_ARGUMENT;
-    }
-
-    try {
-        agplayer::LightEditConfig config;
-        config.output_path = output_path;
-        config.trim_start_ms = trim_start_ms;
-        config.trim_end_ms = trim_end_ms;
-        config.fade_in_ms = fade_in_ms;
-        config.fade_out_ms = fade_out_ms;
-        config.gain = gain;
-
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
-
-        std::function<void(float)> cb;
-        if (progress_callback != nullptr) {
-            cb = [progress_callback, user_data](float frac) {
-                progress_callback(frac, user_data);
-            };
-        }
-
-        std::string error;
-        return agplayer::light_edit(input_path, config, cancelled,
-                                     std::move(cb), error);
-    } catch (...) {
-        return AG_INTERNAL_ERROR;
-    }
 }
 
 ag_result ag_waveform_analyze(const char* utf8_path,
@@ -1293,214 +1287,4 @@ ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out)
     });
 }
 
-ag_result ag_multitrack_edit_ex2(const size_t track_count,
-                                 const char* const* input_paths,
-                                 const long long* timeline_start_ms,
-                                 const long long* trim_start_ms,
-                                 const long long* trim_end_ms,
-                                 const int* fade_in_ms,
-                                 const int* fade_out_ms,
-                                 const double* gain,
-                                 const double* pan,
-                                 const char* output_path,
-                                 const ag_cancel_token* cancel_token,
-                                 const ag_progress_callback progress_callback,
-                                 void* const user_data)
-{
-    if (track_count == 0 || output_path == nullptr || output_path[0] == '\0') {
-        return AG_INVALID_ARGUMENT;
-    }
-
-    try {
-        agplayer::MultiTrackEditConfig config;
-        config.output_path = output_path;
-        config.tracks.reserve(track_count);
-        for (size_t i = 0; i < track_count; ++i) {
-            agplayer::MultiTrackEditConfig::Track track;
-            if (input_paths != nullptr && input_paths[i] != nullptr) {
-                track.input_path = input_paths[i];
-            }
-            if (timeline_start_ms != nullptr) {
-                track.timeline_start_ms = timeline_start_ms[i];
-            }
-            if (trim_start_ms != nullptr) track.trim_start_ms = trim_start_ms[i];
-            if (trim_end_ms != nullptr) track.trim_end_ms = trim_end_ms[i];
-            if (fade_in_ms != nullptr) track.fade_in_ms = fade_in_ms[i];
-            if (fade_out_ms != nullptr) track.fade_out_ms = fade_out_ms[i];
-            if (gain != nullptr) track.gain = gain[i];
-            if (pan != nullptr) track.pan = pan[i];
-            config.tracks.push_back(std::move(track));
-        }
-
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
-
-        std::function<void(float)> cb;
-        if (progress_callback != nullptr) {
-            cb = [progress_callback, user_data](float frac) {
-                progress_callback(frac, user_data);
-            };
-        }
-
-        std::string error;
-        return agplayer::multitrack_edit(config, cancelled, std::move(cb),
-                                         error);
-    } catch (...) {
-        return AG_INTERNAL_ERROR;
-    }
-}
-
-ag_result ag_multitrack_edit_ex(const size_t track_count,
-                                const char* const* input_paths,
-                                const long long* timeline_start_ms,
-                                const long long* trim_start_ms,
-                                const long long* trim_end_ms,
-                                const int* fade_in_ms,
-                                const int* fade_out_ms,
-                                const double* gain,
-                                const char* output_path,
-                                const ag_cancel_token* cancel_token,
-                                const ag_progress_callback progress_callback,
-                                void* const user_data)
-{
-    return ag_multitrack_edit_ex2(
-        track_count, input_paths, timeline_start_ms, trim_start_ms,
-        trim_end_ms, fade_in_ms, fade_out_ms, gain, nullptr, output_path,
-        cancel_token, progress_callback, user_data);
-}
-
-ag_result ag_multitrack_edit_v2(
-    const size_t track_count,
-    const ag_multitrack_track_v2* const tracks,
-    const char* const output_path,
-    const ag_cancel_token* const cancel_token,
-    const ag_progress_callback progress_callback,
-    void* const user_data)
-{
-    if (track_count == 0 || tracks == nullptr || output_path == nullptr
-        || output_path[0] == '\0') {
-        return AG_INVALID_ARGUMENT;
-    }
-    try {
-        agplayer::MultiTrackEditConfig config;
-        config.output_path = output_path;
-        config.tracks.reserve(track_count);
-        for (size_t index = 0; index < track_count; ++index) {
-            const ag_multitrack_track_v2& source = tracks[index];
-            if (source.struct_size < sizeof(ag_multitrack_track_v2)
-                || source.api_version != 1U) {
-                return AG_INVALID_ARGUMENT;
-            }
-            agplayer::MultiTrackEditConfig::Track track;
-            if (source.input_path != nullptr) {
-                track.input_path = source.input_path;
-            }
-            track.timeline_start_ms = source.timeline_start_ms;
-            track.trim_start_ms = source.trim_start_ms;
-            track.trim_end_ms = source.trim_end_ms;
-            track.fade_in_ms = source.fade_in_ms;
-            track.fade_out_ms = source.fade_out_ms;
-            track.gain = source.gain;
-            track.pan = source.pan;
-            track.timeline_duration_ms = source.timeline_duration_ms;
-            track.loop = source.loop != 0;
-            config.tracks.push_back(std::move(track));
-        }
-        const std::atomic_bool* cancelled = cancel_token == nullptr
-            ? nullptr : &cancel_token->cancelled;
-        std::function<void(float)> callback;
-        if (progress_callback != nullptr) {
-            callback = [progress_callback, user_data](float value) {
-                progress_callback(value, user_data);
-            };
-        }
-        std::string error;
-        return agplayer::multitrack_edit(config, cancelled,
-                                         std::move(callback), error);
-    } catch (...) {
-        return AG_INTERNAL_ERROR;
-    }
-}
-
-ag_result ag_multitrack_edit_v3(
-    const size_t track_count,
-    const ag_multitrack_track_v3* const tracks,
-    const char* const output_path,
-    const ag_cancel_token* const cancel_token,
-    const ag_progress_callback progress_callback,
-    void* const user_data)
-{
-    if (track_count == 0 || tracks == nullptr || output_path == nullptr
-        || output_path[0] == '\0') {
-        return AG_INVALID_ARGUMENT;
-    }
-    try {
-        agplayer::MultiTrackEditConfig config;
-        config.output_path = output_path;
-        config.tracks.reserve(track_count);
-        for (size_t index = 0; index < track_count; ++index) {
-            const ag_multitrack_track_v3& source = tracks[index];
-            constexpr size_t v3_base_size =
-                offsetof(ag_multitrack_track_v3, fade_in_curve);
-            if (source.struct_size < v3_base_size
-                || source.api_version != 1U) {
-                return AG_INVALID_ARGUMENT;
-            }
-            agplayer::MultiTrackEditConfig::Track track;
-            if (source.input_path != nullptr) {
-                track.input_path = source.input_path;
-            }
-            track.timeline_start_sample = source.timeline_start_sample;
-            track.trim_start_sample = source.trim_start_sample;
-            track.trim_end_sample = source.trim_end_sample;
-            track.fade_in_samples = source.fade_in_samples;
-            track.fade_out_samples = source.fade_out_samples;
-            if (source.struct_size >= sizeof(ag_multitrack_track_v3)) {
-                const auto fade_curve = [](int value) {
-                    if (value == 0) return agplayer::FadeCurve::Linear;
-                    if (value == 2) return agplayer::FadeCurve::Smooth;
-                    return agplayer::FadeCurve::EqualPower;
-                };
-                track.fade_in_curve = fade_curve(source.fade_in_curve);
-                track.fade_out_curve = fade_curve(source.fade_out_curve);
-            }
-            track.gain = source.gain;
-            track.pan = source.pan;
-            track.timeline_duration_samples =
-                source.timeline_duration_samples;
-            track.loop = source.loop != 0;
-            config.tracks.push_back(std::move(track));
-        }
-        const std::atomic_bool* cancelled = cancel_token == nullptr
-            ? nullptr : &cancel_token->cancelled;
-        std::function<void(float)> callback;
-        if (progress_callback != nullptr) {
-            callback = [progress_callback, user_data](float value) {
-                progress_callback(value, user_data);
-            };
-        }
-        std::string error;
-        return agplayer::multitrack_edit(config, cancelled,
-                                         std::move(callback), error);
-    } catch (...) {
-        return AG_INTERNAL_ERROR;
-    }
-}
-
-ag_result ag_multitrack_edit(const size_t track_count,
-                             const char* const* input_paths,
-                             const long long* trim_start_ms,
-                             const long long* trim_end_ms,
-                             const int* fade_in_ms,
-                             const int* fade_out_ms,
-                             const double* gain,
-                             const char* output_path,
-                             const ag_cancel_token* cancel_token,
-                             const ag_progress_callback progress_callback,
-                             void* const user_data)
-{
-    return ag_multitrack_edit_ex(
-        track_count, input_paths, nullptr, trim_start_ms, trim_end_ms,
-        fade_in_ms, fade_out_ms, gain, output_path, cancel_token,
-        progress_callback, user_data);
-}
+// End of C API implementation.

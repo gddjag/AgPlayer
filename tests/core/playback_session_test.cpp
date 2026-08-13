@@ -46,6 +46,47 @@ int main()
     assert(session.index() == 1);
     assert(session.current_path() == "b");
 
+    agplayer::PlaybackSession scoped(
+        [](const std::size_t current, const std::size_t size) {
+            return (current + 1U) % size;
+        });
+    scoped.set_scoped_queue({"a", "b", "c", "d", "outside"}, 0, 4, true);
+    scoped.set_mode(agplayer::PlaybackMode::Sequential);
+    assert(scoped.next_index_from(2) == 3);
+    assert(scoped.next_index_from(3) == 4);
+
+    scoped.set_scoped_queue(
+        {"a", "b", "c", "d", "e", "outside"}, 0, 5, false);
+    scoped.set_mode(agplayer::PlaybackMode::Sequential);
+    assert(scoped.next_index_from(4) == 0);
+    scoped.set_mode(agplayer::PlaybackMode::RepeatAll);
+    assert(scoped.next_index_from(4) == 0);
+    scoped.set_mode(agplayer::PlaybackMode::RepeatOne);
+    assert(scoped.next_index_from(2) == 2);
+
+    scoped.set_scoped_queue({"a", "b", "c", "d", "outside"}, 0, 4, true);
+    scoped.set_mode(agplayer::PlaybackMode::Shuffle);
+    assert(scoped.next_index_from(0) == 1);
+    scoped.set_index(1);
+    assert(scoped.next_index_from(1) == 2);
+    scoped.set_index(2);
+    assert(scoped.next_index_from(2) == 3);
+    scoped.set_index(3);
+    assert(scoped.next_index_from(3) == 4);
+
+    scoped.set_scoped_queue(
+        {"a", "b", "c", "d", "e", "outside"}, 0, 5, false);
+    scoped.set_mode(agplayer::PlaybackMode::Shuffle);
+    scoped.set_index(1);
+    scoped.set_index(2);
+    scoped.set_index(3);
+    scoped.set_index(4);
+    assert(scoped.next_index_from(4) < 5);
+
+    scoped.set_index(0);
+    scoped.set_mode(agplayer::PlaybackMode::Sequential);
+    assert(scoped.previous_index() == 4);
+
     session.mark_error("decode failed");
     assert(session.state() == agplayer::PlaybackState::Error);
     assert(session.error_message() == "decode failed");

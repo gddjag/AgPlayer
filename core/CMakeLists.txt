@@ -1,19 +1,26 @@
 add_library(agplayer_core STATIC
+    src/audio_editor/audio_file_analyzer.cpp
+    src/audio_editor/audio_file_analyzer.hpp
     src/audio_editor/audio_document.cpp
     src/audio_editor/audio_document.hpp
+    src/audio_editor/document_renderer.cpp
+    src/audio_editor/document_renderer.hpp
+    src/audio_editor/document_writer.cpp
+    src/audio_editor/document_writer.hpp
     src/audio_editor/edit_command.hpp
     src/audio_editor/peak_pyramid.cpp
     src/audio_editor/peak_pyramid.hpp
+    src/audio_editor/recording_session.cpp
+    src/audio_editor/recording_session.hpp
     src/audio_editor/time_pixel_mapper.hpp
+    src/audio_editor/time_pitch_session.cpp
+    src/audio_editor/time_pitch_session.hpp
     src/audio_engine.cpp
     src/c_api.cpp
     src/core_context.cpp
     src/decoder.cpp
     src/graphic_equalizer.cpp
     src/graphic_equalizer.hpp
-    src/light_editor.cpp
-    src/multitrack_editor.cpp
-    src/multitrack_editor.hpp
     src/metadata_writer.cpp
     src/pitch_shifter.cpp
     src/playback_session.cpp
@@ -24,8 +31,6 @@ add_library(agplayer_core STATIC
     src/transcode_probe.hpp
     src/transcode_verifier.cpp
     src/transcode_verifier.hpp
-    src/timeline_preview_mixer.cpp
-    src/timeline_preview_mixer.hpp
     src/time_pitch_engine.cpp
     src/time_pitch_engine.hpp
     src/waveform_analyzer.cpp

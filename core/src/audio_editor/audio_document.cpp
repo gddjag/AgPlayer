@@ -149,6 +149,90 @@ bool AudioDocument::addMarker(Marker marker)
     return true;
 }
 
+bool AudioDocument::insertSource(AudioSource source, const SampleFrame frame)
+{
+    if (frame < 0 || frame > totalFrames() || source.sample_rate == 0
+        || source.channels == 0 || source.total_frames <= 0
+        || source.path.empty()) {
+        return false;
+    }
+    const auto first_source = state_.spans.empty() ? nullptr
+                                                    : state_.spans.front().source;
+    if (first_source != nullptr
+        && (source.sample_rate != first_source->sample_rate
+            || source.channels != first_source->channels)) {
+        return false;
+    }
+    State candidate = state_;
+    if (!splitAt(candidate.spans, frame)) return false;
+    SampleFrame cursor = 0;
+    auto insertion = candidate.spans.begin();
+    while (insertion != candidate.spans.end() && cursor < frame) {
+        cursor += insertion->frame_count;
+        ++insertion;
+    }
+    auto shared = std::make_shared<const AudioSource>(std::move(source));
+    candidate.spans.insert(insertion,
+        AudioSpan{shared, 0, shared->total_frames, false, 1.0F, 1.0F});
+    for (auto& marker : candidate.markers) {
+        if (marker.frame >= frame) marker.frame += shared->total_frames;
+    }
+    candidate.selection.reset();
+    commit(std::move(candidate));
+    return true;
+}
+
+bool AudioDocument::replaceRangeWithSource(
+    AudioSource source, const Selection range)
+{
+    if (!range.valid() || range.end > totalFrames()
+        || source.sample_rate == 0 || source.channels == 0
+        || source.total_frames <= 0 || source.path.empty()) {
+        return false;
+    }
+    const auto first_source = state_.spans.empty() ? nullptr
+                                                    : state_.spans.front().source;
+    if (first_source != nullptr
+        && (source.sample_rate != first_source->sample_rate
+            || source.channels != first_source->channels)) {
+        return false;
+    }
+    State candidate = state_;
+    if (!splitAt(candidate.spans, range.start)
+        || !splitAt(candidate.spans, range.end)) {
+        return false;
+    }
+    SampleFrame cursor = 0;
+    candidate.spans.erase(
+        std::remove_if(candidate.spans.begin(), candidate.spans.end(),
+            [&](const AudioSpan& span) {
+                const SampleFrame next = cursor + span.frame_count;
+                const bool selected = cursor >= range.start && next <= range.end;
+                cursor = next;
+                return selected;
+            }), candidate.spans.end());
+    SampleFrame prefix_frames = 0;
+    auto insertion = candidate.spans.begin();
+    while (insertion != candidate.spans.end() && prefix_frames < range.start) {
+        prefix_frames += insertion->frame_count;
+        ++insertion;
+    }
+    auto shared = std::make_shared<const AudioSource>(std::move(source));
+    candidate.spans.insert(insertion,
+        AudioSpan{shared, 0, shared->total_frames, false, 1.0F, 1.0F});
+    const SampleFrame delta = shared->total_frames - (range.end - range.start);
+    for (auto& marker : candidate.markers) {
+        if (marker.frame >= range.start && marker.frame < range.end) {
+            marker.frame = range.start;
+        } else if (marker.frame >= range.end) {
+            marker.frame += delta;
+        }
+    }
+    candidate.selection.reset();
+    commit(std::move(candidate));
+    return true;
+}
+
 SampleFrame AudioDocument::totalFrames() const noexcept
 {
     return spanFrames(state_.spans);

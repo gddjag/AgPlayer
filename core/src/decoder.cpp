@@ -19,6 +19,8 @@ extern "C" {
 #include <new>
 #include <utility>
 
+#include "metadata_writer.hpp"
+
 namespace agplayer {
 namespace {
 
@@ -72,6 +74,87 @@ const char* image_mime_type(const AVCodecID codec_id) noexcept
 }
 
 } // namespace
+
+ag_result probe_media_metadata(const std::string& utf8_path,
+                               MediaMetadata& metadata) noexcept
+{
+    metadata = {};
+    if (utf8_path.empty()) return AG_INVALID_ARGUMENT;
+    AVFormatContext* context = nullptr;
+    const int open_result = avformat_open_input(&context, utf8_path.c_str(),
+                                                nullptr, nullptr);
+    if (open_result < 0) return map_open_error(open_result);
+    const auto close = [&context]() { avformat_close_input(&context); };
+    if (avformat_find_stream_info(context, nullptr) < 0) {
+        close();
+        return AG_UNSUPPORTED_FORMAT;
+    }
+    const int audio_index = av_find_best_stream(context, AVMEDIA_TYPE_AUDIO,
+                                                -1, -1, nullptr, 0);
+    if (audio_index < 0) {
+        close();
+        return AG_UNSUPPORTED_FORMAT;
+    }
+    const AVStream* audio_stream = context->streams[audio_index];
+    const AVCodecParameters* parameters = audio_stream->codecpar;
+    const auto read_canonical = [audio_stream, context](
+                                    const CanonicalField field) {
+        for (const char* alias : known_metadata_aliases(field)) {
+            const std::string value = read_tag(audio_stream->metadata,
+                                               context->metadata, alias);
+            if (!value.empty()) return value;
+        }
+        return std::string{};
+    };
+    metadata.title = read_canonical(CanonicalField::Title);
+    metadata.artist = read_canonical(CanonicalField::Artist);
+    metadata.album = read_canonical(CanonicalField::Album);
+    metadata.album_artist = read_canonical(CanonicalField::AlbumArtist);
+    metadata.track = read_tag(audio_stream->metadata, context->metadata, "track");
+    metadata.disc = read_tag(audio_stream->metadata, context->metadata, "disc");
+    metadata.composer = read_canonical(CanonicalField::Composer);
+    metadata.comment = read_tag(audio_stream->metadata, context->metadata, "comment");
+    metadata.bpm = read_canonical(CanonicalField::Bpm);
+    metadata.copyright = read_tag(audio_stream->metadata, context->metadata,
+                                  "copyright");
+    metadata.encoder = read_tag(audio_stream->metadata, context->metadata,
+                                "encoded_by");
+    if (metadata.encoder.empty()) {
+        metadata.encoder = read_tag(audio_stream->metadata, context->metadata,
+                                    "encoder");
+    }
+    metadata.year = read_canonical(CanonicalField::Year);
+    metadata.genre = read_canonical(CanonicalField::Genre);
+    metadata.lyrics = read_lyrics(audio_stream->metadata, context->metadata);
+    metadata.format = context->iformat != nullptr && context->iformat->name != nullptr
+        ? context->iformat->name : "";
+    metadata.sample_rate = parameters->sample_rate;
+    metadata.channels = parameters->ch_layout.nb_channels;
+    metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
+        ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
+    metadata.bit_rate = parameters->bit_rate > 0
+        ? parameters->bit_rate : context->bit_rate;
+    if (audio_stream->duration > 0 && audio_stream->duration != AV_NOPTS_VALUE) {
+        metadata.duration_ms = av_rescale_q(audio_stream->duration,
+            audio_stream->time_base, AVRational{1, 1'000});
+    } else if (context->duration > 0 && context->duration != AV_NOPTS_VALUE) {
+        metadata.duration_ms = av_rescale_q(context->duration,
+            AVRational{1, AV_TIME_BASE}, AVRational{1, 1'000});
+    }
+    for (unsigned int index = 0; index < context->nb_streams; ++index) {
+        const AVStream* stream = context->streams[index];
+        if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0
+            || stream->attached_pic.data == nullptr || stream->attached_pic.size <= 0) {
+            continue;
+        }
+        metadata.cover.assign(stream->attached_pic.data,
+                              stream->attached_pic.data + stream->attached_pic.size);
+        metadata.cover_mime_type = image_mime_type(stream->codecpar->codec_id);
+        break;
+    }
+    close();
+    return AG_OK;
+}
 
 class Decoder::Impl final {
 public:

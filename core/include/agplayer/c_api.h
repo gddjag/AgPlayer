@@ -97,6 +97,12 @@ ag_result ag_player_set_queue(ag_player* player,
                               const char* const* utf8_paths,
                               size_t count,
                               size_t start_index);
+ag_result ag_player_set_scoped_queue(ag_player* player,
+                                     const char* const* utf8_paths,
+                                     size_t count,
+                                     size_t start_index,
+                                     size_t scope_size,
+                                     int allow_fallback);
 ag_result ag_player_queue_next(ag_player* player, const char* utf8_path);
 ag_result ag_player_play(ag_player* player);
 ag_result ag_player_pause(ag_player* player);
@@ -297,12 +303,6 @@ ag_result ag_transcode_ex(const char* input_path,
                           ag_progress_callback progress_callback,
                           void* user_data);
 
-/* Light edit: trim + fade in/out + gain. Decodes to float32, applies edits
- * in-memory, re-encodes with the same codec as input.
- * trim_start_ms: 0 = start of file. trim_end_ms: 0 = end of file.
- * fade_in_ms / fade_out_ms: 0 = no fade. Linear fade.
- * gain: linear amplitude factor (1.0 = no change, 0.5 = -6dB, 2.0 = +6dB).
- * output_path: destination file path (same codec as input).
 #define AG_TRANSCODE_REQUEST_V2_VERSION 2U
 
 /* Versioned conversion request. struct_size and api_version must be set so
@@ -333,18 +333,6 @@ ag_result ag_transcode_v2(const char* input_path,
 /* Returns a thread-local UTF-8 diagnostic for the most recent failed core
  * operation on this thread; returns an empty string when no detail is known. */
 const char* ag_last_error(void);
-
- * Returns AG_OK on success, AG_CANCELLED if cancelled. */
-ag_result ag_light_edit(const char* input_path,
-                        const char* output_path,
-                        long long trim_start_ms,
-                        long long trim_end_ms,
-                        int fade_in_ms,
-                        int fade_out_ms,
-                        double gain,
-                        const ag_cancel_token* cancel_token,
-                        ag_progress_callback progress_callback,
-                        void* user_data);
 
 ag_result ag_waveform_analyze(const char* utf8_path,
                               size_t target_points,
@@ -416,111 +404,6 @@ typedef struct ag_bpm_result {
  * Returns AG_INVALID_ARGUMENT if file_path or out is NULL.
  * Returns AG_DECODE_ERROR if the file cannot be decoded or is too short. */
 ag_result ag_bpm_analyze(const char* file_path, ag_bpm_result* out);
-
-/* Multi-track non-destructive edit: mix multiple audio files with optional
- * per-track timeline offset/trim/fade/gain, and render to output_path.
- * track_count: number of tracks.
- * input_paths: array of UTF-8 input paths. NULL or empty string = silent track.
- * timeline_start_ms: per-track offset on the output timeline. Pass NULL for 0.
- * trim_start_ms / trim_end_ms / fade_in_ms / fade_out_ms / gain: per-track
- *   arrays. Values use the same semantics as ag_light_edit. Pass NULL to use
- *   defaults (no trim, no fade, gain=1.0).
- * Returns AG_OK on success, AG_CANCELLED if cancelled. */
-ag_result ag_multitrack_edit_ex(size_t track_count,
-                                const char* const* input_paths,
-                                const long long* timeline_start_ms,
-                                const long long* trim_start_ms,
-                                const long long* trim_end_ms,
-                                const int* fade_in_ms,
-                                const int* fade_out_ms,
-                                const double* gain,
-                                const char* output_path,
-                                const ag_cancel_token* cancel_token,
-                                ag_progress_callback progress_callback,
-                                void* user_data);
-
-/* Extended multitrack render with per-track stereo pan (-1.0 left, 0 centre,
- * +1.0 right). Pass pan=NULL for centred tracks. */
-ag_result ag_multitrack_edit_ex2(size_t track_count,
-                                 const char* const* input_paths,
-                                 const long long* timeline_start_ms,
-                                 const long long* trim_start_ms,
-                                 const long long* trim_end_ms,
-                                 const int* fade_in_ms,
-                                 const int* fade_out_ms,
-                                 const double* gain,
-                                 const double* pan,
-                                 const char* output_path,
-                                 const ag_cancel_token* cancel_token,
-                                 ag_progress_callback progress_callback,
-                                 void* user_data);
-
-typedef struct ag_multitrack_track_v2 {
-    size_t struct_size;
-    uint32_t api_version;
-    const char* input_path;
-    long long timeline_start_ms;
-    long long trim_start_ms;
-    long long trim_end_ms;
-    int fade_in_ms;
-    int fade_out_ms;
-    double gain;
-    double pan;
-    long long timeline_duration_ms;
-    int loop;
-} ag_multitrack_track_v2;
-
-/* Versioned multitrack API. api_version=1 and struct_size=sizeof(struct) are
- * required. This is the preferred bridge for Qt and future platform adapters. */
-ag_result ag_multitrack_edit_v2(size_t track_count,
-                                const ag_multitrack_track_v2* tracks,
-                                const char* output_path,
-                                const ag_cancel_token* cancel_token,
-                                ag_progress_callback progress_callback,
-                                void* user_data);
-
-typedef struct ag_multitrack_track_v3 {
-    size_t struct_size;
-    uint32_t api_version;
-    const char* input_path;
-    long long timeline_start_sample;
-    long long trim_start_sample;
-    long long trim_end_sample;
-    long long fade_in_samples;
-    long long fade_out_samples;
-    double gain;
-    double pan;
-    long long timeline_duration_samples;
-    int loop;
-    /* 0=linear, 1=equal-power, 2=smooth. Older callers that omit these
-     * trailing fields use equal-power. */
-    int fade_in_curve;
-    int fade_out_curve;
-} ag_multitrack_track_v3;
-
-/* Sample-authoritative multitrack render. Sample positions use the project
- * sample rate, which is the first non-empty input track's decoded rate.
- * Set optional trim/fade/duration fields to -1 to use their default. */
-ag_result ag_multitrack_edit_v3(size_t track_count,
-                                const ag_multitrack_track_v3* tracks,
-                                const char* output_path,
-                                const ag_cancel_token* cancel_token,
-                                ag_progress_callback progress_callback,
-                                void* user_data);
-
-/* Backwards-compatible wrapper. Calls ag_multitrack_edit_ex with all timeline
- * offsets set to zero. */
-ag_result ag_multitrack_edit(size_t track_count,
-                             const char* const* input_paths,
-                             const long long* trim_start_ms,
-                             const long long* trim_end_ms,
-                             const int* fade_in_ms,
-                             const int* fade_out_ms,
-                             const double* gain,
-                             const char* output_path,
-                             const ag_cancel_token* cancel_token,
-                             ag_progress_callback progress_callback,
-                             void* user_data);
 
 #ifdef __cplusplus
 }

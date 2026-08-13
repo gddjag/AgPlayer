@@ -45,6 +45,13 @@ int main()
     assert(ag_player_set_transition_fade_ms(null_player, 100)
            == AG_INVALID_ARGUMENT);
     assert(ag_player_set_match_track_sample_rate(null_player, true) == AG_OK);
+    const char* scope_paths[] = {"first.wav", "second.wav"};
+    assert(ag_player_set_scoped_queue(null_player, scope_paths, 2U,
+                                      0U, 0U, 0)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_scoped_queue(null_player, scope_paths, 2U,
+                                      1U, 1U, 0)
+           == AG_INVALID_ARGUMENT);
     std::array<float, 64> spectrum{};
     assert(ag_player_spectrum(nullptr, spectrum.data(), spectrum.size())
            == AG_INVALID_ARGUMENT);

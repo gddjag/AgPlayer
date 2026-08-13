@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <atomic>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,10 @@ public:
     explicit PlaybackSession(ShuffleIndexFunction shuffle_index = {});
 
     void set_queue(std::vector<std::string> paths, std::size_t start_index);
+    void set_scoped_queue(std::vector<std::string> paths,
+                          std::size_t start_index,
+                          std::size_t scope_size,
+                          bool allow_fallback);
     bool queue_next(std::string path);
     void clear() noexcept;
     void set_mode(PlaybackMode mode) noexcept;
@@ -52,12 +57,20 @@ public:
     void mark_error(std::string message);
 
 private:
+    [[nodiscard]] std::size_t next_shuffle_index(std::size_t current) const;
+    void reset_scope_visits(std::size_t current) noexcept;
+
     std::vector<std::string> paths_;
     std::atomic<std::size_t> index_{0U};
     std::atomic<PlaybackMode> mode_{PlaybackMode::Sequential};
     PlaybackState state_ = PlaybackState::Stopped;
     std::string error_;
     ShuffleIndexFunction shuffle_index_;
+    bool scope_enabled_ = false;
+    std::size_t scope_size_ = 0U;
+    bool allow_fallback_ = false;
+    mutable std::mutex scope_mutex_;
+    mutable std::vector<bool> scope_visited_;
 };
 
 } // namespace agplayer
