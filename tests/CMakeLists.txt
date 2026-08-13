@@ -475,6 +475,7 @@ foreach(qt_test IN ITEMS
     voice_clone_worker_protocol_test
     voice_clone_host_controller_test
     voice_clone_package_manager_test
+    voice_clone_controller_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -493,6 +494,12 @@ foreach(qt_test IN ITEMS
 endforeach()
 
 target_link_libraries(voice_clone_package_manager_test PRIVATE Qt6::Network)
+target_link_libraries(voice_clone_controller_test PRIVATE Qt6::Network)
+target_link_libraries(voice_clone_controller_test PRIVATE agplayer_voice_clone_controller)
+target_compile_definitions(voice_clone_controller_test PRIVATE
+    AGPLAYER_VOICE_CLONE_REGISTRY_PATH="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/models.json"
+)
+set_tests_properties(voice_clone_controller_test PROPERTIES TIMEOUT 30)
 
 add_library(voice_clone_test_plugin MODULE
     qt/voice_clone_test_plugin.cpp

@@ -43,6 +43,7 @@ find_package(SoundTouch CONFIG REQUIRED)
 
 add_subdirectory(core)
 add_subdirectory(qt)
+add_subdirectory(plugins/voice-clone)
 add_subdirectory(app)
 add_subdirectory(tools)
 add_subdirectory(tests)
