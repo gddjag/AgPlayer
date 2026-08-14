@@ -7,13 +7,16 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStorageInfo>
+#include <QtConcurrent>
 
 #include <limits>
 #include <algorithm>
+#include <utility>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -60,16 +63,19 @@ bool hasReparseAncestor(QString path)
     return false;
 }
 
-bool collectRegularTree(const QString& root, QVector<QString>* files = nullptr)
+bool collectRegularTree(const QString& root, QVector<QString>* files = nullptr,
+                        const std::atomic_bool* canceled = nullptr)
 {
     const QFileInfo rootInfo(root);
     if (!rootInfo.isDir() || isReparse(root)) return false;
     QStringList pending{absoluteNormalized(root)};
     while (!pending.isEmpty()) {
+        if (canceled != nullptr && canceled->load(std::memory_order_relaxed)) return false;
         const QString directory = pending.takeLast();
         const QFileInfoList entries = QDir(directory).entryInfoList(
             QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
         for (const QFileInfo& entry : entries) {
+            if (canceled != nullptr && canceled->load(std::memory_order_relaxed)) return false;
             const QString path = entry.absoluteFilePath();
             if (isReparse(path)) return false;
             if (entry.isDir()) pending.append(path);
@@ -146,12 +152,17 @@ QString systemTar()
     return {};
 }
 
-QString hashFile(const QString& path)
+QString hashFile(const QString& path, const std::atomic_bool* canceled = nullptr)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) return {};
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    if (!hash.addData(&file)) return {};
+    while (!file.atEnd()) {
+        if (canceled != nullptr && canceled->load(std::memory_order_relaxed)) return {};
+        const QByteArray chunk = file.read(1024 * 1024);
+        if (chunk.isEmpty() && !file.atEnd()) return {};
+        hash.addData(chunk);
+    }
     return QString::fromLatin1(hash.result().toHex());
 }
 
@@ -191,7 +202,8 @@ bool containsZip64Extra(const QByteArray& extra, bool* malformed)
 
 bool inspectZipCentralDirectory(const QString& archivePath,
                                 const VoiceCloneRuntimePackageManifest& manifest,
-                                QString* error)
+                                QString* error,
+                                const std::atomic_bool* canceled = nullptr)
 {
     constexpr quint64 maximumEntryBytes = 16ULL * 1024 * 1024 * 1024;
     constexpr quint64 maximumInstalledBytes = 64ULL * 1024 * 1024 * 1024;
@@ -256,6 +268,9 @@ bool inspectZipCentralDirectory(const QString& archivePath,
     quint64 totalInstalled = 0;
     qint64 centralCursor = centralOffset;
     for (quint16 index = 0; index < entryCount; ++index) {
+        if (canceled != nullptr && canceled->load(std::memory_order_relaxed)) {
+            *error = QStringLiteral("Runtime verification canceled"); return false;
+        }
         QByteArray header;
         if (!readAt(&archive, centralCursor, 46, &header)
             || little32(header, 0) != 0x02014b50U) {
@@ -426,7 +441,18 @@ VoiceCloneRuntimePackageManager::VoiceCloneRuntimePackageManager(
 VoiceCloneRuntimePackageManager::~VoiceCloneRuntimePackageManager()
 {
     ++generation_;
+    ++resolutionGeneration_;
+    if (verificationCanceled_) verificationCanceled_->store(true, std::memory_order_relaxed);
+    if (resolutionCanceled_) resolutionCanceled_->store(true, std::memory_order_relaxed);
     closeReply();
+    if (verificationWatcher_ != nullptr) {
+        verificationWatcher_->disconnect(this);
+        verificationWatcher_->waitForFinished();
+    }
+    for (auto* watcher : std::as_const(resolutionWatchers_)) {
+        watcher->disconnect(this);
+        watcher->waitForFinished();
+    }
 }
 
 QString VoiceCloneRuntimePackageManager::phase() const
@@ -526,6 +552,10 @@ bool VoiceCloneRuntimePackageManager::prepareRoot(QString* error)
 
 void VoiceCloneRuntimePackageManager::start(const VoiceCloneRuntimePackageManifest& manifest)
 {
+    if (verificationWatcher_ != nullptr && !verificationWatcher_->isFinished()) {
+        return;
+    }
+    cancelInstalledResolution();
     ++generation_;
     closeReply();
     manifest_ = manifest;
@@ -649,50 +679,112 @@ void VoiceCloneRuntimePackageManager::finishDownload()
         || (resumeOffset_ > 0 ? status != 206 : (status < 200 || status >= 300))) {
         fail(QStringLiteral("Runtime package download failed")); return;
     }
-    if (QFileInfo(archivePath_).size() != manifest_.packageBytes
-        || hashFile(archivePath_) != manifest_.packageSha256) {
-        fail(QStringLiteral("Runtime package size or SHA-256 mismatch")); return;
+    if (QFileInfo(archivePath_).size() != manifest_.packageBytes) {
+        fail(QStringLiteral("Runtime package size mismatch")); return;
     }
-    setState(Verifying);
-    QString error;
-    if (!inspectAndExtract(&error)) { fail(error); return; }
-    setState(Committing);
-    if (!commit(&error)) { fail(error); return; }
-    QFile::remove(archivePath_);
-    QFile::remove(resumePath_);
-    transferredBytes_ = manifest_.packageBytes;
-    emit progressChanged();
-    setState(Completed);
+    beginVerification();
 }
 
-bool VoiceCloneRuntimePackageManager::inspectAndExtract(QString* error)
+void VoiceCloneRuntimePackageManager::beginVerification()
 {
-    if (!inspectZipCentralDirectory(archivePath_, manifest_, error)) return false;
+    setState(Verifying);
+    verificationCanceled_ = std::make_shared<std::atomic_bool>(false);
+    const auto canceled = verificationCanceled_;
+    const quint64 generation = generation_;
+    auto* watcher = new QFutureWatcher<QString>(this);
+    verificationWatcher_ = watcher;
+    connect(watcher, &QFutureWatcher<QString>::finished, this,
+            [this, watcher, canceled, generation] {
+        const QString error = watcher->result();
+        if (verificationWatcher_ == watcher) verificationWatcher_ = nullptr;
+        watcher->deleteLater();
+        if (generation != generation_ || canceled->load(std::memory_order_relaxed)) return;
+        if (!error.isEmpty()) { fail(error); return; }
+        setState(Committing);
+        QString commitError;
+        if (!commit(&commitError)) { fail(commitError); return; }
+        QFile::remove(archivePath_);
+        QFile::remove(resumePath_);
+        transferredBytes_ = manifest_.packageBytes;
+        emit progressChanged();
+        setState(Completed);
+    });
+    watcher->setFuture(QtConcurrent::run([this, canceled, generation] {
+        return verifyExtractedArchive(canceled, generation);
+    }));
+}
+
+QString VoiceCloneRuntimePackageManager::verifyExtractedArchive(
+    const std::shared_ptr<std::atomic_bool>& canceled, const quint64 generation)
+{
+    auto canceledResult = [this, &canceled]() {
+        if (QFileInfo::exists(stagingRoot_)) removeTree(stagingRoot_);
+        return QStringLiteral("Runtime verification canceled");
+    };
+    if (hashFile(archivePath_, canceled.get()) != manifest_.packageSha256) {
+        if (canceled->load(std::memory_order_relaxed)) return canceledResult();
+        return QStringLiteral("Runtime package SHA-256 mismatch");
+    }
+    QString error;
+    if (!inspectZipCentralDirectory(archivePath_, manifest_, &error, canceled.get())) {
+        if (canceled->load(std::memory_order_relaxed)) return canceledResult();
+        return error;
+    }
     const QString tar = systemTar();
-    if (tar.isEmpty()) { *error = QStringLiteral("Trusted Windows ZIP extractor is unavailable"); return false; }
+    if (tar.isEmpty()) return QStringLiteral("Trusted Windows ZIP extractor is unavailable");
+    if (canceled->load(std::memory_order_relaxed)) return canceledResult();
     if (QFileInfo::exists(stagingRoot_) && !removeTree(stagingRoot_)) {
-        *error = QStringLiteral("Runtime staging directory is unsafe or could not be cleaned"); return false;
+        return QStringLiteral("Runtime staging directory is unsafe or could not be cleaned");
     }
     if (!QDir().mkpath(stagingRoot_) || hasReparseAncestor(stagingRoot_)) {
-        *error = QStringLiteral("Runtime staging directory could not be created safely"); return false;
+        return QStringLiteral("Runtime staging directory could not be created safely");
     }
-    setState(Extracting);
+    const QPointer<VoiceCloneRuntimePackageManager> guarded(this);
+    QMetaObject::invokeMethod(this, [guarded, canceled, generation] {
+        if (guarded != nullptr && guarded->generation_ == generation
+            && !canceled->load(std::memory_order_relaxed)) {
+            guarded->setState(Extracting);
+        }
+    }, Qt::QueuedConnection);
     QProcess extraction;
     extraction.setProgram(tar);
     extraction.setArguments({QStringLiteral("-xf"), archivePath_, QStringLiteral("-C"), stagingRoot_});
     extraction.start();
-    if (!extraction.waitForFinished(120000) || extraction.exitStatus() != QProcess::NormalExit
-        || extraction.exitCode() != 0) {
-        *error = QStringLiteral("Runtime ZIP extraction failed"); return false;
+    if (!extraction.waitForStarted()) {
+        removeTree(stagingRoot_);
+        return QStringLiteral("Runtime ZIP extraction failed");
     }
-    if (!validateExtracted(error) || !writeInstalledMarker(error)) return false;
-    return true;
+    while (extraction.state() != QProcess::NotRunning) {
+        if (canceled->load(std::memory_order_relaxed)) {
+            extraction.kill();
+            extraction.waitForFinished(5000);
+            return canceledResult();
+        }
+        extraction.waitForFinished(50);
+    }
+    if (extraction.exitStatus() != QProcess::NormalExit || extraction.exitCode() != 0) {
+        removeTree(stagingRoot_);
+        return QStringLiteral("Runtime ZIP extraction failed");
+    }
+    if (!validateExtracted(&error, canceled)) {
+        removeTree(stagingRoot_);
+        return canceled->load(std::memory_order_relaxed) ? canceledResult() : error;
+    }
+    if (!writeInstalledMarker(&error)) {
+        removeTree(stagingRoot_);
+        return error;
+    }
+    return {};
 }
 
-bool VoiceCloneRuntimePackageManager::validateExtracted(QString* error) const
+bool VoiceCloneRuntimePackageManager::validateExtracted(
+    QString* error, const std::shared_ptr<std::atomic_bool>& canceled) const
 {
     QVector<QString> extractedFiles;
-    if (!collectRegularTree(stagingRoot_, &extractedFiles)) {
+    if (!collectRegularTree(stagingRoot_, &extractedFiles, canceled.get())) {
+        if (canceled->load(std::memory_order_relaxed)) {
+            *error = QStringLiteral("Runtime verification canceled"); return false;
+        }
         *error = QStringLiteral("Runtime staging contains a link or reparse point"); return false;
     }
     QSet<QString> actual;
@@ -702,10 +794,13 @@ bool VoiceCloneRuntimePackageManager::validateExtracted(QString* error) const
     }
     QSet<QString> expected;
     for (const auto& file : manifest_.files) {
+        if (canceled->load(std::memory_order_relaxed)) {
+            *error = QStringLiteral("Runtime verification canceled"); return false;
+        }
         expected.insert(file.relativePath.toLower());
         const QString path = QDir(stagingRoot_).filePath(file.relativePath);
         if (!isWithin(stagingRoot_, path) || QFileInfo(path).size() != file.bytes
-            || hashFile(path) != file.sha256) {
+            || hashFile(path, canceled.get()) != file.sha256) {
             *error = QStringLiteral("Extracted Runtime payload failed size/SHA verification"); return false;
         }
     }
@@ -732,11 +827,49 @@ bool VoiceCloneRuntimePackageManager::commit(QString* error)
     return VoiceClonePackageManager::commitStagingDirectory(stagingRoot_, targetRoot_, error, operations);
 }
 
-VoiceCloneRuntimeResolution VoiceCloneRuntimePackageManager::resolveInstalled(
+quint64 VoiceCloneRuntimePackageManager::resolveInstalledAsync(
     const QString& runtimeId, const QString& adapterId, const QString& adapterVersion,
-    const int protocolVersion) const
+    const int protocolVersion)
+{
+    cancelInstalledResolution();
+    const quint64 requestId = ++resolutionGeneration_;
+    resolutionCanceled_ = std::make_shared<std::atomic_bool>(false);
+    const auto canceled = resolutionCanceled_;
+    auto* watcher = new QFutureWatcher<VoiceCloneRuntimeResolution>(this);
+    resolutionWatcher_ = watcher;
+    resolutionWatchers_.append(watcher);
+    connect(watcher, &QFutureWatcher<VoiceCloneRuntimeResolution>::finished, this,
+            [this, watcher, canceled, requestId] {
+        const VoiceCloneRuntimeResolution result = watcher->result();
+        if (resolutionWatcher_ == watcher) resolutionWatcher_ = nullptr;
+        resolutionWatchers_.removeAll(watcher);
+        watcher->deleteLater();
+        if (requestId != resolutionGeneration_
+            || canceled->load(std::memory_order_relaxed)) return;
+        emit installedResolved(requestId, result.root, result.error);
+    });
+    watcher->setFuture(QtConcurrent::run(
+        [this, runtimeId, adapterId, adapterVersion, protocolVersion, canceled] {
+            return resolveInstalledNow(runtimeId, adapterId, adapterVersion,
+                                       protocolVersion, canceled);
+        }));
+    return requestId;
+}
+
+void VoiceCloneRuntimePackageManager::cancelInstalledResolution()
+{
+    ++resolutionGeneration_;
+    if (resolutionCanceled_) resolutionCanceled_->store(true, std::memory_order_relaxed);
+}
+
+VoiceCloneRuntimeResolution VoiceCloneRuntimePackageManager::resolveInstalledNow(
+    const QString& runtimeId, const QString& adapterId, const QString& adapterVersion,
+    const int protocolVersion, const std::shared_ptr<std::atomic_bool>& canceled) const
 {
     VoiceCloneRuntimeResolution result;
+    if (canceled->load(std::memory_order_relaxed)) {
+        result.error = QStringLiteral("Runtime resolution canceled"); return result;
+    }
     const QString versionsRoot = QDir(runtimeRoot_).filePath(runtimeId);
     if (!isWithin(runtimeRoot_, versionsRoot) || hasReparseAncestor(versionsRoot)) {
         result.error = QStringLiteral("Installed Runtime root is unsafe"); return result;
@@ -744,8 +877,16 @@ VoiceCloneRuntimeResolution VoiceCloneRuntimePackageManager::resolveInstalled(
     const QFileInfoList versions = QDir(versionsRoot).entryInfoList(
         QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed);
     for (const QFileInfo& version : versions) {
+        if (canceled->load(std::memory_order_relaxed)) {
+            result.error = QStringLiteral("Runtime resolution canceled"); return result;
+        }
         QVector<QString> installedFiles;
-        if (!collectRegularTree(version.absoluteFilePath(), &installedFiles)) continue;
+        if (!collectRegularTree(version.absoluteFilePath(), &installedFiles, canceled.get())) {
+            if (canceled->load(std::memory_order_relaxed)) {
+                result.error = QStringLiteral("Runtime resolution canceled"); return result;
+            }
+            continue;
+        }
         QFile marker(QDir(version.absoluteFilePath()).filePath(QStringLiteral("agplayer-runtime.json")));
         if (!marker.open(QIODevice::ReadOnly)) continue;
         const QJsonDocument document = QJsonDocument::fromJson(marker.readAll());
@@ -762,10 +903,13 @@ VoiceCloneRuntimeResolution VoiceCloneRuntimePackageManager::resolveInstalled(
         QSet<QString> expected{QStringLiteral("agplayer-runtime.json")};
         bool valid = true;
         for (const auto& file : manifest.files) {
+            if (canceled->load(std::memory_order_relaxed)) {
+                result.error = QStringLiteral("Runtime resolution canceled"); return result;
+            }
             expected.insert(file.relativePath.toLower());
             const QString path = QDir(version.absoluteFilePath()).filePath(file.relativePath);
             if (!isWithin(version.absoluteFilePath(), path) || QFileInfo(path).size() != file.bytes
-                || hashFile(path) != file.sha256) { valid = false; break; }
+                || hashFile(path, canceled.get()) != file.sha256) { valid = false; break; }
         }
         if (!valid || actual != expected) continue;
         result.root = absoluteNormalized(version.absoluteFilePath());
@@ -791,6 +935,8 @@ bool VoiceCloneRuntimePackageManager::pause()
 void VoiceCloneRuntimePackageManager::cancel()
 {
     ++generation_;
+    if (verificationCanceled_) verificationCanceled_->store(true, std::memory_order_relaxed);
+    cancelInstalledResolution();
     if (reply_ != nullptr) reply_->abort();
     closeReply();
     archive_.close();
@@ -800,6 +946,7 @@ void VoiceCloneRuntimePackageManager::cancel()
 bool VoiceCloneRuntimePackageManager::retry()
 {
     if (state_ != Paused && state_ != Failed && state_ != Canceled) return false;
+    if (verificationWatcher_ != nullptr && !verificationWatcher_->isFinished()) return false;
     start(manifest_);
     return state_ != Failed;
 }
@@ -816,6 +963,7 @@ void VoiceCloneRuntimePackageManager::closeReply()
 void VoiceCloneRuntimePackageManager::fail(const QString& error)
 {
     ++generation_;
+    if (verificationCanceled_) verificationCanceled_->store(true, std::memory_order_relaxed);
     if (reply_ != nullptr) reply_->abort();
     closeReply();
     archive_.close();

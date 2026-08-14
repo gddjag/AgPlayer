@@ -3,6 +3,7 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -200,6 +201,20 @@ private:
     bool sawRange_ = false;
 };
 
+bool awaitInstalledResolution(VoiceCloneRuntimePackageManager* manager,
+                              const QString& runtimeId,
+                              VoiceCloneRuntimeResolution* result)
+{
+    QSignalSpy resolved(manager, &VoiceCloneRuntimePackageManager::installedResolved);
+    const quint64 requestId = manager->resolveInstalledAsync(
+        runtimeId, QStringLiteral("qwen"), QStringLiteral("1.0.0"), 1);
+    if (requestId == 0 || !resolved.wait(10000) || resolved.count() != 1
+        || resolved.at(0).at(0).toULongLong() != requestId) return false;
+    result->root = resolved.at(0).at(1).toString();
+    result->error = resolved.at(0).at(2).toString();
+    return true;
+}
+
 }
 
 class VoiceCloneRuntimePackageTest final : public QObject {
@@ -211,6 +226,8 @@ private slots:
     void productionPolicyRejectsSignedLookingMetadataWithoutVerification();
     void strictManifestRejectsWrongCompatibilityAndUnsignedProduction();
     void acceptsWindowsSafeSpacesAndRejectsUnsafeCharacters();
+    void resolvesInstalledAsynchronouslyWithoutBlockingHeartbeat();
+    void cancelsVerificationWithoutStaleCommit();
     void downloadsVerifiesExtractsAndCommitsStoredZip();
     void rejectsCorruptArchiveAndTraversalWithoutReplacingInstalledRuntime();
     void rejectsZipSymlinkBeforeExtraction();
@@ -221,6 +238,77 @@ private slots:
     void disabledFeedIsHonestAndContainsNoFakeRelease();
     void failedAtomicSwapRestoresPreviousRuntime();
 };
+
+void VoiceCloneRuntimePackageTest::resolvesInstalledAsynchronouslyWithoutBlockingHeartbeat()
+{
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const QByteArray payload(16 * 1024 * 1024, 'r');
+    const QByteArray archive("fixture-archive");
+    QJsonObject object = manifestObject(QUrl(QStringLiteral("http://127.0.0.1/fixture")),
+                                        archive, payload);
+    const QString versionRoot = QDir(root.path()).filePath(QStringLiteral("qwen-shared/1.0.0"));
+    QVERIFY(QDir().mkpath(versionRoot));
+    QFile runtime(QDir(versionRoot).filePath(QStringLiteral("python.exe")));
+    QVERIFY(runtime.open(QIODevice::WriteOnly));
+    QCOMPARE(runtime.write(payload), payload.size());
+    runtime.close();
+    QFile marker(QDir(versionRoot).filePath(QStringLiteral("agplayer-runtime.json")));
+    QVERIFY(marker.open(QIODevice::WriteOnly));
+    QVERIFY(marker.write(QJsonDocument(object).toJson()) > 0);
+    marker.close();
+
+    VoiceCloneRuntimePackageManager manager(root.path(),
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    QSignalSpy resolved(&manager, &VoiceCloneRuntimePackageManager::installedResolved);
+    int heartbeats = 0;
+    QTimer heartbeat;
+    heartbeat.setInterval(1);
+    connect(&heartbeat, &QTimer::timeout, this, [&heartbeats] { ++heartbeats; });
+    heartbeat.start();
+    QElapsedTimer elapsed;
+    elapsed.start();
+    const quint64 requestId = manager.resolveInstalledAsync(
+        QStringLiteral("qwen-shared"), QStringLiteral("qwen"), QStringLiteral("1.0.0"), 1);
+    QVERIFY(requestId > 0);
+    QVERIFY2(elapsed.elapsed() < 50, "resolveInstalledAsync blocked its caller");
+    QTRY_COMPARE_WITH_TIMEOUT(resolved.count(), 1, 10000);
+    QCOMPARE(resolved.at(0).at(0).toULongLong(), requestId);
+    QCOMPARE(resolved.at(0).at(1).toString(), QDir::fromNativeSeparators(versionRoot));
+    QVERIFY(resolved.at(0).at(2).toString().isEmpty());
+    QVERIFY2(heartbeats > 0, "UI heartbeat did not run while installed Runtime was hashed");
+}
+
+void VoiceCloneRuntimePackageTest::cancelsVerificationWithoutStaleCommit()
+{
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const QByteArray payload(8 * 1024 * 1024, 'v');
+    const QByteArray archive = storedZip({{QByteArray("python.exe"), payload}});
+    HttpArchiveServer server(archive);
+    const auto manifest = VoiceCloneRuntimePackageManifest::fromJson(
+        manifestObject(server.url(), archive, payload),
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    VoiceCloneRuntimePackageManager manager(root.path(),
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    int heartbeats = 0;
+    QTimer heartbeat;
+    heartbeat.setInterval(1);
+    connect(&heartbeat, &QTimer::timeout, this, [&heartbeats] { ++heartbeats; });
+    connect(&manager, &VoiceCloneRuntimePackageManager::stateChanged, this, [&manager] {
+        if (manager.state() == VoiceCloneRuntimePackageManager::Verifying)
+            QTimer::singleShot(0, &manager, &VoiceCloneRuntimePackageManager::cancel);
+    });
+    heartbeat.start();
+    manager.start(manifest);
+    QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceCloneRuntimePackageManager::Canceled, 10000);
+    QTest::qWait(250);
+    QCOMPARE(manager.state(), VoiceCloneRuntimePackageManager::Canceled);
+    QVERIFY(heartbeats > 0);
+    QVERIFY(!QFileInfo::exists(QDir(root.path()).filePath(QStringLiteral("qwen-shared/1.0.0"))));
+    QVERIFY(!QFileInfo::exists(QDir(root.path()).filePath(
+        QStringLiteral("qwen-shared/.runtime-qwen-1.0.0.staging"))));
+}
 
 void VoiceCloneRuntimePackageTest::acceptsWindowsSafeSpacesAndRejectsUnsafeCharacters()
 {
@@ -411,8 +499,8 @@ void VoiceCloneRuntimePackageTest::downloadsVerifiesExtractsAndCommitsStoredZip(
     QFile installed(QDir(root.path()).filePath(QStringLiteral("qwen-shared/1.0.0/python.exe")));
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), payload);
-    const auto resolution = manager.resolveInstalled(
-        QStringLiteral("qwen-shared"), QStringLiteral("qwen"), QStringLiteral("1.0.0"), 1);
+    VoiceCloneRuntimeResolution resolution;
+    QVERIFY(awaitInstalledResolution(&manager, QStringLiteral("qwen-shared"), &resolution));
     QVERIFY2(resolution.isValid(), qPrintable(resolution.error));
 }
 
@@ -628,8 +716,8 @@ void VoiceCloneRuntimePackageTest::resumesPartialAndRejectsUnsafeInstalledFolder
         {QStringLiteral("/d"), QStringLiteral("/c"), QStringLiteral("mklink"),
          QStringLiteral("/J"), QDir::toNativeSeparators(junction),
          QDir::toNativeSeparators(external)}) == 0);
-    const auto unsafe = manager.resolveInstalled(QStringLiteral("qwen-shared"), QStringLiteral("qwen"),
-                                                  QStringLiteral("1.0.0"), 1);
+    VoiceCloneRuntimeResolution unsafe;
+    QVERIFY(awaitInstalledResolution(&manager, QStringLiteral("qwen-shared"), &unsafe));
     QVERIFY(unsafe.isValid());
     QVERIFY(unsafe.root.endsWith(QStringLiteral("/qwen-shared/1.0.0")));
 #endif

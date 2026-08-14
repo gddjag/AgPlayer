@@ -147,6 +147,10 @@ private:
     void setActivation(const QString& state, const QString& message = {});
     void setDownloadPhase(const QString& phase);
     bool startPendingModelDownload();
+    bool startPendingRuntimeDownload();
+    bool launchWorker();
+
+    enum class PendingRuntimeAction { None, DownloadModel, StartWorker };
 
     QString pluginRoot_;
     QString modelsRoot_;
@@ -183,6 +187,9 @@ private:
     bool modelLoaded_ = false;
     bool activationInProgress_ = false;
     bool runtimeDownloadRequired_ = false;
+    PendingRuntimeAction pendingRuntimeAction_ = PendingRuntimeAction::None;
+    quint64 pendingRuntimeResolutionId_ = 0;
+    bool runtimeResolutionCanceled_ = false;
 };
 
 } // namespace agplayer::voice_clone
