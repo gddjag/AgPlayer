@@ -199,6 +199,17 @@ try {
         'https://downloads.agplayer.cn/voice-clone#latest',
         'https://127.0.0.1/voice-clone',
         'https://example.com/voice-clone',
+        'https://example.com./voice-clone',
+        'https://downloads/voice-clone',
+        'https://test/voice-clone',
+        'https://invalid/voice-clone',
+        'https://example/voice-clone',
+        'https://-/voice-clone',
+        'https://localhost/voice-clone',
+        'https://localhost./voice-clone',
+        'https://voice.localhost/voice-clone',
+        'https://nested.voice.localhost/voice-clone',
+        'https://voice.localhost./voice-clone',
         'https://downloads.agplayer.cn/voice-clone/../private'
     )) {
         Invoke-ExpectFailure {

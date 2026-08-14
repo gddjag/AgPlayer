@@ -205,12 +205,20 @@ $publishRequested = $PSBoundParameters.ContainsKey('PublishBaseUrl')
 $publishUri = $null
 if ($publishRequested) {
     if ([string]::IsNullOrWhiteSpace($PublishBaseUrl)) { throw 'PublishBaseUrl must be a real HTTPS base URL' }
-    if (-not [Uri]::TryCreate($PublishBaseUrl, [UriKind]::Absolute, [ref]$publishUri) -or
+    if (-not [Uri]::TryCreate($PublishBaseUrl, [UriKind]::Absolute, [ref]$publishUri)) {
+        throw 'PublishBaseUrl must be a real HTTPS base URL'
+    }
+    $publishHost = $publishUri.Host.TrimEnd('.')
+    $publishHostType = [Uri]::CheckHostName($publishHost)
+    $publishHostIsIpAddress = $publishHostType -in @([UriHostNameType]::IPv4, [UriHostNameType]::IPv6)
+    if (
         $publishUri.Scheme -ne 'https' -or [string]::IsNullOrWhiteSpace($publishUri.Host) -or
         $publishUri.IsLoopback -or -not [string]::IsNullOrEmpty($publishUri.UserInfo) -or
         -not [string]::IsNullOrEmpty($publishUri.Query) -or
         -not [string]::IsNullOrEmpty($publishUri.Fragment) -or
-        $publishUri.Host -match '(?i)(^|\.)example\.(com|net|org)$|\.(invalid|example|test)$' -or
+        (-not $publishHostIsIpAddress -and $publishHost.IndexOf('.') -lt 0) -or
+        $publishHost.EndsWith('.localhost', [StringComparison]::OrdinalIgnoreCase) -or
+        $publishHost -match '(?i)(^|\.)example\.(com|net|org)$|\.(invalid|example|test)$' -or
         $PublishBaseUrl -match '(?i)(^|/)(\.\.|%2e%2e)(/|$)|%2f|%5c' -or
         [Uri]::UnescapeDataString($publishUri.AbsolutePath).Contains('\')) {
         throw 'PublishBaseUrl must be a real HTTPS base URL'
