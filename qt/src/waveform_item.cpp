@@ -212,6 +212,7 @@ void resampleValues(const std::vector<float>& values,
         std::copy(values.begin(), values.end(), result.begin());
         return;
     }
+
     if (values.size() < pointCount) {
         if (values.size() == 1U) {
             std::fill(result.begin(), result.end(), values.front());
@@ -233,13 +234,40 @@ void resampleValues(const std::vector<float>& values,
     }
 
     for (std::size_t index = 0U; index < pointCount; ++index) {
-        // Derive every boundary from the same global fraction. Distributing
-        // all remainder samples into the first buckets compresses the first
-        // part of the song and can move a mid-track beat dozens of pixels.
-        const std::size_t begin = index * values.size() / pointCount;
-        const std::size_t end = (index + 1U) * values.size() / pointCount;
-        float bucketMax = 0.0F;
-        for (std::size_t i = begin; i < end; ++i) {
+        // Use continuous source coverage per pixel.
+        // Keep real peaks when a target pixel covers multiple source buckets,
+        // use smooth linear interpolation only when the coverage is within
+        // one source bucket.
+        const double sourceStart =
+            std::min(static_cast<double>(index) * static_cast<double>(values.size())
+                         / static_cast<double>(pointCount),
+                     static_cast<double>(values.size() - 1U));
+        const double sourceEnd =
+            std::min(static_cast<double>(index + 1U)
+                         * static_cast<double>(values.size())
+                         / static_cast<double>(pointCount),
+                     static_cast<double>(values.size()));
+        const std::size_t leftBucket =
+            static_cast<std::size_t>(std::floor(sourceStart));
+        const std::size_t rightBoundary =
+            std::min(static_cast<std::size_t>(std::ceil(sourceEnd)),
+                     values.size());
+
+        if (rightBoundary <= leftBucket + 1U) {
+            const double sourcePosition = std::clamp(
+                (sourceStart + sourceEnd) * 0.5,
+                0.0, static_cast<double>(values.size() - 1U));
+            const std::size_t left = static_cast<std::size_t>(sourcePosition);
+            const std::size_t right = std::min(left + 1U, values.size() - 1U);
+            const double fraction = sourcePosition - static_cast<double>(left);
+            result[index] = static_cast<float>(values[left]
+                                               + (values[right] - values[left])
+                                                     * fraction);
+            continue;
+        }
+
+        float bucketMax = values[leftBucket];
+        for (std::size_t i = leftBucket + 1U; i < rightBoundary; ++i) {
             bucketMax = std::max(bucketMax, values[i]);
         }
         result[index] = bucketMax;
