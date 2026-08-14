@@ -23,7 +23,9 @@
 #include "waveform_item.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
+#include "voice_clone/voice_clone_host_controller.hpp"
 
+#include <QCoreApplication>
 #include <qqml.h>
 
 void register_agplayer_qml_types(LibraryModel* library,
@@ -41,6 +43,8 @@ void register_agplayer_qml_types(LibraryModel* library,
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
+    static VoiceCloneHostController* voiceCloneHost =
+        new VoiceCloneHostController(QCoreApplication::instance());
     PlaylistModel* const playlists = playlistModel != nullptr
         ? playlistModel : &fallbackPlaylistModel;
     qmlRegisterSingletonType<AudioPreviewController>(
@@ -77,6 +81,8 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "EqualizerController",
                                  equalizer != nullptr ? equalizer
                                                       : &fallbackEqualizer);
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                 "VoiceCloneHostController", voiceCloneHost);
     if (waveformProvider != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", waveformProvider);
     }

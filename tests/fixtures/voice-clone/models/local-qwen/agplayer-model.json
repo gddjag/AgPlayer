@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "stableId": "local/qwen-demo",
+  "displayName": "Local Qwen demo",
+  "adapterId": "qwen",
+  "runtimeId": "qwen",
+  "revision": "2026.08.13",
+  "source": {
+    "provider": "Hugging Face",
+    "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+  },
+  "license": {
+    "name": "Apache-2.0",
+    "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+  },
+  "files": [
+    {
+      "path": "config.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "model.safetensors",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

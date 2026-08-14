@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "adapterId": "indextts25",
+  "adapterVersion": "1.0.0",
+  "protocolVersion": 1,
+  "runtime": { "id": "indextts25-isolated", "root": "runtimes/indextts25", "shared": false },
+  "defaultLauncherId": "python-module",
+  "launchers": [
+    { "id": "python-module", "kind": "pythonModule", "path": "workers/indextts25/worker.py", "shared": false }
+  ]
+}

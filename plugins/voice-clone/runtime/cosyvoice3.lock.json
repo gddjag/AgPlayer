@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "runtimeId": "cosyvoice3-isolated",
+  "ready": true,
+  "python": {
+    "version": "3.10.11",
+    "archive": {
+      "cachePath": "downloads/python-3.10.11-embed-amd64.zip",
+      "url": "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip",
+      "sha256": "608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d"
+    }
+  },
+  "resolver": {
+    "version": "0.12.4",
+    "archive": {
+      "cachePath": "downloads/uv-x86_64-pc-windows-msvc-0.12.4.zip",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "4f3b7d63cd81fca0da5a655d973d20affca89ce6e5f9a29fd0183cc4204a7639"
+    }
+  },
+  "source": {
+    "repository": "https://github.com/FunAudioLLM/CosyVoice",
+    "revision": "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc",
+    "tree": "8a32a505b2a7bb81e4847cb658b66fa93832c3f0",
+    "cachePath": "sources/CosyVoice",
+    "installPath": "source/CosyVoice",
+    "pythonPath": "source/CosyVoice",
+    "importProbe": {
+      "module": "cosyvoice",
+      "expectedRoot": "source/CosyVoice"
+    },
+    "submodules": [
+      {
+        "repository": "https://github.com/shivammehta25/Matcha-TTS",
+        "revision": "dd9105b34bf2be2230f4aa1e4769fb586a3c824e",
+        "tree": "783c68f3aa2708135e453e3eaa0bd8a5ae3e1609",
+        "cachePath": "sources/Matcha-TTS",
+        "installPath": "source/CosyVoice/third_party/Matcha-TTS"
+      }
+    ]
+  },
+  "requirements": {
+    "path": "locks/cosyvoice3-win-x64-py310.requirements.txt",
+    "sha256": "f45233d74b6fc67a5fe4ca694f70cacede34ff287ec37c98d96995ba58371f2c",
+    "generatedFrom": "https://github.com/FunAudioLLM/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/requirements.txt",
+    "generator": "uv 0.11.29 pip compile --python-version 3.10 --python-platform x86_64-pc-windows-msvc --generate-hashes --index-strategy unsafe-best-match",
+    "inputSha256": "6619a7f7f95e6c7c23dc82471294ee168a4fc0e901ab4e123881fff71f38d94c"
+  },
+  "models": [
+    { "id": "FunAudioLLM/Fun-CosyVoice3-0.5B-2512", "revision": "29e01c4e8d000f4bcd70751be16fa94bf3d85a18" }
+  ],
+  "artifacts": [
+    { "kind": "python-archive", "cachePath": "downloads/python-3.10.11-embed-amd64.zip", "sha256": "608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d" },
+    { "kind": "resolver-archive", "cachePath": "downloads/uv-x86_64-pc-windows-msvc-0.12.4.zip", "sha256": "4f3b7d63cd81fca0da5a655d973d20affca89ce6e5f9a29fd0183cc4204a7639" },
+    { "kind": "dependency-lock", "path": "locks/cosyvoice3-win-x64-py310.requirements.txt", "sha256": "f45233d74b6fc67a5fe4ca694f70cacede34ff287ec37c98d96995ba58371f2c" },
+    { "kind": "source-tree", "cachePath": "sources/CosyVoice", "revision": "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc", "tree": "8a32a505b2a7bb81e4847cb658b66fa93832c3f0" },
+    { "kind": "source-tree", "cachePath": "sources/Matcha-TTS", "revision": "dd9105b34bf2be2230f4aa1e4769fb586a3c824e", "tree": "783c68f3aa2708135e453e3eaa0bd8a5ae3e1609" }
+  ],
+  "notices": [
+    {
+      "name": "CosyVoice",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/FunAudioLLM/CosyVoice",
+      "sourceLicensePath": "LICENSE"
+    },
+    {
+      "name": "Matcha-TTS",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/shivammehta25/Matcha-TTS",
+      "sourceLicensePath": "LICENSE",
+      "sourceRef": "submodules[0]"
+    }
+  ],
+  "unresolved": []
+}

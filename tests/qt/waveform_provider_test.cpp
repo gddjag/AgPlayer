@@ -4,6 +4,7 @@
 
 #include <QFile>
 #include <QDir>
+#include <QHash>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -29,6 +30,7 @@ private slots:
     void aggregationChangeUsesSeparateCache();
     void newerTrackSuppressesStaleAnalysisResult();
     void resultCarriesTrackIdentityAndGeneration();
+    void requestScopedLoadsCompleteIndependently();
     void prefetchTracksWarmsCacheWithoutChangingCurrentTrack();
 
 private:
@@ -363,6 +365,44 @@ void WaveformProviderTest::resultCarriesTrackIdentityAndGeneration()
     QCOMPARE(result.value(QStringLiteral("_peakCount")).toInt(),
              result.value(QStringLiteral("mix")).toList().size());
     QCOMPARE(result.value(QStringLiteral("_cacheVersion")).toInt(), 2);
+}
+
+void WaveformProviderTest::requestScopedLoadsCompleteIndependently()
+{
+    if (fixturePath_.isEmpty()) {
+        QSKIP("AGPLAYER_TEST_WAV not set");
+    }
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString referencePath =
+        tempDir.filePath(QStringLiteral("reference.wav"));
+    const QString resultPath = tempDir.filePath(QStringLiteral("result.wav"));
+    QVERIFY(QFile::copy(fixturePath_, referencePath));
+    QVERIFY(QFile::copy(fixturePath_, resultPath));
+
+    SettingsController settings;
+    settings.setCacheDirectory(tempDir.filePath(QStringLiteral("cache")));
+    WaveformProvider provider(&settings);
+    QSignalSpy spy(&provider, &WaveformProvider::requestWaveformReady);
+
+    provider.loadForRequest(QStringLiteral("voice-clone-reference"),
+                            referencePath);
+    provider.loadForRequest(QStringLiteral("voice-clone-result"), resultPath);
+
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 2, 10'000);
+    QHash<QString, QString> completedRequests;
+    for (const QList<QVariant>& arguments : spy) {
+        QCOMPARE(arguments.size(), 3);
+        completedRequests.insert(arguments.at(0).toString(),
+                                 arguments.at(1).toString());
+        QVERIFY(!arguments.at(2).toMap()
+                     .value(QStringLiteral("mix")).toList().isEmpty());
+    }
+    QCOMPARE(completedRequests.value(QStringLiteral("voice-clone-reference")),
+             referencePath);
+    QCOMPARE(completedRequests.value(QStringLiteral("voice-clone-result")),
+             resultPath);
 }
 
 void WaveformProviderTest::prefetchTracksWarmsCacheWithoutChangingCurrentTrack()

@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "runtimeId": "qwen-shared",
+  "ready": true,
+  "python": {
+    "version": "3.12.9",
+    "archive": {
+      "cachePath": "downloads/python-3.12.9-embed-amd64.zip",
+      "url": "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip",
+      "sha256": "615861fb801e8b04c847598db4e1e46e4b046295017caa37cb5486dde72b5865"
+    }
+  },
+  "resolver": {
+    "version": "0.12.4",
+    "archive": {
+      "cachePath": "downloads/uv-x86_64-pc-windows-msvc-0.12.4.zip",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "4f3b7d63cd81fca0da5a655d973d20affca89ce6e5f9a29fd0183cc4204a7639"
+    }
+  },
+  "source": {
+    "repository": "https://github.com/QwenLM/Qwen3-TTS",
+    "revision": "022e286b98fbec7e1e916cb940cdf532cd9f488e",
+    "tree": "33e4644dc5a698874fa035630d1878aa453b564c",
+    "cachePath": "sources/Qwen3-TTS",
+    "installPath": "source/Qwen3-TTS",
+    "pythonPath": "source/Qwen3-TTS",
+    "importProbe": {
+      "module": "qwen_tts",
+      "expectedRoot": "source/Qwen3-TTS"
+    }
+  },
+  "requirements": {
+    "path": "locks/qwen-win-x64-py312.requirements.txt",
+    "sha256": "54a9260d7975115a06af3a384fddcb4945425af203eb98939666c5a5073f6dd9",
+    "generatedFrom": "https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/pyproject.toml",
+    "generator": "uv 0.11.29 pip compile --python-version 3.12 --python-platform x86_64-pc-windows-msvc --generate-hashes",
+    "inputs": [
+      "transformers==4.57.3", "accelerate==1.12.0", "gradio", "librosa",
+      "torchaudio", "soundfile", "sox", "onnxruntime", "einops"
+    ]
+  },
+  "sourceOverlays": [
+    {
+      "name": "sox",
+      "version": "1.5.0",
+      "license": "BSD-3-Clause",
+      "sourceUrl": "https://pypi.org/project/sox/1.5.0/",
+      "archive": {
+        "cachePath": "downloads/sox-1.5.0.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/3d/a2/d8e0d8fd7abf509ead4a2cb0fb24e5758b5330166bf9223d5cb9f98a7e8d/sox-1.5.0.tar.gz",
+        "sha256": "12c7be5bb1f548d891fe11e82c08cf5f1a1d74e225298f60082e5aeb2469ada0",
+        "format": "tar.gz",
+        "archiveRoot": "sox-1.5.0"
+      },
+      "fileCount": 28,
+      "expandedBytes": 433271,
+      "treeSha256": "2de51b5db7ee9ea8ab1907138c21354180553ecb661e9c6831547f1c968ab508",
+      "packagePath": "sox",
+      "licensePath": "LICENSE",
+      "importProbe": {
+        "module": "sox",
+        "expectedRoot": "Lib/site-packages/sox"
+      }
+    }
+  ],
+  "nativeTools": [
+    {
+      "name": "SoX",
+      "version": "14.4.2",
+      "architecture": "x86",
+      "license": "GPL-2.0-only",
+      "sourceUrl": "https://sourceforge.net/projects/sox/files/sox/14.4.2/",
+      "archive": {
+        "cachePath": "downloads/sox-14.4.2-win32.zip",
+        "url": "https://downloads.sourceforge.net/project/sox/sox/14.4.2/sox-14.4.2-win32.zip",
+        "sha256": "8072cc147cf1a3b3713b8b97d6844bb9389e211ab9e1101e432193fad6ae6662",
+        "format": "zip",
+        "archiveRoot": "sox-14.4.2"
+      },
+      "fileCount": 25,
+      "expandedBytes": 6128308,
+      "treeSha256": "32d7b371fc7ebf8c077a906885762c45d3316c7bbc496c940697be5094498e76",
+      "installPath": ".",
+      "installFiles": [
+        "sox.exe",
+        "libflac-8.dll",
+        "libgcc_s_sjlj-1.dll",
+        "libgomp-1.dll",
+        "libid3tag-0.dll",
+        "libogg-0.dll",
+        "libpng16-16.dll",
+        "libsox-3.dll",
+        "libssp-0.dll",
+        "libvorbis-0.dll",
+        "libvorbisenc-2.dll",
+        "libvorbisfile-3.dll",
+        "libwavpack-1.dll",
+        "libwinpthread-1.dll",
+        "zlib1.dll"
+      ],
+      "licensePath": "LICENSE.GPL.txt",
+      "executable": {
+        "path": "sox.exe",
+        "sha256": "e0e3cdc4bcdfbb5b91ac8f53b024964d092f89ba90130ba74b223a1df11b5439",
+        "versionArguments": ["--version"],
+        "versionPattern": "SoX v14\\.4\\.2"
+      },
+      "smokeTest": "sox-norm",
+      "correspondingSource": {
+        "cachePath": "downloads/sox-14.4.2.tar.gz",
+        "url": "https://downloads.sourceforge.net/project/sox/sox/14.4.2/sox-14.4.2.tar.gz",
+        "sha256": "b45f598643ffbd8e363ff24d61166ccec4836fea6d3888881b8df53e3bb55f6c",
+        "installPath": "third-party/sources/sox-14.4.2.tar.gz"
+      }
+    }
+  ],
+  "dependencyLicenseFiles": [
+    {
+      "name": "flatbuffers",
+      "version": "25.12.19",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/google/flatbuffers/tree/7e163021e59cca4f8e1e35a7c828b5c6b7915953",
+      "files": [
+        {
+          "cachePath": "downloads/licenses/flatbuffers-25.12.19-LICENSE",
+          "url": "https://raw.githubusercontent.com/google/flatbuffers/7e163021e59cca4f8e1e35a7c828b5c6b7915953/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "bytes": 11358,
+          "fileName": "LICENSE"
+        }
+      ]
+    },
+    {
+      "name": "gradio-client",
+      "version": "2.5.0",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/gradio-app/gradio/tree/43f5de68579919b0632ceb6107a99c629483ea2f",
+      "files": [
+        {
+          "cachePath": "downloads/licenses/gradio-client-2.5.0-LICENSE",
+          "url": "https://raw.githubusercontent.com/gradio-app/gradio/43f5de68579919b0632ceb6107a99c629483ea2f/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "bytes": 11357,
+          "fileName": "LICENSE"
+        }
+      ]
+    },
+    {
+      "name": "onnxruntime",
+      "version": "1.28.0",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/microsoft/onnxruntime/tree/da9b5e364c465de65c49d91e696cd6485270757f",
+      "files": [
+        {
+          "cachePath": "downloads/licenses/onnxruntime-1.28.0-LICENSE",
+          "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/da9b5e364c465de65c49d91e696cd6485270757f/LICENSE",
+          "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+          "bytes": 1073,
+          "fileName": "LICENSE"
+        }
+      ]
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.22.2",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/huggingface/tokenizers/tree/f383101a26663708484cac0727792aad74f78234",
+      "files": [
+        {
+          "cachePath": "downloads/licenses/tokenizers-0.22.2-LICENSE",
+          "url": "https://raw.githubusercontent.com/huggingface/tokenizers/f383101a26663708484cac0727792aad74f78234/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "bytes": 11357,
+          "fileName": "LICENSE"
+        }
+      ]
+    }
+  ],
+  "models": [
+    { "id": "Qwen/Qwen3-TTS-12Hz-0.6B-Base", "revision": "5d83992436eae1d760afd27aff78a71d676296fc" },
+    { "id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "revision": "fd4b254389122332181a7c3db7f27e918eec64e3" }
+  ],
+  "artifacts": [
+    { "kind": "python-archive", "cachePath": "downloads/python-3.12.9-embed-amd64.zip", "sha256": "615861fb801e8b04c847598db4e1e46e4b046295017caa37cb5486dde72b5865" },
+    { "kind": "resolver-archive", "cachePath": "downloads/uv-x86_64-pc-windows-msvc-0.12.4.zip", "sha256": "4f3b7d63cd81fca0da5a655d973d20affca89ce6e5f9a29fd0183cc4204a7639" },
+    { "kind": "dependency-lock", "path": "locks/qwen-win-x64-py312.requirements.txt", "sha256": "54a9260d7975115a06af3a384fddcb4945425af203eb98939666c5a5073f6dd9" },
+    { "kind": "source-tree", "cachePath": "sources/Qwen3-TTS", "revision": "022e286b98fbec7e1e916cb940cdf532cd9f488e", "tree": "33e4644dc5a698874fa035630d1878aa453b564c" },
+    { "kind": "source-overlay", "cachePath": "downloads/sox-1.5.0.tar.gz", "sha256": "12c7be5bb1f548d891fe11e82c08cf5f1a1d74e225298f60082e5aeb2469ada0", "treeSha256": "2de51b5db7ee9ea8ab1907138c21354180553ecb661e9c6831547f1c968ab508" },
+    { "kind": "native-tool-archive", "cachePath": "downloads/sox-14.4.2-win32.zip", "sha256": "8072cc147cf1a3b3713b8b97d6844bb9389e211ab9e1101e432193fad6ae6662", "treeSha256": "32d7b371fc7ebf8c077a906885762c45d3316c7bbc496c940697be5094498e76" },
+    { "kind": "corresponding-source-archive", "cachePath": "downloads/sox-14.4.2.tar.gz", "sha256": "b45f598643ffbd8e363ff24d61166ccec4836fea6d3888881b8df53e3bb55f6c" },
+    { "kind": "dependency-license-file", "cachePath": "downloads/licenses/flatbuffers-25.12.19-LICENSE", "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30" },
+    { "kind": "dependency-license-file", "cachePath": "downloads/licenses/gradio-client-2.5.0-LICENSE", "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4" },
+    { "kind": "dependency-license-file", "cachePath": "downloads/licenses/onnxruntime-1.28.0-LICENSE", "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c" },
+    { "kind": "dependency-license-file", "cachePath": "downloads/licenses/tokenizers-0.22.2-LICENSE", "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4" }
+  ],
+  "notices": [
+    {
+      "name": "Qwen3-TTS",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/QwenLM/Qwen3-TTS",
+      "sourceLicensePath": "LICENSE"
+    }
+  ],
+  "unresolved": []
+}
