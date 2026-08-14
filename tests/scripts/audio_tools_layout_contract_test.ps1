@@ -14,6 +14,7 @@ $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEdi
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
+$appMain = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/main.cpp')
 $recordingInspector = Get-Content -Raw -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml')
 $transportBar = Get-Content -Raw -LiteralPath (
@@ -50,6 +51,15 @@ if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}La
 }
 if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*942') {
     throw 'The tools window must open at the complete reference-workbench size.'
+}
+if ($appMain -notmatch '--qa-tool\s+<0\.\.4>' -or
+    $appMain -notmatch 'requestedTool\s*<=\s*4' -or
+    $appMain -notmatch 'qaTool\s*==\s*4[\s\S]{0,180}selectToolById\(QStringLiteral\("voice-clone"\)\)') {
+    throw 'The native QA capture path must select Voice Clone through its stable tool ID.'
+}
+if ($appMain -notmatch '--qa-tools-size' -or
+    $appMain -notmatch 'toolsWin->resize\(qaToolsSize\)') {
+    throw 'The native QA capture path must support explicit responsive viewport sizes.'
 }
 if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
     throw 'The new single-track editor must not retain legacy multitrack concepts.'

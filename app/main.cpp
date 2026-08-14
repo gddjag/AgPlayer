@@ -17,6 +17,7 @@
 #include <QQuickWindow>
 #include <QQuickStyle>
 #include <QSettings>
+#include <QSize>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QStyle>
@@ -148,7 +149,8 @@ int main(int argc, char* argv[])
     //   --qa-play <path>            load + play a file through the normal path
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
-    //   --qa-tool <0..3>             choose the audio-tool screenshot page
+    //   --qa-tool <0..4>             choose the audio-tool screenshot page
+    //   --qa-tools-size <WxH>        resize the tools window before capture
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
@@ -156,6 +158,7 @@ int main(int argc, char* argv[])
     QString qaScreenshotMini;
     QString qaScreenshotTools;
     int qaTool = 0;
+    QSize qaToolsSize;
     QString qaScreenshotList;
     QString qaListCategory;
     bool qaShowTrackDetails = false;
@@ -190,8 +193,20 @@ int main(int argc, char* argv[])
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
-                if (ok && requestedTool >= 0 && requestedTool <= 3) {
+                if (ok && requestedTool >= 0 && requestedTool <= 4) {
                     qaTool = requestedTool;
+                }
+            } else if (arg == QStringLiteral("--qa-tools-size")
+                       && i + 1 < cliArgs.size()) {
+                const QStringList dimensions = cliArgs.at(++i).toLower().split('x');
+                bool widthOk = false;
+                bool heightOk = false;
+                const int width = dimensions.value(0).toInt(&widthOk);
+                const int height = dimensions.value(1).toInt(&heightOk);
+                if (dimensions.size() == 2 && widthOk && heightOk
+                    && width >= 880 && height >= 560
+                    && width <= 7680 && height <= 4320) {
+                    qaToolsSize = QSize(width, height);
                 }
             } else if (arg == QStringLiteral("--qa-screenshot-list")
                        && i + 1 < cliArgs.size()) {
@@ -611,7 +626,11 @@ int main(int argc, char* argv[])
         AudioToolsController audioTools;
         AudioEditorController audioEditor;
         if (!qaScreenshotTools.isEmpty()) {
-            audioTools.selectTool(qaTool);
+            if (qaTool == 4) {
+                audioTools.selectToolById(QStringLiteral("voice-clone"));
+            } else {
+                audioTools.selectTool(qaTool);
+            }
         }
         MetadataEditor metadataEditor;
         metadataEditor.setLibraryModel(&library);
@@ -1136,6 +1155,9 @@ int main(int argc, char* argv[])
             }
             if (wantScreenshotTools && audioToolsWindow != nullptr) {
                 if (auto* toolsWin = qobject_cast<QWindow*>(audioToolsWindow)) {
+                    if (qaToolsSize.isValid()) {
+                        toolsWin->resize(qaToolsSize);
+                    }
                     toolsWin->show();
                 }
                 if (qaTool == 2 && !qaImportFolder.isEmpty()) {

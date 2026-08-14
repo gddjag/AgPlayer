@@ -160,10 +160,32 @@ Item {
         }
     }
 
-    ColumnLayout {
+    ScrollView {
+        id: workspaceScroll
+        objectName: "voiceCloneWorkspaceScroll"
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 10
+        clip: true
+        contentWidth: availableWidth
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        ScrollBar.vertical: ScrollBar {
+            objectName: "voiceCloneWorkspaceVerticalScrollBar"
+            parent: workspaceScroll
+            anchors.top: workspaceScroll.top
+            anchors.right: workspaceScroll.right
+            anchors.bottom: workspaceScroll.bottom
+            width: 8
+            policy: ScrollBar.AsNeeded
+            active: workspaceScroll.contentHeight > workspaceScroll.availableHeight
+            visible: active
+        }
+
+        ColumnLayout {
+            id: workspaceContent
+            x: 12
+            y: 12
+            width: Math.max(0, workspaceScroll.availableWidth - 24)
+            height: Math.max(workspaceScroll.availableHeight - 24, implicitHeight)
+            spacing: 10
 
         VoiceCloneModelBar {
             id: modelBar
@@ -220,12 +242,14 @@ Item {
             }
             VoiceCloneOutputPanel {
                 id: outputPanel
+                objectName: "voiceCloneOutputPanel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 30
                 canGenerate: root.canGenerate
                 running: root.running
-                errorText: root.controller ? root.controller.errorString : ""
+                errorText: root.controller && root.controller.activationState === "error"
+                           ? root.controller.errorString : ""
                 statusText: root.activationStatusText()
                 onGenerateRequested: root.startGeneration()
                 onCancelRequested: root.cancelGeneration()
@@ -268,6 +292,7 @@ Item {
                 AudioEditorController.openFile(root.controller.resultFileUrl(path))
                 // qmllint enable unqualified
             }
+        }
         }
     }
 

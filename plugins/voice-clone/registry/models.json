@@ -4,7 +4,7 @@
     {
       "stableId": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
       "displayName": "Qwen3-TTS 0.6B Base",
-      "description": "Lightweight 10-language zero-shot voice cloning; supports rapid cloning from a short reference.",
+      "description": "轻量级 10 语种零样本人声克隆，适合用短参考音频快速试音。",
       "provider": "Qwen",
       "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
       "adapterId": "qwen",
@@ -26,7 +26,7 @@
     {
       "stableId": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
       "displayName": "Qwen3-TTS 1.7B Base",
-      "description": "Larger 10-language zero-shot voice cloning model with streaming generation support.",
+      "description": "更高质量的 10 语种零样本人声克隆，支持流式生成与低延迟配音。",
       "provider": "Qwen",
       "revision": "fd4b254389122332181a7c3db7f27e918eec64e3",
       "adapterId": "qwen",
@@ -48,7 +48,7 @@
     {
       "stableId": "IndexTeam/IndexTTS-2.5",
       "displayName": "IndexTTS 2.5",
-      "description": "Expressive five-language zero-shot voice cloning with emotion, speed, and pronunciation control.",
+      "description": "面向细腻情绪配音的 5 语种零样本人声克隆，支持情绪、语速和发音控制。",
       "provider": "IndexTeam",
       "revision": "c39ce5ba981572cb187443877ff559dfb246ce63",
       "adapterId": "indextts25",
@@ -70,7 +70,7 @@
     {
       "stableId": "FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
       "displayName": "Fun-CosyVoice3 0.5B 2512",
-      "description": "Nine-language zero-shot voice cloning with 18+ Chinese dialects and accents.",
+      "description": "支持 9 种语言及 18 种以上中文方言与口音，适合短视频口播和方言配音。",
       "provider": "FunAudioLLM",
       "revision": "29e01c4e8d000f4bcd70751be16fa94bf3d85a18",
       "adapterId": "cosyvoice3",

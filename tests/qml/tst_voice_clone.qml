@@ -238,6 +238,9 @@ TestCase {
         fakeController.downloadInProgress = false
         fakeController.licenseAcceptanceRequired = false
         fakeController.licenseIdentityValid = true
+        fakeController.errorString = ""
+        fakeController.activationState = "ready"
+        fakeController.activationMessage = "Model ready"
         fakeController.lastSelectedId = ""
         fakeHost.state = 0
         fakeHost.pluginLoaded = false
@@ -297,6 +300,38 @@ TestCase {
         mouseClick(findChild(workspace, "voiceCloneOpenModelDirectoryButton"))
         compare(fakeController.refreshCalls, 1)
         compare(fakeController.openDirectoryCalls, 1)
+    }
+
+    function test_smallViewportKeepsAllSectionsReachable() {
+        testCase.width = 1280
+        testCase.height = 720
+        wait(0)
+        const scroll = findChild(workspace, "voiceCloneWorkspaceScroll")
+        verify(scroll)
+        verify(scroll.contentHeight > scroll.availableHeight)
+        const verticalBar = findChild(workspace, "voiceCloneWorkspaceVerticalScrollBar")
+        verify(verticalBar.visible)
+        verify(verticalBar.x + verticalBar.width >= workspace.width - 12)
+        verify(findChild(workspace, "voiceCloneResultPanel"))
+        testCase.width = 1672
+        testCase.height = 942
+    }
+
+    function test_needsDownloadStateUsesLocalizedNonDuplicatedCopy() {
+        fakeController.activationState = "needs-download"
+        fakeController.errorString = "Model files are not installed or not ready; download them before activation"
+        wait(0)
+        const output = findChild(workspace, "voiceCloneOutputPanel")
+        verify(output)
+        compare(output.statusText, "模型或运行时未就绪，需要下载")
+        compare(output.errorText, "")
+        compare(findChild(workspace, "voiceCloneModelInstallState3").text,
+                "FunAudioLLM  ·  未下载")
+    }
+
+    function test_modelCapabilitiesUseChineseProductCopy() {
+        compare(findChild(workspace, "voiceCloneCapabilitySummary").text,
+                "人声克隆  ·  多语言")
     }
 
     function test_realPluginHostLoadsWorkspaceAndClickedModelBecomesReady() {

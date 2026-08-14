@@ -42,6 +42,45 @@
 
 final result: passed
 
+## Voice Clone Plugin — 2026-08-14
+
+**Source visual truth**
+
+- `C:\Users\Administrator\Desktop\音视频播放器\未开发\人声克隆.png` (actual pixels: 1672 x 941)
+
+**Implementation evidence**
+
+- `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\final-1672x942.png`
+- Same-size comparison: `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\comparison-final-3344x941.png` (the implementation is cropped by one bottom pixel only)
+- Focused header/model comparison: `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\comparison-final-top-3344x280.png`
+- Responsive captures: `final-1280x720.png`, `final-1920x1080.png`, and `final-3840x2160.png` in the same QA directory.
+- Windows scaling captures: `final-1672x942-scale125.png` and `final-1672x942-scale15.png`; host `AppliedDPI=96` (100%) was also recorded.
+- State: Chinese, dark theme, real native plugin loaded, official four-model registry present, Qwen3-TTS 0.6B selected, no model installed.
+- Capture method: the native application's built-in `--qa-tool 4 --qa-screenshot-tools` path. Browser capture is not available for a Qt native window; no browser evidence is claimed.
+
+**Findings**
+
+- No actionable visual P0/P1/P2 remains. The 1280 x 720 layout now exposes a right-edge vertical scrollbar and keeps all five sections reachable; 1672, 1920, 4K, 125%, and 150% captures have no overlap or horizontal clipping.
+- Fonts and typography use the existing AG Player Qt/Windows tokens. They are denser than the reference but preserve section, label, action, and disabled-state hierarchy. P3 only.
+- Spacing follows the reference's model/workbench/parameters/result hierarchy. At 4K the three workbench panels expand rather than inventing a fixed-width shell; this preserves usable audio/text work areas. P3 only.
+- Colors keep the AG Player navy surface, blue selection/action semantics, muted unavailable states, and high-contrast Chinese text.
+- Icons reuse the project icon font. No raster imitation or fake waveform was introduced.
+- Copy is Chinese-first. Raw worker errors are suppressed in the expected not-downloaded state; model capabilities and install states are localized.
+- Approved source deviations are product-driven: the fixed model dropdown becomes four data-driven cards for future registry-only model additions, and the populated reference/result waveform is replaced by truthful empty states until real files exist.
+
+**Comparison history**
+
+- Pass 1: the 1280 viewport clipped the result section, the expected not-downloaded state repeated raw English errors, and registry capabilities/descriptions leaked implementation-facing English.
+- Pass 2: responsive scrolling and localized product copy were added; the scrollbar thumb appeared at the wrong edge.
+- Final: the right-edge scrollbar geometry is contract-tested and the complete resolution/scaling matrix was visually inspected at original pixels.
+
+**Primary interactions tested**
+
+- Stable ID selection of the voice-clone tool, deterministic QA window sizing, model-card selection, download-required state, capability copy, and small-viewport reachability.
+- This report is visual acceptance only; real model inference, playback, save, and send-to-editor evidence is tracked separately.
+
+final result: passed
+
 ## Audio Editor V2 — 2026-08-13
 
 **Source visual truth**

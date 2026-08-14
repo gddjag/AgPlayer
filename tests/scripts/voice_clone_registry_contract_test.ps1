@@ -125,6 +125,7 @@ $registry = Get-Content -LiteralPath $modelRegistryPath -Raw -Encoding utf8 | Co
 Assert-True (@($registry.models).Count -eq 4) 'Product Registry must contain exactly four approved models'
 foreach ($model in @($registry.models)) {
     Assert-True ($model.revision -match $revisionPattern) "Product Registry model $($model.stableId) is not pinned"
+    Assert-True ($model.description -match '[\u4e00-\u9fff]') "Product Registry model $($model.stableId) needs a Chinese-first product introduction"
     $download = Get-Content -LiteralPath (Join-Path $downloadRoot (($expected.GetEnumerator() | Where-Object { $_.Value.ModelId -ceq $model.stableId }).Key)) -Raw -Encoding utf8 | ConvertFrom-Json
     Assert-True ($model.revision -ceq $download.revision) "Product Registry and download manifest revision differ for $($model.stableId)"
     Assert-True ($model.license.url -ceq $download.licenses[0].url) "Product Registry and download manifest license URL differ for $($model.stableId)"

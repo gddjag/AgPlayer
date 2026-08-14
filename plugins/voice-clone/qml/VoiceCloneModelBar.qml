@@ -34,6 +34,23 @@ Rectangle {
     signal openDirectoryRequested()
     signal licenseAcceptanceRequested()
 
+    function installStateText(state) {
+        if (state === "ready") return qsTr("已安装")
+        if (state === "local-unverified") return qsTr("本地模型")
+        return qsTr("未下载")
+    }
+
+    function capabilityText(capability) {
+        switch (capability) {
+        case "voice-clone": return qsTr("人声克隆")
+        case "multilingual": return qsTr("多语言")
+        case "higher-quality": return qsTr("高质量")
+        case "expressive": return qsTr("情感控制")
+        case "chinese-dialects": return qsTr("中文方言")
+        default: return capability
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 10
@@ -70,9 +87,10 @@ Rectangle {
                             font.weight: Font.DemiBold
                         }
                         Label {
+                            objectName: "voiceCloneModelInstallState" + modelCard.index
                             Layout.fillWidth: true
                             text: (modelCard.modelData.provider || "") + "  ·  "
-                                  + (modelCard.modelData.installState || qsTr("未知状态"))
+                                  + root.installStateText(modelCard.modelData.installState || "")
                             elide: Text.ElideRight
                             color: modelCard.modelData.installState === "ready"
                                    ? Theme.waveformGreen : Theme.secondaryText
@@ -107,8 +125,10 @@ Rectangle {
                     font.pixelSize: 12
                 }
                 Label {
+                    objectName: "voiceCloneCapabilitySummary"
                     Layout.fillWidth: true
-                    text: (root.selectedModel.capabilityPreview || []).join("  ·  ")
+                    text: (root.selectedModel.capabilityPreview || []).map(
+                              capability => root.capabilityText(capability)).join("  ·  ")
                     color: Theme.secondaryText
                     elide: Text.ElideRight
                     font.pixelSize: 11
