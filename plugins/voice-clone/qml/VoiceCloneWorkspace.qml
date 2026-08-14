@@ -80,10 +80,6 @@ Item {
         return row ? row.checkboxItem : null
     }
 
-    function modelCardForStableId(stableId) {
-        return modelBar.cardForStableId(stableId)
-    }
-
     function activationStatusText() {
         if (!controller) return ""
         switch (controller.activationState) {
@@ -119,15 +115,8 @@ Item {
         const current = controller.models[index] || ({})
         const resolvedStableId = stableId || current.stableId || ""
         if (resolvedStableId === "") return
-        let resolvedIndex = index
-        for (let modelIndex = 0; modelIndex < modelCount; ++modelIndex) {
-            if (controller.models[modelIndex].stableId === resolvedStableId) {
-                resolvedIndex = modelIndex
-                break
-            }
-        }
         activeRequestId = ""
-        selectedModelIndex = resolvedIndex
+        selectedModelIndex = index
         resetParameterDefaults()
         if (controller.activateModel) controller.activateModel(resolvedStableId)
     }

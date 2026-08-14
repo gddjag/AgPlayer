@@ -367,9 +367,8 @@ TestCase {
                     { target: realVoiceCloneHost.pluginController })
         verify(activationSpy)
         activationSpy.clear()
-        const installedId = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
         wait(100)
-        const installedCard = loader.item.modelCardForStableId(installedId)
+        const installedCard = findChild(loader.item, "voiceCloneModelCard0")
         verify(installedCard)
         mouseClick(installedCard)
         verify(activationSpy.count >= 1)
@@ -388,8 +387,8 @@ TestCase {
             }
         }
         verify(missingIndex >= 0)
-        const missingCard = loader.item.modelCardForStableId(
-                    "Qwen/Qwen3-TTS-12Hz-1.7B-Base")
+        const missingCard = findChild(
+                    loader.item, "voiceCloneModelCard" + missingIndex)
         verify(missingCard)
         mouseClick(missingCard)
         tryCompare(realVoiceCloneHost.pluginController, "activationState", "needs-download")
@@ -539,7 +538,6 @@ TestCase {
         fakeController.generationFinished("request-1", specialAudioFixturePath())
         tryCompare(resultPanel, "hasResult", true)
         tryCompare(resultPanel, "waveformReady", true, 5000)
-        referencePanel.loadWaveform()
         tryCompare(referencePanel, "waveformReady", true, 5000)
         mouseClick(referencePlayButton)
         tryCompare(AudioPreviewController, "hasSource", true)

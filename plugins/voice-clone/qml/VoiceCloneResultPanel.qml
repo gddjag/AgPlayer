@@ -13,6 +13,7 @@ Rectangle {
     implicitHeight: 190
 
     property string resultPath: ""
+    property string waveformRequestId: ""
     property string previousResultPath: ""
     property url resultUrl: ""
     property var waveformLayers: ({})
@@ -52,10 +53,12 @@ Rectangle {
     }
 
     function loadWaveform() {
+        WaveformProvider.cancelRequest(root.waveformRequestId)
         root.waveformLayers = ({})
         root.waveformDurationMs = 0
         if (root.resultPath !== "")
-            WaveformProvider.loadForTrack(root.resultPath)
+            WaveformProvider.loadForRequest(root.waveformRequestId,
+                                            root.resultPath)
     }
 
     onResultPathChanged: {
@@ -175,7 +178,7 @@ Rectangle {
                                   ? root.waveformDurationMs
                                   : (root.previewingThis
                                      ? AudioPreviewController.durationMs : 0)
-                        analysisProgress: WaveformProvider.analysisProgress
+                        analysisProgress: root.waveformReady ? 1 : 0
                         baseColor: Theme.waveformViolet
                         progressColor: Theme.waveformCyan
                         gradientStartColor: Theme.waveformCyan
@@ -204,8 +207,9 @@ Rectangle {
 
     Connections {
         target: WaveformProvider
-        function onWaveformReady(path, layers) {
-            if (!root.sameLocalPath(path, root.resultPath))
+        function onRequestWaveformReady(requestId, path, layers) {
+            if (requestId !== root.waveformRequestId
+                    || !root.sameLocalPath(path, root.resultPath))
                 return
             root.waveformLayers = {
                 mix: layers.mix || [],
@@ -219,10 +223,13 @@ Rectangle {
     }
 
     Component.onCompleted: {
+        root.waveformRequestId = root.objectName + ":" + String(root)
         root.previousResultPath = root.resultPath
         root.loadWaveform()
     }
     Component.onDestruction: {
+        if (root.waveformRequestId !== "")
+            WaveformProvider.cancelRequest(root.waveformRequestId)
         if (AudioPreviewController.isCurrentSource(root.resultUrl))
             AudioPreviewController.stop()
     }
