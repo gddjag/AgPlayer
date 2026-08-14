@@ -6,8 +6,8 @@ import AgPlayer
 Rectangle {
     id: root
     property var converter
-    color: "#0b1721"
-    border.color: "#203340"
+    color: Theme.panel
+    border.color: Theme.border
     radius: 6
     clip: true
 
@@ -23,7 +23,7 @@ Rectangle {
             Layout.preferredHeight: 44
             Layout.leftMargin: 18
             spacing: 12
-            Text { text: qsTr("任务列表"); color: "#eef3f6"; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
             Repeater {
                 model: [
                     { key: "All", text: qsTr("全部"), count: converter.fileCount },
@@ -40,13 +40,13 @@ Rectangle {
                              || (modelData.key === "All" && converter.filteredTaskModel.statusFilter === "")
                     onClicked: converter.filteredTaskModel.statusFilter = modelData.key
                     background: Rectangle {
-                        color: parent.checked ? "#0c63c8" : "#0c1821"
-                        border.color: parent.checked ? "#1688ff" : "#203340"
+                        color: parent.checked ? Theme.accent : Theme.elevated
+                        border.color: parent.checked ? Theme.accent : Theme.border
                         radius: 5
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: parent.checked ? "#ffffff" : "#c9d2d8"
+                        color: parent.checked ? Theme.accentText : Theme.secondaryText
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 13
@@ -59,7 +59,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            color: "#101e28"
+            color: Theme.elevated
             Row {
                 anchors.fill: parent
                 Repeater {
@@ -80,7 +80,7 @@ Rectangle {
                             anchors.leftMargin: 10
                             verticalAlignment: Text.AlignVCenter
                             text: modelData
-                            color: "#aeb9c1"
+                            color: Theme.secondaryText
                             font.pixelSize: 13
                         }
                     }
@@ -99,8 +99,8 @@ Rectangle {
             delegate: Rectangle {
                 implicitWidth: root.columnWidths[column]
                 implicitHeight: 44
-                color: row % 2 ? "#0d1a24" : "#0a1720"
-                border.color: "#172a36"
+                color: row % 2 ? Theme.elevated : Theme.background
+                border.color: Theme.border
                 border.width: 1
 
                 CheckBox {
@@ -126,10 +126,10 @@ Rectangle {
                         : model.status === "Done" ? qsTr("已完成")
                         : model.status === "Error" ? qsTr("失败")
                         : model.status === "Cancelled" ? qsTr("已取消") : qsTr("就绪")
-                    color: column === 7 && model.status === "Done" ? "#19c37d"
-                         : column === 7 && model.status === "Error" ? "#ff4d4f"
-                         : column === 7 && model.status === "Converting" ? "#1688ff"
-                         : "#c9d2d8"
+                    color: column === 7 && model.status === "Done" ? Theme.waveformGreen
+                         : column === 7 && model.status === "Error" ? Theme.waveformRed
+                         : column === 7 && model.status === "Converting" ? Theme.accent
+                         : Theme.secondaryText
                     font.pixelSize: 13
                 }
                 ProgressBar {
@@ -141,17 +141,17 @@ Rectangle {
                     anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
                     value: model.progress
-                    background: Rectangle { implicitHeight: 8; color: "#20303b"; radius: 4 }
-                    contentItem: Item {
-                        implicitHeight: 8
-                        Rectangle {
-                            width: rowProgress.visualPosition * parent.width
-                            height: parent.height
-                            radius: 4
-                            color: model.status === "Done" ? "#19c37d" : "#1688ff"
+                    background: Rectangle { implicitHeight: 8; color: Theme.border; radius: 4 }
+                            contentItem: Item {
+                                implicitHeight: 8
+                                Rectangle {
+                                    width: rowProgress.visualPosition * parent.width
+                                    height: parent.height
+                                    radius: 4
+                                    color: model.status === "Done" ? Theme.waveformGreen : Theme.accent
+                                }
+                            }
                         }
-                    }
-                }
                 Text {
                     id: percent
                     visible: column === 8
@@ -160,7 +160,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 40
                     text: Math.round(model.progress * 100) + "%"
-                    color: "#c9d2d8"
+                    color: Theme.secondaryText
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }
@@ -172,7 +172,7 @@ Rectangle {
             Layout.leftMargin: 18
             verticalAlignment: Text.AlignVCenter
             text: qsTr("共 %1 个任务 / 已选择 %2 个").arg(converter.fileCount).arg(converter.checkedCount)
-            color: "#91a0aa"
+            color: Theme.secondaryText
             font.pixelSize: 12
         }
     }

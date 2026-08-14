@@ -270,7 +270,7 @@ Rectangle {
     Connections {
         target: AudioEditorController
         function onOpenRequested() { openDialog.open() }
-        function onNewRecordingRequested() { recordingInspector.requestRecording(true) }
+        function onNewRecordingRequested() { recordingInspector.requestRecording(true, true) }
         function onSaveAsRequested() { saveDialog.open() }
         function onExportRequested() {
             exportRangeBox.currentIndex = 0
@@ -278,6 +278,12 @@ Rectangle {
         }
         function onMoreMenuRequested() { moreMenu.popup() }
         function onDiscardConfirmationRequested() { discardOpenDialog.open() }
+    }
+
+    Shortcut {
+        sequence: "Space"
+        context: Qt.ApplicationShortcut
+        onActivated: AudioEditorController.playPause()
     }
 
     focus: true
@@ -306,7 +312,6 @@ Rectangle {
         else if (control && event.key === Qt.Key_Left) AudioEditorController.seekPreviousMarker()
         else if (control && event.key === Qt.Key_Right) AudioEditorController.seekNextMarker()
         else if (event.key === Qt.Key_Delete) AudioEditorController.triggerAction("editor.deleteSelection")
-        else if (event.key === Qt.Key_Space) AudioEditorController.playPause()
         else if (event.key === Qt.Key_Left) AudioEditorController.seekMs(
             Math.max(0, AudioEditorController.positionMs - (shift ? 1000 : 10)))
         else if (event.key === Qt.Key_Right) AudioEditorController.seekMs(
@@ -394,7 +399,7 @@ Rectangle {
                     objectName: "editorTransportBar"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 104
-                    onRecordingRequested: recordingInspector.requestRecording(false)
+                    onRecordingRequested: function(autoStart) { recordingInspector.requestRecording(false, autoStart) }
                 }
             }
 

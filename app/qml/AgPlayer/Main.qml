@@ -16,7 +16,9 @@ ApplicationWindow {
         close.accepted = false
         WindowController.requestClose()
     }
-    flags: Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.FramelessWindowHint
+    showInTaskbar: true
+    icon: "qrc:/qt/qml/AgPlayer/assets/brand/agplayer.ico"
     color: "transparent"
     background: null
     title: "AgPlayer"

@@ -21,6 +21,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/heart-outline.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/information-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/list-unordered.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg

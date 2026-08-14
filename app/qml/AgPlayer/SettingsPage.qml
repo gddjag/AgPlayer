@@ -1773,7 +1773,7 @@ Item {
 
                 SettingRow {
                     label: qsTr("RGB显示区域")
-                    visible: SettingsController.waveformMode === 1
+                    visible: SettingsController.waveformMode !== 0
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [

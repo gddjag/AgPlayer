@@ -20,9 +20,18 @@ Rectangle {
             + ratio * AudioEditorController.viewport.visibleFrameCount)
     }
     function xAtFrame(frame) {
-        return 26 + (waveArea.width - 38)
-            * (frame - AudioEditorController.viewport.visibleStartFrame)
+        const ratio = (frame - AudioEditorController.viewport.visibleStartFrame)
             / Math.max(1, AudioEditorController.viewport.visibleFrameCount)
+        return 26 + (waveArea.width - 38)
+            * Math.max(0, Math.min(1, ratio))
+    }
+    function playbackFrame() {
+        const sampleRate = Math.max(
+            1,
+            AudioEditorController.sampleRate > 0
+                ? AudioEditorController.sampleRate
+                : AudioEditorController.recordingSampleRate)
+        return AudioEditorController.positionMs * sampleRate / 1000
     }
     function timeText(frame) {
         if (AudioEditorController.sampleRate <= 0)
@@ -99,16 +108,19 @@ Rectangle {
                 channelPeaks: AudioEditorController.channelPeaks
                 waveformColor: Theme.isLight ? "#169B97" : "#39C7C0"
                 visibleStartRatio: AudioEditorController.viewport.overviewStartRatio
-                visibleEndRatio: AudioEditorController.viewport.overviewStartRatio
-                    + AudioEditorController.viewport.overviewWidthRatio
+                visibleEndRatio: Math.min(1,
+                    AudioEditorController.viewport.overviewStartRatio
+                    + AudioEditorController.viewport.overviewWidthRatio)
+                visible: AudioEditorController.hasDocument || AudioEditorController.recording
             }
 
             Rectangle {
                 visible: AudioEditorController.selectionStart >= 0
                 x: canvas.xAtFrame(AudioEditorController.selectionStart)
-                width: (waveArea.width - 38)
+                width: Math.max(0, Math.min(waveArea.width - 38,
+                       (waveArea.width - 38)
                        * AudioEditorController.selectionFrames
-                       / Math.max(1, AudioEditorController.viewport.visibleFrameCount)
+                       / Math.max(1, AudioEditorController.viewport.visibleFrameCount)))
                 anchors.top: parent.top
                 anchors.topMargin: 10
                 anchors.bottom: parent.bottom
@@ -154,12 +166,11 @@ Rectangle {
             }
 
             Rectangle {
-                x: canvas.xAtFrame(AudioEditorController.positionMs
-                    * AudioEditorController.sampleRate / 1000)
-                visible: AudioEditorController.hasDocument
-                    && AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000
+                x: canvas.xAtFrame(playbackFrame())
+                visible: (AudioEditorController.hasDocument || AudioEditorController.recording)
+                    && playbackFrame()
                         >= AudioEditorController.viewport.visibleStartFrame
-                    && AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000
+                    && playbackFrame()
                         <= AudioEditorController.viewport.visibleEndFrame
                 y: 4
                 width: 1
@@ -168,7 +179,7 @@ Rectangle {
             }
 
             Text {
-                visible: !AudioEditorController.hasDocument
+                visible: !AudioEditorController.hasDocument && !AudioEditorController.recording
                 anchors.centerIn: parent
                 text: qsTr("打开音频或新建录音以开始编辑")
                 color: Theme.secondaryText

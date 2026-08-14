@@ -12,7 +12,9 @@ Window {
     minimumWidth: 588
     minimumHeight: 186
     maximumHeight: 186
-    flags: Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.FramelessWindowHint
+    showInTaskbar: true
+    icon: "qrc:/qt/qml/AgPlayer/assets/brand/agplayer.ico"
     color: "transparent"
     title: "AgPlayer Mini"
     palette.window: Theme.background

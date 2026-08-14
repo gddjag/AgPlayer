@@ -111,8 +111,9 @@ VertexColor mixColor(double normalizedX,
         // the clipped played canvas.  Preserve that distinction so a seek
         // immediately moves the played colour with the real playback clock.
         const Rgb color = played
-            ? gradientColor(normalizedX, gradientStart, gradientMiddle, gradientEnd)
-            : Rgb{baseColor.red(), baseColor.green(), baseColor.blue()};
+            == rgbProgress
+                ? gradientColor(normalizedX, gradientStart, gradientMiddle, gradientEnd)
+                : Rgb{baseColor.red(), baseColor.green(), baseColor.blue()};
         return {color, 255U};
     }
     if (legacyColor.isValid()) {

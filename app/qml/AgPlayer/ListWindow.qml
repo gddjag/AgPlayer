@@ -12,7 +12,9 @@ Window {
     height: 570
     minimumWidth: 612
     minimumHeight: 320
-    flags: Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.FramelessWindowHint
+    showInTaskbar: true
+    icon: "qrc:/qt/qml/AgPlayer/assets/brand/agplayer.ico"
     color: "transparent"
     title: qsTr("AgPlayer 音乐列表")
     palette.window: Theme.background

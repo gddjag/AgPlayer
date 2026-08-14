@@ -17,6 +17,19 @@
 #include <QVariantList>
 
 #include <atomic>
+#include <cstdint>
+#include <list>
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
+namespace agplayer {
+namespace editor {
+class AudioDocument;
+struct DocumentSnapshot;
+struct AudioSpan;
+} // namespace editor
+}
 
 enum class EditorSessionState {
     Empty,
@@ -52,6 +65,8 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(int bitsPerSample READ bitsPerSample NOTIFY documentChanged)
     Q_PROPERTY(qint64 bitRate READ bitRate NOTIFY documentChanged)
     Q_PROPERTY(QVariantList channelPeaks READ channelPeaks NOTIFY waveformChanged)
+    Q_PROPERTY(QVariantList viewportChannelPeaks READ viewportChannelPeaks
+                   NOTIFY waveformChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
     Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY playbackChanged)
     Q_PROPERTY(qint64 durationMs READ durationMs NOTIFY documentChanged)
@@ -109,6 +124,8 @@ public:
     [[nodiscard]] int bitsPerSample() const noexcept { return bits_per_sample_; }
     [[nodiscard]] qint64 bitRate() const noexcept { return bit_rate_; }
     [[nodiscard]] QVariantList channelPeaks() const { return channel_peaks_; }
+    [[nodiscard]] QVariantList viewportChannelPeaks() const
+    { return viewport_channel_peaks_; }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] qint64 positionMs() const noexcept { return position_ms_; }
     [[nodiscard]] qint64 durationMs() const noexcept;
@@ -212,6 +229,13 @@ private:
     void refreshActions();
     [[nodiscard]] QVariantList buildExportFormats() const;
     void rebuildEditorPeaks();
+    void requestViewportWaveform();
+    void clearViewportWaveformCache();
+    [[nodiscard]] std::string activeWaveformCacheKey(
+        qint64 startFrame, qint64 endFrame, qint64 targetPointCount,
+        int mode) const;
+    [[nodiscard]] QVariantList toVariantPeaks(
+        const std::vector<std::vector<float>>& channels) const;
     bool preparePlayback();
     bool runDocumentCommand(const agplayer::editor::EditCommand& command,
                             bool modifiesDocument = true);
@@ -237,6 +261,27 @@ private:
     qint64 bit_rate_{};
     QVariantList source_channel_peaks_;
     QVariantList channel_peaks_;
+    QVariantList viewport_channel_peaks_;
+    qint64 viewport_cache_version_ = 1;
+    qint64 viewport_cache_size_bytes_ = 0;
+    qint64 viewport_cache_size_limit_ = 16LL * 1024LL * 1024LL;
+    QFutureWatcher<void>* viewport_waveform_watcher_ = nullptr;
+    quint64 viewport_waveform_generation_ = 0;
+    std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
+
+    struct ViewportWaveformCacheEntry {
+        qint64 start_frame{};
+        qint64 end_frame{};
+        qint64 target_point_count{};
+        int mode{};
+        qint64 bytes{};
+        std::vector<std::vector<float>> channels;
+        std::list<QString>::iterator lru_iterator{};
+    };
+    std::unordered_map<QString, std::shared_ptr<ViewportWaveformCacheEntry>>
+        viewport_waveform_cache_;
+    std::list<QString> viewport_waveform_lru_;
+
     EditorSessionState state_{EditorSessionState::Empty};
     bool has_document_{};
     bool modified_{};

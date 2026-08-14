@@ -301,7 +301,7 @@ Rectangle {
                         flat: true
                         icon.source: root.currentTrackFavorite()
                                      ? Theme.icon("heart-fill")
-                                     : Theme.icon("heart-line")
+                                     : Theme.icon("heart-outline")
                         icon.color: root.currentTrackFavorite()
                                     ? Theme.favoriteRed
                                     : Theme.secondaryText
@@ -473,11 +473,14 @@ Rectangle {
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
                 baseColor: SettingsController.waveformMode === 0
-                           ? (SettingsController.waveformSolidBaseColor || "#8f98a8")
+                           ? (SettingsController.waveformSolidBaseColor
+                              || Theme.waveformMagenta)
                            : (SettingsController.waveformMode === 2
                               ? SettingsController.spectrumSolidColor
-                               : (SettingsController.waveformRgbBaseColor || "#8f98a8"))
-                progressColor: SettingsController.waveformSolidProgressColor || "#002FA7"
+                               : (SettingsController.waveformRgbBaseColor
+                                  || Theme.waveformMagenta))
+                progressColor: SettingsController.waveformSolidProgressColor
+                              || Theme.waveformMagenta
                 gradientStartColor: SettingsController.waveformMode === 2
                                     && SettingsController.spectrumColorMode === 0
                                     ? SettingsController.spectrumSolidColor
@@ -604,7 +607,7 @@ Rectangle {
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: "#002FA7"
+                color: Theme.waveformMagenta
                 z: 10
             }
 

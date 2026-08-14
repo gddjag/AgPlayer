@@ -35,8 +35,7 @@ Rectangle {
 
             Button {
                 objectName: "audioToolNavButton"
-                Layout.preferredWidth: index === 2 ? 156 : 154
-                Layout.maximumWidth: Layout.preferredWidth
+                Layout.fillWidth: true
                 Layout.preferredHeight: 53
                 Layout.maximumHeight: 53
                 flat: true

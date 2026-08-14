@@ -5,7 +5,7 @@ import AgPlayer
 
 Rectangle {
     id: transport
-    signal recordingRequested()
+    signal recordingRequested(bool autoStart)
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
@@ -53,9 +53,9 @@ Rectangle {
                     ToolTip.visible: hovered
                     ToolTip.text: modelData.label + (modelData.shortcut.length > 0
                         ? "  (" + modelData.shortcut + ")" : "")
-                    onClicked: {
-                        if (modelData.key === "record") {
-                            if (!AudioEditorController.recording) transport.recordingRequested()
+                        onClicked: {
+                            if (modelData.key === "record") {
+                            if (!AudioEditorController.recording) transport.recordingRequested(true)
                             else if (AudioEditorController.recordingPaused) AudioEditorController.resumeRecording()
                             else AudioEditorController.pauseRecording()
                         } else if (modelData.key === "stop") {

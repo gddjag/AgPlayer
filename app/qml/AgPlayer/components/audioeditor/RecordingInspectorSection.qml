@@ -13,11 +13,27 @@ Rectangle {
     property bool collapsed: false
     property url recordingTarget
     property bool forceNewRecording: false
-    function requestRecording(forceNew) {
+    property bool pendingAutoStart: false
+
+    function startRecording(targetUrl) {
+        const requestedTarget = targetUrl || recordingTarget
+        AudioEditorController.startRecording(
+            requestedTarget || "",
+            deviceCombo.currentValue || "",
+            Number(sampleRateCombo.currentValue),
+            Number(channelCombo.currentValue),
+            monitorSwitch.checked,
+            !section.forceNewRecording && insertMode.checked)
+    }
+
+    function requestRecording(forceNew, autoStart) {
         forceNewRecording = forceNew === true
+        pendingAutoStart = autoStart === true
         if (AudioEditorController.modified
                 && (forceNewRecording || newMode.checked))
             discardRecordingDialog.open()
+        else if (pendingAutoStart)
+            startRecording()
         else
             recordingFileDialog.open()
     }
@@ -27,7 +43,14 @@ Rectangle {
         title: qsTr("舍弃未保存更改？")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: recordingFileDialog.open()
+        onAccepted: {
+            if (section.pendingAutoStart)
+                section.startRecording()
+            else
+                recordingFileDialog.open()
+            section.pendingAutoStart = false
+        }
+        onRejected: section.pendingAutoStart = false
         Label {
             text: qsTr("新建录音将舍弃当前未保存的音频。")
             color: Theme.primaryText
@@ -41,13 +64,7 @@ Rectangle {
         nameFilters: [qsTr("WAV 音频 (*.wav)")]
         onAccepted: {
             section.recordingTarget = selectedFile
-            AudioEditorController.startRecording(
-                selectedFile,
-                deviceCombo.currentValue || "",
-                Number(sampleRateCombo.currentValue),
-                Number(channelCombo.currentValue),
-                monitorSwitch.checked,
-                !section.forceNewRecording && insertMode.checked)
+            section.startRecording(selectedFile)
         }
     }
 

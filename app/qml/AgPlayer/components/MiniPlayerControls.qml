@@ -139,7 +139,7 @@ Rectangle {
                     id: favoriteButton
                     objectName: "miniFavoriteButton"
                     Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                    icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
+                    icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-outline")
                     icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
                     icon.width: 21; icon.height: 21; enabled: root.currentRow() >= 0
                     onClicked: if (playback) playback.toggleFavorite(); background: null
@@ -166,11 +166,14 @@ Rectangle {
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
                     baseColor: SettingsController.waveformMode === 0
-                               ? SettingsController.waveformSolidBaseColor
+                               ? (SettingsController.waveformSolidBaseColor
+                                  || Theme.waveformMagenta)
                                : (SettingsController.waveformMode === 2
                                   ? SettingsController.spectrumSolidColor
-                                  : SettingsController.waveformRgbBaseColor)
+                                  : (SettingsController.waveformRgbBaseColor
+                                     || Theme.waveformMagenta))
                     progressColor: SettingsController.waveformSolidProgressColor
+                                  || Theme.waveformMagenta
                     gradientStartColor: SettingsController.waveformMode === 2
                                         && SettingsController.spectrumColorMode === 0
                                         ? SettingsController.spectrumSolidColor
@@ -183,7 +186,7 @@ Rectangle {
                                       && SettingsController.spectrumColorMode === 0
                                       ? SettingsController.spectrumSolidColor
                                       : SettingsController.spectrumRgbEndColor
-                    rgbProgress: SettingsController.waveformRgbProgress
+                    rgbProgress: SettingsController.waveformRgbProgress !== false
                     amplitudeScale: SettingsController.waveformMode === 2
                                     ? 1.0 : SettingsController.waveformHeight
                     density: SettingsController.waveformMode === 2

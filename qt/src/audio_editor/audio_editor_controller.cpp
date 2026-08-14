@@ -8,26 +8,247 @@
 
 #include <QFileInfo>
 #include <QDateTime>
+#include <QDir>
 #include <QPointer>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <array>
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <limits>
+#include <list>
 
 using agplayer::editor::AudioDocument;
 using agplayer::editor::AudioFileAnalysis;
 using agplayer::editor::AudioFileAnalyzer;
 using agplayer::editor::AudioSource;
+using agplayer::editor::AudioSpan;
 using agplayer::editor::DocumentRenderer;
 using agplayer::editor::DocumentWriter;
+using agplayer::editor::DocumentSnapshot;
 using agplayer::editor::EditCommand;
+using agplayer::editor::SampleFrame;
 using agplayer::editor::Selection;
 using agplayer::editor::WriteRequest;
 
 namespace {
 
+struct ViewportWaveformJobResult {
+    struct Tile {
+        qint64 start_frame{};
+        qint64 end_frame{};
+        int mode{};
+        qint64 target_point_count{};
+        std::vector<std::vector<float>> channels;
+    };
+
+    std::vector<Tile> tiles;
+    bool cancelled{};
+    bool ok{true};
+    QString error;
+};
+
+constexpr qint64 kViewportWaveformCacheDefaultLimit = 16LL * 1024LL * 1024LL;
+
+constexpr qreal kViewportModeAThreshold = 32.0;
+constexpr qreal kViewportModeBThreshold = 1.2;
+
+int viewportRenderMode(const qreal samplesPerPixel)
+{
+    if (!std::isfinite(samplesPerPixel) || samplesPerPixel <= 0.0) {
+        return 0;
+    }
+    if (samplesPerPixel > kViewportModeAThreshold) {
+        return 0;
+    }
+    if (samplesPerPixel > kViewportModeBThreshold) {
+        return 1;
+    }
+    return 2;
+}
+
+qint64 viewportTargetPoints(const int renderMode, const qint64 visibleFrames,
+                           const qreal viewportWidth)
+{
+    const qint64 width = std::max<qint64>(1, static_cast<qint64>(std::llround(
+        std::max<qreal>(1.0, viewportWidth))));
+    if (renderMode == 0) {
+        return std::max<qint64>(48, std::min(visibleFrames, width / 2));
+    }
+    if (renderMode == 1) {
+        return std::max<qint64>(width,
+            std::min<qint64>(visibleFrames, width * 2));
+    }
+    return std::min(visibleFrames, width * 2);
+}
+
+qint64 viewportCacheBytes(const std::vector<std::vector<float>>& channels)
+{
+    qint64 bytes = 0;
+    for (const auto& channel : channels) {
+        bytes += static_cast<qint64>(channel.size())
+            * static_cast<qint64>(sizeof(float));
+    }
+    return bytes;
+}
+
+QVariantList build_variant_peaks(
+    const std::vector<std::vector<float>>& channels)
+{
+    QVariantList result;
+    for (const auto& channel : channels) {
+        QVariantList values;
+        values.reserve(static_cast<qsizetype>(channel.size()));
+        for (const float value : channel) {
+            values.append(value);
+        }
+        result.append(QVariant::fromValue(values));
+    }
+    return result;
+}
+
+qint64 clamped_int64_to_qint64(const std::size_t value)
+{
+    return value > static_cast<std::size_t>(std::numeric_limits<qint64>::max())
+        ? std::numeric_limits<qint64>::max() : static_cast<qint64>(value);
+}
+
+qint64 spanFromBucket(const qint64 frame, const qint64 totalFrames,
+                      const qint64 peakBuckets)
+{
+    if (totalFrames <= 0 || peakBuckets <= 0) {
+        return 0;
+    }
+    return std::clamp(
+        (frame * peakBuckets) / totalFrames, 0LL,
+        peakBuckets - 1);
+}
+
+qint64 mapFrameToBucket(const qint64 frame, const qint64 frameStart,
+                        const qint64 frameEnd, const qint64 totalBuckets)
+{
+    const qint64 frameCount = std::max<qint64>(1, frameEnd - frameStart);
+    const qint64 offset = std::max<qint64>(0, frame - frameStart);
+    return std::clamp(
+        (offset * totalBuckets) / frameCount, 0LL, std::max<qint64>(0, totalBuckets - 1));
+}
+
+void assignBucketRange(const std::vector<float>& sourceValues,
+                      const qint64 sourceBuckets,
+                      const qint64 totalFrames,
+                      const qint64 requestStart,
+                      const qint64 requestEnd,
+                      const qint64 targetPoints,
+                      std::vector<float>& outputMin,
+                      std::vector<float>& outputMax)
+{
+    const qint64 requestFrames = requestEnd - requestStart;
+    for (qint64 point = 0; point < targetPoints; ++point) {
+        const qint64 pointStart = requestStart + point * requestFrames
+            / targetPoints;
+        const qint64 pointEnd = requestStart + (point + 1) * requestFrames
+            / targetPoints;
+        const qint64 bucketStart = spanFromBucket(
+            pointStart, totalFrames, sourceBuckets);
+        const qint64 bucketEnd = spanFromBucket(
+            pointEnd, totalFrames, sourceBuckets);
+        const qint64 first = std::min(bucketStart, bucketEnd);
+        const qint64 last = std::max(bucketStart, bucketEnd);
+        float minimum = 0.0F;
+        float maximum = 0.0F;
+        bool hasValue = false;
+        for (qint64 bucket = first; bucket <= last
+             && bucket < sourceBuckets; ++bucket) {
+            const qint64 minIndex = bucket * 2;
+            const qint64 maxIndex = minIndex + 1;
+            if (minIndex + 1 >= static_cast<qint64>(sourceValues.size())
+                || maxIndex >= static_cast<qint64>(sourceValues.size())) {
+                continue;
+            }
+            const float minimumCandidate = sourceValues[minIndex];
+            const float maximumCandidate = sourceValues[maxIndex];
+            if (!hasValue) {
+                minimum = minimumCandidate;
+                maximum = maximumCandidate;
+                hasValue = true;
+            } else {
+                minimum = std::min(minimum, minimumCandidate);
+                maximum = std::max(maximum, maximumCandidate);
+            }
+        }
+        if (!hasValue) {
+            outputMin[static_cast<size_t>(point)] = 0.0F;
+            outputMax[static_cast<size_t>(point)] = 0.0F;
+        } else {
+            outputMin[static_cast<size_t>(point)] = minimum;
+            outputMax[static_cast<size_t>(point)] = maximum;
+        }
+    }
+}
+
+std::vector<std::vector<float>> viewportPeaksFromSnapshot(
+    const std::vector<std::vector<float>>& channelSourcePeaks,
+    const std::vector<std::vector<float>>& fallbackPeaks,
+    const QVariantList& sourcePeaks,
+    const qint64 totalFrames,
+    const qint64 requestStart,
+    const qint64 requestEnd,
+    const qint64 targetPoints,
+    const int channels)
+{
+    const qint64 sourceBuckets = static_cast<qint64>(
+        sourcePeaks.empty() ? 0 : sourcePeaks.front().size());
+    std::vector<std::vector<float>> result;
+    result.resize(static_cast<std::size_t>(std::max<qint64>(0, channels)));
+    const std::vector<std::vector<float>>* source = nullptr;
+    const auto& sourceVector = channelSourcePeaks.empty() ? fallbackPeaks
+                                                         : channelSourcePeaks;
+    if (!sourceVector.empty()) {
+        source = &sourceVector;
+    } else {
+        result.assign(static_cast<std::size_t>(std::max<qint64>(0, channels)),
+                      std::vector<float>(static_cast<std::size_t>(targetPoints * 2U),
+                                        0.0F));
+        return result;
+    }
+    const qint64 requestFrames = std::max<qint64>(1, requestEnd - requestStart);
+    const qint64 availableChannels = static_cast<qint64>(source->size());
+    for (qint64 channelIndex = 0; channelIndex < channels; ++channelIndex) {
+        const qint64 safeChannel = std::clamp(
+            channelIndex, 0LL, availableChannels - 1 >= 0 ? availableChannels - 1 : 0);
+        const auto& sourceChannelRaw = (*source)[static_cast<std::size_t>(safeChannel)];
+        if (sourceChannelRaw.empty()) {
+            result[static_cast<std::size_t>(channelIndex)].assign(
+                static_cast<std::size_t>(targetPoints * 2LL), 0.0F);
+            continue;
+        }
+        const qint64 bucketCount = static_cast<qint64>(sourceChannelRaw.size() / 2);
+        auto& minOut = result[static_cast<std::size_t>(channelIndex)];
+        auto& maxOut = minOut;
+        result[static_cast<std::size_t>(channelIndex)].assign(
+            static_cast<std::size_t>(targetPoints * 2LL), 0.0F);
+        (void)maxOut;
+        std::vector<float> localMin(static_cast<std::size_t>(targetPoints), 0.0F);
+        std::vector<float> localMax(static_cast<std::size_t>(targetPoints), 0.0F);
+        assignBucketRange(sourceChannelRaw, bucketCount, totalFrames,
+                         requestStart, requestEnd, targetPoints, localMin, localMax);
+        for (qint64 point = 0; point < targetPoints; ++point) {
+            const float minimum = localMin[static_cast<std::size_t>(point)];
+            const float maximum = localMax[static_cast<std::size_t>(point)];
+            const qint64 sampleIndex = point * 2LL;
+            result[static_cast<std::size_t>(channelIndex)]
+                  [static_cast<std::size_t>(sampleIndex)] = minimum;
+            result[static_cast<std::size_t>(channelIndex)]
+                  [static_cast<std::size_t>(sampleIndex + 1)] = maximum;
+        }
+    }
+    (void)requestFrames;
+    return result;
+}
 QVariantList to_variant_peaks(
     const std::vector<std::vector<float>>& channels)
 {
@@ -65,7 +286,22 @@ AudioEditorController::AudioEditorController(
             this, &AudioEditorController::pollPlayback);
     recording_timer_.setInterval(33);
     connect(&recording_timer_, &QTimer::timeout, this, [this] {
+        if (!recording()) return;
+        const auto capturedFrames = static_cast<qint64>(
+            recording_session_.framesCaptured());
+        const qint64 sampleRate = std::max<qint64>(1, recording_sample_rate_);
+        const qint64 recordingPosition = static_cast<qint64>(std::llround(
+            static_cast<double>(capturedFrames) * 1'000.0 / static_cast<double>(sampleRate)));
+        if (position_ms_ != recordingPosition) position_ms_ = recordingPosition;
+        const qint64 projectedFrames = std::max<qint64>(
+            document_.totalFrames(),
+            (insert_recording_at_cursor_ ? recording_insert_frame_ + capturedFrames
+                                        : capturedFrames));
+        if (projectedFrames != 0 && projectedFrames > viewport_.documentFrames()) {
+            viewport_.setDocumentFrames(projectedFrames);
+        }
         emit recordingChanged();
+        emit playbackChanged();
     });
     QSettings settings;
     settings.beginGroup(QStringLiteral("audioEditor"));
@@ -706,18 +942,40 @@ bool AudioEditorController::startRecording(
     const int recordingSampleRate, const int recordingChannels,
     const bool monitor, const bool insertAtCursor)
 {
-    const QString path = local_path(target);
+    const int effectiveSampleRate = std::max(1, recordingSampleRate);
+    const int effectiveChannels = std::max(1, recordingChannels);
+    QString path = local_path(target);
     if (path.isEmpty()) {
-        setError(tr("请选择录音保存位置"));
-        return false;
+        QString directory = recording_directory_;
+        if (directory.isEmpty()) {
+            directory = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+        }
+        if (directory.isEmpty()) {
+            directory = QDir::currentPath();
+        }
+        QDir outputDir(directory);
+        if (!outputDir.exists()) {
+            outputDir.mkpath(QStringLiteral("."));
+        }
+        const QString timestamp = QDateTime::currentDateTime().toString(
+            QStringLiteral("yyyyMMdd_HHmmss"));
+        int attempt = 0;
+        do {
+            path = outputDir.filePath(QStringLiteral("AgPlayer_Recording_%1%2.wav")
+                                     .arg(timestamp, (attempt > 0
+                                         ? QString("_%1").arg(attempt)
+                                         : QString{})));
+            ++attempt;
+        } while (QFileInfo::exists(path));
+        recording_directory_ = outputDir.absolutePath();
     }
     if (recording()) return false;
     stopPlayback();
     agplayer::editor::RecordingConfig config;
     config.output_path = std::filesystem::path(path.toStdWString());
     config.device_id = deviceId.toStdString();
-    config.sample_rate = static_cast<std::uint32_t>(recordingSampleRate);
-    config.channels = static_cast<std::uint32_t>(recordingChannels);
+    config.sample_rate = static_cast<std::uint32_t>(effectiveSampleRate);
+    config.channels = static_cast<std::uint32_t>(effectiveChannels);
     config.monitor = monitor;
     insert_recording_at_cursor_ = insertAtCursor && has_document_;
     recording_insert_frame_ = position_ms_ * sample_rate_ / 1'000;
@@ -729,8 +987,8 @@ bool AudioEditorController::startRecording(
     settings.beginGroup(QStringLiteral("audioEditor"));
     recording_directory_ = QFileInfo(path).absolutePath();
     recording_device_id_ = deviceId;
-    recording_sample_rate_ = recordingSampleRate;
-    recording_channels_ = recordingChannels;
+    recording_sample_rate_ = effectiveSampleRate;
+    recording_channels_ = effectiveChannels;
     recording_monitor_ = monitor;
     settings.setValue(QStringLiteral("recordingDirectory"), recording_directory_);
     settings.setValue(QStringLiteral("recordingDeviceId"), recording_device_id_);
@@ -740,8 +998,10 @@ bool AudioEditorController::startRecording(
     settings.endGroup();
     emit recordingPreferencesChanged();
     recording_timer_.start();
+    position_ms_ = insert_recording_at_cursor_ ? position_ms_ : 0;
     setState(EditorSessionState::Recording);
     setError({});
+    emit playbackChanged();
     emit recordingChanged();
     return true;
 }
@@ -812,6 +1072,7 @@ bool AudioEditorController::stopRecording()
     emit waveformChanged();
     emit documentChanged();
     emit recordingChanged();
+    emit playbackChanged();
     return true;
 }
 
@@ -820,10 +1081,12 @@ bool AudioEditorController::cancelRecording()
     if (!recording()) return false;
     recording_timer_.stop();
     const bool cancelled = recording_session_.cancel();
+    position_ms_ = 0;
     setState(has_document_ ? EditorSessionState::Ready
                            : EditorSessionState::Empty);
     if (cancelled) setError(tr("录音已取消"));
     emit recordingChanged();
+    emit playbackChanged();
     return cancelled;
 }
 
