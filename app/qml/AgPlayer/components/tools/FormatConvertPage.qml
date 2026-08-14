@@ -9,9 +9,10 @@ Rectangle {
     objectName: "formatConvertPage"
     color: Theme.background
     focus: true
+    readonly property bool compactLayout: width < 1100
 
     property var converter: FormatConverter
-    property string outputDirectory: ""
+    property string outputDirectory: SettingsController.defaultOutputDirectory
 
     function addCurrentPlayerTrack() {
         const urls = []
@@ -32,7 +33,10 @@ Rectangle {
         converter.conflictPolicy = settingsPanel.conflictPolicy
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
+            preset: settingsPanel.preset,
             bitRate: settingsPanel.bitRate,
+            bitrateMode: settingsPanel.bitrateMode,
+            quality: settingsPanel.quality,
             sampleRate: settingsPanel.sampleRate,
             channels: settingsPanel.channels,
             outputDir: outputDirectory,
@@ -83,6 +87,7 @@ Rectangle {
         FolderDialog {
             onAccepted: {
                 page.outputDirectory = selectedFolder.toString().replace(/^file:\/+/, "")
+                SettingsController.defaultOutputDirectory = page.outputDirectory
                 destroy()
             }
             onRejected: destroy()
@@ -117,10 +122,11 @@ Rectangle {
                         { text: qsTr("清空列表"), icon: "delete-bin-line", action: "clear" }
                     ]
                     Button {
-                        Layout.preferredWidth: modelData.action === "playlist" ? 158
+                        Layout.preferredWidth: page.compactLayout
+                                               ? (modelData.action === "playlist" ? 142 : 118)
+                                               : modelData.action === "playlist" ? 158
                                                : modelData.action === "file" ? 130
-                                               : modelData.action === "folder" ? 142
-                                               : 128
+                                               : modelData.action === "folder" ? 142 : 128
                         Layout.preferredHeight: 40
                         enabled: !converter.busy
                                  && (modelData.action !== "playlist"
@@ -148,7 +154,7 @@ Rectangle {
                             spacing: 8
                             ThemedIcon {
                                 source: parent.parent.icon.source
-                                tint: Theme.primaryText
+                                tint: Theme.iconPrimary
                                 sourceSize.width: 18
                                 sourceSize.height: 18
                                 Layout.preferredWidth: 18
@@ -164,49 +170,6 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
-
-                TextField {
-                    id: searchField
-                    objectName: "formatSearchField"
-                    Layout.preferredWidth: 360
-                    Layout.preferredHeight: 40
-                    placeholderText: qsTr("搜索文件名、格式或标签...")
-                    color: Theme.primaryText
-                    onTextChanged: converter.filteredTaskModel.query = text
-                    background: Rectangle {
-                        color: Theme.elevated
-                        border.color: searchField.activeFocus ? Theme.accent : Theme.border
-                        radius: 6
-                    }
-                    leftPadding: 16
-                }
-                ToolButton {
-                    objectName: "formatFilterButton"
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    icon.source: Theme.icon("equalizer-line")
-                    onClicked: filterMenu.open()
-                    background: Rectangle {
-                        color: parent.hovered ? Theme.hoverSurface : Theme.elevated
-                        border.color: Theme.border
-                        radius: 6
-                    }
-                }
-            }
-        }
-
-        Menu {
-            id: filterMenu
-            objectName: "formatStatusFilters"
-            Repeater {
-                model: ["All", "Converting", "Done", "Error", "Cancelled"]
-                MenuItem {
-                    text: modelData === "All" ? qsTr("全部")
-                          : modelData === "Converting" ? qsTr("转换中")
-                          : modelData === "Done" ? qsTr("已完成")
-                          : modelData === "Error" ? qsTr("失败") : qsTr("已取消")
-                    onTriggered: converter.filteredTaskModel.statusFilter = modelData
-                }
             }
         }
 
@@ -226,9 +189,9 @@ Rectangle {
             FormatSettingsPanel {
                 id: settingsPanel
                 objectName: "formatSettingsPanel"
-                Layout.preferredWidth: 445
-                Layout.minimumWidth: 420
-                Layout.maximumWidth: 455
+                Layout.preferredWidth: page.compactLayout ? 360 : 445
+                Layout.minimumWidth: page.compactLayout ? 340 : 420
+                Layout.maximumWidth: page.compactLayout ? 380 : 455
                 Layout.fillHeight: true
                 converter: page.converter
                 outputDirectory: page.outputDirectory
@@ -240,7 +203,7 @@ Rectangle {
             id: bottomBar
             objectName: "formatBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 114
+            Layout.preferredHeight: page.compactLayout ? 96 : 114
             color: Theme.panel
             border.color: Theme.border
             radius: 6
@@ -252,14 +215,14 @@ Rectangle {
                 spacing: 16
 
                 ColumnLayout {
-                    Layout.preferredWidth: 430
+                    Layout.preferredWidth: page.compactLayout ? 280 : 430
                     spacing: 8
                     RowLayout {
                         Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: 14 }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
-                            Layout.preferredWidth: 320
+                            Layout.preferredWidth: page.compactLayout ? 180 : 320
                             from: 0; to: 1; value: converter.progress
                             background: Rectangle { implicitHeight: 10; color: Theme.border; radius: 5 }
                             contentItem: Item {
@@ -272,7 +235,7 @@ Rectangle {
                                 }
                             }
                         }
-                        Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.secondaryText }
+                        Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.primaryText }
                     }
                     Text {
                         text: qsTr("%1 个任务 / 预计剩余 %2").arg(converter.fileCount)
@@ -284,31 +247,11 @@ Rectangle {
 
                 Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: Theme.border }
 
-                ComboBox {
-                    id: parallelBox
-                    objectName: "converterParallelJobsBox"
-                    Layout.preferredWidth: 160
-                    Layout.preferredHeight: 46
-                    model: [1, 2, 4]
-                    currentIndex: 2
-                    displayText: qsTr("并发  %1").arg(currentValue)
-                    onActivated: converter.parallelJobs = currentValue
-                }
-
-                Button {
-                    Layout.preferredWidth: 310
-                    Layout.preferredHeight: 46
-                    text: page.outputDirectory.length > 0
-                          ? qsTr("输出目录  %1").arg(page.outputDirectory)
-                          : qsTr("选择输出目录")
-                    icon.source: Theme.icon("folder-open-line")
-                    onClicked: outputDialogComponent.createObject(page).open()
-                }
-
                 Item { Layout.fillWidth: true }
 
                 Rectangle {
                     objectName: "formatSummaryCard"
+                    visible: !page.compactLayout
                     Layout.preferredWidth: 230
                     Layout.preferredHeight: 46
                     color: Theme.elevated
@@ -325,8 +268,8 @@ Rectangle {
                 Button {
                     id: convertAllButton
                     objectName: "convertAllButton"
-                    Layout.preferredWidth: 174
-                    Layout.preferredHeight: 68
+                    Layout.preferredWidth: page.compactLayout ? 132 : 174
+                    Layout.preferredHeight: page.compactLayout ? 56 : 68
                     enabled: converter.checkedCount > 0 && !converter.busy
                     text: qsTr("▶  开始处理")
                     onClicked: page.requestPlan()
@@ -336,8 +279,8 @@ Rectangle {
 
                 Button {
                     objectName: "cancelAllButton"
-                    Layout.preferredWidth: 168
-                    Layout.preferredHeight: 68
+                    Layout.preferredWidth: page.compactLayout ? 128 : 168
+                    Layout.preferredHeight: page.compactLayout ? 56 : 68
                     enabled: converter.busy
                     text: qsTr("■  取消全部")
                     onClicked: converter.cancelAll()

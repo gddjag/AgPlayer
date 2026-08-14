@@ -10,6 +10,8 @@ enum class NumberPosition { Beginning, AfterPrefix, BeforeSuffix, AfterSuffix };
 struct FilenameRuleSet {
     QString prefix;
     QString suffix;
+    QString removePrefix;
+    QString removeSuffix;
     QString spaceReplacement = QStringLiteral("_");
     QString numberSeparator = QStringLiteral("_");
     bool replaceSpaces = false;
@@ -20,6 +22,8 @@ struct FilenameRuleSet {
     bool removePrefixWhenEmpty = true;
     bool removeSuffixWhenEmpty = true;
     bool removeSequenceWhenEmpty = true;
+    bool removeSequenceAtStart = false;
+    bool removeSequenceAtEnd = false;
     int numberStart = 1;
     int numberDigits = 2;
     CaseRule caseRule = CaseRule::Keep;

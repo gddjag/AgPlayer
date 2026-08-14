@@ -6,11 +6,13 @@ import AgPlayer
 
 Rectangle {
     id: section
+    objectName: "recordingInspectorSection"
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
     implicitHeight: collapsed ? 38 : 360
     property bool collapsed: false
+    readonly property int recordingActionCount: 4
     property url recordingTarget
     property bool forceNewRecording: false
     property bool pendingAutoStart: false
@@ -32,39 +34,46 @@ Rectangle {
         if (AudioEditorController.modified
                 && (forceNewRecording || newMode.checked))
             discardRecordingDialog.open()
-        else if (pendingAutoStart)
-            startRecording()
+        else if (forceNewRecording)
+            createBlankRecordingDocument()
         else
-            recordingFileDialog.open()
+            beginRecording()
+    }
+    function createBlankRecordingDocument() {
+        AudioEditorController.createRecordingDocument(
+            Number(sampleRateCombo.currentValue),
+            Number(channelCombo.currentValue))
+    }
+    function beginRecording() {
+        AudioEditorController.startRecordingToTemporaryFile(
+            deviceCombo.currentValue || "",
+            Number(sampleRateCombo.currentValue),
+            Number(channelCombo.currentValue),
+            monitorSwitch.checked,
+            insertMode.checked && AudioEditorController.hasDocument)
+    }
+    function pauseOrResume() {
+        if (AudioEditorController.recordingPaused)
+            AudioEditorController.resumeRecording()
+        else
+            AudioEditorController.pauseRecording()
     }
 
     Dialog {
         id: discardRecordingDialog
+        objectName: "recordingDiscardDialog"
         title: qsTr("舍弃未保存更改？")
         modal: true
+        anchors.centerIn: parent
+        width: Math.min(420, Math.max(260, section.width + 100))
+        padding: 20
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: {
-            if (section.pendingAutoStart)
-                section.startRecording()
-            else
-                recordingFileDialog.open()
-            section.pendingAutoStart = false
-        }
-        onRejected: section.pendingAutoStart = false
+        onAccepted: forceNewRecording
+            ? section.createBlankRecordingDocument()
+            : section.beginRecording()
         Label {
             text: qsTr("新建录音将舍弃当前未保存的音频。")
             color: Theme.primaryText
-        }
-    }
-
-    FileDialog {
-        id: recordingFileDialog
-        fileMode: FileDialog.SaveFile
-        defaultSuffix: "wav"
-        nameFilters: [qsTr("WAV 音频 (*.wav)")]
-        onAccepted: {
-            section.recordingTarget = selectedFile
-            section.startRecording(selectedFile)
         }
     }
 
@@ -154,12 +163,56 @@ Rectangle {
             }
             Label { text: qsTr("输出格式") }
             ComboBox { Layout.fillWidth: true; model: ["WAV (PCM 24 bit)"]; enabled: false }
-            Label { text: qsTr("保存位置") }
+            Label { text: qsTr("录音文件") }
             TextField {
                 Layout.fillWidth: true
                 readOnly: true
-                text: section.recordingTarget.toString().replace("file:///", "")
-                placeholderText: qsTr("开始录音时选择")
+                text: AudioEditorController.recording
+                    ? qsTr("临时 WAV · 保存时选择位置") : ""
+                placeholderText: qsTr("使用私有临时 WAV")
+            }
+            Button {
+                objectName: "recordingRefreshDevicesButton"
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                text: qsTr("刷新输入设备")
+                enabled: !AudioEditorController.recording
+                onClicked: AudioEditorController.refreshRecordingDevices()
+            }
+            RowLayout {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                Button {
+                    objectName: "recordingStartButton"
+                    Layout.fillWidth: true
+                    text: qsTr("开始录音")
+                    enabled: !AudioEditorController.recording
+                             && !AudioEditorController.busy
+                             && deviceCombo.count > 0
+                    onClicked: section.requestRecording(false)
+                }
+                Button {
+                    objectName: "recordingPauseResumeButton"
+                    Layout.fillWidth: true
+                    text: AudioEditorController.recordingPaused
+                          ? qsTr("继续") : qsTr("暂停")
+                    enabled: AudioEditorController.recording
+                    onClicked: section.pauseOrResume()
+                }
+                Button {
+                    objectName: "recordingStopButton"
+                    Layout.fillWidth: true
+                    text: qsTr("停止")
+                    enabled: AudioEditorController.recording
+                    onClicked: AudioEditorController.stopRecording()
+                }
+                Button {
+                    objectName: "recordingCancelButton"
+                    Layout.fillWidth: true
+                    text: qsTr("取消录音")
+                    enabled: AudioEditorController.recording
+                    onClicked: AudioEditorController.cancelRecording()
+                }
             }
         }
     }

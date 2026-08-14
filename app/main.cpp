@@ -70,8 +70,61 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);
 namespace {
 
 constexpr wchar_t kAgPlayerAppUserModelId[] = L"AgPlayer.Desktop";
+constexpr int kAgPlayerIconResourceId = 101;
 
-void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
+struct NativeWindowIcons final {
+    HICON bigIcon = nullptr;
+    HICON smallIcon = nullptr;
+};
+
+NativeWindowIcons loadNativeWindowIcons()
+{
+    const HINSTANCE module = GetModuleHandleW(nullptr);
+    return {
+        static_cast<HICON>(LoadImageW(module,
+            MAKEINTRESOURCEW(kAgPlayerIconResourceId), IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+            LR_DEFAULTCOLOR)),
+        static_cast<HICON>(LoadImageW(module,
+            MAKEINTRESOURCEW(kAgPlayerIconResourceId), IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+            LR_DEFAULTCOLOR))
+    };
+}
+
+void publishNativeWindowIcons(const HWND hwnd,
+                              const NativeWindowIcons& icons)
+{
+    if (icons.bigIcon != nullptr) {
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                     reinterpret_cast<LPARAM>(icons.bigIcon));
+    }
+    if (icons.smallIcon != nullptr) {
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                     reinterpret_cast<LPARAM>(icons.smallIcon));
+    }
+    // Read back the values here as a runtime contract: taskbar integration
+    // must never silently depend on the tray icon or a Qt image provider.
+    const auto bigResult = SendMessageW(hwnd, WM_GETICON, ICON_BIG, 0);
+    const auto smallResult = SendMessageW(hwnd, WM_GETICON, ICON_SMALL, 0);
+    if (bigResult == 0 || smallResult == 0) {
+        qWarning("AgPlayer native window icon publication failed");
+    }
+}
+
+HRESULT setWindowStringProperty(IPropertyStore* properties,
+                                const PROPERTYKEY& key,
+                                const QString& value)
+{
+    const std::wstring storage = value.toStdWString();
+    PROPVARIANT property{};
+    property.vt = VT_LPWSTR;
+    property.pwszVal = const_cast<wchar_t*>(storage.c_str());
+    return properties->SetValue(key, property);
+}
+
+void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
+                               const NativeWindowIcons& nativeIcons)
 {
     if (window == nullptr) {
         return;
@@ -81,6 +134,7 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
     if (hwnd == nullptr) {
         return;
     }
+    publishNativeWindowIcons(hwnd, nativeIcons);
 
     IPropertyStore* properties = nullptr;
     if (FAILED(SHGetPropertyStoreForWindow(
@@ -88,18 +142,37 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon)
             reinterpret_cast<void**>(&properties)))) {
         return;
     }
-    PROPVARIANT appId{};
-    appId.vt = VT_LPWSTR;
-    appId.pwszVal = const_cast<wchar_t*>(kAgPlayerAppUserModelId);
-    properties->SetValue(PKEY_AppUserModel_ID, appId);
-    properties->Commit();
+    const QString executable = QDir::toNativeSeparators(
+        QCoreApplication::applicationFilePath());
+    const QString relaunchCommand = QStringLiteral("\"") + executable
+        + QStringLiteral("\"");
+    const QString displayNameResource = QStringLiteral("@") + executable
+        + QStringLiteral(",-102");
+    const QString iconResource = executable + QStringLiteral(",-101");
+
+    const HRESULT identityResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_ID,
+        QString::fromWCharArray(kAgPlayerAppUserModelId));
+    const HRESULT commandResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_RelaunchCommand, relaunchCommand);
+    const HRESULT displayResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_RelaunchDisplayNameResource,
+        displayNameResource);
+    const HRESULT iconResult = setWindowStringProperty(
+        properties, PKEY_AppUserModel_RelaunchIconResource, iconResource);
+    if (SUCCEEDED(identityResult) && SUCCEEDED(commandResult)
+        && SUCCEEDED(displayResult) && SUCCEEDED(iconResult)) {
+        properties->Commit();
+    }
     properties->Release();
 }
 
 class WindowsShellIdentityFilter final : public QObject {
 public:
-    explicit WindowsShellIdentityFilter(QIcon icon, QObject* parent = nullptr)
-        : QObject(parent), icon_(std::move(icon))
+    explicit WindowsShellIdentityFilter(QIcon icon,
+                                        NativeWindowIcons nativeIcons,
+                                        QObject* parent = nullptr)
+        : QObject(parent), icon_(std::move(icon)), native_icons_(nativeIcons)
     {
     }
 
@@ -108,13 +181,15 @@ protected:
     {
         if (event->type() == QEvent::Show
             || event->type() == QEvent::WinIdChange) {
-            applyWindowsShellIdentity(qobject_cast<QWindow*>(watched), icon_);
+            applyWindowsShellIdentity(qobject_cast<QWindow*>(watched), icon_,
+                                      native_icons_);
         }
         return false;
     }
 
 private:
     QIcon icon_;
+    NativeWindowIcons native_icons_;
 };
 
 } // namespace
@@ -138,7 +213,8 @@ int main(int argc, char* argv[])
         ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
     app.setWindowIcon(applicationIcon);
 #ifdef Q_OS_WIN
-    WindowsShellIdentityFilter shellIdentityFilter(applicationIcon, &app);
+    WindowsShellIdentityFilter shellIdentityFilter(
+        applicationIcon, loadNativeWindowIcons(), &app);
     app.installEventFilter(&shellIdentityFilter);
 #endif
 
@@ -157,6 +233,7 @@ int main(int argc, char* argv[])
     QString qaScreenshotMini;
     QString qaScreenshotTools;
     int qaTool = 0;
+    QSize qaToolsSize;
     QString qaScreenshotList;
     QString qaListCategory;
     bool qaShowTrackDetails = false;
@@ -193,6 +270,15 @@ int main(int argc, char* argv[])
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
                 if (ok && requestedTool >= 0 && requestedTool <= 5) {
                     qaTool = requestedTool;
+                }
+            } else if (arg == QStringLiteral("--qa-tools-size")
+                       && i + 2 < cliArgs.size()) {
+                bool widthOk = false;
+                bool heightOk = false;
+                const int width = cliArgs.at(++i).toInt(&widthOk);
+                const int height = cliArgs.at(++i).toInt(&heightOk);
+                if (widthOk && heightOk && width >= 880 && height >= 560) {
+                    qaToolsSize = QSize(width, height);
                 }
             } else if (arg == QStringLiteral("--qa-screenshot-list")
                        && i + 1 < cliArgs.size()) {
@@ -611,6 +697,7 @@ int main(int argc, char* argv[])
 
         AudioToolsController audioTools;
         AudioEditorController audioEditor;
+        audioEditor.setMainPlaybackController(&playback);
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(qaTool);
         }
@@ -630,10 +717,6 @@ int main(int argc, char* argv[])
                     audioEditor.setSelection(audioEditor.totalFrames() / 4,
                                              audioEditor.totalFrames() / 2);
                     audioEditor.seekMs(audioEditor.durationMs() / 3);
-                    audioEditor.addMarker(QStringLiteral("标记 1"),
-                                          audioEditor.totalFrames() / 6);
-                    audioEditor.addMarker(QStringLiteral("标记 2"),
-                                          audioEditor.totalFrames() * 5 / 6);
                 }
                 break;
             case 1:
@@ -1143,9 +1226,17 @@ int main(int argc, char* argv[])
             }
             if (wantScreenshotTools && audioToolsWindow != nullptr) {
                 if (auto* toolsWin = qobject_cast<QWindow*>(audioToolsWindow)) {
+                    if (qaToolsSize.isValid()) {
+                        toolsWin->resize(qaToolsSize);
+                    }
                     toolsWin->show();
                 }
-                if (qaTool == 2 && !qaImportFolder.isEmpty()) {
+                if (qaTool == 0 && !qaImportFolder.isEmpty()) {
+                    audioEditor.openFile(QUrl::fromLocalFile(qaImportFolder));
+                } else if (qaTool == 1 && !qaImportFolder.isEmpty()) {
+                    formatConverter.loadFiles(
+                        {QUrl::fromLocalFile(qaImportFolder)});
+                } else if (qaTool == 2 && !qaImportFolder.isEmpty()) {
                     metadataEditor.loadFiles(
                         {QUrl::fromLocalFile(qaImportFolder)});
                 } else if (qaTool == 3 && !qaImportFolder.isEmpty()) {

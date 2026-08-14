@@ -41,10 +41,13 @@ Name: "associateaudio"; Description: "注册常用音频文件关联（可在 Wi
 Source: "..\build\package\AgPlayer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
 
 [Registry]
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\{#AppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "RelaunchCommand"; ValueData: """{app}\{#AppExeName}"""
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\DefaultIcon"; ValueType: string; ValueData: "{app}\{#AppExeName},0"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\shell\open\command"; ValueType: string; ValueData: """{app}\{#AppExeName}"" ""%1"""
@@ -83,6 +86,17 @@ Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType
 #undef AudioExt
 
 [Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssPostInstall then begin
+    { [Icons] recreates shortcuts on upgrades; invalidate the Shell icon cache. }
+    ShellExec('', ExpandConstant('{cmd}'),
+      '/c ie4uinit.exe -show', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   Result := True;

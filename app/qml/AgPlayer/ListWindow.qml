@@ -292,6 +292,8 @@ Window {
                     allCount: LibraryModel.count
                     favoriteCount: LibraryModel.favoriteCount
                     historyCount: LibraryModel.historyCount
+                    recentAddedCount: LibraryModel.recentAddedCount
+                    neverPlayedCount: LibraryModel.neverPlayedCount
                     playlistModel: listWindow.playlistModel
                     onCategorySelected: function(category) {
                         if (filterModel) filterModel.category = category

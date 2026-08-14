@@ -72,6 +72,29 @@ QString removeKnownSuffix(QString stem, const FilenameRuleSet& rules)
     return stem;
 }
 
+QString removeExplicitAffixes(QString stem, const FilenameRuleSet& rules)
+{
+    if (rules.removeSequenceAtStart) {
+        static const QRegularExpression startSequence(
+            QStringLiteral("^\\s*\\d{1,9}\\s*(?:[_\\-. ]+)\\s*"));
+        stem.remove(startSequence);
+    }
+    if (rules.removeSequenceAtEnd) {
+        static const QRegularExpression endSequence(
+            QStringLiteral("\\s*(?:[_\\-. ]+)\\s*\\d{1,9}\\s*$"));
+        stem.remove(endSequence);
+    }
+    if (!rules.removePrefix.isEmpty()
+        && stem.startsWith(rules.removePrefix, Qt::CaseInsensitive)) {
+        stem.remove(0, rules.removePrefix.size());
+    }
+    if (!rules.removeSuffix.isEmpty()
+        && stem.endsWith(rules.removeSuffix, Qt::CaseInsensitive)) {
+        stem.chop(rules.removeSuffix.size());
+    }
+    return stem.trimmed();
+}
+
 } // namespace
 
 QString FilenameTransformEngine::transform(const QString& sourceFileName,
@@ -79,7 +102,7 @@ QString FilenameTransformEngine::transform(const QString& sourceFileName,
                                            int ordinal)
 {
     const NameParts parts = splitName(sourceFileName);
-    QString stem = parts.stem;
+    QString stem = removeExplicitAffixes(parts.stem, rules);
     if (rules.prefix.isEmpty()) stem = removeKnownPrefix(stem, rules);
     if (rules.suffix.isEmpty()) stem = removeKnownSuffix(stem, rules);
     if (rules.replaceSpaces) {

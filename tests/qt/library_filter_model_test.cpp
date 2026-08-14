@@ -18,6 +18,7 @@ private slots:
     void filtersExactRatingInsteadOfMinimumRating();
     void filtersAndSortsPlaybackHistory();
     void filtersRecentAndNeverPlayedCategories();
+    void newImportAppearsInRecentAndLeavesNeverPlayedAfterPlayback();
     void writesRatingThroughProxyRows();
     void filtersPlaylistMembershipAndTracksLiveChanges();
     void preservesCustomPlaylistOrder();
@@ -195,6 +196,26 @@ void LibraryFilterModelTest::filtersRecentAndNeverPlayedCategories()
         QVERIFY(filter.data(filter.index(row, 0), LibraryModel::TrackIdRole).toString()
                 != QStringLiteral("alpha"));
     }
+}
+
+void LibraryFilterModelTest::newImportAppearsInRecentAndLeavesNeverPlayedAfterPlayback()
+{
+    LibraryModel source;
+    TrackRecord track = makeTrack(QStringLiteral("new"),
+                                  QStringLiteral("New import"),
+                                  QStringLiteral("Artist"),
+                                  QStringLiteral("Album"), 0, 100.0);
+    QVERIFY(source.append(track));
+
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.setCategory(QStringLiteral("recentAdded"));
+    QCOMPARE(filter.count(), 1);
+
+    filter.setCategory(QStringLiteral("neverPlayed"));
+    QCOMPARE(filter.count(), 1);
+    QVERIFY(source.markPlayed(source.tracks().front().trackId, 123456));
+    QCOMPARE(filter.count(), 0);
 }
 
 void LibraryFilterModelTest::writesRatingThroughProxyRows()

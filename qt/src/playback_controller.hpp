@@ -74,6 +74,7 @@ public:
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
+    Q_INVOKABLE void stop();
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void seek(qint64 positionMs);
     // Full PCM analysis supplies the exact decoded-frame duration used by both

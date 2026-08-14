@@ -14,6 +14,9 @@ $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEdi
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
+$toolsNavigation = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
+$settingsPage = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/SettingsPage.qml')
+$equalizerWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/EqualizerWindow.qml')
 $recordingInspector = Get-Content -Raw -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml')
 $transportBar = Get-Content -Raw -LiteralPath (
@@ -51,6 +54,23 @@ if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}La
 if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*942') {
     throw 'The tools window must open at the complete reference-workbench size.'
 }
+if ($toolsNavigation -notmatch 'objectName:\s*"audioToolsTopNav"' -or
+    $toolsNavigation -notmatch 'RowLayout' -or
+    $toolsNavigation -notmatch 'radius:\s*Theme\.radiusMd') {
+    throw 'The four audio tools must remain in the selected top horizontal pill navigation.'
+}
+if ($settingsPage -notmatch 'designRole:\s*"settingsCategoryRail"' -or
+    $settingsPage -notmatch 'designRole:\s*"settingsContentSurface"' -or
+    $settingsPage -match 'Segoe UI Symbol') {
+    throw 'Settings must use the selected left-category and right-content layout.'
+}
+foreach ($control in @(
+    'equalizerHeaderPanel', 'equalizerResponsePanel',
+    'equalizerBandsPanel', 'equalizerFooterPanel')) {
+    if ($equalizerWindow -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The scheme-3 EQ layout is missing $control."
+    }
+}
 if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
     throw 'The new single-track editor must not retain legacy multitrack concepts.'
 }
@@ -62,10 +82,10 @@ foreach ($behavior in @('recordingRequested', 'pauseRecording', 'resumeRecording
         throw "The transport bar is missing recording behavior: $behavior."
     }
 }
-foreach ($control in @(
+foreach ($obsoleteMarkerControl in @(
     'transportAddMarker', 'transportPreviousMarker', 'transportNextMarker')) {
-    if ($transportBar -notmatch ('objectName:\s*"?' + $control + '"?')) {
-        throw "The transport bar is missing the primary marker control: $control."
+    if ($transportBar -match ('objectName:\s*"?' + $obsoleteMarkerControl + '"?')) {
+        throw "The editor must not retain obsolete marker control: $obsoleteMarkerControl."
     }
 }
 foreach ($duplicate in @('volume-up-fill', 'setVolume\(', '波形缩放')) {
@@ -91,8 +111,8 @@ if ($transportBar -match 'Slider\s*\{\s*Layout\.preferredWidth:\s*90;\s*value:\s
 if ($audioEditor -notmatch 'AudioEditorController\.cancelRecording\(\)') {
     throw 'The recording state machine cancel action must be reachable from the editor UI.'
 }
-if (($audioEditor | Select-String -Pattern 'text:\s*qsTr\("取消录音"\)' -AllMatches).Matches.Count -ne 1) {
-    throw 'The editor must expose exactly one cancel-recording menu action.'
+if ((($audioEditor + "`n" + $recordingInspector) | Select-String -Pattern 'text:\s*qsTr\("取消录音"\)' -AllMatches).Matches.Count -ne 1) {
+    throw 'The editor must expose exactly one visible cancel-recording action.'
 }
 foreach ($exportControl in @(
     'exportSettingsDialog', 'exportRangeBox', 'exportFormatBox',
@@ -141,17 +161,17 @@ if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*tru
 if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
     throw 'Mini-player controls must not reference an undefined expanded property.'
 }
-if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,160}Layout\.preferredWidth:\s*(Math\.max\(360, page\.width \* 0\.265\)|445)') {
+if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,220}Layout\.preferredWidth:\s*page\.compactLayout\s*\?\s*360\s*:\s*445') {
     throw 'The format converter needs a reference-width settings workbench.'
 }
-if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(480, page\.width \* 0\.36\)') {
+if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,180}Math\.max\(480, page\.width \* 0\.36\)') {
     throw 'The metadata editor needs a complete batch-edit workbench at desktop width.'
 }
 if ($formatPage -notmatch 'enabled:\s*!converter\.busy[\s\S]{0,140}PlaybackController\.currentTrackId\.length > 0') {
     throw 'The converter player-import action must only be enabled while its controller can accept work.'
 }
 foreach ($control in @(
-    'formatToolbar', 'formatSearchField', 'formatStatusFilters',
+    'formatToolbar', 'formatStatusFilters',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
     'formatOutputFormatGroup', 'formatEncodingSettingsGroup',
     'formatOutputOptionsGroup', 'formatTotalProgress')) {

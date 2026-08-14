@@ -3,6 +3,8 @@ import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
+    property bool showShortcutHint: false
+
     color: Theme.panel
     border.color: Theme.border
 
@@ -20,7 +22,10 @@ Rectangle {
         }
         Item { Layout.fillWidth: true }
         Text {
-            text: AudioEditorController.selectionStart >= 0
+            objectName: "editorStatusShortcutHint"
+            text: showShortcutHint
+                ? qsTr("Space 播放/暂停 · R 录音 · Ctrl+Shift+A 取消选区 · Ctrl+W 清空")
+                : AudioEditorController.selectionStart >= 0
                 ? qsTr("选区范围：%1 - %2（%3 帧）")
                     .arg(AudioEditorController.selectionStart)
                     .arg(AudioEditorController.selectionEnd)
@@ -28,6 +33,8 @@ Rectangle {
                 : qsTr("选区范围：--")
             color: Theme.secondaryText
             font.pixelSize: 11
+            elide: Text.ElideRight
+            Layout.fillWidth: showShortcutHint
         }
         Item { Layout.fillWidth: true }
         Text {

@@ -1,6 +1,9 @@
 #include "audio_editor/audio_editor_controller.hpp"
+#include "library_model.hpp"
+#include "playback_controller.hpp"
 
 #include <QFileInfo>
+#include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -8,6 +11,29 @@ class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void stopsMainPlaybackBeforeEditorPreview()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        ag_player* mainPlayer = nullptr;
+        const ag_player_config config{AG_AUDIO_BACKEND_NULL, 0U};
+        QCOMPARE(ag_player_create_with_config(&config, &mainPlayer), AG_OK);
+        QCOMPARE(ag_player_load(mainPlayer, fixture.toUtf8().constData()), AG_OK);
+        QCOMPARE(ag_player_play(mainPlayer), AG_OK);
+        LibraryModel library;
+        PlaybackController mainPlayback(mainPlayer, &library);
+        QTRY_COMPARE_WITH_TIMEOUT(mainPlayback.state(),
+                                  PlaybackController::Playing, 2'000);
+        AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+        editor.setMainPlaybackController(&mainPlayback);
+        QVERIFY(editor.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(editor.playPause());
+        QTRY_COMPARE_WITH_TIMEOUT(mainPlayback.state(),
+                                  PlaybackController::Stopped, 2'000);
+        QVERIFY(editor.stopPlayback());
+        ag_player_destroy(mainPlayer);
+    }
+
     void emptyDocumentDisablesDocumentActions()
     {
         AudioEditorController controller;
@@ -53,8 +79,21 @@ private slots:
             "editor.undo", "editor.redo", "editor.cut", "editor.copy",
             "editor.paste", "editor.deleteSelection", "editor.cropToSelection",
             "editor.silenceSelection", "editor.fadeIn", "editor.fadeOut",
-            "editor.moreMenu", "editor.export"};
+            "editor.export"};
         QCOMPARE(controller.actions()->ids(), expected);
+    }
+
+    void recordingDocumentAndClearUseAnUntitledLifecycle()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createRecordingDocument(48'000, 2));
+        QVERIFY(controller.hasDocument());
+        QVERIFY(controller.filePath().isEmpty());
+        QVERIFY(controller.totalFrames() > 0);
+        QVERIFY(controller.clearDocument());
+        QVERIFY(!controller.hasDocument());
+        QCOMPARE(controller.state(), EditorSessionState::Empty);
+        QCOMPARE(controller.totalFrames(), qint64{0});
     }
 
     void opensRealAudioAndPublishesSummaryAndWaveform()
@@ -179,39 +218,82 @@ private slots:
         const qint64 originalFrames = controller.totalFrames();
         QVERIFY(controller.setSpeedPercent(125.0));
         QVERIFY(controller.setPitch(2, 0));
+        QElapsedTimer elapsed;
+        elapsed.start();
         QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
-        QVERIFY(controller.timePitchPreviewActive());
+        QVERIFY2(elapsed.elapsed() < 50,
+                 "time/pitch preview must not block the GUI heartbeat");
+        QTRY_VERIFY_WITH_TIMEOUT(controller.timePitchPreviewActive(), 10'000);
         QCOMPARE(controller.totalFrames(), originalFrames);
         QVERIFY(!controller.modified());
         QVERIFY(controller.playing());
         QVERIFY(controller.stopPlayback());
     }
 
-    void markerNavigationUsesTheNearestMarker()
+    void selectionPreviewLoopsInsideSelectionByDefault()
     {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 192'000));
-        QVERIFY(controller.addMarker(QStringLiteral("A"), 48'000));
-        QVERIFY(controller.addMarker(QStringLiteral("B"), 144'000));
-        QVERIFY(controller.seekMs(2'000));
-        QVERIFY(controller.seekPreviousMarker());
-        QCOMPARE(controller.positionMs(), qint64{1'000});
-        QVERIFY(controller.seekNextMarker());
-        QCOMPARE(controller.positionMs(), qint64{3'000});
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        const qint64 startFrame = controller.sampleRate() / 10;
+        const qint64 endFrame = controller.sampleRate() * 3 / 10;
+        QVERIFY(controller.setSelection(startFrame, endFrame));
+        QVERIFY(controller.seekMs(0));
+        QVERIFY(controller.playPause());
+        QCOMPARE(controller.positionMs(), qint64{100});
+        QTest::qWait(550);
+        QVERIFY(controller.playing());
+        QVERIFY(controller.positionMs() >= 100);
+        QVERIFY(controller.positionMs() < 300);
+        QVERIFY(controller.stopPlayback());
     }
 
-    void markerManagementIsExposedToTheEditorUi()
+    void bpmAnalysisRunsOffTheGuiThreadAgainstTheEditedDocument()
     {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 192'000));
-        QVERIFY(controller.addMarker(QStringLiteral("A"), 48'000));
-        QVERIFY(controller.renameMarker(0, QStringLiteral("Intro")));
-        QCOMPARE(controller.markers().at(0).toMap().value(QStringLiteral("name")),
-                 QStringLiteral("Intro"));
-        QVERIFY(controller.removeMarker(0));
-        QVERIFY(controller.markers().isEmpty());
-        QVERIFY(!controller.renameMarker(0, QStringLiteral("Missing")));
-        QVERIFY(!controller.removeMarker(0));
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.setSelection(0, controller.sampleRate() / 2));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.detectBpm());
+        QVERIFY2(elapsed.elapsed() < 50,
+                 "BPM analysis must not block the GUI thread");
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
+    }
+
+    void noiseReductionRunsOffTheGuiThreadAndIsUndoable()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.setSelection(0, controller.sampleRate() / 2));
+        const qint64 frames = controller.totalFrames();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.reduceNoise());
+        QVERIFY2(elapsed.elapsed() < 50,
+                 "noise reduction must not block the GUI thread");
+        QVERIFY(controller.noiseReductionActive());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 15'000);
+        QVERIFY2(controller.errorMessage().isEmpty(),
+                 qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.totalFrames(), frames);
+        QVERIFY(controller.modified());
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.undo")));
+        QCOMPARE(controller.totalFrames(), frames);
+    }
+
+    void removedMarkerAndNormalizeInterfacesStayAbsent()
+    {
+        const QMetaObject& meta = AudioEditorController::staticMetaObject;
+        QCOMPARE(meta.indexOfMethod("normalize()"), -1);
+        QCOMPARE(meta.indexOfMethod("addMarker(QString,qint64)"), -1);
+        QCOMPARE(meta.indexOfProperty("markers"), -1);
     }
 
     void openingAnotherFileRequiresDiscardConfirmation()
@@ -244,7 +326,26 @@ private slots:
             QVERIFY(!item.value(QStringLiteral("name")).toString().isEmpty());
         }
         QVERIFY(!controller.startRecording(QUrl(), QString(), 48'000, 2,
-                                           false, false));
+                                            false, false));
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
+    void recordingDeviceStartupFailureReturnsAsynchronously()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(directory.filePath(QStringLiteral("capture.wav"))),
+            QStringLiteral("capture:missing-device"), 48'000, 2,
+            false, false));
+        QVERIFY2(elapsed.elapsed() < 50,
+                 "recording device startup must not block the GUI thread");
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.state() != EditorSessionState::Processing, 5'000);
         QVERIFY(!controller.errorMessage().isEmpty());
     }
 };

@@ -63,14 +63,29 @@ Rectangle {
             border.color: root.moduleBorder
             border.width: 1
             radius: Theme.radiusSm
+            ThemedIcon {
+                id: searchIcon
+                objectName: "librarySearchIcon"
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                width: 16
+                height: 16
+                source: Theme.icon("search-line")
+                tint: Theme.secondaryText
+                opacity: 0.55
+            }
             TextField {
                 id: searchField
                 objectName: "librarySearchField"
                 anchors.fill: parent
-                placeholderText: qsTr("歌曲/艺术家/专辑/标签/")
+                placeholderText: qsTr("歌曲 · 艺术家 · 专辑 · 标签")
                 text: root.searchText
                 color: Theme.primaryText
-                placeholderTextColor: Theme.secondaryText
+                placeholderTextColor: Qt.rgba(Theme.secondaryText.r,
+                                               Theme.secondaryText.g,
+                                               Theme.secondaryText.b, 0.55)
+                leftPadding: 34
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
                 onTextChanged: root.searchText = text

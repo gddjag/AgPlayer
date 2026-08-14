@@ -6,7 +6,7 @@ if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}\r?$') {
     throw "Installed Apps must display only AgPlayer"
 }
 
-if ($installer -notmatch 'Name:\s*"\{autodesktop\}\\\{#AppName\}";\s*Filename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*AppUserModelID:\s*"AgPlayer\.Desktop"') {
+if ($installer -notmatch 'Name:\s*"\{autodesktop\}\\\{#AppName\}";\s*Filename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*WorkingDir:\s*"\{app\}";[^\r\n]*IconFilename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Desktop shortcut must be created unconditionally"
 }
 if ($installer -match '\[InstallDelete\]' -or
@@ -62,11 +62,31 @@ if ($mainSource -notmatch 'SetCurrentProcessExplicitAppUserModelID') {
 }
 if ($mainSource -notmatch 'SHGetPropertyStoreForWindow' -or
     $mainSource -notmatch 'PKEY_AppUserModel_ID' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchCommand' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchDisplayNameResource' -or
+    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchIconResource' -or
     $mainSource -notmatch 'window->setIcon') {
-    throw "Every native top-level window must publish the stable taskbar identity and icon"
+    throw "Every native top-level window must publish stable taskbar identity, relaunch metadata, and icon"
+}
+if ($mainSource -notmatch 'LoadImageW' -or
+    $mainSource -notmatch 'MAKEINTRESOURCEW\(kAgPlayerIconResourceId\)' -or
+    $mainSource -notmatch 'WM_SETICON' -or
+    $mainSource -notmatch 'WM_GETICON') {
+    throw "Every native top-level window must publish and verify the PE icon resource"
 }
 if ($installer -notmatch 'AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Installed shortcuts must share the stable taskbar AppUserModelID"
+}
+foreach ($identityValue in @(
+    'Software\Classes\AppUserModelId\AgPlayer.Desktop',
+    'ValueName: "DisplayName"',
+    'ValueName: "IconUri"',
+    'ValueName: "RelaunchCommand"',
+    'ie4uinit.exe -show'
+)) {
+    if (-not $installer.Contains($identityValue)) {
+        throw "Installer must register and refresh the stable taskbar identity: $identityValue"
+    }
 }
 $manifestPath = Join-Path $repo 'app\agplayer.manifest'
 if (-not (Test-Path -LiteralPath $manifestPath)) {

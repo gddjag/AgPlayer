@@ -153,6 +153,11 @@ void PlaybackController::pause()
     runCommand(player_ != nullptr ? ag_player_pause(player_) : AG_INVALID_ARGUMENT);
 }
 
+void PlaybackController::stop()
+{
+    runCommand(player_ != nullptr ? ag_player_stop(player_) : AG_INVALID_ARGUMENT);
+}
+
 void PlaybackController::togglePlayback()
 {
     if (state_ == Playing) {

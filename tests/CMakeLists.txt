@@ -142,6 +142,17 @@ set_tests_properties(recording_session_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+# Opt-in real-device acceptance executable. It is deliberately not registered
+# with CTest because CI machines are not required to expose a capture device.
+add_executable(recording_hardware_smoke
+    core/recording_hardware_smoke.cpp
+)
+target_include_directories(recording_hardware_smoke PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(recording_hardware_smoke PRIVATE agplayer_core)
+agplayer_enable_warnings(recording_hardware_smoke)
+
 foreach(audio_editor_core_test IN ITEMS
     time_pixel_mapper_test
     peak_pyramid_test
@@ -398,6 +409,9 @@ agplayer_enable_warnings(metadata_writer_test)
 add_test(NAME metadata_writer_test COMMAND metadata_writer_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(metadata_writer_test PROPERTIES
     TIMEOUT 30
+    # This suite performs atomic replacements and preflight probes next to the
+    # shared decoder fixture. Keep it isolated from QML metadata readers.
+    RUN_SERIAL TRUE
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
@@ -749,6 +763,15 @@ set_tests_properties(qml_filename_process_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_test(NAME qml_metadata_editor_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
+set_tests_properties(qml_metadata_editor_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_test(NAME metadata_editor_layout_contract_test
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
         -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/metadata_editor_layout_contract_test.ps1
@@ -789,6 +812,12 @@ set_tests_properties(native_drop_router_test PROPERTIES
     # This test opens a native QWindow and posts WM_DROPFILES to its HWND.
     # It must not compete with the offscreen QML windows used by the parallel
     # UI tests, otherwise Windows can reject the temporary exposed surface.
+    RUN_SERIAL TRUE
+)
+set_tests_properties(playback_controller_test qml_main_window_test qml_waveform_test
+    PROPERTIES
+    # Qt/FFmpeg global process state and the shared generated fixtures make
+    # these integration tests deterministic only when they do not overlap.
     RUN_SERIAL TRUE
 )
 set_tests_properties(settings_controller_test PROPERTIES
@@ -896,4 +925,10 @@ if (WIN32)
     set_tests_properties(installer_contract_test PROPERTIES
         ENVIRONMENT "AGPLAYER_INSTALLER_SCRIPT=${CMAKE_SOURCE_DIR}/installer/AgPlayer.iss"
     )
+endif()
+if(WIN32)
+    add_test(NAME window_icon_contract_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+            -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/window_icon_contract_test.ps1
+            -SourceRoot ${CMAKE_SOURCE_DIR})
 endif()

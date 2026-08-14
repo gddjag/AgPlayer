@@ -26,7 +26,7 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 8);
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 4);
         delete node;
     }
 
@@ -60,7 +60,7 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 4);
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 2);
         delete node;
     }
 

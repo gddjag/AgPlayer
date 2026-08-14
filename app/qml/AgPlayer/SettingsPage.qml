@@ -43,52 +43,6 @@ Item {
         closed()
     }
 
-    Dialog {
-        id: feedbackDialog
-        objectName: "feedbackDialog"
-        anchors.centerIn: parent
-        width: 420
-        modal: true
-        title: qsTr("反馈")
-        standardButtons: Dialog.Ok
-        contentItem: ColumnLayout {
-            spacing: 10
-            Text {
-                objectName: "feedbackMessage"
-                text: qsTr("建议反馈请发邮件：agplayer@foxmail.com")
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 13
-                wrapMode: Text.Wrap
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                TextField {
-                    id: feedbackEmailField
-                    objectName: "feedbackEmailField"
-                    Layout.fillWidth: true
-                    text: "agplayer@foxmail.com"
-                    readOnly: true
-                    selectByMouse: true
-                }
-                Button {
-                    objectName: "copyFeedbackEmailButton"
-                    text: qsTr("复制邮箱")
-                    onClicked: {
-                        feedbackEmailField.selectAll()
-                        feedbackEmailField.copy()
-                    }
-                }
-            }
-        }
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.border
-            border.width: 1
-            radius: Theme.radiusMd
-        }
-    }
-
     Keys.onEscapePressed: cancelAndClose()
 
     function shortcutText(event) {
@@ -232,13 +186,13 @@ Item {
 
     function sectionList() {
         return [
-            { index: 0, text: qsTr("常规"), subtitle: qsTr("常规"), icon: "\u2699" },
-            { index: 1, text: qsTr("播放与音频"), subtitle: qsTr("播放"), icon: "\u25B6" },
-            { index: 2, text: qsTr("外观与波形"), subtitle: qsTr("外观"), icon: "\u223F" },
-            { index: 3, text: qsTr("音频工具预设"), subtitle: qsTr("音频工具"), icon: "\u2692" },
-            { index: 4, text: qsTr("快捷键设置"), subtitle: qsTr("快捷键"), icon: "\u2328" },
-            { index: 5, text: qsTr("缓存与数据"), subtitle: qsTr("缓存"), icon: "\u2672" },
-            { index: 6, text: qsTr("关于"), subtitle: qsTr("关于"), icon: "\u2139" }
+            { index: 0, text: qsTr("常规"), subtitle: qsTr("常规"), icon: "settings-3-fill" },
+            { index: 1, text: qsTr("播放与音频"), subtitle: qsTr("播放"), icon: "play-fill" },
+            { index: 2, text: qsTr("外观与波形"), subtitle: qsTr("外观"), icon: "waveform-switch" },
+            { index: 3, text: qsTr("音频工具预设"), subtitle: qsTr("音频工具"), icon: "equalizer-line" },
+            { index: 4, text: qsTr("快捷键设置"), subtitle: qsTr("快捷键"), icon: "list-unordered" },
+            { index: 5, text: qsTr("缓存与数据"), subtitle: qsTr("缓存"), icon: "folder-open-line" },
+            { index: 6, text: qsTr("关于"), subtitle: qsTr("关于"), icon: "information-line" }
         ]
     }
 
@@ -323,7 +277,7 @@ Item {
 
             TextField {
                 id: searchField
-                Layout.preferredWidth: 220
+                Layout.preferredWidth: 188
                 Layout.preferredHeight: 32
                 placeholderText: qsTr("搜索设置...")
                 color: Theme.primaryText
@@ -403,7 +357,8 @@ Item {
             Rectangle {
                 id: settingsSidebar
                 objectName: "settingsSidebar"
-                Layout.preferredWidth: 208
+                property string designRole: "settingsCategoryRail"
+                Layout.preferredWidth: 184
                 Layout.fillHeight: true
                 color: "transparent"
 
@@ -434,15 +389,15 @@ Item {
                             anchors.rightMargin: Theme.spacingMd
                             spacing: Theme.spacingMd
 
-                            Text {
-                                text: modelData.icon
-                                color: root.selectedSection === modelData.index
-                                       ? Theme.cyan
-                                       : Theme.secondaryText
-                                font.pixelSize: 16
-                                font.family: "Segoe UI Symbol"
-                                Layout.preferredWidth: 24
-                                horizontalAlignment: Text.AlignHCenter
+                            ThemedIcon {
+                                source: Theme.icon(modelData.icon)
+                                tint: root.selectedSection === modelData.index
+                                      ? Theme.iconAccent
+                                      : Theme.iconSecondary
+                                sourceSize.width: 17
+                                sourceSize.height: 17
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 17
                             }
 
                             Text {
@@ -476,6 +431,7 @@ Item {
             ScrollView {
                 id: settingsScroll
                 objectName: "settingsScroll"
+                property string designRole: "settingsContentSurface"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -2406,31 +2362,6 @@ Item {
                         }
                     }
 
-                    Button {
-                        objectName: "feedbackButton"
-                        text: qsTr("反馈")
-                        onClicked: feedbackDialog.open()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 96
-                            implicitHeight: 36
-                        }
-                    }
                 }
             }
         }

@@ -10,7 +10,7 @@ $settings = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlay
 $combined = $page + "`n" + $table + "`n" + $settings
 
 foreach ($control in @(
-    'formatToolbar', 'formatFilterButton', 'formatSelectAllCheck',
+    'formatToolbar', 'formatStatusFilters', 'formatSelectAllCheck',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
     'formatEncoderBox', 'formatOutputDirectoryRow', 'formatSummaryCard')) {
     if ($combined -notmatch [regex]::Escape($control)) {
@@ -18,8 +18,15 @@ foreach ($control in @(
     }
 }
 
+if ($page -match 'formatSearchField|converterParallelJobsBox') {
+    throw 'Search and concurrency controls must not remain in the format workbench.'
+}
+
 if ($combined -notmatch 'key:\s*"Converting"') {
     throw 'The reference task filters must expose the converting state.'
+}
+if (($combined | Select-String -Pattern 'objectName:\s*"formatStatusFilters"' -AllMatches).Matches.Count -ne 1) {
+    throw 'The format workbench must expose one status-filter row without a duplicate toolbar copy.'
 }
 if ($combined -notmatch 'model\.status\s*===\s*"Converting"') {
     throw 'The converting filter must be backed by actual task state.'

@@ -56,6 +56,7 @@ public:
     [[nodiscard]] float peak() const noexcept;
     [[nodiscard]] SampleFrame framesCaptured() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
+    [[nodiscard]] std::vector<float> recentPeaks(std::size_t maximum) const;
 
 private:
     class Impl;

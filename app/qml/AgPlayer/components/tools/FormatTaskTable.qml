@@ -40,13 +40,13 @@ Rectangle {
                              || (modelData.key === "All" && converter.filteredTaskModel.statusFilter === "")
                     onClicked: converter.filteredTaskModel.statusFilter = modelData.key
                     background: Rectangle {
-                        color: parent.checked ? Theme.accent : Theme.elevated
+                        color: parent.checked ? Theme.selectedTrackSelection : Theme.elevated
                         border.color: parent.checked ? Theme.accent : Theme.border
                         radius: 5
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: parent.checked ? Theme.accentText : Theme.secondaryText
+                        color: Theme.primaryText
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 13
@@ -99,7 +99,7 @@ Rectangle {
             delegate: Rectangle {
                 implicitWidth: root.columnWidths[column]
                 implicitHeight: 44
-                color: row % 2 ? Theme.elevated : Theme.background
+                color: row % 2 ? Theme.panel : Theme.elevated
                 border.color: Theme.border
                 border.width: 1
 
@@ -129,7 +129,7 @@ Rectangle {
                     color: column === 7 && model.status === "Done" ? Theme.waveformGreen
                          : column === 7 && model.status === "Error" ? Theme.waveformRed
                          : column === 7 && model.status === "Converting" ? Theme.accent
-                         : Theme.secondaryText
+                         : Theme.primaryText
                     font.pixelSize: 13
                 }
                 ProgressBar {
@@ -142,15 +142,13 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     value: model.progress
                     background: Rectangle { implicitHeight: 8; color: Theme.border; radius: 4 }
-                            contentItem: Item {
-                                implicitHeight: 8
-                                Rectangle {
-                                    width: rowProgress.visualPosition * parent.width
-                                    height: parent.height
-                                    radius: 4
-                                    color: model.status === "Done" ? Theme.waveformGreen : Theme.accent
-                                }
-                            }
+                    contentItem: Item {
+                        implicitHeight: 8
+                        Rectangle {
+                            width: rowProgress.visualPosition * parent.width
+                            height: parent.height
+                            radius: 4
+                            color: model.status === "Done" ? Theme.waveformGreen : Theme.accent
                         }
                 Text {
                     id: percent
@@ -160,7 +158,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 40
                     text: Math.round(model.progress * 100) + "%"
-                    color: Theme.secondaryText
+                    color: Theme.primaryText
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }

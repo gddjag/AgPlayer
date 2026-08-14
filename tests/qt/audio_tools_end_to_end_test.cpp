@@ -56,6 +56,7 @@ private slots:
     void formatConverterReportsReferenceTaskColumns();
     void formatConverterExposesQueueFacadeModelsAndPreflight();
     void formatConverterPreflightReturnsResolvedProfileBeforeStarting();
+    void formatConverterBuildPreflightUsesSmartProfilesAndRejectsInvalidCustomValues();
     void formatConverterAskPolicyRequiresConflictConfirmationBeforeStarting();
     void formatConverterSkipPolicyLeavesExistingOutputUntouched();
     void formatConverterExposesEveryPdfRequiredOutputFormat();
@@ -84,6 +85,57 @@ private slots:
     void filenameProcessorUsesTwoStageTransactions();
     void filenameProcessorSanitizesWindowsReservedAndLongNames();
 };
+
+void AudioToolsEndToEndTest::
+    formatConverterBuildPreflightUsesSmartProfilesAndRejectsInvalidCustomValues()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("smart-profile.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+
+    converter.setSelectedFormat(QStringLiteral("mp3"));
+    const QVariantMap recommended = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("mp3")},
+        {QStringLiteral("preset"), QStringLiteral("recommended")},
+        {QStringLiteral("bitRate"), 1000},
+        {QStringLiteral("sampleRate"), 0},
+        {QStringLiteral("channelLayout"), QString()},
+    });
+    QVERIFY(recommended.value(QStringLiteral("ready")).toBool());
+    QCOMPARE(recommended.value(QStringLiteral("bitRate")).toInt(), 320000);
+    QCOMPARE(recommended.value(QStringLiteral("quality")).toInt(), 85);
+    QCOMPARE(recommended.value(QStringLiteral("bitrateMode")).toString(),
+             QStringLiteral("cbr"));
+    converter.rejectPendingPlan();
+
+    const QVariantMap invalidCustom = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("mp3")},
+        {QStringLiteral("preset"), QStringLiteral("custom")},
+        {QStringLiteral("bitRate"), 1000},
+        {QStringLiteral("bitrateMode"), QStringLiteral("cbr")},
+    });
+    QVERIFY(!invalidCustom.value(QStringLiteral("ready")).toBool());
+    QVERIFY(!invalidCustom.value(QStringLiteral("reason")).toString().isEmpty());
+    converter.rejectPendingPlan();
+
+    converter.setSelectedFormat(QStringLiteral("opus"));
+    const QVariantMap opus = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("opus")},
+        {QStringLiteral("preset"), QStringLiteral("recommended")},
+        {QStringLiteral("sampleRate"), 44100},
+    });
+    QVERIFY(opus.value(QStringLiteral("ready")).toBool());
+    QCOMPARE(opus.value(QStringLiteral("sampleRate")).toInt(), 48000);
+    QCOMPARE(opus.value(QStringLiteral("bitRate")).toInt(), 192000);
+    QCOMPARE(opus.value(QStringLiteral("bitrateMode")).toString(),
+             QStringLiteral("vbr"));
+    converter.rejectPendingPlan();
+}
 
 void AudioToolsEndToEndTest::formatConverterReportsReferenceTaskColumns()
 {
@@ -368,7 +420,7 @@ void AudioToolsEndToEndTest::formatConverterExportsAndReopensEveryExposedFormat(
 {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
-    const QString input = temp.filePath(QStringLiteral("all-formats.wav"));
+    const QString input = temp.filePath(QStringLiteral("中文 音频 all-formats.wav"));
     QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
 
     const QVariantList formats = FormatConverter().supportedOutputFormats();
@@ -378,7 +430,7 @@ void AudioToolsEndToEndTest::formatConverterExportsAndReopensEveryExposedFormat(
             continue;
         }
         const QString key = format.value(QStringLiteral("key")).toString();
-        const QString outputDir = temp.filePath(key);
+        const QString outputDir = temp.filePath(QStringLiteral("中文输出-") + key);
         QVERIFY(QDir().mkpath(outputDir));
         FormatConverter converter;
         converter.loadFiles({QUrl::fromLocalFile(input)});

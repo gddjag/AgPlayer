@@ -7,9 +7,9 @@ Window {
     id: settingsWindow
     objectName: "settingsWindow"
     visible: false
-    width: 920
+    width: 860
     height: Math.min(900, Math.max(640, Screen.desktopAvailableHeight - 40))
-    minimumWidth: 900
+    minimumWidth: 840
     minimumHeight: 640
     flags: Qt.FramelessWindowHint
     color: "transparent"

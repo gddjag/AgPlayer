@@ -1239,7 +1239,8 @@ ag_result transcode(const std::string& input_path,
                                           && muxer_key != ".wav";
     verification_plan.expect_metadata = staged_config.keep_metadata
                                         && output_supports_metadata;
-    verification_plan.expect_cover = staged_config.keep_cover;
+    verification_plan.expect_cover = staged_config.keep_cover
+        && source_probe.has_cover && output_supports_metadata;
     TranscodeVerificationResult verification_result;
     const ag_result verify_result = verify_transcoded_output(
         staged_config.output_path, verification_plan, verification_result,

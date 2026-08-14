@@ -53,6 +53,8 @@ agplayer::qt::FilenameRuleSet typedRules(const QVariantMap& rules)
     agplayer::qt::FilenameRuleSet typed;
     typed.prefix = rules.value(QStringLiteral("prefix")).toString();
     typed.suffix = rules.value(QStringLiteral("suffix")).toString();
+    typed.removePrefix = rules.value(QStringLiteral("removePrefix")).toString();
+    typed.removeSuffix = rules.value(QStringLiteral("removeSuffix")).toString();
     typed.replaceSpaces = rules.value(QStringLiteral("replaceSpaces"), false).toBool();
     typed.spaceReplacement = rules.value(QStringLiteral("spaceReplacement"), QStringLiteral("_")).toString();
     typed.autoNumber = rules.value(QStringLiteral("autoNumber"), false).toBool();
@@ -63,6 +65,8 @@ agplayer::qt::FilenameRuleSet typedRules(const QVariantMap& rules)
     typed.removePrefixWhenEmpty = rules.value(QStringLiteral("removePrefixWhenEmpty"), true).toBool();
     typed.removeSuffixWhenEmpty = rules.value(QStringLiteral("removeSuffixWhenEmpty"), true).toBool();
     typed.removeSequenceWhenEmpty = rules.value(QStringLiteral("removeSequenceWhenEmpty"), true).toBool();
+    typed.removeSequenceAtStart = rules.value(QStringLiteral("removeSequenceAtStart"), false).toBool();
+    typed.removeSequenceAtEnd = rules.value(QStringLiteral("removeSequenceAtEnd"), false).toBool();
     const QString mode = rules.value(QStringLiteral("caseMode"), QStringLiteral("keep")).toString();
     typed.caseRule = mode == QLatin1String("lower") ? agplayer::qt::CaseRule::Lower
         : mode == QLatin1String("upper") ? agplayer::qt::CaseRule::Upper

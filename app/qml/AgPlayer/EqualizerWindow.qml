@@ -118,6 +118,7 @@ Window {
         }
 
         Rectangle {
+            objectName: "equalizerHeaderPanel"
             Layout.fillWidth: true
             Layout.preferredHeight: 44
             color: Theme.panel
@@ -138,8 +139,9 @@ Window {
                 }
                 Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 24; color: Theme.border }
                 Label { text: qsTr("预设"); color: Theme.secondaryText }
-                ComboBox {
+                ThemedComboBox {
                     id: presetBox
+                    objectName: "equalizerPresetBox"
                     Layout.preferredWidth: 88
                     model: EqualizerController.presetNames
                     currentIndex: Math.max(0, EqualizerController.presetIds.indexOf(
@@ -181,6 +183,7 @@ Window {
         }
 
         Rectangle {
+            objectName: "equalizerResponsePanel"
             Layout.fillWidth: true
             Layout.preferredHeight: 66
             Layout.leftMargin: 10
@@ -216,6 +219,7 @@ Window {
         }
 
         RowLayout {
+            objectName: "equalizerBandsPanel"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: 10
@@ -266,6 +270,7 @@ Window {
         }
 
         Rectangle {
+            objectName: "equalizerFooterPanel"
             Layout.fillWidth: true
             Layout.preferredHeight: 38
             color: Theme.panel
@@ -335,7 +340,7 @@ Window {
         ColumnLayout {
             width: parent.width
             Label { text: qsTr("管理自定义预设"); color: Theme.primaryText; font.weight: Font.DemiBold }
-            ComboBox {
+            ThemedComboBox {
                 id: customPresetBox
                 Layout.fillWidth: true
                 textRole: "text"

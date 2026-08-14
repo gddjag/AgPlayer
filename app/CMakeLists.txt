@@ -4,10 +4,13 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/add-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-back-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-right-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/close-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
@@ -33,13 +36,16 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-list-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/search-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
@@ -54,6 +60,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/waveform-switch.svg
 )
 
@@ -112,6 +119,8 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedSwitch.qml
+        qml/AgPlayer/components/ThemedMenuItem.qml
+        qml/AgPlayer/components/ThemedComboBox.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/FormatTaskTable.qml
         qml/AgPlayer/components/tools/FormatSettingsPanel.qml
@@ -156,7 +165,7 @@ target_link_libraries(AgPlayer PRIVATE
     agplayer_app_qmlplugin
 )
 if(WIN32)
-    target_link_libraries(AgPlayer PRIVATE shell32)
+    target_link_libraries(AgPlayer PRIVATE shell32 propsys)
 endif()
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)

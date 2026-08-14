@@ -179,6 +179,92 @@ FormatInfo format_info(const QString& format)
     return {"libmp3lame", "mp3", "mp3"};
 }
 
+QVariantList bitrate_choices_for(const QString& format)
+{
+    if (format == QStringLiteral("opus")) {
+        return {64000, 96000, 128000, 160000, 192000, 256000};
+    }
+    if (format == QStringLiteral("ogg")) {
+        return {96000, 128000, 192000, 256000, 320000};
+    }
+    if (format == QStringLiteral("mp3")
+        || format == QStringLiteral("aac")
+        || format == QStringLiteral("m4a")) {
+        return {128000, 192000, 256000, 320000};
+    }
+    return {};
+}
+
+QVariantMap preset(const QString& key, const QString& label, int bitRate,
+                   const QString& bitrateMode, int sampleRate, int quality)
+{
+    return {{QStringLiteral("key"), key},
+            {QStringLiteral("label"), label},
+            {QStringLiteral("bitRate"), bitRate},
+            {QStringLiteral("bitrateMode"), bitrateMode},
+            {QStringLiteral("sampleRate"), sampleRate},
+            {QStringLiteral("quality"), quality}};
+}
+
+QVariantList presets_for(const QString& format, bool lossy)
+{
+    if (!lossy) {
+        return {preset(QStringLiteral("recommended"),
+                       QStringLiteral("推荐（保留原始参数）"), 0, {}, 0, 100),
+                preset(QStringLiteral("custom"), QStringLiteral("自定义"),
+                       0, {}, 0, 100)};
+    }
+    if (format == QStringLiteral("opus")) {
+        return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
+                       192000, QStringLiteral("vbr"), 48000, 85),
+                preset(QStringLiteral("high"), QStringLiteral("高质量"),
+                       256000, QStringLiteral("vbr"), 48000, 95),
+                preset(QStringLiteral("compatible"), QStringLiteral("兼容"),
+                       128000, QStringLiteral("cbr"), 48000, 70),
+                preset(QStringLiteral("custom"), QStringLiteral("自定义"),
+                       192000, QStringLiteral("vbr"), 48000, 85)};
+    }
+    if (format == QStringLiteral("aac") || format == QStringLiteral("m4a")) {
+        return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
+                       256000, QStringLiteral("vbr"), 0, 85),
+                preset(QStringLiteral("high"), QStringLiteral("高质量"),
+                       320000, QStringLiteral("vbr"), 0, 95),
+                preset(QStringLiteral("compatible"), QStringLiteral("兼容"),
+                       192000, QStringLiteral("cbr"), 44100, 70),
+                preset(QStringLiteral("custom"), QStringLiteral("自定义"),
+                       256000, QStringLiteral("vbr"), 0, 85)};
+    }
+    if (format == QStringLiteral("ogg")) {
+        return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
+                       192000, QStringLiteral("vbr"), 0, 85),
+                preset(QStringLiteral("high"), QStringLiteral("高质量"),
+                       320000, QStringLiteral("vbr"), 0, 95),
+                preset(QStringLiteral("compatible"), QStringLiteral("兼容"),
+                       128000, QStringLiteral("cbr"), 44100, 70),
+                preset(QStringLiteral("custom"), QStringLiteral("自定义"),
+                       192000, QStringLiteral("vbr"), 0, 85)};
+    }
+    return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
+                   320000, QStringLiteral("cbr"), 0, 85),
+            preset(QStringLiteral("high"), QStringLiteral("高质量"),
+                   320000, QStringLiteral("vbr"), 0, 95),
+            preset(QStringLiteral("compatible"), QStringLiteral("兼容"),
+                   192000, QStringLiteral("cbr"), 44100, 70),
+            preset(QStringLiteral("custom"), QStringLiteral("自定义"),
+                   320000, QStringLiteral("cbr"), 0, 85)};
+}
+
+bool list_contains_string(const QVariantList& values, const QString& needle,
+                          const QString& valueKey = {})
+{
+    return std::any_of(values.cbegin(), values.cend(),
+                       [&needle, &valueKey](const QVariant& value) {
+        return (valueKey.isEmpty() ? value.toString()
+                                   : value.toMap().value(valueKey).toString())
+            == needle;
+    });
+}
+
 bool is_video_file(const QString& path)
 {
     static const QSet<QString> extensions = {
@@ -646,8 +732,9 @@ QVariantList FormatConverter::supportedOutputFormats() const
                     {QStringLiteral("label"), QString::fromStdString(mode.label)},
                     {QStringLiteral("default"), mode.is_default}});
             }
+            const QString formatKey = QString::fromStdString(capability.key);
             actualFormats.append(QVariantMap{
-                {QStringLiteral("key"), QString::fromStdString(capability.key)},
+                {QStringLiteral("key"), formatKey},
                 {QStringLiteral("label"), QString::fromStdString(capability.label)},
                 {QStringLiteral("codec"), QString::fromStdString(capability.codec_name)},
                 {QStringLiteral("encoderLabel"), QString::fromStdString(capability.codec_name)},
@@ -660,7 +747,10 @@ QVariantList FormatConverter::supportedOutputFormats() const
                 {QStringLiteral("sampleRates"), sampleRates},
                 {QStringLiteral("sampleFormats"), sampleFormats},
                 {QStringLiteral("channelLayouts"), channelLayouts},
-                {QStringLiteral("bitrateModes"), bitrateModes}});
+                {QStringLiteral("bitrateModes"), bitrateModes},
+                {QStringLiteral("bitRates"), bitrate_choices_for(formatKey)},
+                {QStringLiteral("presets"),
+                 presets_for(formatKey, capability.lossy)}});
         }
         return actualFormats;
     }
@@ -909,15 +999,134 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     QVariantMap plan = request;
     const QString format = request.value(
         QStringLiteral("outputFormat"), selectedFormat_).toString().toLower();
+    QVariantMap capability;
+    for (const QVariant& value : supportedOutputFormats()) {
+        const QVariantMap candidate = value.toMap();
+        if (candidate.value(QStringLiteral("key")).toString() == format) {
+            capability = candidate;
+            break;
+        }
+    }
     plan.insert(QStringLiteral("outputFormat"), format);
     plan.insert(QStringLiteral("taskCount"), checkedCount());
-    plan.insert(QStringLiteral("capability"), currentCapability());
-    const bool requiresConfirmation =
-        request.value(QStringLiteral("requiresConfirmation")).toBool()
-        || conflictPolicy_ == QStringLiteral("ask");
-    plan.insert(QStringLiteral("requiresConfirmation"), requiresConfirmation);
-    plan.insert(QStringLiteral("ready"), checkedCount() > 0
-        && currentCapability().value(QStringLiteral("available")).toBool());
+    plan.insert(QStringLiteral("capability"), capability);
+
+    const QString presetKey = request.value(
+        QStringLiteral("preset"), QStringLiteral("recommended")).toString();
+    const QVariantList presets = capability.value(QStringLiteral("presets")).toList();
+    QVariantMap selectedPreset;
+    for (const QVariant& value : presets) {
+        const QVariantMap candidate = value.toMap();
+        if (candidate.value(QStringLiteral("key")).toString() == presetKey) {
+            selectedPreset = candidate;
+            break;
+        }
+    }
+    if (selectedPreset.isEmpty() && !presets.isEmpty()) {
+        selectedPreset = presets.constFirst().toMap();
+    }
+    if (presetKey != QStringLiteral("custom") && !selectedPreset.isEmpty()) {
+        for (const QString& key : {QStringLiteral("bitRate"),
+                                   QStringLiteral("bitrateMode"),
+                                   QStringLiteral("sampleRate"),
+                                   QStringLiteral("quality")}) {
+            plan.insert(key, selectedPreset.value(key));
+        }
+    }
+    const bool lossy = capability.value(QStringLiteral("lossy")).toBool();
+    if (!lossy) {
+        plan.insert(QStringLiteral("bitRate"), 0);
+        plan.insert(QStringLiteral("bitrateMode"), QString());
+        plan.insert(QStringLiteral("quality"), 100);
+    }
+    if (!plan.contains(QStringLiteral("quality"))) {
+        plan.insert(QStringLiteral("quality"), 85);
+    }
+    const int requestedRate = plan.value(QStringLiteral("sampleRate")).toInt();
+    if (format == QStringLiteral("opus") && requestedRate != 48000) {
+        plan.insert(QStringLiteral("sampleRate"), 48000);
+        plan.insert(QStringLiteral("requiresConfirmation"), requestedRate != 0);
+    }
+
+    QString reason;
+    if (checkedCount() <= 0) {
+        reason = tr("没有已选择的转换任务");
+    } else if (!capability.value(QStringLiteral("available")).toBool()) {
+        reason = capability.value(QStringLiteral("reason")).toString();
+    } else if (lossy
+               && !capability.value(QStringLiteral("bitRates")).toList()
+                       .contains(plan.value(QStringLiteral("bitRate")))) {
+        reason = tr("所选码率不受当前编码器预设支持");
+    } else if (lossy
+               && !list_contains_string(
+                   capability.value(QStringLiteral("bitrateModes")).toList(),
+                   plan.value(QStringLiteral("bitrateMode")).toString(),
+                   QStringLiteral("key"))) {
+        reason = tr("所选码率模式不受当前编码器支持");
+    } else if (plan.value(QStringLiteral("sampleRate")).toInt() != 0
+               && !capability.value(QStringLiteral("sampleRates")).toList()
+                       .contains(plan.value(QStringLiteral("sampleRate")))) {
+        reason = tr("所选采样率不受当前编码器支持");
+    } else if (!plan.value(QStringLiteral("sampleFormat")).toString().isEmpty()
+               && !list_contains_string(
+                   capability.value(QStringLiteral("sampleFormats")).toList(),
+                   plan.value(QStringLiteral("sampleFormat")).toString())) {
+        reason = tr("所选采样格式不受当前编码器支持");
+    } else if (!plan.value(QStringLiteral("channelLayout")).toString().isEmpty()
+               && !list_contains_string(
+                   capability.value(QStringLiteral("channelLayouts")).toList(),
+                   plan.value(QStringLiteral("channelLayout")).toString())) {
+        reason = tr("所选声道布局不受当前编码器支持");
+    }
+
+    if (reason.isEmpty()) {
+        QVariantList checkedIndices;
+        QMutexLocker lock(&mutex_);
+        for (int index = 0; index < entries_.size(); ++index) {
+            const QString taskId = entries_.at(index).taskId;
+            for (int row = 0; row < taskModel_->rowCount(); ++row) {
+                if (taskModel_->taskIdAt(row) == taskId
+                    && taskModel_->taskAt(row)
+                           .value(QStringLiteral("checked")).toBool()) {
+                    checkedIndices.append(index);
+                    break;
+                }
+            }
+        }
+        lock.unlock();
+        const QVariantMap preview = previewSelected(
+            checkedIndices, format, plan.value(QStringLiteral("bitRate")).toInt(),
+            plan.value(QStringLiteral("sampleRate")).toInt(),
+            plan.value(QStringLiteral("channels")).toInt(),
+            plan.value(QStringLiteral("outputDir")).toString(),
+            plan.value(QStringLiteral("extractAudio")).toBool());
+        plan.insert(QStringLiteral("ready"),
+                    preview.value(QStringLiteral("ready")).toBool());
+        plan.insert(QStringLiteral("conflicts"),
+                    preview.value(QStringLiteral("conflicts")));
+        plan.insert(QStringLiteral("conflictCount"),
+                    preview.value(QStringLiteral("conflictCount"), 0));
+        const bool requiresConfirmation = plan.value(
+            QStringLiteral("requiresConfirmation")).toBool()
+            || preview.value(QStringLiteral("requiresConfirmation")).toBool()
+            || conflictPolicy_ == QStringLiteral("ask");
+        plan.insert(QStringLiteral("requiresConfirmation"), requiresConfirmation);
+        QVariantMap resolvedProfile = preview.value(
+            QStringLiteral("resolvedProfile")).toMap();
+        for (const QString& key : {QStringLiteral("bitRate"),
+                                   QStringLiteral("bitrateMode"),
+                                   QStringLiteral("sampleRate"),
+                                   QStringLiteral("sampleFormat"),
+                                   QStringLiteral("channelLayout"),
+                                   QStringLiteral("quality")}) {
+            resolvedProfile.insert(key, plan.value(key));
+        }
+        plan.insert(QStringLiteral("resolvedProfile"), resolvedProfile);
+    } else {
+        plan.insert(QStringLiteral("ready"), false);
+        plan.insert(QStringLiteral("requiresConfirmation"), false);
+        plan.insert(QStringLiteral("reason"), reason);
+    }
     pendingPlan_ = plan;
     emit pendingPlanChanged();
     return plan;
@@ -944,6 +1153,8 @@ void FormatConverter::confirmPendingPlan()
             }
         }
     }
+    setBitrateMode(plan.value(QStringLiteral("bitrateMode"),
+                              bitrateMode_).toString());
     startJobs(checked,
               plan.value(QStringLiteral("outputFormat"), selectedFormat_).toString(),
               plan.value(QStringLiteral("bitRate"), 192000).toInt(),
@@ -957,7 +1168,8 @@ void FormatConverter::confirmPendingPlan()
               plan.value(QStringLiteral("sampleFormat")).toString(),
               plan.value(QStringLiteral("channelLayout")).toString(),
               plan.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
-              plan.value(QStringLiteral("preserveDirectories"), false).toBool());
+              plan.value(QStringLiteral("preserveDirectories"), false).toBool(),
+              plan.value(QStringLiteral("quality"), 85).toInt());
 }
 
 void FormatConverter::rejectPendingPlan()
@@ -1221,7 +1433,8 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
                                 const QString& sampleFormat,
                                 const QString& channelLayout,
                                 int audioStreamIndex,
-                                bool preserveDirectories)
+                                bool preserveDirectories,
+                                int quality)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
@@ -1335,14 +1548,14 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
          keepMetadata, volumeNormalize, extractAudio, overwriteExisting,
          bitrateMode, conflictPolicy, metadataFields, metadataCoverData,
          metadataCoverMime, keepCover, sampleFormat, channelLayout,
-         audioStreamIndex, preserveDirectories,
+         audioStreamIndex, preserveDirectories, quality,
          jobIndices]() {
             runTranscode(outputFormat, bitRate, effectiveSampleRate, channels,
                          outputDir, keepMetadata, volumeNormalize,
                          extractAudio, overwriteExisting, bitrateMode, conflictPolicy,
                          metadataFields, metadataCoverData, metadataCoverMime,
                          jobIndices, keepCover, sampleFormat, channelLayout,
-                         audioStreamIndex, preserveDirectories);
+                         audioStreamIndex, preserveDirectories, quality);
         });
     watcher->setFuture(future);
 }
@@ -1366,7 +1579,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    const QString& sampleFormat,
                                    const QString& channelLayout,
                                    int audioStreamIndex,
-                                   bool preserveDirectories)
+                                   bool preserveDirectories,
+                                   int quality)
 {
     const FormatInfo fi = format_info(outputFormat);
     const QByteArray codecName = QByteArray(fi.codec_name);
@@ -1536,7 +1750,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         request.keep_metadata = keepMetadata ? 1 : 0;
         request.keep_cover = keepCover ? 1 : 0;
         request.bitrate_mode = bitrateMode == QStringLiteral("vbr") ? 1 : 0;
-        request.quality = 75;
+        request.quality = std::clamp(quality, 0, 100);
         const ag_result result = ag_transcode_v2(
             inputUtf8.constData(), &request, token, progressCallback,
             &progressContext);

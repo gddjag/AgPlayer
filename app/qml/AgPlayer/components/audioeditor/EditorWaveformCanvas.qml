@@ -4,7 +4,7 @@ import AgPlayer
 
 Rectangle {
     id: canvas
-    color: Theme.isLight ? "#F7FAFA" : "#11191B"
+    color: Theme.editorCanvas
     border.color: Theme.border
     radius: Theme.radiusSm
     clip: true
@@ -33,12 +33,33 @@ Rectangle {
                 : AudioEditorController.recordingSampleRate)
         return AudioEditorController.positionMs * sampleRate / 1000
     }
+    function frameAtWaveX(x) {
+        return frameAt(x - 26)
+    }
     function timeText(frame) {
         if (AudioEditorController.sampleRate <= 0)
             return "0:00"
         const seconds = frame / AudioEditorController.sampleRate
         const minutes = Math.floor(seconds / 60)
         return minutes + ":" + String(Math.floor(seconds % 60)).padStart(2, "0")
+    }
+    function zoomAt(wheel, localX, localWidth) {
+        if ((wheel.modifiers & Qt.ControlModifier) === 0)
+            return false
+        const total = Math.max(1, AudioEditorController.totalFrames)
+        const current = Math.max(1, AudioEditorController.viewport.visibleFrameCount)
+        const factor = wheel.angleDelta.y > 0 ? 0.8 : 1.25
+        const next = Math.max(256, Math.min(total, Math.round(current * factor)))
+        const waveX = Math.max(0, Math.min(localWidth, localX))
+        const anchorFrame = AudioEditorController.viewport.visibleStartFrame
+            + waveX / Math.max(1, localWidth)
+              * AudioEditorController.viewport.visibleFrameCount
+        const anchorRatio = waveX / Math.max(1, localWidth)
+        const start = Math.max(0, Math.min(total - next,
+            Math.round(anchorFrame - next * anchorRatio)))
+        AudioEditorController.viewport.setVisibleRange(start, start + next)
+        wheel.accepted = true
+        return true
     }
 
     ColumnLayout {
@@ -48,7 +69,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 38
-            color: Theme.isLight ? "#EEF3F3" : "#151F21"
+            color: Theme.editorRuler
             border.color: Theme.border
 
             Row {
@@ -105,18 +126,8 @@ Rectangle {
                 anchors.rightMargin: 12
                 anchors.topMargin: 10
                 anchors.bottomMargin: 10
-                channelPeaks: AudioEditorController.viewportChannelPeaks.length > 0
-                    ? AudioEditorController.viewportChannelPeaks
-                    : AudioEditorController.channelPeaks
-                waveformColor: Theme.isLight ? "#169B97" : "#39C7C0"
-                renderMode: {
-                    const visibleFrames = Math.max(1, AudioEditorController.viewport.visibleFrameCount)
-                    const viewportWidth = Math.max(1, canvas.width - 38)
-                    const samplesPerPixel = visibleFrames / viewportWidth
-                    if (samplesPerPixel > 32.0) return 0
-                    if (samplesPerPixel > 1.2) return 1
-                    return 2
-                }
+                channelPeaks: AudioEditorController.channelPeaks
+                waveformColor: Theme.editorWaveform
                 visibleStartRatio: AudioEditorController.viewport.overviewStartRatio
                 visibleEndRatio: Math.min(1,
                     AudioEditorController.viewport.overviewStartRatio
@@ -125,6 +136,7 @@ Rectangle {
             }
 
             Rectangle {
+                id: selectionOverlay
                 visible: AudioEditorController.selectionStart >= 0
                 x: canvas.xAtFrame(AudioEditorController.selectionStart)
                 width: Math.max(0, Math.min(waveArea.width - 38,
@@ -135,50 +147,17 @@ Rectangle {
                 anchors.topMargin: 10
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 10
-                color: "#2639C7C0"
+                color: Theme.editorSelection
                 border.color: Theme.cyan
                 border.width: 1
             }
 
-            Repeater {
-                model: AudioEditorController.markers
-                Item {
-                    visible: modelData.frame >= AudioEditorController.viewport.visibleStartFrame
-                        && modelData.frame <= AudioEditorController.viewport.visibleEndFrame
-                    x: canvas.xAtFrame(modelData.frame) - 50
-                    y: 4
-                    width: 100
-                    height: waveArea.height - 8
-                    z: 3
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: 1
-                        height: parent.height
-                        color: Theme.ratingGold
-                        opacity: 0.8
-                    }
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: 1
-                        width: 8
-                        height: 8
-                        rotation: 45
-                        color: Theme.ratingGold
-                    }
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: 11
-                        text: modelData.name
-                        color: Theme.ratingGold
-                        font.pixelSize: 9
-                    }
-                }
-            }
-
             Rectangle {
-                x: canvas.xAtFrame(playbackFrame())
-                visible: (AudioEditorController.hasDocument || AudioEditorController.recording)
-                    && playbackFrame()
+                id: playheadLine
+                x: canvas.xAtFrame(AudioEditorController.positionMs
+                    * AudioEditorController.sampleRate / 1000)
+                visible: AudioEditorController.hasDocument || AudioEditorController.recording
+                    && AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000
                         >= AudioEditorController.viewport.visibleStartFrame
                     && playbackFrame()
                         <= AudioEditorController.viewport.visibleEndFrame
@@ -215,6 +194,7 @@ Rectangle {
                 anchors.leftMargin: 26
                 anchors.rightMargin: 12
                 enabled: AudioEditorController.hasDocument
+                z: 1
                 property real pressX: 0
                 onPressed: mouse => {
                     canvas.forceActiveFocus()
@@ -231,22 +211,114 @@ Rectangle {
                         AudioEditorController.setSelection(
                             Math.min(first, last), Math.max(first, last))
                 }
-                onDoubleClicked: AudioEditorController.clearSelection()
+                onDoubleClicked: mouse => {
+                    const frame = canvas.frameAt(mouse.x)
+                    if (frame < AudioEditorController.selectionStart
+                            || frame >= AudioEditorController.selectionEnd)
+                        AudioEditorController.clearSelection()
+                }
                 onWheel: wheel => {
-                    if ((wheel.modifiers & Qt.ControlModifier) === 0)
-                        return
-                    const total = Math.max(1, AudioEditorController.totalFrames)
-                    const current = Math.max(1,
-                        AudioEditorController.viewport.visibleFrameCount)
-                    const factor = wheel.angleDelta.y > 0 ? 0.8 : 1.25
-                    const next = Math.max(256, Math.min(total,
-                        Math.round(current * factor)))
-                    const anchorFrame = canvas.frameAt(wheel.x)
-                    const anchorRatio = wheel.x / Math.max(1, width)
-                    const start = Math.max(0, Math.min(total - next,
-                        Math.round(anchorFrame - next * anchorRatio)))
-                    AudioEditorController.viewport.setVisibleRange(start, start + next)
-                    wheel.accepted = true
+                    canvas.zoomAt(wheel, wheel.x, width)
+                }
+            }
+
+            MouseArea {
+                objectName: "editorSelectionContextCancel"
+                anchors.fill: selectionOverlay
+                z: 4
+                acceptedButtons: Qt.RightButton
+                enabled: selectionOverlay.visible
+                onClicked: AudioEditorController.clearSelection()
+                onWheel: wheel => {
+                    const point = mapToItem(waveArea, wheel.x, wheel.y)
+                    canvas.zoomAt(wheel, point.x - 26, waveArea.width - 38)
+                }
+            }
+
+            MouseArea {
+                id: playheadHandle
+                objectName: "editorPlayheadHandle"
+                z: 6
+                width: 24
+                height: waveArea.height
+                x: playheadLine.x - width / 2
+                enabled: playheadLine.visible
+                cursorShape: Qt.SizeHorCursor
+                preventStealing: true
+                onPressed: mouse => mouse.accepted = true
+                onPositionChanged: mouse => {
+                    if (!pressed) return
+                    const point = mapToItem(waveArea, mouse.x, mouse.y)
+                    const frame = canvas.frameAtWaveX(point.x)
+                    AudioEditorController.seekMs(frame * 1000
+                        / Math.max(1, AudioEditorController.sampleRate))
+                }
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: 2
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: Theme.waveformRed
+                }
+            }
+
+            MouseArea {
+                id: selectionStartHandle
+                objectName: "editorSelectionStartHandle"
+                z: 5
+                visible: selectionOverlay.visible
+                enabled: visible
+                width: 24
+                height: selectionOverlay.height
+                x: selectionOverlay.x - width / 2
+                y: selectionOverlay.y
+                cursorShape: Qt.SizeHorCursor
+                preventStealing: true
+                onPressed: mouse => mouse.accepted = true
+                onPositionChanged: mouse => {
+                    if (!pressed) return
+                    const point = mapToItem(waveArea, mouse.x, mouse.y)
+                    const frame = Math.min(canvas.frameAtWaveX(point.x),
+                                           AudioEditorController.selectionEnd - 1)
+                    AudioEditorController.setSelection(frame,
+                        AudioEditorController.selectionEnd)
+                }
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 3
+                    height: parent.height
+                    color: Theme.cyan
+                }
+            }
+
+            MouseArea {
+                id: selectionEndHandle
+                objectName: "editorSelectionEndHandle"
+                z: 5
+                visible: selectionOverlay.visible
+                enabled: visible
+                width: 24
+                height: selectionOverlay.height
+                x: selectionOverlay.x + selectionOverlay.width - width / 2
+                y: selectionOverlay.y
+                cursorShape: Qt.SizeHorCursor
+                preventStealing: true
+                onPressed: mouse => mouse.accepted = true
+                onPositionChanged: mouse => {
+                    if (!pressed) return
+                    const point = mapToItem(waveArea, mouse.x, mouse.y)
+                    const frame = Math.max(canvas.frameAtWaveX(point.x),
+                                           AudioEditorController.selectionStart + 1)
+                    AudioEditorController.setSelection(
+                        AudioEditorController.selectionStart, frame)
+                }
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 3
+                    height: parent.height
+                    color: Theme.cyan
                 }
             }
         }

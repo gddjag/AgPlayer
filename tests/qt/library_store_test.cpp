@@ -2,7 +2,10 @@
 #include "library_store.hpp"
 
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -16,6 +19,7 @@ private slots:
     void preservesIntegersBeyondJsonDoublePrecision();
     void destructorFlushesPendingSnapshot();
     void explicitFlushCommitsPendingSnapshot();
+    void migratesMissingAddedTimestampFromTheAudioFile();
 };
 
 namespace {
@@ -52,6 +56,38 @@ TrackRecord makeTrack(const QString& path, const QString& title)
     track.importError = QStringLiteral("old warning");
     return track;
 }
+}
+
+void LibraryStoreTest::migratesMissingAddedTimestampFromTheAudioFile()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString audioPath = dir.filePath(QStringLiteral("legacy.wav"));
+    QFile audio(audioPath);
+    QVERIFY(audio.open(QIODevice::WriteOnly));
+    QCOMPARE(audio.write("legacy"), 6);
+    audio.close();
+
+    const QString libraryPath = dir.filePath(QStringLiteral("library.json"));
+    QFile json(libraryPath);
+    QVERIFY(json.open(QIODevice::WriteOnly));
+    const QJsonArray legacyLibrary{
+        QJsonObject{{QStringLiteral("path"), audioPath},
+                    {QStringLiteral("title"), QStringLiteral("Legacy")}}};
+    QCOMPARE(json.write(QJsonDocument(legacyLibrary).toJson(
+                 QJsonDocument::Compact)) > 0, true);
+    json.close();
+
+    LibraryStore store(libraryPath);
+    const QList<TrackRecord> loaded = store.load();
+
+    QCOMPARE(loaded.size(), 1);
+    QVERIFY(loaded.front().addedAtMs > 0);
+    const QFileInfo info(audioPath);
+    const qint64 fileTimestamp = info.birthTime().isValid()
+        ? info.birthTime().toMSecsSinceEpoch()
+        : info.lastModified().toMSecsSinceEpoch();
+    QCOMPARE(loaded.front().addedAtMs, fileTimestamp);
 }
 
 void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()

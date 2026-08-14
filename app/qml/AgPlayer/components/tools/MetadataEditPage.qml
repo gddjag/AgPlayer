@@ -9,15 +9,16 @@ Rectangle {
     objectName: "metadataEditPage"
     color: Theme.background
     focus: true
+    readonly property bool compactLayout: width < 1100
 
     property var selectedIndices: []
     property int selectionAnchor: -1
     property int entryRevision: 0
-    property string searchText: ""
     property string sortKey: "fileName"
     property bool sortAscending: true
     property string statusFilter: "all"
     property string exportMode: "results"
+    readonly property string coverMode: MetadataEditor.coverImage !== "" ? "set" : "keep"
     readonly property var displayedIndices: filteredSortedIndices()
     readonly property var fieldDefinitions: [
         { key: "title", label: qsTr("标题") },
@@ -67,15 +68,6 @@ Rectangle {
         }
         return null
     }
-    function matchesSearch(index) {
-        const query = searchText.trim().toLowerCase()
-        if (query.length === 0) return true
-        const item = entry(index)
-        return String(item.fileName || "").toLowerCase().indexOf(query) >= 0
-                || String(item.title || "").toLowerCase().indexOf(query) >= 0
-                || String(item.artist || "").toLowerCase().indexOf(query) >= 0
-                || String(item.album || "").toLowerCase().indexOf(query) >= 0
-    }
     function rowStatus(index) {
         const item = entry(index)
         const result = resultForPath(item.path)
@@ -89,7 +81,6 @@ Rectangle {
         entryRevision
         const rows = []
         for (let index = 0; index < MetadataEditor.fileCount; ++index) {
-            if (!matchesSearch(index)) continue
             if (statusFilter !== "all" && rowStatus(index) !== statusFilter) continue
             rows.push(index)
         }
@@ -150,6 +141,46 @@ Rectangle {
         }
         return result
     }
+    function rowForField(key) {
+        for (let index = 0; index < fieldRepeater.count; ++index) {
+            const row = fieldRepeater.itemAt(index)
+            if (row && row.fieldKey === key)
+                return row
+        }
+        return null
+    }
+    function setFieldValue(key, value) {
+        const row = rowForField(key)
+        if (row) row.setValue(value)
+    }
+    function setFieldMode(key, mode) {
+        const row = rowForField(key)
+        if (row) row.selectMode(mode)
+    }
+    function fieldMode(key) {
+        const row = rowForField(key)
+        return row ? row.selectedMode : ""
+    }
+    function fieldValue(key) {
+        const row = rowForField(key)
+        return row ? row.valueText : ""
+    }
+    function fieldSourceIndices() {
+        if (selectedIndices.length > 0)
+            return selectedIndices.slice()
+        if (selectionAnchor >= 0)
+            return [selectionAnchor]
+        return Array.from({length: MetadataEditor.fileCount},
+                          function(_, index) { return index })
+    }
+    function refreshFields() {
+        const indexes = fieldSourceIndices()
+        for (let index = 0; index < fieldRepeater.count; ++index) {
+            const row = fieldRepeater.itemAt(index)
+            if (row)
+                row.loadValues(indexes)
+        }
+    }
     function conversionTargetUrls() {
         const urls = []
         let indexes = []
@@ -168,7 +199,7 @@ Rectangle {
     }
     function openConversionWorkflow() {
         const payload = fieldPayload()
-        payload.coverMode = coverModeBox.currentValue
+        payload.coverMode = page.coverMode
         if (!FormatConverter.setMetadataEditPlan(payload,
                                                  MetadataEditor.coverImage))
             return
@@ -183,7 +214,7 @@ Rectangle {
         for (let i = 0; i < fieldRepeater.count; ++i) {
             if (fieldRepeater.itemAt(i).selectedMode !== "keep") ++count
         }
-        if (coverModeBox.currentValue !== "keep") ++count
+        if (page.coverMode !== "keep") ++count
         return count
     }
     function targetCount() {
@@ -202,12 +233,13 @@ Rectangle {
                                                        : qsTr("清除")
             lines.push(row.fieldLabel + qsTr("：") + action)
         }
-        if (coverModeBox.currentValue !== "keep") {
-            const action = coverModeBox.currentValue === "set" ? qsTr("替换") : qsTr("移除")
-            lines.push(qsTr("封面：") + action)
-        }
+        if (page.coverMode === "set")
+            lines.push(qsTr("封面：替换"))
         return lines
     }
+
+    onSelectedIndicesChanged: Qt.callLater(refreshFields)
+    onSelectionAnchorChanged: Qt.callLater(refreshFields)
     function formatDuration(durationMs) {
         const totalSeconds = Math.max(0, Math.round(Number(durationMs || 0) / 1000))
         const minutes = Math.floor(totalSeconds / 60)
@@ -243,21 +275,6 @@ Rectangle {
             else
                 MetadataEditor.exportResults(selectedFile)
             page.exportMode = "results"
-        }
-    }
-    Dialog {
-        id: threeStateHelpDialog
-        modal: true
-        title: qsTr("三态编辑说明")
-        anchors.centerIn: parent
-        width: 440
-        standardButtons: Dialog.Ok
-        contentItem: Label {
-            width: 400
-            padding: 16
-            wrapMode: Text.WordWrap
-            text: qsTr("保留：每个文件保持原值，不写入。\n\n设为：将输入值统一写入目标文件；空值无效，请使用清除。\n\n清除：删除该字段的已知标签。批量文件值不同不会自动覆盖。")
-            color: Theme.primaryText
         }
     }
     Dialog {
@@ -323,7 +340,6 @@ Rectangle {
         nameFilters: [qsTr("图片文件 (*.png *.jpg *.jpeg *.bmp)")]
         onAccepted: {
             MetadataEditor.setCoverImage(selectedFile)
-            coverModeBox.currentIndex = 1
         }
     }
 
@@ -375,29 +391,16 @@ Rectangle {
                 onClicked: MetadataEditor.clear()
             }
             Item { Layout.fillWidth: true }
-            TextField {
-                objectName: "metadataSearchField"
-                Layout.preferredWidth: 260
-                placeholderText: qsTr("搜索文件名、标题、艺术家或专辑")
-                leftPadding: 12
-                rightPadding: 12
-                onTextChanged: page.searchText = text
-            }
-            ComboBox {
-                id: metadataStatusFilter
-                objectName: "metadataStatusFilter"
-                Layout.preferredWidth: 116
-                textRole: "text"
-                valueRole: "value"
-                model: [
-                    { text: qsTr("全部状态"), value: "all" },
-                    { text: qsTr("就绪"), value: "ready" },
-                    { text: qsTr("支持"), value: "supported" },
-                    { text: qsTr("已修改"), value: "modified" },
-                    { text: qsTr("失败"), value: "failed" }
-                ]
-                onCurrentValueChanged: page.statusFilter = currentValue || "all"
-            }
+        }
+
+        TabBar {
+            id: compactMetadataTabs
+            objectName: "metadataCompactTabs"
+            visible: page.compactLayout
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 36 : 0
+            TabButton { text: qsTr("任务列表") }
+            TabButton { text: qsTr("编辑元数据") }
         }
 
         RowLayout {
@@ -408,8 +411,17 @@ Rectangle {
             Rectangle {
                 id: filePanel
                 objectName: "metadataFilePanel"
+                visible: !page.compactLayout
+                         || compactMetadataTabs.currentIndex === 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: page.compactLayout
+                                       ? (visible ? page.width - 28 : 0)
+                                       : Math.max(620, page.width * 0.58)
+                Layout.minimumWidth: page.compactLayout ? 0 : 560
+                Layout.maximumWidth: page.compactLayout
+                                     ? (visible ? 16777215 : 0)
+                                     : 16777215
                 color: Theme.panel
                 border.color: Theme.border
                 border.width: 1
@@ -418,6 +430,39 @@ Rectangle {
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
+
+                    RowLayout {
+                        objectName: "metadataStatusFilter"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        Layout.leftMargin: 10
+                        Layout.rightMargin: 10
+                        spacing: 6
+                        Label {
+                            text: qsTr("任务列表：")
+                            color: Theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        ButtonGroup { id: metadataStatusFilterGroup }
+                        Repeater {
+                            model: [
+                                { text: qsTr("全部"), value: "all" },
+                                { text: qsTr("就绪"), value: "ready" },
+                                { text: qsTr("支持"), value: "supported" },
+                                { text: qsTr("已修改"), value: "modified" },
+                                { text: qsTr("失败"), value: "failed" }
+                            ]
+                            Button {
+                                checkable: true
+                                checked: page.statusFilter === modelData.value
+                                ButtonGroup.group: metadataStatusFilterGroup
+                                text: modelData.text
+                                onClicked: page.statusFilter = modelData.value
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
 
                     Rectangle {
                         Layout.fillWidth: true
@@ -645,7 +690,16 @@ Rectangle {
             Rectangle {
                 id: inspectorPanel
                 objectName: "metadataInspectorPanel"
-                Layout.preferredWidth: Math.max(480, page.width * 0.36)
+                visible: !page.compactLayout
+                         || compactMetadataTabs.currentIndex === 1
+                Layout.fillWidth: page.compactLayout
+                Layout.preferredWidth: page.compactLayout
+                                       ? (visible ? page.width - 28 : 0)
+                                       : Math.max(480, page.width * 0.36)
+                Layout.minimumWidth: page.compactLayout ? 0 : 460
+                Layout.maximumWidth: page.compactLayout
+                                     ? (visible ? 16777215 : 0)
+                                     : 640
                 Layout.fillHeight: true
                 color: Theme.panel
                 border.color: Theme.border
@@ -671,10 +725,10 @@ Rectangle {
                                 font.weight: Font.DemiBold
                             }
                             Item { Layout.fillWidth: true }
-                            ToolButton {
-                                objectName: "metadataThreeStateHelp"
-                                text: qsTr("三态编辑说明")
-                                onClicked: threeStateHelpDialog.open()
+                            Label {
+                                text: qsTr("直接编辑；留空即清除")
+                                color: Theme.secondaryText
+                                font.pixelSize: 10
                             }
                         }
                         RowLayout {
@@ -711,7 +765,7 @@ Rectangle {
                         }
                         Label {
                             Layout.fillWidth: true
-                            text: qsTr("每个字段独立选择：保留原值、写入新值或清空。")
+                            text: qsTr("编辑框自动显示原值；不改动即保留，删除内容留空即清除。")
                             color: Theme.secondaryText
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
@@ -741,57 +795,66 @@ Rectangle {
                             id: fieldRepeater
                             model: page.fieldDefinitions
                             delegate: RowLayout {
+                                id: fieldRow
                                 required property var modelData
                                 property string fieldKey: modelData.key
                                 property string fieldLabel: modelData.label
                                 property string selectedMode: "keep"
                                 property string valueText: valueField.text
+                                property bool loadingValue: false
+                                function selectMode(mode) {
+                                    selectedMode = mode
+                                    if (mode === "clear")
+                                        valueField.clear()
+                                }
+                                function setValue(value) {
+                                    valueField.text = value
+                                    selectedMode = value === "" ? "clear" : "set"
+                                }
+                                function loadValues(indexes) {
+                                    loadingValue = true
+                                    if (!indexes || indexes.length === 0) {
+                                        valueField.text = ""
+                                        valueField.placeholderText = qsTr("选择文件后显示原值")
+                                    } else {
+                                        const first = String(page.entry(indexes[0])[fieldKey] || "")
+                                        let mixed = false
+                                        for (let i = 1; i < indexes.length; ++i) {
+                                            if (String(page.entry(indexes[i])[fieldKey] || "") !== first) {
+                                                mixed = true
+                                                break
+                                            }
+                                        }
+                                        valueField.text = mixed ? "" : first
+                                        valueField.placeholderText = mixed ? qsTr("多个值") : qsTr("留空即清除")
+                                    }
+                                    selectedMode = "keep"
+                                    loadingValue = false
+                                }
                                 function descriptor() {
-                                    return { mode: selectedMode,
+                                    return { mode: fieldRow.selectedMode,
                                              value: valueField.text }
                                 }
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 24
                                 spacing: 4
                                 Label {
-                                    text: modelData.label
+                                    text: fieldRow.fieldLabel
                                     color: Theme.secondaryText
                                     Layout.preferredWidth: 72
                                     elide: Text.ElideRight
                                 }
-                                ButtonGroup { id: fieldModeGroup }
-                                Repeater {
-                                    model: [
-                                        { text: qsTr("保留"), value: "keep" },
-                                        { text: qsTr("设为"), value: "set" },
-                                        { text: qsTr("清空"), value: "clear" }
-                                    ]
-                                    delegate: ToolButton {
-                                         required property var modelData
-                                         objectName: "metadataModeButton_" + fieldKey
-                                                     + "_" + modelData.value
-                                        text: modelData.text
-                                        checkable: true
-                                        checked: modelData.value === selectedMode
-                                        ButtonGroup.group: fieldModeGroup
-                                        Layout.preferredWidth: 42
-                                        Layout.preferredHeight: 22
-                                        font.pixelSize: 10
-                                        onClicked: selectedMode = modelData.value
-                                    }
-                                }
                                 TextField {
                                     id: valueField
-                                    objectName: "metadataValueField_" + fieldKey
+                                    objectName: "metadataValueField_" + fieldRow.fieldKey
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 22
-                                    enabled: selectedMode === "set"
-                                    font.pixelSize: 11
-                                    placeholderText: selectedMode === "set"
-                                                     ? qsTr("输入新值")
-                                                     : (page.isMixedField(fieldKey)
-                                                        ? qsTr("多个值")
-                                                        : qsTr("保留原值"))
+                                    Layout.preferredHeight: 28
+                                    font.pixelSize: 12
+                                    placeholderText: qsTr("选择文件后显示原值")
+                                    onTextEdited: {
+                                        if (!fieldRow.loadingValue)
+                                            fieldRow.selectedMode = text === "" ? "clear" : "set"
+                                    }
                                 }
                             }
                         }
@@ -809,36 +872,6 @@ Rectangle {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
-                                ColumnLayout {
-                                    Layout.preferredWidth: 132
-                                    RadioButton {
-                                        text: qsTr("保留原封面")
-                                        checked: coverModeBox.currentValue === "keep"
-                                        onClicked: coverModeBox.currentIndex = 0
-                                    }
-                                    RadioButton {
-                                        text: qsTr("替换封面")
-                                        checked: coverModeBox.currentValue === "set"
-                                        onClicked: coverModeBox.currentIndex = 1
-                                    }
-                                    RadioButton {
-                                        text: qsTr("移除封面")
-                                        checked: coverModeBox.currentValue === "clear"
-                                        onClicked: coverModeBox.currentIndex = 2
-                                    }
-                                }
-                                ComboBox {
-                                    id: coverModeBox
-                                    objectName: "coverModeBox"
-                                    visible: false
-                                    model: [
-                                        { text: qsTr("保留"), value: "keep" },
-                                        { text: qsTr("替换"), value: "set" },
-                                        { text: qsTr("清空"), value: "clear" }
-                                    ]
-                                    textRole: "text"
-                                    valueRole: "value"
-                                }
                                 Rectangle {
                                     Layout.preferredWidth: 92
                                     Layout.preferredHeight: 92
@@ -881,7 +914,6 @@ Rectangle {
                                     Button {
                                         Layout.fillWidth: true
                                         text: qsTr("选择图片...")
-                                        enabled: coverModeBox.currentValue === "set"
                                         onClicked: coverDialog.open()
                                     }
                                     Button {
@@ -890,7 +922,6 @@ Rectangle {
                                         enabled: MetadataEditor.coverImage !== ""
                                         onClicked: {
                                             MetadataEditor.clearCoverImage()
-                                            coverModeBox.currentIndex = 0
                                         }
                                     }
                                 }
@@ -985,7 +1016,7 @@ Rectangle {
                 anchors.rightMargin: 8
                 spacing: 10
                 ColumnLayout {
-                    Layout.preferredWidth: 260
+                    Layout.preferredWidth: page.compactLayout ? 190 : 260
                     spacing: 2
                     Label {
                         text: metadataScopeBox.currentValue === "current"
@@ -996,6 +1027,7 @@ Rectangle {
                         color: Theme.primaryText
                     }
                     Label {
+                        visible: !page.compactLayout
                         text: qsTr("写入采用临时文件和原子替换，不直接覆盖源文件。")
                         color: Theme.secondaryText
                         font.pixelSize: 10
@@ -1016,7 +1048,7 @@ Rectangle {
                              && !MetadataEditor.busy
                     onClicked: {
                         const payload = page.fieldPayload()
-                        payload.coverMode = coverModeBox.currentValue
+                        payload.coverMode = page.coverMode
                         let targets = metadataScopeBox.currentValue === "selected"
                                       ? page.selectedIndices : []
                         if (metadataScopeBox.currentValue === "current")
@@ -1050,7 +1082,7 @@ Rectangle {
                              && !MetadataEditor.busy
                     onClicked: {
                         const payload = page.fieldPayload()
-                        payload.coverMode = coverModeBox.currentValue
+                        payload.coverMode = page.coverMode
                         let targets = []
                         if (metadataScopeBox.currentValue === "current") {
                             if (page.selectionAnchor >= 0) targets = [page.selectionAnchor]
@@ -1073,8 +1105,12 @@ Rectangle {
             page.selectedIndices = []
             page.selectionAnchor = -1
             ++page.entryRevision
+            Qt.callLater(page.refreshFields)
         }
-        function onEntriesChanged() { ++page.entryRevision }
+        function onEntriesChanged() {
+            ++page.entryRevision
+            Qt.callLater(page.refreshFields)
+        }
         function onPreflightDecisionRequired() { preflightDecisionDialog.open() }
     }
 }

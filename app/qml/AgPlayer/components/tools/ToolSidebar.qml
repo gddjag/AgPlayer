@@ -9,7 +9,7 @@ Rectangle {
     color: Theme.panel
     border.color: Theme.border
     border.width: 1
-    radius: Theme.radiusSm
+    radius: Theme.radiusMd
     implicitHeight: 55
 
     readonly property var toolNames: [
@@ -23,8 +23,11 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 16
-        spacing: 0
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
+        spacing: Theme.spacingSm
+
+        Item { Layout.fillWidth: true }
 
         Repeater {
             model: [
@@ -38,7 +41,7 @@ Rectangle {
 
             Button {
                 objectName: "audioToolNavButton"
-                Layout.fillWidth: true
+                Layout.preferredWidth: 154
                 Layout.preferredHeight: 53
                 Layout.maximumHeight: 53
                 flat: true
@@ -72,16 +75,7 @@ Rectangle {
                                              Theme.accent.b, 0.14)
                                    : (parent.hovered ? Theme.hoverSurface : "transparent")
                     border.width: 0
-                    radius: Theme.radiusSm
-
-                    Rectangle {
-                        visible: parent.parent.checked
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 2
-                        color: Theme.cyan
-                    }
+                    radius: Theme.radiusMd
                 }
 
                 onClicked: navigation.toolSelected(index)

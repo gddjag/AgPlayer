@@ -14,7 +14,7 @@ class AudioPreviewControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void pausesMainPlayerBeforePreviewAndDoesNotResume();
+    void stopsMainPlayerBeforePreviewAndDoesNotResume();
     void appliesUpdatedDspParametersToActivePreview();
     void rejectsMissingFiles();
     void clearsOldStateWhenNewSourceCannotLoad();
@@ -55,7 +55,7 @@ appliesUpdatedDspParametersToActivePreview()
     QVERIFY(preview.isCurrentSource(QUrl::fromLocalFile(fixture)));
 }
 
-void AudioPreviewControllerTest::pausesMainPlayerBeforePreviewAndDoesNotResume()
+void AudioPreviewControllerTest::stopsMainPlayerBeforePreviewAndDoesNotResume()
 {
     const QString fixture =
         QCoreApplication::applicationDirPath()
@@ -84,7 +84,7 @@ void AudioPreviewControllerTest::pausesMainPlayerBeforePreviewAndDoesNotResume()
     QTRY_VERIFY_WITH_TIMEOUT(preview.hasSource(), 2'000);
     QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
     QTRY_COMPARE_WITH_TIMEOUT(
-        mainPlayback.state(), PlaybackController::Paused, 2'000);
+        mainPlayback.state(), PlaybackController::Stopped, 2'000);
     QVERIFY(preview.durationMs() > 0);
     QVERIFY(preview.isCurrentSource(QUrl::fromLocalFile(fixture)));
     QCOMPARE(QFileInfo(preview.sourcePath()).canonicalFilePath(),
@@ -100,7 +100,7 @@ void AudioPreviewControllerTest::pausesMainPlayerBeforePreviewAndDoesNotResume()
     preview.stop();
     QVERIFY(!preview.playing());
     QVERIFY(!preview.hasSource());
-    QCOMPARE(mainPlayback.state(), PlaybackController::Paused);
+    QCOMPARE(mainPlayback.state(), PlaybackController::Stopped);
     ag_player_destroy(mainPlayer);
 }
 

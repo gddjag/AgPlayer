@@ -11,6 +11,8 @@ Item {
     property int allCount: 0
     property int favoriteCount: 0
     property int historyCount: 0
+    property int recentAddedCount: 0
+    property int neverPlayedCount: 0
     property var playlistModel: PlaylistModel
     property string contextPlaylistId: ""
 
@@ -178,6 +180,7 @@ Item {
                     objectName: "recentAddedCategoryButton"
                     icon: "add-line"
                     label: qsTr("最近添加")
+                    count: root.recentAddedCount
                     selected: root.selectedCategory === "recentAdded"
                     onClicked: root.categorySelected("recentAdded")
                 }
@@ -186,6 +189,7 @@ Item {
                     objectName: "neverPlayedCategoryButton"
                     icon: "time-line"
                     label: qsTr("从未播放")
+                    count: root.neverPlayedCount
                     selected: root.selectedCategory === "neverPlayed"
                     onClicked: root.categorySelected("neverPlayed")
                 }

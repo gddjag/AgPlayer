@@ -29,15 +29,32 @@ QtObject {
     readonly property color elevated: isLight ? "#F9F9F9" : "#101E28"
     readonly property color border: isLight ? "#D1D1D1" : "#203340"
     readonly property color hoverSurface: isLight ? "#EAEAEA" : "#172A37"
+    readonly property color editorCanvas: isLight ? "#F7FAFA" : "#11191B"
+    readonly property color editorRuler: isLight ? "#EEF3F3" : "#151F21"
+    readonly property color editorOverview: isLight ? "#EAF2F2" : "#132124"
+    readonly property color editorWaveform: isLight ? "#169B97" : "#39C7C0"
+    readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
+    readonly property color editorSelection: Qt.rgba(
+        editorWaveform.r, editorWaveform.g, editorWaveform.b, 0.15)
+    readonly property color editorOverviewSelection: Qt.rgba(
+        editorWaveform.r, editorWaveform.g, editorWaveform.b, 0.07)
     readonly property color accent: systemPalette.highlight
     readonly property color activeSelection: systemPalette.highlight
     readonly property color activeSelectionText: systemPalette.highlightedText
     readonly property color inactiveSelection: inactiveSystemPalette.highlight
     readonly property color inactiveSelectionText: inactiveSystemPalette.highlightedText
+    readonly property color currentTrackSelection: Qt.rgba(
+        activeSelection.r, activeSelection.g, activeSelection.b, 0.28)
+    readonly property color selectedTrackSelection: Qt.rgba(
+        activeSelection.r, activeSelection.g, activeSelection.b, 0.18)
+    readonly property color currentTrackSelectionInactive: Qt.rgba(
+        inactiveSelection.r, inactiveSelection.g, inactiveSelection.b, 0.28)
+    readonly property color selectedTrackSelectionInactive: Qt.rgba(
+        inactiveSelection.r, inactiveSelection.g, inactiveSelection.b, 0.18)
     readonly property color cyan: accent
     readonly property color violet: accent
     readonly property color favoriteRed: "#FF334D"
-    readonly property color ratingGold: "#FFD700"
+    readonly property color ratingGold: "#FF9800"
     readonly property color primaryText: isLight ? "#1B1B1B" : "#FFFFFF"
     readonly property color secondaryText: isLight ? "#5D5D5D" : "#CFCFCF"
     readonly property color onCyanText: systemPalette.highlightedText
@@ -79,7 +96,6 @@ QtObject {
     readonly property string iconPrefix: "qrc:/qt/qml/AgPlayer/assets/icons/"
     function icon(name) { return iconPrefix + name + ".svg" }
     function ratingColor(index) {
-        return ["#FFF4B8", "#FFE98A", "#FFE05C", "#FFD62E", "#FFCC00"][
-                    Math.max(0, Math.min(4, index))]
+        return ratingGold
     }
 }

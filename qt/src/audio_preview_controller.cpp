@@ -130,8 +130,8 @@ void AudioPreviewController::play(const QUrl& source)
 
     stopPlaybackAndClear();
     if (mainPlayback_ != nullptr
-        && mainPlayback_->state() == PlaybackController::Playing) {
-        mainPlayback_->pause();
+        && mainPlayback_->state() != PlaybackController::Stopped) {
+        mainPlayback_->stop();
     }
     const QString absolutePath = QFileInfo(path).absoluteFilePath();
     if (!loadPlaybackPath(absolutePath, absolutePath, 0.0, true)) {

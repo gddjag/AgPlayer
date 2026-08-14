@@ -40,6 +40,8 @@ TestCase {
         SideNavigation {
             width: 208
             height: 500
+            recentAddedCount: 7
+            neverPlayedCount: 11
             property string lastSelectedCategory: ""
             property int renameRequestCount: 0
             property int exportRequestCount: 0
@@ -185,6 +187,19 @@ TestCase {
         compare(button.icon.color, "#000000")
         Theme.mode = previousThemeMode
         verify(findChild(window, "equalizerResponseCurve"))
+        var presetBox = findChild(window, "equalizerPresetBox")
+        verify(presetBox)
+        for (var themeMode = 0; themeMode <= 1; ++themeMode) {
+            Theme.mode = themeMode
+            presetBox.popup.open()
+            tryVerify(function() { return presetBox.popup.visible })
+            compare(presetBox.popup.background.color.toString(),
+                    Theme.elevated.toString())
+            compare(presetBox.popup.background.border.color.toString(),
+                    Theme.border.toString())
+            presetBox.popup.close()
+        }
+        Theme.mode = previousThemeMode
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
         compare(bands.count, 10)
@@ -481,6 +496,8 @@ TestCase {
         verify(!findChild(side, "libraryManagerCategoryButton"))
         verify(recent.y > history.y)
         verify(never.y > recent.y)
+        compare(recent.count, 7)
+        compare(never.count, 11)
         mouseClick(recent)
         compare(side.lastSelectedCategory, "recentAdded")
         mouseClick(never)
@@ -680,6 +697,8 @@ TestCase {
                "the playlist submenu must expose a visible parent action")
         compare(moveMenuEntry.contentItem.color.toString(),
                 Theme.primaryText.toString())
+        compare(moveMenuEntry.background.color.toString(),
+                "#00000000")
         compare(moveMenuEntry.subMenu, moveMenu)
         verify(moveMenuEntry.arrow.visible)
         mouseMove(moveMenuEntry, moveMenuEntry.width / 2,
@@ -1033,8 +1052,8 @@ TestCase {
     function test_waveform_mode_button_cycles_the_live_setting() {
         var button = findChild(mainWindow, "waveformModeButton")
         verify(button)
-        verify(button.icon.source.toString().endsWith("/waveform-switch.svg"),
-               "waveform switch must use the supplied waveform icon")
+        verify(button.icon.source.toString().endsWith("/pulse-line.svg"),
+               "waveform switch must use a thin line waveform icon")
         var previousMode = SettingsController.waveformMode
         SettingsController.waveformMode = 0
         button.clicked()
@@ -1078,7 +1097,7 @@ TestCase {
         verify(findChild(mainWindow, "waveformPlaybackGuide"))
         compare(previous.icon.width, 24)
         compare(next.icon.width, 24)
-        compare(mode.icon.width, 24)
+        compare(mode.icon.width, 20)
         compare(play.width, 52)
         compare(play.height, 52)
         compare(play.icon.width, 24)
@@ -1154,7 +1173,7 @@ TestCase {
         verify(slider)
         verify(percent)
         compare(mute.icon.color.toString(), Theme.iconPrimary.toString())
-        compare(mute.icon.width, 24)
+        compare(mute.icon.width, 20)
         verify(slider.handle.width <= 10)
 
         var previousVolume = PlaybackController.volume
@@ -1213,7 +1232,8 @@ TestCase {
         verify(filter)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
-                "歌曲/艺术家/专辑/标签/")
+                "歌曲 · 艺术家 · 专辑 · 标签")
+        verify(findChild(filter, "librarySearchIcon"))
         compare(findChild(filter, "bpmModule").width, 216)
         compare(findChild(filter, "bpmRange").first.handle.width, 12)
         compare(findChild(filter, "bpmRange").second.handle.width, 12)
@@ -1324,8 +1344,26 @@ TestCase {
                    "An intentionally long artist name for hover marquee verification")
         tryCompare(artistAlbum, "album",
                    "An intentionally long album name for hover marquee verification")
-        verify(artistAlbum.text.indexOf(" / ") > 0,
-               "the main player must render artist and album separately")
+        verify(artistAlbum.text.indexOf(" · ") > 0,
+               "the main player must render artist, album and tags separately")
+        compare(artistAlbum.text.split(" · ").length, 2)
+        verify(!artistAlbum.text.endsWith(" · "))
+        verify(artistAlbum.text.indexOf("无标签") < 0)
+
+        LibraryModel.setTags(trackId, ["测试标签"])
+        tryVerify(function() {
+            return artistAlbum.text.split(" · ").length === 3
+                    && artistAlbum.text.endsWith("测试标签")
+        }, 1000, "real tags must be appended after artist and album")
+        LibraryModel.setTags(trackId, [])
+    }
+
+    function test_main_waveform_toggle_uses_complete_line_icon() {
+        var button = findChild(mainWindow, "waveformModeButton")
+        verify(button)
+        verify(button.icon.source.toString().endsWith("/pulse-line.svg"))
+        compare(button.icon.width, 20)
+        compare(button.icon.height, 20)
     }
 
     function test_current_track_rating_follows_artist_and_album() {
@@ -1354,7 +1392,7 @@ TestCase {
         verify(indicator)
         var currentRow = findChild(list, "currentTrackRow")
         verify(currentRow)
-        compare(currentRow.color.toString(), Theme.activeSelection.toString())
+        compare(currentRow.color.toString(), Theme.currentTrackSelection.toString())
         compare(indicator.barCount, 3)
         compare(indicator.barColor.toString(), Theme.waveformMagenta.toString())
         verify(findChild(indicator, "playingBar0"))
@@ -1452,11 +1490,13 @@ TestCase {
                "file metadata must remain visible at the native minimum height")
         verify(artist.height > 0 && rating.height > 0 && metadata.height > 0,
                "responsive metadata rows must retain a usable rendered height")
-        verify(artist.text.indexOf(" / ") >= 0,
-               "metadata must render artist and album as separate fields")
+        verify(artist.text.split(" · ").length >= 2
+               && artist.text.split(" · ").length <= 3
+               && artist.text.indexOf("无标签") < 0,
+               "metadata must omit an empty tag without hiding artist/album")
         verify(rating.mapToItem(artist.parent, 0, 0).x
                >= artist.mapToItem(artist.parent, 0, 0).x + artist.width,
-               "rating stars must immediately follow the artist/album text")
+               "rating stars must immediately follow the artist/album/tag text")
         verify(cover.height <= pane.height,
                "cover must scale with the available player height")
         verify(waveform.height >= 32,
@@ -1478,7 +1518,7 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 920)
+        compare(settingsWindow.width, 860)
         verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
                "settings window must fit the available desktop")
         const page = findChild(mainWindow, "settingsPage")
@@ -1496,7 +1536,7 @@ TestCase {
         var headerDragArea = findChild(page, "settingsHeaderDragArea")
         verify(headerDragArea, "settings header must expose a full-width native drag surface")
         verify(headerDragArea.width > settingsWindow.width * 0.50)
-        compare(sidebar.width, 208)
+        compare(sidebar.width, 184)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
         verify(contentColumn.x >= 24,
@@ -1715,25 +1755,46 @@ TestCase {
         page.close()
     }
 
-    function test_settings_y_feedback_dialog_is_actionable() {
+    function test_settings_y_feedback_entry_is_removed() {
         var page = findChild(mainWindow, "settingsPage")
         verify(page)
         page.open()
         page.selectedSection = 6
         wait(500)
-        var button = findChild(page, "feedbackButton")
-        var dialog = findChild(page, "feedbackDialog")
-        var message = findChild(page, "feedbackMessage")
-        verify(button)
-        verify(dialog)
-        verify(message)
-        mouseClick(button)
-        tryVerify(function() { return dialog.visible })
-        compare(message.text, "建议反馈请发邮件：agplayer@foxmail.com")
-        verify(findChild(dialog, "feedbackEmailField"))
-        verify(findChild(dialog, "copyFeedbackEmailButton"))
-        dialog.close()
+        verify(!findChild(page, "feedbackButton"))
+        verify(!findChild(page, "feedbackDialog"))
         page.close()
+    }
+
+    function test_track_context_submenus_follow_dark_and_light_theme() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        var previousMode = SettingsController.themeMode
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        var rowItem = list.itemAtIndex(0)
+        verify(rowItem)
+        for (var mode = 0; mode <= 1; ++mode) {
+            SettingsController.themeMode = mode
+            tryCompare(Theme, "isLight", mode === 1)
+            mouseClick(rowItem, rowItem.width / 2, rowItem.height / 2,
+                       Qt.RightButton)
+            var menu = findChild(list, "trackContextMenu")
+            tryVerify(function() { return menu && menu.visible })
+            var playlistEntry = menu.itemAt(2)
+            var toolsEntry = menu.itemAt(3)
+            compare(playlistEntry.contentItem.color.toString(),
+                    (playlistEntry.enabled ? Theme.primaryText
+                                           : Theme.secondaryText).toString())
+            compare(toolsEntry.contentItem.color.toString(),
+                    (toolsEntry.enabled ? Theme.primaryText
+                                        : Theme.secondaryText).toString())
+            compare(playlistEntry.background.color.toString(), "#00000000")
+            compare(toolsEntry.background.color.toString(), "#00000000")
+            menu.close()
+        }
+        SettingsController.themeMode = previousMode
+        list.destroy()
     }
 
     function test_theme_mode_updates_surfaces_text_and_icons() {
@@ -1772,6 +1833,12 @@ TestCase {
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 
         SettingsController.themeMode = previousMode
+    }
+
+    function test_rating_stars_use_one_solid_orange_color() {
+        compare(Theme.ratingGold.toString(), "#ff9800")
+        for (var index = 0; index < 5; ++index)
+            compare(Theme.ratingColor(index).toString(), "#ff9800")
     }
 
     function test_title_buttons_use_compact_chinese_labels() {

@@ -242,7 +242,8 @@ private:
                    const QString& sampleFormat = {},
                    const QString& channelLayout = {},
                    int audioStreamIndex = -1,
-                   bool preserveDirectories = false);
+                   bool preserveDirectories = false,
+                   int quality = 75);
 
     // Bounded parallel transcode worker. Runs in a background thread.
     void runTranscode(const QString& outputFormat,
@@ -264,5 +265,6 @@ private:
                       const QString& sampleFormat,
                       const QString& channelLayout,
                       int audioStreamIndex,
-                      bool preserveDirectories);
+                      bool preserveDirectories,
+                      int quality);
 };

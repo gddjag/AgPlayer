@@ -8,12 +8,12 @@ param(
     [string[]]$Themes = @("dark", "light", "system"),
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
-        "library", "details",
+        "details",
         "tool-0", "tool-1", "tool-2", "tool-3"
     )]
     [string[]]$Surfaces = @(
         "startup", "playback", "mini", "settings", "list",
-        "library", "details",
+        "details",
         "tool-0", "tool-1", "tool-2", "tool-3"
     )
 )
@@ -50,22 +50,19 @@ function Get-SurfaceExpectation {
 
     switch -Regex ($Surface) {
         "^startup$|^playback$" {
-            return [pscustomobject]@{ Width = 1228; Height = 380 }
+            return [pscustomobject]@{ Width = 960; Height = 298 }
         }
         "^mini$" {
             return [pscustomobject]@{ Width = 588; Height = 186 }
         }
         "^settings$" {
-            return [pscustomobject]@{ Width = 1228; Height = 900 }
+            return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            return [pscustomobject]@{ Width = 1228; Height = 600 }
-        }
-        "^library$" {
-            return [pscustomobject]@{ Width = 1228; Height = 840 }
+            return [pscustomobject]@{ Width = 960; Height = 570 }
         }
         "^tool-\d+$" {
-            return [pscustomobject]@{ Width = 1440; Height = 810 }
+            return [pscustomobject]@{ Width = 1672; Height = 942 }
         }
         default {
             throw "No screenshot expectation configured for surface '$Surface'"
@@ -276,14 +273,6 @@ try {
                 Invoke-Capture $language $theme "list" @(
                     "--qa-library", (Join-Path $stateRoot "list.json"),
                     "--qa-import-folder", $formatFixtures,
-                    "--qa-screenshot-list"
-                )
-            }
-            if ($Surfaces -contains "library") {
-                Invoke-Capture $language $theme "library" @(
-                    "--qa-library", (Join-Path $stateRoot "library.json"),
-                    "--qa-import-folder", $formatFixtures,
-                    "--qa-list-category", "library",
                     "--qa-screenshot-list"
                 )
             }

@@ -191,6 +191,7 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
     QList<TrackRecord> accepted;
     accepted.reserve(tracks.size());
     QSet<QString> batchKeys;
+    const qint64 importedAtMs = QDateTime::currentMSecsSinceEpoch();
     for (TrackRecord& track : tracks) {
         track.path = canonicalLibraryPath(track.path);
         const QString key = normalizedCanonicalKey(track.path);
@@ -199,6 +200,9 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
         }
         if (track.trackId.isEmpty()) {
             track.trackId = trackIdForPath(track.path);
+        }
+        if (track.addedAtMs <= 0) {
+            track.addedAtMs = importedAtMs;
         }
         batchKeys.insert(key);
         accepted.append(std::move(track));
@@ -240,6 +244,8 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
     }
     endInsertRows();
     emit countChanged();
+    emit recentAddedCountChanged();
+    emit neverPlayedCountChanged();
     if (favoriteAdded) {
         emit favoriteCountChanged();
     }
@@ -278,6 +284,8 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
     }
     emit favoriteCountChanged();
     emit historyCountChanged();
+    emit recentAddedCountChanged();
+    emit neverPlayedCountChanged();
 }
 
 const QList<TrackRecord>& LibraryModel::tracks() const noexcept
@@ -341,6 +349,8 @@ bool LibraryModel::removeTrack(const QString& trackId)
     endRemoveRows();
 
     emit countChanged();
+    emit recentAddedCountChanged();
+    emit neverPlayedCountChanged();
     if (removed.favorite) {
         emit favoriteCountChanged();
     }
@@ -704,6 +714,7 @@ bool LibraryModel::markPlayed(const QString& trackId, qint64 playedAtMs)
     emit dataChanged(changed, changed, {PlayCountRole, LastPlayedAtRole});
     if (firstPlay) {
         emit historyCountChanged();
+        emit neverPlayedCountChanged();
     }
     return true;
 }
@@ -720,6 +731,7 @@ bool LibraryModel::removeFromHistory(const QString& trackId)
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed, {PlayCountRole, LastPlayedAtRole});
     emit historyCountChanged();
+    emit neverPlayedCountChanged();
     emit flushRequested();
     return true;
 }
@@ -752,4 +764,22 @@ int LibraryModel::historyCount() const noexcept
     return static_cast<int>(std::count_if(
         tracks_.cbegin(), tracks_.cend(),
         [](const TrackRecord& track) { return track.playCount > 0; }));
+}
+
+int LibraryModel::recentAddedCount() const noexcept
+{
+    const qint64 cutoff = QDateTime::currentMSecsSinceEpoch()
+        - 30LL * 24 * 60 * 60 * 1'000;
+    return static_cast<int>(std::count_if(
+        tracks_.cbegin(), tracks_.cend(),
+        [cutoff](const TrackRecord& track) {
+            return track.addedAtMs >= cutoff;
+        }));
+}
+
+int LibraryModel::neverPlayedCount() const noexcept
+{
+    return static_cast<int>(std::count_if(
+        tracks_.cbegin(), tracks_.cend(),
+        [](const TrackRecord& track) { return track.playCount == 0; }));
 }

@@ -50,6 +50,8 @@ Rectangle {
                 return track.album || ""
             if (role === LibraryModel.TitleRole)
                 return track.title || ""
+            if (role === LibraryModel.TagsRole)
+                return track.tags || []
         }
         var row = root.currentRow()
         if (row < 0)
@@ -60,6 +62,13 @@ Rectangle {
     function currentTrackRating(): int {
         var value = parseInt(root.currentTrackValue(LibraryModel.RatingRole), 10)
         return isNaN(value) ? 0 : Math.max(0, Math.min(5, value))
+    }
+
+    function currentTrackTags(): string {
+        var tags = root.currentTrackValue(LibraryModel.TagsRole)
+        if (!tags || tags.length === 0)
+            return ""
+        return Array.isArray(tags) ? tags.join("、") : String(tags)
     }
 
     function currentTrackFavorite(): bool {
@@ -350,9 +359,11 @@ Rectangle {
                                                             LibraryModel.ArtistRole)
                                 property string album: root.currentTrackValue(
                                                            LibraryModel.AlbumRole)
-                                text: (artist || qsTr("Unknown artist"))
-                                      + " / "
-                                      + (album || qsTr("Unknown album"))
+                                property string tags: root.currentTrackTags()
+                                text: (artist || qsTr("未知艺术家"))
+                                      + " · "
+                                      + (album || qsTr("未知专辑"))
+                                      + (tags.length > 0 ? " · " + tags : "")
                                 color: Theme.secondaryText
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: root.minimalHeight ? 9 : 14
