@@ -80,6 +80,10 @@ Item {
         return row ? row.checkboxItem : null
     }
 
+    function modelCardForStableId(stableId) {
+        return modelBar.cardForStableId(stableId)
+    }
+
     function activationStatusText() {
         if (!controller) return ""
         switch (controller.activationState) {
@@ -112,10 +116,20 @@ Item {
 
     function selectModel(index, stableId) {
         if (!controller || index < 0 || index >= modelCount) return
+        const current = controller.models[index] || ({})
+        const resolvedStableId = stableId || current.stableId || ""
+        if (resolvedStableId === "") return
+        let resolvedIndex = index
+        for (let modelIndex = 0; modelIndex < modelCount; ++modelIndex) {
+            if (controller.models[modelIndex].stableId === resolvedStableId) {
+                resolvedIndex = modelIndex
+                break
+            }
+        }
         activeRequestId = ""
-        selectedModelIndex = index
+        selectedModelIndex = resolvedIndex
         resetParameterDefaults()
-        if (controller.activateModel) controller.activateModel(stableId)
+        if (controller.activateModel) controller.activateModel(resolvedStableId)
     }
 
     function startGeneration() {
@@ -233,6 +247,9 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 32
+                referenceUrl: root.controller && root.referenceAudioPath !== ""
+                              ? root.controller.resultFileUrl(
+                                    root.referenceAudioPath) : ""
             }
             VoiceCloneTextPanel {
                 id: textPanel
@@ -274,6 +291,8 @@ Item {
             id: resultPanel
             Layout.fillWidth: true
             Layout.preferredHeight: 190
+            resultUrl: root.controller && root.resultPath !== ""
+                       ? root.controller.resultFileUrl(root.resultPath) : ""
             onSaveRequested: function(path, destinationPath) {
                 root.saveResultRequested(path)
                 if (root.controller && root.controller.saveResult)

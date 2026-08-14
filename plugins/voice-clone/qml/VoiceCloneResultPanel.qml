@@ -13,10 +13,55 @@ Rectangle {
     implicitHeight: 190
 
     property string resultPath: ""
+    property url resultUrl: ""
+    property var waveformLayers: ({})
+    property int waveformDurationMs: 0
     readonly property bool hasResult: resultPath !== ""
+    readonly property bool waveformReady: !!(waveformDurationMs > 0
+                                             && waveformLayers
+                                             && waveformLayers.mix
+                                             && waveformLayers.mix.length > 0)
+    readonly property bool previewingThis: root.hasResult
+                                            && AudioPreviewController.isCurrentSource(
+                                                root.resultUrl)
+    readonly property real waveformScale: root.scaleForPeaks(
+                                               root.waveformLayers.mix || [])
     signal saveRequested(string path, string destinationPath)
     signal deleteRequested(string path)
     signal sendToEditorRequested(string path)
+
+    function formatTime(ms) {
+        var seconds = Math.max(0, Math.floor(Number(ms) / 1000))
+        var minutes = Math.floor(seconds / 60)
+        seconds %= 60
+        return (minutes < 10 ? "0" : "") + minutes + ":"
+                + (seconds < 10 ? "0" : "") + seconds
+    }
+
+    function scaleForPeaks(peaks) {
+        var maximum = 0
+        for (var index = 0; index < peaks.length; ++index)
+            maximum = Math.max(maximum, Math.abs(Number(peaks[index]) || 0))
+        return maximum > 0 ? Math.max(1, Math.min(12, 0.72 / maximum)) : 1
+    }
+
+    function sameLocalPath(left, right) {
+        return String(left).replace(/\\/g, "/").toLowerCase()
+                === String(right).replace(/\\/g, "/").toLowerCase()
+    }
+
+    function loadWaveform() {
+        root.waveformLayers = ({})
+        root.waveformDurationMs = 0
+        if (root.resultPath !== "")
+            WaveformProvider.loadForTrack(root.resultPath)
+    }
+
+    onResultPathChanged: {
+        if (AudioPreviewController.isCurrentSource(root.resultUrl))
+            AudioPreviewController.stop()
+        root.loadWaveform()
+    }
 
     function saveTo(destinationPath) {
         if (!hasResult || destinationPath === "") return
@@ -40,53 +85,135 @@ Rectangle {
             color: Theme.elevated
             border.color: Theme.border
             radius: Theme.radiusSm
-            RowLayout {
+            ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 14
-                spacing: 12
-                ThemedIcon {
-                    source: Theme.icon(root.hasResult ? "music-2-fill" : "information-line")
-                    tint: root.hasResult ? Theme.iconAccent : Theme.iconSecondary
-                    sourceSize.width: 28
-                    sourceSize.height: 28
-                }
-                ColumnLayout {
+                spacing: 8
+                RowLayout {
                     Layout.fillWidth: true
-                    Label {
-                        Layout.fillWidth: true
-                        text: root.hasResult ? qsTr("已生成真实音频文件") : qsTr("暂无生成结果")
-                        color: Theme.primaryText
-                        font.weight: Font.DemiBold
+                    spacing: 12
+                    Button {
+                        id: playButton
+                        objectName: "voiceCloneResultPlayButton"
+                        visible: root.hasResult
+                        enabled: root.resultUrl.toString() !== ""
+                        Layout.preferredWidth: 44
+                        Layout.preferredHeight: 40
+                        icon.source: Theme.icon(root.previewingThis
+                                                && AudioPreviewController.playing
+                                                ? "pause-fill" : "play-fill")
+                        onClicked: AudioPreviewController.toggle(root.resultUrl)
                     }
-                    Label {
+                    ThemedIcon {
+                        visible: !root.hasResult
+                        source: Theme.icon("information-line")
+                        tint: Theme.iconSecondary
+                        sourceSize.width: 28
+                        sourceSize.height: 28
+                    }
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: root.hasResult ? root.resultPath : qsTr("生成成功后在此显示实际文件；不绘制占位波形")
-                        color: Theme.secondaryText
-                        elide: Text.ElideMiddle
+                        spacing: 2
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.hasResult ? qsTr("已生成真实音频文件") : qsTr("暂无生成结果")
+                            color: Theme.primaryText
+                            font.weight: Font.DemiBold
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.hasResult ? root.resultPath : qsTr("生成成功后在此显示实际文件；不绘制占位波形")
+                            color: Theme.secondaryText
+                            elide: Text.ElideMiddle
+                        }
+                    }
+                    Button {
+                        objectName: "voiceCloneSendToEditorButton"
+                        visible: root.hasResult
+                        text: qsTr("发送到剪辑")
+                        onClicked: root.sendToEditorRequested(root.resultPath)
+                    }
+                    Button {
+                        objectName: "voiceCloneSaveResultButton"
+                        visible: root.hasResult
+                        text: qsTr("保存文件")
+                        icon.source: Theme.icon("download-line")
+                        onClicked: saveDialog.open()
+                    }
+                    Button {
+                        objectName: "voiceCloneDeleteResultButton"
+                        visible: root.hasResult
+                        text: qsTr("删除")
+                        icon.source: Theme.icon("delete-bin-line")
+                        onClicked: root.deleteRequested(root.resultPath)
                     }
                 }
-                Button {
-                    objectName: "voiceCloneSendToEditorButton"
+
+                Item {
                     visible: root.hasResult
-                    text: qsTr("发送到剪辑")
-                    onClicked: root.sendToEditorRequested(root.resultPath)
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 42
+
+                    WaveformItem {
+                        id: resultWaveform
+                        objectName: "voiceCloneResultWaveform"
+                        anchors.fill: parent
+                        layers: root.waveformLayers
+                        position: 0
+                        cursorPosition: root.previewingThis
+                                        ? AudioPreviewController.positionMs : 0
+                        duration: root.waveformDurationMs > 0
+                                  ? root.waveformDurationMs
+                                  : (root.previewingThis
+                                     ? AudioPreviewController.durationMs : 0)
+                        analysisProgress: WaveformProvider.analysisProgress
+                        baseColor: Theme.waveformViolet
+                        progressColor: Theme.waveformCyan
+                        gradientStartColor: Theme.waveformCyan
+                        gradientMiddleColor: Theme.waveformViolet
+                        gradientEndColor: Theme.waveformMagenta
+                        amplitudeScale: root.waveformScale
+                        onSeekRequested: positionMs => {
+                            if (root.previewingThis)
+                                AudioPreviewController.seek(positionMs)
+                        }
+                    }
                 }
-                Button {
-                    objectName: "voiceCloneSaveResultButton"
+
+                Label {
                     visible: root.hasResult
-                    text: qsTr("保存文件")
-                    icon.source: Theme.icon("download-line")
-                    onClicked: saveDialog.open()
-                }
-                Button {
-                    objectName: "voiceCloneDeleteResultButton"
-                    visible: root.hasResult
-                    text: qsTr("删除")
-                    icon.source: Theme.icon("delete-bin-line")
-                    onClicked: root.deleteRequested(root.resultPath)
+                    Layout.alignment: Qt.AlignRight
+                    text: root.formatTime(root.previewingThis
+                                          ? AudioPreviewController.positionMs : 0)
+                          + " / " + root.formatTime(root.waveformDurationMs)
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
                 }
             }
         }
+    }
+
+    Connections {
+        target: WaveformProvider
+        function onWaveformReady(path, layers) {
+            if (!root.sameLocalPath(path, root.resultPath))
+                return
+            root.waveformLayers = {
+                mix: layers.mix || [],
+                _sampleRate: Number(layers._sampleRate) || 0,
+                _totalSamples: Number(layers._totalSamples) || 0,
+                _peakCount: Number(layers._peakCount) || 0
+            }
+            root.waveformDurationMs = Math.max(
+                        0, Number(layers._durationMs) || 0)
+        }
+    }
+
+    Component.onCompleted: root.loadWaveform()
+    Component.onDestruction: {
+        if (AudioPreviewController.isCurrentSource(root.resultUrl))
+            AudioPreviewController.stop()
     }
 
     FileDialog {

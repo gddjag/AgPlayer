@@ -51,33 +51,36 @@ final result: passed
 **Implementation evidence**
 
 - `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\final-1672x942.png`
-- Same-size comparison: `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\comparison-final-3344x941.png` (the implementation is cropped by one bottom pixel only)
-- Focused header/model comparison: `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\comparison-final-top-3344x280.png`
+- Populated Host/Plugin/Controller/Worker fixture capture: `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\loaded-fixture-final-v5-1672x942.png`
+- Same-size populated comparison: `D:\ai\AgPlayer\.worktrees\voice-clone-plugin\build\qa\voice-clone\comparison-loaded-final-v5-3344x942.png` (the 1672 x 941 source is normalized by one vertical pixel)
 - Responsive captures: `final-1280x720.png`, `final-1920x1080.png`, and `final-3840x2160.png` in the same QA directory.
 - Windows scaling captures: `final-1672x942-scale125.png` and `final-1672x942-scale15.png`; host `AppliedDPI=96` (100%) was also recorded.
-- State: Chinese, dark theme, real native plugin loaded, official four-model registry present, Qwen3-TTS 0.6B selected, no model installed.
+- States: Chinese dark-theme not-downloaded state plus a Qwen3-TTS 0.6B QA fixture state with a real authorized reference WAV, real analyzed reference/result waveforms, dynamic parameters, and generated-result actions.
 - Capture method: the native application's built-in `--qa-tool 4 --qa-screenshot-tools` path. Browser capture is not available for a Qt native window; no browser evidence is claimed.
+- Fixture truth: the build-only test Worker was launched through the real Host/Plugin/Controller/Worker chain and copied the authorized hardware recording to the Controller-managed output. Source and published output are both 8,634,284 bytes with SHA-256 `D950198910B589974978010C5B877626EC2168261E851536A0E49974529ABA01`. This proves the populated UI/product chain, not real model inference.
 
 **Findings**
 
-- No actionable visual P0/P1/P2 remains. The 1280 x 720 layout now exposes a right-edge vertical scrollbar and keeps all five sections reachable; 1672, 1920, 4K, 125%, and 150% captures have no overlap or horizontal clipping.
+- No actionable visual P0/P1/P2 remains. The 1280 x 720 layout exposes a right-edge vertical scrollbar and keeps all five sections reachable; 1672, 1920, 4K, 125%, and 150% captures have no overlap or horizontal clipping.
 - Fonts and typography use the existing AG Player Qt/Windows tokens. They are denser than the reference but preserve section, label, action, and disabled-state hierarchy. P3 only.
 - Spacing follows the reference's model/workbench/parameters/result hierarchy. At 4K the three workbench panels expand rather than inventing a fixed-width shell; this preserves usable audio/text work areas. P3 only.
 - Colors keep the AG Player navy surface, blue selection/action semantics, muted unavailable states, and high-contrast Chinese text.
-- Icons reuse the project icon font. No raster imitation or fake waveform was introduced.
-- Copy is Chinese-first. Raw worker errors are suppressed in the expected not-downloaded state; model capabilities and install states are localized.
-- Approved source deviations are product-driven: the fixed model dropdown becomes four data-driven cards for future registry-only model additions, and the populated reference/result waveform is replaced by truthful empty states until real files exist.
+- Icons reuse the project icon font. Reference and result waveforms are derived from decoded WAV samples, visually normalized for low-level recordings, and never replaced by placeholder peaks.
+- Copy is Chinese-first. Raw worker errors are suppressed in the expected not-downloaded state; model capabilities, install states, and common dynamic Worker parameter labels are localized without changing protocol keys/values.
+- Approved source deviations are product-driven: the fixed model dropdown becomes four data-driven cards for future registry-only model additions, while sampling/channel controls remain Worker-result-driven instead of pretending they can override model output.
 
 **Comparison history**
 
 - Pass 1: the 1280 viewport clipped the result section, the expected not-downloaded state repeated raw English errors, and registry capabilities/descriptions leaked implementation-facing English.
 - Pass 2: responsive scrolling and localized product copy were added; the scrollbar thumb appeared at the wrong edge.
-- Final: the right-edge scrollbar geometry is contract-tested and the complete resolution/scaling matrix was visually inspected at original pixels.
+- Pass 3: the populated fixture exposed an empty result presentation and unstable model-card index selectors; real preview/waveform actions, stable-ID selection, and Chinese parameter display were added.
+- Pass 4: reference/result data reached the panels but imperative clears had broken the `WaveformItem.layers` binding. A `peakCount > 0` regression test failed before the two binding-breaking assignments were removed.
+- Final: both not-downloaded and populated states, the complete resolution/scaling matrix, and the same-size populated comparison were inspected at original pixels.
 
 **Primary interactions tested**
 
-- Stable ID selection of the voice-clone tool, deterministic QA window sizing, model-card selection, download-required state, capability copy, and small-viewport reachability.
-- This report is visual acceptance only; real model inference, playback, save, and send-to-editor evidence is tracked separately.
+- Stable-ID tool/model selection, deterministic QA window sizing, download-required state, capability copy, small-viewport reachability, real waveform rendering, reference/result preview loading, save, delete, and send-to-editor wiring.
+- This report is visual acceptance plus QA-fixture chain evidence only. Real official-model inference and hardware playback remain tracked separately and are not implied by `passed` below.
 
 final result: passed
 

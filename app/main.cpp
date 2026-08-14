@@ -151,6 +151,7 @@ int main(int argc, char* argv[])
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..4>             choose the audio-tool screenshot page
     //   --qa-tools-size <WxH>        resize the tools window before capture
+    //   --qa-voice-clone-fixture <wav> activate + generate through the plugin
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
@@ -159,6 +160,10 @@ int main(int argc, char* argv[])
     QString qaScreenshotTools;
     int qaTool = 0;
     QSize qaToolsSize;
+    QString qaVoiceCloneFixture;
+    QString qaVoiceCloneModel =
+        QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base");
+    QString qaVoiceCloneText = QStringLiteral("欢迎使用 AG Player 人声克隆功能。");
     QString qaScreenshotList;
     QString qaListCategory;
     bool qaShowTrackDetails = false;
@@ -208,6 +213,15 @@ int main(int argc, char* argv[])
                     && width <= 7680 && height <= 4320) {
                     qaToolsSize = QSize(width, height);
                 }
+            } else if (arg == QStringLiteral("--qa-voice-clone-fixture")
+                       && i + 1 < cliArgs.size()) {
+                qaVoiceCloneFixture = QFileInfo(cliArgs.at(++i)).absoluteFilePath();
+            } else if (arg == QStringLiteral("--qa-voice-clone-model")
+                       && i + 1 < cliArgs.size()) {
+                qaVoiceCloneModel = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-voice-clone-text")
+                       && i + 1 < cliArgs.size()) {
+                qaVoiceCloneText = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-screenshot-list")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotList = cliArgs.at(++i);
@@ -1234,7 +1248,101 @@ int main(int argc, char* argv[])
                     QCoreApplication::quit();
                 };
 
-                if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
+                const bool wantVoiceCloneFixture = wantScreenshotTools
+                    && qaTool == 4 && !qaVoiceCloneFixture.isEmpty();
+                if (wantVoiceCloneFixture) {
+                    auto phase = std::make_shared<int>(0);
+                    auto attempts = std::make_shared<int>(0);
+                    auto pollFunc = std::make_shared<std::function<void()>>();
+                    *pollFunc = [audioToolsWindow, qaVoiceCloneFixture,
+                                 qaVoiceCloneModel, qaVoiceCloneText,
+                                 phase, attempts, pollFunc, captureWindow]() {
+                        QObject* workspace = audioToolsWindow != nullptr
+                            ? audioToolsWindow->findChild<QObject*>(
+                                  QStringLiteral("voiceCloneWorkspace"))
+                            : nullptr;
+                        QObject* controller = workspace != nullptr
+                            ? workspace->property("controller").value<QObject*>()
+                            : nullptr;
+                        if (*phase == 0 && controller != nullptr) {
+                            bool activated = false;
+                            const bool invoked = QMetaObject::invokeMethod(
+                                controller, "activateModel", Qt::DirectConnection,
+                                Q_RETURN_ARG(bool, activated),
+                                Q_ARG(QString, qaVoiceCloneModel));
+                            if (!invoked || !activated) {
+                                qWarning().noquote()
+                                    << "Voice Clone QA could not activate the fixture model:"
+                                    << controller->property("errorString").toString();
+                                QCoreApplication::quit();
+                                return;
+                            }
+                            *phase = 1;
+                        } else if (*phase == 1 && controller != nullptr
+                                   && controller->property("modelLoaded").toBool()) {
+                            workspace->setProperty("referenceAudioPath",
+                                                   qaVoiceCloneFixture);
+                            workspace->setProperty("cloneText", qaVoiceCloneText);
+                            *phase = 2;
+                        } else if (*phase == 2 && workspace != nullptr
+                                   && workspace->property("canGenerate").toBool()) {
+                            if (!QMetaObject::invokeMethod(workspace,
+                                                           "startGeneration")) {
+                                qWarning("Voice Clone QA could not start fixture generation");
+                                QCoreApplication::quit();
+                                return;
+                            }
+                            *phase = 3;
+                        } else if (*phase == 3 && workspace != nullptr
+                                   && !workspace->property("resultPath").toString().isEmpty()) {
+                            QObject* const resultPanel = workspace->findChild<QObject*>(
+                                QStringLiteral("voiceCloneResultPanel"));
+                            if (resultPanel != nullptr
+                                && resultPanel->property("waveformReady").toBool()) {
+                                QObject* const referencePanel = workspace->findChild<QObject*>(
+                                    QStringLiteral("voiceCloneReferencePanel"));
+                                if (referencePanel == nullptr
+                                    || !QMetaObject::invokeMethod(referencePanel,
+                                                                  "loadWaveform")) {
+                                    qWarning("Voice Clone QA could not load reference waveform");
+                                    QCoreApplication::quit();
+                                    return;
+                                }
+                                *phase = 4;
+                            }
+                        } else if (*phase == 4 && workspace != nullptr) {
+                            QObject* const referencePanel = workspace->findChild<QObject*>(
+                                QStringLiteral("voiceCloneReferencePanel"));
+                            if (referencePanel != nullptr
+                                && referencePanel->property("waveformReady").toBool()) {
+                                QTimer::singleShot(250, captureWindow);
+                                return;
+                            }
+                        }
+                        if (++(*attempts) > 400) { // 20s timeout at 50ms polls
+                            qWarning().noquote()
+                                << "Voice Clone QA fixture generation timed out at phase"
+                                << *phase
+                                << "activation"
+                                << (controller != nullptr
+                                        ? controller->property("activationState").toString()
+                                        : QStringLiteral("no-controller"))
+                                << "message"
+                                << (controller != nullptr
+                                        ? controller->property("activationMessage").toString()
+                                        : QStringLiteral("no-controller"))
+                                << "error"
+                                << (controller != nullptr
+                                        ? controller->property("errorString").toString()
+                                        : QStringLiteral("no-controller"));
+                            QCoreApplication::quit();
+                            return;
+                        }
+                        QTimer::singleShot(50, *pollFunc);
+                    };
+                    QTimer::singleShot(50, *pollFunc);
+                } else if (wantScreenshotTools
+                           || (wantScreenshotMain && library.count() == 0)) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList) {
                     auto attempts = std::make_shared<int>(0);

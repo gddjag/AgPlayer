@@ -4,6 +4,7 @@
 #include "voice_clone_host_controller.hpp"
 #include "audio_tools_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
+#include "waveform_item.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -323,14 +324,24 @@ int runWorker(const QStringList& arguments)
                     continue;
                 }
 #endif
-                QFile wav(path);
-                QDir().mkpath(QFileInfo(wav).absolutePath());
-                if (!wav.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                    QCoreApplication::exit(92);
-                    return;
+                QDir().mkpath(QFileInfo(path).absolutePath());
+                const QString qaResultSource = qEnvironmentVariable(
+                    "AGPLAYER_VOICE_CLONE_QA_RESULT_SOURCE");
+                if (!qaResultSource.isEmpty()) {
+                    if (!QFileInfo(qaResultSource).isFile()
+                        || !QFile::copy(qaResultSource, path)) {
+                        QCoreApplication::exit(96);
+                        return;
+                    }
+                } else {
+                    QFile wav(path);
+                    if (!wav.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                        QCoreApplication::exit(92);
+                        return;
+                    }
+                    wav.write("RIFFtest-WAVE");
+                    wav.close();
                 }
-                wav.write("RIFFtest-WAVE");
-                wav.close();
                 if (text == QStringLiteral("slow") || text == QStringLiteral("cancel-error")) {
                     delayed = request.requestId;
                     if (text == QStringLiteral("cancel-error")) cancelFailureTarget = request.requestId;
@@ -464,6 +475,25 @@ struct TestLayout {
     }
 };
 
+class ScopedEnvironment final {
+public:
+    ScopedEnvironment(const char* name, const QByteArray& value)
+        : name_(name), previous_(qgetenv(name)), hadPrevious_(!previous_.isNull())
+    {
+        qputenv(name_, value);
+    }
+    ~ScopedEnvironment()
+    {
+        if (hadPrevious_) qputenv(name_, previous_);
+        else qunsetenv(name_);
+    }
+
+private:
+    const char* name_;
+    QByteArray previous_;
+    bool hadPrevious_;
+};
+
 } // namespace
 
 class VoiceCloneControllerTest final : public QObject {
@@ -471,6 +501,7 @@ class VoiceCloneControllerTest final : public QObject {
 
 private slots:
     void activateModelResolvesInstalledAdapterAndLoadsWorker();
+    void qaWorkerPublishesConfiguredFixture();
     void activateModelReportsMissingRuntimeWithoutPretendingReady();
     void downloadsInstallsRefreshesAndSelectsModel();
     void activateModelClearsLiveSchemaBeforeMissingRuntime();
@@ -610,6 +641,38 @@ void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWork
     QCOMPARE(loaded.value(QStringLiteral("seed")).toInt(), 1);
     QCOMPARE(loaded.value(QStringLiteral("mode")).toString(), QStringLiteral("fast"));
 
+}
+
+void VoiceCloneControllerTest::qaWorkerPublishesConfiguredFixture()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writeAdapterPack(layout.pluginRoot));
+    const QString modelId = QStringLiteral("local/qa-fixture-qwen");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("qwen")).isEmpty());
+    const QString sourcePath = layout.root.filePath(QStringLiteral("authorized-fixture.wav"));
+    const QByteArray sourceBytes("RIFF-authorized-fixture-WAVE-data");
+    QFile source(sourcePath);
+    QVERIFY(source.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(source.write(sourceBytes), sourceBytes.size());
+    source.close();
+    ScopedEnvironment fixture("AGPLAYER_VOICE_CLONE_QA_RESULT_SOURCE",
+                              QFile::encodeName(sourcePath));
+
+    VoiceClonePackageManager licenses(layout.packagesRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &licenses);
+    QVERIFY2(controller.activateModel(modelId), qPrintable(controller.errorString()));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 5000);
+    QSignalSpy finished(&controller, &VoiceCloneController::generationFinished);
+    const QString requestId = controller.generate(
+        QStringLiteral("qa-fixture"), sourcePath,
+        {{QStringLiteral("seed"), 1},
+         {QStringLiteral("mode"), QStringLiteral("fast")}});
+    QVERIFY(!requestId.isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QFile output(finished.constFirst().at(1).toString());
+    QVERIFY(output.open(QIODevice::ReadOnly));
+    QCOMPARE(output.readAll(), sourceBytes);
 }
 
 void VoiceCloneControllerTest::activateModelReportsMissingRuntimeWithoutPretendingReady()
@@ -1134,6 +1197,7 @@ void VoiceCloneControllerTest::shutdownUsesProtocolAndModuleLoadsThroughHost()
     AudioEditorController audioEditor(AG_AUDIO_BACKEND_NULL);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioToolsController", &audioTools);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioEditorController", &audioEditor);
+    qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
     {
         QQmlEngine engine;
         engine.addImportPath(QStringLiteral("qrc:/"));

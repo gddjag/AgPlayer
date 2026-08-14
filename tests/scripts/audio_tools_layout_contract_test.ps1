@@ -61,6 +61,11 @@ if ($appMain -notmatch '--qa-tools-size' -or
     $appMain -notmatch 'toolsWin->resize\(qaToolsSize\)') {
     throw 'The native QA capture path must support explicit responsive viewport sizes.'
 }
+if ($appMain -notmatch '--qa-voice-clone-fixture' -or
+    $appMain -notmatch 'voiceCloneWorkspace' -or
+    $appMain -notmatch 'startGeneration') {
+    throw 'Voice Clone QA must drive a loaded fixture through the workspace/controller chain.'
+}
 if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
     throw 'The new single-track editor must not retain legacy multitrack concepts.'
 }

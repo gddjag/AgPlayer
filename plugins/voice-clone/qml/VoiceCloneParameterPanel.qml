@@ -41,6 +41,42 @@ Rectangle {
         return actual === field.visibleWhen.equals
     }
 
+    function localizedLabel(field) {
+        const labels = {
+            seed: qsTr("随机种子"),
+            mode: qsTr("生成模式"),
+            normalize: qsTr("文本规范化"),
+            language: qsTr("语言"),
+            speed: qsTr("语速"),
+            style: qsTr("风格"),
+            lexicon: qsTr("自定义词典")
+        }
+        return labels[field.key] || field.label || field.key
+    }
+
+    function localizedDescription(field) {
+        const descriptions = {
+            seed: qsTr("控制可复现的生成结果"),
+            mode: qsTr("选择生成速度与质量策略"),
+            normalize: qsTr("生成前规范化输入文本"),
+            language: qsTr("设置输出语言"),
+            speed: qsTr("调整生成语速"),
+            style: qsTr("输入风格提示"),
+            lexicon: qsTr("选择可选的本地词典")
+        }
+        return descriptions[field.key] || field.description || ""
+    }
+
+    function localizedOption(value) {
+        const options = {
+            fast: qsTr("快速"),
+            hq: qsTr("高质量"),
+            zh: qsTr("中文"),
+            en: qsTr("英文")
+        }
+        return options[value] || value
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 12
@@ -112,7 +148,7 @@ Rectangle {
 
             Label {
                 Layout.fillWidth: true
-                text: fieldRoot.field.label || fieldRoot.field.key
+                text: root.localizedLabel(fieldRoot.field)
                 color: Theme.primaryText
                 elide: Text.ElideRight
                 font.pixelSize: 12
@@ -150,7 +186,7 @@ Rectangle {
             }
             Label {
                 Layout.fillWidth: true
-                text: fieldRoot.field.description || ""
+                text: root.localizedDescription(fieldRoot.field)
                 visible: text !== ""
                 color: Theme.secondaryText
                 elide: Text.ElideRight
@@ -176,6 +212,7 @@ Rectangle {
             property var fieldValue
             model: fieldData.options || []
             currentIndex: Math.max(0, model.indexOf(fieldValue))
+            displayText: root.localizedOption(fieldValue)
             onActivated: root.valueEdited(fieldData.key, currentText)
         }
     }

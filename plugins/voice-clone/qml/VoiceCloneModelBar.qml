@@ -34,6 +34,16 @@ Rectangle {
     signal openDirectoryRequested()
     signal licenseAcceptanceRequested()
 
+    function cardForStableId(stableId) {
+        for (var index = 0; index < modelRepeater.count; ++index) {
+            const card = modelRepeater.itemAt(index)
+            if (card && card.modelData
+                    && card.modelData.stableId === stableId)
+                return card
+        }
+        return null
+    }
+
     function installStateText(state) {
         if (state === "ready") return qsTr("已安装")
         if (state === "local-unverified") return qsTr("本地模型")
@@ -61,6 +71,7 @@ Rectangle {
             spacing: 8
 
             Repeater {
+                id: modelRepeater
                 model: root.models
 
                 Button {
@@ -68,6 +79,13 @@ Rectangle {
                     required property int index
                     required property var modelData
                     objectName: "voiceCloneModelCard" + modelCard.index
+                    function syncObjectNames() {
+                        objectName = "voiceCloneModelCard" + modelCard.index
+                        installState.objectName = "voiceCloneModelInstallState"
+                                + modelCard.index
+                    }
+                    onIndexChanged: syncObjectNames()
+                    Component.onCompleted: syncObjectNames()
                     Layout.fillWidth: true
                     Layout.preferredHeight: 68
                     checked: modelCard.index === root.selectedIndex
@@ -87,6 +105,7 @@ Rectangle {
                             font.weight: Font.DemiBold
                         }
                         Label {
+                            id: installState
                             objectName: "voiceCloneModelInstallState" + modelCard.index
                             Layout.fillWidth: true
                             text: (modelCard.modelData.provider || "") + "  ·  "

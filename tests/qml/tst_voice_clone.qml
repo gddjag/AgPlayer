@@ -363,7 +363,11 @@ TestCase {
                     { target: realVoiceCloneHost.pluginController })
         verify(activationSpy)
         activationSpy.clear()
-        mouseClick(findChild(loader.item, "voiceCloneModelCard0"))
+        const installedId = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+        wait(100)
+        const installedCard = loader.item.modelCardForStableId(installedId)
+        verify(installedCard)
+        mouseClick(installedCard)
         verify(activationSpy.count >= 2)
         verify(realVoiceCloneHost.pluginController.activationState === "starting-worker",
                realVoiceCloneHost.pluginController.errorString + " / "
@@ -389,7 +393,10 @@ TestCase {
             }
         }
         verify(missingIndex >= 0)
-        mouseClick(findChild(loader.item, "voiceCloneModelCard" + missingIndex))
+        const missingCard = loader.item.modelCardForStableId(
+                    "Qwen/Qwen3-TTS-12Hz-1.7B-Base")
+        verify(missingCard)
+        mouseClick(missingCard)
         tryCompare(realVoiceCloneHost.pluginController, "activationState", "needs-download")
         compare(realVoiceCloneHost.pluginController.basicParameters.length, 0)
         compare(realVoiceCloneHost.pluginController.advancedParameters.length, 0)
@@ -458,7 +465,7 @@ TestCase {
         workspace.resetParameterDefaults()
         compare(workspace.parameterValues.conditionalStyle, undefined)
 
-        workspace.referenceAudioPath = "C:/fixtures/reference.wav"
+        workspace.referenceAudioPath = audioFixturePath()
         workspace.cloneText = "hidden parameter payload"
         workspace.startGeneration()
         compare(fakeController.generateCalls, 1)
@@ -504,8 +511,10 @@ TestCase {
         compare(fakeController.lastSelectedId, "IndexTeam/IndexTTS-2.5")
         const gate = findChild(workspace, "voiceCloneLicenseAuthorityCheck")
         verify(gate && gate.visible)
-        workspace.referenceAudioPath = "C:/fixtures/reference.wav"
+        workspace.referenceAudioPath = audioFixturePath()
         workspace.cloneText = "测试人声克隆"
+        const referencePanel = findChild(workspace, "voiceCloneReferencePanel")
+        verify(referencePanel)
         compare(workspace.canGenerate, false)
         mouseClick(gate)
         const licenseDialog = findChild(workspace, "voiceCloneLicenseDialog")
@@ -530,7 +539,20 @@ TestCase {
         mouseClick(generateButton)
         fakeController.generationFinished("request-1", specialAudioFixturePath())
         tryCompare(resultPanel, "hasResult", true)
-        wait(20)
+        tryCompare(resultPanel, "waveformReady", true, 5000)
+        referencePanel.loadWaveform()
+        tryCompare(referencePanel, "waveformReady", true, 5000)
+        const referenceWaveform = findChild(workspace,
+                                             "voiceCloneReferenceWaveform")
+        verify(referenceWaveform.visible)
+        verify(referenceWaveform.peakCount > 0)
+        const resultWaveform = findChild(workspace, "voiceCloneResultWaveform")
+        verify(resultWaveform && resultWaveform.visible)
+        verify(resultWaveform.peakCount > 0)
+        const resultPlayButton = findChild(workspace, "voiceCloneResultPlayButton")
+        verify(resultPlayButton && resultPlayButton.visible && resultPlayButton.enabled)
+        mouseClick(resultPlayButton)
+        tryCompare(AudioPreviewController, "hasSource", true)
         mouseClick(findChild(workspace, "voiceCloneSaveResultButton"))
         const saveDialog = findChild(workspace, "voiceCloneSaveDialog")
         verify(saveDialog)

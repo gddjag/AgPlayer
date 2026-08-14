@@ -6,11 +6,57 @@ import AgPlayer
 
 Rectangle {
     id: root
+    objectName: "voiceCloneReferencePanel"
     color: Theme.panel
     border.color: Theme.border
     radius: Theme.radiusSm
 
     property alias referencePath: pathField.text
+    property var waveformLayers: ({})
+    property int waveformDurationMs: 0
+    readonly property bool hasReference: pathField.text !== ""
+    readonly property bool waveformReady: !!(waveformDurationMs > 0
+                                             && waveformLayers.mix
+                                             && waveformLayers.mix.length > 0)
+    property url referenceUrl: ""
+    readonly property bool previewingThis: hasReference
+                                            && AudioPreviewController.isCurrentSource(
+                                                referenceUrl)
+    readonly property real waveformScale: scaleForPeaks(waveformLayers.mix || [])
+
+    function formatTime(ms) {
+        var seconds = Math.max(0, Math.floor(Number(ms) / 1000))
+        var minutes = Math.floor(seconds / 60)
+        seconds %= 60
+        return (minutes < 10 ? "0" : "") + minutes + ":"
+                + (seconds < 10 ? "0" : "") + seconds
+    }
+
+    function fileName(path) {
+        const normalized = String(path).replace(/\\/g, "/")
+        return normalized.substring(normalized.lastIndexOf("/") + 1)
+    }
+
+    function sameLocalPath(left, right) {
+        return String(left).replace(/\\/g, "/").toLowerCase()
+                === String(right).replace(/\\/g, "/").toLowerCase()
+    }
+
+    function scaleForPeaks(peaks) {
+        var maximum = 0
+        for (var index = 0; index < peaks.length; ++index)
+            maximum = Math.max(maximum, Math.abs(Number(peaks[index]) || 0))
+        return maximum > 0 ? Math.max(1, Math.min(12, 0.72 / maximum)) : 1
+    }
+
+    function loadWaveform() {
+        waveformLayers = ({})
+        waveformDurationMs = 0
+        if (hasReference)
+            WaveformProvider.loadForTrack(pathField.text)
+    }
+
+    onReferencePathChanged: root.loadWaveform()
 
     ColumnLayout {
         anchors.fill: parent
@@ -31,6 +77,7 @@ Rectangle {
             radius: Theme.radiusSm
 
             ColumnLayout {
+                visible: !root.hasReference
                 anchors.centerIn: parent
                 width: parent.width - 28
                 spacing: 8
@@ -55,6 +102,74 @@ Rectangle {
                     font.pixelSize: 11
                 }
             }
+
+            ColumnLayout {
+                visible: root.hasReference
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        objectName: "voiceCloneReferencePlayButton"
+                        Layout.preferredWidth: 42
+                        Layout.preferredHeight: 38
+                        icon.source: Theme.icon(root.previewingThis
+                                                && AudioPreviewController.playing
+                                                ? "pause-fill" : "play-fill")
+                        onClicked: AudioPreviewController.toggle(root.referenceUrl)
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 1
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.fileName(pathField.text)
+                            color: Theme.primaryText
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideMiddle
+                        }
+                        Label {
+                            text: qsTr("已加载参考人声 · %1").arg(
+                                      root.formatTime(root.waveformDurationMs))
+                            color: Theme.secondaryText
+                            font.pixelSize: 11
+                        }
+                    }
+                }
+
+                WaveformItem {
+                    id: referenceWaveform
+                    objectName: "voiceCloneReferenceWaveform"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 60
+                    layers: root.waveformLayers
+                    position: 0
+                    cursorPosition: root.previewingThis
+                                    ? AudioPreviewController.positionMs : 0
+                    duration: root.waveformDurationMs > 0
+                              ? root.waveformDurationMs
+                              : (root.previewingThis
+                                 ? AudioPreviewController.durationMs : 0)
+                    analysisProgress: WaveformProvider.analysisProgress
+                    baseColor: Theme.waveformViolet
+                    progressColor: Theme.waveformCyan
+                    amplitudeScale: root.waveformScale
+                    onSeekRequested: positionMs => {
+                        if (root.previewingThis)
+                            AudioPreviewController.seek(positionMs)
+                    }
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignRight
+                    text: qsTr("建议 3–30 秒；格式约束由当前模型提供")
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
+                }
+            }
         }
         RowLayout {
             Layout.fillWidth: true
@@ -64,6 +179,7 @@ Rectangle {
                 Layout.fillWidth: true
                 placeholderText: qsTr("输入或粘贴本地音频路径")
                 Accessible.name: qsTr("参考音频路径")
+                onTextChanged: if (!activeFocus) cursorPosition = 0
             }
             ToolButton {
                 objectName: "voiceCloneReferenceBrowseButton"
@@ -73,6 +189,28 @@ Rectangle {
                 onClicked: referenceDialog.open()
             }
         }
+    }
+
+    Connections {
+        target: WaveformProvider
+        function onWaveformReady(path, layers) {
+            if (!root.sameLocalPath(path, pathField.text))
+                return
+            root.waveformLayers = {
+                mix: layers.mix || [],
+                _sampleRate: Number(layers._sampleRate) || 0,
+                _totalSamples: Number(layers._totalSamples) || 0,
+                _peakCount: Number(layers._peakCount) || 0
+            }
+            root.waveformDurationMs = Math.max(
+                        0, Number(layers._durationMs) || 0)
+        }
+    }
+
+    Component.onCompleted: root.loadWaveform()
+    Component.onDestruction: {
+        if (AudioPreviewController.isCurrentSource(root.referenceUrl))
+            AudioPreviewController.stop()
     }
 
     FileDialog {
