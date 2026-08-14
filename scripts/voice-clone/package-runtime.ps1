@@ -133,7 +133,9 @@ try {
 } finally { $archiveStream.Dispose() }
 
 $payload = @()
+$installedBytes = [int64]0
 foreach ($file in $files) {
+    $installedBytes += [int64]$file.item.Length
     $payload += [ordered]@{
         path = $file.relative
         bytes = $file.item.Length
@@ -166,6 +168,8 @@ $manifest = [ordered]@{
     packageUrl = "http://127.0.0.1/unsigned-test/$archiveName"
     packageBytes = (Get-Item -LiteralPath $archivePath).Length
     packageSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    installedBytes = $installedBytes
+    entryCount = $payload.Count
     files = $payload
 }
 [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10),

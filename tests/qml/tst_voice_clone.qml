@@ -338,7 +338,7 @@ TestCase {
                 "人声克隆  ·  多语言")
     }
 
-    function test_realPluginHostLoadsWorkspaceAndClickedModelBecomesReady() {
+    function test_realPluginHostRejectsUnverifiedProductionRuntime() {
         compare(realVoiceCloneStageError, "")
         verify(realVoiceCloneHost)
         realVoiceCloneHost.refresh()
@@ -358,10 +358,10 @@ TestCase {
         tryCompare(loader.item, "selectedModelIndex", 0)
         compare(loader.item.selectedModel.stableId,
                 "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
-        tryVerify(function() {
-            return realVoiceCloneHost.pluginController.workerReady
-                    && realVoiceCloneHost.pluginController.modelLoaded
-        }, 8000)
+        tryCompare(realVoiceCloneHost.pluginController, "activationState", "needs-download")
+        compare(realVoiceCloneHost.pluginController.workerReady, false)
+        compare(realVoiceCloneHost.pluginController.modelLoaded, false)
+        compare(realVoiceCloneHost.pluginController.runtimeDownloadRequired, true)
         const activationSpy = createTemporaryObject(
                     activationSpyComponent, testCase,
                     { target: realVoiceCloneHost.pluginController })
@@ -372,21 +372,12 @@ TestCase {
         const installedCard = loader.item.modelCardForStableId(installedId)
         verify(installedCard)
         mouseClick(installedCard)
-        verify(activationSpy.count >= 2)
-        verify(realVoiceCloneHost.pluginController.activationState === "starting-worker",
-               realVoiceCloneHost.pluginController.errorString + " / "
-               + realVoiceCloneHost.pluginController.activationMessage)
+        verify(activationSpy.count >= 1)
+        tryCompare(realVoiceCloneHost.pluginController, "activationState", "needs-download")
         compare(realVoiceCloneHost.pluginController.modelLoaded, false)
-        tryVerify(function() {
-            return realVoiceCloneHost.pluginController.workerReady
-                    && realVoiceCloneHost.pluginController.modelLoaded
-        }, 8000)
-        compare(realVoiceCloneHost.pluginController.activationMessage, "Model ready")
-        compare(realVoiceCloneHost.pluginController.activationState, "ready")
-        compare(realVoiceCloneHost.pluginController.workerReady, true)
-        compare(realVoiceCloneHost.pluginController.modelLoaded, true)
-        compare(realVoiceCloneHost.pluginController.advancedParameters.length, 1)
-        verify(findChild(loader.item, "voiceCloneAdvancedParameter_style"))
+        compare(realVoiceCloneHost.pluginController.workerReady, false)
+        compare(realVoiceCloneHost.pluginController.runtimeDownloadRequired, true)
+        compare(realVoiceCloneHost.pluginController.advancedParameters.length, 0)
 
         let missingIndex = -1
         for (let index = 0; index < realVoiceCloneHost.pluginController.models.length; ++index) {

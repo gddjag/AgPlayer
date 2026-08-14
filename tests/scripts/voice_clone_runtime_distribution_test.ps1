@@ -38,6 +38,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Runtime package script failed: $LASTEXITCODE" }
     $archive = Join-Path $outputRoot 'runtime-qwen-1.0.0-windows-x86_64.zip'
     $manifest = Join-Path $outputRoot 'runtime-qwen-1.0.0-windows-x86_64.manifest.json'
+    $publishedManifest = Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json
+    $declaredBytes = [int64](($publishedManifest.files | Measure-Object -Property bytes -Sum).Sum)
+    if ($publishedManifest.installedBytes -ne $declaredBytes -or
+        $publishedManifest.entryCount -ne $publishedManifest.files.Count) {
+        throw 'Runtime package script omitted the exact installed size/entry count contract'
+    }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $verifyScript `
         -ManifestPath $manifest -ArchivePath $archive
     if ($LASTEXITCODE -ne 0) { throw "Runtime verify script failed: $LASTEXITCODE" }

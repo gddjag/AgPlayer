@@ -3,6 +3,7 @@
 #include "voice_clone_package_manager.hpp"
 
 #include <QCryptographicHash>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
@@ -12,6 +13,7 @@
 #include <QStorageInfo>
 
 #include <limits>
+#include <algorithm>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -149,6 +151,253 @@ QString hashFile(const QString& path)
     QCryptographicHash hash(QCryptographicHash::Sha256);
     if (!hash.addData(&file)) return {};
     return QString::fromLatin1(hash.result().toHex());
+}
+
+quint16 little16(const QByteArray& bytes, const qsizetype offset)
+{
+    return quint16(quint8(bytes.at(offset)))
+           | (quint16(quint8(bytes.at(offset + 1))) << 8U);
+}
+
+quint32 little32(const QByteArray& bytes, const qsizetype offset)
+{
+    return quint32(little16(bytes, offset))
+           | (quint32(little16(bytes, offset + 2)) << 16U);
+}
+
+bool readAt(QFile* file, const qint64 offset, const qint64 count, QByteArray* output)
+{
+    if (offset < 0 || count < 0 || !file->seek(offset)) return false;
+    *output = file->read(count);
+    return output->size() == count;
+}
+
+bool containsZip64Extra(const QByteArray& extra, bool* malformed)
+{
+    qsizetype offset = 0;
+    while (offset < extra.size()) {
+        if (extra.size() - offset < 4) { *malformed = true; return false; }
+        const quint16 id = little16(extra, offset);
+        const quint16 size = little16(extra, offset + 2);
+        offset += 4;
+        if (size > extra.size() - offset) { *malformed = true; return false; }
+        if (id == 0x0001U) return true;
+        offset += size;
+    }
+    return false;
+}
+
+bool inspectZipCentralDirectory(const QString& archivePath,
+                                const VoiceCloneRuntimePackageManifest& manifest,
+                                QString* error)
+{
+    constexpr quint64 maximumEntryBytes = 16ULL * 1024 * 1024 * 1024;
+    constexpr quint64 maximumInstalledBytes = 64ULL * 1024 * 1024 * 1024;
+    constexpr quint64 maximumCompressionRatio = 200;
+    constexpr quint64 ratioThreshold = 1024 * 1024;
+    constexpr int maximumEntries = 200000;
+    QFile archive(archivePath);
+    if (!archive.open(QIODevice::ReadOnly)) {
+        *error = QStringLiteral("Runtime ZIP central directory could not be opened");
+        return false;
+    }
+    const qint64 archiveSize = archive.size();
+    if (archiveSize < 22) {
+        *error = QStringLiteral("Runtime ZIP central directory is truncated"); return false;
+    }
+    const qint64 tailSize = qMin<qint64>(archiveSize, 22 + 65535);
+    QByteArray tail;
+    if (!readAt(&archive, archiveSize - tailSize, tailSize, &tail)) {
+        *error = QStringLiteral("Runtime ZIP central directory could not be read"); return false;
+    }
+    const QByteArray endSignature = QByteArray::fromHex("504b0506");
+    qsizetype endOffset = -1;
+    for (qsizetype candidate = tail.lastIndexOf(endSignature); candidate >= 0;
+         candidate = tail.lastIndexOf(endSignature, candidate - 1)) {
+        if (candidate + 22 <= tail.size()
+            && candidate + 22 + little16(tail, candidate + 20) == tail.size()) {
+            endOffset = candidate;
+            break;
+        }
+        if (candidate == 0) break;
+    }
+    if (endOffset < 0) {
+        *error = QStringLiteral("Runtime ZIP central directory end record is missing or truncated");
+        return false;
+    }
+    const quint16 disk = little16(tail, endOffset + 4);
+    const quint16 centralDisk = little16(tail, endOffset + 6);
+    const quint16 diskEntries = little16(tail, endOffset + 8);
+    const quint16 entryCount = little16(tail, endOffset + 10);
+    const quint32 centralBytes = little32(tail, endOffset + 12);
+    const quint32 centralOffset = little32(tail, endOffset + 16);
+    const qint64 absoluteEndOffset = archiveSize - tailSize + endOffset;
+    if (disk != 0 || centralDisk != 0 || diskEntries != entryCount
+        || entryCount == 0xffffU || centralBytes == 0xffffffffU
+        || centralOffset == 0xffffffffU) {
+        *error = QStringLiteral("Runtime ZIP64 or multi-disk archives are unsupported"); return false;
+    }
+    if (entryCount == 0 || entryCount > maximumEntries
+        || entryCount != manifest.entryCount) {
+        *error = QStringLiteral("Runtime ZIP entry count differs from its manifest"); return false;
+    }
+    if (quint64(centralOffset) + quint64(centralBytes) != quint64(absoluteEndOffset)) {
+        *error = QStringLiteral("Runtime ZIP central directory is truncated or misplaced");
+        return false;
+    }
+
+    QHash<QString, VoiceCloneRuntimeFile> expected;
+    for (const auto& file : manifest.files) expected.insert(file.relativePath.toLower(), file);
+    QSet<QString> listed;
+    struct LocalRange { quint64 begin; quint64 end; };
+    QVector<LocalRange> ranges;
+    quint64 totalInstalled = 0;
+    qint64 centralCursor = centralOffset;
+    for (quint16 index = 0; index < entryCount; ++index) {
+        QByteArray header;
+        if (!readAt(&archive, centralCursor, 46, &header)
+            || little32(header, 0) != 0x02014b50U) {
+            *error = QStringLiteral("Runtime ZIP central directory entry is truncated"); return false;
+        }
+        const quint16 versionMade = little16(header, 4);
+        const quint16 versionNeeded = little16(header, 6);
+        const quint16 flags = little16(header, 8);
+        const quint16 method = little16(header, 10);
+        const quint32 crc = little32(header, 16);
+        const quint32 compressedBytes = little32(header, 20);
+        const quint32 installedBytes = little32(header, 24);
+        const quint16 nameBytes = little16(header, 28);
+        const quint16 extraBytes = little16(header, 30);
+        const quint16 commentBytes = little16(header, 32);
+        const quint16 startDisk = little16(header, 34);
+        const quint32 externalAttributes = little32(header, 38);
+        const quint32 localOffset = little32(header, 42);
+        if (versionNeeded >= 45 || compressedBytes == 0xffffffffU
+            || installedBytes == 0xffffffffU || localOffset == 0xffffffffU
+            || startDisk != 0) {
+            *error = QStringLiteral("Runtime ZIP64 entries are unsupported"); return false;
+        }
+        if ((flags & 0x0001U) != 0) {
+            *error = QStringLiteral("Runtime ZIP contains an encrypted entry"); return false;
+        }
+        if ((flags & ~quint16(0x0800U)) != 0) {
+            *error = QStringLiteral("Runtime ZIP contains unsupported entry flags"); return false;
+        }
+        if (method != 0 && method != 8) {
+            *error = QStringLiteral("Runtime ZIP compression method is unsupported"); return false;
+        }
+        const quint16 creator = versionMade >> 8U;
+        const quint32 unixType = (externalAttributes >> 16U) & 0xf000U;
+        if ((creator == 3 && unixType != 0 && unixType != 0x8000U)
+            || (externalAttributes & 0x10U) != 0) {
+            *error = QStringLiteral("Runtime ZIP contains an unsafe ZIP entry type"); return false;
+        }
+        if (nameBytes == 0 || nameBytes > 4096) {
+            *error = QStringLiteral("Runtime ZIP contains an unsafe path"); return false;
+        }
+        QByteArray variable;
+        const qint64 variableBytes = qint64(nameBytes) + extraBytes + commentBytes;
+        if (!readAt(&archive, centralCursor + 46, variableBytes, &variable)) {
+            *error = QStringLiteral("Runtime ZIP central directory entry is truncated"); return false;
+        }
+        const QByteArray encodedName = variable.left(nameBytes);
+        const QByteArray extra = variable.mid(nameBytes, extraBytes);
+        bool malformedExtra = false;
+        if (containsZip64Extra(extra, &malformedExtra)) {
+            *error = QStringLiteral("Runtime ZIP64 entries are unsupported"); return false;
+        }
+        if (malformedExtra) {
+            *error = QStringLiteral("Runtime ZIP central directory extra data is truncated");
+            return false;
+        }
+        const QString path = QString::fromUtf8(encodedName);
+        if (path.toUtf8() != encodedName || path.endsWith(QLatin1Char('/'))
+            || !safeArchiveEntry(path)) {
+            *error = QStringLiteral("Runtime ZIP contains an unsafe path"); return false;
+        }
+        const QString normalized = path.toLower();
+        if (listed.contains(normalized) || !expected.contains(normalized)) {
+            *error = QStringLiteral("Runtime ZIP contains a duplicate or unlisted path"); return false;
+        }
+        listed.insert(normalized);
+        if (expected.value(normalized).bytes != installedBytes) {
+            *error = QStringLiteral("Runtime ZIP installed size differs from its manifest");
+            return false;
+        }
+        if (installedBytes > maximumEntryBytes
+            || totalInstalled > maximumInstalledBytes - installedBytes) {
+            *error = QStringLiteral("Runtime ZIP installed size exceeds supported limits");
+            return false;
+        }
+        totalInstalled += installedBytes;
+        if (method == 0 && compressedBytes != installedBytes) {
+            *error = QStringLiteral("Runtime ZIP stored entry size is inconsistent"); return false;
+        }
+        if (installedBytes > ratioThreshold
+            && (compressedBytes == 0
+                || quint64(installedBytes) / quint64(compressedBytes)
+                       > maximumCompressionRatio)) {
+            *error = QStringLiteral("Runtime ZIP compression ratio exceeds the safe limit");
+            return false;
+        }
+
+        QByteArray localHeader;
+        if (localOffset >= centralOffset || !readAt(&archive, localOffset, 30, &localHeader)
+            || little32(localHeader, 0) != 0x04034b50U) {
+            *error = QStringLiteral("Runtime ZIP local entry header is truncated"); return false;
+        }
+        const quint16 localFlags = little16(localHeader, 6);
+        const quint16 localMethod = little16(localHeader, 8);
+        const quint32 localCrc = little32(localHeader, 14);
+        const quint32 localCompressed = little32(localHeader, 18);
+        const quint32 localInstalled = little32(localHeader, 22);
+        const quint16 localNameBytes = little16(localHeader, 26);
+        const quint16 localExtraBytes = little16(localHeader, 28);
+        const quint64 localVariableBytes = quint64(localNameBytes) + localExtraBytes;
+        const quint64 dataBegin = quint64(localOffset) + 30 + localVariableBytes;
+        const quint64 dataEnd = dataBegin + compressedBytes;
+        if (localFlags != flags || localMethod != method || localCrc != crc
+            || localCompressed != compressedBytes || localInstalled != installedBytes
+            || localNameBytes != nameBytes || dataEnd > centralOffset) {
+            *error = QStringLiteral("Runtime ZIP local and central entry metadata differ");
+            return false;
+        }
+        QByteArray localVariable;
+        if (!readAt(&archive, qint64(localOffset) + 30, qint64(localVariableBytes),
+                    &localVariable)
+            || localVariable.left(localNameBytes) != encodedName) {
+            *error = QStringLiteral("Runtime ZIP local entry path is truncated or inconsistent");
+            return false;
+        }
+        bool malformedLocalExtra = false;
+        if (containsZip64Extra(localVariable.mid(localNameBytes), &malformedLocalExtra)) {
+            *error = QStringLiteral("Runtime ZIP64 entries are unsupported"); return false;
+        }
+        if (malformedLocalExtra) {
+            *error = QStringLiteral("Runtime ZIP local entry extra data is truncated"); return false;
+        }
+        ranges.append({localOffset, dataEnd});
+        centralCursor += 46 + variableBytes;
+    }
+    if (centralCursor != qint64(centralOffset) + centralBytes) {
+        *error = QStringLiteral("Runtime ZIP central directory size is inconsistent"); return false;
+    }
+    if (listed.size() != expected.size() || totalInstalled != quint64(manifest.installedBytes)) {
+        *error = QStringLiteral("Runtime ZIP file list or installed size differs from its manifest");
+        return false;
+    }
+    std::sort(ranges.begin(), ranges.end(), [](const LocalRange& left, const LocalRange& right) {
+        return left.begin < right.begin;
+    });
+    if (ranges.isEmpty() || ranges.constFirst().begin != 0) {
+        *error = QStringLiteral("Runtime ZIP local records are misplaced"); return false;
+    }
+    for (qsizetype index = 1; index < ranges.size(); ++index) {
+        if (ranges.at(index).begin < ranges.at(index - 1).end) {
+            *error = QStringLiteral("Runtime ZIP local records overlap"); return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -416,83 +665,9 @@ void VoiceCloneRuntimePackageManager::finishDownload()
 
 bool VoiceCloneRuntimePackageManager::inspectAndExtract(QString* error)
 {
+    if (!inspectZipCentralDirectory(archivePath_, manifest_, error)) return false;
     const QString tar = systemTar();
     if (tar.isEmpty()) { *error = QStringLiteral("Trusted Windows ZIP extractor is unavailable"); return false; }
-    QProcess listing;
-    listing.setProgram(tar);
-    listing.setArguments({QStringLiteral("-tf"), archivePath_});
-    listing.start();
-    if (!listing.waitForFinished(30000) || listing.exitStatus() != QProcess::NormalExit
-        || listing.exitCode() != 0) {
-        *error = QStringLiteral("Runtime ZIP could not be inspected"); return false;
-    }
-    QProcess verboseListing;
-    verboseListing.setProgram(tar);
-    verboseListing.setArguments({QStringLiteral("-tvf"), archivePath_});
-    verboseListing.start();
-    if (!verboseListing.waitForFinished(30000)
-        || verboseListing.exitStatus() != QProcess::NormalExit
-        || verboseListing.exitCode() != 0) {
-        *error = QStringLiteral("Runtime ZIP entry types could not be inspected"); return false;
-    }
-    QSet<QString> expected;
-    QSet<QString> expectedDirectories;
-    for (const auto& file : manifest_.files) {
-        expected.insert(file.relativePath.toLower());
-        const QStringList parts = file.relativePath.split(QLatin1Char('/'));
-        QString directory;
-        for (qsizetype i = 0; i + 1 < parts.size(); ++i) {
-            if (!directory.isEmpty()) directory += QLatin1Char('/');
-            directory += parts.at(i);
-            expectedDirectories.insert(directory.toLower());
-        }
-    }
-    QSet<QString> listed;
-    QSet<QString> allEntries;
-    QList<QByteArray> lines;
-    for (QByteArray line : listing.readAllStandardOutput().split('\n')) {
-        if (line.endsWith('\r')) line.chop(1);
-        if (!line.isEmpty()) lines.append(line);
-    }
-    QList<QByteArray> verboseLines;
-    for (QByteArray line : verboseListing.readAllStandardOutput().split('\n')) {
-        if (line.endsWith('\r')) line.chop(1);
-        if (!line.isEmpty()) verboseLines.append(line);
-    }
-    if (lines.size() != verboseLines.size()) {
-        *error = QStringLiteral("Runtime ZIP inspection results are inconsistent"); return false;
-    }
-    for (qsizetype i = 0; i < lines.size(); ++i) {
-        const QByteArray line = lines.at(i);
-        const QString entry = QString::fromUtf8(line);
-        if (!safeArchiveEntry(entry)) { *error = QStringLiteral("Runtime ZIP contains an unsafe path"); return false; }
-        const QByteArray details = verboseLines.at(i);
-        if (details.isEmpty() || (details.at(0) != '-' && details.at(0) != 'd')) {
-            *error = QStringLiteral("Runtime ZIP contains an unsafe ZIP entry type"); return false;
-        }
-        if (!details.endsWith(QByteArray(" ") + line)
-            && !details.endsWith(QByteArray("\t") + line)) {
-            *error = QStringLiteral("Runtime ZIP path/type inspection mismatch"); return false;
-        }
-        const QString normalized = entry.endsWith(QLatin1Char('/'))
-                                       ? entry.left(entry.size() - 1).toLower()
-                                       : entry.toLower();
-        if (allEntries.contains(normalized)) {
-            *error = QStringLiteral("Runtime ZIP contains duplicate paths"); return false;
-        }
-        allEntries.insert(normalized);
-        if (details.at(0) == 'd') {
-            if (!entry.endsWith(QLatin1Char('/')) || !expectedDirectories.contains(normalized)) {
-                *error = QStringLiteral("Runtime ZIP contains an unlisted directory"); return false;
-            }
-        } else {
-            if (entry.endsWith(QLatin1Char('/'))) {
-                *error = QStringLiteral("Runtime ZIP entry type does not match its path"); return false;
-            }
-            listed.insert(normalized);
-        }
-    }
-    if (listed != expected) { *error = QStringLiteral("Runtime ZIP file list differs from its manifest"); return false; }
     if (QFileInfo::exists(stagingRoot_) && !removeTree(stagingRoot_)) {
         *error = QStringLiteral("Runtime staging directory is unsafe or could not be cleaned"); return false;
     }

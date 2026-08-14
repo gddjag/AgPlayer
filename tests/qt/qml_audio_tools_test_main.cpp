@@ -163,6 +163,8 @@ bool stageVoiceClonePlugin(const QString& root)
                            {QStringLiteral("packageUrl"), QStringLiteral("https://downloads.agplayer.cn/runtime-qwen-test.zip")},
                            {QStringLiteral("packageBytes"), runtimeBytes.size()},
                            {QStringLiteral("packageSha256"), runtimeSha},
+                           {QStringLiteral("installedBytes"), runtimeBytes.size()},
+                           {QStringLiteral("entryCount"), 1},
                            {QStringLiteral("files"), QJsonArray{QJsonObject{
                                 {QStringLiteral("path"), QStringLiteral("python.exe")},
                                 {QStringLiteral("bytes"), runtimeBytes.size()},

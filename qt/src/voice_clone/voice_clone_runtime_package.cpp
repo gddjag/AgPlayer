@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
+#include <QVersionNumber>
 
 namespace agplayer::voice_clone {
 namespace {
@@ -104,7 +105,8 @@ VoiceCloneRuntimePackageManifest VoiceCloneRuntimePackageManifest::fromJson(
         QStringLiteral("installRoot"), QStringLiteral("publisher"),
         QStringLiteral("licenseNotices"), QStringLiteral("signature"),
         QStringLiteral("packageUrl"), QStringLiteral("packageBytes"),
-        QStringLiteral("packageSha256"), QStringLiteral("files")};
+        QStringLiteral("packageSha256"), QStringLiteral("installedBytes"),
+        QStringLiteral("entryCount"), QStringLiteral("files")};
     const QString extra = unknownField(object, rootFields);
     if (!extra.isEmpty()) {
         result.parseError = QStringLiteral("Unknown runtime manifest field: %1").arg(extra);
@@ -123,6 +125,8 @@ VoiceCloneRuntimePackageManifest VoiceCloneRuntimePackageManifest::fromJson(
     result.packageUrl = QUrl(object.value(QStringLiteral("packageUrl")).toString());
     result.packageBytes = object.value(QStringLiteral("packageBytes")).toVariant().toLongLong();
     result.packageSha256 = object.value(QStringLiteral("packageSha256")).toString();
+    result.installedBytes = object.value(QStringLiteral("installedBytes")).toVariant().toLongLong();
+    result.entryCount = object.value(QStringLiteral("entryCount")).toInt(-1);
 
     const QJsonObject publisher = object.value(QStringLiteral("publisher")).toObject();
     if (unknownField(publisher, {QStringLiteral("name"), QStringLiteral("url")}).isEmpty()) {
@@ -223,13 +227,30 @@ QString VoiceCloneRuntimePackageManifest::errorString(const VoiceCloneRuntimeVal
             hasPython = true;
     }
     if (!hasPython) return QStringLiteral("Runtime payload does not contain python.exe");
+    constexpr qint64 maximumInstalledBytes = 64LL * 1024 * 1024 * 1024;
+    constexpr int maximumEntryCount = 200000;
+    if (installedBytes <= 0 || installedBytes > maximumInstalledBytes
+        || entryCount <= 0 || entryCount > maximumEntryCount
+        || entryCount != files.size()) {
+        return QStringLiteral("Runtime declared installed size or entry count is invalid");
+    }
+    qint64 summedBytes = 0;
+    for (const auto& file : files) {
+        if (file.bytes > maximumInstalledBytes - summedBytes)
+            return QStringLiteral("Runtime declared installed size exceeds supported limits");
+        summedBytes += file.bytes;
+    }
+    if (summedBytes != installedBytes)
+        return QStringLiteral("Runtime declared installed size differs from its file list");
+    const QVersionNumber required = QVersionNumber::fromString(minimumPlayerVersion);
+    const QVersionNumber current = QVersionNumber::fromString(QStringLiteral(AGPLAYER_VERSION));
+    if (required.segmentCount() != 3 || current.segmentCount() != 3
+        || QVersionNumber::compare(required, current) > 0) {
+        return QStringLiteral("Runtime Pack requires a newer AG Player version");
+    }
     if (policy == VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly) {
-        if (!isHttpsUrl(packageUrl) || packageUrl.host().compare(QStringLiteral("downloads.agplayer.cn"),
-                                                                  Qt::CaseInsensitive) != 0)
-            return QStringLiteral("Production Runtime Pack URL is not an approved AG Player HTTPS URL");
-        if (signatureStatus != QStringLiteral("signed") || signatureAlgorithm.isEmpty()
-            || signatureKeyId.isEmpty())
-            return QStringLiteral("Production Runtime Pack is not signed");
+        return QStringLiteral(
+            "Production Runtime Pack signature verification unavailable; releases are disabled");
     } else if (!((packageUrl.scheme() == QStringLiteral("http") && packageUrl.isLocalFile() == false
                   && (packageUrl.host() == QStringLiteral("127.0.0.1")
                       || packageUrl.host() == QStringLiteral("localhost")))
@@ -286,6 +307,8 @@ QJsonObject VoiceCloneRuntimePackageManifest::toJson() const
             {QStringLiteral("packageUrl"), packageUrl.toString()},
             {QStringLiteral("packageBytes"), packageBytes},
             {QStringLiteral("packageSha256"), packageSha256},
+            {QStringLiteral("installedBytes"), installedBytes},
+            {QStringLiteral("entryCount"), entryCount},
             {QStringLiteral("files"), payload}};
 }
 
@@ -325,9 +348,9 @@ VoiceCloneRuntimeFeed VoiceCloneRuntimeFeed::fromJson(
         result.error = QStringLiteral("Injected test Runtime feed must be unsigned-test");
         return result;
     }
-    if (result.enabled && policy == VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly
-        && result.signatureStatus != QStringLiteral("signed")) {
-        result.error = QStringLiteral("Production Runtime feed must be signed");
+    if (result.enabled && policy == VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly) {
+        result.error = QStringLiteral(
+            "Production Runtime feed signature verification unavailable; releases are disabled");
         return result;
     }
     for (const QJsonValue& value : object.value(QStringLiteral("runtimes")).toArray()) {

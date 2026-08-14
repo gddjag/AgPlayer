@@ -741,6 +741,8 @@ void VoiceCloneControllerTest::oneClickDownloadInstallsRuntimeThenModelAndProbes
         {QStringLiteral("packageUrl"), runtimeServer.url().toString()},
         {QStringLiteral("packageBytes"), runtimeZip.size()},
         {QStringLiteral("packageSha256"), bytesSha256(runtimeZip)},
+        {QStringLiteral("installedBytes"), runtimeExecutable.size()},
+        {QStringLiteral("entryCount"), 1},
         {QStringLiteral("files"), QJsonArray{QJsonObject{
              {QStringLiteral("path"), QStringLiteral("python.exe")},
              {QStringLiteral("bytes"), runtimeExecutable.size()},

@@ -51,6 +51,8 @@ struct VoiceCloneRuntimePackageManifest {
     QUrl packageUrl;
     qint64 packageBytes = -1;
     QString packageSha256;
+    qint64 installedBytes = -1;
+    int entryCount = 0;
     QVector<VoiceCloneRuntimeFile> files;
     QString parseError;
 

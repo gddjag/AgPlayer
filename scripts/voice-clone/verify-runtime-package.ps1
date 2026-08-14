@@ -69,6 +69,8 @@ if ($null -eq $identity -or $manifest.schemaVersion -ne 1 -or
     $manifest.signature.status -ne 'unsigned-test' -or
     $manifest.packageUrl -notmatch '^http://(127\.0\.0\.1|localhost)/unsigned-test/' -or
     $manifest.packageBytes -le 0 -or $manifest.packageSha256 -notmatch '^[0-9a-f]{64}$' -or
+    $manifest.installedBytes -le 0 -or $manifest.installedBytes -gt 64GB -or
+    $manifest.entryCount -ne $manifest.files.Count -or $manifest.entryCount -gt 200000 -or
     $manifest.files.Count -lt 3) {
     throw 'Runtime package manifest identity/schema is invalid'
 }
@@ -87,6 +89,7 @@ if ($archiveItem.Length -ne [int64]$manifest.packageBytes -or
 }
 
 $expected = @{}
+$declaredInstalledBytes = [int64]0
 foreach ($file in $manifest.files) {
     Assert-SafeRelativePath $file.path
     $key = $file.path.ToLowerInvariant()
@@ -94,7 +97,11 @@ foreach ($file in $manifest.files) {
         $file.sha256 -notmatch '^[0-9a-f]{64}$') {
         throw 'Runtime manifest contains duplicate or invalid payload metadata'
     }
+    $declaredInstalledBytes += [int64]$file.bytes
     $expected[$key] = $file
+}
+if ($declaredInstalledBytes -ne [int64]$manifest.installedBytes) {
+    throw 'Runtime manifest installed size differs from its file list'
 }
 foreach ($required in @('python.exe','runtime-manifest.json','third_party_notices.txt')) {
     if (-not $expected.ContainsKey($required)) { throw "Runtime payload is missing $required" }
@@ -106,6 +113,7 @@ try {
         $stream, [System.IO.Compression.ZipArchiveMode]::Read, $true)
     try {
         $seen = @{}
+        $archiveInstalledBytes = [int64]0
         foreach ($entry in $zip.Entries) {
             $path = $entry.FullName.Replace('\','/')
             Assert-SafeRelativePath $path
@@ -122,6 +130,7 @@ try {
             if ($entry.Length -ne [int64]$metadata.bytes) {
                 throw "Runtime ZIP entry size mismatch: $path"
             }
+            $archiveInstalledBytes += [int64]$entry.Length
             $entryStream = $entry.Open()
             try { $actualHash = Get-StreamSha256 $entryStream } finally { $entryStream.Dispose() }
             if ($actualHash -ne $metadata.sha256) {
@@ -129,7 +138,10 @@ try {
             }
             $seen[$key] = $true
         }
-        if ($seen.Count -ne $expected.Count) { throw 'Runtime ZIP payload list is incomplete' }
+        if ($seen.Count -ne $expected.Count -or $seen.Count -ne [int]$manifest.entryCount -or
+            $archiveInstalledBytes -ne [int64]$manifest.installedBytes) {
+            throw 'Runtime ZIP payload list or installed size is incomplete'
+        }
     } finally { $zip.Dispose() }
 } finally { $stream.Dispose() }
 

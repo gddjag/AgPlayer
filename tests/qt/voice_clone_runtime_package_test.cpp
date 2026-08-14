@@ -14,6 +14,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QVersionNumber>
 
 using namespace agplayer::voice_clone;
 
@@ -87,6 +88,13 @@ void overwrite32(QByteArray& output, const qsizetype offset, const quint32 value
     output[offset + 3] = char((value >> 24U) & 0xffU);
 }
 
+void overwrite16(QByteArray& output, const qsizetype offset, const quint16 value)
+{
+    QVERIFY(offset >= 0 && offset + 2 <= output.size());
+    output[offset] = char(value & 0xffU);
+    output[offset + 1] = char((value >> 8U) & 0xffU);
+}
+
 QString sha256(const QByteArray& bytes)
 {
     return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
@@ -129,6 +137,8 @@ QJsonObject manifestObject(const QUrl& url, const QByteArray& archive,
     result.insert(QStringLiteral("packageUrl"), url.toString());
     result.insert(QStringLiteral("packageBytes"), archive.size());
     result.insert(QStringLiteral("packageSha256"), sha256(archive));
+    result.insert(QStringLiteral("installedBytes"), payload.size());
+    result.insert(QStringLiteral("entryCount"), 1);
     return result;
 }
 
@@ -196,15 +206,96 @@ class VoiceCloneRuntimePackageTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void requiresDeclaredInstalledSizeAndEntryCount();
+    void rejectsFuturePlayerVersionAndAcceptsCurrentBoundary();
+    void productionPolicyRejectsSignedLookingMetadataWithoutVerification();
     void strictManifestRejectsWrongCompatibilityAndUnsignedProduction();
     void downloadsVerifiesExtractsAndCommitsStoredZip();
     void rejectsCorruptArchiveAndTraversalWithoutReplacingInstalledRuntime();
     void rejectsZipSymlinkBeforeExtraction();
+    void rejectsUnsafeZipMetadataBeforeExtraction_data();
+    void rejectsUnsafeZipMetadataBeforeExtraction();
     void rejectsRuntimeWhenVerifiedInstallWouldExceedFreeSpace();
     void resumesPartialAndRejectsUnsafeInstalledFolder();
     void disabledFeedIsHonestAndContainsNoFakeRelease();
     void failedAtomicSwapRestoresPreviousRuntime();
 };
+
+void VoiceCloneRuntimePackageTest::requiresDeclaredInstalledSizeAndEntryCount()
+{
+    const QByteArray payload("worker-runtime");
+    const QByteArray archive = storedZip({{QByteArray("python.exe"), payload}});
+    HttpArchiveServer server(archive);
+    QJsonObject object = manifestObject(server.url(), archive);
+    object.remove(QStringLiteral("installedBytes"));
+    object.remove(QStringLiteral("entryCount"));
+    const auto manifest = VoiceCloneRuntimePackageManifest::fromJson(
+        object,
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+
+    QVERIFY(!manifest.isValid(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest));
+    QVERIFY(manifest.errorString(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest)
+                .contains(QStringLiteral("installed"), Qt::CaseInsensitive));
+}
+
+void VoiceCloneRuntimePackageTest::rejectsFuturePlayerVersionAndAcceptsCurrentBoundary()
+{
+    const QByteArray payload("worker-runtime");
+    const QByteArray archive = storedZip({{QByteArray("python.exe"), payload}});
+    HttpArchiveServer server(archive);
+    const QVersionNumber current = QVersionNumber::fromString(QStringLiteral(AGPLAYER_VERSION));
+    QVERIFY(current.segmentCount() == 3);
+
+    QJsonObject boundary = manifestObject(server.url(), archive);
+    boundary.insert(QStringLiteral("minimumPlayerVersion"), current.toString());
+    const auto accepted = VoiceCloneRuntimePackageManifest::fromJson(
+        boundary, VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    QVERIFY2(accepted.isValid(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest),
+             qPrintable(accepted.errorString(
+                 VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest)));
+
+    QJsonObject future = boundary;
+    future.insert(QStringLiteral("minimumPlayerVersion"),
+                  QVersionNumber(current.majorVersion(), current.minorVersion(),
+                                 current.microVersion() + 1).toString());
+    const auto rejected = VoiceCloneRuntimePackageManifest::fromJson(
+        future, VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    QVERIFY(!rejected.isValid(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest));
+    QVERIFY(rejected.errorString(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest)
+                .contains(QStringLiteral("player version"), Qt::CaseInsensitive));
+}
+
+void VoiceCloneRuntimePackageTest::productionPolicyRejectsSignedLookingMetadataWithoutVerification()
+{
+    const QByteArray payload("worker-runtime");
+    const QByteArray archive = storedZip({{QByteArray("python.exe"), payload}});
+    QJsonObject package = manifestObject(
+        QUrl(QStringLiteral("https://downloads.agplayer.cn/runtime/runtime-qwen.zip")), archive);
+    package.insert(QStringLiteral("signature"), QJsonObject{
+        {QStringLiteral("status"), QStringLiteral("signed")},
+        {QStringLiteral("algorithm"), QStringLiteral("ed25519")},
+        {QStringLiteral("keyId"), QStringLiteral("release-1")}});
+    const auto manifest = VoiceCloneRuntimePackageManifest::fromJson(
+        package, VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly);
+    QVERIFY(!manifest.isValid(VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly));
+    QVERIFY(manifest.errorString(VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly)
+                .contains(QStringLiteral("verification unavailable"), Qt::CaseInsensitive));
+
+    const QJsonObject feed{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("enabled"), true},
+        {QStringLiteral("reason"), QStringLiteral("signed-looking release")},
+        {QStringLiteral("signature"), QJsonObject{
+             {QStringLiteral("status"), QStringLiteral("signed")},
+             {QStringLiteral("algorithm"), QStringLiteral("ed25519")},
+             {QStringLiteral("keyId"), QStringLiteral("release-1")}}},
+        {QStringLiteral("runtimes"), QJsonArray{package}}};
+    const auto parsedFeed = VoiceCloneRuntimeFeed::fromJson(
+        QJsonDocument(feed).toJson(), VoiceCloneRuntimeValidationPolicy::OfficialSignedOnly);
+    QVERIFY(!parsedFeed.isValid());
+    QVERIFY(parsedFeed.error.contains(QStringLiteral("verification unavailable"),
+                                      Qt::CaseInsensitive));
+}
 
 void VoiceCloneRuntimePackageTest::strictManifestRejectsWrongCompatibilityAndUnsignedProduction()
 {
@@ -325,6 +416,104 @@ void VoiceCloneRuntimePackageTest::rejectsZipSymlinkBeforeExtraction()
     QVERIFY2(manager.errorString().contains(QStringLiteral("unsafe ZIP entry type")),
              qPrintable(manager.errorString()));
     QVERIFY(!QFileInfo::exists(QDir(root.path()).filePath(QStringLiteral("qwen-shared/1.0.0"))));
+}
+
+void VoiceCloneRuntimePackageTest::rejectsUnsafeZipMetadataBeforeExtraction_data()
+{
+    QTest::addColumn<QString>("kind");
+    QTest::addColumn<QString>("errorFragment");
+    QTest::newRow("encrypted") << QStringLiteral("encrypted") << QStringLiteral("encrypted");
+    QTest::newRow("zip64") << QStringLiteral("zip64") << QStringLiteral("ZIP64");
+    QTest::newRow("unsupported-method") << QStringLiteral("method") << QStringLiteral("method");
+    QTest::newRow("compression-ratio") << QStringLiteral("ratio") << QStringLiteral("ratio");
+    QTest::newRow("overlapping-local-records") << QStringLiteral("overlap")
+                                                << QStringLiteral("overlap");
+    QTest::newRow("truncated-eocd") << QStringLiteral("truncated")
+                                     << QStringLiteral("central directory");
+    QTest::newRow("installed-size-mismatch") << QStringLiteral("installed")
+                                              << QStringLiteral("installed size");
+}
+
+void VoiceCloneRuntimePackageTest::rejectsUnsafeZipMetadataBeforeExtraction()
+{
+    QFETCH(QString, kind);
+    QFETCH(QString, errorFragment);
+    const QByteArray payload("worker-runtime");
+    QByteArray archive;
+    QJsonArray files;
+    qint64 installedBytes = payload.size();
+    int entryCount = 1;
+    if (kind == QStringLiteral("overlap")) {
+        archive = storedZip({{QByteArray("python.exe"), QByteArray("a")},
+                             {QByteArray("helper.txt"), QByteArray("b")}});
+        const qsizetype central = archive.indexOf(QByteArray::fromHex("504b0102"));
+        QVERIFY(central >= 0);
+        overwrite32(archive, 18, 2);
+        overwrite32(archive, 22, 2);
+        overwrite32(archive, central + 20, 2);
+        overwrite32(archive, central + 24, 2);
+        files = QJsonArray{
+            QJsonObject{{QStringLiteral("path"), QStringLiteral("python.exe")},
+                        {QStringLiteral("bytes"), 2},
+                        {QStringLiteral("sha256"), sha256(QByteArray("a"))}},
+            QJsonObject{{QStringLiteral("path"), QStringLiteral("helper.txt")},
+                        {QStringLiteral("bytes"), 1},
+                        {QStringLiteral("sha256"), sha256(QByteArray("b"))}}};
+        installedBytes = 3;
+        entryCount = 2;
+    } else {
+        archive = storedZip({{QByteArray("python.exe"), payload}});
+        const qsizetype central = archive.indexOf(QByteArray::fromHex("504b0102"));
+        QVERIFY(central >= 0);
+        if (kind == QStringLiteral("encrypted")) {
+            overwrite16(archive, 6, 1);
+            overwrite16(archive, central + 8, 1);
+        } else if (kind == QStringLiteral("zip64")) {
+            overwrite32(archive, central + 20, 0xffffffffU);
+        } else if (kind == QStringLiteral("method")) {
+            overwrite16(archive, 8, 99);
+            overwrite16(archive, central + 10, 99);
+        } else if (kind == QStringLiteral("ratio")) {
+            constexpr quint32 expanded = 4U * 1024U * 1024U;
+            overwrite16(archive, 8, 8);
+            overwrite16(archive, central + 10, 8);
+            overwrite32(archive, 22, expanded);
+            overwrite32(archive, central + 24, expanded);
+            installedBytes = expanded;
+            files = QJsonArray{QJsonObject{
+                {QStringLiteral("path"), QStringLiteral("python.exe")},
+                {QStringLiteral("bytes"), installedBytes},
+                {QStringLiteral("sha256"), sha256(payload)}}};
+        } else if (kind == QStringLiteral("truncated")) {
+            archive.chop(1);
+        } else if (kind == QStringLiteral("installed")) {
+            overwrite16(archive, 8, 8);
+            overwrite16(archive, central + 10, 8);
+            overwrite32(archive, 22, quint32(payload.size() + 1));
+            overwrite32(archive, central + 24, quint32(payload.size() + 1));
+        }
+    }
+
+    HttpArchiveServer server(archive);
+    QJsonObject object = manifestObject(server.url(), archive, payload);
+    if (!files.isEmpty()) object.insert(QStringLiteral("files"), files);
+    object.insert(QStringLiteral("installedBytes"), installedBytes);
+    object.insert(QStringLiteral("entryCount"), entryCount);
+    const auto manifest = VoiceCloneRuntimePackageManifest::fromJson(
+        object, VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    QVERIFY2(manifest.isValid(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest),
+             qPrintable(manifest.errorString(
+                 VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest)));
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    VoiceCloneRuntimePackageManager manager(
+        root.path(), VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    manager.start(manifest);
+    QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceCloneRuntimePackageManager::Failed, 5000);
+    QVERIFY2(manager.errorString().contains(errorFragment, Qt::CaseInsensitive),
+             qPrintable(manager.errorString()));
+    QVERIFY(!QFileInfo::exists(
+        QDir(root.path()).filePath(QStringLiteral("qwen-shared/1.0.0"))));
 }
 
 void VoiceCloneRuntimePackageTest::rejectsRuntimeWhenVerifiedInstallWouldExceedFreeSpace()
