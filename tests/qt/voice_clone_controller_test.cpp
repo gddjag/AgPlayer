@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QPointer>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSignalSpy>
@@ -42,8 +43,9 @@ namespace {
 
 class ModelDownloadServer final : public QTcpServer {
 public:
-    explicit ModelDownloadServer(QByteArray body, QObject* parent = nullptr)
-        : QTcpServer(parent), body_(std::move(body))
+    explicit ModelDownloadServer(QByteArray body, int bodyDelayMs = 0,
+                                 QObject* parent = nullptr)
+        : QTcpServer(parent), body_(std::move(body)), bodyDelayMs_(bodyDelayMs)
     {
         QObject::connect(this, &QTcpServer::newConnection, this, [this] {
             while (QTcpSocket* socket = nextPendingConnection()) {
@@ -52,12 +54,23 @@ public:
                     const QByteArray request = socket->readAll();
                     if (!request.contains("\r\n\r\n")) return;
                     const bool head = request.startsWith("HEAD ");
-                    QByteArray response = "HTTP/1.1 200 OK\r\nContent-Length: ";
-                    response += QByteArray::number(body_.size());
-                    response += "\r\nConnection: close\r\n\r\n";
-                    if (!head) response += body_;
-                    socket->write(response);
-                    socket->disconnectFromHost();
+                    QByteArray headers = "HTTP/1.1 200 OK\r\nContent-Length: ";
+                    headers += QByteArray::number(body_.size());
+                    headers += "\r\nConnection: close\r\n\r\n";
+                    socket->write(headers);
+                    if (head) {
+                        socket->disconnectFromHost();
+                    } else if (bodyDelayMs_ > 0) {
+                        const QPointer<QTcpSocket> guarded(socket);
+                        QTimer::singleShot(bodyDelayMs_, this, [this, guarded] {
+                            if (guarded == nullptr) return;
+                            guarded->write(body_);
+                            guarded->disconnectFromHost();
+                        });
+                    } else {
+                        socket->write(body_);
+                        socket->disconnectFromHost();
+                    }
                 });
             }
         });
@@ -71,6 +84,7 @@ public:
 
 private:
     QByteArray body_;
+    int bodyDelayMs_ = 0;
 };
 
 QJsonObject liveSchema()
@@ -478,14 +492,14 @@ void VoiceCloneControllerTest::downloadsInstallsRefreshesAndSelectsModel()
     TestLayout layout;
     QVERIFY(layout.root.isValid());
     const QByteArray body("downloaded-config");
-    ModelDownloadServer server(body);
+    ModelDownloadServer server(body, 350);
     const QString manifestPath = QDir(layout.pluginRoot).filePath(
         QStringLiteral("registry/downloads/qwen3-tts-0.6b.json"));
     const QString revision = QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc");
     const QString licenseRevision = QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e");
     const QJsonObject package{
         {QStringLiteral("schemaVersion"), 1},
-        {QStringLiteral("packageId"), QStringLiteral("qwen3-tts-0.6b")},
+        {QStringLiteral("packageId"), QStringLiteral("controller-http-fixture")},
         {QStringLiteral("modelId"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
         {QStringLiteral("adapterId"), QStringLiteral("qwen")},
         {QStringLiteral("version"), QStringLiteral("1.0.0")},
@@ -518,10 +532,24 @@ void VoiceCloneControllerTest::downloadsInstallsRefreshesAndSelectsModel()
     QVERIFY(manifestFile.write(QJsonDocument(package).toJson()) > 0);
     manifestFile.close();
 
-    VoiceClonePackageManager packages(layout.modelsRoot);
-    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &packages);
+    VoiceClonePackageManager packages(
+        layout.modelsRoot, VoiceClonePackageValidationPolicy::AllowLoopback);
+    VoiceCloneController controller(
+        layout.pluginRoot, layout.modelsRoot, &packages,
+        VoiceClonePackageValidationPolicy::AllowLoopback);
     QVERIFY2(controller.downloadModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")),
              qPrintable(controller.errorString()));
+    QTRY_COMPARE_WITH_TIMEOUT(packages.state(), VoiceClonePackageManager::Downloading, 2000);
+    QCOMPARE(controller.downloadModelId(),
+             QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"));
+    QCOMPARE(controller.downloadState(), QStringLiteral("downloading"));
+    QVERIFY(controller.pauseDownload());
+    QCOMPARE(controller.downloadState(), QStringLiteral("paused"));
+    QVERIFY(controller.resumeDownload());
+    QTRY_COMPARE_WITH_TIMEOUT(packages.state(), VoiceClonePackageManager::Downloading, 2000);
+    QVERIFY(controller.cancelDownload());
+    QCOMPARE(controller.downloadState(), QStringLiteral("canceled"));
+    QVERIFY(controller.retryDownload());
     QTRY_COMPARE_WITH_TIMEOUT(packages.state(), VoiceClonePackageManager::Completed, 3000);
     QTRY_VERIFY_WITH_TIMEOUT([&controller] {
         for (const QVariant& value : controller.models()) {
@@ -537,6 +565,26 @@ void VoiceCloneControllerTest::downloadsInstallsRefreshesAndSelectsModel()
     QVERIFY2(controller.selectModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")),
              qPrintable(controller.errorString()));
     QVERIFY(!controller.modelLoaded());
+
+    QJsonObject failedPackage = package;
+    failedPackage.insert(QStringLiteral("packageId"),
+                         QStringLiteral("controller-failure-fixture"));
+    QJsonArray failedFiles = failedPackage.value(QStringLiteral("files")).toArray();
+    QJsonObject failedFile = failedFiles.first().toObject();
+    failedFile.insert(QStringLiteral("sha256"), QString(64, QLatin1Char('0')));
+    failedFiles[0] = failedFile;
+    failedPackage.insert(QStringLiteral("files"), failedFiles);
+    QVERIFY(manifestFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QVERIFY(manifestFile.write(QJsonDocument(failedPackage).toJson()) > 0);
+    manifestFile.close();
+    QVERIFY(controller.downloadModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")));
+    QTRY_COMPARE_WITH_TIMEOUT(packages.state(), VoiceClonePackageManager::Failed, 3000);
+    QCOMPARE(controller.downloadState(), QStringLiteral("failed"));
+    QVERIFY(!controller.downloadError().isEmpty());
+    QCOMPARE(controller.errorString(), controller.downloadError());
+    QVERIFY(controller.retryDownload());
+    QTRY_COMPARE_WITH_TIMEOUT(packages.state(), VoiceClonePackageManager::Downloading, 2000);
+    QVERIFY(controller.cancelDownload());
 }
 
 void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWorker()

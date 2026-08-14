@@ -8,6 +8,11 @@
 
 namespace agplayer::voice_clone {
 
+enum class VoiceClonePackageValidationPolicy {
+    OfficialOnly,
+    AllowLoopback,
+};
+
 struct VoiceClonePackageFile {
     QString relativePath;
     QUrl url;
@@ -33,10 +38,15 @@ QVector<VoiceClonePackageLicense> approvedRequiredLicenses(const QString& modelI
 
 class VoiceClonePackageManifest {
 public:
-    static VoiceClonePackageManifest fromJson(const QJsonObject& object);
+    static VoiceClonePackageManifest fromJson(
+        const QJsonObject& object,
+        VoiceClonePackageValidationPolicy policy = VoiceClonePackageValidationPolicy::OfficialOnly);
 
-    bool isValid() const;
-    QString errorString() const;
+    bool isValid(VoiceClonePackageValidationPolicy policy =
+                     VoiceClonePackageValidationPolicy::OfficialOnly) const;
+    QString errorString(VoiceClonePackageValidationPolicy policy =
+                            VoiceClonePackageValidationPolicy::OfficialOnly) const;
+    QByteArray calculatedFileGraphSha256() const;
     bool licenseAcceptanceRequired() const;
 
     QString packageId;
@@ -46,6 +56,7 @@ public:
     QString revision;
     QString modelDisplayName;
     QString modelDescription;
+    QByteArray fileGraphSha256;
     QString sourceProvider;
     QString sourceRepository;
     QUrl sourceUrl;
@@ -59,7 +70,7 @@ public:
     QVector<VoiceClonePackageFile> files;
 
 private:
-    QString validationError() const;
+    QString validationError(VoiceClonePackageValidationPolicy policy) const;
     QString parseError_;
 };
 

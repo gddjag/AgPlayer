@@ -9,6 +9,7 @@
     "displayName": "Fun-CosyVoice3 0.5B 2512",
     "description": "Nine-language zero-shot voice cloning with 18+ Chinese dialects and accents."
   },
+  "fileGraphSha256": "6246043fbd2bcec79d8eded67cf7919368a8396223aeec7d52807dd01c4e3f2e",
   "source": {
     "provider": "hugging-face",
     "repository": "FunAudioLLM/Fun-CosyVoice3-0.5B-2512",

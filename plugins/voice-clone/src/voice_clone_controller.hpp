@@ -2,6 +2,7 @@
 
 #include "voice_clone_adapter_manifest.hpp"
 #include "voice_clone_manifest.hpp"
+#include "voice_clone_package_manifest.hpp"
 #include "voice_clone_worker_client.hpp"
 
 #include <QHash>
@@ -31,6 +32,8 @@ class VoiceCloneController final : public QObject {
     Q_PROPERTY(QString currentLicenseRevision READ currentLicenseRevision NOTIFY licenseChanged)
     Q_PROPERTY(QVariantList currentLicenseRequirements READ currentLicenseRequirements NOTIFY licenseChanged)
     Q_PROPERTY(QString downloadState READ downloadState NOTIFY downloadChanged)
+    Q_PROPERTY(QString downloadModelId READ downloadModelId NOTIFY downloadChanged)
+    Q_PROPERTY(QString downloadError READ downloadError NOTIFY downloadChanged)
     Q_PROPERTY(int downloadProgressPercent READ downloadProgressPercent NOTIFY downloadChanged)
     Q_PROPERTY(bool downloadInProgress READ downloadInProgress NOTIFY downloadChanged)
 
@@ -38,6 +41,8 @@ public:
     explicit VoiceCloneController(QString pluginRoot,
                                   QString modelsRoot,
                                   VoiceClonePackageManager* licenseManager,
+                                  VoiceClonePackageValidationPolicy packageValidationPolicy =
+                                      VoiceClonePackageValidationPolicy::OfficialOnly,
                                   QObject* parent = nullptr);
     ~VoiceCloneController() override;
 
@@ -54,6 +59,10 @@ public:
                                        const QString& revision);
     Q_INVOKABLE void refreshModels();
     Q_INVOKABLE bool downloadModel(const QString& stableId);
+    Q_INVOKABLE bool pauseDownload();
+    Q_INVOKABLE bool resumeDownload();
+    Q_INVOKABLE bool cancelDownload();
+    Q_INVOKABLE bool retryDownload();
     Q_INVOKABLE bool openModelDirectory();
 
     Q_INVOKABLE bool startWorker();
@@ -85,6 +94,8 @@ public:
     QString currentLicenseRevision() const;
     QVariantList currentLicenseRequirements() const;
     QString downloadState() const;
+    QString downloadModelId() const;
+    QString downloadError() const;
     int downloadProgressPercent() const;
     bool downloadInProgress() const;
     QVariantList basicParameters() const;
@@ -128,6 +139,8 @@ private:
     QString registryPath_;
     QString outputRoot_;
     VoiceClonePackageManager* licenseManager_ = nullptr;
+    VoiceClonePackageValidationPolicy packageValidationPolicy_ =
+        VoiceClonePackageValidationPolicy::OfficialOnly;
     VoiceCloneWorkerClient worker_;
     VoiceCloneAdapterManifest adapterManifest_;
     AdapterLauncherResolution launcher_;

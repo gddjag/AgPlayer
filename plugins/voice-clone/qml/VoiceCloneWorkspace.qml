@@ -177,12 +177,26 @@ Item {
             downloadProgressPercent: root.controller
                                      && root.controller.downloadProgressPercent !== undefined
                                      ? root.controller.downloadProgressPercent : -1
+            downloadModelId: root.controller && root.controller.downloadModelId
+                             ? root.controller.downloadModelId : ""
+            downloadState: root.controller && root.controller.downloadState
+                           ? root.controller.downloadState : "idle"
+            downloadError: root.controller && root.controller.downloadError
+                           ? root.controller.downloadError : ""
             onModelSelected: function(index, stableId) { root.selectModel(index, stableId) }
             onLicenseAcceptanceRequested: licenseDialog.open()
             onDownloadRequested: function(stableId) {
                 if (root.controller && root.controller.downloadModel)
                     root.controller.downloadModel(stableId)
             }
+            onPauseDownloadRequested: if (root.controller && root.controller.pauseDownload)
+                                          root.controller.pauseDownload()
+            onResumeDownloadRequested: if (root.controller && root.controller.resumeDownload)
+                                           root.controller.resumeDownload()
+            onCancelDownloadRequested: if (root.controller && root.controller.cancelDownload)
+                                           root.controller.cancelDownload()
+            onRetryDownloadRequested: if (root.controller && root.controller.retryDownload)
+                                          root.controller.retryDownload()
             onRefreshRequested: if (root.controller && root.controller.refreshModels) root.controller.refreshModels()
             onOpenDirectoryRequested: if (root.controller && root.controller.openModelDirectory) root.controller.openModelDirectory()
         }

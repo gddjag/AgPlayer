@@ -16,16 +16,16 @@ $addingModelsPath = Join-Path $SourceRoot 'docs/voice-clone/ADDING_MODELS.zh-CN.
 
 $expected = [ordered]@{
     'qwen3-tts-0.6b.json' = @{
-        ModelId = 'Qwen/Qwen3-TTS-12Hz-0.6B-Base'; AdapterId = 'qwen'; Repository = 'Qwen/Qwen3-TTS-12Hz-0.6B-Base'; FileCount = 13
+        PackageId = 'qwen3-tts-0.6b'; ModelId = 'Qwen/Qwen3-TTS-12Hz-0.6B-Base'; AdapterId = 'qwen'; Repository = 'Qwen/Qwen3-TTS-12Hz-0.6B-Base'; FileCount = 13; GraphDigest = 'c4431d0a6eab74a9515b7e0843be4ff9b68eb9a56277c931b04d833e9cc59232'
     }
     'qwen3-tts-1.7b.json' = @{
-        ModelId = 'Qwen/Qwen3-TTS-12Hz-1.7B-Base'; AdapterId = 'qwen'; Repository = 'Qwen/Qwen3-TTS-12Hz-1.7B-Base'; FileCount = 13
+        PackageId = 'qwen3-tts-1.7b'; ModelId = 'Qwen/Qwen3-TTS-12Hz-1.7B-Base'; AdapterId = 'qwen'; Repository = 'Qwen/Qwen3-TTS-12Hz-1.7B-Base'; FileCount = 13; GraphDigest = '68560411f5a15d2a85f00765ca5230982056a3babf5a66667bfe3cdc8e5c3eb7'
     }
     'indextts-2.5.json' = @{
-        ModelId = 'IndexTeam/IndexTTS-2.5'; AdapterId = 'indextts25'; Repository = 'IndexTeam/IndexTTS-2.5'; FileCount = 32
+        PackageId = 'indextts-2.5'; ModelId = 'IndexTeam/IndexTTS-2.5'; AdapterId = 'indextts25'; Repository = 'IndexTeam/IndexTTS-2.5'; FileCount = 32; GraphDigest = '47db9bb86068249a112d96cfa7ebba704f8c9f77c1505c2e6672f7df801ccc61'
     }
     'fun-cosyvoice3.json' = @{
-        ModelId = 'FunAudioLLM/Fun-CosyVoice3-0.5B-2512'; AdapterId = 'cosyvoice3'; Repository = 'FunAudioLLM/Fun-CosyVoice3-0.5B-2512'; FileCount = 20
+        PackageId = 'fun-cosyvoice3'; ModelId = 'FunAudioLLM/Fun-CosyVoice3-0.5B-2512'; AdapterId = 'cosyvoice3'; Repository = 'FunAudioLLM/Fun-CosyVoice3-0.5B-2512'; FileCount = 20; GraphDigest = '6246043fbd2bcec79d8eded67cf7919368a8396223aeec7d52807dd01c4e3f2e'
     }
 }
 
@@ -45,6 +45,8 @@ foreach ($fileName in $expected.Keys) {
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding utf8 | ConvertFrom-Json
 
     Assert-True ($manifest.schemaVersion -eq 1) "$fileName has unsupported schemaVersion"
+    Assert-True ($manifest.packageId -ceq $spec.PackageId) "$fileName has the wrong packageId"
+    Assert-True ($manifest.fileGraphSha256 -ceq $spec.GraphDigest) "$fileName has the wrong approved file graph digest"
     Assert-True ($manifest.modelId -ceq $spec.ModelId) "$fileName has the wrong modelId"
     Assert-True ($manifest.adapterId -ceq $spec.AdapterId) "$fileName has the wrong adapterId"
     Assert-True ($manifest.revision -match $revisionPattern) "$fileName revision must be an immutable 40-hex commit"

@@ -19,9 +19,18 @@ Rectangle {
     property bool licenseAcceptanceRequired: false
     property bool downloadInProgress: false
     property int downloadProgressPercent: -1
+    property string downloadModelId: ""
+    property string downloadState: "idle"
+    property string downloadError: ""
+    readonly property bool selectedDownload: !!selectedModel.stableId
+                                             && selectedModel.stableId === downloadModelId
     signal modelSelected(int index, string stableId)
     signal refreshRequested()
     signal downloadRequested(string stableId)
+    signal pauseDownloadRequested()
+    signal resumeDownloadRequested()
+    signal cancelDownloadRequested()
+    signal retryDownloadRequested()
     signal openDirectoryRequested()
     signal licenseAcceptanceRequested()
 
@@ -144,7 +153,7 @@ Rectangle {
             }
             Button {
                 objectName: "voiceCloneDownloadModelButton"
-                text: root.downloadInProgress
+                text: root.selectedDownload && root.downloadInProgress
                       ? (root.downloadProgressPercent >= 0
                          ? qsTr("下载中 %1%").arg(root.downloadProgressPercent)
                          : qsTr("下载中…"))
@@ -154,6 +163,45 @@ Rectangle {
                          && root.selectedModel.installState !== "local-unverified"
                 enabled: !root.downloadInProgress
                 onClicked: root.downloadRequested(root.selectedModel.stableId || "")
+            }
+            Button {
+                objectName: "voiceClonePauseDownloadButton"
+                text: qsTr("暂停")
+                visible: root.selectedDownload
+                         && (root.downloadState === "resolving"
+                             || root.downloadState === "downloading")
+                onClicked: root.pauseDownloadRequested()
+            }
+            Button {
+                objectName: "voiceCloneResumeDownloadButton"
+                text: qsTr("继续")
+                visible: root.selectedDownload && root.downloadState === "paused"
+                onClicked: root.resumeDownloadRequested()
+            }
+            Button {
+                objectName: "voiceCloneCancelDownloadButton"
+                text: qsTr("取消下载")
+                visible: root.selectedDownload
+                         && (root.downloadInProgress || root.downloadState === "paused"
+                             || root.downloadState === "license-required")
+                onClicked: root.cancelDownloadRequested()
+            }
+            Button {
+                objectName: "voiceCloneRetryDownloadButton"
+                text: qsTr("重试下载")
+                visible: root.selectedDownload
+                         && (root.downloadState === "failed"
+                             || root.downloadState === "canceled")
+                onClicked: root.retryDownloadRequested()
+            }
+            Label {
+                objectName: "voiceCloneDownloadError"
+                visible: root.selectedDownload && root.downloadState === "failed"
+                         && root.downloadError.length > 0
+                text: root.downloadError
+                color: Theme.favoriteRed
+                elide: Text.ElideRight
+                Layout.maximumWidth: 260
             }
             ToolButton {
                 objectName: "voiceCloneRefreshModelsButton"

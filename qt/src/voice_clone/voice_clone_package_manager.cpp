@@ -208,16 +208,37 @@ QString readLicenseRecords(const QString& path, QJsonArray* records)
 } // namespace
 
 VoiceClonePackageManager::VoiceClonePackageManager(QString installRoot, QObject* parent)
-    : VoiceClonePackageManager(std::move(installRoot), nullptr, {}, parent)
+    : VoiceClonePackageManager(std::move(installRoot), nullptr, DeploymentOperations{}, parent)
 {
+}
+
+VoiceClonePackageManager::VoiceClonePackageManager(
+    QString installRoot,
+    const VoiceClonePackageValidationPolicy validationPolicy,
+    QObject* parent)
+    : VoiceClonePackageManager(std::move(installRoot), nullptr, DeploymentOperations{}, parent)
+{
+    validationPolicy_ = validationPolicy;
 }
 
 VoiceClonePackageManager::VoiceClonePackageManager(
     QString installRoot,
     QNetworkAccessManager* networkAccessManager,
     QObject* parent)
-    : VoiceClonePackageManager(std::move(installRoot), networkAccessManager, {}, parent)
+    : VoiceClonePackageManager(std::move(installRoot), networkAccessManager,
+                               DeploymentOperations{}, parent)
 {
+}
+
+VoiceClonePackageManager::VoiceClonePackageManager(
+    QString installRoot,
+    QNetworkAccessManager* networkAccessManager,
+    const VoiceClonePackageValidationPolicy validationPolicy,
+    QObject* parent)
+    : VoiceClonePackageManager(std::move(installRoot), networkAccessManager,
+                               DeploymentOperations{}, parent)
+{
+    validationPolicy_ = validationPolicy;
 }
 
 VoiceClonePackageManager::VoiceClonePackageManager(
@@ -234,6 +255,18 @@ VoiceClonePackageManager::VoiceClonePackageManager(
                                                : ownedNetwork_.get()),
       deploymentOperations_(std::move(deploymentOperations))
 {
+}
+
+VoiceClonePackageManager::VoiceClonePackageManager(
+    QString installRoot,
+    QNetworkAccessManager* networkAccessManager,
+    DeploymentOperations deploymentOperations,
+    const VoiceClonePackageValidationPolicy validationPolicy,
+    QObject* parent)
+    : VoiceClonePackageManager(std::move(installRoot), networkAccessManager,
+                               std::move(deploymentOperations), parent)
+{
+    validationPolicy_ = validationPolicy;
 }
 
 VoiceClonePackageManager::~VoiceClonePackageManager()
@@ -458,8 +491,8 @@ void VoiceClonePackageManager::start(const VoiceClonePackageManifest& manifest)
     partialFilePath_.clear();
     resumeMetadataPath_.clear();
 
-    if (!manifest_.isValid()) {
-        setState(Failed, manifest_.errorString());
+    if (!manifest_.isValid(validationPolicy_)) {
+        setState(Failed, manifest_.errorString(validationPolicy_));
         return;
     }
     QString pathError;

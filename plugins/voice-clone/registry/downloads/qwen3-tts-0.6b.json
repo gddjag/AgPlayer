@@ -9,6 +9,7 @@
     "displayName": "Qwen3-TTS 0.6B Base",
     "description": "Lightweight 10-language zero-shot voice cloning; supports rapid cloning from a short reference."
   },
+  "fileGraphSha256": "c4431d0a6eab74a9515b7e0843be4ff9b68eb9a56277c931b04d833e9cc59232",
   "source": {
     "provider": "hugging-face",
     "repository": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",

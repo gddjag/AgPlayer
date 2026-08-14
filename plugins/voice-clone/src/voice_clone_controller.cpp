@@ -344,11 +344,13 @@ bool removePublishedResultSafely(const QString& path)
 VoiceCloneController::VoiceCloneController(QString pluginRoot,
                                            QString modelsRoot,
                                            VoiceClonePackageManager* licenseManager,
+                                           const VoiceClonePackageValidationPolicy packageValidationPolicy,
                                            QObject* parent)
     : QObject(parent),
       pluginRoot_(QDir::fromNativeSeparators(QFileInfo(pluginRoot).canonicalFilePath())),
       modelsRoot_(QDir::fromNativeSeparators(QFileInfo(modelsRoot).canonicalFilePath())),
-      licenseManager_(licenseManager)
+      licenseManager_(licenseManager),
+      packageValidationPolicy_(packageValidationPolicy)
 {
     const QFileInfo pluginInfo(pluginRoot_);
     const QFileInfo modelsInfo(modelsRoot_);
@@ -405,6 +407,9 @@ VoiceCloneController::VoiceCloneController(QString pluginRoot,
     if (licenseManager_ != nullptr) {
         connect(licenseManager_, &VoiceClonePackageManager::stateChanged, this, [this] {
             emit downloadChanged();
+            if (licenseManager_->state() == VoiceClonePackageManager::Failed) {
+                setError(licenseManager_->errorString());
+            }
             if (licenseManager_->state() == VoiceClonePackageManager::Completed) refreshModels();
         });
         connect(licenseManager_, &VoiceClonePackageManager::progressChanged,
@@ -710,6 +715,14 @@ bool VoiceCloneController::downloadModel(const QString& stableId)
          QStringLiteral("indextts-2.5.json")},
         {QStringLiteral("FunAudioLLM/Fun-CosyVoice3-0.5B-2512"),
          QStringLiteral("fun-cosyvoice3.json")}};
+    const QHash<QString, QString> packageIds{
+        {QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+         QStringLiteral("qwen3-tts-0.6b")},
+        {QStringLiteral("Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+         QStringLiteral("qwen3-tts-1.7b")},
+        {QStringLiteral("IndexTeam/IndexTTS-2.5"), QStringLiteral("indextts-2.5")},
+        {QStringLiteral("FunAudioLLM/Fun-CosyVoice3-0.5B-2512"),
+         QStringLiteral("fun-cosyvoice3")}};
     const QString fileName = manifests.value(stableId);
     if (fileName.isEmpty()) {
         setError(QStringLiteral("No approved download manifest exists for this model"));
@@ -733,11 +746,15 @@ bool VoiceCloneController::downloadModel(const QString& stableId)
         return false;
     }
     const VoiceClonePackageManifest manifest = VoiceClonePackageManifest::fromJson(
-        document.object());
-    if (!manifest.isValid() || manifest.modelId != stableId) {
-        setError(manifest.isValid()
+        document.object(), packageValidationPolicy_);
+    const bool valid = manifest.isValid(packageValidationPolicy_);
+    const bool packageIdentityMatches = packageValidationPolicy_
+                                            != VoiceClonePackageValidationPolicy::OfficialOnly
+                                        || manifest.packageId == packageIds.value(stableId);
+    if (!valid || manifest.modelId != stableId || !packageIdentityMatches) {
+        setError(valid
                      ? QStringLiteral("Model download manifest identity mismatch")
-                     : manifest.errorString());
+                     : manifest.errorString(packageValidationPolicy_));
         return false;
     }
     licenseManager_->start(manifest);
@@ -747,6 +764,47 @@ bool VoiceCloneController::downloadModel(const QString& stableId)
     }
     setError({});
     return true;
+}
+
+bool VoiceCloneController::pauseDownload()
+{
+    return licenseManager_ != nullptr && licenseManager_->pause();
+}
+
+bool VoiceCloneController::resumeDownload()
+{
+    if (licenseManager_ == nullptr
+        || licenseManager_->state() != VoiceClonePackageManager::Paused) {
+        return false;
+    }
+    const bool resumed = licenseManager_->retry();
+    if (resumed) setError({});
+    return resumed;
+}
+
+bool VoiceCloneController::cancelDownload()
+{
+    if (licenseManager_ == nullptr) return false;
+    const auto before = licenseManager_->state();
+    if (before == VoiceClonePackageManager::Idle
+        || before == VoiceClonePackageManager::Completed
+        || before == VoiceClonePackageManager::Canceled) {
+        return false;
+    }
+    licenseManager_->cancel();
+    return licenseManager_->state() == VoiceClonePackageManager::Canceled;
+}
+
+bool VoiceCloneController::retryDownload()
+{
+    if (licenseManager_ == nullptr
+        || (licenseManager_->state() != VoiceClonePackageManager::Failed
+            && licenseManager_->state() != VoiceClonePackageManager::Canceled)) {
+        return false;
+    }
+    const bool retried = licenseManager_->retry();
+    if (retried) setError({});
+    return retried;
 }
 
 bool VoiceCloneController::openModelDirectory()
@@ -998,6 +1056,14 @@ QString VoiceCloneController::downloadState() const
     case VoiceClonePackageManager::Failed: return QStringLiteral("failed");
     }
     return QStringLiteral("unknown");
+}
+QString VoiceCloneController::downloadModelId() const
+{
+    return licenseManager_ == nullptr ? QString{} : licenseManager_->currentManifest().modelId;
+}
+QString VoiceCloneController::downloadError() const
+{
+    return licenseManager_ == nullptr ? QString{} : licenseManager_->errorString();
 }
 int VoiceCloneController::downloadProgressPercent() const
 {

@@ -1,5 +1,6 @@
 #include "voice_clone_package_manifest.hpp"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -8,7 +9,9 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
 #include <limits>
+#include <tuple>
 
 namespace agplayer::voice_clone {
 namespace {
@@ -74,12 +77,14 @@ bool isLoopbackHttp(const QUrl& url)
 
 bool isAllowedDownloadUrl(const VoiceClonePackageFile& file,
                           const QString& repository,
-                          const QString& revision)
+                          const QString& revision,
+                          const VoiceClonePackageValidationPolicy policy)
 {
     const QUrl& url = file.url;
-#ifdef AGPLAYER_VOICE_CLONE_ALLOW_LOOPBACK_TEST_URLS
-    if (isLoopbackHttp(url)) return url.isValid() && !url.host().isEmpty();
-#endif
+    if (policy == VoiceClonePackageValidationPolicy::AllowLoopback
+        && isLoopbackHttp(url)) {
+        return url.isValid() && !url.host().isEmpty();
+    }
     if (!url.isValid() || url.scheme() != QStringLiteral("https")
         || url.host() != QStringLiteral("huggingface.co") || !url.userInfo().isEmpty()
         || (url.port(-1) != -1 && url.port() != 443) || !url.fragment().isEmpty()) {
@@ -147,6 +152,20 @@ const ApprovedModelIdentity* approvedIdentity(const QString& modelId,
     return nullptr;
 }
 
+QString approvedPackageId(const QString& modelId)
+{
+    static const QHash<QString, QString> packageIds{
+        {QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+         QStringLiteral("qwen3-tts-0.6b")},
+        {QStringLiteral("Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+         QStringLiteral("qwen3-tts-1.7b")},
+        {QStringLiteral("IndexTeam/IndexTTS-2.5"), QStringLiteral("indextts-2.5")},
+        {QStringLiteral("FunAudioLLM/Fun-CosyVoice3-0.5B-2512"),
+         QStringLiteral("fun-cosyvoice3")},
+    };
+    return packageIds.value(modelId);
+}
+
 bool isApprovedFileSource(const QString& modelId,
                           const QString& repository,
                           const QString& revision)
@@ -162,6 +181,30 @@ bool isApprovedFileSource(const QString& modelId,
         {QStringLiteral("nvidia/bigvgan_v2_22khz_80band_256x"),
          QStringLiteral("633ff708ed5b74903e86ff1298cf4a98e921c513")}};
     return approved.value(repository) == revision;
+}
+
+QByteArray approvedFileGraphDigest(const QString& packageId)
+{
+    static const QHash<QString, QByteArray> approved{
+        {QStringLiteral("qwen3-tts-0.6b"),
+         QByteArrayLiteral("c4431d0a6eab74a9515b7e0843be4ff9b68eb9a56277c931b04d833e9cc59232")},
+        {QStringLiteral("qwen3-tts-1.7b"),
+         QByteArrayLiteral("68560411f5a15d2a85f00765ca5230982056a3babf5a66667bfe3cdc8e5c3eb7")},
+        {QStringLiteral("indextts-2.5"),
+         QByteArrayLiteral("47db9bb86068249a112d96cfa7ebba704f8c9f77c1505c2e6672f7df801ccc61")},
+        {QStringLiteral("fun-cosyvoice3"),
+         QByteArrayLiteral("6246043fbd2bcec79d8eded67cf7919368a8396223aeec7d52807dd01c4e3f2e")},
+    };
+    return approved.value(packageId);
+}
+
+void appendCanonicalField(QByteArray* bytes, const QString& value)
+{
+    const QByteArray encoded = value.toUtf8();
+    bytes->append(QByteArray::number(encoded.size()));
+    bytes->append(':');
+    bytes->append(encoded);
+    bytes->append('\n');
 }
 
 QVector<VoiceClonePackageLicense> approvedPackageLicenses(const QString& modelId,
@@ -215,7 +258,9 @@ QVector<VoiceClonePackageLicense> approvedRequiredLicenses(const QString& modelI
     return result;
 }
 
-VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject& object)
+VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(
+    const QJsonObject& object,
+    const VoiceClonePackageValidationPolicy policy)
 {
     VoiceClonePackageManifest result;
     const QString rootUnknown = unknownField(
@@ -224,6 +269,7 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
          QStringLiteral("modelId"), QStringLiteral("adapterId"),
          QStringLiteral("version"), QStringLiteral("revision"),
          QStringLiteral("model"),
+         QStringLiteral("fileGraphSha256"),
          QStringLiteral("source"), QStringLiteral("licenses"),
          QStringLiteral("totalBytes"), QStringLiteral("files")});
     if (!rootUnknown.isEmpty()) {
@@ -266,6 +312,14 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
     }
     result.modelDisplayName = model.value(QStringLiteral("displayName")).toString();
     result.modelDescription = model.value(QStringLiteral("description")).toString();
+    if (object.contains(QStringLiteral("fileGraphSha256"))) {
+        if (!object.value(QStringLiteral("fileGraphSha256")).isString()) {
+            result.parseError_ = QStringLiteral("invalid package fileGraphSha256");
+            return result;
+        }
+        result.fileGraphSha256 = object.value(QStringLiteral("fileGraphSha256"))
+                                     .toString().toLatin1().toLower();
+    }
     result.totalBytes = object.value(QStringLiteral("totalBytes")).toVariant().toLongLong();
     const QJsonObject source = object.value(QStringLiteral("source")).toObject();
     const QString sourceUnknown = unknownField(
@@ -367,11 +421,12 @@ VoiceClonePackageManifest VoiceClonePackageManifest::fromJson(const QJsonObject&
         result.files.append(entry);
     }
     result.requiresLicenseAcceptance = result.licenseAcceptanceRequired();
-    result.parseError_ = result.validationError();
+    result.parseError_ = result.validationError(policy);
     return result;
 }
 
-QString VoiceClonePackageManifest::validationError() const
+QString VoiceClonePackageManifest::validationError(
+    const VoiceClonePackageValidationPolicy policy) const
 {
     const QString foldedPackageId = packageId.toCaseFolded();
     if (packageId.trimmed().isEmpty() || QFileInfo(packageId).fileName() != packageId
@@ -390,6 +445,10 @@ QString VoiceClonePackageManifest::validationError() const
     const ApprovedModelIdentity* approved = approvedIdentity(modelId, adapterId);
     if (approved == nullptr) {
         return QStringLiteral("unapproved modelId/adapterId package identity");
+    }
+    if (policy == VoiceClonePackageValidationPolicy::OfficialOnly
+        && packageId != approvedPackageId(modelId)) {
+        return QStringLiteral("official model packageId does not match the approved package");
     }
     if (sourceProvider != QStringLiteral("hugging-face")
         || sourceRepository != QLatin1String(approved->repository)
@@ -446,7 +505,7 @@ QString VoiceClonePackageManifest::validationError() const
             return QStringLiteral("package file path is absolute or contains ..: %1")
                 .arg(file.relativePath);
         }
-        if (!isAllowedDownloadUrl(file, sourceRepository, revision)) {
+        if (!isAllowedDownloadUrl(file, sourceRepository, revision, policy)) {
             return QStringLiteral("invalid package file URL: %1").arg(file.url.toString());
         }
         const bool hasAuxiliarySource = !file.sourceRepository.isEmpty()
@@ -479,17 +538,90 @@ QString VoiceClonePackageManifest::validationError() const
     }
     if (totalBytes < 0 || totalBytes != fileBytes)
         return QStringLiteral("package totalBytes does not match file sizes");
+    const QByteArray approvedGraph = approvedFileGraphDigest(packageId);
+    if (!approvedGraph.isEmpty()
+        && (fileGraphSha256 != approvedGraph
+            || calculatedFileGraphSha256() != approvedGraph)) {
+        return QStringLiteral("official package file graph does not match the approved digest");
+    }
+    if (approvedGraph.isEmpty() && !fileGraphSha256.isEmpty()) {
+        return QStringLiteral("fileGraphSha256 is reserved for approved official packages");
+    }
     return {};
 }
 
-bool VoiceClonePackageManifest::isValid() const
+QByteArray VoiceClonePackageManifest::calculatedFileGraphSha256() const
 {
-    return parseError_.isEmpty() && validationError().isEmpty();
+    QByteArray canonical("agplayer-file-graph-v1\n");
+    appendCanonicalField(&canonical, modelDisplayName);
+    appendCanonicalField(&canonical, modelDescription);
+
+    QVector<VoiceClonePackageLicense> sortedLicenses = licenses;
+    std::sort(sortedLicenses.begin(), sortedLicenses.end(),
+              [](const VoiceClonePackageLicense& left,
+                 const VoiceClonePackageLicense& right) {
+                  return left.id < right.id;
+              });
+    appendCanonicalField(&canonical, QString::number(sortedLicenses.size()));
+    for (const VoiceClonePackageLicense& license : sortedLicenses) {
+        appendCanonicalField(&canonical, license.id);
+        appendCanonicalField(&canonical, license.name);
+        appendCanonicalField(&canonical, license.url.toString(QUrl::FullyEncoded));
+        appendCanonicalField(&canonical, license.revision);
+        appendCanonicalField(&canonical, license.spdx);
+        appendCanonicalField(&canonical,
+                             license.requiredAcceptance ? QStringLiteral("1")
+                                                        : QStringLiteral("0"));
+        appendCanonicalField(&canonical, license.useRestriction);
+    }
+
+    struct CanonicalFile {
+        QString repository;
+        QString revision;
+        QString remotePath;
+        QString relativePath;
+        QByteArray sha256;
+        qint64 size = -1;
+    };
+    QVector<CanonicalFile> sortedFiles;
+    sortedFiles.reserve(files.size());
+    for (const VoiceClonePackageFile& file : files) {
+        sortedFiles.append({file.sourceRepository.isEmpty() ? sourceRepository
+                                                             : file.sourceRepository,
+                            file.sourceRevision.isEmpty() ? revision : file.sourceRevision,
+                            normalizedRelativePath(file.sourcePath.isEmpty()
+                                                       ? file.relativePath : file.sourcePath),
+                            normalizedRelativePath(file.relativePath),
+                            file.sha256.toLower(), file.expectedBytes});
+    }
+    std::sort(sortedFiles.begin(), sortedFiles.end(),
+              [](const CanonicalFile& left, const CanonicalFile& right) {
+                  return std::tie(left.repository, left.revision, left.remotePath,
+                                  left.relativePath)
+                         < std::tie(right.repository, right.revision, right.remotePath,
+                                    right.relativePath);
+              });
+    appendCanonicalField(&canonical, QString::number(sortedFiles.size()));
+    for (const CanonicalFile& file : sortedFiles) {
+        appendCanonicalField(&canonical, file.repository);
+        appendCanonicalField(&canonical, file.revision);
+        appendCanonicalField(&canonical, file.remotePath);
+        appendCanonicalField(&canonical, file.relativePath);
+        appendCanonicalField(&canonical, QString::fromLatin1(file.sha256));
+        appendCanonicalField(&canonical, QString::number(file.size));
+    }
+    return QCryptographicHash::hash(canonical, QCryptographicHash::Sha256).toHex();
 }
 
-QString VoiceClonePackageManifest::errorString() const
+bool VoiceClonePackageManifest::isValid(const VoiceClonePackageValidationPolicy policy) const
 {
-    return parseError_.isEmpty() ? validationError() : parseError_;
+    return parseError_.isEmpty() && validationError(policy).isEmpty();
+}
+
+QString VoiceClonePackageManifest::errorString(
+    const VoiceClonePackageValidationPolicy policy) const
+{
+    return parseError_.isEmpty() ? validationError(policy) : parseError_;
 }
 
 bool VoiceClonePackageManifest::licenseAcceptanceRequired() const

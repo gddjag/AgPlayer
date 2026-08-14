@@ -42,12 +42,24 @@ public:
 
     explicit VoiceClonePackageManager(QString installRoot, QObject* parent = nullptr);
     VoiceClonePackageManager(QString installRoot,
+                             VoiceClonePackageValidationPolicy validationPolicy,
+                             QObject* parent = nullptr);
+    VoiceClonePackageManager(QString installRoot,
                              QNetworkAccessManager* networkAccessManager,
                              QObject* parent);
     VoiceClonePackageManager(QString installRoot,
                              QNetworkAccessManager* networkAccessManager,
+                             VoiceClonePackageValidationPolicy validationPolicy,
+                             QObject* parent = nullptr);
+    VoiceClonePackageManager(QString installRoot,
+                             QNetworkAccessManager* networkAccessManager,
                              DeploymentOperations deploymentOperations,
                              QObject* parent);
+    VoiceClonePackageManager(QString installRoot,
+                             QNetworkAccessManager* networkAccessManager,
+                             DeploymentOperations deploymentOperations,
+                             VoiceClonePackageValidationPolicy validationPolicy,
+                             QObject* parent = nullptr);
     ~VoiceClonePackageManager() override;
 
     State state() const;
@@ -127,6 +139,8 @@ private:
     std::unique_ptr<QNetworkAccessManager> ownedNetwork_;
     QNetworkAccessManager* network_ = nullptr;
     DeploymentOperations deploymentOperations_;
+    VoiceClonePackageValidationPolicy validationPolicy_ =
+        VoiceClonePackageValidationPolicy::OfficialOnly;
     QNetworkReply* reply_ = nullptr;
     QFile partialFile_;
     QVector<qint64> resolvedSizes_;

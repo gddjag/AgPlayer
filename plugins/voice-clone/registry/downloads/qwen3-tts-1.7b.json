@@ -9,6 +9,7 @@
     "displayName": "Qwen3-TTS 1.7B Base",
     "description": "Larger 10-language zero-shot voice cloning model with streaming generation support."
   },
+  "fileGraphSha256": "68560411f5a15d2a85f00765ca5230982056a3babf5a66667bfe3cdc8e5c3eb7",
   "source": {
     "provider": "hugging-face",
     "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",

@@ -93,6 +93,11 @@ TestCase {
         property url currentLicenseUrl: ""
         property string currentLicenseRevision: ""
         property var currentLicenseRequirements: []
+        property string downloadModelId: ""
+        property string downloadState: "idle"
+        property string downloadError: ""
+        property int downloadProgressPercent: -1
+        property bool downloadInProgress: false
         property bool licenseIdentityValid: true
         property int refreshCalls: 0
         property int openDirectoryCalls: 0
@@ -102,6 +107,10 @@ TestCase {
         property int saveCalls: 0
         property int deleteCalls: 0
         property int acceptLicenseCalls: 0
+        property int pauseDownloadCalls: 0
+        property int resumeDownloadCalls: 0
+        property int cancelDownloadCalls: 0
+        property int retryDownloadCalls: 0
         property string lastSelectedId: ""
         property var lastParameters: ({})
 
@@ -113,6 +122,10 @@ TestCase {
 
         function refreshModels() { ++refreshCalls }
         function openModelDirectory() { ++openDirectoryCalls; return true }
+        function pauseDownload() { ++pauseDownloadCalls; return true }
+        function resumeDownload() { ++resumeDownloadCalls; return true }
+        function cancelDownload() { ++cancelDownloadCalls; return true }
+        function retryDownload() { ++retryDownloadCalls; return true }
         function activateModel(stableId) {
             ++selectCalls
             lastSelectedId = stableId
@@ -214,6 +227,15 @@ TestCase {
         fakeController.saveCalls = 0
         fakeController.deleteCalls = 0
         fakeController.acceptLicenseCalls = 0
+        fakeController.pauseDownloadCalls = 0
+        fakeController.resumeDownloadCalls = 0
+        fakeController.cancelDownloadCalls = 0
+        fakeController.retryDownloadCalls = 0
+        fakeController.downloadModelId = ""
+        fakeController.downloadState = "idle"
+        fakeController.downloadError = ""
+        fakeController.downloadProgressPercent = -1
+        fakeController.downloadInProgress = false
         fakeController.licenseAcceptanceRequired = false
         fakeController.licenseIdentityValid = true
         fakeController.lastSelectedId = ""
@@ -507,5 +529,36 @@ TestCase {
         mouseClick(findChild(workspace, "voiceCloneLicenseConfirmButton"))
         tryCompare(dialog, "visible", false)
         compare(fakeController.acceptLicenseCalls, 1)
+    }
+
+    function test_downloadStatusAndControlsStayBoundToActualModelId() {
+        mouseClick(findChild(workspace, "voiceCloneModelCard3"))
+        fakeController.downloadModelId = "FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
+        fakeController.downloadState = "downloading"
+        fakeController.downloadProgressPercent = 42
+        fakeController.downloadInProgress = true
+        const downloadButton = findChild(workspace, "voiceCloneDownloadModelButton")
+        tryVerify(function() { return downloadButton.visible && downloadButton.text.indexOf("42") >= 0 })
+        const pauseButton = findChild(workspace, "voiceClonePauseDownloadButton")
+        const cancelButton = findChild(workspace, "voiceCloneCancelDownloadButton")
+        tryVerify(function() { return pauseButton.visible && cancelButton.visible })
+        pauseButton.clicked()
+        cancelButton.clicked()
+        compare(fakeController.pauseDownloadCalls, 1)
+        compare(fakeController.cancelDownloadCalls, 1)
+
+        mouseClick(findChild(workspace, "voiceCloneModelCard0"))
+        tryVerify(function() { return !pauseButton.visible && !cancelButton.visible })
+
+        mouseClick(findChild(workspace, "voiceCloneModelCard3"))
+        fakeController.downloadState = "failed"
+        fakeController.downloadError = "network failed"
+        fakeController.downloadInProgress = false
+        const errorLabel = findChild(workspace, "voiceCloneDownloadError")
+        const retryButton = findChild(workspace, "voiceCloneRetryDownloadButton")
+        tryVerify(function() { return errorLabel.visible && retryButton.visible })
+        compare(errorLabel.text, "network failed")
+        retryButton.clicked()
+        compare(fakeController.retryDownloadCalls, 1)
     }
 }

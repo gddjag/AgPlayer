@@ -9,6 +9,7 @@
     "displayName": "IndexTTS 2.5",
     "description": "Expressive five-language zero-shot voice cloning with emotion, speed, and pronunciation control."
   },
+  "fileGraphSha256": "47db9bb86068249a112d96cfa7ebba704f8c9f77c1505c2e6672f7df801ccc61",
   "source": {
     "provider": "hugging-face",
     "repository": "IndexTeam/IndexTTS-2.5",
