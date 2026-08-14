@@ -67,7 +67,7 @@ Rectangle {
     function currentTrackTags(): string {
         var tags = root.currentTrackValue(LibraryModel.TagsRole)
         if (!tags || tags.length === 0)
-            return qsTr("无标签")
+            return ""
         return Array.isArray(tags) ? tags.join("、") : String(tags)
     }
 
@@ -363,7 +363,7 @@ Rectangle {
                                 text: (artist || qsTr("未知艺术家"))
                                       + " · "
                                       + (album || qsTr("未知专辑"))
-                                      + " · " + tags
+                                      + (tags.length > 0 ? " · " + tags : "")
                                 color: Theme.secondaryText
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: root.minimalHeight ? 9 : 14

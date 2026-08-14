@@ -9,6 +9,8 @@ Rectangle {
     objectName: "filenameProcessPage"
     color: Theme.background
     focus: true
+    readonly property bool compactLayout: width < 1100
+    readonly property bool denseLayout: width < 1500
 
     property var selectedIndices: []
     property var previewRows: []
@@ -297,7 +299,9 @@ Rectangle {
                 objectName: "filenameFilePanel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(380, page.width * 0.378)
+                Layout.preferredWidth: page.compactLayout
+                                       ? 260 : Math.max(380, page.width * 0.378)
+                Layout.minimumWidth: page.compactLayout ? 250 : 340
                 Layout.maximumWidth: page.width * 0.40
                 color: Theme.panel
                 border.color: Theme.border
@@ -447,14 +451,33 @@ Rectangle {
                 id: rulesColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(620, page.width * 0.61)
+                Layout.preferredWidth: page.compactLayout
+                                       ? Math.max(560, page.width - 288)
+                                       : Math.max(620, page.width * 0.61)
+                Layout.minimumWidth: page.compactLayout ? 540 : 600
                 spacing: 8
+
+                TabBar {
+                    id: compactWorkspaceTabs
+                    objectName: "filenameCompactWorkspaceTabs"
+                    visible: page.compactLayout
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? 36 : 0
+                    TabButton { text: qsTr("前后缀") }
+                    TabButton { text: qsTr("规则") }
+                    TabButton { text: qsTr("序号") }
+                    TabButton { text: qsTr("预览") }
+                }
 
                 Rectangle {
                     id: rulesPanel
                     objectName: "filenameRulesPanel"
+                    visible: !page.compactLayout
+                             || compactWorkspaceTabs.currentIndex < 3
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 258
+                    Layout.fillHeight: page.compactLayout
+                    Layout.preferredHeight: page.compactLayout ? 0
+                                            : 292
                     color: Theme.panel
                     border.color: Theme.border
                     border.width: 1
@@ -462,8 +485,8 @@ Rectangle {
 
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 7
+                        anchors.margins: page.compactLayout ? 10 : 12
+                        spacing: page.compactLayout ? 4 : 7
                         Label {
                             text: qsTr("批量文件名处理")
                             color: Theme.primaryText
@@ -474,15 +497,20 @@ Rectangle {
                             Layout.fillWidth: true
                             spacing: 10
                             GridLayout {
+                                objectName: "filenamePrimaryRules"
+                                visible: !page.compactLayout
+                                         || compactWorkspaceTabs.currentIndex === 0
                                 Layout.fillWidth: true
-                                Layout.minimumWidth: 320
+                                Layout.minimumWidth: page.compactLayout ? 210
+                                                     : page.denseLayout ? 250 : 320
                                 columns: 2
-                                rowSpacing: 6
+                                rowSpacing: 4
                                 columnSpacing: 8
                                 Label { text: qsTr("前缀"); color: Theme.secondaryText }
                                 TextField {
                                     id: prefixField
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     placeholderText: qsTr("留空：删除识别到的原前缀/序号")
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("填写则添加；留空则删除文件名开头的标签和序号")
@@ -492,6 +520,7 @@ Rectangle {
                                 TextField {
                                     id: suffixField
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     placeholderText: qsTr("留空：删除识别到的原后缀")
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("填写则添加；留空则删除文件名末尾的尾标和标签")
@@ -502,6 +531,7 @@ Rectangle {
                                     id: removePrefixField
                                     objectName: "filenameRemovePrefixField"
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     placeholderText: qsTr("精确匹配文件名开头")
                                     onTextChanged: page.refreshPreview()
                                 }
@@ -510,6 +540,7 @@ Rectangle {
                                     id: removeSuffixField
                                     objectName: "filenameRemoveSuffixField"
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     placeholderText: qsTr("精确匹配扩展名前的结尾")
                                     onTextChanged: page.refreshPreview()
                                 }
@@ -519,6 +550,7 @@ Rectangle {
                                     objectName: "filenameCaseBox"
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: 112
+                                    Layout.preferredHeight: 34
                                     model: [
                                         { text: qsTr("保持不变"), value: "keep" },
                                         { text: qsTr("全部小写"), value: "lower" },
@@ -530,23 +562,30 @@ Rectangle {
                                     onCurrentValueChanged: page.refreshPreview()
                                 }
                             }
-                            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
+                            Rectangle { visible: !page.compactLayout; Layout.preferredWidth: visible ? 1 : 0; Layout.fillHeight: true; color: Theme.border }
                             ColumnLayout {
+                                objectName: "filenameOptionRules"
+                                visible: !page.compactLayout
+                                         || compactWorkspaceTabs.currentIndex === 1
                                 Layout.fillWidth: true
+                                spacing: 2
                                 CheckBox {
                                     id: replaceSpacesCheck
+                                    Layout.preferredHeight: 32
                                     text: qsTr("替换空格为下划线")
                                     checked: false
                                     onToggled: page.refreshPreview()
                                 }
                                 CheckBox {
                                     id: preserveExtensionCheck
+                                    Layout.preferredHeight: 32
                                     text: qsTr("保留扩展名")
                                     checked: true
                                     onToggled: page.refreshPreview()
                                 }
                                 CheckBox {
                                     id: removeAffixesWhenBlankCheck
+                                    Layout.preferredHeight: 32
                                     text: qsTr("自动识别并删除常见前后缀")
                                     checked: false
                                     onToggled: page.refreshPreview()
@@ -555,6 +594,7 @@ Rectangle {
                                 }
                                 CheckBox {
                                     id: removeLeadingSequenceCheck
+                                    Layout.preferredHeight: 32
                                     objectName: "filenameRemoveLeadingSequence"
                                     text: qsTr("删除开头序号")
                                     checked: false
@@ -562,6 +602,7 @@ Rectangle {
                                 }
                                 CheckBox {
                                     id: removeTrailingSequenceCheck
+                                    Layout.preferredHeight: 32
                                     objectName: "filenameRemoveTrailingSequence"
                                     text: qsTr("删除结尾序号")
                                     checked: false
@@ -583,6 +624,7 @@ Rectangle {
                                     id: conflictBox
                                     objectName: "filenameConflictBox"
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     model: [
                                         { text: qsTr("自动重命名（添加序号）"), value: "autoNumber" },
                                         { text: qsTr("跳过冲突文件"), value: "skip" },
@@ -594,17 +636,22 @@ Rectangle {
                                     onCurrentValueChanged: page.refreshPreview()
                                 }
                             }
-                            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
+                            Rectangle { visible: !page.compactLayout; Layout.preferredWidth: visible ? 1 : 0; Layout.fillHeight: true; color: Theme.border }
                             GridLayout {
+                                objectName: "filenameNumberingRules"
+                                visible: !page.compactLayout
+                                         || compactWorkspaceTabs.currentIndex === 2
                                 Layout.fillWidth: true
-                                Layout.minimumWidth: 292
+                                Layout.minimumWidth: page.compactLayout ? 170
+                                                     : page.denseLayout ? 220 : 292
                                 columns: 2
-                                rowSpacing: 6
+                                rowSpacing: 4
                                 columnSpacing: 7
                                 ThemedSwitch {
                                     id: autoNumberCheck
                                     Layout.columnSpan: 2
                                     Layout.alignment: Qt.AlignRight
+                                    Layout.preferredHeight: 32
                                     checked: false
                                     text: qsTr("自动序号")
                                     onToggled: page.refreshPreview()
@@ -613,6 +660,7 @@ Rectangle {
                                 SpinBox {
                                     id: numberStartSpin
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     from: 0
                                     to: 999999
                                     value: 1
@@ -623,6 +671,7 @@ Rectangle {
                                 SpinBox {
                                     id: numberDigitsSpin
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     from: 1
                                     to: 9
                                     value: 2
@@ -633,6 +682,7 @@ Rectangle {
                                 ComboBox {
                                     id: numberPositionBox
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     enabled: autoNumberCheck.checked
                                     model: [
                                         { text: qsTr("文件名最前"), value: "beginning" },
@@ -649,6 +699,7 @@ Rectangle {
                                 TextField {
                                     id: numberSeparatorField
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 34
                                     text: "_"
                                     enabled: autoNumberCheck.checked
                                     onTextChanged: page.refreshPreview()
@@ -659,8 +710,11 @@ Rectangle {
                 }
 
                 RowLayout {
+                    visible: !page.compactLayout
+                             || compactWorkspaceTabs.currentIndex === 3
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.preferredHeight: visible ? -1 : 0
                     spacing: 8
 
                     Rectangle {
@@ -802,7 +856,7 @@ Rectangle {
                 }
 
                 Rectangle {
-                    visible: page.width < 1500
+                    visible: page.width < 1500 && !page.compactLayout
                     Layout.fillWidth: true
                     Layout.preferredHeight: visible ? 56 : 0
                     color: Theme.panel
@@ -829,7 +883,7 @@ Rectangle {
             id: bottomBar
             objectName: "filenameBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 132
+            Layout.preferredHeight: page.denseLayout ? 88 : 116
             color: Theme.panel
             border.color: Theme.border
             border.width: 1
@@ -837,12 +891,28 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.topMargin: 32
-                anchors.bottomMargin: 16
+                anchors.topMargin: page.denseLayout ? 28 : 30
+                anchors.bottomMargin: page.denseLayout ? 10 : 14
                 anchors.leftMargin: 12
                 anchors.rightMargin: 24
-                spacing: 20
+                spacing: page.denseLayout ? 10 : 16
                 Rectangle {
+                    visible: page.denseLayout
+                    Layout.preferredWidth: page.compactLayout ? 250 : 312
+                    Layout.fillHeight: true
+                    color: Theme.background
+                    border.color: Theme.border
+                    radius: Theme.radiusSm
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        Label { text: qsTr("就绪 %1").arg(readyCount); color: Theme.waveformGreen }
+                        Label { text: qsTr("冲突 %1").arg(conflictCount); color: conflictCount > 0 ? Theme.ratingGold : Theme.secondaryText }
+                        Label { text: FilenameProcessor.canUndo ? qsTr("可撤销") : qsTr("无撤销"); color: Theme.cyan }
+                    }
+                }
+                Rectangle {
+                    visible: !page.denseLayout
                     Layout.preferredWidth: 278
                     Layout.fillHeight: true
                     color: Theme.background
@@ -857,6 +927,7 @@ Rectangle {
                     }
                 }
                 Rectangle {
+                    visible: !page.denseLayout
                     Layout.preferredWidth: 266
                     Layout.fillHeight: true
                     color: Theme.background
@@ -871,6 +942,7 @@ Rectangle {
                     }
                 }
                 Rectangle {
+                    visible: !page.denseLayout
                     Layout.preferredWidth: 244
                     Layout.fillHeight: true
                     color: Theme.background
@@ -897,14 +969,15 @@ Rectangle {
                 Item { Layout.fillWidth: !FilenameProcessor.busy }
                 Label {
                     Layout.preferredWidth: 300
-                    visible: !FilenameProcessor.busy
+                    visible: !FilenameProcessor.busy && !page.denseLayout
                     text: qsTr("重命名操作将在处理后生成日志，\n如需退回，可通过撤销恢复原名列表进行还原。")
                     color: Theme.secondaryText
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
                 }
                 Button {
-                    Layout.preferredWidth: 184
+                    objectName: "filenameCancelButton"
+                    Layout.preferredWidth: page.denseLayout ? 112 : 160
                     Layout.fillHeight: true
                     text: qsTr("取消")
                     visible: true
@@ -912,7 +985,8 @@ Rectangle {
                     onClicked: FilenameProcessor.cancel()
                 }
                 Button {
-                    Layout.preferredWidth: 220
+                    objectName: "filenameStartButton"
+                    Layout.preferredWidth: page.denseLayout ? 150 : 200
                     Layout.fillHeight: true
                     text: qsTr("开始重命名")
                     icon.source: Theme.icon("play-fill")

@@ -5,6 +5,7 @@ import AgPlayer
 
 Rectangle {
     id: bar
+    readonly property bool compact: width < 1120
     signal exportRequested(bool selectionOnly)
     signal gainRequested()
     color: Theme.panel
@@ -24,7 +25,7 @@ Rectangle {
             const documentRevision = AudioEditorController.modified
             return AudioEditorController.actionEnabled(actionId)
         }
-        implicitWidth: Math.max(60, contentRow.implicitWidth + 18)
+        implicitWidth: bar.compact ? 38 : Math.max(60, contentRow.implicitWidth + 18)
         implicitHeight: 44
         onClicked: AudioEditorController.triggerAction(actionId)
         Accessible.name: label
@@ -42,6 +43,7 @@ Rectangle {
                 Layout.preferredHeight: 18
             }
             Text {
+                visible: !bar.compact
                 text: label
                 color: parent.parent.enabled ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
@@ -64,7 +66,7 @@ Rectangle {
         signal invoked()
         objectName: "editorCommand_" + commandName
         enabled: commandEnabled
-        implicitWidth: Math.max(60, directRow.implicitWidth + 16)
+        implicitWidth: bar.compact ? 38 : Math.max(60, directRow.implicitWidth + 16)
         implicitHeight: 44
         onClicked: invoked()
         Accessible.name: label
@@ -81,6 +83,7 @@ Rectangle {
                 Layout.preferredHeight: 18
             }
             Text {
+                visible: !bar.compact
                 text: parent.parent.label
                 color: parent.parent.enabled ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
@@ -125,7 +128,7 @@ Rectangle {
                 AudioEditorController.sampleRate)
         }
         DirectButton {
-            commandName: "clearSelection"; label: qsTr("取消选区"); shortcutText: "Ctrl+Shift+A"; iconName: "close-fill"
+            commandName: "clearSelection"; label: qsTr("取消选区"); shortcutText: "Ctrl+Shift+A"; iconName: "close-line"
             commandEnabled: AudioEditorController.selectionStart >= 0
             onInvoked: AudioEditorController.clearSelection()
         }
@@ -139,6 +142,11 @@ Rectangle {
             objectName: "editorCommand_exportMenu"
             text: qsTr("导出")
             icon.source: Theme.icon("download-line")
+            icon.width: 18
+            icon.height: 18
+            display: bar.compact ? AbstractButton.IconOnly
+                                 : AbstractButton.TextBesideIcon
+            implicitWidth: bar.compact ? 38 : 84
             enabled: AudioEditorController.hasDocument && !AudioEditorController.busy
             onClicked: exportMenu.open()
             Menu {

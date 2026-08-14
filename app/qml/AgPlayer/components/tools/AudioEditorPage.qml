@@ -72,7 +72,9 @@ Rectangle {
         title: qsTr("导出音频")
         modal: true
         anchors.centerIn: parent
-        width: 430
+        width: Math.min(460, page.width - 32)
+        height: Math.min(486, page.height - 32)
+        padding: 20
         standardButtons: Dialog.Ok | Dialog.Cancel
         property var formats: AudioEditorController.exportFormats
         readonly property var currentFormat: formats.length > 0
@@ -93,8 +95,8 @@ Rectangle {
         onAccepted: exportDialog.open()
         contentItem: GridLayout {
             columns: 2
-            rowSpacing: 8
-            columnSpacing: 12
+            rowSpacing: 10
+            columnSpacing: 16
 
             Label { text: qsTr("导出范围") }
             ComboBox {
@@ -175,8 +177,12 @@ Rectangle {
     }
     Dialog {
         id: gainDialog
+        objectName: "audioEditorGainDialog"
         title: qsTr("调整增益")
         modal: true
+        anchors.centerIn: parent
+        width: Math.min(340, page.width - 32)
+        padding: 20
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: AudioEditorController.applyGain(gainValue.value)
         contentItem: RowLayout {
@@ -187,8 +193,12 @@ Rectangle {
     }
     Dialog {
         id: discardOpenDialog
+        objectName: "audioEditorDiscardDialog"
         title: qsTr("舍弃未保存更改？")
         modal: true
+        anchors.centerIn: parent
+        width: Math.min(420, page.width - 32)
+        padding: 20
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: AudioEditorController.confirmDiscardAndOpen()
         onRejected: AudioEditorController.cancelDiscardAndOpen()
@@ -322,6 +332,8 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 104
+                    Layout.minimumHeight: 104
+                    Layout.maximumHeight: 104
                     spacing: 12
                     EditorTransportBar {
                         id: editorTransportBar
@@ -356,9 +368,9 @@ Rectangle {
                 id: inspector
                 objectName: "editorInspector"
                 readonly property int businessSectionCount: 2
-                readonly property bool compact: page.height < 880 || page.width < 1350
-                Layout.preferredWidth: page.width < 1100 ? 224 : 284
-                Layout.minimumWidth: 208
+                readonly property bool compact: page.height < 760 || page.width < 1280
+                Layout.preferredWidth: 292
+                Layout.minimumWidth: page.width < 1100 ? 280 : 208
                 Layout.maximumWidth: 304
                 Layout.fillHeight: true
                 Layout.rightMargin: 4
@@ -402,6 +414,7 @@ Rectangle {
             objectName: "editorStatusBar"
             Layout.fillWidth: true
             Layout.preferredHeight: 28
+            showShortcutHint: page.narrowLayout
         }
     }
 }

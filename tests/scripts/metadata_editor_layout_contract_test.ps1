@@ -43,7 +43,7 @@ foreach ($directEditPhrase in @('不改动即保留', '留空即清除', '多个
     }
 }
 
-if ($page -notmatch 'Layout\.preferredWidth:\s*Math\.max\(480, page\.width \* 0\.36\)') {
+if ($page -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,180}Math\.max\(480, page\.width \* 0\.36\)') {
     throw 'The metadata inspector must preserve the reference desktop width.'
 }
 if ($page -notmatch 'MetadataEditor\.applyMetadata\(payload, targets\)') {

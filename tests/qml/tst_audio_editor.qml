@@ -172,10 +172,42 @@ TestCase {
         verify(findChild(page, "editorInspectorTabs"))
         verify(findChild(page, "editorShortcutCard"))
         host.width = 1672
-        host.height = 942
+        // The 942 px tool window leaves 839 px for this page after its title
+        // and top navigation bars.
+        host.height = 839
         wait(0)
         const inspector = findChild(page, "editorInspector")
         verify(inspector)
         verify(inspector.height <= page.height)
+        compare(inspector.compact, false,
+                "the 1672x942 reference viewport must show both inspector groups")
+        verify(findChild(page, "recordingInspector").visible)
+        verify(findChild(page, "timePitchInspector").visible)
+    }
+
+    function test_export_dialog_is_complete_inside_the_window() {
+        host.width = 880
+        // The 560 px tool window leaves 457 px below its title and navigation.
+        host.height = 457
+        wait(0)
+        const dialog = findChild(page, "audioEditorExportDialog")
+        verify(dialog)
+        dialog.open()
+        tryVerify(function() { return dialog.visible })
+        verify(dialog.width <= page.width - 24)
+        verify(dialog.height <= page.height - 24)
+        verify(dialog.contentItem.height <= dialog.availableHeight)
+        dialog.close()
+    }
+
+    function test_compact_layout_keeps_shortcut_help_visible() {
+        host.width = 880
+        host.height = 457
+        wait(0)
+        const shortcutHint = findChild(page, "editorStatusShortcutHint")
+        verify(shortcutHint)
+        verify(shortcutHint.visible)
+        verify(shortcutHint.text.indexOf("Space") >= 0)
+        verify(shortcutHint.text.indexOf("Ctrl+W") >= 0)
     }
 }

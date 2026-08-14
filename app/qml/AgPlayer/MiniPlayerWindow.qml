@@ -89,12 +89,13 @@ Window {
 
                     ToolButton {
                         id: pinButton
+                        objectName: "miniPinButton"
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        icon.source: Theme.icon("pushpin-fill")
+                        icon.source: Theme.icon("pushpin-line")
                         icon.color: windows && windows.alwaysOnTop ? Theme.cyan
                                                                    : Theme.secondaryText
-                        icon.width: 18
-                        icon.height: 18
+                        icon.width: 15
+                        icon.height: 15
                         Accessible.name: windows && windows.alwaysOnTop
                                          ? qsTr("Disable always on top")
                                          : qsTr("Pin on top")
@@ -110,11 +111,12 @@ Window {
                     }
                     ToolButton {
                         id: restoreButton
+                        objectName: "miniRestoreButton"
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 18
-                        icon.height: 18
+                        icon.width: 15
+                        icon.height: 15
                         Accessible.name: qsTr("Restore main window")
                         onClicked: windows.showMain()
                         background: Rectangle {
@@ -125,11 +127,12 @@ Window {
                     }
                     ToolButton {
                         id: minimizeButton
+                        objectName: "miniMinimizeButton"
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 18
-                        icon.height: 18
+                        icon.width: 15
+                        icon.height: 15
                         Accessible.name: qsTr("Minimize")
                         onClicked: miniWindow.showMinimized()
                         background: Rectangle {
@@ -140,11 +143,12 @@ Window {
                     }
                     ToolButton {
                         id: closeButton
+                        objectName: "miniCloseButton"
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        icon.source: Theme.icon("close-fill")
+                        icon.source: Theme.icon("close-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 18
-                        icon.height: 18
+                        icon.width: 15
+                        icon.height: 15
                         Accessible.name: qsTr("Close")
                         onClicked: windows.requestClose()
                         background: Rectangle {

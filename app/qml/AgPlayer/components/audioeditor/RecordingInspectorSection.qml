@@ -10,7 +10,7 @@ Rectangle {
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
-    implicitHeight: collapsed ? 38 : 420
+    implicitHeight: collapsed ? 38 : 360
     property bool collapsed: false
     readonly property int recordingActionCount: 4
     property url recordingTarget
@@ -47,8 +47,12 @@ Rectangle {
 
     Dialog {
         id: discardRecordingDialog
+        objectName: "recordingDiscardDialog"
         title: qsTr("舍弃未保存更改？")
         modal: true
+        anchors.centerIn: parent
+        width: Math.min(420, Math.max(260, section.width + 100))
+        padding: 20
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: forceNewRecording
             ? section.createBlankRecordingDocument()

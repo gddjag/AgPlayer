@@ -9,6 +9,7 @@ Rectangle {
     objectName: "formatConvertPage"
     color: Theme.background
     focus: true
+    readonly property bool compactLayout: width < 1100
 
     property var converter: FormatConverter
     property string outputDirectory: SettingsController.defaultOutputDirectory
@@ -121,10 +122,11 @@ Rectangle {
                         { text: qsTr("清空列表"), icon: "delete-bin-line", action: "clear" }
                     ]
                     Button {
-                        Layout.preferredWidth: modelData.action === "playlist" ? 158
+                        Layout.preferredWidth: page.compactLayout
+                                               ? (modelData.action === "playlist" ? 142 : 118)
+                                               : modelData.action === "playlist" ? 158
                                                : modelData.action === "file" ? 130
-                                               : modelData.action === "folder" ? 142
-                                               : 128
+                                               : modelData.action === "folder" ? 142 : 128
                         Layout.preferredHeight: 40
                         enabled: !converter.busy
                                  && (modelData.action !== "playlist"
@@ -187,9 +189,9 @@ Rectangle {
             FormatSettingsPanel {
                 id: settingsPanel
                 objectName: "formatSettingsPanel"
-                Layout.preferredWidth: 445
-                Layout.minimumWidth: 420
-                Layout.maximumWidth: 455
+                Layout.preferredWidth: page.compactLayout ? 360 : 445
+                Layout.minimumWidth: page.compactLayout ? 340 : 420
+                Layout.maximumWidth: page.compactLayout ? 380 : 455
                 Layout.fillHeight: true
                 converter: page.converter
                 outputDirectory: page.outputDirectory
@@ -201,7 +203,7 @@ Rectangle {
             id: bottomBar
             objectName: "formatBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 114
+            Layout.preferredHeight: page.compactLayout ? 96 : 114
             color: Theme.panel
             border.color: Theme.border
             radius: 6
@@ -213,14 +215,14 @@ Rectangle {
                 spacing: 16
 
                 ColumnLayout {
-                    Layout.preferredWidth: 430
+                    Layout.preferredWidth: page.compactLayout ? 280 : 430
                     spacing: 8
                     RowLayout {
                         Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: 14 }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
-                            Layout.preferredWidth: 320
+                            Layout.preferredWidth: page.compactLayout ? 180 : 320
                             from: 0; to: 1; value: converter.progress
                             background: Rectangle { implicitHeight: 10; color: Theme.border; radius: 5 }
                             contentItem: Item {
@@ -249,6 +251,7 @@ Rectangle {
 
                 Rectangle {
                     objectName: "formatSummaryCard"
+                    visible: !page.compactLayout
                     Layout.preferredWidth: 230
                     Layout.preferredHeight: 46
                     color: Theme.elevated
@@ -265,8 +268,8 @@ Rectangle {
                 Button {
                     id: convertAllButton
                     objectName: "convertAllButton"
-                    Layout.preferredWidth: 174
-                    Layout.preferredHeight: 68
+                    Layout.preferredWidth: page.compactLayout ? 132 : 174
+                    Layout.preferredHeight: page.compactLayout ? 56 : 68
                     enabled: converter.checkedCount > 0 && !converter.busy
                     text: qsTr("▶  开始处理")
                     onClicked: page.requestPlan()
@@ -276,8 +279,8 @@ Rectangle {
 
                 Button {
                     objectName: "cancelAllButton"
-                    Layout.preferredWidth: 168
-                    Layout.preferredHeight: 68
+                    Layout.preferredWidth: page.compactLayout ? 128 : 168
+                    Layout.preferredHeight: page.compactLayout ? 56 : 68
                     enabled: converter.busy
                     text: qsTr("■  取消全部")
                     onClicked: converter.cancelAll()

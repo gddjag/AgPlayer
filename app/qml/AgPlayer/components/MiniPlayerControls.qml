@@ -113,43 +113,46 @@ Rectangle {
 
         ColumnLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 1
+            Text {
+                objectName: "miniTrackTitle"
+                text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
+                color: Theme.primaryText; font.family: Theme.fontPrimary
+                font.pixelSize: 16; font.weight: Font.DemiBold
+                elide: Text.ElideRight; Layout.fillWidth: true
+                Layout.preferredHeight: 20
+            }
             RowLayout {
-                Layout.fillWidth: true; Layout.preferredHeight: 18; spacing: 3
+                objectName: "miniMetadataRow"
+                Layout.fillWidth: true; Layout.preferredHeight: 18; spacing: 5
                 Text {
-                    objectName: "miniTrackTitle"
-                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
-                    color: Theme.primaryText; font.family: Theme.fontPrimary
-                    font.pixelSize: 16; font.weight: Font.DemiBold
+                    objectName: "miniArtistAlbum"
+                    text: (root.currentTrackValue(LibraryModel.ArtistRole) || qsTr("未知艺术家"))
+                          + " · " + (root.currentTrackValue(LibraryModel.AlbumRole) || qsTr("未知专辑"))
+                    color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 9
                     elide: Text.ElideRight; Layout.fillWidth: true
                 }
                 RowLayout {
-                    objectName: "miniRating"; spacing: 2
+                    objectName: "miniRating"; spacing: 1
                     Repeater {
                         model: 5
                         delegate: ThemedIcon {
                             required property int index
                             source: index < root.currentTrackRating() ? Theme.icon("star-fill") : Theme.icon("star-line")
                             tint: index < root.currentTrackRating() ? Theme.ratingColor(index) : Theme.iconSecondary
-                            sourceSize.width: 16; sourceSize.height: 16
-                            Layout.preferredWidth: 17; Layout.preferredHeight: 18
+                            sourceSize.width: 11; sourceSize.height: 11
+                            Layout.preferredWidth: 12; Layout.preferredHeight: 14
                         }
                     }
                 }
                 ToolButton {
                     id: favoriteButton
                     objectName: "miniFavoriteButton"
-                    Layout.preferredWidth: 32; Layout.preferredHeight: 32
+                    Layout.preferredWidth: 24; Layout.preferredHeight: 24
                     icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                     icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
-                    icon.width: 21; icon.height: 21; enabled: root.currentRow() >= 0
+                    icon.width: 15; icon.height: 15; enabled: root.currentRow() >= 0
                     onClicked: if (playback) playback.toggleFavorite(); background: null
                 }
-            }
-            Text {
-                text: (root.currentTrackValue(LibraryModel.ArtistRole) || qsTr("未知艺术家"))
-                      + " · " + (root.currentTrackValue(LibraryModel.AlbumRole) || qsTr("未知专辑"))
-                color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 9
-                elide: Text.ElideRight; Layout.fillWidth: true; Layout.preferredHeight: 12
             }
             Item {
                 Layout.fillWidth: true
@@ -251,10 +254,10 @@ Rectangle {
                     Layout.minimumWidth: Layout.preferredWidth
                     Layout.maximumWidth: Layout.preferredWidth
                     Layout.preferredHeight: 28
-                    icon.source: Theme.icon("waveform-switch")
+                    icon.source: Theme.icon("pulse-line")
                     icon.color: Theme.iconPrimary
-                    icon.width: 20
-                    icon.height: 20
+                    icon.width: 17
+                    icon.height: 17
                     Accessible.name: qsTr("切换波形样式")
                     ToolTip.text: Accessible.name
                     ToolTip.visible: hovered
@@ -269,7 +272,7 @@ Rectangle {
                                : playback.mode === PlaybackController.Shuffle ? Theme.icon("shuffle-arrows-line")
                                : playback.mode === PlaybackController.RepeatOne ? Theme.icon("repeat-one-line-alt")
                                : Theme.icon("repeat-list-line")
-                    icon.color: Theme.iconPrimary; icon.width: 20; icon.height: 20
+                    icon.color: Theme.iconPrimary; icon.width: 17; icon.height: 17
                     Accessible.name: root.modeName(); ToolTip.text: Accessible.name; ToolTip.visible: hovered
                     onClicked: if (playback) playback.cycleMode(); background: null
                 }
@@ -322,11 +325,12 @@ Rectangle {
 
                     ToolButton {
                         id: muteButton
+                        objectName: "miniMuteButton"
                         width: 28
                         height: parent.height
                         anchors.left: parent.left
-                        icon.source: playback && playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-fill")
-                        icon.color: Theme.primaryText; icon.width: 20; icon.height: 20
+                        icon.source: playback && playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
+                        icon.color: Theme.primaryText; icon.width: 17; icon.height: 17
                         onClicked: if (playback) playback.toggleMuted(); background: null
                     }
                     HoverHandler {

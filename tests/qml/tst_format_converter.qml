@@ -47,6 +47,24 @@ TestCase {
         compare(formatBox.count, 8)
     }
 
+    function test_compact_geometry_keeps_all_workbench_regions_visible() {
+        testCase.width = 880
+        testCase.height = 457
+        wait(0)
+        const taskPanel = findChild(page, "formatTaskPanel")
+        const settingsPanel = findChild(page, "formatSettingsPanel")
+        const bottomBar = findChild(page, "formatBottomBar")
+        const start = findChild(page, "convertAllButton")
+        const cancel = findChild(page, "cancelAllButton")
+        verify(taskPanel && settingsPanel && bottomBar && start && cancel)
+        verify(taskPanel.width >= 420)
+        verify(settingsPanel.width <= 380)
+        verify(start.x + start.width <= bottomBar.width)
+        verify(cancel.x + cancel.width <= bottomBar.width)
+        testCase.width = 1672
+        testCase.height = 942
+    }
+
     function test_smart_profiles_keep_auto_channels_and_format_specific_rates() {
         const preset = findChild(page, "formatPresetBox")
         const bitRate = findChild(page, "formatBitRateBox")

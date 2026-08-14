@@ -1224,7 +1224,12 @@ int main(int argc, char* argv[])
                     }
                     toolsWin->show();
                 }
-                if (qaTool == 2 && !qaImportFolder.isEmpty()) {
+                if (qaTool == 0 && !qaImportFolder.isEmpty()) {
+                    audioEditor.openFile(QUrl::fromLocalFile(qaImportFolder));
+                } else if (qaTool == 1 && !qaImportFolder.isEmpty()) {
+                    formatConverter.loadFiles(
+                        {QUrl::fromLocalFile(qaImportFolder)});
+                } else if (qaTool == 2 && !qaImportFolder.isEmpty()) {
                     metadataEditor.loadFiles(
                         {QUrl::fromLocalFile(qaImportFolder)});
                 } else if (qaTool == 3 && !qaImportFolder.isEmpty()) {

@@ -9,6 +9,7 @@ Rectangle {
     objectName: "metadataEditPage"
     color: Theme.background
     focus: true
+    readonly property bool compactLayout: width < 1100
 
     property var selectedIndices: []
     property int selectionAnchor: -1
@@ -392,6 +393,16 @@ Rectangle {
             Item { Layout.fillWidth: true }
         }
 
+        TabBar {
+            id: compactMetadataTabs
+            objectName: "metadataCompactTabs"
+            visible: page.compactLayout
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 36 : 0
+            TabButton { text: qsTr("任务列表") }
+            TabButton { text: qsTr("编辑元数据") }
+        }
+
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -400,8 +411,17 @@ Rectangle {
             Rectangle {
                 id: filePanel
                 objectName: "metadataFilePanel"
+                visible: !page.compactLayout
+                         || compactMetadataTabs.currentIndex === 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: page.compactLayout
+                                       ? (visible ? page.width - 28 : 0)
+                                       : Math.max(620, page.width * 0.58)
+                Layout.minimumWidth: page.compactLayout ? 0 : 560
+                Layout.maximumWidth: page.compactLayout
+                                     ? (visible ? 16777215 : 0)
+                                     : 16777215
                 color: Theme.panel
                 border.color: Theme.border
                 border.width: 1
@@ -670,7 +690,16 @@ Rectangle {
             Rectangle {
                 id: inspectorPanel
                 objectName: "metadataInspectorPanel"
-                Layout.preferredWidth: Math.max(480, page.width * 0.36)
+                visible: !page.compactLayout
+                         || compactMetadataTabs.currentIndex === 1
+                Layout.fillWidth: page.compactLayout
+                Layout.preferredWidth: page.compactLayout
+                                       ? (visible ? page.width - 28 : 0)
+                                       : Math.max(480, page.width * 0.36)
+                Layout.minimumWidth: page.compactLayout ? 0 : 460
+                Layout.maximumWidth: page.compactLayout
+                                     ? (visible ? 16777215 : 0)
+                                     : 640
                 Layout.fillHeight: true
                 color: Theme.panel
                 border.color: Theme.border
@@ -987,7 +1016,7 @@ Rectangle {
                 anchors.rightMargin: 8
                 spacing: 10
                 ColumnLayout {
-                    Layout.preferredWidth: 260
+                    Layout.preferredWidth: page.compactLayout ? 190 : 260
                     spacing: 2
                     Label {
                         text: metadataScopeBox.currentValue === "current"
@@ -998,6 +1027,7 @@ Rectangle {
                         color: Theme.primaryText
                     }
                     Label {
+                        visible: !page.compactLayout
                         text: qsTr("写入采用临时文件和原子替换，不直接覆盖源文件。")
                         color: Theme.secondaryText
                         font.pixelSize: 10

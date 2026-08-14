@@ -10,6 +10,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/close-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
@@ -37,6 +38,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-list-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg

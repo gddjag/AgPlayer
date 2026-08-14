@@ -1346,7 +1346,24 @@ TestCase {
                    "An intentionally long album name for hover marquee verification")
         verify(artistAlbum.text.indexOf(" · ") > 0,
                "the main player must render artist, album and tags separately")
-        verify(artistAlbum.text.split(" · ").length === 3)
+        compare(artistAlbum.text.split(" · ").length, 2)
+        verify(!artistAlbum.text.endsWith(" · "))
+        verify(artistAlbum.text.indexOf("无标签") < 0)
+
+        LibraryModel.setTags(trackId, ["测试标签"])
+        tryVerify(function() {
+            return artistAlbum.text.split(" · ").length === 3
+                    && artistAlbum.text.endsWith("测试标签")
+        }, 1000, "real tags must be appended after artist and album")
+        LibraryModel.setTags(trackId, [])
+    }
+
+    function test_main_waveform_toggle_uses_complete_line_icon() {
+        var button = findChild(mainWindow, "waveformModeButton")
+        verify(button)
+        verify(button.icon.source.toString().endsWith("/pulse-line.svg"))
+        compare(button.icon.width, 20)
+        compare(button.icon.height, 20)
     }
 
     function test_current_track_rating_follows_artist_and_album() {
@@ -1473,8 +1490,10 @@ TestCase {
                "file metadata must remain visible at the native minimum height")
         verify(artist.height > 0 && rating.height > 0 && metadata.height > 0,
                "responsive metadata rows must retain a usable rendered height")
-        verify(artist.text.split(" · ").length === 3,
-               "metadata must render artist, album and tags as separate fields")
+        verify(artist.text.split(" · ").length >= 2
+               && artist.text.split(" · ").length <= 3
+               && artist.text.indexOf("无标签") < 0,
+               "metadata must omit an empty tag without hiding artist/album")
         verify(rating.mapToItem(artist.parent, 0, 0).x
                >= artist.mapToItem(artist.parent, 0, 0).x + artist.width,
                "rating stars must immediately follow the artist/album/tag text")

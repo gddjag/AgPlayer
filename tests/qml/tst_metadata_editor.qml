@@ -15,9 +15,36 @@ TestCase {
         anchors.fill: parent
     }
 
+    Component {
+        id: compactPageComponent
+        MetadataEditPage { width: 880; height: 457 }
+    }
+
     function init() {
+        testCase.width = 1280
+        testCase.height = 760
         if (!MetadataEditor.busy)
             MetadataEditor.clear()
+    }
+
+    function test_compact_layout_keeps_list_editor_and_actions_visible() {
+        const compactPage = createTemporaryObject(compactPageComponent, testCase)
+        verify(compactPage)
+        wait(0)
+        const files = findChild(compactPage, "metadataFilePanel")
+        const inspector = findChild(compactPage, "metadataInspectorPanel")
+        const bottom = findChild(compactPage, "metadataBottomBar")
+        const apply = findChild(compactPage, "metadataApplyButton")
+        const tabs = findChild(compactPage, "metadataCompactTabs")
+        verify(files && inspector && bottom && apply && tabs)
+        verify(files.visible)
+        verify(files.width >= 820)
+        tabs.currentIndex = 1
+        tryVerify(function() { return inspector.width > 0 })
+        verify(inspector.visible)
+        verify(inspector.width >= 780, "inspector width=" + inspector.width)
+        verify(inspector.mapToItem(compactPage, inspector.width, 0).x <= compactPage.width)
+        verify(apply.x + apply.width <= bottom.width)
     }
 
     function test_directFieldsPreserveUntilEditedAndEmptyMeansClear() {

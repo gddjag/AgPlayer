@@ -54,4 +54,52 @@ TestCase {
         mouseClick(issueFilter, issueFilter.width / 2, issueFilter.height / 2)
         compare(page.issueFilterEnabled, true)
     }
+
+    function test_compact_layout_keeps_rules_preview_and_actions_inside() {
+        const page = createTemporaryObject(pageComponent, testCase,
+                                           {width: 880, height: 457})
+        verify(page)
+        const filePanel = findChild(page, "filenameFilePanel")
+        const rulesPanel = findChild(page, "filenameRulesPanel")
+        const previewPanel = findChild(page, "filenamePreviewPanel")
+        const bottom = findChild(page, "filenameBottomBar")
+        const primary = findChild(page, "filenamePrimaryRules")
+        const numbering = findChild(page, "filenameNumberingRules")
+        const cancelButton = findChild(page, "filenameCancelButton")
+        const startButton = findChild(page, "filenameStartButton")
+        verify(filePanel && rulesPanel && previewPanel && bottom)
+        verify(primary && numbering && cancelButton && startButton)
+        verify(filePanel.width >= 250)
+        const fileTop = filePanel.mapToItem(page, 0, 0)
+        const rulesTop = rulesPanel.mapToItem(page, 0, 0)
+        verify(rulesTop.x >= fileTop.x + filePanel.width)
+        verify(primary.x + primary.width <= rulesPanel.width)
+        verify(numbering.x + numbering.width <= rulesPanel.width)
+        verify(bottom.width <= page.width)
+        const cancelRight = cancelButton.mapToItem(page, cancelButton.width, 0).x
+        const startRight = startButton.mapToItem(page, startButton.width, 0).x
+        verify(cancelRight <= page.width)
+        verify(startRight <= page.width)
+    }
+
+    function test_dense_layout_keeps_rule_groups_and_actions_inside() {
+        const page = createTemporaryObject(pageComponent, testCase,
+                                           {width: 1280, height: 720})
+        verify(page)
+        const rulesPanel = findChild(page, "filenameRulesPanel")
+        const primary = findChild(page, "filenamePrimaryRules")
+        const options = findChild(page, "filenameOptionRules")
+        const numbering = findChild(page, "filenameNumberingRules")
+        const cancelButton = findChild(page, "filenameCancelButton")
+        const startButton = findChild(page, "filenameStartButton")
+        verify(rulesPanel && primary && options && numbering)
+        verify(cancelButton && startButton)
+        for (const group of [primary, options, numbering]) {
+            const bottomRight = group.mapToItem(rulesPanel, group.width, group.height)
+            verify(bottomRight.x <= rulesPanel.width + 1)
+            verify(bottomRight.y <= rulesPanel.height + 1)
+        }
+        verify(cancelButton.mapToItem(page, cancelButton.width, 0).x <= page.width)
+        verify(startButton.mapToItem(page, startButton.width, 0).x <= page.width)
+    }
 }

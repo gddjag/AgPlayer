@@ -9,7 +9,7 @@ Rectangle {
     color: Theme.elevated
     border.color: Theme.border
     radius: Theme.radiusSm
-    implicitHeight: collapsed ? 38 : 340
+    implicitHeight: collapsed ? 38 : 310
     property bool collapsed: false
     readonly property int timePitchActionCount: 3
 
