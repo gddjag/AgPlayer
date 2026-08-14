@@ -105,8 +105,18 @@ Rectangle {
                 anchors.rightMargin: 12
                 anchors.topMargin: 10
                 anchors.bottomMargin: 10
-                channelPeaks: AudioEditorController.channelPeaks
+                channelPeaks: AudioEditorController.viewportChannelPeaks.length > 0
+                    ? AudioEditorController.viewportChannelPeaks
+                    : AudioEditorController.channelPeaks
                 waveformColor: Theme.isLight ? "#169B97" : "#39C7C0"
+                renderMode: {
+                    const visibleFrames = Math.max(1, AudioEditorController.viewport.visibleFrameCount)
+                    const viewportWidth = Math.max(1, canvas.width - 38)
+                    const samplesPerPixel = visibleFrames / viewportWidth
+                    if (samplesPerPixel > 32.0) return 0
+                    if (samplesPerPixel > 1.2) return 1
+                    return 2
+                }
                 visibleStartRatio: AudioEditorController.viewport.overviewStartRatio
                 visibleEndRatio: Math.min(1,
                     AudioEditorController.viewport.overviewStartRatio

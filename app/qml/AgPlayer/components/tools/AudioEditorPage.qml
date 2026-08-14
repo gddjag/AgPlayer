@@ -288,6 +288,11 @@ Rectangle {
 
     focus: true
     Keys.onPressed: event => {
+        if (event.key === Qt.Key_Space) {
+            AudioEditorController.playPause()
+            event.accepted = true
+            return
+        }
         const control = (event.modifiers & Qt.ControlModifier) !== 0
         const alt = (event.modifiers & Qt.AltModifier) !== 0
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0

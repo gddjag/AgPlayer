@@ -249,7 +249,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Space"
         context: Qt.WindowShortcut
-        enabled: !mainWindow.editingText()
+        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible()
         onActivated: PlaybackController.togglePlayback()
     }
 

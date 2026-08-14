@@ -277,6 +277,18 @@ QString local_path(const QUrl& url)
     return url.isLocalFile() ? url.toLocalFile() : QString{};
 }
 
+qint64 effectiveDocumentFramesForViewport(
+    const bool hasDocument, const qint64 documentFrames,
+    const bool recording, const qint64 recordingInsertFrame,
+    const qint64 recordedFrames, const bool insertAtCursor)
+{
+    if (!recording) return documentFrames;
+    const qint64 projected = insertAtCursor && hasDocument
+        ? recordingInsertFrame + std::max<qint64>(0, recordedFrames)
+        : std::max<qint64>(0, recordedFrames);
+    return std::max(documentFrames, projected);
+}
+
 } // namespace
 
 AudioEditorController::AudioEditorController(
@@ -494,6 +506,7 @@ bool AudioEditorController::createUntitledDocument(
     bit_rate_ = 0;
     source_channel_peaks_.clear();
     channel_peaks_.clear();
+    clearViewportWaveformCache();
     has_document_ = true;
     modified_ = false;
     viewport_.setDocumentFrames(frames);
@@ -536,6 +549,7 @@ bool AudioEditorController::openFile(const QUrl& source)
     bit_rate_ = analysis.bit_rate;
     source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
     channel_peaks_ = source_channel_peaks_;
+    clearViewportWaveformCache();
     has_document_ = true;
     modified_ = false;
     position_ms_ = 0;
@@ -916,6 +930,7 @@ bool AudioEditorController::applyTimePitch()
         if (analysis.success) {
             source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
         }
+        clearViewportWaveformCache();
         rebuildEditorPeaks();
         setProgress(1.0);
         setState(EditorSessionState::Ready);
@@ -1015,6 +1030,8 @@ bool AudioEditorController::startRecording(
     emit recordingPreferencesChanged();
     recording_timer_.start();
     position_ms_ = insert_recording_at_cursor_ ? position_ms_ : 0;
+    clearViewportWaveformCache();
+    requestViewportWaveform();
     setState(EditorSessionState::Recording);
     setError({});
     emit playbackChanged();
@@ -1067,6 +1084,7 @@ bool AudioEditorController::stopRecording()
         modified_ = true;
         playback_path_.clear();
         viewport_.setDocumentFrames(document_.totalFrames());
+        clearViewportWaveformCache();
         rebuildEditorPeaks();
     } else {
         document_ = AudioDocument::fromSource(analysis.source);
@@ -1079,6 +1097,7 @@ bool AudioEditorController::stopRecording()
         bit_rate_ = sample_rate_ * channels_ * bits_per_sample_;
         source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
         channel_peaks_ = source_channel_peaks_;
+        clearViewportWaveformCache();
         has_document_ = true;
         modified_ = false;
         viewport_.setDocumentFrames(document_.totalFrames());
@@ -1098,6 +1117,7 @@ bool AudioEditorController::cancelRecording()
     recording_timer_.stop();
     const bool cancelled = recording_session_.cancel();
     position_ms_ = 0;
+    clearViewportWaveformCache();
     setState(has_document_ ? EditorSessionState::Ready
                            : EditorSessionState::Empty);
     if (cancelled) setError(tr("录音已取消"));
@@ -1155,6 +1175,7 @@ bool AudioEditorController::triggerAction(const QString& id)
         modified_ = true;
         playback_path_.clear();
         viewport_.setDocumentFrames(document_.totalFrames());
+        clearViewportWaveformCache();
         rebuildEditorPeaks();
     }
     refreshActions();
@@ -1173,6 +1194,7 @@ bool AudioEditorController::runDocumentCommand(
         modified_ = true;
         playback_path_.clear();
         viewport_.setDocumentFrames(document_.totalFrames());
+        clearViewportWaveformCache();
         rebuildEditorPeaks();
     }
     refreshActions();
@@ -1348,25 +1370,37 @@ void AudioEditorController::clearViewportWaveformCache()
     viewport_cache_size_bytes_ = 0;
     viewport_waveform_cache_.clear();
     viewport_waveform_lru_.clear();
+    ++viewport_cache_version_;
     viewport_channel_peaks_.clear();
 }
 
 void AudioEditorController::requestViewportWaveform()
 {
-    const qint64 totalFrames = document_.totalFrames();
+    const qint64 recordedFrames = recording()
+        ? static_cast<qint64>(recording_session_.framesCaptured())
+        : 0;
+    const qint64 totalFrames = effectiveDocumentFramesForViewport(
+        has_document_, document_.totalFrames(), recording(), recording_insert_frame_,
+        recordedFrames, insert_recording_at_cursor_);
     const qreal viewportWidth = viewport_.viewportWidth();
-    const qint64 startFrame = std::clamp<qint64>(
-        viewport_.visibleStartFrame(), 0, std::max<qint64>(0, totalFrames));
-    const qint64 endFrame = std::clamp<qint64>(
-        viewport_.visibleEndFrame(), 0, std::max<qint64>(0, totalFrames));
+    const qint64 clampedTotal = std::max<qint64>(0, totalFrames);
+    qint64 startFrame = std::clamp<qint64>(
+        viewport_.visibleStartFrame(), 0, clampedTotal);
+    qint64 endFrame = std::clamp<qint64>(
+        viewport_.visibleEndFrame(), 0, clampedTotal);
+    if (endFrame <= startFrame) {
+        startFrame = 0;
+        endFrame = std::max<qint64>(1, clampedTotal);
+    }
     const qint64 visibleFrames = std::max<qint64>(0, endFrame - startFrame);
     const qint64 targetPoints = visibleFrames <= 0 || viewportWidth <= 0.0
         ? 0 : viewportTargetPoints(
             viewportRenderMode(std::max<qreal>(1.0, static_cast<qreal>(visibleFrames))
                               / std::max<qreal>(1.0, viewportWidth)),
             visibleFrames, viewportWidth);
-    if (!has_document_ || totalFrames <= 0 || channels_ <= 0
-        || visibleFrames <= 0 || targetPoints <= 0) {
+    if ((!has_document_ && !recording())
+        || clampedTotal <= 0 || channels_ <= 0 || visibleFrames <= 0
+        || targetPoints <= 0) {
         viewport_channel_peaks_.clear();
         emit waveformChanged();
         return;
@@ -1376,11 +1410,14 @@ void AudioEditorController::requestViewportWaveform()
         ? channel_peaks_ : source_channel_peaks_;
     const auto sourcePeaks = peaksAsChannels(sourcePeaksData);
     const auto fallbackPeaks = peaksAsChannels(source_channel_peaks_);
-    if (sourcePeaks.empty() && fallbackPeaks.empty()) {
+    const bool hasSourcePeaks = !sourcePeaks.empty();
+    const bool hasFallbackPeaks = !fallbackPeaks.empty();
+    if (!hasSourcePeaks && !hasFallbackPeaks && !recording()) {
         viewport_channel_peaks_.clear();
         emit waveformChanged();
         return;
     }
+    const bool recordingActive = recording();
 
     const int renderMode = viewportRenderMode(
         std::max<qreal>(1.0, static_cast<qreal>(visibleFrames))
@@ -1464,10 +1501,43 @@ void AudioEditorController::requestViewportWaveform()
     watcher->setFuture(QtConcurrent::run([this, startFrame, endFrame, targetPoints,
                                           renderMode, sourcePeaks,
                                           fallbackPeaks, channels = channels_,
-                                          totalFrames,
+                                          totalFrames, recordingActive, recordedFrames,
+                                          recStart = recording_insert_frame_,
+                                          recAtCursor = insert_recording_at_cursor_,
+                                          recPeak = static_cast<qreal>(recording_session_.peak()),
                                           generation, cancel_token] {
         if (cancel_token->load(std::memory_order_acquire)) {
             return QVariantList{};
+        }
+        if (!recordingActive && sourcePeaks.empty() && fallbackPeaks.empty()) {
+            return QVariantList{};
+        }
+        if (sourcePeaks.empty() && fallbackPeaks.empty() && recordingActive) {
+            const qint64 recStartFrame = recAtCursor ? recStart : 0;
+            const qint64 recEndFrame = recStartFrame + recordedFrames;
+            std::vector<std::vector<float>> peaks;
+            peaks.resize(static_cast<std::size_t>(std::max<qint64>(1, channels)));
+            for (auto& channel : peaks) {
+                channel.assign(static_cast<std::size_t>(targetPoints * 2LL), 0.0F);
+            }
+            if (recordedFrames > 0 && recPeak > 0.0) {
+                const float amplitude = static_cast<float>(
+                    std::clamp(recPeak, static_cast<qreal>(0.0), static_cast<qreal>(1.0)));
+                const qint64 visibleFrameWindow = std::max<qint64>(1, endFrame - startFrame);
+                for (qint64 index = 0; index < targetPoints; ++index) {
+                    const qint64 pointStart = startFrame + index * visibleFrameWindow
+                        / targetPoints;
+                    const qint64 pointEnd = startFrame + (index + 1) * visibleFrameWindow
+                        / targetPoints;
+                    if (pointStart < recEndFrame && pointEnd > recStartFrame) {
+                        for (auto& channel : peaks) {
+                            channel[static_cast<std::size_t>(index * 2)] = -amplitude;
+                            channel[static_cast<std::size_t>(index * 2 + 1)] = amplitude;
+                        }
+                    }
+                }
+            }
+            return build_variant_peaks(peaks);
         }
         const auto peaks = viewportPeaksFromSnapshot(
             sourcePeaks, fallbackPeaks, totalFrames, startFrame, endFrame,
