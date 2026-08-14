@@ -13,8 +13,6 @@ Window {
     minimumWidth: 880
     minimumHeight: 560
     flags: Qt.Window | Qt.FramelessWindowHint
-    showInTaskbar: true
-    icon: "qrc:/qt/qml/AgPlayer/assets/brand/agplayer.ico"
     color: "transparent"
     title: "AgPlayer · " + qsTr("音频工具")
     function requestHide() {
@@ -39,6 +37,12 @@ Window {
     palette.highlight: Theme.cyan
     palette.highlightedText: Theme.accentText
     palette.mid: Theme.border
+
+    Shortcut {
+        sequence: "Space"
+        context: Qt.ApplicationShortcut
+        onActivated: AudioEditorController.playPause()
+    }
 
     Dialog {
         id: unsavedCloseDialog

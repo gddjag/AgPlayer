@@ -280,12 +280,6 @@ Rectangle {
         function onDiscardConfirmationRequested() { discardOpenDialog.open() }
     }
 
-    Shortcut {
-        sequence: "Space"
-        context: Qt.ApplicationShortcut
-        onActivated: AudioEditorController.playPause()
-    }
-
     focus: true
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Space) {

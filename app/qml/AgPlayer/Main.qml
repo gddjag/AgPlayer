@@ -17,8 +17,6 @@ ApplicationWindow {
         WindowController.requestClose()
     }
     flags: Qt.Window | Qt.FramelessWindowHint
-    showInTaskbar: true
-    icon: "qrc:/qt/qml/AgPlayer/assets/brand/agplayer.ico"
     color: "transparent"
     background: null
     title: "AgPlayer"
@@ -249,7 +247,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Space"
         context: Qt.WindowShortcut
-        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible()
+        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
         onActivated: PlaybackController.togglePlayback()
     }
 

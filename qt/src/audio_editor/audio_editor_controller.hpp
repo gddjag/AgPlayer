@@ -265,15 +265,17 @@ private:
     qint64 viewport_cache_version_ = 1;
     qint64 viewport_cache_size_bytes_ = 0;
     qint64 viewport_cache_size_limit_ = 16LL * 1024LL * 1024LL;
-    QFutureWatcher<QVariantList>* viewport_waveform_watcher_ = nullptr;
+    QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
 
     struct ViewportWaveformCacheEntry {
         qint64 start_frame{};
         qint64 end_frame{};
-        qint64 target_point_count{};
+        qint64 source_start_frame{};
+        qint64 target_frames_per_point{};
         int mode{};
+        int sample_rate{};
         qint64 bytes{};
         std::vector<std::vector<float>> channels;
         std::list<QString>::iterator lru_iterator{};

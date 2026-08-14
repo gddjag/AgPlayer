@@ -14,9 +14,9 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 
-#include <algorithm>
+#include "decoder.hpp"
+
 #include <array>
-#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <limits>
@@ -38,6 +38,9 @@ using agplayer::editor::WriteRequest;
 namespace {
 
 constexpr qint64 kViewportWaveformCacheDefaultLimit = 16LL * 1024LL * 1024LL;
+constexpr qint64 kViewportTileFrameLimit = 4'096LL;
+constexpr qint64 kViewportTileFrameLimitMode1 = 8'192LL;
+constexpr qint64 kViewportMode2PointCap = 4'096LL;
 
 constexpr qreal kViewportModeAThreshold = 32.0;
 constexpr qreal kViewportModeBThreshold = 1.2;
@@ -68,7 +71,7 @@ qint64 viewportTargetPoints(const int renderMode, const qint64 visibleFrames,
         return std::max<qint64>(width,
             std::min<qint64>(visibleFrames, width * 2));
     }
-    return std::min(visibleFrames, width * 2);
+    return std::min<qint64>(visibleFrames, std::min(width * 2, kViewportMode2PointCap));
 }
 
 qint64 viewportCacheBytes(const std::vector<std::vector<float>>& channels)
@@ -79,6 +82,24 @@ qint64 viewportCacheBytes(const std::vector<std::vector<float>>& channels)
             * static_cast<qint64>(sizeof(float));
     }
     return bytes;
+}
+
+QString waveformCacheKey(const QString& path, const qint64 version,
+                        const qint64 startFrame, const qint64 endFrame,
+                        const qint64 pointsPerSample, const int mode)
+{
+    return QStringLiteral("%1:%2:%3:%4:%5:%6")
+        .arg(QString::number(version))
+        .arg(path.isEmpty() ? QStringLiteral("noval") : path)
+        .arg(startFrame)
+        .arg(endFrame)
+        .arg(pointsPerSample)
+        .arg(mode);
+}
+
+qint64 tileFrameSpan(const int renderMode)
+{
+    return renderMode == 2 ? kViewportTileFrameLimit : kViewportTileFrameLimitMode1;
 }
 
 std::vector<std::vector<float>> peaksAsChannels(const QVariantList& channelPeaks)
@@ -257,6 +278,238 @@ std::vector<std::vector<float>> viewportPeaksFromSnapshot(
     (void)requestFrames;
     return result;
 }
+
+struct TileRangeData final {
+    qint64 start_frame{};
+    qint64 end_frame{};
+    std::vector<std::vector<float>> channels;
+};
+
+struct ViewportWaveformJobResult final {
+    std::vector<std::vector<float>> peaks;
+    std::vector<TileRangeData> decoded_tiles;
+};
+
+std::vector<std::vector<float>> mergeResampledFromTileData(
+    const std::vector<std::vector<float>>& sourceData,
+    const qint64 sourceStartFrame,
+    const qint64 visibleStartFrame,
+    const qint64 visibleEndFrame,
+    const qint64 visibleFrames,
+    const qint64 targetPoints,
+    const int channels,
+    std::vector<std::vector<float>> output)
+{
+    if (sourceData.empty() || visibleFrames <= 0 || targetPoints <= 0
+        || visibleEndFrame <= visibleStartFrame) {
+        return output;
+    }
+    if (output.empty()) {
+        output = std::vector<std::vector<float>>(
+            static_cast<std::size_t>(std::max<qint64>(0, channels)),
+            std::vector<float>(static_cast<std::size_t>(targetPoints * 2LL), 0.0F));
+    }
+
+    for (std::size_t channelIndex = 0; channelIndex < output.size();
+         ++channelIndex) {
+        auto& channel = output[channelIndex];
+        if (channel.size() != static_cast<std::size_t>(targetPoints * 2LL)) {
+            channel.assign(static_cast<std::size_t>(targetPoints * 2LL), 0.0F);
+        }
+        for (qint64 point = 0; point < targetPoints; ++point) {
+            const auto minIndex = static_cast<std::size_t>(point * 2LL);
+            channel[minIndex] = std::numeric_limits<float>::infinity();
+            channel[minIndex + 1U] = -std::numeric_limits<float>::infinity();
+        }
+    }
+
+    for (std::size_t channelIndex = 0;
+         channelIndex < output.size() && channelIndex < sourceData.size();
+         ++channelIndex) {
+        const std::vector<float>& source = sourceData[channelIndex];
+        if (source.empty()) continue;
+        for (qint64 sampleIndex = 0;
+             sampleIndex < static_cast<qint64>(source.size());
+             ++sampleIndex) {
+            const qint64 frame = sourceStartFrame + sampleIndex;
+            if (frame < visibleStartFrame || frame >= visibleEndFrame) {
+                continue;
+            }
+            const qint64 local = frame - visibleStartFrame;
+            const qint64 point = std::clamp<qint64>(
+                (local * targetPoints) / visibleFrames, 0, targetPoints - 1);
+            const float value = source[static_cast<std::size_t>(sampleIndex)];
+            auto& target = output[static_cast<std::size_t>(channelIndex)];
+            const auto minIndex = static_cast<std::size_t>(point * 2);
+            if (!std::isfinite(value)) continue;
+            target[minIndex] = std::min(target[minIndex], value);
+            target[minIndex + 1U] = std::max(target[minIndex + 1U], value);
+        }
+    }
+    for (qint64 point = 0; point < targetPoints; ++point) {
+        const auto minIndex = static_cast<std::size_t>(point * 2);
+        for (std::size_t channelIndex = 0; channelIndex < output.size();
+             ++channelIndex) {
+            const auto minIdx = minIndex;
+            const auto maxIdx = minIdx + 1U;
+            auto& channelResult = output[channelIndex];
+            if (!std::isfinite(channelResult[minIdx])
+                || !std::isfinite(channelResult[maxIdx])
+                || channelResult[minIdx] > channelResult[maxIdx]) {
+                channelResult[minIdx] = 0.0F;
+                channelResult[maxIdx] = 0.0F;
+            }
+        }
+    }
+    return output;
+}
+
+std::vector<std::vector<float>> buildRecordingPlaceholderPeaks(
+    const qreal recPeak, const int channels, const qint64 targetPoints,
+    const qint64 startFrame, const qint64 endFrame, const qint64 recStartFrame,
+    const qint64 recordedFrames)
+{
+    if (targetPoints <= 0 || channels <= 0 || recordedFrames <= 0
+        || startFrame >= endFrame) {
+        return {};
+    }
+    const qint64 recEndFrame = recStartFrame + recordedFrames;
+    std::vector<std::vector<float>> peaks(
+        static_cast<std::size_t>(std::max<qint64>(1, channels)),
+        std::vector<float>(static_cast<std::size_t>(targetPoints * 2LL), 0.0F));
+    const float amplitude = std::clamp(static_cast<float>(recPeak), 0.0F, 1.0F);
+    if (amplitude <= 0.0F) return peaks;
+    const qint64 visibleFrameWindow = std::max<qint64>(1, endFrame - startFrame);
+    for (qint64 index = 0; index < targetPoints; ++index) {
+        const qint64 pointStart =
+            startFrame + index * visibleFrameWindow / targetPoints;
+        const qint64 pointEnd =
+            startFrame + (index + 1) * visibleFrameWindow / targetPoints;
+        if (pointStart < recEndFrame && pointEnd > recStartFrame) {
+            for (auto& channel : peaks) {
+                channel[static_cast<std::size_t>(index * 2)] = -amplitude;
+                channel[static_cast<std::size_t>(index * 2 + 1)] = amplitude;
+            }
+        }
+    }
+    return peaks;
+}
+
+std::vector<std::vector<float>> decodeViewportTileSamples(
+    const QString& path,
+    const qint64 startFrame,
+    const qint64 endFrame,
+    const int channels,
+    const int sampleRate,
+    const std::shared_ptr<std::atomic_bool> cancelToken)
+{
+    std::vector<std::vector<float>> empty;
+    if (path.isEmpty() || startFrame >= endFrame || channels <= 0
+        || sampleRate <= 0 || startFrame < 0) {
+        return empty;
+    }
+    const qint64 frameCount = endFrame - startFrame;
+    if (frameCount <= 0) return empty;
+
+    agplayer::Decoder decoder;
+    if (decoder.open(path.toStdString()) != AG_OK) {
+        return empty;
+    }
+    if (decoder.seek(std::llround(static_cast<long double>(startFrame)
+                                 * 1000.0L / static_cast<long double>(sampleRate)))
+        != AG_OK) {
+        decoder.close();
+        return empty;
+    }
+    if (cancelToken && cancelToken->load(std::memory_order_acquire)) {
+        decoder.close();
+        return empty;
+    }
+
+    std::vector<std::vector<float>> result(
+        static_cast<std::size_t>(channels),
+        std::vector<float>());
+    for (auto& channel : result) {
+        channel.reserve(static_cast<std::size_t>(frameCount));
+    }
+
+    qint64 currentFrame = startFrame;
+    qint64 consumed = 0;
+    agplayer::DecodedAudioBlock block;
+    while (consumed < frameCount
+           && !cancelToken->load(std::memory_order_acquire)) {
+        if (decoder.read(block) != AG_OK) break;
+        if (block.frames == 0U) {
+            if (block.end_of_stream) break;
+            continue;
+        }
+
+        qint64 blockFrameStart = block.timestamp_ms >= 0
+            ? static_cast<qint64>(std::llround(static_cast<long double>(block.timestamp_ms)
+                                               * sampleRate / 1000.0L))
+            : currentFrame;
+        const qint64 blockFrameEnd = blockFrameStart + static_cast<qint64>(block.frames);
+        if (blockFrameEnd <= startFrame) {
+            if (block.end_of_stream) break;
+            currentFrame = blockFrameEnd;
+            continue;
+        }
+
+        const qint64 localStart = std::max(blockFrameStart, startFrame);
+        const qint64 localEnd = std::min(blockFrameEnd, endFrame);
+        if (localEnd <= localStart) {
+            if (block.end_of_stream) break;
+            currentFrame = blockFrameEnd;
+            continue;
+        }
+
+        const qint64 dropFrames = localStart - blockFrameStart;
+        const qint64 takeFrames = std::min(localEnd - localStart, frameCount - consumed);
+        const qint64 takeStart = dropFrames * static_cast<qint64>(channels);
+        const qint64 takeCount = takeFrames * static_cast<qint64>(channels);
+        if (takeStart < 0 || static_cast<std::size_t>(takeStart) >= block.samples.size()) {
+            if (block.end_of_stream) break;
+            currentFrame = blockFrameEnd;
+            continue;
+        }
+
+        const std::size_t localStartIndex = static_cast<std::size_t>(takeStart);
+        const std::size_t localEndIndex = static_cast<std::size_t>(
+            std::min<std::size_t>(block.samples.size(),
+                                  static_cast<std::size_t>(takeStart + takeCount)));
+        for (std::size_t sampleBase = localStartIndex;
+             sampleBase < localEndIndex;
+             sampleBase += static_cast<std::size_t>(channels)) {
+            const qint64 globalFrame = currentFrame
+                + static_cast<qint64>(
+                    (sampleBase - localStartIndex) / static_cast<std::size_t>(channels));
+            if (globalFrame < startFrame || globalFrame >= endFrame) {
+                continue;
+            }
+            for (int channel = 0; channel < channels; ++channel) {
+                const std::size_t sampleIndex = sampleBase + static_cast<std::size_t>(channel);
+                if (sampleIndex >= localEndIndex) break;
+                result[static_cast<std::size_t>(channel)].push_back(block.samples[sampleIndex]);
+            }
+            ++consumed;
+            if (consumed >= frameCount) {
+                break;
+            }
+        }
+        currentFrame += static_cast<qint64>(block.frames);
+        if (block.end_of_stream || consumed >= frameCount) {
+            break;
+        }
+    }
+    for (auto& channel : result) {
+        if (channel.size() > static_cast<std::size_t>(frameCount)) {
+            channel.resize(static_cast<std::size_t>(frameCount));
+        }
+    }
+    decoder.close();
+    return result;
+}
+
 QVariantList to_variant_peaks(
     const std::vector<std::vector<float>>& channels)
 {
@@ -1418,28 +1671,169 @@ void AudioEditorController::requestViewportWaveform()
         return;
     }
     const bool recordingActive = recording();
+    const qint64 recordingStartFrame = insert_recording_at_cursor_ && has_document_
+        ? recording_insert_frame_ : 0;
+    const qreal recordingPeak = static_cast<qreal>(recording_session_.peak());
 
     const int renderMode = viewportRenderMode(
         std::max<qreal>(1.0, static_cast<qreal>(visibleFrames))
         / std::max<qreal>(1.0, viewportWidth));
-    const quint64 generation = ++viewport_waveform_generation_;
-    const QString key = activeWaveformCacheKey(startFrame, endFrame, targetPoints,
-                                              renderMode);
-    if (const auto cache_it = viewport_waveform_cache_.find(key);
-        cache_it != viewport_waveform_cache_.end()) {
-        const auto cached = cache_it->second;
-        if (cached && !cached->channels.empty()) {
-            viewport_waveform_lru_.splice(viewport_waveform_lru_.begin(),
-                                          viewport_waveform_lru_,
-                                          cached->lru_iterator);
-            viewport_channel_peaks_ = toVariantPeaks(cached->channels);
-            emit waveformChanged();
-            return;
+    if (renderMode < 2) {
+        const quint64 generation = ++viewport_waveform_generation_;
+        const QString key = waveformCacheKey(
+            source_path_, viewport_cache_version_, startFrame, endFrame,
+            targetPoints, renderMode);
+        if (const auto cache_it = viewport_waveform_cache_.find(key);
+            cache_it != viewport_waveform_cache_.end()) {
+            const auto cached = cache_it->second;
+            if (cached && !cached->channels.empty()) {
+                viewport_waveform_lru_.splice(viewport_waveform_lru_.begin(),
+                                              viewport_waveform_lru_,
+                                              cached->lru_iterator);
+                viewport_channel_peaks_ = toVariantPeaks(cached->channels);
+                emit waveformChanged();
+                return;
+            }
         }
+
+        if (viewport_waveform_cancel_token_) {
+            viewport_waveform_cancel_token_->store(true,
+                                                  std::memory_order_release);
+        }
+        const auto cancel_token = std::make_shared<std::atomic_bool>(false);
+        viewport_waveform_cancel_token_ = cancel_token;
+
+        if (viewport_waveform_watcher_) {
+            viewport_waveform_watcher_->disconnect(this);
+            viewport_waveform_watcher_->deleteLater();
+            viewport_waveform_watcher_ = nullptr;
+        }
+
+        auto* watcher = new QFutureWatcher<QVariantList>(this);
+        viewport_waveform_watcher_ = watcher;
+        connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
+                [this, watcher, generation, cancel_token, key, startFrame, endFrame,
+                 targetPoints, renderMode] {
+            viewport_waveform_watcher_ = nullptr;
+            if (cancel_token->load(std::memory_order_acquire)
+                || generation != viewport_waveform_generation_) {
+                watcher->deleteLater();
+                return;
+            }
+            const auto peaks = watcher->result();
+            const auto channels = peaksAsChannels(peaks);
+            if (!channels.empty()) {
+                const qint64 bytes = viewportCacheBytes(channels);
+                auto entry = std::make_shared<ViewportWaveformCacheEntry>();
+                entry->start_frame = startFrame;
+                entry->end_frame = endFrame;
+                entry->source_start_frame = 0;
+                entry->target_frames_per_point = targetPoints;
+                entry->mode = renderMode;
+                entry->sample_rate = sample_rate_;
+                entry->bytes = bytes;
+                entry->channels = channels;
+                if (const auto existing_it = viewport_waveform_cache_.find(key);
+                    existing_it != viewport_waveform_cache_.end()) {
+                    viewport_cache_size_bytes_ -= existing_it->second->bytes;
+                    viewport_waveform_lru_.erase(existing_it->second->lru_iterator);
+                    viewport_waveform_cache_.erase(existing_it);
+                }
+                viewport_waveform_cache_.insert_or_assign(key, entry);
+                viewport_waveform_lru_.push_front(key);
+                entry->lru_iterator = viewport_waveform_lru_.begin();
+                viewport_cache_size_bytes_ += bytes;
+                while (viewport_cache_size_bytes_ > viewport_cache_size_limit_
+                       && !viewport_waveform_lru_.empty()) {
+                    const QString stale_key = viewport_waveform_lru_.back();
+                    viewport_waveform_lru_.pop_back();
+                    if (const auto stale_it =
+                            viewport_waveform_cache_.find(stale_key);
+                        stale_it != viewport_waveform_cache_.end()) {
+                        viewport_cache_size_bytes_ -= stale_it->second->bytes;
+                        viewport_waveform_cache_.erase(stale_it);
+                    }
+                }
+            }
+            watcher->deleteLater();
+            viewport_channel_peaks_ = peaks;
+            emit waveformChanged();
+        });
+
+        watcher->setFuture(QtConcurrent::run(
+            [this, startFrame, endFrame, targetPoints, renderMode, sourcePeaks,
+             fallbackPeaks, channels = channels_, totalFrames, recordingActive,
+             recordedFrames, recStart = recording_insert_frame_,
+             recAtCursor = insert_recording_at_cursor_,
+             recPeak = static_cast<qreal>(recording_session_.peak()),
+             cancel_token] {
+                if (cancel_token->load(std::memory_order_acquire)) {
+                    return QVariantList{};
+                }
+                if (!recordingActive && sourcePeaks.empty() && fallbackPeaks.empty()) {
+                    return QVariantList{};
+                }
+                if (sourcePeaks.empty() && fallbackPeaks.empty() && recordingActive) {
+                    const qint64 recStartFrame = recAtCursor ? recStart : 0;
+                    return build_variant_peaks(buildRecordingPlaceholderPeaks(
+                        recPeak, channels, targetPoints, startFrame, endFrame,
+                        recStartFrame, recordedFrames));
+                }
+                const auto peaks = viewportPeaksFromSnapshot(
+                    sourcePeaks, fallbackPeaks, totalFrames, startFrame, endFrame,
+                    targetPoints, channels);
+                return build_variant_peaks(peaks);
+            }));
+        return;
+    }
+
+    const qint64 tileSpan = tileFrameSpan(renderMode);
+    const qint64 prefetchStart = std::max<qint64>(
+        0, startFrame - tileSpan);
+    const qint64 prefetchEnd = std::min<qint64>(endFrame + tileSpan, clampedTotal);
+    const qint64 cacheFramesPerPoint = std::max<qint64>(1, tileSpan);
+    struct CachedTileView final {
+        qint64 start_frame{};
+        qint64 end_frame{};
+        std::vector<std::vector<float>> channels;
+    };
+    std::vector<CachedTileView> cached_tiles;
+    std::vector<std::pair<qint64, qint64>> missing_tiles;
+
+    const qint64 alignedStart = (prefetchStart / tileSpan) * tileSpan;
+    for (qint64 tileStart = alignedStart; tileStart < prefetchEnd; tileStart += tileSpan) {
+        const qint64 tileEnd = std::min<qint64>(tileStart + tileSpan, clampedTotal);
+        if (tileEnd <= tileStart) continue;
+        const QString tile_key = waveformCacheKey(
+            source_path_, viewport_cache_version_, tileStart, tileEnd,
+            cacheFramesPerPoint, renderMode);
+        if (const auto cache_it = viewport_waveform_cache_.find(tile_key);
+            cache_it != viewport_waveform_cache_.end()) {
+            const auto cached = cache_it->second;
+            if (cached && cached->mode == 2 && cached->sample_rate == sample_rate_
+                && cached->source_start_frame == tileStart && !cached->channels.empty()) {
+                viewport_waveform_lru_.splice(viewport_waveform_lru_.begin(),
+                                              viewport_waveform_lru_,
+                                              cached->lru_iterator);
+                cached_tiles.push_back(
+                    {cached->source_start_frame, cached->end_frame,
+                     cached->channels});
+                continue;
+            }
+        }
+        missing_tiles.push_back(std::make_pair(tileStart, tileEnd));
+    }
+
+    const quint64 generation = ++viewport_waveform_generation_;
+    if (source_path_.isEmpty() && !recordingActive) {
+        viewport_channel_peaks_.clear();
+        emit waveformChanged();
+        return;
     }
 
     if (viewport_waveform_cancel_token_) {
-        viewport_waveform_cancel_token_->store(true, std::memory_order_release);
+        viewport_waveform_cancel_token_->store(true,
+                                              std::memory_order_release);
     }
     const auto cancel_token = std::make_shared<std::atomic_bool>(false);
     viewport_waveform_cancel_token_ = cancel_token;
@@ -1450,100 +1844,169 @@ void AudioEditorController::requestViewportWaveform()
         viewport_waveform_watcher_ = nullptr;
     }
 
-    auto* watcher = new QFutureWatcher<QVariantList>(this);
+    auto* watcher = new QFutureWatcher<ViewportWaveformJobResult>(this);
     viewport_waveform_watcher_ = watcher;
-    connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
-            [this, watcher, generation, cancel_token, key, startFrame, endFrame,
-             targetPoints, renderMode] {
+    connect(watcher, &QFutureWatcher<ViewportWaveformJobResult>::finished, this,
+            [this, watcher, generation, cancel_token, startFrame, endFrame,
+             targetPoints, renderMode, cacheFramesPerPoint, sourcePath = source_path_,
+             recActive = recordingActive, recPeak = recordingPeak,
+             recFrames = recordedFrames, recStart = recordingStartFrame] {
         viewport_waveform_watcher_ = nullptr;
         if (cancel_token->load(std::memory_order_acquire)
             || generation != viewport_waveform_generation_) {
             watcher->deleteLater();
             return;
         }
-        const auto peaks = watcher->result();
-            const auto channels = peaksAsChannels(peaks);
-        if (!channels.empty()) {
-            const qint64 bytes = viewportCacheBytes(channels);
-            auto entry = std::make_shared<ViewportWaveformCacheEntry>();
-            entry->start_frame = startFrame;
-            entry->end_frame = endFrame;
-            entry->target_point_count = targetPoints;
-            entry->mode = renderMode;
-            entry->bytes = bytes;
-            entry->channels = channels;
-            if (const auto existing_it = viewport_waveform_cache_.find(key);
-                existing_it != viewport_waveform_cache_.end()) {
-                viewport_cache_size_bytes_ -= existing_it->second->bytes;
-                viewport_waveform_lru_.erase(existing_it->second->lru_iterator);
-                viewport_waveform_cache_.erase(existing_it);
-            }
-            viewport_waveform_cache_.insert_or_assign(key, entry);
-            viewport_waveform_lru_.push_front(key);
-            entry->lru_iterator = viewport_waveform_lru_.begin();
-            viewport_cache_size_bytes_ += bytes;
-            while (viewport_cache_size_bytes_ > viewport_cache_size_limit_
-                   && !viewport_waveform_lru_.empty()) {
-                const QString stale_key = viewport_waveform_lru_.back();
-                viewport_waveform_lru_.pop_back();
-                if (const auto stale_it = viewport_waveform_cache_.find(stale_key);
-                    stale_it != viewport_waveform_cache_.end()) {
-                    viewport_cache_size_bytes_ -= stale_it->second->bytes;
-                    viewport_waveform_cache_.erase(stale_it);
+
+        const ViewportWaveformJobResult jobResult = watcher->result();
+        if (!jobResult.decoded_tiles.empty()) {
+            for (const auto& tile : jobResult.decoded_tiles) {
+                const QString tileKey = waveformCacheKey(
+                    sourcePath, viewport_cache_version_, tile.start_frame,
+                    tile.end_frame, cacheFramesPerPoint, renderMode);
+                const qint64 bytes = viewportCacheBytes(tile.channels);
+                auto entry = std::make_shared<ViewportWaveformCacheEntry>();
+                entry->start_frame = tile.start_frame;
+                entry->end_frame = tile.end_frame;
+                entry->source_start_frame = tile.start_frame;
+                entry->target_frames_per_point = cacheFramesPerPoint;
+                entry->mode = renderMode;
+                entry->sample_rate = sample_rate_;
+                entry->bytes = bytes;
+                entry->channels = tile.channels;
+                if (const auto existing_it = viewport_waveform_cache_.find(tileKey);
+                    existing_it != viewport_waveform_cache_.end()) {
+                    viewport_cache_size_bytes_ -= existing_it->second->bytes;
+                    viewport_waveform_lru_.erase(existing_it->second->lru_iterator);
+                    viewport_waveform_cache_.erase(existing_it);
+                }
+                viewport_waveform_cache_.insert_or_assign(tileKey, entry);
+                viewport_waveform_lru_.push_front(tileKey);
+                entry->lru_iterator = viewport_waveform_lru_.begin();
+                viewport_cache_size_bytes_ += bytes;
+                while (viewport_cache_size_bytes_ > viewport_cache_size_limit_
+                       && !viewport_waveform_lru_.empty()) {
+                    const QString stale_key = viewport_waveform_lru_.back();
+                    viewport_waveform_lru_.pop_back();
+                    if (const auto stale_it = viewport_waveform_cache_.find(stale_key);
+                        stale_it != viewport_waveform_cache_.end()) {
+                        viewport_cache_size_bytes_ -= stale_it->second->bytes;
+                        viewport_waveform_cache_.erase(stale_it);
+                    }
                 }
             }
         }
-        watcher->deleteLater();
-        viewport_channel_peaks_ = peaks;
+
+        std::vector<std::vector<float>> peaks = jobResult.peaks;
+        if (recActive && !peaks.empty()) {
+            auto recordingPeaks = buildRecordingPlaceholderPeaks(
+                recPeak, channels_, targetPoints, startFrame, endFrame,
+                recStart, recFrames);
+            const std::size_t channelCount = std::min(peaks.size(),
+                                                     recordingPeaks.size());
+            for (std::size_t channel = 0; channel < channelCount; ++channel) {
+                auto& channelPeak = peaks[channel];
+                const auto& recordingChannel = recordingPeaks[channel];
+                for (qint64 point = 0; point < targetPoints; ++point) {
+                    const auto minIndex = static_cast<std::size_t>(point * 2LL);
+                    if (minIndex + 1ULL >= channelPeak.size()
+                        || minIndex + 1ULL >= recordingChannel.size()) {
+                        continue;
+                    }
+                    channelPeak[minIndex] = std::min(
+                        channelPeak[minIndex], recordingChannel[minIndex]);
+                    channelPeak[minIndex + 1ULL] = std::max(
+                        channelPeak[minIndex + 1ULL], recordingChannel[minIndex + 1ULL]);
+                }
+            }
+        }
+
+        if (!peaks.empty()) {
+            const auto peaksVariant = toVariantPeaks(peaks);
+            viewport_channel_peaks_ = peaksVariant;
+        } else {
+            viewport_channel_peaks_.clear();
+        }
         emit waveformChanged();
+        watcher->deleteLater();
     });
 
-    watcher->setFuture(QtConcurrent::run([this, startFrame, endFrame, targetPoints,
-                                          renderMode, sourcePeaks,
-                                          fallbackPeaks, channels = channels_,
-                                          totalFrames, recordingActive, recordedFrames,
-                                          recStart = recording_insert_frame_,
-                                          recAtCursor = insert_recording_at_cursor_,
-                                          recPeak = static_cast<qreal>(recording_session_.peak()),
-                                          generation, cancel_token] {
-        if (cancel_token->load(std::memory_order_acquire)) {
-            return QVariantList{};
-        }
-        if (!recordingActive && sourcePeaks.empty() && fallbackPeaks.empty()) {
-            return QVariantList{};
-        }
-        if (sourcePeaks.empty() && fallbackPeaks.empty() && recordingActive) {
-            const qint64 recStartFrame = recAtCursor ? recStart : 0;
-            const qint64 recEndFrame = recStartFrame + recordedFrames;
-            std::vector<std::vector<float>> peaks;
-            peaks.resize(static_cast<std::size_t>(std::max<qint64>(1, channels)));
-            for (auto& channel : peaks) {
-                channel.assign(static_cast<std::size_t>(targetPoints * 2LL), 0.0F);
+        watcher->setFuture(QtConcurrent::run(
+        [this, cached_tiles = std::move(cached_tiles),
+         missing_tiles = std::move(missing_tiles), startFrame, endFrame, targetPoints,
+         renderMode, cacheFramesPerPoint, channels = channels_,
+         sourcePath = source_path_, sampleRate = sample_rate_, cancel_token,
+         recActive = recordingActive, recFrames = recordedFrames,
+         recStart = recordingStartFrame, recPeak = recordingPeak]() mutable
+            -> ViewportWaveformJobResult {
+            ViewportWaveformJobResult jobResult;
+            jobResult.peaks = std::vector<std::vector<float>>();
+            const qint64 visibleFrames = std::max<qint64>(1, endFrame - startFrame);
+            if (sourcePath.isEmpty()) {
+                if (!recActive || recFrames <= 0) {
+                    return jobResult;
+                }
+                auto recordingPeaks = buildRecordingPlaceholderPeaks(
+                    recPeak, channels, targetPoints, startFrame, endFrame,
+                    recStart, recFrames);
+                if (!recordingPeaks.empty()) {
+                    jobResult.peaks = std::move(recordingPeaks);
+                }
+                return jobResult;
             }
-            if (recordedFrames > 0 && recPeak > 0.0) {
-                const float amplitude = static_cast<float>(
-                    std::clamp(recPeak, static_cast<qreal>(0.0), static_cast<qreal>(1.0)));
-                const qint64 visibleFrameWindow = std::max<qint64>(1, endFrame - startFrame);
-                for (qint64 index = 0; index < targetPoints; ++index) {
-                    const qint64 pointStart = startFrame + index * visibleFrameWindow
-                        / targetPoints;
-                    const qint64 pointEnd = startFrame + (index + 1) * visibleFrameWindow
-                        / targetPoints;
-                    if (pointStart < recEndFrame && pointEnd > recStartFrame) {
-                        for (auto& channel : peaks) {
-                            channel[static_cast<std::size_t>(index * 2)] = -amplitude;
-                            channel[static_cast<std::size_t>(index * 2 + 1)] = amplitude;
+            if (!recActive) {
+                return jobResult;
+            }
+
+            std::vector<std::vector<float>> merged;
+            for (const auto& cached : cached_tiles) {
+                merged = mergeResampledFromTileData(
+                    cached.channels, cached.start_frame, startFrame, endFrame,
+                    visibleFrames, targetPoints, channels, std::move(merged));
+            }
+            for (const auto& missing : missing_tiles) {
+                if (cancel_token->load(std::memory_order_acquire)) break;
+                auto decoded = decodeViewportTileSamples(sourcePath, missing.first,
+                                                        missing.second, channels,
+                                                        sampleRate, cancel_token);
+                if (decoded.empty()) {
+                    continue;
+                }
+                TileRangeData data{missing.first, missing.second,
+                                   std::move(decoded)};
+                merged = mergeResampledFromTileData(
+                    data.channels, data.start_frame, startFrame, endFrame,
+                    visibleFrames, targetPoints, channels, std::move(merged));
+                jobResult.decoded_tiles.push_back(std::move(data));
+            }
+            if (merged.empty()) {
+                return jobResult;
+            }
+            if (recActive && recFrames > 0) {
+                auto recordingPeaks = buildRecordingPlaceholderPeaks(
+                    recPeak, channels, targetPoints, startFrame, endFrame,
+                    recStart, recFrames);
+                if (!recordingPeaks.empty() && recordingPeaks.size() == merged.size()) {
+                    for (std::size_t channel = 0;
+                         channel < merged.size(); ++channel) {
+                        for (qint64 point = 0; point < targetPoints; ++point) {
+                            const auto minIndex = static_cast<std::size_t>(point * 2LL);
+                            if (minIndex + 1ULL >= merged[channel].size()
+                                || minIndex + 1ULL >= recordingPeaks[channel].size()) {
+                                continue;
+                            }
+                            merged[channel][minIndex] = std::min(
+                                merged[channel][minIndex], recordingPeaks[channel][minIndex]);
+                            merged[channel][minIndex + 1ULL] = std::max(
+                                merged[channel][minIndex + 1ULL],
+                                recordingPeaks[channel][minIndex + 1ULL]);
                         }
                     }
                 }
             }
-            return build_variant_peaks(peaks);
-        }
-        const auto peaks = viewportPeaksFromSnapshot(
-            sourcePeaks, fallbackPeaks, totalFrames, startFrame, endFrame,
-            targetPoints, channels);
-        return build_variant_peaks(peaks);
-    }));
+            jobResult.peaks = std::move(merged);
+            return jobResult;
+        }));
 }
 
 void AudioEditorController::rebuildEditorPeaks()
