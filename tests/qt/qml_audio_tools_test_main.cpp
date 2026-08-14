@@ -11,20 +11,13 @@
 #include "settings_controller.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
-#include "voice_clone/voice_clone_host_controller.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
-#include <QCryptographicHash>
 #include <QDragEnterEvent>
 #include <QDropEvent>
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QMimeData>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -33,159 +26,12 @@
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTest>
-#include <QTemporaryDir>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
 
 #include <memory>
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
-
-namespace {
-
-bool writeJsonFile(const QString& path, const QJsonObject& object)
-{
-    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) return false;
-    const QByteArray bytes = QJsonDocument(object).toJson();
-    return file.write(bytes) == bytes.size();
-}
-
-bool stageVoiceClonePlugin(const QString& root)
-{
-    const QString sourceLibrary = QString::fromUtf8(AGPLAYER_VOICE_CLONE_PLUGIN);
-    const QString libraryName = QFileInfo(sourceLibrary).fileName();
-    const QString libraryPath = QDir(root).filePath(libraryName);
-    if (!QDir().mkpath(root) || !QFile::copy(sourceLibrary, libraryPath)) return false;
-
-    const QString registry = QDir(root).filePath(QStringLiteral("registry/models.json"));
-    if (!QDir().mkpath(QFileInfo(registry).absolutePath())
-        || !QFile::copy(QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH), registry)) {
-        return false;
-    }
-
-    const QString modelRoot = QDir(root).filePath(
-        QStringLiteral("models/voice-clone/qwen/5d83992436eae1d760afd27aff78a71d676296fc"));
-    if (!QDir().mkpath(modelRoot)) return false;
-    QFile config(QDir(modelRoot).filePath(QStringLiteral("config.json")));
-    if (!config.open(QIODevice::WriteOnly) || config.write("{}") != 2) return false;
-    config.close();
-    const QString modelId = QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base");
-    const QString modelUrl = QStringLiteral(
-        "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base");
-    if (!writeJsonFile(QDir(modelRoot).filePath(QStringLiteral("agplayer-model.json")),
-                       QJsonObject{
-                           {QStringLiteral("schemaVersion"), 1},
-                           {QStringLiteral("stableId"), modelId},
-                           {QStringLiteral("displayName"), QStringLiteral("Qwen3-TTS 0.6B Base")},
-                           {QStringLiteral("description"), QStringLiteral("QML integration model")},
-                           {QStringLiteral("adapterId"), QStringLiteral("qwen")},
-                           {QStringLiteral("runtimeId"), QStringLiteral("qwen")},
-                           {QStringLiteral("revision"), QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc")},
-                           {QStringLiteral("source"), QJsonObject{
-                                {QStringLiteral("provider"), QStringLiteral("official")},
-                                {QStringLiteral("url"), modelUrl}}},
-                           {QStringLiteral("license"), QJsonObject{
-                                {QStringLiteral("name"), QStringLiteral("Apache-2.0")},
-                                {QStringLiteral("url"), QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE")},
-                                {QStringLiteral("revision"), QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e")}}},
-                           {QStringLiteral("files"), QJsonArray{QJsonObject{
-                                {QStringLiteral("path"), QStringLiteral("config.json")}}}}})) {
-        return false;
-    }
-
-    const QString adapterRoot = QDir(root).filePath(
-        QStringLiteral("adapters/qwen/1.0.0"));
-    const QString workerRelative = QStringLiteral("workers/test-worker.exe");
-    const QString workerPath = QDir(adapterRoot).filePath(workerRelative);
-    if (!QDir().mkpath(QFileInfo(workerPath).absolutePath())
-        || !QFile::copy(QString::fromUtf8(AGPLAYER_VOICE_CLONE_TEST_WORKER), workerPath)) {
-        return false;
-    }
-    if (!writeJsonFile(QDir(adapterRoot).filePath(QStringLiteral("adapter.json")),
-                       QJsonObject{
-                           {QStringLiteral("schemaVersion"), 1},
-                           {QStringLiteral("adapterId"), QStringLiteral("qwen")},
-                           {QStringLiteral("adapterVersion"), QStringLiteral("1.0.0")},
-                           {QStringLiteral("protocolVersion"), 1},
-                           {QStringLiteral("runtime"), QJsonObject{
-                                {QStringLiteral("id"), QStringLiteral("qwen-shared")},
-                                {QStringLiteral("root"), QStringLiteral("runtime")},
-                                {QStringLiteral("shared"), false}}},
-                           {QStringLiteral("defaultLauncherId"), QStringLiteral("test")},
-                           {QStringLiteral("launchers"), QJsonArray{QJsonObject{
-                                {QStringLiteral("id"), QStringLiteral("test")},
-                                {QStringLiteral("kind"), QStringLiteral("executable")},
-                                {QStringLiteral("path"), workerRelative},
-                                {QStringLiteral("shared"), false}}}}})) {
-        return false;
-    }
-
-    const QString runtimeRoot = QDir(root).filePath(
-        QStringLiteral("runtime/qwen-shared/1.0.0"));
-    const QString runtimePython = QDir(runtimeRoot).filePath(QStringLiteral("python.exe"));
-    if (!QDir().mkpath(runtimeRoot)
-        || !QFile::copy(QString::fromUtf8(AGPLAYER_VOICE_CLONE_TEST_WORKER), runtimePython)) {
-        return false;
-    }
-    QFile runtimeFile(runtimePython);
-    if (!runtimeFile.open(QIODevice::ReadOnly)) return false;
-    const QByteArray runtimeBytes = runtimeFile.readAll();
-    const QString runtimeSha = QString::fromLatin1(
-        QCryptographicHash::hash(runtimeBytes, QCryptographicHash::Sha256).toHex());
-    if (!writeJsonFile(QDir(runtimeRoot).filePath(QStringLiteral("agplayer-runtime.json")),
-                       QJsonObject{
-                           {QStringLiteral("schemaVersion"), 1},
-                           {QStringLiteral("packageId"), QStringLiteral("runtime-qwen")},
-                           {QStringLiteral("runtimeId"), QStringLiteral("qwen-shared")},
-                           {QStringLiteral("version"), QStringLiteral("1.0.0")},
-                           {QStringLiteral("compatibleAdapters"), QJsonArray{QJsonObject{
-                                {QStringLiteral("adapterId"), QStringLiteral("qwen")},
-                                {QStringLiteral("adapterVersion"), QStringLiteral("1.0.0")}}}},
-                           {QStringLiteral("protocolVersion"), 1},
-                           {QStringLiteral("platform"), QStringLiteral("windows")},
-                           {QStringLiteral("architecture"), QStringLiteral("x86_64")},
-                           {QStringLiteral("minimumPlayerVersion"), QStringLiteral("1.0.0")},
-                           {QStringLiteral("archiveFormat"), QStringLiteral("zip")},
-                           {QStringLiteral("installRoot"), QStringLiteral("runtime/qwen-shared/1.0.0")},
-                           {QStringLiteral("publisher"), QJsonObject{
-                                {QStringLiteral("name"), QStringLiteral("AG Player")},
-                                {QStringLiteral("url"), QStringLiteral("https://agplayer.cn")}}},
-                           {QStringLiteral("licenseNotices"), QJsonArray{QJsonObject{
-                                {QStringLiteral("name"), QStringLiteral("Test Runtime")},
-                                {QStringLiteral("spdx"), QStringLiteral("MIT")},
-                                {QStringLiteral("url"), QStringLiteral("https://agplayer.cn/licenses/test")}}}},
-                           {QStringLiteral("signature"), QJsonObject{
-                                {QStringLiteral("status"), QStringLiteral("signed")},
-                                {QStringLiteral("algorithm"), QStringLiteral("test-fixture")},
-                                {QStringLiteral("keyId"), QStringLiteral("test-fixture")}}},
-                           {QStringLiteral("packageUrl"), QStringLiteral("https://downloads.agplayer.cn/runtime-qwen-test.zip")},
-                           {QStringLiteral("packageBytes"), runtimeBytes.size()},
-                           {QStringLiteral("packageSha256"), runtimeSha},
-                           {QStringLiteral("installedBytes"), runtimeBytes.size()},
-                           {QStringLiteral("entryCount"), 1},
-                           {QStringLiteral("files"), QJsonArray{QJsonObject{
-                                {QStringLiteral("path"), QStringLiteral("python.exe")},
-                                {QStringLiteral("bytes"), runtimeBytes.size()},
-                                {QStringLiteral("sha256"), runtimeSha}}}}})) {
-        return false;
-    }
-
-    return writeJsonFile(QDir(root).filePath(QStringLiteral("agplayer-voice-clone.json")),
-                         QJsonObject{
-                             {QStringLiteral("schemaVersion"), 1},
-                             {QStringLiteral("pluginId"), QStringLiteral("agplayer.voice-clone")},
-                             {QStringLiteral("version"), QStringLiteral("1.0.0")},
-                             {QStringLiteral("availableVersion"), QStringLiteral("1.0.0")},
-                             {QStringLiteral("platform"), QStringLiteral("windows")},
-                             {QStringLiteral("architecture"), QStringLiteral("x86_64")},
-                             {QStringLiteral("minimumPlayerVersion"), QStringLiteral("1.0.0")},
-                             {QStringLiteral("protocolVersion"), 1},
-                             {QStringLiteral("library"), libraryName}});
-}
-
-} // namespace
 
 class NativeDropHelper final : public QObject {
     Q_OBJECT
@@ -314,8 +160,6 @@ class QmlAudioToolsSetup final : public QObject {
 public:
     ~QmlAudioToolsSetup() override
     {
-        voiceCloneHost_.reset();
-        qunsetenv("AGPLAYER_VOICE_CLONE_ROOT");
         if (core_ != nullptr) {
             ag_player_destroy(core_);
         }
@@ -328,23 +172,6 @@ public slots:
         QStandardPaths::setTestModeEnabled(true);
         QCoreApplication::setOrganizationName("AgPlayer");
         QCoreApplication::setApplicationName("AgPlayer-test-audio-tools");
-
-        if (!voiceCloneRoot_.isValid()
-            || !stageVoiceClonePlugin(voiceCloneRoot_.path())) {
-            voiceCloneStageError_ = QStringLiteral("Could not stage real voice-clone plugin test root");
-        } else {
-            qputenv("AGPLAYER_VOICE_CLONE_ROOT", voiceCloneRoot_.path().toUtf8());
-            voiceCloneHost_ = std::make_unique<VoiceCloneHostController>();
-        }
-        const QString specialAudioPath = voiceCloneRoot_.filePath(
-            QStringLiteral("audio fixtures/voice #50%.wav"));
-        if (QDir().mkpath(QFileInfo(specialAudioPath).absolutePath())
-            && QFile::copy(QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO")),
-                           specialAudioPath)) {
-            specialAudioUrl_ = QUrl::fromLocalFile(specialAudioPath);
-        } else if (voiceCloneStageError_.isEmpty()) {
-            voiceCloneStageError_ = QStringLiteral("Could not stage reserved-character audio fixture");
-        }
 
         ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
         if (ag_player_create_with_config(&config, &core_) != AG_OK) {
@@ -379,15 +206,10 @@ public slots:
         engine->addImportPath("qrc:/");
         engine->rootContext()->setContextProperty("nativeDropHelper",
                                                   &nativeDropHelper_);
-        engine->rootContext()->setContextProperty("realVoiceCloneHost",
-                                                  voiceCloneHost_.get());
-        engine->rootContext()->setContextProperty("realVoiceCloneStageError",
-                                                  voiceCloneStageError_);
         engine->rootContext()->setContextProperty(
             "testAudioUrl",
             QUrl::fromLocalFile(QString::fromLocal8Bit(
                 qgetenv("AGPLAYER_TEST_AUDIO"))));
-        engine->rootContext()->setContextProperty("testSpecialAudioUrl", specialAudioUrl_);
     }
 
 private:
@@ -403,10 +225,6 @@ private:
     std::unique_ptr<AudioEditorController> audioEditor_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
-    QTemporaryDir voiceCloneRoot_;
-    std::unique_ptr<VoiceCloneHostController> voiceCloneHost_;
-    QString voiceCloneStageError_;
-    QUrl specialAudioUrl_;
     NativeDropHelper nativeDropHelper_;
 };
 

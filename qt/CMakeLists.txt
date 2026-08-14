@@ -79,33 +79,12 @@ add_library(agplayer_qt STATIC
     src/window_controller.hpp
     src/waveform_item.cpp
     src/waveform_item.hpp
-    src/voice_clone/voice_clone_capability_schema.hpp
-    src/voice_clone/voice_clone_adapter_manifest.cpp
-    src/voice_clone/voice_clone_adapter_manifest.hpp
-    src/voice_clone/voice_clone_manifest.cpp
-    src/voice_clone/voice_clone_manifest.hpp
-    src/voice_clone/voice_clone_registry.cpp
-    src/voice_clone/voice_clone_registry.hpp
-    src/voice_clone/voice_clone_worker_protocol.cpp
-    src/voice_clone/voice_clone_worker_protocol.hpp
-    src/voice_clone/voice_clone_host_controller.cpp
-    src/voice_clone/voice_clone_host_controller.hpp
-    src/voice_clone/voice_clone_package_manifest.cpp
-    src/voice_clone/voice_clone_package_manifest.hpp
-    src/voice_clone/voice_clone_package_manager.cpp
-    src/voice_clone/voice_clone_package_manager.hpp
-    src/voice_clone/voice_clone_runtime_package.cpp
-    src/voice_clone/voice_clone_runtime_package.hpp
-    src/voice_clone/voice_clone_runtime_package_manager.cpp
-    src/voice_clone/voice_clone_runtime_package_manager.hpp
-    src/plugins/voice_clone_plugin_interface.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
 target_include_directories(agplayer_qt
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/voice_clone"
     PRIVATE
         "${CMAKE_SOURCE_DIR}/core/src"
 )
@@ -120,9 +99,7 @@ target_link_libraries(agplayer_qt
         Qt6::Concurrent
         Qt6::Network
 )
-target_compile_definitions(agplayer_qt PUBLIC
-    AGPLAYER_VERSION="${PROJECT_VERSION}"
-)
+
 if(WIN32)
     target_link_libraries(agplayer_qt PRIVATE dwmapi shell32)
 endif()

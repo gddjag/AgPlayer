@@ -36,5 +36,3 @@
 /test-result.txt
 /wave.txt
 /.codex-doc-review/
-__pycache__/
-*.py[cod]

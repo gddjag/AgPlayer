@@ -14,7 +14,9 @@ $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEdi
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
-$appMain = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/main.cpp')
+$toolsNavigation = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
+$settingsPage = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/SettingsPage.qml')
+$equalizerWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/EqualizerWindow.qml')
 $recordingInspector = Get-Content -Raw -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml')
 $transportBar = Get-Content -Raw -LiteralPath (
@@ -52,19 +54,22 @@ if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}La
 if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*942') {
     throw 'The tools window must open at the complete reference-workbench size.'
 }
-if ($appMain -notmatch '--qa-tool\s+<0\.\.4>' -or
-    $appMain -notmatch 'requestedTool\s*<=\s*4' -or
-    $appMain -notmatch 'qaTool\s*==\s*4[\s\S]{0,180}selectToolById\(QStringLiteral\("voice-clone"\)\)') {
-    throw 'The native QA capture path must select Voice Clone through its stable tool ID.'
+if ($toolsNavigation -notmatch 'objectName:\s*"audioToolsTopNav"' -or
+    $toolsNavigation -notmatch 'RowLayout' -or
+    $toolsNavigation -notmatch 'radius:\s*Theme\.radiusMd') {
+    throw 'The four audio tools must remain in the selected top horizontal pill navigation.'
 }
-if ($appMain -notmatch '--qa-tools-size' -or
-    $appMain -notmatch 'toolsWin->resize\(qaToolsSize\)') {
-    throw 'The native QA capture path must support explicit responsive viewport sizes.'
+if ($settingsPage -notmatch 'designRole:\s*"settingsCategoryRail"' -or
+    $settingsPage -notmatch 'designRole:\s*"settingsContentSurface"' -or
+    $settingsPage -match 'Segoe UI Symbol') {
+    throw 'Settings must use the selected left-category and right-content layout.'
 }
-if ($appMain -notmatch '--qa-voice-clone-fixture' -or
-    $appMain -notmatch 'voiceCloneWorkspace' -or
-    $appMain -notmatch 'startGeneration') {
-    throw 'Voice Clone QA must drive a loaded fixture through the workspace/controller chain.'
+foreach ($control in @(
+    'equalizerHeaderPanel', 'equalizerResponsePanel',
+    'equalizerBandsPanel', 'equalizerFooterPanel')) {
+    if ($equalizerWindow -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The scheme-3 EQ layout is missing $control."
+    }
 }
 if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
     throw 'The new single-track editor must not retain legacy multitrack concepts.'

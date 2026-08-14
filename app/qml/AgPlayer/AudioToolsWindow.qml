@@ -174,9 +174,9 @@ Window {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 55
                 window: window
-                currentToolId: AudioToolsController.currentToolId
-                onToolSelected: function(toolId) {
-                    AudioToolsController.selectToolById(toolId)
+                currentTool: AudioToolsController.currentTool
+                onToolSelected: function(index) {
+                    AudioToolsController.selectTool(index)
                 }
             }
 
@@ -199,7 +199,8 @@ Window {
                     FormatConvertPage { objectName: "formatConvertPage" }
                     MetadataEditPage {}
                     FilenameProcessPage {}
-                    VoiceCloneHostPage { objectName: "voiceCloneHostPage" }
+                    VocalSeparationPage {}
+                    VoiceClonePage {}
                 }
             }
         }

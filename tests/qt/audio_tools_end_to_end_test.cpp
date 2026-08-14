@@ -49,7 +49,7 @@ class AudioToolsEndToEndTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void audioToolsControllerPreservesLegacyToolsAndAddsStableVoiceCloneId();
+    void audioToolsControllerSupportsSixToolsIncludingPlugins();
     void toolsExpandDroppedFoldersRecursively();
     void audioFileDiscoveryExpandsFoldersOffTheGuiThread();
     void formatConverterLoadsDroppedFilesAsynchronously();
@@ -526,27 +526,25 @@ void AudioToolsEndToEndTest::formatConverterConvertsAcrossDistinctChinesePaths()
     verifyAudioFile(QDir(outputDirectory).filePath(QStringLiteral("伪装.wav")));
 }
 
-void AudioToolsEndToEndTest::audioToolsControllerPreservesLegacyToolsAndAddsStableVoiceCloneId()
+void AudioToolsEndToEndTest::audioToolsControllerSupportsSixToolsIncludingPlugins()
 {
     AudioToolsController controller;
     QCOMPARE(controller.currentTool(), 0);
-    QCOMPARE(controller.currentToolId(), QStringLiteral("audio-editor"));
 
     controller.setCurrentTool(1);
     QCOMPARE(controller.currentTool(), 1);
 
     controller.setCurrentTool(3);
     QCOMPARE(controller.currentTool(), 3);
-    QCOMPARE(controller.currentToolId(), QStringLiteral("filename-processor"));
 
-    controller.selectToolById(QStringLiteral("voice-clone"));
+    controller.setCurrentTool(4);
     QCOMPARE(controller.currentTool(), 4);
-    QCOMPARE(controller.currentToolId(), QStringLiteral("voice-clone"));
 
     controller.setCurrentTool(5);
-    QCOMPARE(controller.currentTool(), 4);
-    controller.selectToolById(QStringLiteral("unknown"));
-    QCOMPARE(controller.currentTool(), 4);
+    QCOMPARE(controller.currentTool(), 5);
+
+    controller.setCurrentTool(6);
+    QCOMPARE(controller.currentTool(), 5);
 }
 
 void AudioToolsEndToEndTest::toolsExpandDroppedFoldersRecursively()

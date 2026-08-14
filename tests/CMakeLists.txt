@@ -483,13 +483,6 @@ foreach(qt_test IN ITEMS
     format_conversion_task_model_test
     file_association_controller_test
     equalizer_controller_test
-    voice_clone_manifest_test
-    voice_clone_capability_schema_test
-    voice_clone_worker_protocol_test
-    voice_clone_host_controller_test
-    voice_clone_package_manager_test
-    voice_clone_runtime_package_test
-    voice_clone_controller_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -506,129 +499,6 @@ foreach(qt_test IN ITEMS
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
     )
 endforeach()
-
-target_link_libraries(voice_clone_package_manager_test PRIVATE Qt6::Network)
-target_link_libraries(voice_clone_runtime_package_test PRIVATE Qt6::Network)
-target_compile_definitions(voice_clone_runtime_package_test PRIVATE
-    AGPLAYER_VOICE_CLONE_RUNTIME_FEED="${CMAKE_SOURCE_DIR}/plugins/voice-clone/config/runtime-feed.example.json"
-)
-
-add_test(NAME voice_clone_runtime_distribution_test
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_runtime_distribution_test.ps1
-        -SourceRoot ${CMAKE_SOURCE_DIR}
-)
-set_tests_properties(voice_clone_runtime_distribution_test PROPERTIES TIMEOUT 60)
-target_compile_definitions(voice_clone_package_manager_test PRIVATE
-    AGPLAYER_VOICE_CLONE_DOWNLOAD_MANIFESTS_DIR="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/downloads"
-)
-target_link_libraries(voice_clone_controller_test PRIVATE Qt6::Network)
-target_link_libraries(voice_clone_controller_test PRIVATE agplayer_voice_clone_controller)
-target_link_libraries(voice_clone_controller_test PRIVATE
-    agplayer_app_qml
-    agplayer_app_qmlplugin
-    Qt6::Quick
-)
-target_compile_definitions(voice_clone_controller_test PRIVATE
-    AGPLAYER_VOICE_CLONE_REGISTRY_PATH="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/models.json"
-    AGPLAYER_VOICE_CLONE_PLUGIN="$<TARGET_FILE:agplayer_voice_clone_plugin>"
-)
-add_dependencies(voice_clone_controller_test agplayer_voice_clone_plugin)
-set_tests_properties(voice_clone_controller_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
-)
-
-add_library(voice_clone_test_plugin MODULE
-    qt/voice_clone_test_plugin.cpp
-)
-set_target_properties(voice_clone_test_plugin PROPERTIES
-    AUTOMOC ON
-    PREFIX ""
-)
-target_include_directories(voice_clone_test_plugin PRIVATE
-    "${CMAKE_SOURCE_DIR}/qt/src"
-)
-target_link_libraries(voice_clone_test_plugin PRIVATE Qt6::Core)
-agplayer_enable_warnings(voice_clone_test_plugin)
-add_dependencies(voice_clone_host_controller_test voice_clone_test_plugin)
-target_compile_definitions(voice_clone_host_controller_test PRIVATE
-    AGPLAYER_VOICE_CLONE_TEST_PLUGIN="$<TARGET_FILE:voice_clone_test_plugin>"
-)
-
-target_compile_definitions(voice_clone_manifest_test PRIVATE
-    AGPLAYER_VOICE_CLONE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/voice-clone"
-    AGPLAYER_VOICE_CLONE_ADDING_MODELS_DOC="${CMAKE_SOURCE_DIR}/docs/voice-clone/ADDING_MODELS.zh-CN.md"
-)
-
-target_compile_definitions(voice_clone_worker_protocol_test PRIVATE
-    AGPLAYER_VOICE_CLONE_ADAPTERS_DIR="${CMAKE_SOURCE_DIR}/plugins/voice-clone/adapters"
-)
-
-add_executable(voice_clone_worker_contract_client
-    qt/voice_clone_worker_contract_client.cpp
-)
-target_include_directories(voice_clone_worker_contract_client PRIVATE
-    "${CMAKE_SOURCE_DIR}/qt/src"
-)
-target_link_libraries(voice_clone_worker_contract_client PRIVATE
-    agplayer_qt
-    Qt6::Core
-    Qt6::Network
-)
-agplayer_enable_warnings(voice_clone_worker_contract_client)
-
-add_test(NAME voice_clone_worker_contract_test
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_worker_contract_test.ps1
-        -SourceRoot ${CMAKE_SOURCE_DIR}
-        -ClientPath $<TARGET_FILE:voice_clone_worker_contract_client>
-)
-set_tests_properties(voice_clone_worker_contract_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
-)
-
-add_test(NAME voice_clone_registry_contract_test
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_registry_contract_test.ps1
-        -SourceRoot ${CMAKE_SOURCE_DIR}
-)
-set_tests_properties(voice_clone_registry_contract_test PROPERTIES TIMEOUT 30)
-
-add_test(NAME voice_clone_runtime_pack_test
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_runtime_pack_test.ps1
-        -SourceRoot ${CMAKE_SOURCE_DIR}
-)
-set_tests_properties(voice_clone_runtime_pack_test PROPERTIES TIMEOUT 240)
-
-add_executable(voice_clone_package_probe
-    qt/voice_clone_package_probe.cpp
-)
-target_include_directories(voice_clone_package_probe PRIVATE
-    "${CMAKE_SOURCE_DIR}/qt/src"
-)
-target_link_libraries(voice_clone_package_probe PRIVATE
-    agplayer_qt
-    Qt6::Core
-)
-agplayer_enable_warnings(voice_clone_package_probe)
-add_dependencies(voice_clone_package_probe agplayer_voice_clone_plugin)
-
-add_test(NAME voice_clone_package_contract_test
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_package_contract_test.ps1
-        -SourceRoot ${CMAKE_SOURCE_DIR}
-        -BuildRoot ${CMAKE_BINARY_DIR}
-        -HostProbePath $<TARGET_FILE:voice_clone_package_probe>
-)
-set_tests_properties(voice_clone_package_contract_test PROPERTIES
-    TIMEOUT 120
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
-)
 
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
@@ -870,13 +740,9 @@ target_link_libraries(qml_audio_tools_test PRIVATE
 )
 target_compile_definitions(qml_audio_tools_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
-    AGPLAYER_VOICE_CLONE_REGISTRY_PATH="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/models.json"
-    AGPLAYER_VOICE_CLONE_PLUGIN="$<TARGET_FILE:agplayer_voice_clone_plugin>"
-    AGPLAYER_VOICE_CLONE_TEST_WORKER="$<TARGET_FILE:voice_clone_controller_test>"
 )
 agplayer_enable_warnings(qml_audio_tools_test)
-add_dependencies(qml_audio_tools_test decoder_fixture agplayer_voice_clone_plugin
-                 voice_clone_controller_test)
+add_dependencies(qml_audio_tools_test decoder_fixture)
 
 add_test(NAME qml_format_converter_test
     COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
@@ -896,10 +762,9 @@ set_tests_properties(qml_filename_process_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
-add_test(NAME qml_voice_clone_test
-    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_voice_clone.qml
-            -o ${CMAKE_BINARY_DIR}/tests/voice-clone-qtest-round1.txt,txt)
-set_tests_properties(qml_voice_clone_test PROPERTIES
+add_test(NAME qml_metadata_editor_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
+set_tests_properties(qml_metadata_editor_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
@@ -1022,15 +887,15 @@ if (WIN32)
                     -AppPath $<TARGET_FILE:AgPlayer>
         )
         set_tests_properties(debug_runtime_deployment_test PROPERTIES TIMEOUT 10)
-    else()
-        add_test(
-            NAME runtime_deployment_test
-            COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-                    -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/runtime_deployment_test.ps1
-                    -AppPath $<TARGET_FILE:AgPlayer>
-        )
-        set_tests_properties(runtime_deployment_test PROPERTIES TIMEOUT 10)
     endif()
+
+    add_test(
+        NAME runtime_deployment_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/runtime_deployment_test.ps1
+                -AppPath $<TARGET_FILE:AgPlayer>
+    )
+    set_tests_properties(runtime_deployment_test PROPERTIES TIMEOUT 10)
 
     add_test(
         NAME single_instance_test

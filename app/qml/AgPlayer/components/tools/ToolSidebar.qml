@@ -12,9 +12,14 @@ Rectangle {
     radius: Theme.radiusMd
     implicitHeight: 55
 
-    property string currentToolId: "audio-editor"
+    readonly property var toolNames: [
+        qsTr("音频编辑"), qsTr("格式转换"),
+        qsTr("元数据修改"), qsTr("文件名处理"),
+        qsTr("人声伴奏分离"), qsTr("人声克隆")
+    ]
+    property int currentTool: 0
     property Window window
-    signal toolSelected(string toolId)
+    signal toolSelected(int index)
 
     RowLayout {
         anchors.fill: parent
@@ -26,21 +31,21 @@ Rectangle {
 
         Repeater {
             model: [
-                { id: "audio-editor", name: qsTr("音频编辑"), icon: "equalizer-line" },
-                { id: "format-converter", name: qsTr("格式转换"), icon: "briefcase-4-line" },
-                { id: "voice-clone", name: qsTr("人声克隆"), icon: "music-2-line" },
-                { id: "metadata-editor", name: qsTr("元数据修改"), icon: "information-line" },
-                { id: "filename-processor", name: qsTr("文件名处理"), icon: "file-copy-line" }
+                { name: qsTr("音频编辑"), icon: "equalizer-line" },
+                { name: qsTr("格式转换"), icon: "briefcase-4-line" },
+                { name: qsTr("元数据修改"), icon: "information-line" },
+                { name: qsTr("文件名处理"), icon: "file-copy-line" },
+                { name: qsTr("人声伴奏分离"), icon: "waveform-switch" },
+                { name: qsTr("人声克隆"), icon: "music-2-line" }
             ]
 
             Button {
                 objectName: "audioToolNavButton"
-                Layout.preferredWidth: modelData.id === "metadata-editor" ? 156 : 154
-                Layout.maximumWidth: Layout.preferredWidth
+                Layout.preferredWidth: 154
                 Layout.preferredHeight: 53
                 Layout.maximumHeight: 53
                 flat: true
-                checked: navigation.currentToolId === modelData.id
+                checked: navigation.currentTool === index
                 focusPolicy: Qt.StrongFocus
 
                 contentItem: RowLayout {
@@ -73,7 +78,7 @@ Rectangle {
                     radius: Theme.radiusMd
                 }
 
-                onClicked: navigation.toolSelected(modelData.id)
+                onClicked: navigation.toolSelected(index)
             }
         }
 
