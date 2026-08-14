@@ -23,8 +23,6 @@ add_library(agplayer_core STATIC
     src/decoder.cpp
     src/graphic_equalizer.cpp
     src/graphic_equalizer.hpp
-    src/multitrack_editor.cpp
-    src/multitrack_editor.hpp
     src/metadata_writer.cpp
     src/pitch_shifter.cpp
     src/playback_session.cpp
