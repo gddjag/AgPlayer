@@ -8,6 +8,7 @@ class ImportController;
 class LibraryFilterModel;
 class LibraryModel;
 class MetadataEditor;
+class AudioEditorController;
 class PlaybackController;
 class PlaylistModel;
 class SettingsController;
@@ -30,4 +31,6 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider = nullptr,
                                  PlaylistModel* playlistModel = nullptr,
-                                 EqualizerController* equalizer = nullptr);
+                                 EqualizerController* equalizer = nullptr,
+                                 AudioEditorController* audioEditor = nullptr,
+                                 PluginInstallManager* pluginInstallManager = nullptr);

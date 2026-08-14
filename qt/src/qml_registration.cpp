@@ -13,7 +13,6 @@
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
 #include "library_manager_controller.hpp"
-#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "replay_gain_scanner.hpp"
@@ -37,7 +36,9 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
-                                 EqualizerController* equalizer)
+                                 EqualizerController* equalizer,
+                                 AudioEditorController* audioEditor,
+                                 PluginInstallManager* pluginInstallManager)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);

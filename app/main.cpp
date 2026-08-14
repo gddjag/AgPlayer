@@ -732,9 +732,9 @@ int main(int argc, char* argv[])
 
         register_agplayer_qml_types(&library, &playback, &importer, &windows,
                                     &audioTools, &metadataEditor,
-                                    &formatConverter, &pitchShifter,
-                                    &speedAdjuster, &lightEditor, &settings,
-                                    &waveformProvider, &playlists, &equalizer);
+                                    &formatConverter, &filenameProcessor,
+                                    &settings, &waveformProvider, &playlists,
+                                    &equalizer, &audioEditor, &pluginInstaller);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

@@ -363,7 +363,16 @@ void FilenameProcessor::apply(const QVariantMap& rules,
                     }
                 }
             }
-            if (!paths.isEmpty() && !library_->updateTrackPaths(paths)) {
+            bool libraryUpdateOk = true;
+            if (!paths.isEmpty()) {
+                for (auto it = paths.cbegin(); it != paths.cend(); ++it) {
+                    if (!library_->updateTrackPath(it.key(), it.value())) {
+                        libraryUpdateOk = false;
+                        break;
+                    }
+                }
+            }
+            if (!paths.isEmpty() && !libraryUpdateOk) {
                 // The filesystem transaction is already committed. Surface the
                 // recovery action without falsifying its disk outcome.
                 emit errorOccurred(tr("文件已重命名，但播放器资料库路径同步失败；请重新扫描资料库"));
@@ -467,7 +476,16 @@ void FilenameProcessor::undoLast()
                 }
             }
         }
-        if (!restoredPaths.isEmpty() && !library_->updateTrackPaths(restoredPaths)) {
+        bool libraryUpdateOk = true;
+        if (!restoredPaths.isEmpty()) {
+            for (auto it = restoredPaths.cbegin(); it != restoredPaths.cend(); ++it) {
+                if (!library_->updateTrackPath(it.key(), it.value())) {
+                    libraryUpdateOk = false;
+                    break;
+                }
+            }
+        }
+        if (!restoredPaths.isEmpty() && !libraryUpdateOk) {
             emit errorOccurred(tr("文件已恢复，但曲库路径同步失败。"));
         }
     }
