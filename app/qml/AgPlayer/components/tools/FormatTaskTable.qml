@@ -150,6 +150,8 @@ Rectangle {
                             radius: 4
                             color: model.status === "Done" ? Theme.waveformGreen : Theme.accent
                         }
+                    }
+                }
                 Text {
                     id: percent
                     visible: column === 8

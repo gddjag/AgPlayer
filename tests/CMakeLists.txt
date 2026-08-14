@@ -942,12 +942,6 @@ set_tests_properties(waveform_provider_test PROPERTIES
 set_tests_properties(window_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
-set_tests_properties(native_drop_router_test PROPERTIES
-    # This test opens a native QWindow and posts WM_DROPFILES to its HWND.
-    # It must not compete with the offscreen QML windows used by the parallel
-    # UI tests, otherwise Windows can reject the temporary exposed surface.
-    RUN_SERIAL TRUE
-)
 set_tests_properties(playback_controller_test qml_main_window_test qml_waveform_test
     PROPERTIES
     # Qt/FFmpeg global process state and the shared generated fixtures make
