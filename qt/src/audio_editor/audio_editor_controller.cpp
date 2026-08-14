@@ -605,10 +605,19 @@ AudioEditorController::AudioEditorController(
 AudioEditorController::~AudioEditorController()
 {
     cancelOperation();
-    if (write_watcher_) write_watcher_->future().waitForFinished();
-    if (time_pitch_watcher_) time_pitch_watcher_->future().waitForFinished();
+    if (write_watcher_) write_watcher_->waitForFinished();
+    if (time_pitch_watcher_) time_pitch_watcher_->waitForFinished();
     if (viewport_waveform_watcher_) {
-        viewport_waveform_watcher_->future().waitForFinished();
+        if (const auto watcher =
+                qobject_cast<QFutureWatcher<QVariantList>*>(
+                    viewport_waveform_watcher_)) {
+            watcher->waitForFinished();
+        } else if (const auto watcher =
+                       qobject_cast<QFutureWatcher<ViewportWaveformJobResult>*>(
+                           viewport_waveform_watcher_)) {
+            watcher->waitForFinished();
+        }
+        viewport_waveform_watcher_->disconnect(this);
         viewport_waveform_watcher_->deleteLater();
     }
     if (recording()) (void)recording_session_.stop();
@@ -1266,6 +1275,15 @@ bool AudioEditorController::startRecording(
     if (!recording_session_.start(config)) {
         setError(tr("无法启动录音设备，请检查设备与权限"));
         return false;
+    }
+    if (!has_document_) {
+        channels_ = effectiveChannels;
+        sample_rate_ = effectiveSampleRate;
+        bit_rate_ = sample_rate_ * channels_ * 24;
+        bits_per_sample_ = 24;
+        source_channel_peaks_.clear();
+        channel_peaks_.clear();
+        format_name_ = QStringLiteral("WAV");
     }
     QSettings settings;
     settings.beginGroup(QStringLiteral("audioEditor"));
@@ -1954,10 +1972,6 @@ void AudioEditorController::requestViewportWaveform()
                 }
                 return jobResult;
             }
-            if (!recActive) {
-                return jobResult;
-            }
-
             std::vector<std::vector<float>> merged;
             for (const auto& cached : cached_tiles) {
                 merged = mergeResampledFromTileData(
