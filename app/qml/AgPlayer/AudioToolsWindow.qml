@@ -41,6 +41,7 @@ Window {
     Shortcut {
         sequence: "Space"
         context: Qt.ApplicationShortcut
+        priority: Shortcut.HighPriority
         onActivated: AudioEditorController.playPause()
     }
 
