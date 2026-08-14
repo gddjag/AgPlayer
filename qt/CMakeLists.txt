@@ -25,6 +25,8 @@ add_library(agplayer_qt STATIC
     src/rename_transaction.hpp
     src/rename_journal_store.cpp
     src/rename_journal_store.hpp
+    src/plugin_install_manager.cpp
+    src/plugin_install_manager.hpp
     src/editor_timeline_math.cpp
     src/editor_timeline_math.hpp
     src/equalizer_controller.cpp
@@ -101,6 +103,7 @@ target_link_libraries(agplayer_qt
         agplayer_core
     PRIVATE
         Qt6::Concurrent
+        Qt6::Network
 )
 
 if(WIN32)

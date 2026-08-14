@@ -25,12 +25,29 @@ public:
     QSGGeometry geometry_;
     QSGFlatColorMaterial material_;
     std::uint64_t revision_{};
+    int render_mode_{};
     qreal width_{};
     qreal height_{};
     qreal visible_start_ratio_{};
     qreal visible_end_ratio_{1.0};
     QColor color_;
 };
+
+std::size_t visible_mode_stride(const std::size_t visiblePairCount,
+                               const qreal width,
+                               const int renderMode)
+{
+    if (width <= 0.0 || visiblePairCount <= 1U) return 1U;
+    const std::size_t target = static_cast<std::size_t>(
+        std::max<qreal>(1.0, std::round(width)));
+    if (renderMode == 0) {
+        return std::max<std::size_t>(1U, visiblePairCount / (target * 2U));
+    }
+    if (renderMode == 1) {
+        return std::max<std::size_t>(1U, visiblePairCount / (target * 3U));
+    }
+    return 1U;
+}
 
 } // namespace
 
@@ -88,6 +105,15 @@ void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
     channel_peaks_ = std::move(normalized);
     update();
     emit channelPeaksChanged();
+}
+
+void AudioEditorWaveformItem::setRenderMode(const int mode)
+{
+    const int bounded = std::clamp(mode, 0, 2);
+    if (render_mode_ == bounded) return;
+    render_mode_ = bounded;
+    update();
+    emit renderModeChanged();
 }
 
 void AudioEditorWaveformItem::setWaveformColor(const QColor& color)
@@ -151,7 +177,11 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         static_cast<std::size_t>(std::ceil(visible_end_ratio_ * pair_count)),
         first_pair + 1U, pair_count);
     const std::size_t visible_pair_count = end_pair - first_pair;
-    const std::size_t vertex_count = visible_pair_count * 2U
+    const std::size_t stride = visible_mode_stride(visible_pair_count, width(),
+                                                   render_mode_);
+    const std::size_t draw_pair_count = (visible_pair_count > 0U
+        ? ((visible_pair_count - 1U) / stride) + 1U : 0U);
+    const std::size_t vertex_count = draw_pair_count * 2U
         * snapshot->channels.size();
     if (vertex_count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         delete oldNode;
@@ -165,7 +195,8 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         || !qFuzzyCompare(node->width_, width())
         || !qFuzzyCompare(node->height_, height())
         || !qFuzzyCompare(node->visible_start_ratio_, visible_start_ratio_)
-        || !qFuzzyCompare(node->visible_end_ratio_, visible_end_ratio_)) {
+        || !qFuzzyCompare(node->visible_end_ratio_, visible_end_ratio_)
+        || node->render_mode_ != render_mode_) {
         node->geometry_.allocate(static_cast<int>(vertex_count));
         auto* vertices = node->geometry_.vertexDataAsPoint2D();
         const qreal channel_height = height()
@@ -177,11 +208,12 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
             const qreal center = (static_cast<qreal>(channel_index) + 0.5)
                 * channel_height;
             const qreal half_height = channel_height * 0.46;
-            for (std::size_t index = first_pair; index < end_pair; ++index) {
-                const std::size_t visible_index = index - first_pair;
-                const qreal x = visible_pair_count == 1U ? width() * 0.5
+            for (std::size_t index = first_pair; index < end_pair;
+                 index += stride) {
+                const std::size_t visible_index = (index - first_pair) / stride;
+                const qreal x = draw_pair_count <= 1U ? width() * 0.5
                     : static_cast<qreal>(visible_index) * width()
-                        / static_cast<qreal>(visible_pair_count - 1U);
+                        / static_cast<qreal>(draw_pair_count - 1U);
                 vertices[vertex++].set(static_cast<float>(x),
                     static_cast<float>(center + peaks[index * 2U] * half_height));
                 vertices[vertex++].set(static_cast<float>(x),
@@ -193,6 +225,7 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         node->height_ = height();
         node->visible_start_ratio_ = visible_start_ratio_;
         node->visible_end_ratio_ = visible_end_ratio_;
+        node->render_mode_ = render_mode_;
         node->markDirty(QSGNode::DirtyGeometry);
     }
     if (node->color_ != waveform_color_) {

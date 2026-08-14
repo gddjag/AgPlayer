@@ -49,6 +49,7 @@
 #include "library_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
+#include "plugin_install_manager.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
 #include "playback_state_store.hpp"
@@ -148,7 +149,7 @@ int main(int argc, char* argv[])
     //   --qa-play <path>            load + play a file through the normal path
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
-    //   --qa-tool <0..3>             choose the audio-tool screenshot page
+    //   --qa-tool <0..5>             choose the audio-tool screenshot page
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
@@ -190,7 +191,7 @@ int main(int argc, char* argv[])
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
-                if (ok && requestedTool >= 0 && requestedTool <= 3) {
+                if (ok && requestedTool >= 0 && requestedTool <= 5) {
                     qaTool = requestedTool;
                 }
             } else if (arg == QStringLiteral("--qa-screenshot-list")
@@ -618,6 +619,7 @@ int main(int argc, char* argv[])
         FilenameProcessor filenameProcessor;
         filenameProcessor.setLibraryModel(&library);
         FormatConverter formatConverter;
+        PluginInstallManager pluginInstaller;
         if (!qaScreenshotTools.isEmpty() && !qaPlayPath.isEmpty()
             && QFileInfo::exists(qaPlayPath)) {
             const QList<QUrl> qaToolUrls{QUrl::fromLocalFile(qaPlayPath)};
@@ -660,7 +662,7 @@ int main(int argc, char* argv[])
                                     &formatConverter, &filenameProcessor,
                                     &settings,
                                     &waveformProvider, &playlists, &equalizer,
-                                    &audioEditor);
+                                    &audioEditor, &pluginInstaller);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
@@ -992,6 +994,11 @@ int main(int argc, char* argv[])
                             break;
                         case 3:
                             filenameProcessor.loadFiles(urls);
+                            break;
+                        case 4:
+                        case 5:
+                            // Placeholder routing for plugin tools. UI layer
+                            // handles installation/execution states.
                             break;
                         default:
                             break;

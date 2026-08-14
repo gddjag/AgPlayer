@@ -14,6 +14,7 @@ class PlaylistModel;
 class SettingsController;
 class WaveformProvider;
 class WindowController;
+class PluginInstallManager;
 
 // Registers all AgPlayer QML singletons and the WaveformItem type into the
 // "AgPlayer" QML module (URI "AgPlayer", version 1.0).  Call this once from
@@ -31,4 +32,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WaveformProvider* waveformProvider = nullptr,
                                  PlaylistModel* playlistModel = nullptr,
                                  EqualizerController* equalizer = nullptr,
-                                 AudioEditorController* audioEditor = nullptr);
+                                 AudioEditorController* audioEditor = nullptr,
+                                 PluginInstallManager* pluginInstallManager = nullptr);

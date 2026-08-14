@@ -37,21 +37,6 @@ using agplayer::editor::WriteRequest;
 
 namespace {
 
-struct ViewportWaveformJobResult {
-    struct Tile {
-        qint64 start_frame{};
-        qint64 end_frame{};
-        int mode{};
-        qint64 target_point_count{};
-        std::vector<std::vector<float>> channels;
-    };
-
-    std::vector<Tile> tiles;
-    bool cancelled{};
-    bool ok{true};
-    QString error;
-};
-
 constexpr qint64 kViewportWaveformCacheDefaultLimit = 16LL * 1024LL * 1024LL;
 
 constexpr qreal kViewportModeAThreshold = 32.0;
@@ -94,6 +79,32 @@ qint64 viewportCacheBytes(const std::vector<std::vector<float>>& channels)
             * static_cast<qint64>(sizeof(float));
     }
     return bytes;
+}
+
+std::vector<std::vector<float>> peaksAsChannels(const QVariantList& channelPeaks)
+{
+    std::vector<std::vector<float>> result;
+    result.reserve(static_cast<std::size_t>(channelPeaks.size()));
+    for (const QVariant& channel_value : channelPeaks) {
+        const QVariantList values = channel_value.toList();
+        if (values.empty() || values.size() % 2 != 0) {
+            return {};
+        }
+        std::vector<float> channel;
+        channel.reserve(static_cast<std::size_t>(values.size()));
+        for (qsizetype index = 0; index < values.size(); index += 2) {
+            const double minimum = values[index].toDouble();
+            const double maximum = values[index + 1].toDouble();
+            if (!std::isfinite(minimum) || !std::isfinite(maximum)
+                || minimum > maximum) {
+                return {};
+            }
+            channel.push_back(static_cast<float>(minimum));
+            channel.push_back(static_cast<float>(maximum));
+        }
+        result.push_back(std::move(channel));
+    }
+    return result;
 }
 
 QVariantList build_variant_peaks(
@@ -193,15 +204,12 @@ void assignBucketRange(const std::vector<float>& sourceValues,
 std::vector<std::vector<float>> viewportPeaksFromSnapshot(
     const std::vector<std::vector<float>>& channelSourcePeaks,
     const std::vector<std::vector<float>>& fallbackPeaks,
-    const QVariantList& sourcePeaks,
     const qint64 totalFrames,
     const qint64 requestStart,
     const qint64 requestEnd,
     const qint64 targetPoints,
     const int channels)
 {
-    const qint64 sourceBuckets = static_cast<qint64>(
-        sourcePeaks.empty() ? 0 : sourcePeaks.front().size());
     std::vector<std::vector<float>> result;
     result.resize(static_cast<std::size_t>(std::max<qint64>(0, channels)));
     const std::vector<std::vector<float>>* source = nullptr;
@@ -284,6 +292,9 @@ AudioEditorController::AudioEditorController(
     playback_timer_.setInterval(17);
     connect(&playback_timer_, &QTimer::timeout,
             this, &AudioEditorController::pollPlayback);
+    viewport_cache_size_limit_ = kViewportWaveformCacheDefaultLimit;
+    connect(&viewport_, &EditorViewport::viewportChanged, this,
+            &AudioEditorController::requestViewportWaveform);
     recording_timer_.setInterval(33);
     connect(&recording_timer_, &QTimer::timeout, this, [this] {
         if (!recording()) return;
@@ -300,6 +311,7 @@ AudioEditorController::AudioEditorController(
         if (projectedFrames != 0 && projectedFrames > viewport_.documentFrames()) {
             viewport_.setDocumentFrames(projectedFrames);
         }
+        requestViewportWaveform();
         emit recordingChanged();
         emit playbackChanged();
     });
@@ -330,6 +342,10 @@ AudioEditorController::~AudioEditorController()
     cancelOperation();
     if (write_watcher_) write_watcher_->future().waitForFinished();
     if (time_pitch_watcher_) time_pitch_watcher_->future().waitForFinished();
+    if (viewport_waveform_watcher_) {
+        viewport_waveform_watcher_->future().waitForFinished();
+        viewport_waveform_watcher_->deleteLater();
+    }
     if (recording()) (void)recording_session_.stop();
     if (player_) {
         ag_player_stop(player_);
@@ -1307,6 +1323,157 @@ void AudioEditorController::pollPlayback()
         setState(EditorSessionState::Ready);
     }
     emit playbackChanged();
+}
+
+QVariantList AudioEditorController::toVariantPeaks(
+    const std::vector<std::vector<float>>& channels) const
+{
+    return build_variant_peaks(channels);
+}
+
+QString AudioEditorController::activeWaveformCacheKey(
+    const qint64 startFrame, const qint64 endFrame,
+    const qint64 targetPointCount, const int mode) const
+{
+    return QStringLiteral("%1-%2-%3-%4-%5")
+        .arg(startFrame)
+        .arg(endFrame)
+        .arg(targetPointCount)
+        .arg(mode)
+        .arg(viewport_cache_version_);
+}
+
+void AudioEditorController::clearViewportWaveformCache()
+{
+    viewport_cache_size_bytes_ = 0;
+    viewport_waveform_cache_.clear();
+    viewport_waveform_lru_.clear();
+    viewport_channel_peaks_.clear();
+}
+
+void AudioEditorController::requestViewportWaveform()
+{
+    const qint64 totalFrames = document_.totalFrames();
+    const qreal viewportWidth = viewport_.viewportWidth();
+    const qint64 startFrame = std::clamp<qint64>(
+        viewport_.visibleStartFrame(), 0, std::max<qint64>(0, totalFrames));
+    const qint64 endFrame = std::clamp<qint64>(
+        viewport_.visibleEndFrame(), 0, std::max<qint64>(0, totalFrames));
+    const qint64 visibleFrames = std::max<qint64>(0, endFrame - startFrame);
+    const qint64 targetPoints = visibleFrames <= 0 || viewportWidth <= 0.0
+        ? 0 : viewportTargetPoints(
+            viewportRenderMode(std::max<qreal>(1.0, static_cast<qreal>(visibleFrames))
+                              / std::max<qreal>(1.0, viewportWidth)),
+            visibleFrames, viewportWidth);
+    if (!has_document_ || totalFrames <= 0 || channels_ <= 0
+        || visibleFrames <= 0 || targetPoints <= 0) {
+        viewport_channel_peaks_.clear();
+        emit waveformChanged();
+        return;
+    }
+
+    const QVariantList sourcePeaksData = !channel_peaks_.isEmpty()
+        ? channel_peaks_ : source_channel_peaks_;
+    const auto sourcePeaks = peaksAsChannels(sourcePeaksData);
+    const auto fallbackPeaks = peaksAsChannels(source_channel_peaks_);
+    if (sourcePeaks.empty() && fallbackPeaks.empty()) {
+        viewport_channel_peaks_.clear();
+        emit waveformChanged();
+        return;
+    }
+
+    const int renderMode = viewportRenderMode(
+        std::max<qreal>(1.0, static_cast<qreal>(visibleFrames))
+        / std::max<qreal>(1.0, viewportWidth));
+    const quint64 generation = ++viewport_waveform_generation_;
+    const QString key = activeWaveformCacheKey(startFrame, endFrame, targetPoints,
+                                              renderMode);
+    if (const auto cache_it = viewport_waveform_cache_.find(key);
+        cache_it != viewport_waveform_cache_.end()) {
+        const auto cached = cache_it->second;
+        if (cached && !cached->channels.empty()) {
+            viewport_waveform_lru_.splice(viewport_waveform_lru_.begin(),
+                                          viewport_waveform_lru_,
+                                          cached->lru_iterator);
+            viewport_channel_peaks_ = toVariantPeaks(cached->channels);
+            emit waveformChanged();
+            return;
+        }
+    }
+
+    if (viewport_waveform_cancel_token_) {
+        viewport_waveform_cancel_token_->store(true, std::memory_order_release);
+    }
+    const auto cancel_token = std::make_shared<std::atomic_bool>(false);
+    viewport_waveform_cancel_token_ = cancel_token;
+
+    if (viewport_waveform_watcher_) {
+        viewport_waveform_watcher_->disconnect(this);
+        viewport_waveform_watcher_->deleteLater();
+        viewport_waveform_watcher_ = nullptr;
+    }
+
+    auto* watcher = new QFutureWatcher<QVariantList>(this);
+    viewport_waveform_watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<QVariantList>::finished, this,
+            [this, watcher, generation, cancel_token, key, startFrame, endFrame,
+             targetPoints, renderMode] {
+        viewport_waveform_watcher_ = nullptr;
+        if (cancel_token->load(std::memory_order_acquire)
+            || generation != viewport_waveform_generation_) {
+            watcher->deleteLater();
+            return;
+        }
+        const auto peaks = watcher->result();
+            const auto channels = peaksAsChannels(peaks);
+        if (!channels.empty()) {
+            const qint64 bytes = viewportCacheBytes(channels);
+            auto entry = std::make_shared<ViewportWaveformCacheEntry>();
+            entry->start_frame = startFrame;
+            entry->end_frame = endFrame;
+            entry->target_point_count = targetPoints;
+            entry->mode = renderMode;
+            entry->bytes = bytes;
+            entry->channels = channels;
+            if (const auto existing_it = viewport_waveform_cache_.find(key);
+                existing_it != viewport_waveform_cache_.end()) {
+                viewport_cache_size_bytes_ -= existing_it->second->bytes;
+                viewport_waveform_lru_.erase(existing_it->second->lru_iterator);
+                viewport_waveform_cache_.erase(existing_it);
+            }
+            viewport_waveform_cache_.insert_or_assign(key, entry);
+            viewport_waveform_lru_.push_front(key);
+            entry->lru_iterator = viewport_waveform_lru_.begin();
+            viewport_cache_size_bytes_ += bytes;
+            while (viewport_cache_size_bytes_ > viewport_cache_size_limit_
+                   && !viewport_waveform_lru_.empty()) {
+                const QString stale_key = viewport_waveform_lru_.back();
+                viewport_waveform_lru_.pop_back();
+                if (const auto stale_it = viewport_waveform_cache_.find(stale_key);
+                    stale_it != viewport_waveform_cache_.end()) {
+                    viewport_cache_size_bytes_ -= stale_it->second->bytes;
+                    viewport_waveform_cache_.erase(stale_it);
+                }
+            }
+        }
+        watcher->deleteLater();
+        viewport_channel_peaks_ = peaks;
+        emit waveformChanged();
+    });
+
+    watcher->setFuture(QtConcurrent::run([this, startFrame, endFrame, targetPoints,
+                                          renderMode, sourcePeaks,
+                                          fallbackPeaks, channels = channels_,
+                                          totalFrames,
+                                          generation, cancel_token] {
+        if (cancel_token->load(std::memory_order_acquire)) {
+            return QVariantList{};
+        }
+        const auto peaks = viewportPeaksFromSnapshot(
+            sourcePeaks, fallbackPeaks, totalFrames, startFrame, endFrame,
+            targetPoints, channels);
+        return build_variant_peaks(peaks);
+    }));
 }
 
 void AudioEditorController::rebuildEditorPeaks()

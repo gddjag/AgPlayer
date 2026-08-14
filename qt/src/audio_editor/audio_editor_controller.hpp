@@ -231,7 +231,7 @@ private:
     void rebuildEditorPeaks();
     void requestViewportWaveform();
     void clearViewportWaveformCache();
-    [[nodiscard]] std::string activeWaveformCacheKey(
+    [[nodiscard]] QString activeWaveformCacheKey(
         qint64 startFrame, qint64 endFrame, qint64 targetPointCount,
         int mode) const;
     [[nodiscard]] QVariantList toVariantPeaks(
@@ -265,7 +265,7 @@ private:
     qint64 viewport_cache_version_ = 1;
     qint64 viewport_cache_size_bytes_ = 0;
     qint64 viewport_cache_size_limit_ = 16LL * 1024LL * 1024LL;
-    QFutureWatcher<void>* viewport_waveform_watcher_ = nullptr;
+    QFutureWatcher<QVariantList>* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
 
