@@ -79,13 +79,6 @@ Rectangle {
                     required property int index
                     required property var modelData
                     objectName: "voiceCloneModelCard" + modelCard.index
-                    function syncObjectNames() {
-                        objectName = "voiceCloneModelCard" + modelCard.index
-                        installState.objectName = "voiceCloneModelInstallState"
-                                + modelCard.index
-                    }
-                    onIndexChanged: syncObjectNames()
-                    Component.onCompleted: syncObjectNames()
                     Layout.fillWidth: true
                     Layout.preferredHeight: 68
                     checked: modelCard.index === root.selectedIndex

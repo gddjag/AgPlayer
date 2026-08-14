@@ -66,6 +66,7 @@ final result: passed
 - Spacing follows the reference's model/workbench/parameters/result hierarchy. At 4K the three workbench panels expand rather than inventing a fixed-width shell; this preserves usable audio/text work areas. P3 only.
 - Colors keep the AG Player navy surface, blue selection/action semantics, muted unavailable states, and high-contrast Chinese text.
 - Icons reuse the project icon font. Reference and result waveforms are derived from decoded WAV samples, visually normalized for low-level recordings, and never replaced by placeholder peaks.
+- Reference/result icon-only play controls expose state-aware accessible names. Changing a reference path or deleting a result stops only that panel's prior preview source; QML regression coverage verifies both paths.
 - Copy is Chinese-first. Raw worker errors are suppressed in the expected not-downloaded state; model capabilities, install states, and common dynamic Worker parameter labels are localized without changing protocol keys/values.
 - Approved source deviations are product-driven: the fixed model dropdown becomes four data-driven cards for future registry-only model additions, while sampling/channel controls remain Worker-result-driven instead of pretending they can override model output.
 
@@ -79,7 +80,7 @@ final result: passed
 
 **Primary interactions tested**
 
-- Stable-ID tool/model selection, deterministic QA window sizing, download-required state, capability copy, small-viewport reachability, real waveform rendering, reference/result preview loading, save, delete, and send-to-editor wiring.
+- Stable-ID tool/model selection, deterministic QA window sizing, download-required state, capability copy, small-viewport reachability, accessible preview controls, real waveform rendering, reference/result preview loading and invalidation, save, delete, and send-to-editor wiring.
 - This report is visual acceptance plus QA-fixture chain evidence only. Real official-model inference and hardware playback remain tracked separately and are not implied by `passed` below.
 
 final result: passed

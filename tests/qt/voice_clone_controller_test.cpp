@@ -3,8 +3,11 @@
 #include "voice_clone_worker_protocol.hpp"
 #include "voice_clone_host_controller.hpp"
 #include "audio_tools_controller.hpp"
+#include "audio_preview_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
+#include "settings_controller.hpp"
 #include "waveform_item.hpp"
+#include "waveform_provider.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -1195,8 +1198,16 @@ void VoiceCloneControllerTest::shutdownUsesProtocolAndModuleLoadsThroughHost()
 
     AudioToolsController audioTools;
     AudioEditorController audioEditor(AG_AUDIO_BACKEND_NULL);
+    SettingsController settings;
+    WaveformProvider waveformProvider(&settings);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioToolsController", &audioTools);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioEditorController", &audioEditor);
+    qmlRegisterSingletonType<AudioPreviewController>(
+        "AgPlayer", 1, 0, "AudioPreviewController",
+        [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new AudioPreviewController(AG_AUDIO_BACKEND_NULL);
+        });
+    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", &waveformProvider);
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
     {
         QQmlEngine engine;

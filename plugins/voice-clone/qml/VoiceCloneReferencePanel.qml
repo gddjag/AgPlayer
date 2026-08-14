@@ -12,6 +12,7 @@ Rectangle {
     radius: Theme.radiusSm
 
     property alias referencePath: pathField.text
+    property string previousReferencePath: ""
     property var waveformLayers: ({})
     property int waveformDurationMs: 0
     readonly property bool hasReference: pathField.text !== ""
@@ -56,7 +57,14 @@ Rectangle {
             WaveformProvider.loadForTrack(pathField.text)
     }
 
-    onReferencePathChanged: root.loadWaveform()
+    onReferencePathChanged: {
+        if (root.previousReferencePath !== ""
+                && root.sameLocalPath(AudioPreviewController.sourcePath,
+                                      root.previousReferencePath))
+            AudioPreviewController.stop()
+        root.previousReferencePath = pathField.text
+        root.loadWaveform()
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -118,6 +126,10 @@ Rectangle {
                         icon.source: Theme.icon(root.previewingThis
                                                 && AudioPreviewController.playing
                                                 ? "pause-fill" : "play-fill")
+                        Accessible.name: root.previewingThis
+                                         && AudioPreviewController.playing
+                                         ? qsTr("暂停参考人声")
+                                         : qsTr("播放参考人声")
                         onClicked: AudioPreviewController.toggle(root.referenceUrl)
                     }
                     ColumnLayout {
@@ -207,7 +219,10 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: root.loadWaveform()
+    Component.onCompleted: {
+        root.previousReferencePath = pathField.text
+        root.loadWaveform()
+    }
     Component.onDestruction: {
         if (AudioPreviewController.isCurrentSource(root.referenceUrl))
             AudioPreviewController.stop()

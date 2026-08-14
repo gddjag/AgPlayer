@@ -15,6 +15,7 @@ namespace agplayer::voice_clone {
 namespace {
 
 constexpr qsizetype kMaximumFrameBytes = 1024 * 1024;
+constexpr int kMinimumHandshakeTimeoutMs = 5000;
 
 bool isReparsePoint(const QFileInfo& info)
 {
@@ -147,7 +148,7 @@ bool VoiceCloneWorkerClient::start(const VoiceCloneAdapterManifest& manifest,
         failWorker(QStringLiteral("handshake-timeout"),
                    QStringLiteral("Worker did not complete the protocol handshake"));
     });
-    handshakeTimer_->start(requestTimeoutMs_);
+    handshakeTimer_->start(qMax(requestTimeoutMs_, kMinimumHandshakeTimeoutMs));
     process_.start();
     if (!process_.waitForStarted(5000)) {
         error_ = process_.errorString();

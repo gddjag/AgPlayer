@@ -13,6 +13,7 @@ Rectangle {
     implicitHeight: 190
 
     property string resultPath: ""
+    property string previousResultPath: ""
     property url resultUrl: ""
     property var waveformLayers: ({})
     property int waveformDurationMs: 0
@@ -58,8 +59,11 @@ Rectangle {
     }
 
     onResultPathChanged: {
-        if (AudioPreviewController.isCurrentSource(root.resultUrl))
+        if (root.previousResultPath !== ""
+                && root.sameLocalPath(AudioPreviewController.sourcePath,
+                                      root.previousResultPath))
             AudioPreviewController.stop()
+        root.previousResultPath = root.resultPath
         root.loadWaveform()
     }
 
@@ -102,6 +106,10 @@ Rectangle {
                         icon.source: Theme.icon(root.previewingThis
                                                 && AudioPreviewController.playing
                                                 ? "pause-fill" : "play-fill")
+                        Accessible.name: root.previewingThis
+                                         && AudioPreviewController.playing
+                                         ? qsTr("暂停生成结果")
+                                         : qsTr("播放生成结果")
                         onClicked: AudioPreviewController.toggle(root.resultUrl)
                     }
                     ThemedIcon {
@@ -210,7 +218,10 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: root.loadWaveform()
+    Component.onCompleted: {
+        root.previousResultPath = root.resultPath
+        root.loadWaveform()
+    }
     Component.onDestruction: {
         if (AudioPreviewController.isCurrentSource(root.resultUrl))
             AudioPreviewController.stop()

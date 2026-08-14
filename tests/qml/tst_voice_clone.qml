@@ -515,6 +515,10 @@ TestCase {
         workspace.cloneText = "测试人声克隆"
         const referencePanel = findChild(workspace, "voiceCloneReferencePanel")
         verify(referencePanel)
+        const referencePlayButton = findChild(workspace,
+                                               "voiceCloneReferencePlayButton")
+        verify(referencePlayButton)
+        verify(String(referencePlayButton.Accessible.name).length > 0)
         compare(workspace.canGenerate, false)
         mouseClick(gate)
         const licenseDialog = findChild(workspace, "voiceCloneLicenseDialog")
@@ -542,6 +546,12 @@ TestCase {
         tryCompare(resultPanel, "waveformReady", true, 5000)
         referencePanel.loadWaveform()
         tryCompare(referencePanel, "waveformReady", true, 5000)
+        mouseClick(referencePlayButton)
+        tryCompare(AudioPreviewController, "hasSource", true)
+        workspace.referenceAudioPath = specialAudioFixturePath()
+        tryCompare(AudioPreviewController, "hasSource", false)
+        workspace.referenceAudioPath = audioFixturePath()
+        tryCompare(referencePanel, "waveformReady", true, 5000)
         const referenceWaveform = findChild(workspace,
                                              "voiceCloneReferenceWaveform")
         verify(referenceWaveform.visible)
@@ -551,6 +561,7 @@ TestCase {
         verify(resultWaveform.peakCount > 0)
         const resultPlayButton = findChild(workspace, "voiceCloneResultPlayButton")
         verify(resultPlayButton && resultPlayButton.visible && resultPlayButton.enabled)
+        verify(String(resultPlayButton.Accessible.name).length > 0)
         mouseClick(resultPlayButton)
         tryCompare(AudioPreviewController, "hasSource", true)
         mouseClick(findChild(workspace, "voiceCloneSaveResultButton"))
@@ -567,6 +578,7 @@ TestCase {
         compare(fakeController.saveCalls, 1)
         compare(fakeController.deleteCalls, 1)
         compare(resultPanel.hasResult, false)
+        tryCompare(AudioPreviewController, "hasSource", false)
     }
 
     function test_licenseDialogStaysOpenUntilEveryRequiredLicenseIsChecked() {
