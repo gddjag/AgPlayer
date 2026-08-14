@@ -645,9 +645,7 @@ public:
         equalizer_.process(output, frames, channels_);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
-                               : volume_.load(std::memory_order_relaxed)
-                                     * replay_gain_linear_.load(
-                                         std::memory_order_relaxed);
+                               : volume_.load(std::memory_order_relaxed);
         const int fade_ms =
             transition_fade_ms_.load(std::memory_order_acquire);
         const int sample_rate =
