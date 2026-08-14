@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string]$BuildRoot,
     [Parameter(Mandatory = $true)][string]$OutputRoot,
     [Parameter(Mandatory = $true)][string]$Version,
+    [ValidateSet('Release')][string]$Configuration,
     [string]$PublishBaseUrl
 )
 
@@ -15,18 +16,30 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 }
 
 function Assert-NoReparseAncestor([string]$Path) {
-    $cursor = [IO.Path]::GetFullPath($Path)
+    $full = [IO.Path]::GetFullPath($Path)
+    $cursor = $full
+    while (-not (Test-Path -LiteralPath $cursor)) {
+        $parent = Split-Path -Parent $cursor
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $cursor) {
+            throw "Path has no existing ancestor: $Path"
+        }
+        $cursor = $parent
+    }
+    $existingAncestor = $cursor
     while (-not [string]::IsNullOrWhiteSpace($cursor)) {
-        if (Test-Path -LiteralPath $cursor) {
-            $item = Get-Item -LiteralPath $cursor -Force
-            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Path must not traverse a link or reparse point: $Path"
-            }
+        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Path must not traverse a link or reparse point: $Path"
         }
         $parent = Split-Path -Parent $cursor
         if ($parent -eq $cursor) { break }
         $cursor = $parent
     }
+    $canonicalAncestor = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $existingAncestor -ErrorAction Stop).ProviderPath)
+    if (-not $existingAncestor.Equals($canonicalAncestor, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Existing path ancestor is not canonical: $Path"
+    }
+    return $full
 }
 
 function Assert-SafeRelativePath([string]$Path) {
@@ -44,16 +57,98 @@ function Assert-ContainedPath([string]$Root, [string]$Path) {
     }
 }
 
+function New-SafeDirectory([string]$Path, [string]$AllowedRoot = '') {
+    $full = Assert-NoReparseAncestor $Path
+    if (-not [string]::IsNullOrWhiteSpace($AllowedRoot)) {
+        [void](Assert-NoReparseAncestor $AllowedRoot)
+        $allowedFull = [IO.Path]::GetFullPath($AllowedRoot)
+        if (-not $full.Equals($allowedFull, [StringComparison]::OrdinalIgnoreCase)) {
+            Assert-ContainedPath $allowedFull $full
+        }
+    }
+    $missing = @()
+    $cursor = $full
+    while (-not (Test-Path -LiteralPath $cursor)) {
+        $missing = @((Split-Path -Leaf $cursor)) + $missing
+        $cursor = Split-Path -Parent $cursor
+    }
+    foreach ($segment in $missing) {
+        $cursor = Join-Path $cursor $segment
+        if (-not [string]::IsNullOrWhiteSpace($AllowedRoot)) { Assert-ContainedPath $AllowedRoot $cursor }
+        New-Item -ItemType Directory -Path $cursor -ErrorAction Stop | Out-Null
+        $created = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
+        if (-not $created.PSIsContainer -or
+            ($created.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Directory creation produced an unsafe path: $cursor"
+        }
+    }
+    $directory = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if (-not $directory.PSIsContainer) { throw "Expected a directory: $full" }
+    [void](Assert-NoReparseAncestor $full)
+    return $full
+}
+
+function Assert-SafeFileTarget([string]$Path, [string]$AllowedRoot) {
+    $full = [IO.Path]::GetFullPath($Path)
+    Assert-ContainedPath $AllowedRoot $full
+    [void](Assert-NoReparseAncestor $full)
+    $parent = Split-Path -Parent $full
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        throw "File target parent is missing: $full"
+    }
+    if (Test-Path -LiteralPath $full) {
+        $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "File target is unsafe: $full"
+        }
+    }
+    return $full
+}
+
+function Remove-SafeFile([string]$Path, [string]$AllowedRoot) {
+    $full = Assert-SafeFileTarget $Path $AllowedRoot
+    if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Force -ErrorAction Stop }
+}
+
+function Remove-SafeTree([string]$Path, [string]$AllowedRoot) {
+    $full = [IO.Path]::GetFullPath($Path)
+    Assert-ContainedPath $AllowedRoot $full
+    [void](Assert-NoReparseAncestor $full)
+    if (-not (Test-Path -LiteralPath $full)) { return }
+    $rootItem = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if (-not $rootItem.PSIsContainer) { throw "Cleanup target is not a directory: $full" }
+    $directories = [Collections.Generic.List[string]]::new()
+    $files = [Collections.Generic.List[string]]::new()
+    $stack = [Collections.Generic.Stack[string]]::new()
+    $stack.Push($full)
+    while ($stack.Count -gt 0) {
+        $directory = $stack.Pop()
+        $directories.Add($directory)
+        foreach ($child in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)) {
+            if (($child.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Cleanup target contains a link or reparse point: $($child.FullName)"
+            }
+            if ($child.PSIsContainer) { $stack.Push($child.FullName) }
+            else { $files.Add($child.FullName) }
+        }
+    }
+    foreach ($file in $files) { Remove-Item -LiteralPath $file -Force -ErrorAction Stop }
+    for ($index = $directories.Count - 1; $index -ge 0; --$index) {
+        Remove-Item -LiteralPath $directories[$index] -Force -ErrorAction Stop
+    }
+}
+
 function Copy-PackageFile([string]$From, [string]$RelativeTo) {
     Assert-SafeRelativePath $RelativeTo
     if (-not (Test-Path -LiteralPath $From -PathType Leaf)) {
         throw "Required package input is missing: $From"
     }
-    Assert-NoReparseAncestor $From
+    [void](Assert-NoReparseAncestor $From)
     $destination = Join-Path $script:packageRoot $RelativeTo
     Assert-ContainedPath $script:packageRoot $destination
     $destinationDirectory = Split-Path -Parent $destination
-    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+    [void](New-SafeDirectory $destinationDirectory $script:packageRoot)
+    [void](Assert-SafeFileTarget $destination $script:packageRoot)
     Copy-Item -LiteralPath $From -Destination $destination
 }
 
@@ -85,12 +180,26 @@ $source = [IO.Path]::GetFullPath($SourceRoot)
 $build = [IO.Path]::GetFullPath($BuildRoot)
 if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "SourceRoot is missing: $source" }
 if (-not (Test-Path -LiteralPath $build -PathType Container)) { throw "BuildRoot is missing: $build" }
-Assert-NoReparseAncestor $source
-Assert-NoReparseAncestor $build
+[void](Assert-NoReparseAncestor $source)
+[void](Assert-NoReparseAncestor $build)
+
+$cmakeCachePath = Join-Path $build 'CMakeCache.txt'
+if (-not (Test-Path -LiteralPath $cmakeCachePath -PathType Leaf)) {
+    throw 'BuildRoot must contain CMakeCache.txt'
+}
+$cmakeCache = Get-Content -Raw -LiteralPath $cmakeCachePath
+$multiConfiguration = $cmakeCache -match '(?m)^CMAKE_CONFIGURATION_TYPES:[^=]*=.+$'
+if ($multiConfiguration) {
+    if ($Configuration -ne 'Release') {
+        throw 'Multi-configuration builds require -Configuration Release'
+    }
+}
+elseif ($cmakeCache -notmatch '(?m)^CMAKE_BUILD_TYPE:STRING=Release\s*$') {
+    throw 'BuildRoot must be a CMake Release build'
+}
 
 $output = [IO.Path]::GetFullPath($OutputRoot)
-New-Item -ItemType Directory -Path $output -Force | Out-Null
-Assert-NoReparseAncestor $output
+$output = New-SafeDirectory $output
 
 $publishRequested = $PSBoundParameters.ContainsKey('PublishBaseUrl')
 $publishUri = $null
@@ -98,15 +207,30 @@ if ($publishRequested) {
     if ([string]::IsNullOrWhiteSpace($PublishBaseUrl)) { throw 'PublishBaseUrl must be a real HTTPS base URL' }
     if (-not [Uri]::TryCreate($PublishBaseUrl, [UriKind]::Absolute, [ref]$publishUri) -or
         $publishUri.Scheme -ne 'https' -or [string]::IsNullOrWhiteSpace($publishUri.Host) -or
-        $publishUri.IsLoopback -or $publishUri.Host -match '(?i)(^|\.)example\.(com|net|org)$|\.(invalid|example|test)$') {
+        $publishUri.IsLoopback -or -not [string]::IsNullOrEmpty($publishUri.UserInfo) -or
+        -not [string]::IsNullOrEmpty($publishUri.Query) -or
+        -not [string]::IsNullOrEmpty($publishUri.Fragment) -or
+        $publishUri.Host -match '(?i)(^|\.)example\.(com|net|org)$|\.(invalid|example|test)$' -or
+        $PublishBaseUrl -match '(?i)(^|/)(\.\.|%2e%2e)(/|$)|%2f|%5c' -or
+        [Uri]::UnescapeDataString($publishUri.AbsolutePath).Contains('\')) {
         throw 'PublishBaseUrl must be a real HTTPS base URL'
     }
 }
 
 $dllMatches = @(Get-ChildItem -LiteralPath $build -Recurse -Force -File -Filter 'agplayer_voice_clone.dll' |
     Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 })
+if ($multiConfiguration) {
+    $dllMatches = @($dllMatches | Where-Object {
+        $relative = $_.FullName.Substring($build.Length + 1).Replace('\', '/')
+        @($relative.Split('/')) -contains 'Release'
+    })
+}
 if ($dllMatches.Count -ne 1) {
     throw "BuildRoot must contain exactly one agplayer_voice_clone.dll; found $($dllMatches.Count)"
+}
+$dllImports = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllMatches[0].FullName))
+if ($dllImports -match '(?i)(Qt6[A-Za-z0-9_]*d\.dll|MSVCP[0-9]*D\.dll|VCRUNTIME[0-9_]*D\.dll|ucrtbased\.dll)') {
+    throw 'Voice Clone plugin imports Debug runtime libraries and cannot be packaged'
 }
 
 $packageName = "AGPlayer-VoiceClonePlugin-$Version-windows-x64"
@@ -118,10 +242,14 @@ $temporaryZip = Join-Path $output ('.package-' + [guid]::NewGuid().ToString('N')
 $finalZip = Join-Path $output $zipName
 $externalManifest = Join-Path $output $externalManifestName
 
-New-Item -ItemType Directory -Path $script:packageRoot -Force | Out-Null
 Assert-ContainedPath $output $script:packageRoot
 Assert-ContainedPath $output $temporaryZip
 Assert-ContainedPath $output $finalZip
+[void](New-SafeDirectory $stagingContainer $output)
+$script:packageRoot = New-SafeDirectory $script:packageRoot $stagingContainer
+[void](Assert-SafeFileTarget $temporaryZip $output)
+[void](Assert-SafeFileTarget $finalZip $output)
+[void](Assert-SafeFileTarget $externalManifest $output)
 
 try {
     Copy-PackageFile $dllMatches[0].FullName 'agplayer_voice_clone.dll'
@@ -176,7 +304,8 @@ try {
         protocolVersion = 1
         library = 'agplayer_voice_clone.dll'
     }
-    Write-Utf8NoBom (Join-Path $script:packageRoot 'agplayer-voice-clone.json') ($hostManifest | ConvertTo-Json -Depth 8)
+    $hostManifestPath = Assert-SafeFileTarget (Join-Path $script:packageRoot 'agplayer-voice-clone.json') $script:packageRoot
+    Write-Utf8NoBom $hostManifestPath ($hostManifest | ConvertTo-Json -Depth 8)
 
     $payloadFiles = @(Get-ChildItem -LiteralPath $script:packageRoot -Recurse -Force -File |
         Sort-Object { Get-RelativePackagePath $_.FullName })
@@ -197,6 +326,7 @@ try {
         files = $fileEntries
     }
     $packageManifestPath = Join-Path $script:packageRoot 'package-manifest.json'
+    [void](Assert-SafeFileTarget $packageManifestPath $script:packageRoot)
     $packageManifestJson = $packageManifestObject | ConvertTo-Json -Depth 12
     Write-Utf8NoBom $packageManifestPath $packageManifestJson
 
@@ -207,17 +337,26 @@ try {
         $entry = New-HashEntry $_
         "$($entry.sha256)  $($entry.path)"
     })
-    Write-Utf8NoBom (Join-Path $script:packageRoot 'SHA256SUMS') (($hashLines -join "`n") + "`n")
+    $hashListPath = Assert-SafeFileTarget (Join-Path $script:packageRoot 'SHA256SUMS') $script:packageRoot
+    Write-Utf8NoBom $hashListPath (($hashLines -join "`n") + "`n")
 
     Compress-Archive -LiteralPath $script:packageRoot -DestinationPath $temporaryZip -CompressionLevel Optimal
     & (Join-Path $source 'scripts/voice-clone/verify-plugin-package.ps1') -PackagePath $temporaryZip
 
-    if (Test-Path -LiteralPath $finalZip) { Remove-Item -LiteralPath $finalZip -Force }
+    if (Test-Path -LiteralPath $finalZip) { Remove-SafeFile $finalZip $output }
     Move-Item -LiteralPath $temporaryZip -Destination $finalZip
     Write-Utf8NoBom $externalManifest $packageManifestJson
 
     if ($publishRequested) {
-        $base = $PublishBaseUrl.TrimEnd('/')
+        $baseBuilder = [UriBuilder]::new($publishUri)
+        $baseBuilder.UserName = ''
+        $baseBuilder.Password = ''
+        $baseBuilder.Query = ''
+        $baseBuilder.Fragment = ''
+        $baseBuilder.Path = $publishUri.AbsolutePath.TrimEnd('/') + '/'
+        $normalizedBase = $baseBuilder.Uri
+        $packageUri = [Uri]::new($normalizedBase, [Uri]::EscapeDataString($zipName))
+        $manifestUri = [Uri]::new($normalizedBase, [Uri]::EscapeDataString($externalManifestName))
         $feed = [ordered]@{
             schemaVersion = 1
             pluginId = 'agplayer.voice-clone'
@@ -225,18 +364,18 @@ try {
             platform = 'windows'
             architecture = 'x86_64'
             minimumPlayerVersion = '1.0.0'
-            packageUrl = "$base/$zipName"
-            manifestUrl = "$base/$externalManifestName"
+            packageUrl = $packageUri.AbsoluteUri
+            manifestUrl = $manifestUri.AbsoluteUri
             signature = [ordered]@{ status = 'unsigned-test'; algorithm = $null; keyId = $null }
         }
-        Write-Utf8NoBom (Join-Path $output 'plugin-feed.json') ($feed | ConvertTo-Json -Depth 8)
+        $feedPath = Assert-SafeFileTarget (Join-Path $output 'plugin-feed.json') $output
+        Write-Utf8NoBom $feedPath ($feed | ConvertTo-Json -Depth 8)
     }
 }
 finally {
-    if (Test-Path -LiteralPath $temporaryZip) { Remove-Item -LiteralPath $temporaryZip -Force }
+    if (Test-Path -LiteralPath $temporaryZip) { Remove-SafeFile $temporaryZip $output }
     if (Test-Path -LiteralPath $stagingContainer) {
-        Assert-ContainedPath $output $stagingContainer
-        Remove-Item -LiteralPath $stagingContainer -Recurse -Force
+        Remove-SafeTree $stagingContainer $output
     }
 }
 
