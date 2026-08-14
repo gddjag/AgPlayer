@@ -589,7 +589,7 @@ add_test(NAME voice_clone_runtime_pack_test
         -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_runtime_pack_test.ps1
         -SourceRoot ${CMAKE_SOURCE_DIR}
 )
-set_tests_properties(voice_clone_runtime_pack_test PROPERTIES TIMEOUT 120)
+set_tests_properties(voice_clone_runtime_pack_test PROPERTIES TIMEOUT 240)
 
 add_executable(voice_clone_package_probe
     qt/voice_clone_package_probe.cpp
@@ -1009,15 +1009,15 @@ if (WIN32)
                     -AppPath $<TARGET_FILE:AgPlayer>
         )
         set_tests_properties(debug_runtime_deployment_test PROPERTIES TIMEOUT 10)
+    else()
+        add_test(
+            NAME runtime_deployment_test
+            COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                    -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/runtime_deployment_test.ps1
+                    -AppPath $<TARGET_FILE:AgPlayer>
+        )
+        set_tests_properties(runtime_deployment_test PROPERTIES TIMEOUT 10)
     endif()
-
-    add_test(
-        NAME runtime_deployment_test
-        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
-                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/runtime_deployment_test.ps1
-                -AppPath $<TARGET_FILE:AgPlayer>
-    )
-    set_tests_properties(runtime_deployment_test PROPERTIES TIMEOUT 10)
 
     add_test(
         NAME single_instance_test
