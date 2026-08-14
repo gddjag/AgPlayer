@@ -168,7 +168,6 @@ Item {
                 }
                 CategoryItem {
                     width: categories.width
-                    objectName: "historyCategoryButton"
                     icon: "time-line"
                     label: qsTr("播放历史")
                     count: root.historyCount
@@ -177,21 +176,11 @@ Item {
                 }
                 CategoryItem {
                     width: categories.width
-                    objectName: "recentAddedCategoryButton"
-                    icon: "add-line"
-                    label: qsTr("最近添加")
-                    count: root.recentAddedCount
-                    selected: root.selectedCategory === "recentAdded"
-                    onClicked: root.categorySelected("recentAdded")
-                }
-                CategoryItem {
-                    width: categories.width
-                    objectName: "neverPlayedCategoryButton"
-                    icon: "time-line"
-                    label: qsTr("从未播放")
-                    count: root.neverPlayedCount
-                    selected: root.selectedCategory === "neverPlayed"
-                    onClicked: root.categorySelected("neverPlayed")
+                    objectName: "libraryManagerCategoryButton"
+                    icon: "briefcase-4-line"
+                    label: qsTranslate("LibraryManagerPage", "曲库管理")
+                    selected: root.selectedCategory === "library"
+                    onClicked: root.categorySelected("library")
                 }
 
                 Repeater {
@@ -227,8 +216,7 @@ Item {
                                     if (root.selectedCategory !== "all"
                                             && root.selectedCategory !== "favorites"
                                             && root.selectedCategory !== "history"
-                                            && root.selectedCategory !== "recentAdded"
-                                            && root.selectedCategory !== "neverPlayed") {
+                                            && root.selectedCategory !== "library") {
                                         root.playlistModel.moveTracks(root.selectedCategory,
                                                                       playlistId, ids)
                                     } else {

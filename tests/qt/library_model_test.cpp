@@ -23,64 +23,7 @@ private slots:
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
-    void updatesRenamedPathsAsOneBatchWithoutChangingTrackIds();
-    void stampsNewImportsWithoutOverwritingExistingTimestamps();
-    void exposesLiveRecentAndNeverPlayedCounts();
 };
-
-void LibraryModelTest::exposesLiveRecentAndNeverPlayedCounts()
-{
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    TrackRecord recentUnplayed;
-    recentUnplayed.path = QStringLiteral("C:/music/recent-unplayed.wav");
-    recentUnplayed.addedAtMs = now - 1'000;
-    TrackRecord oldUnplayed;
-    oldUnplayed.path = QStringLiteral("C:/music/old-unplayed.wav");
-    oldUnplayed.addedAtMs = now - 31LL * 24 * 60 * 60 * 1'000;
-    TrackRecord recentPlayed;
-    recentPlayed.path = QStringLiteral("C:/music/recent-played.wav");
-    recentPlayed.addedAtMs = now - 2'000;
-    recentPlayed.playCount = 1;
-
-    LibraryModel model;
-    QSignalSpy recentChanged(&model, &LibraryModel::recentAddedCountChanged);
-    QSignalSpy neverChanged(&model, &LibraryModel::neverPlayedCountChanged);
-    model.replaceAll({recentUnplayed, oldUnplayed, recentPlayed});
-    QCOMPARE(model.recentAddedCount(), 2);
-    QCOMPARE(model.neverPlayedCount(), 2);
-    QCOMPARE(recentChanged.count(), 1);
-    QCOMPARE(neverChanged.count(), 1);
-
-    const QString playedId = model.tracks().front().trackId;
-    QVERIFY(model.markPlayed(playedId, now));
-    QCOMPARE(model.neverPlayedCount(), 1);
-    QCOMPARE(neverChanged.count(), 2);
-    QVERIFY(model.removeTrack(model.tracks().at(0).trackId));
-    QCOMPARE(model.neverPlayedCount(), 1);
-    QVERIFY(model.removeTrack(model.tracks().at(0).trackId));
-    QCOMPARE(model.neverPlayedCount(), 0);
-}
-
-void LibraryModelTest::stampsNewImportsWithoutOverwritingExistingTimestamps()
-{
-    TrackRecord first;
-    first.path = QStringLiteral("C:/music/new-a.wav");
-    TrackRecord second;
-    second.path = QStringLiteral("C:/music/new-b.wav");
-    TrackRecord preserved;
-    preserved.path = QStringLiteral("C:/music/known.wav");
-    preserved.addedAtMs = 123456;
-    const qint64 before = QDateTime::currentMSecsSinceEpoch();
-
-    LibraryModel model;
-    model.appendBatch({first, second, preserved});
-
-    QCOMPARE(model.rowCount(), 3);
-    QVERIFY(model.tracks().at(0).addedAtMs >= before);
-    QCOMPARE(model.tracks().at(1).addedAtMs,
-             model.tracks().at(0).addedAtMs);
-    QCOMPARE(model.tracks().at(2).addedAtMs, Q_INT64_C(123456));
-}
 
 void LibraryModelTest::appliesMaintenanceResultsWithSingleModelNotification()
 {

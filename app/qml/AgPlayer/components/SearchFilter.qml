@@ -15,8 +15,10 @@ Rectangle {
     property double maxBpm: 160
     property double pendingMinBpm: minBpm
     property double pendingMaxBpm: maxBpm
-    readonly property color moduleColor: Theme.isLight ? Theme.panel : Theme.elevated
-    readonly property color moduleBorder: Theme.border
+    readonly property color moduleColor: Qt.rgba(
+        Theme.elevated.r, Theme.elevated.g, Theme.elevated.b, 0.42)
+    readonly property color moduleBorder: Qt.rgba(
+        Theme.border.r, Theme.border.g, Theme.border.b, 0.34)
 
     Timer {
         id: bpmDebounce
@@ -63,29 +65,14 @@ Rectangle {
             border.color: root.moduleBorder
             border.width: 1
             radius: Theme.radiusSm
-            ThemedIcon {
-                id: searchIcon
-                objectName: "librarySearchIcon"
-                anchors.left: parent.left
-                anchors.leftMargin: 10
-                anchors.verticalCenter: parent.verticalCenter
-                width: 16
-                height: 16
-                source: Theme.icon("search-line")
-                tint: Theme.secondaryText
-                opacity: 0.55
-            }
             TextField {
                 id: searchField
                 objectName: "librarySearchField"
                 anchors.fill: parent
-                placeholderText: qsTr("歌曲 · 艺术家 · 专辑 · 标签")
+                placeholderText: qsTr("歌曲/艺术家/专辑/标签/")
                 text: root.searchText
                 color: Theme.primaryText
-                placeholderTextColor: Qt.rgba(Theme.secondaryText.r,
-                                               Theme.secondaryText.g,
-                                               Theme.secondaryText.b, 0.55)
-                leftPadding: 34
+                placeholderTextColor: Theme.secondaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
                 onTextChanged: root.searchText = text
@@ -149,7 +136,7 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 2
-                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: 11; Layout.preferredWidth: 24 }
+                Label { text: "BPM"; color: Theme.secondaryText; font.pixelSize: 11; Layout.preferredWidth: 24 }
                 TextField {
                     id: minimumBpmField
                     objectName: "minimumBpmField"
@@ -182,10 +169,7 @@ Rectangle {
                     background: Rectangle {
                         x: bpmRange.leftPadding
                         y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: bpmRange.availableWidth
-                        height: 4
-                        radius: 2
-                        color: Theme.panel
+                        width: bpmRange.availableWidth; height: 3; radius: 1.5; color: Theme.border
                         Rectangle {
                             x: bpmRange.first.visualPosition * parent.width
                             width: (bpmRange.second.visualPosition - bpmRange.first.visualPosition) * parent.width
@@ -195,30 +179,12 @@ Rectangle {
                     first.handle: Rectangle {
                         x: bpmRange.leftPadding + bpmRange.first.visualPosition * (bpmRange.availableWidth - width)
                         y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: 14; height: 14; radius: 7
-                        color: Theme.panel
-                        border.color: Theme.accent
-                        border.width: 2
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 6; height: 6
-                            radius: 3
-                            color: Theme.accent
-                        }
+                        width: 12; height: 12; radius: 6; color: Theme.primaryText; border.color: Theme.accent
                     }
                     second.handle: Rectangle {
                         x: bpmRange.leftPadding + bpmRange.second.visualPosition * (bpmRange.availableWidth - width)
                         y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: 14; height: 14; radius: 7
-                        color: Theme.panel
-                        border.color: Theme.accent
-                        border.width: 2
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 6; height: 6
-                            radius: 3
-                            color: Theme.accent
-                        }
+                        width: 12; height: 12; radius: 6; color: Theme.primaryText; border.color: Theme.accent
                     }
                 }
                 TextField {

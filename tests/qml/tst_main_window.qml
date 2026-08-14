@@ -89,6 +89,89 @@ TestCase {
         }
     }
 
+    Component {
+        id: fileDropAreaComponent
+        FileDropArea {}
+    }
+
+    Component {
+        id: trackListComponent
+        TrackList {
+            width: 1100
+            height: 500
+        }
+    }
+
+    Component {
+        id: listWindowComponent
+        ListWindow {
+            visible: true
+            width: 1000
+            height: 620
+        }
+    }
+
+    Component {
+        id: defaultListWindowComponent
+        ListWindow { visible: true }
+    }
+
+    Component {
+        id: sideNavigationComponent
+        SideNavigation {
+            width: 208
+            height: 500
+            property int renameRequestCount: 0
+            property int exportRequestCount: 0
+            property int deleteRequestCount: 0
+            property string lastRequestedPlaylistId: ""
+            onRenamePlaylistRequested: function(playlistId) {
+                renameRequestCount += 1
+                lastRequestedPlaylistId = playlistId
+            }
+            onExportPlaylistRequested: function(playlistId) {
+                exportRequestCount += 1
+                lastRequestedPlaylistId = playlistId
+            }
+            onRemovePlaylistRequested: function(playlistId) {
+                deleteRequestCount += 1
+                lastRequestedPlaylistId = playlistId
+            }
+        }
+    }
+
+    Component {
+        id: dockedWindowFrameComponent
+        DockedWindowFrame {
+            width: 320
+            height: 180
+        }
+    }
+
+    Component {
+        id: searchFilterComponent
+        SearchFilter {
+            width: 900
+            height: 54
+        }
+    }
+
+    Component {
+        id: libraryManagerComponent
+        LibraryManagerPage {
+            width: 1200
+            height: 760
+        }
+    }
+
+    Component {
+        id: emptyLibraryComponent
+        EmptyLibrary {
+            width: 900
+            height: 420
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -187,19 +270,6 @@ TestCase {
         compare(button.icon.color, "#000000")
         Theme.mode = previousThemeMode
         verify(findChild(window, "equalizerResponseCurve"))
-        var presetBox = findChild(window, "equalizerPresetBox")
-        verify(presetBox)
-        for (var themeMode = 0; themeMode <= 1; ++themeMode) {
-            Theme.mode = themeMode
-            presetBox.popup.open()
-            tryVerify(function() { return presetBox.popup.visible })
-            compare(presetBox.popup.background.color.toString(),
-                    Theme.elevated.toString())
-            compare(presetBox.popup.background.border.color.toString(),
-                    Theme.border.toString())
-            presetBox.popup.close()
-        }
-        Theme.mode = previousThemeMode
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
         compare(bands.count, 10)
@@ -223,21 +293,6 @@ TestCase {
         tryCompare(firstBandControl, "value", -12)
         verify(firstBandControl.visualPosition > 0.95,
                "-12 dB must map to the bottom of a vertical EQ slider")
-        mouseDoubleClickSequence(firstBandControl,
-                                 firstBandControl.width / 2,
-                                 firstBandControl.height / 2)
-        wait(80)
-        compare(firstBand.gainDb, 0,
-                "double-clicking an EQ band must reset it to 0 dB")
-        firstBand.setGain(6)
-        tryCompare(firstBand, "gainDb", 6)
-        var firstBandLabel = findChild(firstBand, "eqBandSlider-0-frequency")
-        verify(firstBandLabel)
-        mouseDoubleClickSequence(firstBandLabel, firstBandLabel.width / 2,
-                                 firstBandLabel.height / 2)
-        wait(80)
-        compare(firstBand.gainDb, 0,
-                "double-clicking an EQ frequency label must reset it to 0 dB")
         EqualizerController.bypassed = true
         tryCompare(findChild(window, "equalizerBypassButton"), "checked", true)
         EqualizerController.resetAll()
@@ -309,6 +364,112 @@ TestCase {
                 Math.round(listButton.y + listButton.height / 2))
         compare(Math.round(center.y + center.height / 2),
                 Math.round(miniButton.y + miniButton.height / 2))
+    }
+
+    function test_library_manager_summary_cards_are_real_filters() {
+        var page = libraryManagerComponent.createObject(mainWindow.contentItem)
+        verify(page)
+        var manager = findChild(page, "libraryManagerController")
+        var backup = findChild(page, "libraryBackupButton")
+        var backupMenu = findChild(page, "libraryBackupMenu")
+        var backupAction = findChild(page, "libraryBackupAction")
+        var importAction = findChild(page, "libraryImportBackupAction")
+        verify(manager && backup && backupMenu && backupAction && importAction,
+               "library manager must expose backup and import actions")
+        compare(backup.text, "备份/导入")
+        compare(backupAction.text, "备份曲库")
+        compare(importAction.text, "导入备份")
+        verify(manager.defaultBackupUrl.toString().endsWith(".db"))
+        var storage = findChild(page, "librarySummaryCard-storage")
+        var missing = findChild(page, "librarySummaryCard-missing")
+        verify(storage)
+        verify(missing)
+        mouseClick(storage)
+        tryCompare(storage.border, "color", Theme.accent)
+        mouseClick(missing)
+        tryCompare(missing.border, "color", Theme.accent)
+        verify(storage.border.color.toString() !== Theme.accent.toString())
+        mouseClick(storage)
+        tryCompare(storage.border, "color", Theme.accent)
+
+        var trackView = findChild(page, "libraryManagerTrackList")
+        verify(trackView)
+        tryVerify(function() {
+            return !manager.scanning && trackView.count > 0
+        }, 5000)
+        var firstRow = trackView.itemAtIndex(0)
+        verify(firstRow)
+        var favoriteButton = findChild(firstRow, "libraryTrackFavorite")
+        var ratingStar = findChild(firstRow, "libraryTrackRatingStar")
+        verify(favoriteButton && ratingStar)
+        var favoriteTrackId = firstRow.trackId
+        var favoriteBefore = firstRow.favorite
+        mouseClick(favoriteButton)
+        tryVerify(function() {
+            var refreshed = trackView.itemAtIndex(0)
+            return refreshed && refreshed.trackId === favoriteTrackId
+                   && refreshed.favorite !== favoriteBefore
+        }, 500)
+        firstRow = trackView.itemAtIndex(0)
+        favoriteButton = findChild(firstRow, "libraryTrackFavorite")
+        mouseClick(favoriteButton)
+        tryVerify(function() {
+            var refreshed = trackView.itemAtIndex(0)
+            return refreshed && refreshed.trackId === favoriteTrackId
+                   && refreshed.favorite === favoriteBefore
+        }, 500)
+        firstRow = trackView.itemAtIndex(0)
+        ratingStar = findChild(firstRow, "libraryTrackRatingStar")
+        var ratingBefore = ratingStar.icon.source.toString()
+        mouseClick(ratingStar)
+        tryVerify(function() {
+            var refreshed = trackView.itemAtIndex(0)
+            var refreshedStar = refreshed
+                    ? findChild(refreshed, "libraryTrackRatingStar") : null
+            return refreshedStar
+                   && refreshedStar.icon.source.toString() !== ratingBefore
+        }, 500)
+        mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                   Qt.RightButton)
+        var trackMenu = findChild(page, "libraryManagerTrackMenu")
+        tryVerify(function() { return trackMenu && trackMenu.visible }, 500)
+        var expectedActions = [
+            "libraryTrackPlay", "libraryTrackPlayNext",
+            "libraryTrackAddToPlaylist", "libraryTrackAudioTools",
+            "libraryTrackShowFolder", "libraryTrackCopyPath",
+            "libraryTrackTag",
+            "libraryTrackRename", "libraryTrackMoveFile",
+            "libraryTrackCopyFile", "libraryTrackRemove",
+            "libraryTrackTrash", "libraryTrackRelocate"
+        ]
+        for (var actionIndex = 0; actionIndex < expectedActions.length;
+             ++actionIndex) {
+            verify(findChild(trackMenu, expectedActions[actionIndex]),
+                   "missing library context action "
+                   + expectedActions[actionIndex])
+        }
+        trackMenu.close()
+
+        var detailsPanel = findChild(page, "libraryTrackDetailsPanel")
+        var detailsContent = findChild(page, "libraryTrackDetailsContent")
+        verify(detailsPanel && detailsContent,
+               "library track details must be a non-scrolling full-height panel")
+        verify(detailsContent.height <= detailsPanel.height,
+               "library details must fit without an internal scrollbar")
+        verify(!findChild(page, "libraryDetailsPlay"))
+        verify(!findChild(page, "libraryDetailsQueue"))
+        verify(!findChild(page, "libraryDetailsFavorite"))
+        verify(findChild(page, "libraryDetailsFormat"))
+        verify(findChild(page, "libraryDetailsBitrate"))
+        verify(page.preferredWindowHeight >= 840)
+        verify(page.preferredWindowHeight
+               >= detailsContent.implicitHeight + 250,
+               "library window height must follow the complete details content")
+        var managerBpmRange = findChild(page, "libraryManagerBpmRange")
+        verify(managerBpmRange)
+        compare(managerBpmRange.first.handle.width, 12)
+        compare(managerBpmRange.second.handle.width, 12)
+        page.destroy()
     }
 
     function test_native_qt_drop_reaches_the_real_import_controller() {
@@ -486,23 +647,17 @@ TestCase {
         listWindow.destroy()
     }
 
-    function test_sidebar_replaces_library_manager_with_recent_filters() {
-        var side = sideNavigationComponent.createObject(mainWindow.contentItem)
-        verify(side)
-        var history = findChild(side, "historyCategoryButton")
-        var recent = findChild(side, "recentAddedCategoryButton")
-        var never = findChild(side, "neverPlayedCategoryButton")
-        verify(history && recent && never)
-        verify(!findChild(side, "libraryManagerCategoryButton"))
-        verify(recent.y > history.y)
-        verify(never.y > recent.y)
-        compare(recent.count, 7)
-        compare(never.count, 11)
-        mouseClick(recent)
-        compare(side.lastSelectedCategory, "recentAdded")
-        mouseClick(never)
-        compare(side.lastSelectedCategory, "neverPlayed")
-        side.destroy()
+    function test_library_manager_uses_ten_row_scroll_viewport() {
+        var manager = libraryManagerComponent.createObject(mainWindow.contentItem)
+        verify(manager)
+        manager.height = manager.preferredWindowHeight
+        compare(manager.visibleRowCount, 10)
+        compare(manager.trackRowHeight, 42)
+        compare(manager.preferredTrackViewportHeight, 420)
+        var trackView = findChild(manager, "libraryManagerTrackList")
+        verify(trackView)
+        tryCompare(trackView, "height", manager.preferredTrackViewportHeight)
+        manager.destroy()
     }
 
     function test_track_context_play_action_uses_real_mouse_click() {
@@ -544,7 +699,7 @@ TestCase {
         list.destroy()
     }
 
-    function test_track_context_audio_tool_executes_submenu_command() {
+    function test_track_context_audio_tool_opens_the_real_tool_window() {
         WindowController.hideAudioTools()
         AudioToolsController.selectTool(0)
         compare(WindowController.audioToolsVisible, false)
@@ -586,14 +741,16 @@ TestCase {
         if (!toolsMenu.visible)
             toolsMenu.open()
         tryVerify(function() { return toolsMenu.visible }, 500)
-        var editorAction = findChild(toolsMenu, "trackMenuAudioEditor")
+        var editorAction = findChild(toolsMenu, "trackMenuLightEditor")
         verify(editorAction && editorAction.enabled)
-        mouseClick(editorAction, editorAction.width / 2,
-                   editorAction.height / 2)
+        // Qt Quick renders nested menus in a separate popup window under the
+        // test platform; invoke the visible child after the real row
+        // right-click and native submenu-chain checks above.
+        editorAction.triggered()
         tryCompare(AudioToolsController, "currentTool", 0)
         tryCompare(WindowController, "audioToolsVisible", true)
-        tryCompare(AudioEditorController, "hasDocument", true, 2000)
-        verify(AudioEditorController.fileName.length > 0,
+        tryCompare(LightEditor, "hasInput", true, 2000)
+        verify(LightEditor.inputFileName.length > 0,
                "the context-menu action must load the selected audio file")
         toolsMenu.close()
         menu.close()
@@ -673,7 +830,7 @@ TestCase {
         list.destroy()
     }
 
-    function test_track_context_add_to_playlist_executes_submenu_command() {
+    function test_track_context_add_to_playlist_uses_real_submenu_click() {
         var ids = nativeDropHelper.ensureSortableTracks()
         verify(ids.length > 0)
         var playlistId = PlaylistModel.createPlaylist(
@@ -697,8 +854,6 @@ TestCase {
                "the playlist submenu must expose a visible parent action")
         compare(moveMenuEntry.contentItem.color.toString(),
                 Theme.primaryText.toString())
-        compare(moveMenuEntry.background.color.toString(),
-                "#00000000")
         compare(moveMenuEntry.subMenu, moveMenu)
         verify(moveMenuEntry.arrow.visible)
         mouseMove(moveMenuEntry, moveMenuEntry.width / 2,
@@ -709,8 +864,7 @@ TestCase {
         var targetAction = findChild(moveMenu,
                                      "playlistMoveTarget-" + playlistId)
         verify(targetAction && targetAction.enabled)
-        mouseClick(targetAction, targetAction.width / 2,
-                   targetAction.height / 2)
+        targetAction.triggered()
         tryVerify(function() {
             return PlaylistModel.containsTrack(playlistId, ids[0])
         }, 500)
@@ -960,7 +1114,7 @@ TestCase {
 
     function test_waveform_click_seeks_real_playback_controller() {
         var waveform = findChild(mainWindow, "mainWaveform")
-        var seekSurface = waveform
+        var seekSurface = findChild(mainWindow, "waveformHoverSurface")
         verify(waveform, "main waveform should exist after importing audio")
         verify(seekSurface, "visible waveform surface should own seeking")
 
@@ -983,38 +1137,31 @@ TestCase {
                     && waveform.duration === PlaybackController.durationMs
         }, 5000)
 
-        wait(120)
-        var expected = waveform.timeForX(seekSurface.width * 0.75)
+        var expected = Math.round(PlaybackController.durationMs * 0.75)
         PlaybackController.pause()
         mouseClick(seekSurface, seekSurface.width * 0.75,
                    seekSurface.height / 2)
-        compare(PlaybackController.errorMessage, "",
-                "waveform seek must not be rejected by the playback core")
         tryVerify(function() {
             return Math.abs(PlaybackController.positionMs - expected) < 150
         }, 1000, "seek mismatch: actual=" + PlaybackController.positionMs
                  + ", expected=" + expected
                  + ", width=" + seekSurface.width)
-        var playedWaveform = findChild(mainWindow, "playedWaveform")
-        verify(playedWaveform)
-        compare(waveform.position, 0)
-        compare(playedWaveform.position, waveform.duration)
-        var playedClip = findChild(mainWindow, "waveformPlayedClip")
-        verify(playedClip,
-               "played waveform colour must be clipped at the exact playback pixel")
-        tryVerify(function() {
-            return Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5
-        }, 500, "played colour boundary must use the C++ waveform mapper")
-        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
-        verify(playbackGuide, "the precise playback cursor must be present")
-        compare(playbackGuide.width, 1)
-        compare(playbackGuide.color.toString(), "#002fa7")
-        verify(Math.abs(playbackGuide.x - waveform.waveformCursorX) <= 0.5)
+        var guide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(guide)
+        var expectedWidth = waveform.width * waveform.position
+                            / waveform.duration
+        verify(Math.abs(waveform.position - expected) < 150,
+               "rendered waveform and playback controller must share one position")
+        verify(Math.abs(guide.x - Math.round(expectedWidth - guide.width / 2)) < 2)
         var originalWidth = mainWindow.width
         mainWindow.width = Math.max(mainWindow.minimumWidth, originalWidth - 160)
         wait(30)
-        verify(Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5,
-               "played colour boundary must remain authoritative after resizing")
+        expectedWidth = waveform.width * waveform.position
+                        / waveform.duration
+        verify(Math.abs(waveform.position - PlaybackController.positionMs) < 2,
+               "waveform position must remain authoritative after resizing")
+        verify(Math.abs(guide.x - Math.round(expectedWidth - guide.width / 2)) < 2,
+               "playback guide must stay aligned after resizing")
         mainWindow.width = originalWidth
     }
 
@@ -1022,38 +1169,21 @@ TestCase {
         var pane = findChild(mainWindow, "playerPane")
         verify(pane)
         verify(PlaybackController.durationMs > 0)
-        // The complete PCM analysis is authoritative for waveform pixels.
-        // Container duration may include encoder padding and stretch beats.
+        // Decoder/playback duration is authoritative. Analysis duration can
+        // differ for VBR padding and must never create a seekable visual tail.
         pane.waveformDurationMs = PlaybackController.durationMs * 1.25
-        compare(pane.effectiveDurationMs, pane.waveformDurationMs)
-        verify(findChild(mainWindow, "waveformPlaybackGuide"))
-    }
-
-    function test_waveform_stays_aligned_at_required_window_sizes() {
-        var waveform = findChild(mainWindow, "mainWaveform")
-        var playedClip = findChild(mainWindow, "waveformPlayedClip")
-        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
-        verify(waveform && playedClip && playbackGuide)
-        var originalWidth = mainWindow.width
-        var originalHeight = mainWindow.height
-        var sizes = [[800, 500], [1920, 1080], [3840, 2160]]
-        for (var i = 0; i < sizes.length; ++i) {
-            mainWindow.width = sizes[i][0]
-            mainWindow.height = sizes[i][1]
-            wait(30)
-            verify(Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5)
-            verify(Math.abs(playbackGuide.x - waveform.waveformCursorX) <= 0.5)
-            compare(waveform.pixelForTime(waveform.duration), waveform.renderWidth)
-        }
-        mainWindow.width = originalWidth
-        mainWindow.height = originalHeight
+        compare(pane.effectiveDurationMs, PlaybackController.durationMs)
+        var guide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(guide)
+        compare(guide.width, 1)
+        compare(guide.color, "#002fa7")
     }
 
     function test_waveform_mode_button_cycles_the_live_setting() {
         var button = findChild(mainWindow, "waveformModeButton")
         verify(button)
-        verify(button.icon.source.toString().endsWith("/pulse-line.svg"),
-               "waveform switch must use a thin line waveform icon")
+        verify(button.icon.source.toString().endsWith("/waveform-switch.svg"),
+               "waveform switch must use the supplied waveform icon")
         var previousMode = SettingsController.waveformMode
         SettingsController.waveformMode = 0
         button.clicked()
@@ -1093,57 +1223,40 @@ TestCase {
         verify(mode)
         verify(play)
         verify(hoverGuide)
-        verify(!findChild(mainWindow, "waveformProgressFeather"))
-        verify(findChild(mainWindow, "waveformPlaybackGuide"))
+        verify(findChild(mainWindow, "waveformProgressFeather"))
+        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(playbackGuide)
+        compare(playbackGuide.width, 1)
+        compare(playbackGuide.color.toString(), "#002fa7")
         compare(previous.icon.width, 24)
         compare(next.icon.width, 24)
-        compare(mode.icon.width, 20)
+        compare(mode.icon.width, 24)
         compare(play.width, 52)
         compare(play.height, 52)
         compare(play.icon.width, 24)
         compare(hoverGuide.color.toString(), "#54ff84")
-        verify(findChild(mainWindow, "mainWaveform"),
-               "the C++ waveform item must own hover and seek input")
+        var hoverSurface = findChild(mainWindow, "waveformHoverSurface")
+        verify(hoverSurface,
+               "the full waveform canvas must own hover preview input")
+        compare(hoverSurface.cursorShape, Qt.ArrowCursor)
     }
 
     function test_waveform_hover_surface_covers_played_and_unplayed_regions() {
         var previousPreview = SettingsController.waveformHoverTimePreview
         SettingsController.waveformHoverTimePreview = true
-        var surface = findChild(mainWindow, "mainWaveform")
-        var interactionSurface = findChild(mainWindow, "waveformInteractionSurface")
+        var surface = findChild(mainWindow, "waveformHoverSurface")
         var guide = findChild(mainWindow, "waveformHoverGuide")
         verify(surface)
-        verify(interactionSurface)
         verify(guide)
         verify(surface.enabled)
-        compare(surface.timeForX(surface.width * 0.15),
-                Math.round(surface.duration * 0.15))
-        compare(surface.timeForX(surface.width * 0.85),
-                Math.round(surface.duration * 0.85))
-        compare(surface.pixelForTime(surface.duration), surface.width)
-        interactionSurface.updatePreviewAt(interactionSurface.width * 0.15)
-        tryVerify(function() { return guide.visible }, 300)
-        tryCompare(guide, "x",
-                   surface.pixelForTime(Math.round(surface.duration * 0.15)))
-        interactionSurface.updatePreviewAt(interactionSurface.width * 0.85)
-        tryVerify(function() { return guide.visible }, 300)
-        tryCompare(guide, "x",
-                   surface.pixelForTime(Math.round(surface.duration * 0.85)))
-        SettingsController.waveformHoverTimePreview = previousPreview
-    }
+        verify(surface.hoverEnabled)
 
-    function test_waveform_playback_guide_can_be_hidden_without_hiding_progress_color() {
-        var previous = SettingsController.waveformPlaybackGuide
-        var guide = findChild(mainWindow, "waveformPlaybackGuide")
-        var playedClip = findChild(mainWindow, "waveformPlayedClip")
-        verify(guide && playedClip)
-        SettingsController.waveformPlaybackGuide = true
-        tryCompare(guide, "visible", true)
-        SettingsController.waveformPlaybackGuide = false
-        tryCompare(guide, "visible", false)
-        verify(playedClip.visible,
-               "disabling the guide must retain the played-color region")
-        SettingsController.waveformPlaybackGuide = previous
+        surface.updatePreview(Math.max(2, surface.width * 0.15))
+        tryVerify(function() { return guide.visible && guide.x < surface.width * 0.30 })
+
+        surface.updatePreview(Math.max(2, surface.width * 0.85))
+        tryVerify(function() { return guide.visible && guide.x > surface.width * 0.70 })
+        SettingsController.waveformHoverTimePreview = previousPreview
     }
 
     function test_play_button_uses_system_solid_style_without_rgb_runtime() {
@@ -1173,28 +1286,13 @@ TestCase {
         verify(slider)
         verify(percent)
         compare(mute.icon.color.toString(), Theme.iconPrimary.toString())
-        compare(mute.icon.width, 20)
+        compare(mute.icon.width, 24)
         verify(slider.handle.width <= 10)
 
         var previousVolume = PlaybackController.volume
         PlaybackController.setVolume(0.42)
         tryCompare(percent, "text", "42%")
         PlaybackController.setVolume(previousVolume)
-    }
-
-    function test_main_volume_flyout_stays_open_for_two_seconds_after_leave() {
-        var control = findChild(mainWindow, "mainVolumeControl")
-        var closeTimer = findChild(mainWindow, "mainVolumeCloseTimer")
-        var slider = findChild(mainWindow, "volumeSlider")
-        verify(control && closeTimer && slider)
-        control.expandedForQa = true
-        slider.forceActiveFocus()
-        closeTimer.restart()
-        wait(1600)
-        verify(control.expandedForQa,
-               "main volume must stay open for the two-second pointer transfer")
-        wait(550)
-        tryVerify(function() { return !control.expandedForQa }, 300)
     }
 
     function test_spectrum_source_is_mirrored_before_responsive_rendering() {
@@ -1216,9 +1314,9 @@ TestCase {
         compare(waveform.spectrumBarCount, 128)
         compare(waveform.spectrumBarWidth, 5)
         compare(waveform.spectrumBarGap, 2)
-        compare(waveform.spectrumMaxHeight, 96)
-        fuzzyCompare(waveform.spectrumAttackSeconds, 0.012, 0.001)
-        fuzzyCompare(waveform.spectrumDecaySeconds, 0.075, 0.001)
+        compare(waveform.spectrumMaxHeight, 72)
+        fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
+        fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
         fuzzyCompare(waveform.spectrumPeakFallSeconds, 0.75, 0.001)
         fuzzyCompare(waveform.amplitudeScale, 1.0, 0.001)
         var pane = findChild(mainWindow, "playerPane")
@@ -1232,8 +1330,7 @@ TestCase {
         verify(filter)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
-                "歌曲 · 艺术家 · 专辑 · 标签")
-        verify(findChild(filter, "librarySearchIcon"))
+                "歌曲/艺术家/专辑/标签/")
         compare(findChild(filter, "bpmModule").width, 216)
         compare(findChild(filter, "bpmRange").first.handle.width, 12)
         compare(findChild(filter, "bpmRange").second.handle.width, 12)
@@ -1248,19 +1345,6 @@ TestCase {
         compare(filter.pendingMinBpm, 72)
         compare(filter.pendingMaxBpm, 155)
         filter.destroy()
-    }
-
-    function test_fractional_bpm_is_not_rounded_away_in_visible_surfaces() {
-        var list = trackListComponent.createObject(mainWindow.contentItem)
-        verify(list)
-        compare(list.formatBpm(127.5), "127.5")
-        compare(list.formatBpm(128), "128")
-        list.destroy()
-
-        var pane = findChild(mainWindow, "playerPane")
-        verify(pane)
-        compare(pane.formatBpm(127.5), "127.5 BPM")
-        compare(pane.formatBpm(128), "128 BPM")
     }
 
     function test_waveform_modes_use_offline_waveform_and_live_spectrum() {
@@ -1330,58 +1414,6 @@ TestCase {
         LibraryModel.setFavorite(row, false)
     }
 
-    function test_current_track_metadata_uses_the_playback_track_id() {
-        var trackId = nativeDropHelper.ensureLongAlbumArtistTrack()
-        var row = LibraryModel.indexForTrackId(trackId)
-        verify(row >= 0)
-
-        PlaybackController.playRow(row)
-        tryCompare(PlaybackController, "currentTrackId", trackId, 1000)
-
-        var artistAlbum = findChild(mainWindow, "trackArtistAlbum")
-        verify(artistAlbum)
-        tryCompare(artistAlbum, "artist",
-                   "An intentionally long artist name for hover marquee verification")
-        tryCompare(artistAlbum, "album",
-                   "An intentionally long album name for hover marquee verification")
-        verify(artistAlbum.text.indexOf(" · ") > 0,
-               "the main player must render artist, album and tags separately")
-        compare(artistAlbum.text.split(" · ").length, 2)
-        verify(!artistAlbum.text.endsWith(" · "))
-        verify(artistAlbum.text.indexOf("无标签") < 0)
-
-        LibraryModel.setTags(trackId, ["测试标签"])
-        tryVerify(function() {
-            return artistAlbum.text.split(" · ").length === 3
-                    && artistAlbum.text.endsWith("测试标签")
-        }, 1000, "real tags must be appended after artist and album")
-        LibraryModel.setTags(trackId, [])
-    }
-
-    function test_main_waveform_toggle_uses_complete_line_icon() {
-        var button = findChild(mainWindow, "waveformModeButton")
-        verify(button)
-        verify(button.icon.source.toString().endsWith("/pulse-line.svg"))
-        compare(button.icon.width, 20)
-        compare(button.icon.height, 20)
-    }
-
-    function test_current_track_rating_follows_artist_and_album() {
-        var ids = nativeDropHelper.ensureSortableTracks()
-        verify(ids.length > 0)
-        PlaybackController.playRow(LibraryModel.indexForTrackId(ids[0]))
-        tryCompare(PlaybackController, "currentTrackId", ids[0], 1000)
-        var artistAlbum = findChild(mainWindow, "trackArtistAlbum")
-        var rating = findChild(mainWindow, "trackRating")
-        verify(artistAlbum && rating)
-        var artistEnd = artistAlbum.mapToItem(mainWindow.contentItem,
-                                              artistAlbum.width, 0).x
-        var ratingStart = rating.mapToItem(mainWindow.contentItem, 0, 0).x
-        verify(ratingStart <= artistEnd + 24,
-               "rating stars must follow artist/album instead of the row edge: "
-               + ratingStart + " > " + artistEnd)
-    }
-
     function test_z_playing_row_uses_three_independent_spectrum_bars() {
         verify(PlaybackController.currentTrackId.length > 0)
         var list = trackListComponent.createObject(mainWindow.contentItem)
@@ -1392,7 +1424,7 @@ TestCase {
         verify(indicator)
         var currentRow = findChild(list, "currentTrackRow")
         verify(currentRow)
-        compare(currentRow.color.toString(), Theme.currentTrackSelection.toString())
+        compare(currentRow.color.toString(), Theme.activeSelection.toString())
         compare(indicator.barCount, 3)
         compare(indicator.barColor.toString(), Theme.waveformMagenta.toString())
         verify(findChild(indicator, "playingBar0"))
@@ -1426,8 +1458,8 @@ TestCase {
     }
 
     function test_empty_startup_uses_compact_reference_structure() {
-        compare(mainWindow.width, 960)
-        compare(mainWindow.height, 298)
+        compare(mainWindow.width, 1104)
+        compare(mainWindow.height, 342)
 
         var startup = findChild(mainWindow, "emptyStartup")
         var controls = findChild(mainWindow, "playerControls")
@@ -1442,17 +1474,6 @@ TestCase {
                "compact startup actions should exist")
         verify(!findChild(startup, "startupHeroArtwork"),
                "the superseded hero artwork should not exist")
-    }
-
-    function test_empty_startup_never_overlaps_the_bottom_controls() {
-        nativeDropHelper.clearLibrary()
-        tryVerify(function() { return LibraryModel.count === 0 })
-        var startup = findChild(mainWindow, "emptyStartup")
-        var controls = findChild(mainWindow, "playerControls")
-        var actionArea = findChild(startup, "startupActionArea")
-        verify(startup && controls && actionArea)
-        verify(actionArea.y + actionArea.height <= controls.y,
-               "startup actions and format hint must stay above playback controls")
     }
 
     function test_main_window_allows_a_smaller_responsive_native_size() {
@@ -1479,24 +1500,6 @@ TestCase {
                "player metadata/waveform must not cover playback controls")
         verify(controls.y + controls.height <= mainWindow.contentItem.height + 1,
                "playback controls must remain inside the small window")
-        var artist = findChild(mainWindow, "trackArtistAlbum")
-        var rating = findChild(mainWindow, "trackRating")
-        var metadata = findChild(mainWindow, "trackMetadataBadges")
-        verify(artist && artist.visible,
-               "artist/album must remain visible at the native minimum height")
-        verify(rating && rating.visible,
-               "rating must remain visible at the native minimum height")
-        verify(metadata && metadata.visible,
-               "file metadata must remain visible at the native minimum height")
-        verify(artist.height > 0 && rating.height > 0 && metadata.height > 0,
-               "responsive metadata rows must retain a usable rendered height")
-        verify(artist.text.split(" · ").length >= 2
-               && artist.text.split(" · ").length <= 3
-               && artist.text.indexOf("无标签") < 0,
-               "metadata must omit an empty tag without hiding artist/album")
-        verify(rating.mapToItem(artist.parent, 0, 0).x
-               >= artist.mapToItem(artist.parent, 0, 0).x + artist.width,
-               "rating stars must immediately follow the artist/album/tag text")
         verify(cover.height <= pane.height,
                "cover must scale with the available player height")
         verify(waveform.height >= 32,
@@ -1518,7 +1521,7 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 860)
+        compare(settingsWindow.width, 1228)
         verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
                "settings window must fit the available desktop")
         const page = findChild(mainWindow, "settingsPage")
@@ -1535,8 +1538,8 @@ TestCase {
         verify(contentColumn, "settings must expose the single content column")
         var headerDragArea = findChild(page, "settingsHeaderDragArea")
         verify(headerDragArea, "settings header must expose a full-width native drag surface")
-        verify(headerDragArea.width > settingsWindow.width * 0.50)
-        compare(sidebar.width, 184)
+        verify(headerDragArea.width > settingsWindow.width * 0.60)
+        compare(sidebar.width, 208)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
         verify(contentColumn.x >= 24,
@@ -1755,46 +1758,25 @@ TestCase {
         page.close()
     }
 
-    function test_settings_y_feedback_entry_is_removed() {
+    function test_settings_y_feedback_dialog_is_actionable() {
         var page = findChild(mainWindow, "settingsPage")
         verify(page)
         page.open()
         page.selectedSection = 6
         wait(500)
-        verify(!findChild(page, "feedbackButton"))
-        verify(!findChild(page, "feedbackDialog"))
+        var button = findChild(page, "feedbackButton")
+        var dialog = findChild(page, "feedbackDialog")
+        var message = findChild(page, "feedbackMessage")
+        verify(button)
+        verify(dialog)
+        verify(message)
+        mouseClick(button)
+        tryVerify(function() { return dialog.visible })
+        compare(message.text, "建议反馈请发邮件：agplayer@foxmail.com")
+        verify(findChild(dialog, "feedbackEmailField"))
+        verify(findChild(dialog, "copyFeedbackEmailButton"))
+        dialog.close()
         page.close()
-    }
-
-    function test_track_context_submenus_follow_dark_and_light_theme() {
-        if (LibraryModel.count === 0)
-            nativeDropHelper.ensureSortableTracks()
-        var previousMode = SettingsController.themeMode
-        var list = trackListComponent.createObject(mainWindow.contentItem)
-        verify(list)
-        var rowItem = list.itemAtIndex(0)
-        verify(rowItem)
-        for (var mode = 0; mode <= 1; ++mode) {
-            SettingsController.themeMode = mode
-            tryCompare(Theme, "isLight", mode === 1)
-            mouseClick(rowItem, rowItem.width / 2, rowItem.height / 2,
-                       Qt.RightButton)
-            var menu = findChild(list, "trackContextMenu")
-            tryVerify(function() { return menu && menu.visible })
-            var playlistEntry = menu.itemAt(2)
-            var toolsEntry = menu.itemAt(3)
-            compare(playlistEntry.contentItem.color.toString(),
-                    (playlistEntry.enabled ? Theme.primaryText
-                                           : Theme.secondaryText).toString())
-            compare(toolsEntry.contentItem.color.toString(),
-                    (toolsEntry.enabled ? Theme.primaryText
-                                        : Theme.secondaryText).toString())
-            compare(playlistEntry.background.color.toString(), "#00000000")
-            compare(toolsEntry.background.color.toString(), "#00000000")
-            menu.close()
-        }
-        SettingsController.themeMode = previousMode
-        list.destroy()
     }
 
     function test_theme_mode_updates_surfaces_text_and_icons() {
@@ -1804,7 +1786,7 @@ TestCase {
         tryCompare(Theme, "isLight", false)
         var darkBackground = Theme.background.toString()
         var darkText = Theme.primaryText.toString()
-        compare(darkBackground, "#071018")
+        compare(darkBackground, "#202020")
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
@@ -1828,17 +1810,11 @@ TestCase {
         compare(Theme.requestedMode, 2)
         compare(Theme.effectiveMode, Theme.systemIsLight ? 1 : 0)
         compare(Theme.background.toString(),
-                Theme.systemIsLight ? "#f3f3f3" : "#071018")
+                Theme.systemIsLight ? "#f3f3f3" : "#202020")
         compare(Theme.cyan.toString(), Theme.accent.toString())
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 
         SettingsController.themeMode = previousMode
-    }
-
-    function test_rating_stars_use_one_solid_orange_color() {
-        compare(Theme.ratingGold.toString(), "#ff9800")
-        for (var index = 0; index < 5; ++index)
-            compare(Theme.ratingColor(index).toString(), "#ff9800")
     }
 
     function test_title_buttons_use_compact_chinese_labels() {

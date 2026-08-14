@@ -116,11 +116,10 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
         qml/AgPlayer/components/SearchFilter.qml
+        qml/AgPlayer/components/LibraryManagerPage.qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedSwitch.qml
-        qml/AgPlayer/components/ThemedMenuItem.qml
-        qml/AgPlayer/components/ThemedComboBox.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/FormatTaskTable.qml
         qml/AgPlayer/components/tools/FormatSettingsPanel.qml
@@ -165,7 +164,7 @@ target_link_libraries(AgPlayer PRIVATE
     agplayer_app_qmlplugin
 )
 if(WIN32)
-    target_link_libraries(AgPlayer PRIVATE shell32 propsys)
+    target_link_libraries(AgPlayer PRIVATE shell32)
 endif()
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)

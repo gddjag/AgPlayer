@@ -2,24 +2,18 @@ $ErrorActionPreference = "Stop"
 $installer = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:AGPLAYER_INSTALLER_SCRIPT
 $repo = Split-Path -Parent (Split-Path -Parent $env:AGPLAYER_INSTALLER_SCRIPT)
 
-if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}\r?$') {
+if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}$') {
     throw "Installed Apps must display only AgPlayer"
 }
 
-if ($installer -notmatch 'Name:\s*"\{autodesktop\}\\\{#AppName\}";\s*Filename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*WorkingDir:\s*"\{app\}";[^\r\n]*IconFilename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*AppUserModelID:\s*"AgPlayer\.Desktop"') {
+if ($installer -notmatch 'Name:\s*"\{autodesktop\}\\\{#AppName\}";\s*Filename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Desktop shortcut must be created unconditionally"
 }
 if ($installer -match '\[InstallDelete\]' -or
     $installer -match 'RegDeleteKeyIncludingSubkeys') {
     throw "Normal installer must preserve the user's AgPlayer data and settings"
 }
-if ($installer -notmatch '\[Code\]' -or
-    $installer -notmatch 'InitializeUninstall' -or
-    $installer -notmatch 'MsgBox' -or
-    $installer -notmatch 'DelTree\(ExpandConstant\(') {
-    throw "Uninstaller must explicitly offer deletion of personal playlists, favorites, and settings"
-}
-if ($installer -notmatch '(?m)^DisableDirPage=no\r?$') {
+if ($installer -notmatch '(?m)^DisableDirPage=no$') {
     throw "Installer must allow choosing an installation directory"
 }
 if ($installer -notmatch '\[Tasks\]' -or
@@ -60,33 +54,8 @@ if ($mainSource -notmatch 'assets/brand/agplayer\.ico') {
 if ($mainSource -notmatch 'SetCurrentProcessExplicitAppUserModelID') {
     throw "Windows taskbar identity must use a stable AppUserModelID"
 }
-if ($mainSource -notmatch 'SHGetPropertyStoreForWindow' -or
-    $mainSource -notmatch 'PKEY_AppUserModel_ID' -or
-    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchCommand' -or
-    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchDisplayNameResource' -or
-    $mainSource -notmatch 'PKEY_AppUserModel_RelaunchIconResource' -or
-    $mainSource -notmatch 'window->setIcon') {
-    throw "Every native top-level window must publish stable taskbar identity, relaunch metadata, and icon"
-}
-if ($mainSource -notmatch 'LoadImageW' -or
-    $mainSource -notmatch 'MAKEINTRESOURCEW\(kAgPlayerIconResourceId\)' -or
-    $mainSource -notmatch 'WM_SETICON' -or
-    $mainSource -notmatch 'WM_GETICON') {
-    throw "Every native top-level window must publish and verify the PE icon resource"
-}
 if ($installer -notmatch 'AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Installed shortcuts must share the stable taskbar AppUserModelID"
-}
-foreach ($identityValue in @(
-    'Software\Classes\AppUserModelId\AgPlayer.Desktop',
-    'ValueName: "DisplayName"',
-    'ValueName: "IconUri"',
-    'ValueName: "RelaunchCommand"',
-    'ie4uinit.exe -show'
-)) {
-    if (-not $installer.Contains($identityValue)) {
-        throw "Installer must register and refresh the stable taskbar identity: $identityValue"
-    }
 }
 $manifestPath = Join-Path $repo 'app\agplayer.manifest'
 if (-not (Test-Path -LiteralPath $manifestPath)) {

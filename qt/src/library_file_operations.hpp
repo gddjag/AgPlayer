@@ -31,7 +31,7 @@ public:
                                     ConflictMode conflictMode = Skip);
     Q_INVOKABLE int copyTracksToUrl(const QStringList& trackIds, const QUrl& destinationFolder,
                                     ConflictMode conflictMode = Skip) const;
-    Q_INVOKABLE QVariantMap trashTracks(const QStringList& trackIds);
+    Q_INVOKABLE int trashTracks(const QStringList& trackIds);
     Q_INVOKABLE bool relocateTrack(const QString& trackId, const QString& newPath);
     Q_INVOKABLE bool relocateTrackToUrl(const QString& trackId, const QUrl& newFile);
     Q_INVOKABLE QVariantMap trackDetails(const QString& trackId) const;

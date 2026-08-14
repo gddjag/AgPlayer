@@ -293,19 +293,6 @@ ag_result ag_player_set_volume(ag_player* player, const float volume)
                : guard_result([&] { return player->context.set_volume(volume); });
 }
 
-ag_result ag_player_set_replay_gain(ag_player* player, const float gain_db,
-                                    const float peak,
-                                    const int clip_protection)
-{
-    if (player == nullptr || (clip_protection != 0 && clip_protection != 1)) {
-        return AG_INVALID_ARGUMENT;
-    }
-    return guard_result([&] {
-        return player->context.set_replay_gain(gain_db, peak,
-                                               clip_protection != 0);
-    });
-}
-
 ag_result ag_player_set_equalizer(
     ag_player* player,
     const ag_equalizer_settings* settings)

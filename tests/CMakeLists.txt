@@ -461,8 +461,8 @@ foreach(qt_test IN ITEMS
     library_model_test
     library_store_test
     playlist_model_test
+    library_manager_controller_test
     library_file_operations_test
-    playback_state_store_test
     import_controller_test
     library_filter_model_test
     playback_controller_test
@@ -482,7 +482,6 @@ foreach(qt_test IN ITEMS
     format_conversion_plan_test
     format_conversion_task_model_test
     file_association_controller_test
-    native_drop_router_test
     equalizer_controller_test
 )
 

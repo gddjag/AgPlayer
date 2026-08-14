@@ -1,5 +1,6 @@
 #include "qml_registration.hpp"
 
+#include "equalizer_controller.hpp"
 #include "audio_preview_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/audio_editor_waveform_item.hpp"
@@ -11,6 +12,8 @@
 #include "library_filter_model.hpp"
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "light_editor_controller.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "replay_gain_scanner.hpp"
@@ -34,9 +37,7 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  SettingsController* settings,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
-                                 EqualizerController* equalizer,
-                                 AudioEditorController* audioEditor,
-                                 PluginInstallManager* pluginInstallManager)
+                                 EqualizerController* equalizer)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -61,13 +62,10 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
+    qmlRegisterType<LibraryManagerController>("AgPlayer", 1, 0,
+                                               "LibraryManagerController");
     qmlRegisterType<LibraryFileOperations>("AgPlayer", 1, 0,
                                            "LibraryFileOperations");
-    qmlRegisterSingletonType<ReplayGainScanner>(
-        "AgPlayer", 1, 0, "ReplayGainScanner",
-        [library](QQmlEngine*, QJSEngine*) -> QObject* {
-            return new ReplayGainScanner(library);
-        });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows);

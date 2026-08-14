@@ -93,13 +93,6 @@ ag_result CoreContext::set_volume(const float volume) noexcept
     return record(audio_engine_.set_volume(volume), "volume change failed");
 }
 
-ag_result CoreContext::set_replay_gain(const float gain_db, const float peak,
-                                       const bool clip_protection) noexcept
-{
-    return record(audio_engine_.set_replay_gain(gain_db, peak, clip_protection),
-                  "ReplayGain change failed");
-}
-
 ag_result CoreContext::set_equalizer(const GraphicEqSettings& settings,
                                      const std::uint64_t revision) noexcept
 {

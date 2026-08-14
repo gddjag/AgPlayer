@@ -909,12 +909,10 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const std::size_t playedCount = computePlayedCount(
             peakCount, position_, duration_, snapshot->totalSamples);
 
-        if (hasMix) {
-            resampleValues(snapshot->mix->values, peakCount, node->mixValues_);
-        } else {
-            node->mixValues_.clear();
-        }
-        const bool hasHeldSpectrum = visualMode_ == 2
+        std::vector<float> mixValues = hasMix
+                                                 ? resampleValues(snapshot->mix->values, peakCount)
+                                                  : std::vector<float>{};
+        std::vector<float> heldSpectrumValues = visualMode_ == 2
             && snapshot->spectrumPeakHold
             && !snapshot->spectrumPeakHold->values.empty();
         if (hasHeldSpectrum) {
@@ -946,16 +944,17 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const auto& highValues = node->highValues_;
 
         if (visualMode_ == 2 && !mixValues.empty()) {
-            // Input magnitudes are already normalized by the analyser. Per-frame
-            // peak normalization makes quiet frames hit the ceiling and hides
-            // the attack/decay relationship to the music.
-            const auto shapeSpectrum = [](std::vector<float>& values) {
-                for (float& value : values) {
-                    value = std::pow(std::clamp(value, 0.0F, 1.0F), 0.58F);
-                }
-            };
-            shapeSpectrum(mixValues);
-            shapeSpectrum(heldSpectrumValues);
+            const float peak = *std::max_element(mixValues.begin(), mixValues.end());
+            if (peak > 0.0F) {
+                const auto normalizeSpectrum = [peak](std::vector<float>& values) {
+                    for (float& value : values) {
+                        value = std::pow(
+                            std::clamp(value / peak, 0.0F, 1.0F), 0.58F);
+                    }
+                };
+                normalizeSpectrum(mixValues);
+                normalizeSpectrum(heldSpectrumValues);
+            }
         }
 
         std::size_t vertexOffset = 0U;

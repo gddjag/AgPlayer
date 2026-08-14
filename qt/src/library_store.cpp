@@ -74,16 +74,6 @@ TrackRecord fromJson(const QJsonObject& object)
         }
     }
     track.addedAtMs = object.value(QStringLiteral("addedAtMs")).toInteger();
-    if (track.addedAtMs <= 0) {
-        const QFileInfo sourceInfo(track.path);
-        QDateTime sourceTime = sourceInfo.birthTime();
-        if (!sourceTime.isValid()) {
-            sourceTime = sourceInfo.lastModified();
-        }
-        if (sourceTime.isValid()) {
-            track.addedAtMs = sourceTime.toMSecsSinceEpoch();
-        }
-    }
     track.fileStatus = object.value(QStringLiteral("fileStatus"))
                            .toString(QStringLiteral("normal"));
     track.contentHash = object.value(QStringLiteral("contentHash")).toString();

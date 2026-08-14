@@ -112,8 +112,6 @@ ag_result ag_player_next(ag_player* player);
 ag_result ag_player_previous(ag_player* player);
 ag_result ag_player_set_mode(ag_player* player, ag_playback_mode mode);
 ag_result ag_player_set_volume(ag_player* player, float volume);
-ag_result ag_player_set_replay_gain(ag_player* player, float gain_db,
-                                    float peak, int clip_protection);
 ag_result ag_player_set_equalizer(ag_player* player,
                                   const ag_equalizer_settings* settings);
 ag_result ag_player_equalizer_status(const ag_player* player,

@@ -535,20 +535,6 @@ public:
         return AG_OK;
     }
 
-    ag_result set_replay_gain(const float gain_db, const float peak,
-                              const bool clip_protection) noexcept
-    {
-        if (!std::isfinite(gain_db) || !std::isfinite(peak) || peak < 0.0F) {
-            return AG_INVALID_ARGUMENT;
-        }
-        float linear = std::pow(10.0F, gain_db / 20.0F);
-        if (clip_protection && peak > 0.0F && linear * peak > 1.0F) {
-            linear = 1.0F / peak;
-        }
-        replay_gain_linear_.store(linear, std::memory_order_release);
-        return AG_OK;
-    }
-
     ag_result set_equalizer(const GraphicEqSettings& settings,
                             const std::uint64_t revision) noexcept
     {
@@ -656,7 +642,7 @@ public:
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
-        equalizer_.process(output, frames, channels);
+        equalizer_.process(output, frames, channels_);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
                                : volume_.load(std::memory_order_relaxed)
@@ -1768,7 +1754,6 @@ private:
             settings = equalizer_settings_;
             revision = equalizer_revision_;
         }
-
         equalizer_sample_rate_status_.store(sample_rate,
                                             std::memory_order_release);
         if (!is_graphic_eq_sample_rate_supported(sample_rate)) {
@@ -1783,7 +1768,6 @@ private:
                                                std::memory_order_release);
             return;
         }
-
         const auto program = prepare_graphic_eq(settings, sample_rate, revision);
         if (!program.has_value()) {
             equalizer_active_status_.store(false, std::memory_order_release);
@@ -1843,7 +1827,6 @@ private:
     std::atomic<std::size_t> pending_track_index_{0U};
     std::atomic<std::int64_t> pending_duration_ms_{0};
     std::atomic<float> volume_{1.0F};
-    std::atomic<float> replay_gain_linear_{1.0F};
     GraphicEqualizerProcessor equalizer_;
     mutable std::mutex equalizer_settings_mutex_;
     GraphicEqSettings equalizer_settings_{};
@@ -1936,12 +1919,6 @@ ag_result AudioEngine::set_mode(const PlaybackMode mode) noexcept
 ag_result AudioEngine::set_volume(const float volume) noexcept
 {
     return impl_->set_volume(volume);
-}
-
-ag_result AudioEngine::set_replay_gain(const float gain_db, const float peak,
-                                       const bool clip_protection) noexcept
-{
-    return impl_->set_replay_gain(gain_db, peak, clip_protection);
 }
 
 ag_result AudioEngine::set_equalizer(const GraphicEqSettings& settings,

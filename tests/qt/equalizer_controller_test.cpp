@@ -15,7 +15,6 @@ private slots:
     void initTestCase();
     void exposesTenFixedBandsAndAppliesAtomicSnapshots();
     void resetAndBuiltInPresetUseTheRealBandParameters();
-    void professionalBuiltInPresetsUseDocumentedSafeCurves();
     void customPresetsPersistRenameAndDelete();
     void responseCurveReflectsTheActualDspProgram();
 };
@@ -36,7 +35,6 @@ void EqualizerControllerTest::exposesTenFixedBandsAndAppliesAtomicSnapshots()
     QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
 
     EqualizerController controller(player);
-    QVERIFY(!controller.enabled());
     QCOMPARE(controller.rowCount(), 10);
     QCOMPARE(controller.data(controller.index(0, 0),
                              EqualizerController::FrequencyRole).toDouble(),
@@ -89,45 +87,6 @@ void EqualizerControllerTest::resetAndBuiltInPresetUseTheRealBandParameters()
     ag_player_destroy(player);
 }
 
-void EqualizerControllerTest::professionalBuiltInPresetsUseDocumentedSafeCurves()
-{
-    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
-    ag_player* player = nullptr;
-    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
-    EqualizerController controller(player);
-
-    const QStringList expectedIds{
-        QStringLiteral("flat"), QStringLiteral("bass-boost"),
-        QStringLiteral("bass-cut"), QStringLiteral("vocal"),
-        QStringLiteral("treble-boost"), QStringLiteral("treble-cut"),
-        QStringLiteral("rock")};
-    const QStringList presetIds = controller.presetIds();
-    QCOMPARE(presetIds.mid(0, expectedIds.size()), expectedIds);
-
-    struct Curve {
-        const char* id;
-        double preamp;
-        std::array<double, 10> gains;
-    };
-    const std::array<Curve, 7> curves{{
-        {"flat", 0.0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
-        {"bass-boost", -4.5, {4.5, 4, 3, 1.5, 0, 0, 0, 0, 0, 0}},
-        {"bass-cut", 0.0, {-4.5, -4, -3, -1.5, 0, 0, 0, 0, 0, 0}},
-        {"vocal", -2.5, {-2, -1.5, -0.5, 0.5, 1.5, 2.5, 2, 1, 0, -1}},
-        {"treble-boost", -4.5, {0, 0, 0, 0, 0, 0, 1, 2, 3.5, 4.5}},
-        {"treble-cut", 0.0, {0, 0, 0, 0, 0, 0, -1, -2, -3.5, -4.5}},
-        {"rock", -3.5, {3.5, 3, 1, -1.5, -2, 1, 2.5, 3, 3.5, 2}},
-    }};
-
-    for (const Curve& curve : curves) {
-        QVERIFY(controller.applyPreset(QString::fromLatin1(curve.id)));
-        QCOMPARE(controller.preampDb(), curve.preamp);
-        for (int band = 0; band < controller.rowCount(); ++band)
-            QCOMPARE(controller.bandGain(band), curve.gains[band]);
-    }
-    ag_player_destroy(player);
-}
-
 void EqualizerControllerTest::customPresetsPersistRenameAndDelete()
 {
     QSettings().clear();
@@ -164,7 +123,6 @@ void EqualizerControllerTest::responseCurveReflectsTheActualDspProgram()
     ag_player* player = nullptr;
     QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
     EqualizerController controller(player);
-    controller.setEnabled(true);
 
     const QVariantList flat = controller.responseCurve(96);
     QCOMPARE(flat.size(), 96);

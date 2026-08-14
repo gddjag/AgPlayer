@@ -29,18 +29,11 @@ Item {
         spacing: 3
 
         Label {
-            objectName: root.objectName + "-frequency"
             Layout.fillWidth: true
             text: root.frequencyLabel
             color: Theme.primaryText
             font.pixelSize: Math.max(12, Qt.application.font.pixelSize)
             horizontalAlignment: Text.AlignHCenter
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onDoubleClicked: root.setGain(0)
-            }
         }
 
         Slider {
@@ -99,12 +92,6 @@ Item {
                 color: Theme.elevated
                 border.color: slider.activeFocus ? Theme.accent : Theme.secondaryText
                 border.width: slider.activeFocus ? 2 : 1
-
-                TapHandler {
-                    acceptedButtons: Qt.LeftButton
-                    gesturePolicy: TapHandler.WithinBounds
-                    onDoubleTapped: root.setGain(0)
-                }
             }
 
             WheelHandler {
@@ -115,22 +102,21 @@ Item {
                     event.accepted = true
                 }
             }
+
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                gesturePolicy: TapHandler.WithinBounds
+                onDoubleTapped: root.setGain(0)
+            }
         }
 
         Label {
-            objectName: root.objectName + "-value"
             Layout.fillWidth: true
             text: (root.gainDb >= 0 ? "+" : "")
                   + root.gainDb.toFixed(1) + (root.preamp ? " dB" : "")
             color: Theme.primaryText
             font.pixelSize: Math.max(12, Qt.application.font.pixelSize)
             horizontalAlignment: Text.AlignHCenter
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onDoubleClicked: root.setGain(0)
-            }
         }
     }
 }

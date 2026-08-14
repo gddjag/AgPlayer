@@ -78,8 +78,6 @@ public:
     ag_result previous() noexcept;
     ag_result set_mode(PlaybackMode mode) noexcept;
     ag_result set_volume(float volume) noexcept;
-    ag_result set_replay_gain(float gain_db, float peak,
-                              bool clip_protection) noexcept;
     ag_result set_equalizer(const GraphicEqSettings& settings,
                             std::uint64_t revision) noexcept;
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept;

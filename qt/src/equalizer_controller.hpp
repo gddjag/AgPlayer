@@ -97,7 +97,7 @@ private:
     void setCurrentPresetId(const QString& id);
 
     ag_player* player_ = nullptr;
-    bool enabled_ = false;
+    bool enabled_ = true;
     bool bypassed_ = false;
     bool autoClipProtection_ = true;
     double preampDb_ = 0.0;

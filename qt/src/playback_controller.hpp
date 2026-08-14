@@ -33,12 +33,9 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(bool exclusiveModeActive READ exclusiveModeActive
                    NOTIFY exclusiveModeActiveChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
-    Q_PROPERTY(bool replayGainClippingWarning READ replayGainClippingWarning
-                   NOTIFY replayGainClippingWarningChanged)
 
 public:
     static constexpr int PollIntervalMs = 17;
-    static constexpr int IdlePollIntervalMs = 100;
 
     enum State { Stopped, Loading, Playing, Paused, Error };
     Q_ENUM(State)

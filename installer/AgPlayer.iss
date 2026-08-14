@@ -41,13 +41,10 @@ Name: "associateaudio"; Description: "注册常用音频文件关联（可在 Wi
 Source: "..\build\package\AgPlayer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"
 
 [Registry]
-Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\{#AppExeName},0"
-Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "RelaunchCommand"; ValueData: """{app}\{#AppExeName}"""
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\DefaultIcon"; ValueType: string; ValueData: "{app}\{#AppExeName},0"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\shell\open\command"; ValueType: string; ValueData: """{app}\{#AppExeName}"" ""%1"""
@@ -84,29 +81,6 @@ Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"
 Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
 #undef AudioExt
-
-[Code]
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
-begin
-  if CurStep = ssPostInstall then begin
-    { [Icons] recreates shortcuts on upgrades; invalidate the Shell icon cache. }
-    ShellExec('', ExpandConstant('{cmd}'),
-      '/c ie4uinit.exe -show', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
-end;
-
-function InitializeUninstall(): Boolean;
-begin
-  Result := True;
-  if MsgBox('是否删除个人歌单、收藏和应用设置？'#13#10#13#10 +
-            '选择“是”将删除 AgPlayer 的个人数据；不会删除任何音乐文件。',
-            mbConfirmation, MB_YESNO) = IDYES then begin
-    DelTree(ExpandConstant('{userappdata}\\AgPlayer'), True, True, True);
-    DelTree(ExpandConstant('{localappdata}\\AgPlayer'), True, True, True);
-  end;
-end;
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "启动 {#AppName}"; Flags: nowait postinstall skipifsilent
