@@ -579,6 +579,32 @@ add_test(NAME voice_clone_runtime_pack_test
 )
 set_tests_properties(voice_clone_runtime_pack_test PROPERTIES TIMEOUT 120)
 
+add_executable(voice_clone_package_probe
+    qt/voice_clone_package_probe.cpp
+)
+target_include_directories(voice_clone_package_probe PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(voice_clone_package_probe PRIVATE
+    agplayer_qt
+    Qt6::Core
+)
+agplayer_enable_warnings(voice_clone_package_probe)
+add_dependencies(voice_clone_package_probe agplayer_voice_clone_plugin)
+
+add_test(NAME voice_clone_package_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_package_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+        -BuildRoot ${CMAKE_BINARY_DIR}
+        -HostProbePath $<TARGET_FILE:voice_clone_package_probe>
+)
+set_tests_properties(voice_clone_package_contract_test PROPERTIES
+    TIMEOUT 120
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )

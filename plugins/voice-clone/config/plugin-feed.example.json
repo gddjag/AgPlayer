@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "pluginId": "agplayer.voice-clone",
+  "version": "1.0.0",
+  "platform": "windows",
+  "architecture": "x86_64",
+  "minimumPlayerVersion": "1.0.0",
+  "packageUrl": "",
+  "manifestUrl": "",
+  "publishBaseUrlRequired": true,
+  "signature": {
+    "status": "unsigned-test",
+    "algorithm": null,
+    "keyId": null
+  }
+}
