@@ -1,4 +1,5 @@
 #include "voice_clone_package_manager.hpp"
+#include "voice_clone_registry.hpp"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -277,7 +278,7 @@ protected:
     {
         Q_UNUSED(outgoingData)
         const QByteArray body = bodies_.value(request.url());
-        const bool stale = request.url().path().contains(QStringLiteral("stale-old"));
+        const bool stale = request.url().query().isEmpty();
         return new ControlledReply(operation, request,
                                    operation == GetOperation ? body : QByteArray{},
                                    body.size(), stale ? 1000 : 0, stale ? 200 : 0, this);
@@ -297,10 +298,12 @@ VoiceClonePackageManifest packageManifest(const QString& id,
     manifest.modelId = QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base");
     manifest.adapterId = QStringLiteral("qwen");
     manifest.version = QStringLiteral("1.0.0");
-    manifest.revision = QStringLiteral("1111111111111111111111111111111111111111");
+    manifest.revision = QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc");
     manifest.sourceProvider = QStringLiteral("hugging-face");
     manifest.sourceRepository = QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base");
     manifest.sourceUrl = QUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base"));
+    manifest.modelDisplayName = QStringLiteral("Qwen3-TTS 0.6B Base");
+    manifest.modelDescription = QStringLiteral("Test fixture for the production package protocol.");
     manifest.licenseUrl = QUrl(QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE"));
     manifest.licenseRevision = QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e");
     manifest.licenses.append({QStringLiteral("apache-2.0"), QStringLiteral("Apache-2.0"),
@@ -346,6 +349,7 @@ void configureIndexManifest(VoiceClonePackageManifest* manifest)
     manifest->adapterId = QStringLiteral("indextts25");
     manifest->sourceRepository = manifest->modelId;
     manifest->sourceUrl = QUrl(QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5"));
+    manifest->revision = QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63");
     manifest->licenses = indexLicenses();
     manifest->licenseUrl = manifest->licenses.front().url;
     manifest->licenseRevision = manifest->licenses.front().revision;
@@ -373,6 +377,9 @@ class VoiceClonePackageManagerTest final : public QObject {
 
 private slots:
     void parsesSourceSizesAndLicenseSet();
+    void parsesEveryShippedDownloadManifest();
+    void rejectsFileUrlsNotDerivedFromOfficialSource();
+    void installsIntoDiscoveryLayoutAndWritesManifest();
     void rejectsExpectedSizeMismatchEvenWhenHashMatches();
     void requiresEveryIndexLicenseAcceptance();
     void parsesStrictManifestAndRejectsUnsafeOrDuplicateTargets();
@@ -400,6 +407,85 @@ private slots:
     void recoversInterruptedSwapFromRollbackDirectory();
 };
 
+void VoiceClonePackageManagerTest::parsesEveryShippedDownloadManifest()
+{
+    const QStringList names{QStringLiteral("qwen3-tts-0.6b.json"),
+                            QStringLiteral("qwen3-tts-1.7b.json"),
+                            QStringLiteral("indextts-2.5.json"),
+                            QStringLiteral("fun-cosyvoice3.json")};
+    for (const QString& name : names) {
+        QFile file(QDir(QStringLiteral(AGPLAYER_VOICE_CLONE_DOWNLOAD_MANIFESTS_DIR))
+                       .filePath(name));
+        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(name));
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+        QCOMPARE(parseError.error, QJsonParseError::NoError);
+        const VoiceClonePackageManifest manifest = VoiceClonePackageManifest::fromJson(
+            document.object());
+        QVERIFY2(manifest.isValid(),
+                 qPrintable(QStringLiteral("%1: %2").arg(name, manifest.errorString())));
+    }
+}
+
+void VoiceClonePackageManagerTest::rejectsFileUrlsNotDerivedFromOfficialSource()
+{
+    const QByteArray body("official-url");
+    auto manifest = packageManifest(
+        QStringLiteral("qwen3-tts-0.6b"), QStringLiteral("config.json"),
+        QUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/config.json")),
+        body);
+    QVERIFY2(manifest.isValid(), qPrintable(manifest.errorString()));
+
+    const QList<QUrl> rejected{
+        QUrl(QStringLiteral("https://huggingface.co/community/Qwen3-TTS/resolve/5d83992436eae1d760afd27aff78a71d676296fc/config.json")),
+        QUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/2222222222222222222222222222222222222222/config.json")),
+        QUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/other.json")),
+        QUrl(QStringLiteral("https://huggingface.co.evil.example/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/config.json")),
+    };
+    for (const QUrl& url : rejected) {
+        auto tampered = manifest;
+        tampered.files.front().url = url;
+        QVERIFY2(!tampered.isValid(), qPrintable(url.toString()));
+    }
+
+    auto incompleteAuxiliarySource = manifest;
+    incompleteAuxiliarySource.files.front().sourceRevision = manifest.revision;
+    incompleteAuxiliarySource.files.front().sourcePath = QStringLiteral("config.json");
+    QVERIFY2(!incompleteAuxiliarySource.isValid(),
+             "A partial per-file source identity must not inherit around the auxiliary allowlist");
+}
+
+void VoiceClonePackageManagerTest::installsIntoDiscoveryLayoutAndWritesManifest()
+{
+    LocalHttpFixture server;
+    const QByteArray body("discoverable-model");
+    server.add(QStringLiteral("/model/config.json"), {body});
+    QTemporaryDir portable;
+    QVERIFY(portable.isValid());
+    const QString modelsRoot = portable.filePath(QStringLiteral("models/voice-clone"));
+    QVERIFY(QDir().mkpath(modelsRoot));
+    auto manifest = packageManifest(QStringLiteral("qwen3-tts-0.6b"),
+                                    QStringLiteral("config.json"),
+                                    server.url(QStringLiteral("/model/config.json")), body);
+    VoiceClonePackageManager manager(modelsRoot);
+
+    manager.start(manifest);
+    QTRY_VERIFY2_WITH_TIMEOUT(manager.state() == VoiceClonePackageManager::Completed,
+                              qPrintable(manager.errorString()), 3000);
+
+    const QString target = QDir(modelsRoot).filePath(
+        QStringLiteral("qwen/qwen3-tts-0.6b"));
+    QVERIFY(QFileInfo::exists(QDir(target).filePath(QStringLiteral("config.json"))));
+    QVERIFY(QFileInfo::exists(QDir(target).filePath(QStringLiteral("agplayer-model.json"))));
+    const auto discovery = VoiceCloneRegistry::discoverUserModels(
+        portable.path(), {QStringLiteral("qwen")});
+    QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
+    QCOMPARE(discovery.models.size(), 1);
+    QCOMPARE(discovery.models.front().stableId,
+             QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base"));
+    QCOMPARE(discovery.models.front().installState, QStringLiteral("ready"));
+}
+
 void VoiceClonePackageManagerTest::parsesSourceSizesAndLicenseSet()
 {
     const QJsonObject source{{QStringLiteral("provider"), QStringLiteral("hugging-face")},
@@ -423,6 +509,9 @@ void VoiceClonePackageManagerTest::parsesSourceSizesAndLicenseSet()
         {QStringLiteral("adapterId"), QStringLiteral("qwen")},
         {QStringLiteral("version"), QStringLiteral("1.0.0")},
         {QStringLiteral("revision"), QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc")},
+        {QStringLiteral("model"), QJsonObject{
+             {QStringLiteral("displayName"), QStringLiteral("Qwen3-TTS 0.6B Base")},
+             {QStringLiteral("description"), QStringLiteral("Package parser fixture")}}},
         {QStringLiteral("source"), source},
         {QStringLiteral("licenses"), QJsonArray{license}},
         {QStringLiteral("totalBytes"), 4494},
@@ -482,7 +571,7 @@ void VoiceClonePackageManagerTest::parsesStrictManifestAndRejectsUnsafeOrDuplica
 {
     const auto file = [](const QString& path) {
         return QJsonObject{{QStringLiteral("path"), path},
-                           {QStringLiteral("url"), QStringLiteral("https://example.test/file")},
+                           {QStringLiteral("url"), QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/%1").arg(path)},
                            {QStringLiteral("sha256"), QString(64, QLatin1Char('a'))},
                            {QStringLiteral("sizeBytes"), 1}};
     };
@@ -491,7 +580,10 @@ void VoiceClonePackageManagerTest::parsesStrictManifestAndRejectsUnsafeOrDuplica
                        {QStringLiteral("modelId"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
                        {QStringLiteral("adapterId"), QStringLiteral("qwen")},
                        {QStringLiteral("version"), QStringLiteral("1.0.0")},
-                       {QStringLiteral("revision"), QStringLiteral("1111111111111111111111111111111111111111")},
+                       {QStringLiteral("revision"), QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc")},
+                       {QStringLiteral("model"),
+                        QJsonObject{{QStringLiteral("displayName"), QStringLiteral("Qwen3-TTS 0.6B Base")},
+                                    {QStringLiteral("description"), QStringLiteral("Strict parser fixture")}}},
                        {QStringLiteral("source"),
                         QJsonObject{{QStringLiteral("provider"), QStringLiteral("hugging-face")},
                                     {QStringLiteral("repository"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
@@ -585,7 +677,7 @@ void VoiceClonePackageManagerTest::resumesPersistedPartialDownloadWithHttpRange(
     QVERIFY(server.getCount(QStringLiteral("/resume")) >= 2);
     const QList<qint64> ranges = server.ranges(QStringLiteral("/resume"));
     QVERIFY(std::any_of(ranges.cbegin(), ranges.cend(), [](qint64 value) { return value > 0; }));
-    QFile installed(root.filePath(QStringLiteral("resume/file.bin")));
+    QFile installed(root.filePath(QStringLiteral("qwen/resume/file.bin")));
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), body);
 }
@@ -647,14 +739,14 @@ void VoiceClonePackageManagerTest::hashMismatchNeverReplacesInstalledVersion()
     server.add(QStringLiteral("/bad"), {served});
     QTemporaryDir root;
     QVERIFY(root.isValid());
-    QVERIFY(writeFile(root.filePath(QStringLiteral("model/file.bin")), "old-version"));
+    QVERIFY(writeFile(root.filePath(QStringLiteral("qwen/model/file.bin")), "old-version"));
     VoiceClonePackageManager manager(root.path());
     manager.start(packageManifest(QStringLiteral("model"), QStringLiteral("file.bin"),
                                   server.url(QStringLiteral("/bad")), expected));
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Failed, 2000);
     QVERIFY(manager.errorString().contains(QStringLiteral("SHA"), Qt::CaseInsensitive)
             || manager.errorString().contains(QStringLiteral("hash"), Qt::CaseInsensitive));
-    QFile installed(root.filePath(QStringLiteral("model/file.bin")));
+    QFile installed(root.filePath(QStringLiteral("qwen/model/file.bin")));
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), QByteArray("old-version"));
 }
@@ -677,10 +769,10 @@ void VoiceClonePackageManagerTest::commitsCompleteStagingAndRollsBackFailedSwap(
     VoiceClonePackageManager manager(root.path());
     manager.start(manifest);
     QTRY_VERIFY_WITH_TIMEOUT(manager.transferredBytes() >= first.size(), 2000);
-    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("atomic/one.bin"))));
+    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("qwen/atomic/one.bin"))));
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Completed, 3000);
-    QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("atomic/one.bin"))));
-    QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("atomic/nested/two.bin"))));
+    QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("qwen/atomic/one.bin"))));
+    QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("qwen/atomic/nested/two.bin"))));
 
     const QString target = root.filePath(QStringLiteral("rollback"));
     QVERIFY(writeFile(QDir(target).filePath(QStringLiteral("old.bin")), "old"));
@@ -772,22 +864,23 @@ void VoiceClonePackageManagerTest::rejectsReparseStagingAndTargetDirectories()
     QVERIFY(outside.isValid());
     const auto manifest = packageManifest(QStringLiteral("linked"), QStringLiteral("file.bin"),
                                           server.url(QStringLiteral("/safe")), body);
-    QVERIFY(createWindowsJunction(root.filePath(QStringLiteral("linked")), outside.path()));
+    QVERIFY(QDir().mkpath(root.filePath(QStringLiteral("qwen"))));
+    QVERIFY(createWindowsJunction(root.filePath(QStringLiteral("qwen/linked")), outside.path()));
     VoiceClonePackageManager targetManager(root.path());
     targetManager.start(manifest);
     QCOMPARE(targetManager.state(), VoiceClonePackageManager::Failed);
     QVERIFY(targetManager.errorString().contains(QStringLiteral("reparse"), Qt::CaseInsensitive)
             || targetManager.errorString().contains(QStringLiteral("link"), Qt::CaseInsensitive));
-    QVERIFY(QDir().rmdir(root.filePath(QStringLiteral("linked"))));
+    QVERIFY(QDir().rmdir(root.filePath(QStringLiteral("qwen/linked"))));
 
-    QVERIFY(QDir().mkpath(root.filePath(QStringLiteral(".staging"))));
-    QVERIFY(createWindowsJunction(root.filePath(QStringLiteral(".staging/linked")), outside.path()));
+    QVERIFY(QDir().mkpath(root.filePath(QStringLiteral("qwen/.staging"))));
+    QVERIFY(createWindowsJunction(root.filePath(QStringLiteral("qwen/.staging/linked")), outside.path()));
     VoiceClonePackageManager stagingManager(root.path());
     stagingManager.start(manifest);
     QCOMPARE(stagingManager.state(), VoiceClonePackageManager::Failed);
     QVERIFY(stagingManager.errorString().contains(QStringLiteral("reparse"), Qt::CaseInsensitive)
             || stagingManager.errorString().contains(QStringLiteral("link"), Qt::CaseInsensitive));
-    QVERIFY(QDir().rmdir(root.filePath(QStringLiteral(".staging/linked"))));
+    QVERIFY(QDir().rmdir(root.filePath(QStringLiteral("qwen/.staging/linked"))));
 #else
     QSKIP("Reparse-point contract is Windows-specific.");
 #endif
@@ -826,17 +919,17 @@ void VoiceClonePackageManagerTest::removesUnlistedStagingContentBeforeCommit()
     server.add(QStringLiteral("/listed"), {body});
     QTemporaryDir root;
     QVERIFY(root.isValid());
-    QVERIFY(writeFile(root.filePath(QStringLiteral(".staging/clean/unlisted.bin")), "stale"));
-    const QString hidden = root.filePath(QStringLiteral(".staging/clean/.hidden-stale.bin"));
+    QVERIFY(writeFile(root.filePath(QStringLiteral("qwen/.staging/clean/unlisted.bin")), "stale"));
+    const QString hidden = root.filePath(QStringLiteral("qwen/.staging/clean/.hidden-stale.bin"));
     QVERIFY(writeFile(hidden, "hidden-stale"));
     QVERIFY(markHidden(hidden));
     VoiceClonePackageManager manager(root.path());
     manager.start(packageManifest(QStringLiteral("clean"), QStringLiteral("listed.bin"),
                                   server.url(QStringLiteral("/listed")), body));
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Completed, 2000);
-    QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("clean/listed.bin"))));
-    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("clean/unlisted.bin"))));
-    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("clean/.hidden-stale.bin"))));
+    QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("qwen/clean/listed.bin"))));
+    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("qwen/clean/unlisted.bin"))));
+    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("qwen/clean/.hidden-stale.bin"))));
 }
 
 void VoiceClonePackageManagerTest::derivesLicenseGateFromIndexLicenseIdentity()
@@ -885,6 +978,11 @@ void VoiceClonePackageManagerTest::derivesLicenseGateFromIndexLicenseIdentity()
         approved.adapterId = identity.second;
         approved.sourceRepository = identity.first;
         approved.sourceUrl = QUrl(QStringLiteral("https://huggingface.co/%1").arg(identity.first));
+        approved.revision = identity.first.contains(QStringLiteral("1.7B"))
+                                ? QStringLiteral("fd4b254389122332181a7c3db7f27e918eec64e3")
+                                : (identity.second == QStringLiteral("cosyvoice3")
+                                       ? QStringLiteral("29e01c4e8d000f4bcd70751be16fa94bf3d85a18")
+                                       : QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc"));
         if (identity.second == QStringLiteral("cosyvoice3")) {
             approved.licenses[0].url = QUrl(QStringLiteral("https://github.com/FunAudioLLM/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/LICENSE"));
             approved.licenses[0].revision = QStringLiteral("074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc");
@@ -977,19 +1075,19 @@ void VoiceClonePackageManagerTest::rejectsHiddenUnlistedContentAddedDuringDownlo
     manager.start(packageManifest(QStringLiteral("hidden"), QStringLiteral("file.bin"),
                                   server.url(QStringLiteral("/hidden")), body));
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Downloading, 2000);
-    const QString hidden = root.filePath(QStringLiteral(".staging/hidden/.unlisted.bin"));
+    const QString hidden = root.filePath(QStringLiteral("qwen/.staging/hidden/.unlisted.bin"));
     QVERIFY(writeFile(hidden, "unlisted"));
     QVERIFY(markHidden(hidden));
     QVERIFY(QFileInfo(hidden).isHidden());
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Failed, 3000);
-    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("hidden/file.bin"))));
+    QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("qwen/hidden/file.bin"))));
 }
 
 void VoiceClonePackageManagerTest::stalePausedReplyCannotCorruptNewOperation()
 {
     ControlledNetworkManager network;
-    const QUrl oldUrl(QStringLiteral("https://fixture.test/stale-old-pause"));
-    const QUrl newUrl(QStringLiteral("https://fixture.test/new-after-pause"));
+    const QUrl oldUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/file.bin"));
+    const QUrl newUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/file.bin?download=true"));
     network.add(oldUrl, QByteArray("old"));
     network.add(newUrl, QByteArray("new-after-pause"));
     QTemporaryDir root;
@@ -1004,7 +1102,7 @@ void VoiceClonePackageManagerTest::stalePausedReplyCannotCorruptNewOperation()
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Completed, 1000);
     QTest::qWait(300);
     QCOMPARE(manager.state(), VoiceClonePackageManager::Completed);
-    QFile installed(root.filePath(QStringLiteral("new-pause/file.bin")));
+    QFile installed(root.filePath(QStringLiteral("qwen/new-pause/file.bin")));
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), QByteArray("new-after-pause"));
 }
@@ -1012,8 +1110,8 @@ void VoiceClonePackageManagerTest::stalePausedReplyCannotCorruptNewOperation()
 void VoiceClonePackageManagerTest::staleCanceledReplyCannotCorruptNewOperation()
 {
     ControlledNetworkManager network;
-    const QUrl oldUrl(QStringLiteral("https://fixture.test/stale-old-cancel"));
-    const QUrl newUrl(QStringLiteral("https://fixture.test/new-after-cancel"));
+    const QUrl oldUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/file.bin"));
+    const QUrl newUrl(QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/resolve/5d83992436eae1d760afd27aff78a71d676296fc/file.bin?download=true"));
     network.add(oldUrl, QByteArray("old"));
     network.add(newUrl, QByteArray("new-after-cancel"));
     QTemporaryDir root;
@@ -1029,7 +1127,7 @@ void VoiceClonePackageManagerTest::staleCanceledReplyCannotCorruptNewOperation()
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Completed, 1000);
     QTest::qWait(300);
     QCOMPARE(manager.state(), VoiceClonePackageManager::Completed);
-    QFile installed(root.filePath(QStringLiteral("new-cancel/file.bin")));
+    QFile installed(root.filePath(QStringLiteral("qwen/new-cancel/file.bin")));
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), QByteArray("new-after-cancel"));
 }
@@ -1161,7 +1259,7 @@ void VoiceClonePackageManagerTest::keepsCompletedStateWhenBackupCleanupFails()
     server.add(QStringLiteral("/cleanup-warning"), {body});
     QTemporaryDir root;
     QVERIFY(root.isValid());
-    QVERIFY(writeFile(root.filePath(QStringLiteral("cleanup-warning/old.bin")), "old"));
+    QVERIFY(writeFile(root.filePath(QStringLiteral("qwen/cleanup-warning/old.bin")), "old"));
     VoiceClonePackageManager::DeploymentOperations operations;
     operations.renameDirectory = [](const QString& source, const QString& destination) {
         return QDir().rename(source, destination);
@@ -1174,11 +1272,11 @@ void VoiceClonePackageManagerTest::keepsCompletedStateWhenBackupCleanupFails()
     QTRY_COMPARE_WITH_TIMEOUT(manager.state(), VoiceClonePackageManager::Completed, 2000);
     QVERIFY(manager.errorString().contains(QStringLiteral("cleanup"), Qt::CaseInsensitive)
             || manager.errorString().contains(QStringLiteral("backup"), Qt::CaseInsensitive));
-    QFile installed(root.filePath(QStringLiteral("cleanup-warning/file.bin")));
+    QFile installed(root.filePath(QStringLiteral("qwen/cleanup-warning/file.bin")));
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), body);
     QVERIFY(QFileInfo::exists(root.filePath(
-        QStringLiteral("cleanup-warning.rollback/old.bin"))));
+        QStringLiteral("qwen/cleanup-warning.rollback/old.bin"))));
 }
 
 void VoiceClonePackageManagerTest::finalizesAlreadyCompletePartialWithoutEofRange()
@@ -1190,8 +1288,8 @@ void VoiceClonePackageManagerTest::finalizesAlreadyCompletePartialWithoutEofRang
     QVERIFY(root.isValid());
     const auto manifest = packageManifest(QStringLiteral("complete"), QStringLiteral("file.bin"),
                                           server.url(QStringLiteral("/complete-partial")), body);
-    QVERIFY(writeFile(root.filePath(QStringLiteral(".staging/complete/file.bin.part")), body));
-    QVERIFY(writeFile(root.filePath(QStringLiteral(".staging/complete/file.bin.resume.json")),
+    QVERIFY(writeFile(root.filePath(QStringLiteral("qwen/.staging/complete/file.bin.part")), body));
+    QVERIFY(writeFile(root.filePath(QStringLiteral("qwen/.staging/complete/file.bin.resume.json")),
                       QJsonDocument(QJsonObject{{QStringLiteral("url"), manifest.files[0].url.toString()},
                                                 {QStringLiteral("sha256"), QString::fromLatin1(manifest.files[0].sha256)},
                                                 {QStringLiteral("revision"), manifest.revision},

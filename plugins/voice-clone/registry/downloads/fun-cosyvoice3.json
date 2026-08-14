@@ -5,6 +5,10 @@
   "adapterId": "cosyvoice3",
   "version": "1.0.0",
   "revision": "29e01c4e8d000f4bcd70751be16fa94bf3d85a18",
+  "model": {
+    "displayName": "Fun-CosyVoice3 0.5B 2512",
+    "description": "Nine-language zero-shot voice cloning with 18+ Chinese dialects and accents."
+  },
   "source": {
     "provider": "hugging-face",
     "repository": "FunAudioLLM/Fun-CosyVoice3-0.5B-2512",

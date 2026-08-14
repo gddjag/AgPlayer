@@ -173,8 +173,16 @@ Item {
             selectedIndex: root.selectedModelIndex
             licenseAcceptanceRequired: root.controller
                                                ? root.controller.licenseAcceptanceRequired : false
+            downloadInProgress: !!(root.controller && root.controller.downloadInProgress)
+            downloadProgressPercent: root.controller
+                                     && root.controller.downloadProgressPercent !== undefined
+                                     ? root.controller.downloadProgressPercent : -1
             onModelSelected: function(index, stableId) { root.selectModel(index, stableId) }
             onLicenseAcceptanceRequested: licenseDialog.open()
+            onDownloadRequested: function(stableId) {
+                if (root.controller && root.controller.downloadModel)
+                    root.controller.downloadModel(stableId)
+            }
             onRefreshRequested: if (root.controller && root.controller.refreshModels) root.controller.refreshModels()
             onOpenDirectoryRequested: if (root.controller && root.controller.openModelDirectory) root.controller.openModelDirectory()
         }
@@ -255,20 +263,29 @@ Item {
         anchors.centerIn: parent
         modal: true
         title: qsTr("确认模型许可与合法授权")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onOpened: {
-            for (let index = 0; index < licenseRepeater.count; ++index)
-                licenseRepeater.itemAt(index).checked = false
-        }
-        onAccepted: {
-            if (!root.controller || !root.controller.acceptSelectedLicenses) return
+        standardButtons: Dialog.NoButton
+        function submitAcceptance() {
             const acceptedIds = []
             for (let index = 0; index < licenseRepeater.count; ++index) {
                 const item = licenseRepeater.itemAt(index)
-                if (!item.checked) return
+                if (!item.checked) {
+                    licenseIncompleteWarning.visible = true
+                    return
+                }
                 acceptedIds.push(item.licenseId)
             }
-            root.controller.acceptSelectedLicenses(acceptedIds)
+            if (!root.controller || !root.controller.acceptSelectedLicenses
+                    || !root.controller.acceptSelectedLicenses(acceptedIds)) {
+                licenseIncompleteWarning.visible = true
+                return
+            }
+            licenseIncompleteWarning.visible = false
+            licenseDialog.accept()
+        }
+        onOpened: {
+            for (let index = 0; index < licenseRepeater.count; ++index)
+                licenseRepeater.itemAt(index).checked = false
+            licenseIncompleteWarning.visible = false
         }
 
         contentItem: ColumnLayout {
@@ -278,6 +295,15 @@ Item {
                 text: qsTr("使用此模型前，请逐项阅读许可，并确认参考音频与待克隆声音均已获得合法授权。")
                 wrapMode: Text.Wrap
                 color: Theme.primaryText
+            }
+            Label {
+                id: licenseIncompleteWarning
+                objectName: "voiceCloneLicenseIncompleteWarning"
+                Layout.preferredWidth: 460
+                visible: false
+                text: qsTr("请逐项勾选全部必需许可后再继续。")
+                wrapMode: Text.Wrap
+                color: Theme.favoriteRed
             }
             Label {
                 Layout.preferredWidth: 460
@@ -308,6 +334,20 @@ Item {
                         onClicked: Qt.openUrlExternally(modelData.url)
                     }
                 }
+            }
+        }
+        footer: DialogButtonBox {
+            Button {
+                objectName: "voiceCloneLicenseCancelButton"
+                text: qsTr("取消")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                onClicked: licenseDialog.reject()
+            }
+            Button {
+                objectName: "voiceCloneLicenseConfirmButton"
+                text: qsTr("确认")
+                DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
+                onClicked: licenseDialog.submitAcceptance()
             }
         }
     }

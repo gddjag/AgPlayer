@@ -456,7 +456,7 @@ TestCase {
         tryCompare(licenseDialog, "visible", true)
         workspace.licenseRequirementCheck(0).checked = true
         workspace.licenseRequirementCheck(1).checked = true
-        licenseDialog.accept()
+        mouseClick(findChild(workspace, "voiceCloneLicenseConfirmButton"))
         compare(fakeController.acceptLicenseCalls, 1)
         compare(workspace.canGenerate, true)
 
@@ -488,5 +488,24 @@ TestCase {
         compare(fakeController.saveCalls, 1)
         compare(fakeController.deleteCalls, 1)
         compare(resultPanel.hasResult, false)
+    }
+
+    function test_licenseDialogStaysOpenUntilEveryRequiredLicenseIsChecked() {
+        mouseClick(findChild(workspace, "voiceCloneModelCard1"))
+        mouseClick(findChild(workspace, "voiceCloneLicenseAuthorityCheck"))
+        const dialog = findChild(workspace, "voiceCloneLicenseDialog")
+        verify(dialog)
+        tryCompare(dialog, "visible", true)
+        workspace.licenseRequirementCheck(0).checked = true
+        mouseClick(findChild(workspace, "voiceCloneLicenseConfirmButton"))
+        compare(dialog.visible, true)
+        compare(fakeController.acceptLicenseCalls, 0)
+        const warning = findChild(workspace, "voiceCloneLicenseIncompleteWarning")
+        verify(warning && warning.visible)
+
+        workspace.licenseRequirementCheck(1).checked = true
+        mouseClick(findChild(workspace, "voiceCloneLicenseConfirmButton"))
+        tryCompare(dialog, "visible", false)
+        compare(fakeController.acceptLicenseCalls, 1)
     }
 }

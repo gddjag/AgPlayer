@@ -13,6 +13,9 @@ struct VoiceClonePackageFile {
     QUrl url;
     QByteArray sha256;
     qint64 expectedBytes = -1;
+    QString sourceRepository;
+    QString sourceRevision;
+    QString sourcePath;
 };
 
 struct VoiceClonePackageLicense {
@@ -41,6 +44,8 @@ public:
     QString adapterId;
     QString version;
     QString revision;
+    QString modelDisplayName;
+    QString modelDescription;
     QString sourceProvider;
     QString sourceRepository;
     QUrl sourceUrl;

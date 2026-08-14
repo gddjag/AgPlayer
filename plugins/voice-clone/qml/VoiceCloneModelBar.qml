@@ -17,8 +17,11 @@ Rectangle {
     property var selectedModel: selectedIndex >= 0 && selectedIndex < models.length
                                 ? models[selectedIndex] : ({})
     property bool licenseAcceptanceRequired: false
+    property bool downloadInProgress: false
+    property int downloadProgressPercent: -1
     signal modelSelected(int index, string stableId)
     signal refreshRequested()
+    signal downloadRequested(string stableId)
     signal openDirectoryRequested()
     signal licenseAcceptanceRequested()
 
@@ -138,6 +141,19 @@ Rectangle {
                 text: root.selectedModel.licenseName || qsTr("许可")
                 enabled: !!root.selectedModel.licenseUrl
                 onClicked: Qt.openUrlExternally(root.selectedModel.licenseUrl)
+            }
+            Button {
+                objectName: "voiceCloneDownloadModelButton"
+                text: root.downloadInProgress
+                      ? (root.downloadProgressPercent >= 0
+                         ? qsTr("下载中 %1%").arg(root.downloadProgressPercent)
+                         : qsTr("下载中…"))
+                      : qsTr("下载模型")
+                visible: !!root.selectedModel.stableId
+                         && root.selectedModel.installState !== "ready"
+                         && root.selectedModel.installState !== "local-unverified"
+                enabled: !root.downloadInProgress
+                onClicked: root.downloadRequested(root.selectedModel.stableId || "")
             }
             ToolButton {
                 objectName: "voiceCloneRefreshModelsButton"

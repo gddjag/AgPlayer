@@ -5,6 +5,10 @@
   "adapterId": "indextts25",
   "version": "1.0.0",
   "revision": "c39ce5ba981572cb187443877ff559dfb246ce63",
+  "model": {
+    "displayName": "IndexTTS 2.5",
+    "description": "Expressive five-language zero-shot voice cloning with emotion, speed, and pronunciation control."
+  },
   "source": {
     "provider": "hugging-face",
     "repository": "IndexTeam/IndexTTS-2.5",
@@ -194,60 +198,70 @@
     {
       "path": "hf_cache/w2v-bert-2.0/.gitattributes",
       "url": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/da985ba0987f70aaeb84a80f2851cfac8c697a7b/.gitattributes?download=true",
+      "source": { "repository": "facebook/w2v-bert-2.0", "revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b", "path": ".gitattributes" },
       "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
       "sizeBytes": 1519
     },
     {
       "path": "hf_cache/w2v-bert-2.0/README.md",
       "url": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/da985ba0987f70aaeb84a80f2851cfac8c697a7b/README.md?download=true",
+      "source": { "repository": "facebook/w2v-bert-2.0", "revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b", "path": "README.md" },
       "sha256": "478afeacb3b4ce0d86b361f099416d28a7e7673ade31775c0f85f396979b7fc2",
       "sizeBytes": 4792
     },
     {
       "path": "hf_cache/w2v-bert-2.0/config.json",
       "url": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/da985ba0987f70aaeb84a80f2851cfac8c697a7b/config.json?download=true",
+      "source": { "repository": "facebook/w2v-bert-2.0", "revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b", "path": "config.json" },
       "sha256": "f5572bd5998b68182e9c328a43127ed21fed687f6910497136b91a4e3b0e3675",
       "sizeBytes": 1874
     },
     {
       "path": "hf_cache/w2v-bert-2.0/conformer_shaw.pt",
       "url": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/da985ba0987f70aaeb84a80f2851cfac8c697a7b/conformer_shaw.pt?download=true",
+      "source": { "repository": "facebook/w2v-bert-2.0", "revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b", "path": "conformer_shaw.pt" },
       "sha256": "8310b4270a5b499e92e20c859892dbf7429619347debb5f8feba79eb88f99b4f",
       "sizeBytes": 2329131983
     },
     {
       "path": "hf_cache/w2v-bert-2.0/model.safetensors",
       "url": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/da985ba0987f70aaeb84a80f2851cfac8c697a7b/model.safetensors?download=true",
+      "source": { "repository": "facebook/w2v-bert-2.0", "revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b", "path": "model.safetensors" },
       "sha256": "eb890c9660ed6e3414b6812e27257b8ce5454365d5490d3ad581ea60b93be043",
       "sizeBytes": 2322063736
     },
     {
       "path": "hf_cache/w2v-bert-2.0/preprocessor_config.json",
       "url": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/da985ba0987f70aaeb84a80f2851cfac8c697a7b/preprocessor_config.json?download=true",
+      "source": { "repository": "facebook/w2v-bert-2.0", "revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b", "path": "preprocessor_config.json" },
       "sha256": "8e6281aad64f97e40534135a59dcc5d33571efae376f2a25adf5551951897ab4",
       "sizeBytes": 275
     },
     {
       "path": "hf_cache/semantic_codec_model.safetensors",
       "url": "https://huggingface.co/amphion/MaskGCT/resolve/265c6cef07625665d0c28d2faafb1415562379dc/semantic_codec/model.safetensors?download=true",
+      "source": { "repository": "amphion/MaskGCT", "revision": "265c6cef07625665d0c28d2faafb1415562379dc", "path": "semantic_codec/model.safetensors" },
       "sha256": "ec947271175d8cad75ec37e83aa487e27c97a0f72a303393772da5ffa84bddf2",
       "sizeBytes": 177183712
     },
     {
       "path": "hf_cache/campplus_cn_common.bin",
       "url": "https://huggingface.co/funasr/campplus/resolve/e4b6ede7ce16997aff4ae69fbca1f0175e2afede/campplus_cn_common.bin?download=true",
+      "source": { "repository": "funasr/campplus", "revision": "e4b6ede7ce16997aff4ae69fbca1f0175e2afede", "path": "campplus_cn_common.bin" },
       "sha256": "3388cf5fd3493c9ac9c69851d8e7a8badcfb4f3dc631020c4961371646d5ada8",
       "sizeBytes": 28036335
     },
     {
       "path": "hf_cache/bigvgan/config.json",
       "url": "https://huggingface.co/nvidia/bigvgan_v2_22khz_80band_256x/resolve/633ff708ed5b74903e86ff1298cf4a98e921c513/config.json?download=true",
+      "source": { "repository": "nvidia/bigvgan_v2_22khz_80band_256x", "revision": "633ff708ed5b74903e86ff1298cf4a98e921c513", "path": "config.json" },
       "sha256": "88a1f0c4b627bf9855d8b6217a48a5812c52ea50d2ad88d0df8852134490f3ee",
       "sizeBytes": 1405
     },
     {
       "path": "hf_cache/bigvgan/bigvgan_generator.pt",
       "url": "https://huggingface.co/nvidia/bigvgan_v2_22khz_80band_256x/resolve/633ff708ed5b74903e86ff1298cf4a98e921c513/bigvgan_generator.pt?download=true",
+      "source": { "repository": "nvidia/bigvgan_v2_22khz_80band_256x", "revision": "633ff708ed5b74903e86ff1298cf4a98e921c513", "path": "bigvgan_generator.pt" },
       "sha256": "e95ba25972d3de0628d99cd156e9315a9c018899bf739988959ebe3544080ced",
       "sizeBytes": 449228171
     }

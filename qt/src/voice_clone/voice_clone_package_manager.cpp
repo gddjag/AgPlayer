@@ -1,4 +1,5 @@
 #include "voice_clone_package_manager.hpp"
+#include "voice_clone_manifest.hpp"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -276,9 +277,11 @@ void VoiceClonePackageManager::setState(const State state, const QString& error)
 bool VoiceClonePackageManager::preparePaths(QString* error)
 {
     if (!prepareInstallRoot(installRoot_, error)) return false;
-    const QString stagingRoot = QDir(installRoot_).filePath(QStringLiteral(".staging"));
+    const QString adapterRoot = QDir(installRoot_).filePath(manifest_.adapterId);
+    const QString stagingRoot = QDir(adapterRoot).filePath(QStringLiteral(".staging"));
     stagingDirectory_ = QDir(stagingRoot).filePath(manifest_.packageId);
-    targetDirectory_ = QDir(installRoot_).filePath(manifest_.packageId);
+    targetDirectory_ = QDir(installRoot_).filePath(
+        QStringLiteral("%1/%2").arg(manifest_.adapterId, manifest_.packageId));
     if (!pathIsWithin(installRoot_, normalizedAbsolute(stagingDirectory_))
         || !pathIsWithin(installRoot_, normalizedAbsolute(targetDirectory_))) {
         *error = QStringLiteral("Package path escapes install root");
@@ -326,12 +329,86 @@ bool VoiceClonePackageManager::preparePaths(QString* error)
     return true;
 }
 
+bool VoiceClonePackageManager::writeInstalledModelManifest(QString* error) const
+{
+    QJsonArray files;
+    for (const VoiceClonePackageFile& file : manifest_.files) {
+        files.append(QJsonObject{{QStringLiteral("path"), file.relativePath},
+                                 {QStringLiteral("sha256"),
+                                  QString::fromLatin1(file.sha256).toLower()}});
+    }
+    const VoiceClonePackageLicense& primary = manifest_.licenses.front();
+    QJsonObject object{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("stableId"), manifest_.modelId},
+        {QStringLiteral("displayName"), manifest_.modelDisplayName},
+        {QStringLiteral("description"), manifest_.modelDescription},
+        {QStringLiteral("adapterId"), manifest_.adapterId},
+        {QStringLiteral("runtimeId"), manifest_.adapterId},
+        {QStringLiteral("revision"), manifest_.revision},
+        {QStringLiteral("source"),
+         QJsonObject{{QStringLiteral("provider"), QStringLiteral("Hugging Face")},
+                     {QStringLiteral("url"), manifest_.sourceUrl.toString()}}},
+        {QStringLiteral("license"),
+         QJsonObject{{QStringLiteral("name"), primary.name},
+                     {QStringLiteral("url"), primary.url.toString()},
+                     {QStringLiteral("revision"), primary.revision}}},
+        {QStringLiteral("files"), files}};
+    if (manifest_.adapterId == QStringLiteral("indextts25")) {
+        QJsonArray licenses;
+        for (const VoiceClonePackageLicense& license : manifest_.licenses) {
+            if (!license.requiredAcceptance) continue;
+            licenses.append(QJsonObject{
+                {QStringLiteral("id"), license.id},
+                {QStringLiteral("name"), license.name},
+                {QStringLiteral("url"), license.url.toString()},
+                {QStringLiteral("revision"), license.revision},
+                {QStringLiteral("spdx"), license.spdx},
+                {QStringLiteral("requiredAcceptance"), license.requiredAcceptance},
+                {QStringLiteral("useRestriction"), license.useRestriction}});
+        }
+        object.insert(QStringLiteral("licenses"), licenses);
+    }
+    const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
+    const ManifestParseResult parsed = parseLocalModelManifest(bytes);
+    if (!parsed.isValid()) {
+        *error = QStringLiteral("Generated model manifest is invalid: %1").arg(parsed.error);
+        return false;
+    }
+    QSaveFile file(QDir(stagingDirectory_).filePath(QStringLiteral("agplayer-model.json")));
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()
+        || !file.commit()) {
+        *error = QStringLiteral("Cannot write installed model manifest");
+        return false;
+    }
+    return true;
+}
+
 bool VoiceClonePackageManager::validateStaging(QString* error) const
 {
     QHash<QString, QByteArray> expected;
     for (const VoiceClonePackageFile& file : std::as_const(manifest_.files)) {
         expected.insert(normalizedRelativePath(file.relativePath), file.sha256);
     }
+    const QString modelManifestPath = QDir(stagingDirectory_).filePath(
+        QStringLiteral("agplayer-model.json"));
+    QFile modelManifest(modelManifestPath);
+    if (!modelManifest.open(QIODevice::ReadOnly)) {
+        *error = QStringLiteral("Package staging has no model manifest");
+        return false;
+    }
+    const QByteArray modelManifestBytes = modelManifest.readAll();
+    const ManifestParseResult parsed = parseLocalModelManifest(modelManifestBytes);
+    if (!parsed.isValid() || parsed.model.stableId != manifest_.modelId
+        || parsed.model.adapterId != manifest_.adapterId
+        || parsed.model.revision != manifest_.revision
+        || parsed.model.files.size() != manifest_.files.size()) {
+        *error = QStringLiteral("Package staging model manifest does not match package identity");
+        return false;
+    }
+    expected.insert(QStringLiteral("agplayer-model.json"),
+                    QCryptographicHash::hash(modelManifestBytes,
+                                             QCryptographicHash::Sha256).toHex());
     QSet<QString> observed;
     QDirIterator iterator(stagingDirectory_, QDir::AllEntries | QDir::Hidden | QDir::System
                                                  | QDir::NoDotAndDotDot,
@@ -509,6 +586,10 @@ void VoiceClonePackageManager::downloadNextFile()
     if (currentIndex_ >= manifest_.files.size()) {
         setState(Committing);
         QString commitError;
+        if (!writeInstalledModelManifest(&commitError)) {
+            fail(commitError);
+            return;
+        }
         if (!validateStaging(&commitError)) {
             fail(commitError);
             return;
@@ -735,7 +816,8 @@ void VoiceClonePackageManager::removeStagingSafely()
 {
     if (stagingDirectory_.isEmpty()) return;
     const QString stagingRoot = normalizedAbsolute(
-        QDir(installRoot_).filePath(QStringLiteral(".staging")));
+        QDir(installRoot_).filePath(
+            QStringLiteral("%1/.staging").arg(manifest_.adapterId)));
     const QString staging = normalizedAbsolute(stagingDirectory_);
     if (pathIsWithin(stagingRoot, staging) && !pathTraversesReparsePoint(staging)) {
         removeDirectoryTree(staging);

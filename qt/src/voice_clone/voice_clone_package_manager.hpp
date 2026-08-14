@@ -107,6 +107,7 @@ private:
     void finishCurrentDownload();
     void fail(const QString& error);
     bool preparePaths(QString* error);
+    bool writeInstalledModelManifest(QString* error) const;
     bool validateStaging(QString* error) const;
     bool hasAcceptedCurrentLicense(QString* error = nullptr) const;
     bool writeResumeMetadata(const VoiceClonePackageFile& file, qint64 total);

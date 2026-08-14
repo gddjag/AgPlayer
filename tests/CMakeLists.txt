@@ -494,6 +494,9 @@ foreach(qt_test IN ITEMS
 endforeach()
 
 target_link_libraries(voice_clone_package_manager_test PRIVATE Qt6::Network)
+target_compile_definitions(voice_clone_package_manager_test PRIVATE
+    AGPLAYER_VOICE_CLONE_DOWNLOAD_MANIFESTS_DIR="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/downloads"
+)
 target_link_libraries(voice_clone_controller_test PRIVATE Qt6::Network)
 target_link_libraries(voice_clone_controller_test PRIVATE agplayer_voice_clone_controller)
 target_link_libraries(voice_clone_controller_test PRIVATE
@@ -530,6 +533,7 @@ target_compile_definitions(voice_clone_host_controller_test PRIVATE
 
 target_compile_definitions(voice_clone_manifest_test PRIVATE
     AGPLAYER_VOICE_CLONE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/voice-clone"
+    AGPLAYER_VOICE_CLONE_ADDING_MODELS_DOC="${CMAKE_SOURCE_DIR}/docs/voice-clone/ADDING_MODELS.zh-CN.md"
 )
 
 target_compile_definitions(voice_clone_worker_protocol_test PRIVATE

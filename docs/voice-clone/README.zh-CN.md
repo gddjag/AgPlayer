@@ -13,6 +13,15 @@
 
 下载大小是本版本固定文件图的总和，不是运行时显存。实际速度、内存和显存取决于运行设备、音频长度、精度及 Worker；未完成真机实测前，AG Player 不承诺最低配置。
 
+## 参考音频要求
+
+| 模型 | 官方依据 | AG Player 当前口径 |
+| --- | --- | --- |
+| Qwen3-TTS 0.6B Base | 固定版本官方项目把 Base 描述为约 3 秒参考音频的快速克隆。[官方 Voice Clone 说明](https://github.com/QwenLM/Qwen3-TTS/tree/022e286b98fbec7e1e916cb940cdf532cd9f488e#voice-clone) | 以 3 秒清晰单人语音作为起点；格式、采样率和硬性上下限由 Qwen Worker 校验。本项目尚无真机范围实测，不宣称更宽范围。 |
+| Qwen3-TTS 1.7B Base | 与 0.6B Base 使用同一官方 Voice Clone 输入约定。[官方 Voice Clone 说明](https://github.com/QwenLM/Qwen3-TTS/tree/022e286b98fbec7e1e916cb940cdf532cd9f488e#voice-clone) | 同上；不把 VoiceDesign 的“文字造音色”要求混入 Base。 |
+| IndexTTS-2.5 | 固定模型卡展示参考音频克隆，但没有给出可作为产品保证的统一最短/最长秒数。[官方模型卡](https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/README.md) | 按 Index Worker 和固定模型卡校验；本项目尚未完成范围实测，因此不声明固定秒数。 |
+| Fun-CosyVoice3 0.5B 2512 | 固定官方项目展示 zero-shot prompt 音频流程，但没有给出可作为全部 Worker 保证的统一最短/最长秒数。[官方项目](https://github.com/FunAudioLLM/CosyVoice/tree/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc) | 按 CosyVoice Worker 的 prompt 音频/文本要求校验；本项目尚未完成范围实测，因此不声明固定秒数。 |
+
 ## IndexTTS-2.5 的许可门禁
 
 官方 IndexTTS 推理代码还依赖 `facebook/w2v-bert-2.0`、`amphion/MaskGCT`、`funasr/campplus` 和 `nvidia/bigvgan_v2_22khz_80band_256x`。AG Player 将这些官方固定版本全部提前列入下载清单，避免 Worker 首次运行时隐式拉取。

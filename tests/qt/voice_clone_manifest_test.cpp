@@ -34,22 +34,44 @@ QJsonObject builtInModel(const QString& stableId,
                          const QString& huggingFaceUrl,
                          const QString& modelScopeUrl)
 {
+    QString revision;
+    QString licenseUrl;
+    QString licenseRevision;
+    if (stableId == QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")) {
+        revision = QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc");
+        licenseRevision = QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e");
+        licenseUrl = QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/%1/LICENSE")
+                         .arg(licenseRevision);
+    } else if (stableId == QStringLiteral("Qwen/Qwen3-TTS-12Hz-1.7B-Base")) {
+        revision = QStringLiteral("fd4b254389122332181a7c3db7f27e918eec64e3");
+        licenseRevision = QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e");
+        licenseUrl = QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/%1/LICENSE")
+                         .arg(licenseRevision);
+    } else if (stableId == QStringLiteral("IndexTeam/IndexTTS-2.5")) {
+        revision = QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63");
+        licenseRevision = revision;
+        licenseUrl = QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/%1/LICENSE")
+                         .arg(revision);
+    } else {
+        revision = QStringLiteral("29e01c4e8d000f4bcd70751be16fa94bf3d85a18");
+        licenseRevision = QStringLiteral("074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc");
+        licenseUrl = QStringLiteral("https://github.com/FunAudioLLM/CosyVoice/blob/%1/LICENSE")
+                         .arg(licenseRevision);
+    }
     return {
         {QStringLiteral("stableId"), stableId},
         {QStringLiteral("displayName"), stableId},
         {QStringLiteral("description"), description},
         {QStringLiteral("provider"), QStringLiteral("Official provider")},
-        {QStringLiteral("revision"), QStringLiteral("main")},
+        {QStringLiteral("revision"), revision},
         {QStringLiteral("adapterId"), adapterId},
         {QStringLiteral("runtimeId"), runtimeId},
         {QStringLiteral("stable"), true},
         {QStringLiteral("requiresLicenseAcceptance"), requiresLicenseAcceptance},
         {QStringLiteral("license"),
          QJsonObject{{QStringLiteral("name"), licenseName},
-                     {QStringLiteral("url"), huggingFaceUrl},
-                     {QStringLiteral("revision"),
-                      requiresLicenseAcceptance ? QStringLiteral("license-2026-08-13")
-                                                : QString{}}}},
+                     {QStringLiteral("url"), licenseUrl},
+                     {QStringLiteral("revision"), licenseRevision}}},
         {QStringLiteral("officialUrls"),
          QJsonObject{{QStringLiteral("project"), projectUrl},
                      {QStringLiteral("huggingFace"), huggingFaceUrl},
@@ -167,6 +189,7 @@ private slots:
     void rejectsAbsoluteTraversalAndLinkedPaths();
     void marksUnhashedLocalModelsAsLocalUnverified();
     void appliesIndexLicenseGateToLocalModels();
+    void documentationExampleUsesProductionLayoutAndParser();
     void mergesBuiltInAndUserLayersWithoutReplacement();
     void rejectsUnofficialLocalUrls_data();
     void rejectsUnofficialLocalUrls();
@@ -175,6 +198,42 @@ private slots:
     void requiresBuiltInUiMetadata_data();
     void requiresBuiltInUiMetadata();
 };
+
+void VoiceCloneManifestTest::documentationExampleUsesProductionLayoutAndParser()
+{
+    QFile documentation(QStringLiteral(AGPLAYER_VOICE_CLONE_ADDING_MODELS_DOC));
+    QVERIFY(documentation.open(QIODevice::ReadOnly));
+    const QByteArray markdown = documentation.readAll();
+    const qsizetype opening = markdown.indexOf("```json");
+    const qsizetype jsonStart = opening < 0 ? -1 : markdown.indexOf('\n', opening);
+    const qsizetype closing = jsonStart < 0 ? -1 : markdown.indexOf("```", jsonStart + 1);
+    QVERIFY(opening >= 0 && jsonStart >= 0 && closing > jsonStart);
+    QJsonParseError parseError;
+    const QJsonDocument example = QJsonDocument::fromJson(
+        markdown.mid(jsonStart + 1, closing - jsonStart - 1), &parseError);
+    QCOMPARE(parseError.error, QJsonParseError::NoError);
+    QVERIFY(example.isObject());
+
+    QTemporaryDir portable;
+    QVERIFY(portable.isValid());
+    const QString modelDirectory = portable.filePath(
+        QStringLiteral("models/voice-clone/local-qwen/2026.08.14"));
+    QVERIFY(QDir().mkpath(modelDirectory));
+    for (const QJsonValue& value : example.object().value(QStringLiteral("files")).toArray()) {
+        const QString relative = value.toObject().value(QStringLiteral("path")).toString();
+        QFile file(QDir(modelDirectory).filePath(relative));
+        QVERIFY(QDir().mkpath(QFileInfo(file).absolutePath()));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+    QVERIFY(!writeJson(QDir(modelDirectory).filePath(QStringLiteral("agplayer-model.json")),
+                       example.object()).isEmpty());
+    const auto discovery = VoiceCloneRegistry::discoverUserModels(
+        portable.path(), {QStringLiteral("qwen"), QStringLiteral("indextts25"),
+                          QStringLiteral("cosyvoice3")});
+    QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
+    QCOMPARE(discovery.models.size(), 1);
+    QCOMPARE(discovery.models.front().stableId, QStringLiteral("local/qwen-demo"));
+}
 
 void VoiceCloneManifestTest::builtInRegistryContainsOnlyApprovedStableModels()
 {
@@ -524,40 +583,67 @@ void VoiceCloneManifestTest::appliesIndexLicenseGateToLocalModels()
                     QJsonObject{{QStringLiteral("name"),
                                  QStringLiteral("bilibili Model Use License Agreement")},
                                 {QStringLiteral("url"),
-                                 QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5")},
+                                 QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE")},
                                 {QStringLiteral("revision"),
-                                 QStringLiteral("license-2026-08-13")}});
+                                 QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63")}});
     writeManifest(manifestPath, manifest);
 
+    const auto missingIdentities = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("indextts25")});
+    QVERIFY(!missingIdentities.isValid());
+    QVERIFY(missingIdentities.errorString().contains(QStringLiteral("license"),
+                                                      Qt::CaseInsensitive));
+
+    const QJsonObject bilibili{
+        {QStringLiteral("id"), QStringLiteral("bilibili-model-use-license")},
+        {QStringLiteral("name"), QStringLiteral("bilibili Model Use License Agreement")},
+        {QStringLiteral("url"), QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE")},
+        {QStringLiteral("revision"), QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63")},
+        {QStringLiteral("spdx"), QStringLiteral("LicenseRef-Bilibili-Model-Use")},
+        {QStringLiteral("requiredAcceptance"), true},
+        {QStringLiteral("useRestriction"), QStringLiteral("custom-terms")}};
+    const QJsonObject maskGct{
+        {QStringLiteral("id"), QStringLiteral("maskgct-cc-by-nc-4.0")},
+        {QStringLiteral("name"), QStringLiteral("CC-BY-NC-4.0")},
+        {QStringLiteral("url"), QStringLiteral("https://huggingface.co/amphion/MaskGCT/blob/265c6cef07625665d0c28d2faafb1415562379dc/README.md")},
+        {QStringLiteral("revision"), QStringLiteral("265c6cef07625665d0c28d2faafb1415562379dc")},
+        {QStringLiteral("spdx"), QStringLiteral("CC-BY-NC-4.0")},
+        {QStringLiteral("requiredAcceptance"), true},
+        {QStringLiteral("useRestriction"), QStringLiteral("non-commercial-only")}};
+    manifest.insert(QStringLiteral("licenses"), QJsonArray{bilibili, maskGct});
+    writeManifest(manifestPath, manifest);
     const auto discovery = VoiceCloneRegistry::discoverUserModels(
         temporary.path(), {QStringLiteral("indextts25")});
     QVERIFY2(discovery.isValid(), qPrintable(discovery.errorString()));
     QCOMPARE(discovery.models.size(), 1);
     QVERIFY(discovery.models.front().requiresLicenseAcceptance);
     QCOMPARE(discovery.models.front().licenseRevision,
-             QStringLiteral("license-2026-08-13"));
+             QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63"));
 
-    QJsonObject wrongLicense = readJson(manifestPath);
-    QJsonObject license = wrongLicense.value(QStringLiteral("license")).toObject();
-    license.insert(QStringLiteral("name"), QStringLiteral("Apache-2.0"));
-    wrongLicense.insert(QStringLiteral("license"), license);
+    QJsonObject extraLicense = bilibili;
+    extraLicense.insert(QStringLiteral("id"), QStringLiteral("extra-notice"));
+    extraLicense.insert(QStringLiteral("requiredAcceptance"), false);
+    QJsonObject extraLicenseManifest = manifest;
+    extraLicenseManifest.insert(QStringLiteral("licenses"),
+                                QJsonArray{bilibili, maskGct, extraLicense});
+    writeManifest(manifestPath, extraLicenseManifest);
+    const auto extraRejected = VoiceCloneRegistry::discoverUserModels(
+        temporary.path(), {QStringLiteral("indextts25")});
+    QVERIFY(!extraRejected.isValid());
+    QVERIFY(extraRejected.errorString().contains(QStringLiteral("license"),
+                                                  Qt::CaseInsensitive));
+
+    QJsonObject wrongLicense = manifest;
+    QJsonArray wrongLicenses = wrongLicense.value(QStringLiteral("licenses")).toArray();
+    QJsonObject wrongMask = wrongLicenses[1].toObject();
+    wrongMask.insert(QStringLiteral("revision"), QStringLiteral("wrong"));
+    wrongLicenses[1] = wrongMask;
+    wrongLicense.insert(QStringLiteral("licenses"), wrongLicenses);
     writeManifest(manifestPath, wrongLicense);
     const auto rejected = VoiceCloneRegistry::discoverUserModels(
         temporary.path(), {QStringLiteral("indextts25")});
     QVERIFY(!rejected.isValid());
     QVERIFY(rejected.errorString().contains(QStringLiteral("license"), Qt::CaseInsensitive));
-
-    QJsonObject missingRevision = readJson(manifestPath);
-    QJsonObject requiredLicense = missingRevision.value(QStringLiteral("license")).toObject();
-    requiredLicense.insert(QStringLiteral("name"),
-                           QStringLiteral("bilibili Model Use License Agreement"));
-    requiredLicense.remove(QStringLiteral("revision"));
-    missingRevision.insert(QStringLiteral("license"), requiredLicense);
-    writeManifest(manifestPath, missingRevision);
-    const auto missing = VoiceCloneRegistry::discoverUserModels(
-        temporary.path(), {QStringLiteral("indextts25")});
-    QVERIFY(!missing.isValid());
-    QVERIFY(missing.errorString().contains(QStringLiteral("revision"), Qt::CaseInsensitive));
 }
 
 void VoiceCloneManifestTest::mergesBuiltInAndUserLayersWithoutReplacement()

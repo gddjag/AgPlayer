@@ -15,6 +15,8 @@
 
 文件图来自 Hugging Face 官方模型 API 的 pinned sibling 列表。Git LFS 文件 SHA-256 使用官方 LFS 对象身份；Git 管理的小文件从 immutable `resolve/<commit>/...` 下载并计算真实 SHA-256。每个结果同时核对 API `size`，没有下载或伪造权重哈希。
 
+下载清单的每个 URL 都按声明的 `repository + immutable revision + upstream path` 唯一派生。三个单仓模型的文件继承根 `source`；Index 的十个辅助文件显式携带各自官方仓库、固定 commit 与上游路径，安装路径仅是本地 materialize 位置，不冒充上游路径。生产校验器只批准下表四个精确辅助身份。
+
 ## Index 官方辅助资产
 
 Index 官方代码固定点 [model_download.py](https://github.com/index-tts/index-tts/blob/4f8792ff120cd3ea470dd511e997a17c86cddd10/indextts/utils/model_download.py) 声明四类下载：

@@ -30,6 +30,9 @@ class VoiceCloneController final : public QObject {
     Q_PROPERTY(QUrl currentLicenseUrl READ currentLicenseUrl NOTIFY licenseChanged)
     Q_PROPERTY(QString currentLicenseRevision READ currentLicenseRevision NOTIFY licenseChanged)
     Q_PROPERTY(QVariantList currentLicenseRequirements READ currentLicenseRequirements NOTIFY licenseChanged)
+    Q_PROPERTY(QString downloadState READ downloadState NOTIFY downloadChanged)
+    Q_PROPERTY(int downloadProgressPercent READ downloadProgressPercent NOTIFY downloadChanged)
+    Q_PROPERTY(bool downloadInProgress READ downloadInProgress NOTIFY downloadChanged)
 
 public:
     explicit VoiceCloneController(QString pluginRoot,
@@ -50,6 +53,7 @@ public:
                                        const QUrl& licenseUrl,
                                        const QString& revision);
     Q_INVOKABLE void refreshModels();
+    Q_INVOKABLE bool downloadModel(const QString& stableId);
     Q_INVOKABLE bool openModelDirectory();
 
     Q_INVOKABLE bool startWorker();
@@ -80,6 +84,9 @@ public:
     QUrl currentLicenseUrl() const;
     QString currentLicenseRevision() const;
     QVariantList currentLicenseRequirements() const;
+    QString downloadState() const;
+    int downloadProgressPercent() const;
+    bool downloadInProgress() const;
     QVariantList basicParameters() const;
     QVariantList advancedParameters() const;
     bool advancedSettingsAvailable() const;
@@ -94,6 +101,7 @@ signals:
     void errorChanged();
     void activationChanged();
     void licenseChanged();
+    void downloadChanged();
     void generationFinished(const QString& requestId, const QString& outputPath);
     void requestFailed(const QString& requestId, const QString& code, const QString& message);
 

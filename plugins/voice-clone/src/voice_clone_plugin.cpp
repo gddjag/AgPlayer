@@ -17,7 +17,7 @@ VoiceClonePlugin::VoiceClonePlugin()
     const QString modelsRoot = QDir(root).filePath(QStringLiteral("models/voice-clone"));
     QDir().mkpath(modelsRoot);
     packageManager_ = std::make_unique<VoiceClonePackageManager>(
-        QDir(root).filePath(QStringLiteral("packages")));
+        modelsRoot);
     controller_ = std::make_unique<VoiceCloneController>(
         root, modelsRoot,
         packageManager_.get());

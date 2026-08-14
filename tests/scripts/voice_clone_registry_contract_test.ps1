@@ -49,6 +49,8 @@ foreach ($fileName in $expected.Keys) {
     Assert-True ($manifest.adapterId -ceq $spec.AdapterId) "$fileName has the wrong adapterId"
     Assert-True ($manifest.revision -match $revisionPattern) "$fileName revision must be an immutable 40-hex commit"
     Assert-True ($manifest.revision -cne 'main') "$fileName must not use main"
+    Assert-True (-not [string]::IsNullOrWhiteSpace($manifest.model.displayName)) "$fileName has no generated-model displayName"
+    Assert-True (-not [string]::IsNullOrWhiteSpace($manifest.model.description)) "$fileName has no generated-model description"
     Assert-True ($manifest.source.provider -ceq 'hugging-face') "$fileName must use the official Hugging Face source"
     Assert-True ($manifest.source.repository -ceq $spec.Repository) "$fileName has the wrong official repository"
     Assert-True ($manifest.source.url -ceq "https://huggingface.co/$($spec.Repository)") "$fileName has the wrong official source URL"
@@ -81,7 +83,11 @@ foreach ($fileName in $expected.Keys) {
         $key = $entry.path.ToLowerInvariant()
         Assert-True (-not $seenPaths.ContainsKey($key)) "$fileName contains duplicate path: $($entry.path)"
         $seenPaths[$key] = $true
-        Assert-True ($entry.url -match '^https://huggingface\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}/') "$fileName contains an unpinned or non-official file URL"
+        $fileRepository = if ($null -ne $entry.source) { $entry.source.repository } else { $spec.Repository }
+        $fileRevision = if ($null -ne $entry.source) { $entry.source.revision } else { $manifest.revision }
+        $fileSourcePath = if ($null -ne $entry.source) { $entry.source.path } else { $entry.path }
+        $expectedUrl = "https://huggingface.co/$fileRepository/resolve/$fileRevision/$fileSourcePath`?download=true"
+        Assert-True ($entry.url -ceq $expectedUrl) "$fileName file URL is not derived from source + revision + path: $($entry.path)"
         Assert-True ($entry.sha256 -cmatch $hashPattern) "$fileName contains an invalid SHA-256"
         Assert-True ($entry.sizeBytes -is [long] -or $entry.sizeBytes -is [int]) "$fileName contains a non-integer size"
         Assert-True ([long]$entry.sizeBytes -ge 0) "$fileName contains a negative size"
@@ -137,6 +143,9 @@ $commercialRestrictionChinese = -join @([char]0x5546, [char]0x4E1A, [char]0x7528
 Assert-True ($readme.Contains($commercialRestrictionChinese)) 'User guide must explicitly prohibit commercial use without separate authorization'
 foreach ($needle in @('agplayer-model.json', 'local-unverified', 'qwen', 'indextts25', 'cosyvoice3', 'Adapter Pack', $refreshModelsChinese)) {
     Assert-True ($addingModels.Contains($needle)) "Model extension guide is missing: $needle"
+}
+foreach ($needle in @('models/voice-clone/local-qwen/2026.08.14/agplayer-model.json', '"source"', '"license"', '"files"')) {
+    Assert-True ($addingModels.Contains($needle)) "Model extension guide example is not production-parser compatible: $needle"
 }
 
 $productText = ((Get-Content -LiteralPath $modelRegistryPath -Raw -Encoding utf8) + "`n" +

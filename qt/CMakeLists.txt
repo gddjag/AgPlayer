@@ -123,6 +123,11 @@ target_link_libraries(agplayer_qt
 target_compile_definitions(agplayer_qt PUBLIC
     AGPLAYER_VERSION="${PROJECT_VERSION}"
 )
+if(BUILD_TESTING)
+    target_compile_definitions(agplayer_qt PRIVATE
+        AGPLAYER_VOICE_CLONE_ALLOW_LOOPBACK_TEST_URLS=1
+    )
+endif()
 
 if(WIN32)
     target_link_libraries(agplayer_qt PRIVATE dwmapi shell32)

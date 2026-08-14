@@ -8,6 +8,7 @@
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -19,6 +20,8 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTimer>
 #include <QGuiApplication>
 #include <QQmlComponent>
@@ -36,6 +39,39 @@ using namespace agplayer::voice_clone;
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
 
 namespace {
+
+class ModelDownloadServer final : public QTcpServer {
+public:
+    explicit ModelDownloadServer(QByteArray body, QObject* parent = nullptr)
+        : QTcpServer(parent), body_(std::move(body))
+    {
+        QObject::connect(this, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket* socket = nextPendingConnection()) {
+                QObject::connect(socket, &QTcpSocket::readyRead, socket,
+                                 [this, socket] {
+                    const QByteArray request = socket->readAll();
+                    if (!request.contains("\r\n\r\n")) return;
+                    const bool head = request.startsWith("HEAD ");
+                    QByteArray response = "HTTP/1.1 200 OK\r\nContent-Length: ";
+                    response += QByteArray::number(body_.size());
+                    response += "\r\nConnection: close\r\n\r\n";
+                    if (!head) response += body_;
+                    socket->write(response);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+        QVERIFY(listen(QHostAddress::LocalHost));
+    }
+
+    QUrl url() const
+    {
+        return QUrl(QStringLiteral("http://127.0.0.1:%1/config.json").arg(serverPort()));
+    }
+
+private:
+    QByteArray body_;
+};
 
 QJsonObject liveSchema()
 {
@@ -358,7 +394,7 @@ QString writeModel(const QString& modelsRoot,
                         {QStringLiteral("url"), url}};
     if (index) license.insert(QStringLiteral("revision"),
                               QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63"));
-    const QJsonObject manifest{
+    QJsonObject manifest{
         {QStringLiteral("schemaVersion"), 1},
         {QStringLiteral("stableId"), stableId},
         {QStringLiteral("displayName"), stableId},
@@ -373,6 +409,24 @@ QString writeModel(const QString& modelsRoot,
         {QStringLiteral("license"), license},
         {QStringLiteral("files"), QJsonArray{QJsonObject{{QStringLiteral("path"), QStringLiteral("config.json")}}}}
     };
+    if (index) {
+        manifest.insert(QStringLiteral("licenses"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("bilibili-model-use-license")},
+                        {QStringLiteral("name"), QStringLiteral("bilibili Model Use License Agreement")},
+                        {QStringLiteral("url"), QStringLiteral("https://huggingface.co/IndexTeam/IndexTTS-2.5/blob/c39ce5ba981572cb187443877ff559dfb246ce63/LICENSE")},
+                        {QStringLiteral("revision"), QStringLiteral("c39ce5ba981572cb187443877ff559dfb246ce63")},
+                        {QStringLiteral("spdx"), QStringLiteral("LicenseRef-Bilibili-Model-Use")},
+                        {QStringLiteral("requiredAcceptance"), true},
+                        {QStringLiteral("useRestriction"), QStringLiteral("custom-terms")}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("maskgct-cc-by-nc-4.0")},
+                        {QStringLiteral("name"), QStringLiteral("CC-BY-NC-4.0")},
+                        {QStringLiteral("url"), QStringLiteral("https://huggingface.co/amphion/MaskGCT/blob/265c6cef07625665d0c28d2faafb1415562379dc/README.md")},
+                        {QStringLiteral("revision"), QStringLiteral("265c6cef07625665d0c28d2faafb1415562379dc")},
+                        {QStringLiteral("spdx"), QStringLiteral("CC-BY-NC-4.0")},
+                        {QStringLiteral("requiredAcceptance"), true},
+                        {QStringLiteral("useRestriction"), QStringLiteral("non-commercial-only")}}
+        });
+    }
     QFile file(QDir(directory).filePath(QStringLiteral("agplayer-model.json")));
     if (!file.open(QIODevice::WriteOnly)) return {};
     file.write(QJsonDocument(manifest).toJson());
@@ -404,6 +458,7 @@ class VoiceCloneControllerTest final : public QObject {
 private slots:
     void activateModelResolvesInstalledAdapterAndLoadsWorker();
     void activateModelReportsMissingRuntimeWithoutPretendingReady();
+    void downloadsInstallsRefreshesAndSelectsModel();
     void activateModelClearsLiveSchemaBeforeMissingRuntime();
     void resultFileUrlEncodesReservedCharacters();
     void selectedIndexLicenseAcceptanceUsesExactIdentity();
@@ -417,6 +472,72 @@ private slots:
     void rejectsOversizedFrameAndSymlinkPart();
     void shutdownUsesProtocolAndModuleLoadsThroughHost();
 };
+
+void VoiceCloneControllerTest::downloadsInstallsRefreshesAndSelectsModel()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    const QByteArray body("downloaded-config");
+    ModelDownloadServer server(body);
+    const QString manifestPath = QDir(layout.pluginRoot).filePath(
+        QStringLiteral("registry/downloads/qwen3-tts-0.6b.json"));
+    const QString revision = QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc");
+    const QString licenseRevision = QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e");
+    const QJsonObject package{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("packageId"), QStringLiteral("qwen3-tts-0.6b")},
+        {QStringLiteral("modelId"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
+        {QStringLiteral("adapterId"), QStringLiteral("qwen")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("revision"), revision},
+        {QStringLiteral("model"), QJsonObject{
+             {QStringLiteral("displayName"), QStringLiteral("Qwen3-TTS 0.6B Base")},
+             {QStringLiteral("description"), QStringLiteral("Local HTTP protocol fixture")}}},
+        {QStringLiteral("source"), QJsonObject{
+             {QStringLiteral("provider"), QStringLiteral("hugging-face")},
+             {QStringLiteral("repository"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
+             {QStringLiteral("url"), QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base")}}},
+        {QStringLiteral("licenses"), QJsonArray{QJsonObject{
+             {QStringLiteral("id"), QStringLiteral("apache-2.0")},
+             {QStringLiteral("name"), QStringLiteral("Apache-2.0")},
+             {QStringLiteral("url"), QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/%1/LICENSE").arg(licenseRevision)},
+             {QStringLiteral("revision"), licenseRevision},
+             {QStringLiteral("spdx"), QStringLiteral("Apache-2.0")},
+             {QStringLiteral("requiredAcceptance"), false},
+             {QStringLiteral("useRestriction"), QString{}}}}},
+        {QStringLiteral("totalBytes"), body.size()},
+        {QStringLiteral("files"), QJsonArray{QJsonObject{
+             {QStringLiteral("path"), QStringLiteral("config.json")},
+             {QStringLiteral("url"), server.url().toString()},
+             {QStringLiteral("sha256"), QString::fromLatin1(
+                  QCryptographicHash::hash(body, QCryptographicHash::Sha256).toHex())},
+             {QStringLiteral("sizeBytes"), body.size()}}}}};
+    QVERIFY(QDir().mkpath(QFileInfo(manifestPath).absolutePath()));
+    QFile manifestFile(manifestPath);
+    QVERIFY(manifestFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QVERIFY(manifestFile.write(QJsonDocument(package).toJson()) > 0);
+    manifestFile.close();
+
+    VoiceClonePackageManager packages(layout.modelsRoot);
+    VoiceCloneController controller(layout.pluginRoot, layout.modelsRoot, &packages);
+    QVERIFY2(controller.downloadModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")),
+             qPrintable(controller.errorString()));
+    QTRY_COMPARE_WITH_TIMEOUT(packages.state(), VoiceClonePackageManager::Completed, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT([&controller] {
+        for (const QVariant& value : controller.models()) {
+            const QVariantMap model = value.toMap();
+            if (model.value(QStringLiteral("stableId")).toString()
+                    == QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")) {
+                return model.value(QStringLiteral("installState")).toString()
+                       == QStringLiteral("ready");
+            }
+        }
+        return false;
+    }(), 3000);
+    QVERIFY2(controller.selectModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")),
+             qPrintable(controller.errorString()));
+    QVERIFY(!controller.modelLoaded());
+}
 
 void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWorker()
 {
@@ -440,6 +561,7 @@ void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWork
     const QJsonObject loaded = QJsonDocument::fromJson(loadParameters.readAll()).object();
     QCOMPARE(loaded.value(QStringLiteral("seed")).toInt(), 1);
     QCOMPARE(loaded.value(QStringLiteral("mode")).toString(), QStringLiteral("fast"));
+
 }
 
 void VoiceCloneControllerTest::activateModelReportsMissingRuntimeWithoutPretendingReady()

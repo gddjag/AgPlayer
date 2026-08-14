@@ -1,6 +1,7 @@
 #include "voice_clone_manifest.hpp"
 
 #include "voice_clone_capability_schema.hpp"
+#include "voice_clone_package_manifest.hpp"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -96,6 +97,7 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
          QStringLiteral("revision"),
          QStringLiteral("source"),
          QStringLiteral("license"),
+         QStringLiteral("licenses"),
          QStringLiteral("files"),
          QStringLiteral("referenceAudio"),
          QStringLiteral("capabilitySchema")});
@@ -169,6 +171,80 @@ ManifestParseResult parseLocalModelManifest(const QByteArray& json)
     if (model.adapterId == QStringLiteral("indextts25")
         && model.licenseRevision.trimmed().isEmpty()) {
         result.error = QStringLiteral("Index license revision is required");
+        return result;
+    }
+    if (model.adapterId == QStringLiteral("indextts25")) {
+        const QVector<VoiceClonePackageLicense> required = approvedRequiredLicenses(
+            model.stableId, model.adapterId);
+        if (required.size() != 2 || !root.value(QStringLiteral("licenses")).isArray()) {
+            result.error = QStringLiteral("Index model requires the exact approved dual-license identities");
+            return result;
+        }
+        const QJsonArray licenses = root.value(QStringLiteral("licenses")).toArray();
+        if (licenses.size() != required.size()) {
+            result.error = QStringLiteral("Index model requires the exact approved dual-license identities");
+            return result;
+        }
+        QSet<QString> matched;
+        QSet<QString> ids;
+        for (const QJsonValue& value : licenses) {
+            if (!value.isObject()) {
+                result.error = QStringLiteral("Index license identity must be an object");
+                return result;
+            }
+            const QJsonObject item = value.toObject();
+            const QString itemUnknown = unknownField(
+                item, {QStringLiteral("id"), QStringLiteral("name"),
+                       QStringLiteral("url"), QStringLiteral("revision"),
+                       QStringLiteral("spdx"), QStringLiteral("requiredAcceptance"),
+                       QStringLiteral("useRestriction")});
+            const QString id = item.value(QStringLiteral("id")).toString();
+            if (!itemUnknown.isEmpty() || id.isEmpty() || ids.contains(id)
+                || !item.value(QStringLiteral("name")).isString()
+                || !item.value(QStringLiteral("url")).isString()
+                || !item.value(QStringLiteral("revision")).isString()
+                || !item.value(QStringLiteral("spdx")).isString()
+                || !item.value(QStringLiteral("requiredAcceptance")).isBool()
+                || !item.value(QStringLiteral("useRestriction")).isString()) {
+                result.error = QStringLiteral("invalid or duplicate Index license identity");
+                return result;
+            }
+            ids.insert(id);
+            if (!item.value(QStringLiteral("requiredAcceptance")).toBool()) {
+                result.error = QStringLiteral("Index license identity is not approved");
+                return result;
+            }
+            bool exact = false;
+            for (const VoiceClonePackageLicense& approved : required) {
+                if (id == approved.id
+                    && item.value(QStringLiteral("name")).toString() == approved.name
+                    && QUrl(item.value(QStringLiteral("url")).toString()) == approved.url
+                    && item.value(QStringLiteral("revision")).toString() == approved.revision
+                    && item.value(QStringLiteral("spdx")).toString() == approved.spdx
+                    && item.value(QStringLiteral("useRestriction")).toString()
+                           == approved.useRestriction) {
+                    matched.insert(id);
+                    exact = true;
+                    break;
+                }
+            }
+            if (!exact) {
+                result.error = QStringLiteral("Index license identity is not approved");
+                return result;
+            }
+        }
+        if (matched.size() != required.size()) {
+            result.error = QStringLiteral("Index model requires the exact approved dual-license identities");
+            return result;
+        }
+        const VoiceClonePackageLicense& primary = required.front();
+        if (model.license.name != primary.name || QUrl(model.license.url) != primary.url
+            || model.licenseRevision != primary.revision) {
+            result.error = QStringLiteral("Index primary license identity is not approved");
+            return result;
+        }
+    } else if (root.contains(QStringLiteral("licenses"))) {
+        result.error = QStringLiteral("additional license gates are not approved for this adapter");
         return result;
     }
 
