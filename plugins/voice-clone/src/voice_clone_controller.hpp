@@ -3,6 +3,7 @@
 #include "voice_clone_adapter_manifest.hpp"
 #include "voice_clone_manifest.hpp"
 #include "voice_clone_package_manifest.hpp"
+#include "voice_clone_runtime_package.hpp"
 #include "voice_clone_worker_client.hpp"
 
 #include <QHash>
@@ -14,6 +15,7 @@
 namespace agplayer::voice_clone {
 
 class VoiceClonePackageManager;
+class VoiceCloneRuntimePackageManager;
 
 class VoiceCloneController final : public QObject {
     Q_OBJECT
@@ -32,6 +34,8 @@ class VoiceCloneController final : public QObject {
     Q_PROPERTY(QString currentLicenseRevision READ currentLicenseRevision NOTIFY licenseChanged)
     Q_PROPERTY(QVariantList currentLicenseRequirements READ currentLicenseRequirements NOTIFY licenseChanged)
     Q_PROPERTY(QString downloadState READ downloadState NOTIFY downloadChanged)
+    Q_PROPERTY(QString downloadPhase READ downloadPhase NOTIFY downloadChanged)
+    Q_PROPERTY(bool runtimeDownloadRequired READ runtimeDownloadRequired NOTIFY activationChanged)
     Q_PROPERTY(QString downloadModelId READ downloadModelId NOTIFY downloadChanged)
     Q_PROPERTY(QString downloadError READ downloadError NOTIFY downloadChanged)
     Q_PROPERTY(int downloadProgressPercent READ downloadProgressPercent NOTIFY downloadChanged)
@@ -44,6 +48,12 @@ public:
                                   VoiceClonePackageValidationPolicy packageValidationPolicy =
                                       VoiceClonePackageValidationPolicy::OfficialOnly,
                                   QObject* parent = nullptr);
+    VoiceCloneController(QString pluginRoot,
+                         QString modelsRoot,
+                         VoiceClonePackageManager* licenseManager,
+                         VoiceCloneRuntimePackageManager* runtimeManager,
+                         VoiceClonePackageValidationPolicy packageValidationPolicy,
+                         QObject* parent = nullptr);
     ~VoiceCloneController() override;
 
     bool configureAdapter(const QString& adapterId,
@@ -94,6 +104,8 @@ public:
     QString currentLicenseRevision() const;
     QVariantList currentLicenseRequirements() const;
     QString downloadState() const;
+    QString downloadPhase() const { return downloadPhase_; }
+    bool runtimeDownloadRequired() const { return runtimeDownloadRequired_; }
     QString downloadModelId() const;
     QString downloadError() const;
     int downloadProgressPercent() const;
@@ -133,18 +145,22 @@ private:
     void retryPendingCleanup();
     void updateSelectedModelStatus(const QString& state, const QString& diagnostic = {});
     void setActivation(const QString& state, const QString& message = {});
+    void setDownloadPhase(const QString& phase);
+    bool startPendingModelDownload();
 
     QString pluginRoot_;
     QString modelsRoot_;
     QString registryPath_;
     QString outputRoot_;
     VoiceClonePackageManager* licenseManager_ = nullptr;
+    VoiceCloneRuntimePackageManager* runtimeManager_ = nullptr;
     VoiceClonePackageValidationPolicy packageValidationPolicy_ =
         VoiceClonePackageValidationPolicy::OfficialOnly;
     VoiceCloneWorkerClient worker_;
     VoiceCloneAdapterManifest adapterManifest_;
     AdapterLauncherResolution launcher_;
     QString adapterPackRoot_;
+    QString selectedRuntimeRoot_;
     QVector<VoiceCloneModel> modelEntries_;
     VoiceCloneModel selectedModel_;
     QString selectedModelRoot_;
@@ -160,9 +176,13 @@ private:
     QString error_;
     QString activationState_ = QStringLiteral("idle");
     QString activationMessage_;
+    VoiceClonePackageManifest pendingDownloadManifest_;
+    QString pendingDownloadStableId_;
+    QString downloadPhase_ = QStringLiteral("idle");
     int requestTimeoutMs_ = 10000;
     bool modelLoaded_ = false;
     bool activationInProgress_ = false;
+    bool runtimeDownloadRequired_ = false;
 };
 
 } // namespace agplayer::voice_clone

@@ -130,6 +130,7 @@ try {
         'registry/downloads/qwen3-tts-0.6b.json', 'registry/downloads/qwen3-tts-1.7b.json',
         'registry/downloads/indextts-2.5.json', 'registry/downloads/fun-cosyvoice3.json',
         'config/agplayer-model.example.json', 'config/plugin-feed.example.json',
+        'config/runtime-feed.example.json',
         'adapters/qwen/1.0.0/adapter.json', 'adapters/qwen/1.0.0/workers/qwen/worker.py',
         'adapters/qwen/1.0.0/workers/common/agvoice_protocol.py',
         'adapters/indextts25/1.0.0/adapter.json', 'adapters/indextts25/1.0.0/workers/indextts25/worker.py',

@@ -10,6 +10,7 @@ namespace agplayer::voice_clone {
 
 class VoiceCloneController;
 class VoiceClonePackageManager;
+class VoiceCloneRuntimePackageManager;
 
 class VoiceClonePlugin final : public QObject, public AgPlayerVoiceClonePluginInterface {
     Q_OBJECT
@@ -28,6 +29,7 @@ public:
 
 private:
     std::unique_ptr<VoiceClonePackageManager> packageManager_;
+    std::unique_ptr<VoiceCloneRuntimePackageManager> runtimeManager_;
     std::unique_ptr<VoiceCloneController> controller_;
 };
 

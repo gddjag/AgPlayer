@@ -277,6 +277,7 @@ try {
     }
     Copy-PackageFile (Join-Path $source 'plugins/voice-clone/config/agplayer-model.example.json') 'config/agplayer-model.example.json'
     Copy-PackageFile (Join-Path $source 'plugins/voice-clone/config/plugin-feed.example.json') 'config/plugin-feed.example.json'
+    Copy-PackageFile (Join-Path $source 'plugins/voice-clone/config/runtime-feed.example.json') 'config/runtime-feed.example.json'
 
     $adapters = @(
         @{ id = 'qwen'; worker = 'qwen' },

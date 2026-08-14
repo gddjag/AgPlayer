@@ -3,6 +3,7 @@
 #include "voice_clone_capability_schema.hpp"
 #include "voice_clone_package_manager.hpp"
 #include "voice_clone_registry.hpp"
+#include "voice_clone_runtime_package_manager.hpp"
 
 #include <QDesktopServices>
 #include <QDir>
@@ -14,6 +15,8 @@
 #include <QSaveFile>
 #include <QUrl>
 #include <QUuid>
+
+#include <utility>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -346,10 +349,20 @@ VoiceCloneController::VoiceCloneController(QString pluginRoot,
                                            VoiceClonePackageManager* licenseManager,
                                            const VoiceClonePackageValidationPolicy packageValidationPolicy,
                                            QObject* parent)
+    : VoiceCloneController(std::move(pluginRoot), std::move(modelsRoot), licenseManager,
+                           nullptr, packageValidationPolicy, parent)
+{
+}
+
+VoiceCloneController::VoiceCloneController(
+    QString pluginRoot, QString modelsRoot, VoiceClonePackageManager* licenseManager,
+    VoiceCloneRuntimePackageManager* runtimeManager,
+    const VoiceClonePackageValidationPolicy packageValidationPolicy, QObject* parent)
     : QObject(parent),
       pluginRoot_(QDir::fromNativeSeparators(QFileInfo(pluginRoot).canonicalFilePath())),
       modelsRoot_(QDir::fromNativeSeparators(QFileInfo(modelsRoot).canonicalFilePath())),
       licenseManager_(licenseManager),
+      runtimeManager_(runtimeManager),
       packageValidationPolicy_(packageValidationPolicy)
 {
     const QFileInfo pluginInfo(pluginRoot_);
@@ -402,6 +415,7 @@ VoiceCloneController::VoiceCloneController(QString pluginRoot,
         if (activationInProgress_) {
             activationInProgress_ = false;
             setActivation(QStringLiteral("error"), reason);
+            if (downloadPhase_ == QStringLiteral("probe")) emit downloadChanged();
         }
     });
     if (licenseManager_ != nullptr) {
@@ -410,9 +424,29 @@ VoiceCloneController::VoiceCloneController(QString pluginRoot,
             if (licenseManager_->state() == VoiceClonePackageManager::Failed) {
                 setError(licenseManager_->errorString());
             }
-            if (licenseManager_->state() == VoiceClonePackageManager::Completed) refreshModels();
+            if (licenseManager_->state() == VoiceClonePackageManager::Completed) {
+                refreshModels();
+                if (downloadPhase_ == QStringLiteral("model")
+                    && !pendingDownloadStableId_.isEmpty()) {
+                    setDownloadPhase(QStringLiteral("probe"));
+                    if (!activateModel(pendingDownloadStableId_)) emit downloadChanged();
+                }
+            }
         });
         connect(licenseManager_, &VoiceClonePackageManager::progressChanged,
+                this, &VoiceCloneController::downloadChanged);
+    }
+    if (runtimeManager_ != nullptr) {
+        connect(runtimeManager_, &VoiceCloneRuntimePackageManager::stateChanged, this, [this] {
+            emit downloadChanged();
+            if (runtimeManager_->state() == VoiceCloneRuntimePackageManager::Failed) {
+                setError(runtimeManager_->errorString());
+            } else if (runtimeManager_->state() == VoiceCloneRuntimePackageManager::Completed
+                       && downloadPhase_ == QStringLiteral("runtime")) {
+                startPendingModelDownload();
+            }
+        });
+        connect(runtimeManager_, &VoiceCloneRuntimePackageManager::progressChanged,
                 this, &VoiceCloneController::downloadChanged);
     }
     refreshModels();
@@ -465,12 +499,17 @@ bool VoiceCloneController::configureAdapter(const QString& adapterId,
     adapterManifest_ = parsed.manifest;
     launcher_ = resolved;
     adapterPackRoot_ = adapterPackRoot;
+    selectedRuntimeRoot_.clear();
     setError({});
     return true;
 }
 
 bool VoiceCloneController::activateModel(const QString& stableId)
 {
+    if (runtimeDownloadRequired_) {
+        runtimeDownloadRequired_ = false;
+        emit activationChanged();
+    }
     liveSchema_ = {};
     basicParameters_.clear();
     advancedParameters_.clear();
@@ -757,7 +796,91 @@ bool VoiceCloneController::downloadModel(const QString& stableId)
                      : manifest.errorString(packageValidationPolicy_));
         return false;
     }
-    licenseManager_->start(manifest);
+    if (runtimeManager_ == nullptr) {
+        licenseManager_->start(manifest);
+        if (licenseManager_->state() == VoiceClonePackageManager::Failed) {
+            setError(licenseManager_->errorString());
+            return false;
+        }
+        setError({});
+        return true;
+    }
+
+    pendingDownloadManifest_ = manifest;
+    pendingDownloadStableId_ = stableId;
+    const QString versionsRoot = QDir(pluginRoot_).filePath(
+        QStringLiteral("adapters/%1").arg(manifest.adapterId));
+    const QFileInfoList versions = QDir(versionsRoot).entryInfoList(
+        QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed);
+    bool configured = false;
+    for (const QFileInfo& version : versions) {
+        if (configureAdapter(manifest.adapterId, version.fileName())) {
+            configured = true;
+            break;
+        }
+    }
+    if (!configured) {
+        pendingDownloadStableId_.clear();
+        setError(QStringLiteral("No verified Adapter Pack is available for this model"));
+        return false;
+    }
+    setDownloadPhase(QStringLiteral("runtime"));
+    const auto installed = runtimeManager_->resolveInstalled(
+        adapterManifest_.runtime.id, adapterManifest_.adapterId,
+        adapterManifest_.adapterVersion, adapterManifest_.protocolVersion);
+    if (installed.isValid()) {
+        selectedRuntimeRoot_ = installed.root;
+        return startPendingModelDownload();
+    }
+
+    const QString feedPath = QDir(pluginRoot_).filePath(QStringLiteral("config/runtime-feed.json"));
+    if (hasReparseAncestor(feedPath)) {
+        setError(QStringLiteral("Runtime feed path is unsafe"));
+        return false;
+    }
+    QFile feedFile(feedPath);
+    if (!feedFile.open(QIODevice::ReadOnly)) {
+        setError(QStringLiteral("Official Runtime Pack feed is not installed"));
+        return false;
+    }
+    const auto feed = VoiceCloneRuntimeFeed::fromJson(
+        feedFile.readAll(), runtimeManager_->validationPolicy());
+    if (!feed.isValid() || !feed.enabled) {
+        setError(feed.isValid() ? QStringLiteral("Official Runtime Pack feed is disabled")
+                                : feed.error);
+        return false;
+    }
+    QVector<VoiceCloneRuntimePackageManifest> matches;
+    for (const auto& runtime : feed.runtimes) {
+        if (runtime.runtimeId == adapterManifest_.runtime.id
+            && runtime.supports(adapterManifest_.adapterId,
+                                adapterManifest_.adapterVersion,
+                                adapterManifest_.protocolVersion)) {
+            matches.append(runtime);
+        }
+    }
+    if (matches.size() != 1) {
+        setError(QStringLiteral("Runtime feed does not contain exactly one compatible Runtime Pack"));
+        return false;
+    }
+    runtimeManager_->start(matches.constFirst());
+    if (runtimeManager_->state() == VoiceCloneRuntimePackageManager::Failed) {
+        setError(runtimeManager_->errorString());
+        return false;
+    }
+    setError({});
+    return true;
+}
+
+bool VoiceCloneController::startPendingModelDownload()
+{
+    if (licenseManager_ == nullptr || pendingDownloadStableId_.isEmpty()
+        || !pendingDownloadManifest_.isValid(packageValidationPolicy_)) {
+        setError(QStringLiteral("Pending model package is unavailable"));
+        return false;
+    }
+    setDownloadPhase(QStringLiteral("model"));
+    licenseManager_->start(pendingDownloadManifest_);
     if (licenseManager_->state() == VoiceClonePackageManager::Failed) {
         setError(licenseManager_->errorString());
         return false;
@@ -768,11 +891,20 @@ bool VoiceCloneController::downloadModel(const QString& stableId)
 
 bool VoiceCloneController::pauseDownload()
 {
+    if (downloadPhase_ == QStringLiteral("runtime"))
+        return runtimeManager_ != nullptr && runtimeManager_->pause();
     return licenseManager_ != nullptr && licenseManager_->pause();
 }
 
 bool VoiceCloneController::resumeDownload()
 {
+    if (downloadPhase_ == QStringLiteral("runtime")) {
+        if (runtimeManager_ == nullptr
+            || runtimeManager_->state() != VoiceCloneRuntimePackageManager::Paused) return false;
+        const bool resumed = runtimeManager_->retry();
+        if (resumed) setError({});
+        return resumed;
+    }
     if (licenseManager_ == nullptr
         || licenseManager_->state() != VoiceClonePackageManager::Paused) {
         return false;
@@ -784,6 +916,15 @@ bool VoiceCloneController::resumeDownload()
 
 bool VoiceCloneController::cancelDownload()
 {
+    if (downloadPhase_ == QStringLiteral("runtime")) {
+        if (runtimeManager_ == nullptr) return false;
+        const auto before = runtimeManager_->state();
+        if (before == VoiceCloneRuntimePackageManager::Idle
+            || before == VoiceCloneRuntimePackageManager::Completed
+            || before == VoiceCloneRuntimePackageManager::Canceled) return false;
+        runtimeManager_->cancel();
+        return runtimeManager_->state() == VoiceCloneRuntimePackageManager::Canceled;
+    }
     if (licenseManager_ == nullptr) return false;
     const auto before = licenseManager_->state();
     if (before == VoiceClonePackageManager::Idle
@@ -797,6 +938,23 @@ bool VoiceCloneController::cancelDownload()
 
 bool VoiceCloneController::retryDownload()
 {
+    if (downloadPhase_ == QStringLiteral("runtime")) {
+        if (runtimeManager_ == nullptr) return false;
+        if (runtimeManager_->state() == VoiceCloneRuntimePackageManager::Idle
+            && !pendingDownloadStableId_.isEmpty()) {
+            return downloadModel(pendingDownloadStableId_);
+        }
+        if (runtimeManager_->state() != VoiceCloneRuntimePackageManager::Failed
+            && runtimeManager_->state() != VoiceCloneRuntimePackageManager::Canceled) return false;
+        const bool retried = runtimeManager_->retry();
+        if (retried) setError({});
+        return retried;
+    }
+    if (downloadPhase_ == QStringLiteral("probe")
+        && !pendingDownloadStableId_.isEmpty()) {
+        setDownloadPhase(QStringLiteral("probe"));
+        return activateModel(pendingDownloadStableId_);
+    }
     if (licenseManager_ == nullptr
         || (licenseManager_->state() != VoiceClonePackageManager::Failed
             && licenseManager_->state() != VoiceClonePackageManager::Canceled)) {
@@ -819,9 +977,30 @@ bool VoiceCloneController::startWorker()
         setError(QStringLiteral("Adapter and model must be selected before starting the Worker"));
         return false;
     }
-    const bool started = worker_.start(adapterManifest_, launcher_, adapterPackRoot_,
-                                       selectedModelRoot_, outputRoot_,
-                                       requestTimeoutMs_);
+    if (runtimeManager_ != nullptr) {
+        const auto runtime = runtimeManager_->resolveInstalled(
+            adapterManifest_.runtime.id, adapterManifest_.adapterId,
+            adapterManifest_.adapterVersion, adapterManifest_.protocolVersion);
+        if (!runtime.isValid()) {
+            if (!runtimeDownloadRequired_) {
+                runtimeDownloadRequired_ = true;
+                emit activationChanged();
+            }
+            setError(runtime.error);
+            return false;
+        }
+        selectedRuntimeRoot_ = runtime.root;
+    }
+    if (runtimeDownloadRequired_) {
+        runtimeDownloadRequired_ = false;
+        emit activationChanged();
+    }
+    const bool started = selectedRuntimeRoot_.isEmpty()
+                             ? worker_.start(adapterManifest_, launcher_, adapterPackRoot_,
+                                             selectedModelRoot_, outputRoot_, requestTimeoutMs_)
+                             : worker_.start(adapterManifest_, launcher_, adapterPackRoot_,
+                                             selectedRuntimeRoot_, selectedModelRoot_, outputRoot_,
+                                             requestTimeoutMs_);
     if (!started) setError(worker_.errorString());
     return started;
 }
@@ -1042,6 +1221,29 @@ QVariantList VoiceCloneController::currentLicenseRequirements() const
 }
 QString VoiceCloneController::downloadState() const
 {
+    if (downloadPhase_ == QStringLiteral("runtime") && runtimeManager_ != nullptr) {
+        switch (runtimeManager_->state()) {
+        case VoiceCloneRuntimePackageManager::Idle:
+            return !pendingDownloadStableId_.isEmpty() && !error_.isEmpty()
+                       ? QStringLiteral("failed") : QStringLiteral("idle");
+        case VoiceCloneRuntimePackageManager::Resolving: return QStringLiteral("resolving");
+        case VoiceCloneRuntimePackageManager::Downloading: return QStringLiteral("downloading");
+        case VoiceCloneRuntimePackageManager::Paused: return QStringLiteral("paused");
+        case VoiceCloneRuntimePackageManager::Verifying:
+        case VoiceCloneRuntimePackageManager::Extracting: return QStringLiteral("verifying");
+        case VoiceCloneRuntimePackageManager::Committing: return QStringLiteral("committing");
+        case VoiceCloneRuntimePackageManager::Completed: return QStringLiteral("completed");
+        case VoiceCloneRuntimePackageManager::Canceled: return QStringLiteral("canceled");
+        case VoiceCloneRuntimePackageManager::Failed: return QStringLiteral("failed");
+        }
+    }
+    if (downloadPhase_ == QStringLiteral("probe")) {
+        if (modelLoaded_ && worker_.isReady()) return QStringLiteral("completed");
+        if (activationState_ == QStringLiteral("error")
+            || activationState_ == QStringLiteral("needs-download")) return QStringLiteral("failed");
+        return QStringLiteral("verifying");
+    }
+    if (downloadPhase_ == QStringLiteral("ready")) return QStringLiteral("completed");
     if (licenseManager_ == nullptr) return QStringLiteral("unavailable");
     switch (licenseManager_->state()) {
     case VoiceClonePackageManager::Idle: return QStringLiteral("idle");
@@ -1059,18 +1261,40 @@ QString VoiceCloneController::downloadState() const
 }
 QString VoiceCloneController::downloadModelId() const
 {
+    if (!pendingDownloadStableId_.isEmpty()) return pendingDownloadStableId_;
     return licenseManager_ == nullptr ? QString{} : licenseManager_->currentManifest().modelId;
 }
 QString VoiceCloneController::downloadError() const
 {
+    if (downloadPhase_ == QStringLiteral("runtime") && runtimeManager_ != nullptr) {
+        const QString managerError = runtimeManager_->errorString();
+        return managerError.isEmpty() ? error_ : managerError;
+    }
+    if (downloadPhase_ == QStringLiteral("probe")) return error_;
     return licenseManager_ == nullptr ? QString{} : licenseManager_->errorString();
 }
 int VoiceCloneController::downloadProgressPercent() const
 {
+    if (downloadPhase_ == QStringLiteral("runtime") && runtimeManager_ != nullptr)
+        return runtimeManager_->progressPercent();
+    if (downloadPhase_ == QStringLiteral("probe")) return -1;
+    if (downloadPhase_ == QStringLiteral("ready")) return 100;
     return licenseManager_ == nullptr ? -1 : licenseManager_->progressPercent();
 }
 bool VoiceCloneController::downloadInProgress() const
 {
+    if (downloadPhase_ == QStringLiteral("runtime") && runtimeManager_ != nullptr) {
+        const auto state = runtimeManager_->state();
+        return state == VoiceCloneRuntimePackageManager::Resolving
+               || state == VoiceCloneRuntimePackageManager::Downloading
+               || state == VoiceCloneRuntimePackageManager::Verifying
+               || state == VoiceCloneRuntimePackageManager::Extracting
+               || state == VoiceCloneRuntimePackageManager::Committing;
+    }
+    if (downloadPhase_ == QStringLiteral("probe"))
+        return activationState_ != QStringLiteral("error")
+               && activationState_ != QStringLiteral("needs-download")
+               && !(modelLoaded_ && worker_.isReady());
     if (licenseManager_ == nullptr) return false;
     const auto state = licenseManager_->state();
     return state == VoiceClonePackageManager::Resolving
@@ -1083,6 +1307,13 @@ QVariantList VoiceCloneController::advancedParameters() const { return advancedP
 bool VoiceCloneController::advancedSettingsAvailable() const { return !advancedParameters_.isEmpty(); }
 QVariantList VoiceCloneController::models() const { return models_; }
 int VoiceCloneController::pendingCleanupCount() const { return pendingCleanup_.size(); }
+
+void VoiceCloneController::setDownloadPhase(const QString& phase)
+{
+    if (downloadPhase_ == phase) return;
+    downloadPhase_ = phase;
+    emit downloadChanged();
+}
 
 void VoiceCloneController::handleResponse(const VoiceCloneWorkerMessage& message)
 {
@@ -1101,12 +1332,22 @@ void VoiceCloneController::handleResponse(const VoiceCloneWorkerMessage& message
         if (activationInProgress_) {
             activationInProgress_ = false;
             if (loaded) {
+                if (runtimeDownloadRequired_) {
+                    runtimeDownloadRequired_ = false;
+                    emit activationChanged();
+                }
                 setError({});
                 setActivation(QStringLiteral("ready"), QStringLiteral("Model ready"));
+                if (downloadPhase_ == QStringLiteral("probe")) {
+                    setDownloadPhase(QStringLiteral("ready"));
+                    pendingDownloadStableId_.clear();
+                    pendingDownloadManifest_ = {};
+                }
             } else {
                 const QString diagnostic = QStringLiteral("Adapter did not load the model");
                 setError(diagnostic);
                 setActivation(QStringLiteral("error"), diagnostic);
+                if (downloadPhase_ == QStringLiteral("probe")) emit downloadChanged();
             }
         }
     } else if (message.operation == WorkerOperation::Unload) {
@@ -1145,6 +1386,7 @@ void VoiceCloneController::handleFailure(const QString& requestId,
         if (activationInProgress_) {
             activationInProgress_ = false;
             setActivation(QStringLiteral("error"), message);
+            if (downloadPhase_ == QStringLiteral("probe")) emit downloadChanged();
         }
     }
     if (pendingCleanup_.contains(requestId) || pendingCleanup_.contains(cancelTarget)) {

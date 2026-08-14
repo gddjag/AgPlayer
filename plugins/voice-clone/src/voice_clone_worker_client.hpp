@@ -27,6 +27,13 @@ public:
                const QString& modelRoot,
                const QString& outputRoot,
                int requestTimeoutMs);
+    bool start(const VoiceCloneAdapterManifest& manifest,
+               const AdapterLauncherResolution& launcher,
+               const QString& adapterPackRoot,
+               const QString& runtimeRoot,
+               const QString& modelRoot,
+               const QString& outputRoot,
+               int requestTimeoutMs);
     bool restart();
     void shutdown();
 
@@ -66,6 +73,7 @@ private:
     QString modelRoot_;
     QString outputRoot_;
     QString adapterPackRoot_;
+    QString runtimeRoot_;
     int requestTimeoutMs_ = 10000;
     QLocalServer* server_ = nullptr;
     QLocalSocket* socket_ = nullptr;

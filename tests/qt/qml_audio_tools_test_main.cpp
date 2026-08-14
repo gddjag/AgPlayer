@@ -16,6 +16,7 @@
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QDir>
@@ -109,7 +110,7 @@ bool stageVoiceClonePlugin(const QString& root)
                            {QStringLiteral("adapterVersion"), QStringLiteral("1.0.0")},
                            {QStringLiteral("protocolVersion"), 1},
                            {QStringLiteral("runtime"), QJsonObject{
-                                {QStringLiteral("id"), QStringLiteral("test-runtime")},
+                                {QStringLiteral("id"), QStringLiteral("qwen-shared")},
                                 {QStringLiteral("root"), QStringLiteral("runtime")},
                                 {QStringLiteral("shared"), false}}},
                            {QStringLiteral("defaultLauncherId"), QStringLiteral("test")},
@@ -118,6 +119,54 @@ bool stageVoiceClonePlugin(const QString& root)
                                 {QStringLiteral("kind"), QStringLiteral("executable")},
                                 {QStringLiteral("path"), workerRelative},
                                 {QStringLiteral("shared"), false}}}}})) {
+        return false;
+    }
+
+    const QString runtimeRoot = QDir(root).filePath(
+        QStringLiteral("runtime/qwen-shared/1.0.0"));
+    const QString runtimePython = QDir(runtimeRoot).filePath(QStringLiteral("python.exe"));
+    if (!QDir().mkpath(runtimeRoot)
+        || !QFile::copy(QString::fromUtf8(AGPLAYER_VOICE_CLONE_TEST_WORKER), runtimePython)) {
+        return false;
+    }
+    QFile runtimeFile(runtimePython);
+    if (!runtimeFile.open(QIODevice::ReadOnly)) return false;
+    const QByteArray runtimeBytes = runtimeFile.readAll();
+    const QString runtimeSha = QString::fromLatin1(
+        QCryptographicHash::hash(runtimeBytes, QCryptographicHash::Sha256).toHex());
+    if (!writeJsonFile(QDir(runtimeRoot).filePath(QStringLiteral("agplayer-runtime.json")),
+                       QJsonObject{
+                           {QStringLiteral("schemaVersion"), 1},
+                           {QStringLiteral("packageId"), QStringLiteral("runtime-qwen")},
+                           {QStringLiteral("runtimeId"), QStringLiteral("qwen-shared")},
+                           {QStringLiteral("version"), QStringLiteral("1.0.0")},
+                           {QStringLiteral("compatibleAdapters"), QJsonArray{QJsonObject{
+                                {QStringLiteral("adapterId"), QStringLiteral("qwen")},
+                                {QStringLiteral("adapterVersion"), QStringLiteral("1.0.0")}}}},
+                           {QStringLiteral("protocolVersion"), 1},
+                           {QStringLiteral("platform"), QStringLiteral("windows")},
+                           {QStringLiteral("architecture"), QStringLiteral("x86_64")},
+                           {QStringLiteral("minimumPlayerVersion"), QStringLiteral("1.0.0")},
+                           {QStringLiteral("archiveFormat"), QStringLiteral("zip")},
+                           {QStringLiteral("installRoot"), QStringLiteral("runtime/qwen-shared/1.0.0")},
+                           {QStringLiteral("publisher"), QJsonObject{
+                                {QStringLiteral("name"), QStringLiteral("AG Player")},
+                                {QStringLiteral("url"), QStringLiteral("https://agplayer.cn")}}},
+                           {QStringLiteral("licenseNotices"), QJsonArray{QJsonObject{
+                                {QStringLiteral("name"), QStringLiteral("Test Runtime")},
+                                {QStringLiteral("spdx"), QStringLiteral("MIT")},
+                                {QStringLiteral("url"), QStringLiteral("https://agplayer.cn/licenses/test")}}}},
+                           {QStringLiteral("signature"), QJsonObject{
+                                {QStringLiteral("status"), QStringLiteral("signed")},
+                                {QStringLiteral("algorithm"), QStringLiteral("test-fixture")},
+                                {QStringLiteral("keyId"), QStringLiteral("test-fixture")}}},
+                           {QStringLiteral("packageUrl"), QStringLiteral("https://downloads.agplayer.cn/runtime-qwen-test.zip")},
+                           {QStringLiteral("packageBytes"), runtimeBytes.size()},
+                           {QStringLiteral("packageSha256"), runtimeSha},
+                           {QStringLiteral("files"), QJsonArray{QJsonObject{
+                                {QStringLiteral("path"), QStringLiteral("python.exe")},
+                                {QStringLiteral("bytes"), runtimeBytes.size()},
+                                {QStringLiteral("sha256"), runtimeSha}}}}})) {
         return false;
     }
 

@@ -217,8 +217,12 @@ Item {
                              ? root.controller.downloadModelId : ""
             downloadState: root.controller && root.controller.downloadState
                            ? root.controller.downloadState : "idle"
+            downloadPhase: root.controller && root.controller.downloadPhase
+                           ? root.controller.downloadPhase : "idle"
             downloadError: root.controller && root.controller.downloadError
                            ? root.controller.downloadError : ""
+            runtimeDownloadRequired: !!(root.controller
+                                        && root.controller.runtimeDownloadRequired)
             onModelSelected: function(index, stableId) { root.selectModel(index, stableId) }
             onLicenseAcceptanceRequested: licenseDialog.open()
             onDownloadRequested: function(stableId) {

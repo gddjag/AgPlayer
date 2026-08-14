@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "enabled": false,
+  "reason": "No production HTTPS base URL and signing key are configured. Build and verify unsigned-test Runtime Packs locally; do not publish this feed.",
+  "signature": {
+    "status": "unsigned-test",
+    "algorithm": null,
+    "keyId": null
+  },
+  "runtimes": []
+}

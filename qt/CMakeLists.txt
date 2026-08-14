@@ -98,6 +98,10 @@ add_library(agplayer_qt STATIC
     src/voice_clone/voice_clone_package_manifest.hpp
     src/voice_clone/voice_clone_package_manager.cpp
     src/voice_clone/voice_clone_package_manager.hpp
+    src/voice_clone/voice_clone_runtime_package.cpp
+    src/voice_clone/voice_clone_runtime_package.hpp
+    src/voice_clone/voice_clone_runtime_package_manager.cpp
+    src/voice_clone/voice_clone_runtime_package_manager.hpp
     src/plugins/voice_clone_plugin_interface.hpp
 )
 

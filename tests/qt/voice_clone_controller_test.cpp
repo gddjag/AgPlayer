@@ -1,5 +1,6 @@
 #include "voice_clone_controller.hpp"
 #include "voice_clone_package_manager.hpp"
+#include "voice_clone_runtime_package_manager.hpp"
 #include "voice_clone_worker_protocol.hpp"
 #include "voice_clone_host_controller.hpp"
 #include "audio_tools_controller.hpp"
@@ -395,6 +396,81 @@ bool writeAdapterPack(const QString& pluginRoot, const QString& adapterId = QStr
     return true;
 }
 
+quint32 zipCrc32(const QByteArray& bytes)
+{
+    quint32 crc = 0xffffffffU;
+    for (const unsigned char byte : bytes) {
+        crc ^= byte;
+        for (int bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1U) ^ (0xedb88320U & (0U - (crc & 1U)));
+    }
+    return ~crc;
+}
+
+void zip16(QByteArray& output, const quint16 value)
+{
+    output.append(char(value & 0xffU)); output.append(char((value >> 8U) & 0xffU));
+}
+
+void zip32(QByteArray& output, const quint32 value)
+{
+    zip16(output, quint16(value & 0xffffU)); zip16(output, quint16(value >> 16U));
+}
+
+QByteArray singleFileStoredZip(const QByteArray& name, const QByteArray& bytes)
+{
+    QByteArray archive;
+    const quint32 crc = zipCrc32(bytes);
+    zip32(archive, 0x04034b50U); zip16(archive, 20); zip16(archive, 0); zip16(archive, 0);
+    zip16(archive, 0); zip16(archive, 0); zip32(archive, crc);
+    zip32(archive, quint32(bytes.size())); zip32(archive, quint32(bytes.size()));
+    zip16(archive, quint16(name.size())); zip16(archive, 0); archive += name; archive += bytes;
+    const quint32 centralOffset = quint32(archive.size());
+    zip32(archive, 0x02014b50U); zip16(archive, 20); zip16(archive, 20);
+    zip16(archive, 0); zip16(archive, 0); zip16(archive, 0); zip16(archive, 0);
+    zip32(archive, crc); zip32(archive, quint32(bytes.size())); zip32(archive, quint32(bytes.size()));
+    zip16(archive, quint16(name.size())); zip16(archive, 0); zip16(archive, 0);
+    zip16(archive, 0); zip16(archive, 0); zip32(archive, 0); zip32(archive, 0); archive += name;
+    const quint32 centralBytes = quint32(archive.size()) - centralOffset;
+    zip32(archive, 0x06054b50U); zip16(archive, 0); zip16(archive, 0); zip16(archive, 1);
+    zip16(archive, 1); zip32(archive, centralBytes); zip32(archive, centralOffset); zip16(archive, 0);
+    return archive;
+}
+
+QString bytesSha256(const QByteArray& bytes)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+}
+
+bool writePythonAdapterPack(const QString& pluginRoot,
+                            const QString& adapterId = QStringLiteral("qwen"),
+                            const QString& runtimeId = QStringLiteral("qwen-shared"))
+{
+    const QString root = QDir(pluginRoot).filePath(
+        QStringLiteral("adapters/%1/1.0.0").arg(adapterId));
+    const QString workerPath = QStringLiteral("workers/%1/worker.py").arg(adapterId);
+    if (!QDir(root).mkpath(QFileInfo(workerPath).path())) return false;
+    QFile worker(QDir(root).filePath(workerPath));
+    if (!worker.open(QIODevice::WriteOnly) || worker.write("# test launcher\n") < 0) return false;
+    QFile manifest(QDir(root).filePath(QStringLiteral("adapter.json")));
+    if (!manifest.open(QIODevice::WriteOnly)) return false;
+    return manifest.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("adapterId"), adapterId},
+        {QStringLiteral("adapterVersion"), QStringLiteral("1.0.0")},
+        {QStringLiteral("protocolVersion"), 1},
+        {QStringLiteral("runtime"), QJsonObject{{QStringLiteral("id"), runtimeId},
+                                                {QStringLiteral("root"), QStringLiteral("unused")},
+                                                {QStringLiteral("shared"), true}}},
+        {QStringLiteral("defaultLauncherId"), QStringLiteral("python-module")},
+        {QStringLiteral("launchers"), QJsonArray{QJsonObject{
+             {QStringLiteral("id"), QStringLiteral("python-module")},
+             {QStringLiteral("kind"), QStringLiteral("pythonModule")},
+             {QStringLiteral("path"), workerPath},
+             {QStringLiteral("shared"), true}}}}
+    }).toJson()) > 0;
+}
+
 bool copyRegistry(const QString& pluginRoot)
 {
     const QString target = QDir(pluginRoot).filePath(QStringLiteral("registry/models.json"));
@@ -466,14 +542,17 @@ struct TestLayout {
     QString pluginRoot;
     QString modelsRoot;
     QString packagesRoot;
+    QString runtimeRoot;
 
     TestLayout()
         : pluginRoot(root.filePath(QStringLiteral("plugin"))),
           modelsRoot(root.filePath(QStringLiteral("data/models/voice-clone"))),
-          packagesRoot(root.filePath(QStringLiteral("packages")))
+          packagesRoot(root.filePath(QStringLiteral("packages"))),
+          runtimeRoot(root.filePath(QStringLiteral("runtime")))
     {
         QDir().mkpath(pluginRoot);
         QDir().mkpath(modelsRoot);
+        QDir().mkpath(runtimeRoot);
         copyRegistry(pluginRoot);
     }
 };
@@ -507,6 +586,9 @@ private slots:
     void qaWorkerPublishesConfiguredFixture();
     void activateModelReportsMissingRuntimeWithoutPretendingReady();
     void downloadsInstallsRefreshesAndSelectsModel();
+    void oneClickDownloadInstallsRuntimeThenModelAndProbesWorker();
+    void missingRuntimeFeedIsReportedAsRetryableDownloadFailure();
+    void installedModelWithoutRuntimeRequiresRuntimeDownload();
     void activateModelClearsLiveSchemaBeforeMissingRuntime();
     void resultFileUrlEncodesReservedCharacters();
     void selectedIndexLicenseAcceptanceUsesExactIdentity();
@@ -621,6 +703,172 @@ void VoiceCloneControllerTest::downloadsInstallsRefreshesAndSelectsModel()
     QVERIFY(controller.cancelDownload());
 }
 
+void VoiceCloneControllerTest::oneClickDownloadInstallsRuntimeThenModelAndProbesWorker()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writePythonAdapterPack(layout.pluginRoot));
+
+    QFile executable(QCoreApplication::applicationFilePath());
+    QVERIFY(executable.open(QIODevice::ReadOnly));
+    const QByteArray runtimeExecutable = executable.readAll();
+    const QByteArray runtimeZip = singleFileStoredZip("python.exe", runtimeExecutable);
+    ModelDownloadServer runtimeServer(runtimeZip);
+
+    const QJsonObject runtimeManifest{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("packageId"), QStringLiteral("runtime-qwen")},
+        {QStringLiteral("runtimeId"), QStringLiteral("qwen-shared")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("compatibleAdapters"), QJsonArray{QJsonObject{
+             {QStringLiteral("adapterId"), QStringLiteral("qwen")},
+             {QStringLiteral("adapterVersion"), QStringLiteral("1.0.0")}}}},
+        {QStringLiteral("protocolVersion"), 1},
+        {QStringLiteral("platform"), QStringLiteral("windows")},
+        {QStringLiteral("architecture"), QStringLiteral("x86_64")},
+        {QStringLiteral("minimumPlayerVersion"), QStringLiteral("1.0.0")},
+        {QStringLiteral("archiveFormat"), QStringLiteral("zip")},
+        {QStringLiteral("installRoot"), QStringLiteral("runtime/qwen-shared/1.0.0")},
+        {QStringLiteral("publisher"), QJsonObject{{QStringLiteral("name"), QStringLiteral("AG Player")},
+                                                  {QStringLiteral("url"), QStringLiteral("https://agplayer.cn")}}},
+        {QStringLiteral("licenseNotices"), QJsonArray{QJsonObject{
+             {QStringLiteral("name"), QStringLiteral("Python")},
+             {QStringLiteral("spdx"), QStringLiteral("PSF-2.0")},
+             {QStringLiteral("url"), QStringLiteral("https://docs.python.org/3/license.html")}}}},
+        {QStringLiteral("signature"), QJsonObject{{QStringLiteral("status"), QStringLiteral("unsigned-test")},
+                                                  {QStringLiteral("algorithm"), QJsonValue::Null},
+                                                  {QStringLiteral("keyId"), QJsonValue::Null}}},
+        {QStringLiteral("packageUrl"), runtimeServer.url().toString()},
+        {QStringLiteral("packageBytes"), runtimeZip.size()},
+        {QStringLiteral("packageSha256"), bytesSha256(runtimeZip)},
+        {QStringLiteral("files"), QJsonArray{QJsonObject{
+             {QStringLiteral("path"), QStringLiteral("python.exe")},
+             {QStringLiteral("bytes"), runtimeExecutable.size()},
+             {QStringLiteral("sha256"), bytesSha256(runtimeExecutable)}}}}
+    };
+    const QString feedPath = QDir(layout.pluginRoot).filePath(QStringLiteral("config/runtime-feed.json"));
+    QVERIFY(QDir().mkpath(QFileInfo(feedPath).absolutePath()));
+    QFile feed(feedPath);
+    QVERIFY(feed.open(QIODevice::WriteOnly));
+    QVERIFY(feed.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("enabled"), true},
+        {QStringLiteral("reason"), QStringLiteral("test")},
+        {QStringLiteral("signature"), QJsonObject{{QStringLiteral("status"), QStringLiteral("unsigned-test")},
+                                                  {QStringLiteral("algorithm"), QJsonValue::Null},
+                                                  {QStringLiteral("keyId"), QJsonValue::Null}}},
+        {QStringLiteral("runtimes"), QJsonArray{runtimeManifest}}
+    }).toJson()) > 0);
+    feed.close();
+
+    const QByteArray modelBytes("downloaded-config");
+    ModelDownloadServer modelServer(modelBytes);
+    const QString modelManifestPath = QDir(layout.pluginRoot).filePath(
+        QStringLiteral("registry/downloads/qwen3-tts-0.6b.json"));
+    QVERIFY(QDir().mkpath(QFileInfo(modelManifestPath).absolutePath()));
+    const QString revision = QStringLiteral("5d83992436eae1d760afd27aff78a71d676296fc");
+    const QString licenseRevision = QStringLiteral("022e286b98fbec7e1e916cb940cdf532cd9f488e");
+    const QJsonObject modelPackage{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("packageId"), QStringLiteral("controller-runtime-chain")},
+        {QStringLiteral("modelId"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
+        {QStringLiteral("adapterId"), QStringLiteral("qwen")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("revision"), revision},
+        {QStringLiteral("model"), QJsonObject{{QStringLiteral("displayName"), QStringLiteral("Qwen3-TTS 0.6B Base")},
+                                              {QStringLiteral("description"), QStringLiteral("runtime chain")}}},
+        {QStringLiteral("source"), QJsonObject{{QStringLiteral("provider"), QStringLiteral("hugging-face")},
+                                               {QStringLiteral("repository"), QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")},
+                                               {QStringLiteral("url"), QStringLiteral("https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base")}}},
+        {QStringLiteral("licenses"), QJsonArray{QJsonObject{
+             {QStringLiteral("id"), QStringLiteral("apache-2.0")},
+             {QStringLiteral("name"), QStringLiteral("Apache-2.0")},
+             {QStringLiteral("url"), QStringLiteral("https://github.com/QwenLM/Qwen3-TTS/blob/%1/LICENSE").arg(licenseRevision)},
+             {QStringLiteral("revision"), licenseRevision},
+             {QStringLiteral("spdx"), QStringLiteral("Apache-2.0")},
+             {QStringLiteral("requiredAcceptance"), false},
+             {QStringLiteral("useRestriction"), QString{}}}}},
+        {QStringLiteral("totalBytes"), modelBytes.size()},
+        {QStringLiteral("files"), QJsonArray{QJsonObject{
+             {QStringLiteral("path"), QStringLiteral("config.json")},
+             {QStringLiteral("url"), modelServer.url().toString()},
+             {QStringLiteral("sha256"), bytesSha256(modelBytes)},
+             {QStringLiteral("sizeBytes"), modelBytes.size()}}}}
+    };
+    QFile modelManifest(modelManifestPath);
+    QVERIFY(modelManifest.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QVERIFY(modelManifest.write(QJsonDocument(modelPackage).toJson()) > 0);
+    modelManifest.close();
+
+    VoiceClonePackageManager models(layout.modelsRoot,
+        VoiceClonePackageValidationPolicy::AllowLoopback);
+    VoiceCloneRuntimePackageManager runtimes(layout.runtimeRoot,
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    VoiceCloneController controller(
+        layout.pluginRoot, layout.modelsRoot, &models, &runtimes,
+        VoiceClonePackageValidationPolicy::AllowLoopback);
+    QVERIFY2(controller.downloadModel(QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")),
+             qPrintable(controller.errorString()));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.downloadPhase() == QStringLiteral("runtime"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 10000);
+    QCOMPARE(controller.downloadPhase(), QStringLiteral("ready"));
+    QCOMPARE(controller.activationState(), QStringLiteral("ready"));
+}
+
+void VoiceCloneControllerTest::missingRuntimeFeedIsReportedAsRetryableDownloadFailure()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writePythonAdapterPack(layout.pluginRoot));
+    const QString downloadsRoot = QDir(layout.pluginRoot).filePath(
+        QStringLiteral("registry/downloads"));
+    QVERIFY(QDir().mkpath(downloadsRoot));
+    const QString sourceManifest = QDir(
+        QFileInfo(QString::fromUtf8(AGPLAYER_VOICE_CLONE_REGISTRY_PATH)).absolutePath())
+                                       .filePath(QStringLiteral(
+                                           "downloads/qwen3-tts-0.6b.json"));
+    QVERIFY(QFile::copy(sourceManifest,
+                        QDir(downloadsRoot).filePath(QStringLiteral(
+                            "qwen3-tts-0.6b.json"))));
+
+    VoiceClonePackageManager models(layout.modelsRoot,
+        VoiceClonePackageValidationPolicy::AllowLoopback);
+    VoiceCloneRuntimePackageManager runtimes(layout.runtimeRoot,
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    VoiceCloneController controller(
+        layout.pluginRoot, layout.modelsRoot, &models, &runtimes,
+        VoiceClonePackageValidationPolicy::AllowLoopback);
+
+    QVERIFY(!controller.downloadModel(
+        QStringLiteral("Qwen/Qwen3-TTS-12Hz-0.6B-Base")));
+    QCOMPARE(controller.downloadPhase(), QStringLiteral("runtime"));
+    QCOMPARE(controller.downloadState(), QStringLiteral("failed"));
+    QVERIFY(controller.downloadError().contains(QStringLiteral("feed"),
+                                                 Qt::CaseInsensitive));
+}
+
+void VoiceCloneControllerTest::installedModelWithoutRuntimeRequiresRuntimeDownload()
+{
+    TestLayout layout;
+    QVERIFY(layout.root.isValid());
+    QVERIFY(writePythonAdapterPack(layout.pluginRoot, QStringLiteral("indextts25"),
+                                   QStringLiteral("indextts25-isolated")));
+    const QString modelId = QStringLiteral("IndexTeam/IndexTTS-2.5");
+    QVERIFY(!writeModel(layout.modelsRoot, modelId, QStringLiteral("indextts25")).isEmpty());
+    VoiceClonePackageManager models(layout.modelsRoot);
+    VoiceCloneRuntimePackageManager runtimes(layout.runtimeRoot,
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    VoiceCloneController controller(
+        layout.pluginRoot, layout.modelsRoot, &models, &runtimes,
+        VoiceClonePackageValidationPolicy::OfficialOnly);
+
+    QVERIFY(!controller.activateModel(modelId));
+    QVERIFY2(controller.activationState() == QStringLiteral("needs-download"),
+             qPrintable(controller.errorString()));
+    QVERIFY(controller.runtimeDownloadRequired());
+}
+
 void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWorker()
 {
     TestLayout layout;
@@ -633,7 +881,7 @@ void VoiceCloneControllerTest::activateModelResolvesInstalledAdapterAndLoadsWork
 
     QSignalSpy activationChanged(&controller, &VoiceCloneController::activationChanged);
     QVERIFY2(controller.activateModel(modelId), qPrintable(controller.errorString()));
-    QTRY_VERIFY_WITH_TIMEOUT(controller.workerReady(), 5000);
+    QTRY_VERIFY2_WITH_TIMEOUT(controller.workerReady(), qPrintable(controller.errorString()), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(controller.modelLoaded(), 3000);
     QCOMPARE(controller.activationState(), QStringLiteral("ready"));
     QVERIFY(activationChanged.count() >= 2);

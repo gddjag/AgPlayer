@@ -95,9 +95,11 @@ TestCase {
         property var currentLicenseRequirements: []
         property string downloadModelId: ""
         property string downloadState: "idle"
+        property string downloadPhase: "idle"
         property string downloadError: ""
         property int downloadProgressPercent: -1
         property bool downloadInProgress: false
+        property bool runtimeDownloadRequired: false
         property bool licenseIdentityValid: true
         property int refreshCalls: 0
         property int openDirectoryCalls: 0
@@ -233,9 +235,11 @@ TestCase {
         fakeController.retryDownloadCalls = 0
         fakeController.downloadModelId = ""
         fakeController.downloadState = "idle"
+        fakeController.downloadPhase = "idle"
         fakeController.downloadError = ""
         fakeController.downloadProgressPercent = -1
         fakeController.downloadInProgress = false
+        fakeController.runtimeDownloadRequired = false
         fakeController.licenseAcceptanceRequired = false
         fakeController.licenseIdentityValid = true
         fakeController.errorString = ""
@@ -629,5 +633,12 @@ TestCase {
         compare(errorLabel.text, "network failed")
         retryButton.clicked()
         compare(fakeController.retryDownloadCalls, 1)
+    }
+
+    function test_installedModelStillOffersDownloadWhenRuntimeIsMissing() {
+        mouseClick(findChild(workspace, "voiceCloneModelCard0"))
+        fakeController.runtimeDownloadRequired = true
+        const downloadButton = findChild(workspace, "voiceCloneDownloadModelButton")
+        tryCompare(downloadButton, "visible", true)
     }
 }

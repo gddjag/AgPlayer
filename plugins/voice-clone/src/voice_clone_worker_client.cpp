@@ -73,6 +73,18 @@ bool VoiceCloneWorkerClient::start(const VoiceCloneAdapterManifest& manifest,
                                    const QString& outputRoot,
                                    int requestTimeoutMs)
 {
+    return start(manifest, launcher, adapterPackRoot, {}, modelRoot, outputRoot,
+                 requestTimeoutMs);
+}
+
+bool VoiceCloneWorkerClient::start(const VoiceCloneAdapterManifest& manifest,
+                                   const AdapterLauncherResolution& launcher,
+                                   const QString& adapterPackRoot,
+                                   const QString& runtimeRoot,
+                                   const QString& modelRoot,
+                                   const QString& outputRoot,
+                                   int requestTimeoutMs)
+{
     shutdown();
     shuttingDown_ = false;
     error_.clear();
@@ -95,6 +107,7 @@ bool VoiceCloneWorkerClient::start(const VoiceCloneAdapterManifest& manifest,
     manifest_ = manifest;
     launcher_ = launcher;
     adapterPackRoot_ = adapterPackRoot;
+    runtimeRoot_.clear();
     modelRoot_ = QDir::fromNativeSeparators(modelInfo.canonicalFilePath());
     outputRoot_ = QDir::fromNativeSeparators(outputInfo.canonicalFilePath());
     requestTimeoutMs_ = requestTimeoutMs;
@@ -116,20 +129,36 @@ bool VoiceCloneWorkerClient::start(const VoiceCloneAdapterManifest& manifest,
     QString program = launcher.absolutePath;
     QStringList arguments;
     if (launcher.launcher.kind == QStringLiteral("pythonModule")) {
-        VoiceCloneAdapterManifest runtimeManifest = manifest;
-        runtimeManifest.launchers = {AdapterLauncher{QStringLiteral("runtime-python"),
-                                                      QStringLiteral("executable"),
-                                                      QDir(manifest.runtime.root).filePath(QStringLiteral("python.exe")),
-                                                      manifest.runtime.shared}};
-        const auto runtime = resolveAdapterLauncher(runtimeManifest,
-                                                    QStringLiteral("runtime-python"),
-                                                    adapterPackRoot);
-        if (!runtime.isValid() || !QFileInfo::exists(runtime.absolutePath)) {
-            error_ = QStringLiteral("Trusted Adapter runtime Python is unavailable");
-            clearTransport();
-            return false;
+        if (!runtimeRoot.isEmpty()) {
+            const QFileInfo rootInfo(runtimeRoot);
+            const QString canonicalRoot = QDir::fromNativeSeparators(rootInfo.canonicalFilePath());
+            const QFileInfo pythonInfo(QDir(canonicalRoot).filePath(QStringLiteral("python.exe")));
+            if (!rootInfo.isDir() || canonicalRoot.isEmpty() || hasReparseAncestor(canonicalRoot)
+                || !pythonInfo.isFile() || isReparsePoint(pythonInfo)
+                || hasReparseAncestor(pythonInfo.absoluteFilePath())
+                || QDir::fromNativeSeparators(pythonInfo.canonicalPath()) != canonicalRoot) {
+                error_ = QStringLiteral("Verified external Runtime Pack Python is unavailable");
+                clearTransport();
+                return false;
+            }
+            runtimeRoot_ = canonicalRoot;
+            program = pythonInfo.absoluteFilePath();
+        } else {
+            VoiceCloneAdapterManifest runtimeManifest = manifest;
+            runtimeManifest.launchers = {AdapterLauncher{
+                QStringLiteral("runtime-python"), QStringLiteral("executable"),
+                QDir(manifest.runtime.root).filePath(QStringLiteral("python.exe")),
+                manifest.runtime.shared}};
+            const auto runtime = resolveAdapterLauncher(runtimeManifest,
+                                                        QStringLiteral("runtime-python"),
+                                                        adapterPackRoot);
+            if (!runtime.isValid() || !QFileInfo::exists(runtime.absolutePath)) {
+                error_ = QStringLiteral("Trusted Adapter runtime Python is unavailable");
+                clearTransport();
+                return false;
+            }
+            program = runtime.absolutePath;
         }
-        program = runtime.absolutePath;
         arguments = {QStringLiteral("-I"), QStringLiteral("-s"), launcher.absolutePath};
     }
     arguments.append({QStringLiteral("--voice-clone-worker"),
@@ -166,8 +195,9 @@ bool VoiceCloneWorkerClient::restart()
     const QString modelRoot = modelRoot_;
     const QString outputRoot = outputRoot_;
     const QString adapterPackRoot = adapterPackRoot_;
+    const QString runtimeRoot = runtimeRoot_;
     const int timeout = requestTimeoutMs_;
-    return start(manifest, launcher, adapterPackRoot, modelRoot, outputRoot, timeout);
+    return start(manifest, launcher, adapterPackRoot, runtimeRoot, modelRoot, outputRoot, timeout);
 }
 
 void VoiceCloneWorkerClient::shutdown()

@@ -21,7 +21,9 @@ Rectangle {
     property int downloadProgressPercent: -1
     property string downloadModelId: ""
     property string downloadState: "idle"
+    property string downloadPhase: "idle"
     property string downloadError: ""
+    property bool runtimeDownloadRequired: false
     readonly property bool selectedDownload: !!selectedModel.stableId
                                              && selectedModel.stableId === downloadModelId
     signal modelSelected(int index, string stableId)
@@ -59,6 +61,14 @@ Rectangle {
         case "chinese-dialects": return qsTr("中文方言")
         default: return capability
         }
+    }
+
+    function downloadPhaseText(phase) {
+        if (phase === "runtime") return qsTr("运行环境")
+        if (phase === "model") return qsTr("模型文件")
+        if (phase === "probe") return qsTr("启动验证")
+        if (phase === "ready") return qsTr("已就绪")
+        return ""
     }
 
     ColumnLayout {
@@ -186,15 +196,27 @@ Rectangle {
             Button {
                 objectName: "voiceCloneDownloadModelButton"
                 text: root.selectedDownload && root.downloadInProgress
-                      ? (root.downloadProgressPercent >= 0
-                         ? qsTr("下载中 %1%").arg(root.downloadProgressPercent)
-                         : qsTr("下载中…"))
+                      ? (root.downloadPhase === "probe"
+                         ? qsTr("正在验证…")
+                         : (root.downloadProgressPercent >= 0
+                            ? qsTr("%1 %2%").arg(root.downloadPhaseText(root.downloadPhase))
+                                                 .arg(root.downloadProgressPercent)
+                            : qsTr("%1下载中…").arg(root.downloadPhaseText(root.downloadPhase))))
                       : qsTr("下载模型")
                 visible: !!root.selectedModel.stableId
-                         && root.selectedModel.installState !== "ready"
-                         && root.selectedModel.installState !== "local-unverified"
+                         && (root.runtimeDownloadRequired
+                             || (root.selectedModel.installState !== "ready"
+                                 && root.selectedModel.installState !== "local-unverified"))
                 enabled: !root.downloadInProgress
                 onClicked: root.downloadRequested(root.selectedModel.stableId || "")
+            }
+            Label {
+                objectName: "voiceCloneDownloadPhase"
+                visible: root.selectedDownload
+                         && root.downloadPhaseText(root.downloadPhase).length > 0
+                text: root.downloadPhaseText(root.downloadPhase)
+                color: Theme.accent
+                font.pixelSize: 11
             }
             Button {
                 objectName: "voiceClonePauseDownloadButton"

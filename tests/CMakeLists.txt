@@ -475,6 +475,7 @@ foreach(qt_test IN ITEMS
     voice_clone_worker_protocol_test
     voice_clone_host_controller_test
     voice_clone_package_manager_test
+    voice_clone_runtime_package_test
     voice_clone_controller_test
 )
 
@@ -494,6 +495,17 @@ foreach(qt_test IN ITEMS
 endforeach()
 
 target_link_libraries(voice_clone_package_manager_test PRIVATE Qt6::Network)
+target_link_libraries(voice_clone_runtime_package_test PRIVATE Qt6::Network)
+target_compile_definitions(voice_clone_runtime_package_test PRIVATE
+    AGPLAYER_VOICE_CLONE_RUNTIME_FEED="${CMAKE_SOURCE_DIR}/plugins/voice-clone/config/runtime-feed.example.json"
+)
+
+add_test(NAME voice_clone_runtime_distribution_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/voice_clone_runtime_distribution_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(voice_clone_runtime_distribution_test PROPERTIES TIMEOUT 60)
 target_compile_definitions(voice_clone_package_manager_test PRIVATE
     AGPLAYER_VOICE_CLONE_DOWNLOAD_MANIFESTS_DIR="${CMAKE_SOURCE_DIR}/plugins/voice-clone/registry/downloads"
 )
