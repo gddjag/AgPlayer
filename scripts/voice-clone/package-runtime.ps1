@@ -47,11 +47,12 @@ function Resolve-SafeDirectory([string]$Path, [string]$Label) {
 }
 
 function Assert-SafeRelativePath([string]$Path) {
-    if ($Path -notmatch '^[A-Za-z0-9+_.-]+(?:/[A-Za-z0-9+_.-]+)*$' -or
-        $Path.Contains(':') -or $Path.Contains('..')) { throw "Unsafe Runtime path: $Path" }
+    if ([string]::IsNullOrEmpty($Path) -or $Path.StartsWith('/') -or $Path.Contains('\') -or
+        $Path -match '[<>:"|?*\x00-\x1F]') { throw "Unsafe Runtime path: $Path" }
     foreach ($component in $Path.Split('/')) {
         $base = $component.Split('.')[0].ToUpperInvariant()
-        if ($component.EndsWith('.') -or $component.EndsWith(' ') -or
+        if ([string]::IsNullOrEmpty($component) -or $component -in @('.','..') -or
+            $component.StartsWith(' ') -or $component.EndsWith('.') -or $component.EndsWith(' ') -or
             $base -in @('CON','PRN','AUX','NUL') -or $base -match '^(COM|LPT)[1-9]$') {
             throw "Unsafe Runtime path: $Path"
         }

@@ -116,12 +116,14 @@ bool safeArchiveEntry(const QString& path)
         || path.contains(QLatin1Char('\n'))) return false;
     const QStringList components = normalized.split(QLatin1Char('/'), Qt::KeepEmptyParts);
     if (components.isEmpty()) return false;
-    static const QRegularExpression safeComponent(QStringLiteral("^[A-Za-z0-9+_.-]+$"));
+    static const QRegularExpression safeComponent(
+        QStringLiteral("^[^<>:\"/\\\\|?*\\x{0000}-\\x{001F}]+$"));
     static const QRegularExpression device(QStringLiteral("^(COM|LPT)[1-9]$"));
     for (const QString& component : components) {
         const QString base = component.section(QLatin1Char('.'), 0, 0).toUpper();
         if (component == QStringLiteral(".") || component == QStringLiteral("..")
-            || component.isEmpty() || component.endsWith(QLatin1Char('.'))
+            || component.isEmpty() || component.startsWith(QLatin1Char(' '))
+            || component.endsWith(QLatin1Char('.'))
             || component.endsWith(QLatin1Char(' ')) || !safeComponent.match(component).hasMatch()
             || base == QStringLiteral("CON") || base == QStringLiteral("PRN")
             || base == QStringLiteral("AUX") || base == QStringLiteral("NUL")

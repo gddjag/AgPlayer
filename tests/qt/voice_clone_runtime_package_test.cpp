@@ -210,6 +210,7 @@ private slots:
     void rejectsFuturePlayerVersionAndAcceptsCurrentBoundary();
     void productionPolicyRejectsSignedLookingMetadataWithoutVerification();
     void strictManifestRejectsWrongCompatibilityAndUnsignedProduction();
+    void acceptsWindowsSafeSpacesAndRejectsUnsafeCharacters();
     void downloadsVerifiesExtractsAndCommitsStoredZip();
     void rejectsCorruptArchiveAndTraversalWithoutReplacingInstalledRuntime();
     void rejectsZipSymlinkBeforeExtraction();
@@ -220,6 +221,61 @@ private slots:
     void disabledFeedIsHonestAndContainsNoFakeRelease();
     void failedAtomicSwapRestoresPreviousRuntime();
 };
+
+void VoiceCloneRuntimePackageTest::acceptsWindowsSafeSpacesAndRejectsUnsafeCharacters()
+{
+    const QByteArray payload("template");
+    const QString safePath = QStringLiteral("Lib/site-packages/setuptools/script (dev).tmpl");
+    const QByteArray archive = storedZip({{QByteArray("python.exe"), payload},
+                                          {safePath.toUtf8(), payload}});
+    HttpArchiveServer server(archive);
+    QJsonObject object = manifestObject(server.url(), archive, payload);
+    object.insert(QStringLiteral("files"), QJsonArray{
+        QJsonObject{{QStringLiteral("path"), QStringLiteral("python.exe")},
+                    {QStringLiteral("bytes"), payload.size()},
+                    {QStringLiteral("sha256"), sha256(payload)}},
+        QJsonObject{{QStringLiteral("path"), safePath},
+                    {QStringLiteral("bytes"), payload.size()},
+                    {QStringLiteral("sha256"), sha256(payload)}}});
+    object.insert(QStringLiteral("installedBytes"), payload.size() * 2);
+    object.insert(QStringLiteral("entryCount"), 2);
+    const auto safe = VoiceCloneRuntimePackageManifest::fromJson(
+        object, VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    QVERIFY2(safe.isValid(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest),
+             qPrintable(safe.errorString(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest)));
+
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    VoiceCloneRuntimePackageManager manager(root.path(),
+        VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+    manager.start(safe);
+    QTRY_VERIFY_WITH_TIMEOUT(manager.state() == VoiceCloneRuntimePackageManager::Completed
+                             || manager.state() == VoiceCloneRuntimePackageManager::Failed, 5000);
+    QVERIFY2(manager.state() == VoiceCloneRuntimePackageManager::Completed,
+             qPrintable(manager.errorString()));
+
+    const QStringList unsafePaths{
+        QStringLiteral("python.exe:stream"),
+        QStringLiteral("bad\x01name.txt"),
+        QStringLiteral("trailing-dot."),
+        QStringLiteral("folder/trailing-space "),
+        QStringLiteral("CON.txt"),
+        QStringLiteral("../escape.exe")};
+    for (const QString& unsafePath : unsafePaths) {
+        QJsonObject unsafeObject = object;
+        unsafeObject.insert(QStringLiteral("files"), QJsonArray{
+            QJsonObject{{QStringLiteral("path"), QStringLiteral("python.exe")},
+                        {QStringLiteral("bytes"), payload.size()},
+                        {QStringLiteral("sha256"), sha256(payload)}},
+            QJsonObject{{QStringLiteral("path"), unsafePath},
+                        {QStringLiteral("bytes"), payload.size()},
+                        {QStringLiteral("sha256"), sha256(payload)}}});
+        const auto unsafe = VoiceCloneRuntimePackageManifest::fromJson(
+            unsafeObject, VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest);
+        QVERIFY2(!unsafe.isValid(VoiceCloneRuntimeValidationPolicy::AllowLoopbackUnsignedTest),
+                 qPrintable(unsafePath));
+    }
+}
 
 void VoiceCloneRuntimePackageTest::requiresDeclaredInstalledSizeAndEntryCount()
 {

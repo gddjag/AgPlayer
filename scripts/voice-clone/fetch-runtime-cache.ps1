@@ -134,6 +134,48 @@ foreach ($artifact in @(
     }
 }
 
+$additionalFiles = @()
+$overlayIndex = 0
+foreach ($overlay in @($lock.sourceOverlays | Where-Object { $null -ne $_ })) {
+    $additionalFiles += [pscustomobject]@{
+        descriptor = $overlay.archive
+        label = "source-overlay-$overlayIndex-$($overlay.name)"
+    }
+    $overlayIndex++
+}
+$nativeIndex = 0
+foreach ($nativeTool in @($lock.nativeTools | Where-Object { $null -ne $_ })) {
+    $additionalFiles += [pscustomobject]@{
+        descriptor = $nativeTool.archive
+        label = "native-tool-$nativeIndex-$($nativeTool.name)"
+    }
+    $additionalFiles += [pscustomobject]@{
+        descriptor = $nativeTool.correspondingSource
+        label = "corresponding-source-$nativeIndex-$($nativeTool.name)"
+    }
+    $nativeIndex++
+}
+$licenseIndex = 0
+foreach ($supplement in @($lock.dependencyLicenseFiles | Where-Object { $null -ne $_ })) {
+    $fileIndex = 0
+    foreach ($licenseFile in @($supplement.files | Where-Object { $null -ne $_ })) {
+        $additionalFiles += [pscustomobject]@{
+            descriptor = $licenseFile
+            label = "dependency-license-$licenseIndex-$fileIndex-$($supplement.name)"
+        }
+        $fileIndex++
+    }
+    $licenseIndex++
+}
+foreach ($artifact in $additionalFiles) {
+    if (-not (Test-LockedFile $artifact.descriptor $artifact.label)) {
+        if ($Download) { Fetch-LockedFile $artifact.descriptor $artifact.label }
+        if (-not (Test-LockedFile $artifact.descriptor $artifact.label)) {
+            $missing.Add("$($artifact.label):$($artifact.descriptor.cachePath)")
+        }
+    }
+}
+
 $sources = @([pscustomobject]@{ descriptor = $lock.source; label = 'source' })
 $index = 0
 foreach ($submodule in @($lock.source.submodules | Where-Object { $null -ne $_ })) {
@@ -159,6 +201,16 @@ $wheels = if (Test-Path -LiteralPath $wheelhouse -PathType Container) {
 foreach ($block in $blocks) {
     $name = $block.Groups[1].Value
     $version = $block.Groups[2].Value
+    $sourceOverlay = @($lock.sourceOverlays | Where-Object {
+        $_.name -eq $name -and $_.version -eq $version
+    })
+    if ($sourceOverlay.Count -gt 0) {
+        if ($sourceOverlay.Count -ne 1 -or
+            $block.Value -notmatch [regex]::Escape("--hash=sha256:$($sourceOverlay[0].archive.sha256)")) {
+            $missing.Add("source-overlay:$name==$version")
+        }
+        continue
+    }
     $candidates = @($wheels | Where-Object {
         Test-CompatibleWheel $_ $name $version $lock.python.version
     })

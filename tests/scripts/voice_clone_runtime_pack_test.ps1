@@ -61,6 +61,48 @@ foreach ($runtimeId in @('qwen', 'indextts25', 'cosyvoice3')) {
         if (Select-String -LiteralPath $requirementsPath -Pattern '^qwen-tts==' -Quiet) {
             throw 'Qwen runtime must not shadow its locked Git source with a PyPI wheel'
         }
+        $soxOverlay = @($lock.sourceOverlays | Where-Object {
+            $_.name -eq 'sox' -and $_.version -eq '1.5.0'
+        })
+        if ($soxOverlay.Count -ne 1 -or
+            $soxOverlay[0].archive.url -notmatch '^https://files\.pythonhosted\.org/' -or
+            $soxOverlay[0].archive.sha256 -ne '12c7be5bb1f548d891fe11e82c08cf5f1a1d74e225298f60082e5aeb2469ada0' -or
+            $soxOverlay[0].treeSha256 -ne '2de51b5db7ee9ea8ab1907138c21354180553ecb661e9c6831547f1c968ab508' -or
+            $soxOverlay[0].licensePath -ne 'LICENSE' -or
+            $soxOverlay[0].packagePath -ne 'sox') {
+            throw 'Qwen runtime does not lock the official pysox source overlay'
+        }
+        $soxTool = @($lock.nativeTools | Where-Object {
+            $_.name -eq 'SoX' -and $_.version -eq '14.4.2'
+        })
+        if ($soxTool.Count -ne 1 -or $soxTool[0].architecture -ne 'x86' -or
+            $soxTool[0].archive.url -notmatch '^https://downloads\.sourceforge\.net/project/sox/' -or
+            $soxTool[0].archive.sha256 -ne '8072cc147cf1a3b3713b8b97d6844bb9389e211ab9e1101e432193fad6ae6662' -or
+            $soxTool[0].treeSha256 -ne '32d7b371fc7ebf8c077a906885762c45d3316c7bbc496c940697be5094498e76' -or
+            $soxTool[0].executable.path -ne 'sox.exe' -or
+            $soxTool[0].executable.sha256 -ne 'e0e3cdc4bcdfbb5b91ac8f53b024964d092f89ba90130ba74b223a1df11b5439' -or
+            $soxTool[0].correspondingSource.sha256 -ne 'b45f598643ffbd8e363ff24d61166ccec4836fea6d3888881b8df53e3bb55f6c') {
+            throw 'Qwen runtime does not lock the official SoX x86 CLI and corresponding source'
+        }
+        $supplementalLicenses = @($lock.dependencyLicenseFiles)
+        $expectedSupplementNames = @('flatbuffers', 'gradio-client', 'onnxruntime', 'tokenizers')
+        if ($supplementalLicenses.Count -ne $expectedSupplementNames.Count) {
+            throw 'Qwen runtime must enumerate the four wheels that omit packaged license text'
+        }
+        foreach ($expectedName in $expectedSupplementNames) {
+            $supplement = @($supplementalLicenses | Where-Object { $_.name -eq $expectedName })
+            if ($supplement.Count -ne 1 -or $supplement[0].sourceUrl -notmatch '^https://github\.com/' -or
+                @($supplement[0].files).Count -lt 1) {
+                throw "Qwen runtime has no official supplemental license lock for $expectedName"
+            }
+            foreach ($licenseFile in @($supplement[0].files)) {
+                Assert-FullHash $licenseFile.sha256 "$expectedName supplemental license"
+                if ($licenseFile.url -notmatch '^https://raw\.githubusercontent\.com/' -or
+                    $licenseFile.bytes -lt 1 -or $licenseFile.fileName -notmatch '^[A-Za-z0-9_.-]+$') {
+                    throw "Qwen runtime supplemental license is not an immutable official file: $expectedName"
+                }
+            }
+        }
     }
 
     $emptyCache = Join-Path ([System.IO.Path]::GetTempPath()) ("agplayer-empty-cache-" + [guid]::NewGuid().ToString('N'))
@@ -123,17 +165,19 @@ try {
     $sourceTree = (git -C $sourceCache rev-parse 'HEAD^{tree}').Trim()
 
     $wheelSeed = Join-Path $tempRoot 'wheel-seed'
-    New-Item -ItemType Directory -Path (Join-Path $wheelSeed 'contractdep'),(Join-Path $wheelSeed 'contractdep-1.0.0.dist-info/licenses') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $wheelSeed 'contractdep'),(Join-Path $wheelSeed 'contractdep-1.0.0.dist-info') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $wheelSeed 'contractdep/__init__.py') -Value '__version__ = "1.0.0"' -NoNewline
     Set-Content -LiteralPath (Join-Path $wheelSeed 'contractdep-1.0.0.dist-info/METADATA') -Value "Metadata-Version: 2.1`nName: contractdep`nVersion: 1.0.0`nLicense: MIT`n"
     Set-Content -LiteralPath (Join-Path $wheelSeed 'contractdep-1.0.0.dist-info/WHEEL') -Value "Wheel-Version: 1.0`nGenerator: AG Player contract`nRoot-Is-Purelib: true`nTag: py3-none-any`n"
-    Set-Content -LiteralPath (Join-Path $wheelSeed 'contractdep-1.0.0.dist-info/licenses/LICENSE') -Value 'contract dependency license' -NoNewline
     Set-Content -LiteralPath (Join-Path $wheelSeed 'contractdep-1.0.0.dist-info/RECORD') -Value '' -NoNewline
     $wheelZip = Join-Path $tempRoot 'contractdep.zip'
     Compress-Archive -Path (Join-Path $wheelSeed '*') -DestinationPath $wheelZip
     $wheelPath = Join-Path $wheelhouse 'contractdep-1.0.0-py3-none-any.whl'
     Move-Item -LiteralPath $wheelZip -Destination $wheelPath
     $wheelHash = (Get-FileHash -LiteralPath $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $supplementalLicense = Join-Path $downloads 'contractdep-1.0.0-LICENSE'
+    Set-Content -LiteralPath $supplementalLicense -Value 'contract dependency supplemental license' -NoNewline
+    $supplementalLicenseHash = (Get-FileHash -LiteralPath $supplementalLicense -Algorithm SHA256).Hash.ToLowerInvariant()
 
     $requirementsPath = Join-Path $tempRoot 'contract.requirements.txt'
     [System.IO.File]::WriteAllText($requirementsPath, "contractdep==1.0.0 --hash=sha256:$wheelHash`n", [System.Text.UTF8Encoding]::new($false))
@@ -177,7 +221,25 @@ try {
             [ordered]@{ kind = 'python-archive'; cachePath = 'downloads/python-contract.zip'; sha256 = (Get-FileHash $pythonArchive -Algorithm SHA256).Hash.ToLowerInvariant() },
             [ordered]@{ kind = 'resolver-archive'; cachePath = 'downloads/uv-contract.zip'; sha256 = (Get-FileHash $uvArchive -Algorithm SHA256).Hash.ToLowerInvariant() },
             [ordered]@{ kind = 'dependency-lock'; path = 'contract.requirements.txt'; sha256 = (Get-FileHash $requirementsPath -Algorithm SHA256).Hash.ToLowerInvariant() },
-            [ordered]@{ kind = 'source-tree'; cachePath = 'sources/contract-runtime'; revision = $sourceRevision; tree = $sourceTree }
+            [ordered]@{ kind = 'source-tree'; cachePath = 'sources/contract-runtime'; revision = $sourceRevision; tree = $sourceTree },
+            [ordered]@{ kind = 'dependency-license-file'; cachePath = 'downloads/contractdep-1.0.0-LICENSE'; sha256 = $supplementalLicenseHash }
+        )
+        dependencyLicenseFiles = @(
+            [ordered]@{
+                name = 'contractdep'
+                version = '1.0.0'
+                license = 'MIT'
+                sourceUrl = 'https://github.com/example/contractdep/tree/0123456789012345678901234567890123456789'
+                files = @(
+                    [ordered]@{
+                        cachePath = 'downloads/contractdep-1.0.0-LICENSE'
+                        url = 'https://raw.githubusercontent.com/example/contractdep/0123456789012345678901234567890123456789/LICENSE'
+                        sha256 = $supplementalLicenseHash
+                        bytes = (Get-Item -LiteralPath $supplementalLicense).Length
+                        fileName = 'LICENSE'
+                    }
+                )
+            }
         )
         models = @()
         notices = @(
@@ -225,7 +287,7 @@ try {
         throw "Packaged root python.exe is not executable: $pythonVersion"
     }
     $manifest = Get-Content -Raw -LiteralPath (Join-Path $outputRoot 'runtime-manifest.json') | ConvertFrom-Json
-    if ($manifest.runtimeId -ne 'contract-runtime' -or $manifest.artifacts.Count -ne 4 -or
+    if ($manifest.runtimeId -ne 'contract-runtime' -or $manifest.artifacts.Count -ne 5 -or
         $manifest.wheels.Count -ne 1 -or $manifest.wheels[0].file -ne 'contractdep-1.0.0-py3-none-any.whl' -or
         $manifest.wheels[0].sha256 -ne $wheelHash) {
         throw "Runtime Pack manifest mismatch: id=$($manifest.runtimeId) artifacts=$($manifest.artifacts.Count) wheels=$($manifest.wheels.Count) file=$($manifest.wheels[0].file) hash=$($manifest.wheels[0].sha256) expected=$wheelHash"
@@ -236,7 +298,8 @@ try {
         throw "Packaged source module did not resolve from the locked Git tree: $sourceOrigin"
     }
     $notices = Get-Content -Raw -LiteralPath (Join-Path $outputRoot 'THIRD_PARTY_NOTICES.txt')
-    if ($notices -notmatch 'Contract Runtime' -or $notices -notmatch 'contract license') {
+    if ($notices -notmatch 'Contract Runtime' -or $notices -notmatch 'contract license' -or
+        $notices -notmatch 'contract dependency supplemental license') {
         throw 'Runtime Pack notices are incomplete'
     }
 

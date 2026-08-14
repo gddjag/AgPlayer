@@ -32,6 +32,9 @@ try {
     }
     [System.IO.File]::WriteAllText((Join-Path $runtimeRoot 'runtime-manifest.json'),
         ($buildManifest | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
+    New-Item -ItemType Directory -Path (Join-Path $runtimeRoot 'Lib/site-packages/setuptools') -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $runtimeRoot 'Lib/site-packages/setuptools/launcher manifest.xml'),
+        '<assembly />', [System.Text.UTF8Encoding]::new($false))
 
     & powershell -NoProfile -ExecutionPolicy Bypass -File $packageScript `
         -Runtime qwen -RuntimeRoot $runtimeRoot -OutputDirectory $outputRoot -Version 1.0.0

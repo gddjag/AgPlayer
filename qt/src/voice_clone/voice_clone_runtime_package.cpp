@@ -44,10 +44,12 @@ bool isSafeRuntimePath(const QString& value)
         || value.contains(QLatin1Char('\\')) || value.contains(QChar::Null)
         || value.endsWith(QLatin1Char('/'))) return false;
     const QStringList parts = value.split(QLatin1Char('/'), Qt::KeepEmptyParts);
-    static const QRegularExpression safeComponent(QStringLiteral("^[A-Za-z0-9+_.-]+$"));
+    static const QRegularExpression safeComponent(
+        QStringLiteral("^[^<>:\"/\\\\|?*\\x{0000}-\\x{001F}]+$"));
     for (const QString& part : parts) {
         if (part.isEmpty() || part == QStringLiteral(".") || part == QStringLiteral("..")
-            || part.endsWith(QLatin1Char('.')) || part.endsWith(QLatin1Char(' '))
+            || part.startsWith(QLatin1Char(' ')) || part.endsWith(QLatin1Char('.'))
+            || part.endsWith(QLatin1Char(' '))
             || !safeComponent.match(part).hasMatch() || isReservedWindowsName(part)) return false;
     }
     return true;
