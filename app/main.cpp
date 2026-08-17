@@ -36,6 +36,8 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <shobjidl.h>
+#include <propsys.h>
+#include <propkey.h>
 #endif
 
 #include "audio_tools_controller.hpp"
@@ -43,11 +45,13 @@
 #include "format_converter.hpp"
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
 #include "plugin_install_manager.hpp"
 #include "native_drop_router.hpp"
+#include "filename_processor.hpp"
 #include "playback_controller.hpp"
 #include "playback_state_store.hpp"
 #include "playlist_model.hpp"

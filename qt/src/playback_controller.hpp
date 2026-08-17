@@ -36,6 +36,7 @@ class PlaybackController final : public QObject {
 
 public:
     static constexpr int PollIntervalMs = 17;
+    static constexpr int IdlePollIntervalMs = 100;
 
     enum State { Stopped, Loading, Playing, Paused, Error };
     Q_ENUM(State)

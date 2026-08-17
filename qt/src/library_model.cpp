@@ -394,6 +394,22 @@ bool LibraryModel::setRating(int row, int rating)
     return true;
 }
 
+bool LibraryModel::setBpm(const QString& trackId, double bpm)
+{
+    const int row = indexForTrackId(trackId);
+    if (row < 0 || !std::isfinite(bpm) || bpm < 20.0 || bpm > 400.0) {
+        return false;
+    }
+    if (qFuzzyCompare(tracks_[row].bpm, bpm)) {
+        return false;
+    }
+    tracks_[row].bpm = bpm;
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, {BpmRole});
+    emit flushRequested();
+    return true;
+}
+
 bool LibraryModel::setTags(const QString& trackId, const QStringList& tags)
 {
     const int row = indexForTrackId(trackId);
@@ -537,6 +553,57 @@ int LibraryModel::applyMaintenanceResults(const QVariantList& results)
     return changedCount;
 }
 
+bool LibraryModel::refreshMetadataForPath(const QString& path)
+{
+    const int row = indexForLocalFile(path);
+    if (row < 0) return false;
+    ag_metadata* metadata = nullptr;
+    const QByteArray utf8 = canonicalLibraryPath(path).toUtf8();
+    if (ag_metadata_open(utf8.constData(), &metadata) != AG_OK
+        || metadata == nullptr) {
+        return false;
+    }
+    TrackRecord& track = tracks_[row];
+    track.title = copiedMetadata(ag_metadata_title(metadata));
+    track.artist = copiedMetadata(ag_metadata_artist(metadata));
+    track.album = copiedMetadata(ag_metadata_album(metadata));
+    track.format = copiedMetadata(ag_metadata_format(metadata));
+    track.sampleRate = ag_metadata_sample_rate(metadata);
+    track.bitDepth = ag_metadata_bits_per_sample(metadata);
+    track.bitRate = ag_metadata_bit_rate(metadata);
+    track.durationMs = ag_metadata_duration_ms(metadata);
+    track.fileSize = QFileInfo(path).size();
+    bool bpmOk = false;
+    const double bpm = copiedMetadata(ag_metadata_bpm_tag(metadata)).toDouble(&bpmOk);
+    track.bpm = bpmOk && std::isfinite(bpm) ? bpm : 0.0;
+    size_t coverSize = 0;
+    const unsigned char* cover = ag_metadata_cover(metadata, &coverSize, nullptr);
+    if (cover == nullptr || coverSize == 0) {
+        track.coverUrl = {};
+    } else if (track.coverUrl.isValid()) {
+        QUrl refreshed = track.coverUrl;
+        refreshed.setQuery(QStringLiteral("v=%1").arg(QDateTime::currentMSecsSinceEpoch()));
+        track.coverUrl = refreshed;
+    }
+    ag_metadata_destroy(metadata);
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed,
+                     {TitleRole, ArtistRole, AlbumRole, FormatRole,
+                      SampleRateRole, BitDepthRole, BitRateRole, DurationMsRole,
+                      FileSizeRole, CoverUrlRole, BpmRole});
+    emit flushRequested();
+    return true;
+}
+
+int LibraryModel::refreshMetadataForPaths(const QStringList& paths)
+{
+    int refreshed = 0;
+    for (const QString& path : paths) {
+        if (refreshMetadataForPath(path)) ++refreshed;
+    }
+    return refreshed;
+}
+
 bool LibraryModel::applyReplayGainResult(const QString& trackId,
                                          double trackGainDb,
                                          double albumGainDb,
@@ -579,6 +646,47 @@ bool LibraryModel::updateTrackPath(const QString& trackId, const QString& newPat
                                        : QStringLiteral("missing");
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+    emit flushRequested();
+    return true;
+}
+
+bool LibraryModel::updateTrackPaths(const QHash<QString, QString>& paths)
+{
+    if (paths.isEmpty()) return true;
+    QSet<QString> replacementKeys;
+    QSet<int> rows;
+    for (auto it = paths.cbegin(); it != paths.cend(); ++it) {
+        const int row = indexForTrackId(it.key());
+        if (row < 0) return false;
+        const QString key = normalizedCanonicalKey(canonicalLibraryPath(it.value()));
+        if (replacementKeys.contains(key)) return false;
+        replacementKeys.insert(key);
+        rows.insert(row);
+    }
+    for (int row = 0; row < tracks_.size(); ++row) {
+        if (!rows.contains(row) && replacementKeys.contains(pathKey(tracks_.at(row).path))) {
+            return false;
+        }
+    }
+    for (const int row : rows) {
+        const QString oldKey = pathKey(tracks_.at(row).path);
+        pathKeys_.remove(oldKey);
+        pathRows_.remove(oldKey);
+    }
+    for (auto it = paths.cbegin(); it != paths.cend(); ++it) {
+        const int row = indexForTrackId(it.key());
+        const QString canonical = canonicalLibraryPath(it.value());
+        const QString key = normalizedCanonicalKey(canonical);
+        TrackRecord& track = tracks_[row];
+        track.path = canonical;
+        track.available = QFileInfo::exists(canonical);
+        track.fileStatus = track.available ? QStringLiteral("normal")
+                                          : QStringLiteral("missing");
+        pathKeys_.insert(key);
+        pathRows_.insert(key, row);
+        const QModelIndex changed = index(row, 0);
+        emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+    }
     emit flushRequested();
     return true;
 }
