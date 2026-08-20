@@ -83,3 +83,13 @@ The final native Windows capture was rebuilt from `a09e36f` at the exact `1672×
 - Final verdict: no actionable P0/P1/P2. Remaining native font antialiasing and 1–2 px control-rhythm variation are P3 only.
 
 Final focused CTest: all 10 format/audio-tools checks passed, including `qml_format_converter_test`, `qml_format_converter_visual_fixture_test`, `format_converter_reference_contract_test`, and `audio_tools_layout_contract_test`. A complete Release build also succeeded. The subsequent full CTest run passed 74/75 tests; the remaining `qml_main_window_test` reports nine pre-existing main-player interaction/theme assertions outside the format-conversion surface, so a whole-suite pass is not claimed.
+
+## Clean production re-verification — `aff4e36`
+
+- Rebuilt the test harness and app target with Visual Studio 2022 x64, then regenerated the native Windows fixture and every no-scale 1:1 comparison image listed above.
+- The committed production ComboBox controls render a single down-arrow and reference border; the committed cancel action renders a gray surface with the square stop icon. The committed shell and navigation are present in the fixture. No P0/P1/P2 was found. Remaining Windows glyph antialiasing and minor 1–2 px raster variation are P3 only.
+- Fresh facade evidence: `build/qa/format-conversion-reference-v2-aff4e36-real/conversion-evidence.json`; FLAC was `13,700` bytes and MP3 `49,572` bytes, both `Done` and reopened at `2,000 ms` / `44.1 kHz`.
+- Focused CTest passed all `10/10` named format/audio-tools checks.
+- Fresh full CTest executed all `75` configured tests: `74` passed; the sole failure was unrelated `qml_main_window_test` timeout at `21.23 s` (test #61). Format-conversion tests passed, but a whole-suite pass is not claimed.
+
+The production-constant contract remains covered by `tests/qml/tst_format_converter.qml` and `tests/scripts/format_converter_reference_contract_test.ps1`; the fixture QML test covers exact-viewport loading and capture.
