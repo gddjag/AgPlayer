@@ -21,7 +21,7 @@ Rectangle {
         }
     }
 
-    readonly property var columnWidths: [62, 260, 120, 100, 115, 130, 120, 120, 210]
+    readonly property var columnWidths: [62, 260, 120, 100, 115, 130, 120, 120, 190]
 
     ColumnLayout {
         anchors.fill: parent
@@ -108,6 +108,7 @@ Rectangle {
             columnWidthProvider: function(column) { return root.columnWidths[column] }
             rowHeightProvider: function() { return 44 }
             delegate: Rectangle {
+                objectName: column === 1 && row === 0 ? "formatTaskFirstFilenameCell" : ""
                 implicitWidth: root.columnWidths[column]
                 implicitHeight: 44
                 color: row % 2 ? "#101a21" : "#0f1820"
@@ -120,22 +121,31 @@ Rectangle {
                     checked: model.checked
                     onClicked: converter.setTaskChecked(model.taskId, checked)
                 }
-                ThemedIcon {
+                Rectangle {
+                    objectName: column === 1 && row === 0 ? "formatTaskFirstFileIconBadge" : ""
                     visible: column === 1
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    source: Theme.icon("file-music-fill")
-                    tint: model.sourceFormat === "WAV" ? "#ff8a3d"
-                          : model.sourceFormat === "MP3" ? "#25aee4"
-                          : model.sourceFormat === "FLAC" ? "#8d63e8" : "#21bf83"
-                    sourceSize.width: 22
-                    sourceSize.height: 22
+                    width: 28
+                    height: 28
+                    radius: 6
+                    color: model.sourceFormat === "WAV" ? "#e9964a"
+                         : model.sourceFormat === "MP3" ? "#35b8e7"
+                         : model.sourceFormat === "FLAC" ? "#9c6ade" : "#35bc85"
+                    ThemedIcon {
+                        objectName: column === 1 && row === 0 ? "formatTaskFirstFileIcon" : ""
+                        anchors.centerIn: parent
+                        source: Theme.icon("file-music-fill")
+                        tint: "#ffffff"
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                    }
                 }
                 Text {
                     visible: column > 0 && column < 8
                     anchors.fill: parent
-                    anchors.leftMargin: column === 1 ? 42 : 10
+                    anchors.leftMargin: column === 1 ? 48 : 10
                     anchors.rightMargin: 6
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -177,6 +187,7 @@ Rectangle {
                 }
                 Text {
                     id: percent
+                    objectName: column === 8 && row === 0 ? "formatTaskFirstProgressPercent" : ""
                     visible: column === 8
                     anchors.right: parent.right
                     anchors.rightMargin: 8
@@ -187,12 +198,10 @@ Rectangle {
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }
-                MouseArea {
-                    objectName: column === 1 && row === 0 ? "formatTaskFirstFilenameCell" : ""
-                    visible: column === 1
-                    anchors.fill: parent
+                TapHandler {
+                    enabled: column === 1
                     acceptedButtons: Qt.RightButton
-                    onClicked: function(mouse) {
+                    onTapped: {
                         taskContextMenu.taskId = model.taskId
                         taskContextMenu.status = model.status
                         taskContextMenu.errorDetail = model.errorDetail

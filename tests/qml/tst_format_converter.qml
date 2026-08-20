@@ -63,6 +63,7 @@ TestCase {
         const hintPosition = hint.mapToItem(settingsPanel, 0, 0)
         verify(hintPosition.y >= 44)
         verify(hintPosition.y + hint.height <= settingsPanel.height)
+        verify(hintPosition.y >= 566 && hintPosition.y <= 572)
         const advancedPosition = advanced.mapToItem(settingsPanel, 0, 0)
         verify(advancedPosition.y >= settingsPanel.height)
     }
@@ -118,9 +119,14 @@ TestCase {
         tryVerify(function() {
             firstCell = findChild(table, "formatTaskFirstFilenameCell")
             return firstCell && firstCell.visible && firstCell.width > 0 && firstCell.height > 0
+                   && table.contentWidth > 0 && table.contentHeight > 0
         }, 3000)
-        const clickPoint = firstCell.mapToItem(table, firstCell.width / 2, firstCell.height / 2)
-        mouseClick(table, clickPoint.x, clickPoint.y, Qt.RightButton)
+        // Let TableView finish polishing its delegate before sending a full
+        // right-button gesture to that live row, rather than to the flickable.
+        wait(100)
+        mousePress(firstCell, firstCell.width / 2, firstCell.height / 2, Qt.RightButton)
+        wait(20)
+        mouseRelease(firstCell, firstCell.width / 2, firstCell.height / 2, Qt.RightButton)
         tryVerify(function() { return menu.visible }, 2000)
         mouseClick(remove, remove.width / 2, remove.height / 2, Qt.LeftButton)
         tryCompare(FormatConverter, "fileCount", 1, 3000)
@@ -182,5 +188,24 @@ TestCase {
         verify(plan.ready)
         compare(plan.taskCount, 1)
         FormatConverter.rejectPendingPlan()
+    }
+
+    function test_referenceWidthShowsCompleteProgressAndFileBadge() {
+        FormatConverter.addUrls([testAudioUrl])
+        tryVerify(function() { return !FormatConverter.busy }, 5000)
+        tryCompare(FormatConverter, "fileCount", 1, 3000)
+
+        const table = findChild(page, "formatTaskTableView")
+        verify(table)
+        tryVerify(function() { return table.contentWidth > 0 }, 3000)
+        verify(table.contentWidth <= table.width)
+        const percent = findChild(table, "formatTaskFirstProgressPercent")
+        const badge = findChild(table, "formatTaskFirstFileIconBadge")
+        const icon = findChild(table, "formatTaskFirstFileIcon")
+        verify(percent && badge && icon && badge.visible)
+        const percentPosition = percent.mapToItem(table, 0, 0)
+        verify(percentPosition.x >= 0 && percentPosition.x + percent.width <= table.width)
+        compare(Math.round(badge.radius), 6)
+        verify(icon.source.toString().indexOf("file-music-fill") >= 0)
     }
 }

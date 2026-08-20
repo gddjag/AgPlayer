@@ -35,6 +35,9 @@ if ($page -notmatch 'SettingsController\.defaultOutputDirectory') {
 if ($settings -notmatch 'objectName:\s*"formatAdvancedSettings"[\s\S]*?Layout\.topMargin:\s*(?:2[4-9]|[3-9]\d)') {
     throw 'Advanced concurrency controls must begin below the default reference fold.'
 }
+if ($settings -notmatch 'objectName:\s*"formatLocalProcessingHint"[\s\S]*?Layout\.topMargin:\s*3[0-9]') {
+    throw 'The local-processing hint must retain the reference vertical position.'
+}
 if ($page -notmatch 'SettingsController\.parallelJobs' -or
     $settings -notmatch 'SettingsController\.parallelJobs') {
     throw 'Parallel jobs must synchronize through SettingsController.'
@@ -48,6 +51,14 @@ if ($combined -notmatch 'taskId' -or
     $combined -notmatch 'removeFile\(' -or
     $combined -notmatch 'retryFailed\(') {
     throw 'The task context menu must reuse real cancel, copy, and remove APIs.'
+}
+if ($table -notmatch 'columnWidths:\s*\[\s*62,\s*260,\s*120,\s*100,\s*115,\s*130,\s*120,\s*120,\s*190\s*\]') {
+    throw 'The reference-width task table must fit its progress percentage before the settings boundary.'
+}
+if ($table -notmatch 'formatTaskFirstFileIconBadge' -or
+    $table -notmatch 'formatTaskFirstFileIcon' -or
+    $table -notmatch 'Theme\.icon\("file-music-fill"\)') {
+    throw 'Task file icons must use the official music asset inside the colored badge component.'
 }
 if ($page -match 'converterParallelJobsBox' -or
     $page -match 'formatOutputDirectoryRow') {

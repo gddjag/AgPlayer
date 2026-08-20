@@ -212,7 +212,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                Layout.topMargin: 6
+                Layout.topMargin: 32
                 Layout.bottomMargin: 6
                 Layout.preferredHeight: 54
                 color: "#0a151d"
