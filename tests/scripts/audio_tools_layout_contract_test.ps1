@@ -141,7 +141,7 @@ if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*tru
 if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
     throw 'Mini-player controls must not reference an undefined expanded property.'
 }
-if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,160}Layout\.preferredWidth:\s*(Math\.max\(360, page\.width \* 0\.265\)|445)') {
+if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,180}Layout\.preferredWidth:\s*(Math\.max\(360, page\.width \* 0\.265\)|445|settingsPanel\.isExpanded\s*\?\s*445\s*:\s*40)') {
     throw 'The format converter needs a reference-width settings workbench.'
 }
 if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*Math\.max\(480, page\.width \* 0\.36\)') {

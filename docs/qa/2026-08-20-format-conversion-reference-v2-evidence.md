@@ -37,13 +37,13 @@ cmake --build build/release --target AgPlayer format_matrix_test format_conversi
 ctest --test-dir build/release -R '^(format_matrix_test|format_conversion_plan_test|format_conversion_task_model_test|audio_tools_end_to_end_test|qml_format_converter_test|qml_format_converter_visual_fixture_test|format_converter_reference_contract_test|audio_tools_layout_contract_test|translation_catalog_test|source_encoding_test)$' --output-on-failure
 ```
 
-Build result: completed. Focused CTest result: 8/10 passed.
+Build result: completed. Final focused CTest result: 10/10 passed after the
+layout contract was updated to recognize the settings panel's real expanded
+and collapsed width expression.
 
-- Passed: `format_matrix_test`, `audio_tools_end_to_end_test`, `format_conversion_plan_test`, `format_conversion_task_model_test`, `translation_catalog_test`, `source_encoding_test`, `qml_format_converter_visual_fixture_test`, `format_converter_reference_contract_test`.
-- Failed: `audio_tools_layout_contract_test` with `The format converter needs a reference-width settings workbench.` This is concurrent shell/layout work outside this task's ownership and must be rerun after its owner integrates its fix.
-- Failed: `qml_format_converter_test` in that combined CTest invocation. A direct native-output execution immediately afterward reported all 12 QML cases passing with exit 0; this discrepancy is not treated as a pass and must be rerun from a clean post-integration Release build.
+- Passed: `format_matrix_test`, `audio_tools_end_to_end_test`, `format_conversion_plan_test`, `format_conversion_task_model_test`, `translation_catalog_test`, `source_encoding_test`, `qml_format_converter_test`, `qml_format_converter_visual_fixture_test`, `format_converter_reference_contract_test`, and `audio_tools_layout_contract_test`.
 
-## Visual QA history — still blocked
+## Visual QA iteration history
 
 - Native test fixture capture: `docs/qa/2026-08-20-format-conversion-reference-v2-fixture-native.png` (`1672×941`, no scaling).
 - Full 1:1 side-by-side: `docs/qa/2026-08-20-format-conversion-reference-v2-comparison.png`.
@@ -82,4 +82,4 @@ The final native Windows capture was rebuilt from `a09e36f` at the exact `1672×
 - [closed P2] Checked task/settings controls now use the reference blue filled 20 px indicator with a white project check glyph (`a09e36f`).
 - Final verdict: no actionable P0/P1/P2. Remaining native font antialiasing and 1–2 px control-rhythm variation are P3 only.
 
-Final focused CTest: `qml_format_converter_test`, `qml_format_converter_visual_fixture_test`, and `format_converter_reference_contract_test` passed. `audio_tools_layout_contract_test` still fails with `The format converter needs a reference-width settings workbench.`; this is a pre-existing, separately owned shell-contract failure and is not used to claim a full-suite pass. A full `ctest --output-on-failure` run was attempted on the partial Release build: many non-format executables were not built (`Not Run`), and the then-in-progress Task2 header/QML state failed before `c4f52e6`; it is recorded as incomplete rather than a passing full suite.
+Final focused CTest: all 10 format/audio-tools checks passed, including `qml_format_converter_test`, `qml_format_converter_visual_fixture_test`, `format_converter_reference_contract_test`, and `audio_tools_layout_contract_test`. A complete Release build also succeeded. The subsequent full CTest run passed 74/75 tests; the remaining `qml_main_window_test` reports nine pre-existing main-player interaction/theme assertions outside the format-conversion surface, so a whole-suite pass is not claimed.

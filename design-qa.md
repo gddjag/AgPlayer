@@ -1,44 +1,12 @@
-**Source visual truth**
+## Format Conversion V2 — 2026-08-20
 
-- `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\格式转换 .png`
+**Source visual truth**: `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\格式转换 .png` (`1672×941`).
 
-**Implementation evidence**
+**Evidence**: 1:1 native Windows capture and full/table/settings/footer comparisons in `docs/qa/2026-08-20-format-conversion-reference-v2-*.png`, using the test-only injected 12-row fixture. Real facade conversion evidence is recorded in `docs/qa/2026-08-20-format-conversion-reference-v2-evidence.md`.
 
-- `D:\ai\AgPlayer\.worktrees\revised-ui\docs\qa\format-converter-final.png`
-- Combined comparison: `D:\ai\AgPlayer\.worktrees\revised-ui\docs\qa\format-converter-comparison-final.png`
-- Viewport / CSS size: 1672 x 942, density normalized to 1x by the desktop QA capture path.
-- State: Chinese, dark theme, one imported WAV task, MP3 selected, ready at 0%.
+**Final review**: no actionable P0/P1/P2 remains. The task-table header, colored file tiles, blue selected checkboxes, A/B settings geometry, main-region boundaries, footer, progress values, and settings options align at the reference viewport. Native Chinese font rasterisation and approximately 1–2 px control-rhythm variation remain P3 only.
 
-**Findings**
-
-- No actionable P0/P1/P2 mismatch remains. The four-region structure, column rhythm, navy palette, active blue states, status/progress colors, settings order, and fixed bottom action bar match the source intent.
-- Fonts and typography: native Windows Chinese UI fallback differs slightly from the source antialiasing but preserves hierarchy, weights, truncation, and line density. P3 only.
-- Spacing and layout rhythm: source proportions are matched at the same viewport. The implementation uses slightly denser table rows to preserve virtualized-table usability. P3 only.
-- Colors and tokens: active format, CBR, and status filter states now use the source blue; ready/done/error colors match the semantic source states.
-- Image and icon fidelity: existing AgPlayer brand assets and the project icon library are used. Search/filter glyphs use the closest available project icon; no handcrafted image substitute was added. P3 only.
-- Copy and content: all reference labels and visible conversion options are present in Chinese.
-
-**Focused region comparison**
-
-- The dense task table and right-side settings inspector were checked in the combined full-width image; text, controls, and progress states remain readable at original pixels, so a separate crop was unnecessary.
-
-**Comparison history**
-
-- V3: active output/CBR/status controls were gray and shell labeling drifted from the reference.
-- Fix: added explicit blue checked-state styling and corrected the shell labeling used by that historical comparison.
-- Final: `format-converter-comparison-final.png` confirms the active-state and label fixes. No P0/P1/P2 issue remains.
-
-**Primary interactions tested**
-
-- File import, folder import, playlist import, search/status filtering, row selection, preflight confirmation, conversion, cancel, retry/error details, conflict policy, parameter selection, output-directory editing, and directory-structure preservation.
-- QML runtime loaded without conversion-page errors in the dedicated offscreen test.
-
-**Implementation Checklist**
-
-- [x] Source-aligned layout and active states
-- [x] Real capability-driven formats and parameters
-- [x] Verified atomic conversion output
-- [x] Dedicated QML and end-to-end tests
+**Interactions**: real FLAC and MP3 conversion through `FormatConverter` preflight/confirmation completed with non-empty outputs reopened by the project probe API; all 10 focused QML/format/audio-tools tests passed.
 
 final result: passed
 
