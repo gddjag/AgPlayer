@@ -140,8 +140,8 @@ TestCase {
         var button = findChild(miniPlayer, "miniWaveformModeButton")
         verify(button)
         compare(button.icon.source.toString().endsWith("/waveform-switch.svg"), true)
-        compare(button.icon.width, 15)
-        compare(button.icon.height, 15)
+        compare(button.icon.width, 16)
+        compare(button.icon.height, 16)
         var previousMode = SettingsController.waveformMode
         mouseClick(button)
         compare(SettingsController.waveformMode, (previousMode + 1) % 3)
@@ -239,22 +239,35 @@ TestCase {
                     Theme.iconPrimary.toString())
         }
         playbackFake.mode = PlaybackController.Sequential
-        compare(button.icon.width, 15)
-        compare(button.icon.height, 15)
-        compare(findChild(miniPlayer, "miniMuteButton").icon.width, 15)
+        compare(button.icon.width, 16)
+        compare(button.icon.height, 16)
+        compare(findChild(miniPlayer, "miniMuteButton").icon.width, 16)
+    }
+
+    function test_mini_metadata_refreshes_when_current_track_tags_change() {
+        var metadata = findChild(miniPlayer, "miniArtistAlbumTags")
+        verify(metadata)
+        playbackFake.currentTrackId = miniMetadataTrackId
+        tryCompare(metadata, "text", "Mini Artist · Mini Album")
+
+        verify(LibraryModel.setTags(miniMetadataTrackId, ["现场", "测试"]))
+        tryVerify(function() {
+            return metadata.text === "Mini Artist · Mini Album · 现场、测试"
+        }, 1000, "mini player must react to tag edits on the playing track")
+        LibraryModel.setTags(miniMetadataTrackId, [])
     }
 
     function test_titlebar_uses_thin_system_icons() {
         verify(miniPlayer.pinButton.icon.source.toString().endsWith("/pushpin-line.svg"))
         verify(miniPlayer.restoreButton.icon.source.toString().endsWith("/restore-line.svg"))
-        compare(miniPlayer.pinButton.icon.width, 14)
-        compare(miniPlayer.restoreButton.icon.width, 14)
+        compare(miniPlayer.pinButton.icon.width, 16)
+        compare(miniPlayer.restoreButton.icon.width, 16)
         var close = findChild(miniPlayer, "miniCloseButton")
         var minimize = findChild(miniPlayer, "miniMinimizeButton")
         verify(close && minimize)
         verify(close.icon.source.toString().endsWith("/close-line.svg"))
-        compare(close.icon.width, 14)
-        compare(minimize.icon.width, 14)
+        compare(close.icon.width, 16)
+        compare(minimize.icon.width, 16)
     }
 
     function test_mini_spectrum_uses_same_fixed_bars_as_main() {

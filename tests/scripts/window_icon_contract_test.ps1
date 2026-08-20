@@ -16,3 +16,17 @@ foreach ($pattern in $required) {
         throw "Missing native taskbar icon contract: $pattern"
     }
 }
+
+$waveformIcon = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'assets/icons/waveform-switch.svg')
+if ($waveformIcon -notmatch 'M584\.1 851\.5l-145-592\.7' -or
+    $waveformIcon -notmatch 'fill="currentColor"') {
+    throw 'The shared waveform switch icon must use the approved uploaded artwork and theme color.'
+}
+
+$emptyFavoriteIcon = Get-Content -Raw -LiteralPath (
+    Join-Path $SourceRoot 'assets/icons/heart-line.svg')
+if ($emptyFavoriteIcon -notmatch 'M707\.584 93\.184c-77\.312' -or
+    $emptyFavoriteIcon -notmatch 'fill="currentColor"') {
+    throw 'The empty favorite icon must use the approved uploaded artwork and theme color.'
+}

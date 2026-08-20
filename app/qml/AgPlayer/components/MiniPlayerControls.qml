@@ -12,6 +12,7 @@ Rectangle {
     property var windows: WindowController
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
+    property int libraryRevision: 0
     // The complete decoded PCM duration is the waveform clock; metadata is a
     // fallback only until analysis finishes.
     readonly property real effectiveDurationMs: waveformDurationMs > 0
@@ -35,6 +36,7 @@ Rectangle {
         return playback ? LibraryModel.indexForTrackId(playback.currentTrackId) : -1
     }
     function currentTrackValue(role): variant {
+        var revision = libraryRevision
         var row = currentRow()
         return row >= 0 ? LibraryModel.data(LibraryModel.index(row, 0), role) : ""
     }
@@ -47,7 +49,10 @@ Rectangle {
         var tags = currentTrackValue(LibraryModel.TagsRole)
         if (!tags || tags.length === 0)
             return ""
-        return Array.isArray(tags) ? tags.join("、") : String(tags)
+        var values = []
+        for (var index = 0; index < tags.length; ++index)
+            values.push(String(tags[index]))
+        return values.join("、")
     }
     function currentTrackMetadata(): string {
         var values = [
@@ -108,6 +113,12 @@ Rectangle {
         case PlaybackController.RepeatAll: return qsTr("列表循环")
         default: return qsTr("顺序播放")
         }
+    }
+
+    Connections {
+        target: LibraryModel
+        function onDataChanged() { ++root.libraryRevision }
+        function onModelReset() { ++root.libraryRevision }
     }
 
     RowLayout {
@@ -281,8 +292,8 @@ Rectangle {
                     Layout.preferredHeight: 28
                     icon.source: Theme.icon("waveform-switch")
                     icon.color: Theme.iconPrimary
-                    icon.width: 15
-                    icon.height: 15
+                    icon.width: 16
+                    icon.height: 16
                     Accessible.name: qsTr("切换波形样式")
                     ToolTip.text: Accessible.name
                     ToolTip.visible: hovered
@@ -297,7 +308,7 @@ Rectangle {
                                : playback.mode === PlaybackController.Shuffle ? Theme.icon("shuffle-arrows-line")
                                : playback.mode === PlaybackController.RepeatOne ? Theme.icon("repeat-one-line-alt")
                                : Theme.icon("repeat-list-line")
-                    icon.color: Theme.iconPrimary; icon.width: 15; icon.height: 15
+                    icon.color: Theme.iconPrimary; icon.width: 16; icon.height: 16
                     Accessible.name: root.modeName(); ToolTip.text: Accessible.name; ToolTip.visible: hovered
                     onClicked: if (playback) playback.cycleMode(); background: null
                 }
@@ -355,7 +366,7 @@ Rectangle {
                         height: parent.height
                         anchors.left: parent.left
                         icon.source: playback && playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
-                        icon.color: Theme.primaryText; icon.width: 15; icon.height: 15
+                        icon.color: Theme.primaryText; icon.width: 16; icon.height: 16
                         onClicked: if (playback) playback.toggleMuted(); background: null
                     }
                     HoverHandler {
