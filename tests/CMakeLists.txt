@@ -474,6 +474,7 @@ foreach(qt_test IN ITEMS
     waveform_item_test
     waveform_provider_test
     track_waveform_thumbnail_provider_test
+    track_waveform_thumbnail_item_test
     shutdown_test
     runtime_log_test
     settings_controller_test
@@ -820,6 +821,9 @@ set_tests_properties(playback_controller_test qml_main_window_test qml_waveform_
     RUN_SERIAL TRUE
 )
 set_tests_properties(settings_controller_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+set_tests_properties(track_waveform_thumbnail_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 add_dependencies(replay_gain_scanner_test decoder_fixture)
