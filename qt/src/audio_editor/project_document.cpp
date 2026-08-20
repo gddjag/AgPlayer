@@ -48,7 +48,13 @@ bool within(const QString& child, const QString& parent)
 {
     const QString cleanChild = QDir::cleanPath(QDir::fromNativeSeparators(child));
     const QString cleanParent = QDir::cleanPath(QDir::fromNativeSeparators(parent));
-    return cleanChild == cleanParent || cleanChild.startsWith(cleanParent + QLatin1Char('/'));
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
+#endif
+    return cleanChild.compare(cleanParent, sensitivity) == 0
+        || cleanChild.startsWith(cleanParent + QLatin1Char('/'), sensitivity);
 }
 
 bool safeRelative(const QString& path)
@@ -214,6 +220,7 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
         }
     }
     std::unordered_map<const AudioSource*, quint64> sourceIds;
+    std::vector<ProjectSourceRecord> savedRecords;
     QJsonArray sources;
     for (const AudioEvent& event : timeline.events) {
         if (!event.source || sourceIds.count(event.source.get()) != 0) continue;
@@ -228,11 +235,12 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
         const QFileInfo file(sourcePath);
         QString savedPath = relative ? relativePath : sourcePath;
         savedPath.replace(QLatin1Char('\\'), QLatin1Char('/'));
-        const qint64 savedSize = file.exists() ? file.size()
-            : (supplied == records.end() ? -1 : supplied->second.fileSize);
-        const qint64 savedModified = file.exists()
-            ? file.lastModified().toUTC().toMSecsSinceEpoch()
-            : (supplied == records.end() ? -1 : supplied->second.lastModifiedUtcMs);
+        const qint64 savedSize = supplied == records.end()
+            ? (file.exists() ? file.size() : -1) : supplied->second.fileSize;
+        const qint64 savedModified = supplied == records.end()
+            ? (file.exists() ? file.lastModified().toUTC().toMSecsSinceEpoch() : -1)
+            : supplied->second.lastModifiedUtcMs;
+        savedRecords.push_back({id, event.source, savedSize, savedModified});
         sources.append(QJsonObject{{QStringLiteral("sourceId"), idJson(id)},
                                    {QStringLiteral("pathKind"), relative ? QStringLiteral("relative") : QStringLiteral("absolute")},
                                    {QStringLiteral("path"), savedPath},
@@ -285,7 +293,7 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     if (!output.open(QIODevice::WriteOnly)
         || output.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
         || !output.commit()) return {false, QStringLiteral("could not save project")};
-    return {true, {}};
+    return {true, {}, std::move(savedRecords)};
 }
 
 ProjectLoadResult ProjectDocument::load(const QString& path)
@@ -326,8 +334,24 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
         sourceMap.emplace(id, source);
         result.sources.push_back({id, source, fileSize, modified});
         const QFileInfo actual(resolved);
-        if (!actual.exists()) result.issues.push_back({ProjectSourceIssueKind::Missing, id, resolved, QStringLiteral("source file is missing")});
-        else if ((fileSize >= 0 && actual.size() != fileSize) || (modified >= 0 && actual.lastModified().toUTC().toMSecsSinceEpoch() != modified)) result.issues.push_back({ProjectSourceIssueKind::IdentityMismatch, id, resolved, QStringLiteral("source identity changed")});
+        if (!actual.exists()) {
+            result.issues.push_back({ProjectSourceIssueKind::Missing, id,
+                                     resolved, QStringLiteral("source file is missing")});
+        } else {
+            const bool statMismatch = (fileSize >= 0 && actual.size() != fileSize)
+                || (modified >= 0
+                    && actual.lastModified().toUTC().toMSecsSinceEpoch() != modified);
+            const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(
+                toPath(resolved), 1);
+            const bool formatMismatch = !analysis.success
+                || analysis.source.sample_rate != static_cast<std::uint32_t>(rate)
+                || analysis.source.channels != static_cast<std::uint32_t>(channels)
+                || analysis.source.total_frames != frames;
+            if (statMismatch || formatMismatch) {
+                result.issues.push_back({ProjectSourceIssueKind::IdentityMismatch,
+                    id, resolved, QStringLiteral("source identity changed or is unreadable")});
+            }
+        }
     }
     std::vector<AudioEvent> events;
     std::unordered_set<quint64> eventIds;

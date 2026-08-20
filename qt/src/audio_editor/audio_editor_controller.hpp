@@ -18,11 +18,13 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <atomic>
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -74,6 +76,8 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
     Q_PROPERTY(QVariantList projectIssues READ projectIssues NOTIFY projectChanged)
+    Q_PROPERTY(QVariantMap projectExportSettings READ projectExportSettingsMap
+                   WRITE setProjectExportSettingsMap NOTIFY projectChanged)
     Q_PROPERTY(qint64 playheadFrame READ playheadFrame NOTIFY playbackChanged)
     Q_PROPERTY(double originalBpm READ originalBpm NOTIFY timePitchChanged)
     Q_PROPERTY(double targetBpm READ targetBpm NOTIFY timePitchChanged)
@@ -137,6 +141,9 @@ public:
     [[nodiscard]] double progress() const noexcept { return progress_; }
     [[nodiscard]] QString projectPath() const { return project_path_; }
     [[nodiscard]] QVariantList projectIssues() const { return project_issues_; }
+    [[nodiscard]] const agplayer::editor::ProjectExportSettings&
+    projectExportSettings() const noexcept { return project_export_settings_; }
+    [[nodiscard]] QVariantMap projectExportSettingsMap() const;
     [[nodiscard]] qint64 playheadFrame() const noexcept { return playhead_frame_; }
     [[nodiscard]] double originalBpm() const noexcept { return time_pitch_.originalBpm(); }
     [[nodiscard]] double targetBpm() const noexcept { return time_pitch_.targetBpm(); }
@@ -176,6 +183,9 @@ public:
     Q_INVOKABLE bool saveProjectAs(const QUrl& target);
     Q_INVOKABLE bool openProject(const QUrl& source);
     Q_INVOKABLE bool relinkProjectSource(quint64 sourceId, const QUrl& replacement);
+    bool setProjectExportSettings(
+        const agplayer::editor::ProjectExportSettings& settings);
+    void setProjectExportSettingsMap(const QVariantMap& settings);
     Q_INVOKABLE bool undo();
     Q_INVOKABLE bool redo();
     Q_INVOKABLE bool exportTo(const QUrl& target, bool selectionOnly = false,
@@ -257,6 +267,14 @@ private:
     void setState(EditorSessionState value);
     void setError(QString message);
     void setProgress(double value);
+    void markProjectClean() noexcept;
+    void markProjectDirty() noexcept;
+    void syncModifiedFromHistory() noexcept;
+    bool exportWithSettings(const QUrl& target, bool selectionOnly,
+                            const QString& codecName, int sampleRate,
+                            int channels, qint64 bitRate, bool keepMetadata,
+                            bool variableBitRate, int quality,
+                            bool usePersistedDefaults);
 
     EditorActionModel actions_;
     EditorViewport viewport_;
@@ -269,6 +287,7 @@ private:
     QString project_path_;
     QString playback_path_;
     QUrl pending_open_url_;
+    bool pending_open_is_project_{};
     QString format_name_;
     int sample_rate_{};
     int channels_{};
@@ -333,6 +352,7 @@ private:
     bool insert_recording_at_cursor_{};
     bool time_pitch_preview_active_{};
     bool allow_document_replace_{};
+    std::optional<std::uint64_t> saved_history_state_;
     qint64 recording_insert_frame_{};
     QPointer<PlaybackController> main_playback_;
     std::atomic_uint64_t preview_generation_{0};

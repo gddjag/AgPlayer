@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QHash>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -431,6 +432,153 @@ private slots:
         QCOMPARE(loaded.sources[0].fileSize, exact);
         QCOMPARE(loaded.sources[0].lastModifiedUtcMs, exact);
     }
+
+    void mismatchIdentitySurvivesSaveAndReloadUntilExplicitRelink()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+
+        QFile changed(project.sourcePath);
+        QVERIFY(changed.open(QIODevice::Append));
+        QCOMPARE(changed.write("x", 1), qint64{1});
+        changed.close();
+        ProjectLoadResult mismatch = ProjectDocument::load(project.projectPath);
+        QVERIFY(mismatch.ok());
+        QCOMPARE(mismatch.issues.size(), std::size_t{1});
+        QCOMPARE(mismatch.issues[0].kind,
+                 ProjectSourceIssueKind::IdentityMismatch);
+
+        ProjectSaveRequest saveAgain;
+        saveAgain.document = mismatch.document.get();
+        saveAgain.playheadFrame = mismatch.playheadFrame;
+        saveAgain.visibleStartFrame = mismatch.visibleStartFrame;
+        saveAgain.visibleEndFrame = mismatch.visibleEndFrame;
+        saveAgain.exportSettings = mismatch.exportSettings;
+        saveAgain.sourceRecords = &mismatch.sources;
+        const ProjectSaveResult firstResult = ProjectDocument::save(
+            project.projectPath, saveAgain);
+        QVERIFY(firstResult.ok());
+
+        const ProjectLoadResult reloaded = ProjectDocument::load(project.projectPath);
+        QVERIFY(reloaded.ok());
+        QCOMPARE(reloaded.issues.size(), std::size_t{1});
+        QCOMPARE(reloaded.issues[0].kind,
+                 ProjectSourceIssueKind::IdentityMismatch);
+    }
+
+    void sameStatButUndecodableSourceIsStillAnIdentityMismatch()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+
+        const qint64 sourceSize = QFileInfo(project.sourcePath).size();
+        QVERIFY(sourceSize > 0);
+        QFile corrupt(project.sourcePath);
+        QVERIFY(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(corrupt.write(QByteArray(sourceSize, '\0')), sourceSize);
+        corrupt.close();
+
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+        QJsonObject source = sources[0].toObject();
+        const QFileInfo actual(project.sourcePath);
+        source.insert(QStringLiteral("fileSize"),
+                      QString::number(actual.size()));
+        source.insert(QStringLiteral("lastModifiedUtcMs"),
+                      QString::number(actual.lastModified().toUTC().toMSecsSinceEpoch()));
+        sources[0] = source;
+        root.insert(QStringLiteral("sources"), sources);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY(loaded.ok());
+        QCOMPARE(loaded.issues.size(), std::size_t{1});
+        QCOMPARE(loaded.issues[0].kind,
+                 ProjectSourceIssueKind::IdentityMismatch);
+    }
+
+    void sourceIdsRemainStableWhenNewSourcesAreInsertedBetweenSaves()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY(loaded.ok());
+
+        const QString sourceB = temporary.filePath(QStringLiteral("new-b.wav"));
+        const QString sourceC = temporary.filePath(QStringLiteral("new-c.wav"));
+        QVERIFY(QFile::copy(fixturePath(), sourceB));
+        QVERIFY(QFile::copy(fixturePath(), sourceC));
+        QVERIFY(loaded.document->insertSource(
+            AudioSource{nativePath(sourceB), 44'100, 2, 100}, 50'000));
+
+        ProjectSaveRequest saveAgain;
+        saveAgain.document = loaded.document.get();
+        saveAgain.playheadFrame = 1'234;
+        saveAgain.visibleStartFrame = 100;
+        saveAgain.visibleEndFrame = 8'000;
+        saveAgain.exportSettings = loaded.exportSettings;
+        saveAgain.sourceRecords = &loaded.sources;
+        const ProjectSaveResult firstResult = ProjectDocument::save(
+            project.projectPath, saveAgain);
+        QVERIFY(firstResult.ok());
+        loaded.sources = firstResult.sources;
+        const QJsonObject firstSave = readObject(project.projectPath);
+        QHash<QString, QString> firstIds;
+        for (const QJsonValue& value : firstSave.value(QStringLiteral("sources")).toArray()) {
+            const QJsonObject source = value.toObject();
+            firstIds.insert(source.value(QStringLiteral("path")).toString(),
+                            source.value(QStringLiteral("sourceId")).toVariant().toString());
+        }
+        const QString bPath = QStringLiteral("new-b.wav");
+        QVERIFY(firstIds.contains(bPath));
+
+        QVERIFY(loaded.document->insertSource(
+            AudioSource{nativePath(sourceC), 44'100, 2, 100}, 45'000));
+        const ProjectSaveResult secondResult = ProjectDocument::save(
+            project.projectPath, saveAgain);
+        QVERIFY(secondResult.ok());
+        const QJsonObject secondSave = readObject(project.projectPath);
+        QHash<QString, QString> secondIds;
+        for (const QJsonValue& value : secondSave.value(QStringLiteral("sources")).toArray()) {
+            const QJsonObject source = value.toObject();
+            secondIds.insert(source.value(QStringLiteral("path")).toString(),
+                             source.value(QStringLiteral("sourceId")).toVariant().toString());
+        }
+        QCOMPARE(secondIds.value(bPath), firstIds.value(bPath));
+    }
+
+#ifdef Q_OS_WIN
+    void windowsCaseVariantInsideProjectStillUsesRelativePath()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString sourcePath = temporary.filePath(QStringLiteral("Media/source.wav"));
+        QVERIFY(QDir{}.mkpath(QFileInfo(sourcePath).absolutePath()));
+        QVERIFY(QFile::copy(fixturePath(), sourcePath));
+        QString caseVariant = sourcePath;
+        caseVariant[0] = caseVariant[0].isUpper()
+            ? caseVariant[0].toLower() : caseVariant[0].toUpper();
+        auto source = std::make_shared<const AudioSource>(AudioSource{
+            nativePath(caseVariant), 44'100, 2, 100});
+        AudioDocument document = AudioDocument::fromEvents(
+            {{1, source, 0, 100, 0}});
+        ProjectSaveRequest save;
+        save.document = &document;
+        save.visibleEndFrame = 100;
+        const QString projectPath = temporary.filePath(QStringLiteral("case.agproj"));
+        QVERIFY(ProjectDocument::save(projectPath, save).ok());
+        const QJsonArray sources = readObject(projectPath)
+            .value(QStringLiteral("sources")).toArray();
+        QCOMPARE(sources[0].toObject().value(QStringLiteral("pathKind")).toString(),
+                 QStringLiteral("relative"));
+    }
+#endif
 };
 
 QTEST_APPLESS_MAIN(ProjectDocumentTest)

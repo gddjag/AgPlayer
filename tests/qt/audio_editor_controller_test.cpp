@@ -112,10 +112,11 @@ private slots:
 
         QVERIFY(controller.triggerAction(QStringLiteral("editor.undo")));
         QCOMPARE(controller.totalFrames(), qint64{1'000});
-        QVERIFY(controller.modified());
+        QVERIFY(!controller.modified());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.redo")));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.redo")));
         QCOMPARE(controller.totalFrames(), qint64{800});
+        QVERIFY(controller.modified());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.undo")));
     }
 
@@ -253,6 +254,152 @@ private slots:
         QCOMPARE(controller.playheadFrame(), playheadBefore);
         QCOMPARE(controller.modified(), modifiedBefore);
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.undo")));
+    }
+
+    void explicitInvalidProjectSaveAsNeverFallsBackToCurrentProject()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        const QString project = temporary.filePath(QStringLiteral("current.agproj"));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+        QFile originalFile(project);
+        QVERIFY(originalFile.open(QIODevice::ReadOnly));
+        const QByteArray original = originalFile.readAll();
+        originalFile.close();
+
+        QVERIFY(!controller.saveProjectAs(
+            QUrl(QStringLiteral("https://example.invalid/project.agproj"))));
+        QFile unchangedFile(project);
+        QVERIFY(unchangedFile.open(QIODevice::ReadOnly));
+        QCOMPARE(unchangedFile.readAll(), original);
+        QCOMPARE(controller.projectPath(), QFileInfo(project).absoluteFilePath());
+    }
+
+    void legacyAudioSaveAsStillWritesAudioNotProjectJson()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(QStringLiteral("saved.wav"));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.saveAs(QUrl::fromLocalFile(output)));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
+                                  10'000);
+        QFile file(output);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.read(4), QByteArray("RIFF", 4));
+        QVERIFY(controller.projectPath().isEmpty());
+    }
+
+    void modifiedProjectOpenUsesDiscardConfirmationBeforeReplacement()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        const QString project = temporary.filePath(QStringLiteral("target.agproj"));
+        AudioEditorController projectMaker(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(projectMaker.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(projectMaker.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.trimEvent(1, 10, controller.totalFrames() - 10, 0));
+        const qint64 changedFrames = controller.totalFrames();
+        QSignalSpy requested(&controller,
+                             &AudioEditorController::discardConfirmationRequested);
+        QVERIFY(!controller.openProject(QUrl::fromLocalFile(project)));
+        QCOMPARE(requested.count(), 1);
+        QCOMPARE(controller.totalFrames(), changedFrames);
+        QVERIFY(controller.modified());
+
+        QVERIFY(controller.confirmDiscardAndOpen());
+        QCOMPARE(controller.projectPath(), QFileInfo(project).absoluteFilePath());
+        QVERIFY(!controller.modified());
+    }
+
+    void redoBackToSavedHistoryPointClearsDirtyState()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        const QString project = temporary.filePath(QStringLiteral("saved.agproj"));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.trimEvent(1, 10, controller.totalFrames() - 10, 0));
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+        QVERIFY(!controller.modified());
+
+        QVERIFY(controller.undo());
+        QVERIFY(controller.modified());
+        QVERIFY(controller.redo());
+        QVERIFY(!controller.modified());
+    }
+
+    void nonDefaultExportSettingsRoundTripAndDriveDefaultExportArguments()
+    {
+        using agplayer::editor::ProjectExportSettings;
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        const QString project = temporary.filePath(QStringLiteral("settings.agproj"));
+        const QString exported = temporary.filePath(QStringLiteral("default.flac"));
+
+        ProjectExportSettings expected;
+        expected.codecName = QStringLiteral("flac");
+        expected.sampleRate = 48'000;
+        expected.channels = 1;
+        expected.bitRate = 192'000;
+        expected.keepMetadata = false;
+        expected.variableBitRate = false;
+        expected.quality = 61;
+        expected.outputDirectory = temporary.filePath(QStringLiteral("exports"));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        controller.setProjectExportSettings(expected);
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(loaded.openProject(QUrl::fromLocalFile(project)));
+        const ProjectExportSettings restored = loaded.projectExportSettings();
+        QCOMPARE(restored.codecName, expected.codecName);
+        QCOMPARE(restored.sampleRate, expected.sampleRate);
+        QCOMPARE(restored.channels, expected.channels);
+        QCOMPARE(restored.bitRate, expected.bitRate);
+        QCOMPARE(restored.keepMetadata, expected.keepMetadata);
+        QCOMPARE(restored.variableBitRate, expected.variableBitRate);
+        QCOMPARE(restored.quality, expected.quality);
+        QCOMPARE(restored.outputDirectory, expected.outputDirectory);
+
+        QVERIFY(loaded.exportTo(QUrl::fromLocalFile(exported)));
+        QCOMPARE(loaded.projectExportSettings().codecName, expected.codecName);
+        QCOMPARE(loaded.projectExportSettings().sampleRate, expected.sampleRate);
+        QCOMPARE(loaded.projectExportSettings().channels, expected.channels);
+        QCOMPARE(loaded.projectExportSettings().bitRate, expected.bitRate);
+        QCOMPARE(loaded.projectExportSettings().keepMetadata,
+                 expected.keepMetadata);
+        QCOMPARE(loaded.projectExportSettings().variableBitRate,
+                 expected.variableBitRate);
+        QCOMPARE(loaded.projectExportSettings().quality, expected.quality);
+        QTRY_COMPARE_WITH_TIMEOUT(loaded.state(), EditorSessionState::Ready, 10'000);
+        QVERIFY(QFileInfo::exists(exported));
     }
 
     void opensRealAudioAndPublishesSummary()

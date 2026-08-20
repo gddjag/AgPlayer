@@ -1,6 +1,7 @@
 #include "timeline_edit_command.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace agplayer::editor {
@@ -66,17 +67,21 @@ std::optional<TimelineEditCommand> TimelineEditCommand::fromCandidate(
     const std::vector<AudioEvent>& current = snapshot.events;
     std::vector<AudioEvent> before;
     std::vector<AudioEvent> after;
+    std::unordered_map<EventId, const AudioEvent*> currentById;
+    std::unordered_map<EventId, const AudioEvent*> candidateById;
+    currentById.reserve(current.size());
+    candidateById.reserve(candidate.size());
+    for (const AudioEvent& event : current) currentById.emplace(event.id, &event);
+    for (const AudioEvent& event : candidate) candidateById.emplace(event.id, &event);
     for (const AudioEvent& event : current) {
-        const auto found = std::find_if(candidate.begin(), candidate.end(),
-            [&event](const AudioEvent& item) { return item.id == event.id; });
-        if (found == candidate.end() || !sameEvent(event, *found)) {
+        const auto found = candidateById.find(event.id);
+        if (found == candidateById.end() || !sameEvent(event, *found->second)) {
             before.push_back(event);
         }
     }
     for (const AudioEvent& event : candidate) {
-        const auto found = std::find_if(current.begin(), current.end(),
-            [&event](const AudioEvent& item) { return item.id == event.id; });
-        if (found == current.end() || !sameEvent(*found, event)) {
+        const auto found = currentById.find(event.id);
+        if (found == currentById.end() || !sameEvent(*found->second, event)) {
             after.push_back(event);
         }
     }

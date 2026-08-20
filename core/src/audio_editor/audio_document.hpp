@@ -58,6 +58,8 @@ public:
 
     [[nodiscard]] bool canUndo() const noexcept { return history_.canUndo(); }
     [[nodiscard]] bool canRedo() const noexcept { return history_.canRedo(); }
+    [[nodiscard]] std::uint64_t historyStateId() const noexcept
+    { return history_.stateId(); }
     [[nodiscard]] bool hasClipboard() const noexcept { return !clipboard_.empty(); }
     [[nodiscard]] SampleFrame totalFrames() const noexcept;
     [[nodiscard]] const std::vector<Marker>& markers() const noexcept

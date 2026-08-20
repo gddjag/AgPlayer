@@ -3,6 +3,7 @@
 #include "timeline_edit_command.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -33,17 +34,27 @@ public:
     [[nodiscard]] std::size_t redoCount() const noexcept { return redo_.size(); }
     [[nodiscard]] std::size_t retainedBytes() const noexcept
     { return retained_bytes_; }
+    [[nodiscard]] std::uint64_t stateId() const noexcept
+    { return current_state_id_; }
 
 private:
+    struct Entry final {
+        std::unique_ptr<TimelineEditCommand> command;
+        std::uint64_t beforeState{};
+        std::uint64_t afterState{};
+    };
+
     void clearRedo() noexcept;
     void enforceLimits() noexcept;
 
     TimelineHistoryLimits limits_;
-    std::deque<std::unique_ptr<TimelineEditCommand>> undo_;
-    std::deque<std::unique_ptr<TimelineEditCommand>> redo_;
+    std::deque<Entry> undo_;
+    std::deque<Entry> redo_;
     std::size_t retained_bytes_{};
     std::optional<EventId> active_event_;
     bool active_has_item_{};
+    std::uint64_t current_state_id_{};
+    std::uint64_t next_state_id_{1};
 };
 
 } // namespace agplayer::editor
