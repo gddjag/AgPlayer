@@ -120,6 +120,29 @@ bool validate_audio_output(const QString& path)
     return valid;
 }
 
+QString prepare_output_directory(QString& path)
+{
+    path = path.trimmed();
+    if (path.isEmpty()) {
+        return {};
+    }
+    path = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    if (!QDir().mkpath(path)) {
+        return QStringLiteral("Invalid outputDir: cannot create %1")
+            .arg(path);
+    }
+    const QFileInfo info(path);
+    if (!info.isDir()) {
+        return QStringLiteral("Invalid outputDir: not a directory: %1")
+            .arg(path);
+    }
+    if (!info.isWritable()) {
+        return QStringLiteral("Invalid outputDir: not writable: %1")
+            .arg(path);
+    }
+    return {};
+}
+
 } // namespace
 
 bool format_converter_detail::commit_staged_output(
@@ -1154,24 +1177,11 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         }
     }
     conversionRequest.outputDirectory = request.value(
-        QStringLiteral("outputDir")).toString().trimmed();
-    if (!conversionRequest.outputDirectory.isEmpty()) {
-        conversionRequest.outputDirectory = QDir::cleanPath(
-            QFileInfo(conversionRequest.outputDirectory).absoluteFilePath());
-        if (!QDir().mkpath(conversionRequest.outputDirectory)) {
-            return failPreflight(
-                QStringLiteral("Invalid outputDir: cannot create directory"));
-        }
-        const QFileInfo outputDirectoryInfo(
-            conversionRequest.outputDirectory);
-        if (!outputDirectoryInfo.isDir()) {
-            return failPreflight(
-                QStringLiteral("Invalid outputDir: not a directory"));
-        }
-        if (!outputDirectoryInfo.isWritable()) {
-            return failPreflight(
-                QStringLiteral("Invalid outputDir: directory is not writable"));
-        }
+        QStringLiteral("outputDir")).toString();
+    const QString outputDirectoryError = prepare_output_directory(
+        conversionRequest.outputDirectory);
+    if (!outputDirectoryError.isEmpty()) {
+        return failPreflight(outputDirectoryError);
     }
     conversionRequest.conflictPolicy = conflictPolicy;
     conversionRequest.keepMetadata = request.value(
@@ -1239,6 +1249,27 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         batch = build_format_conversion_plan(inputs, conversionRequest);
     } else {
         batch.fatalError = probeError;
+    }
+    if (batch.ready) {
+        QSet<QString> checkedOutputParents;
+        for (const FormatTaskPlan& task : batch.tasks) {
+            if (task.skipped) {
+                continue;
+            }
+            QString outputParent = QFileInfo(task.outputPath).absolutePath();
+            QString parentKey = QDir::cleanPath(outputParent);
+#ifdef Q_OS_WIN
+            parentKey = parentKey.toCaseFolded();
+#endif
+            if (checkedOutputParents.contains(parentKey)) {
+                continue;
+            }
+            const QString parentError = prepare_output_directory(outputParent);
+            if (!parentError.isEmpty()) {
+                return failPreflight(parentError);
+            }
+            checkedOutputParents.insert(parentKey);
+        }
     }
     if (resolvesUnusedBitrateMode && batch.ready) {
         for (FormatTaskPlan& task : batch.tasks) {
