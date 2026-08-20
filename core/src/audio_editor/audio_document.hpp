@@ -10,13 +10,6 @@
 
 namespace agplayer::editor {
 
-struct AudioSource final {
-    std::filesystem::path path;
-    std::uint32_t sample_rate{};
-    std::uint32_t channels{};
-    SampleFrame total_frames{};
-};
-
 struct AudioSpan final {
     std::shared_ptr<const AudioSource> source;
     SampleFrame source_start{};
