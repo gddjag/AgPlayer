@@ -84,7 +84,7 @@ TagModel::TagModel(LibraryModel* library, QString storagePath, QObject* parent)
                 }
             });
     connect(library_, &QAbstractItemModel::modelReset, this,
-            &TagModel::rebuildFromLibrary);
+            [this] { rebuildFromLibrary(); });
 }
 
 int TagModel::rowCount(const QModelIndex& parent) const
@@ -133,6 +133,7 @@ bool TagModel::createTag(const QString& displayName)
     const QString cleanName = displayName.trimmed();
     const QString key = keyFor(cleanName);
     if (key.isEmpty() || rowForKey(key) >= 0) return false;
+    pendingRemovedKeys_.remove(key);
     const int row = entries_.size();
     beginInsertRows({}, row, row);
     entries_.append({key, cleanName, 0, nextColorFor(key)});
@@ -176,6 +177,10 @@ int TagModel::renameTag(const QString& key, const QString& displayName)
         emit countChanged();
     }
     if (oldKey == selectedKey_) setSelectedKey(newKey);
+    if (oldKey != newKey) {
+        pendingRemovedKeys_.insert(oldKey);
+        pendingRemovedKeys_.remove(newKey);
+    }
     scheduleFlush();
     return changed;
 }
@@ -196,6 +201,7 @@ int TagModel::removeTag(const QString& key)
         emit countChanged();
     }
     if (selectedKey_ == normalized) setSelectedKey({});
+    pendingRemovedKeys_.insert(normalized);
     scheduleFlush();
     return changed;
 }
@@ -229,6 +235,7 @@ bool TagModel::flush()
     if (!dirty_) return true;
     if (!store_.save(entries_)) return false;
     dirty_ = false;
+    pendingRemovedKeys_.clear();
     return true;
 }
 
@@ -242,7 +249,28 @@ QColor TagModel::nextColorFor(const QString& key) const
 
 void TagModel::rebuildFromLibrary()
 {
+    // Overlay the local directory on the persisted one, but keep explicit
+    // local removals as tombstones until QSaveFile commits. This preserves
+    // unsaved colors/zero-count tags without dropping independent disk entries.
     QList<TagEntry> entries = store_.load();
+    if (dirty_) {
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                     [this](const TagEntry& entry) {
+            return pendingRemovedKeys_.contains(entry.key);
+        }), entries.end());
+        QHash<QString, int> storedRows;
+        for (int row = 0; row < entries.size(); ++row) storedRows.insert(entries.at(row).key, row);
+        for (const TagEntry& memoryEntry : entries_) {
+            const int row = storedRows.value(memoryEntry.key, -1);
+            if (row < 0) {
+                storedRows.insert(memoryEntry.key, entries.size());
+                entries.append(memoryEntry);
+            } else {
+                entries[row] = memoryEntry;
+            }
+        }
+    }
+    for (TagEntry& entry : entries) entry.trackCount = 0;
     bool metadataChanged = false;
     QHash<QString, int> rowByKey;
     for (int row = 0; row < entries.size(); ++row) rowByKey.insert(entries.at(row).key, row);

@@ -16,6 +16,9 @@ private slots:
     void retainsUnsavedEmptyDirectoryEntriesAcrossLibraryReset();
     void persistsMetadataDiscoveredFromTrackTags();
     void renamesAnEmptyTagWithoutLosingItsColor();
+    void retainsDirtyEmptyTagMetadataAcrossImmediateLibraryReset();
+    void doesNotResurrectDirtyDeletedTagOnLibraryReset();
+    void rebuildsDirtyDirectoryCountsExactlyOnceOnLibraryReset();
 };
 
 namespace {
@@ -118,6 +121,65 @@ void TagModelTest::renamesAnEmptyTagWithoutLosingItsColor()
     QCOMPARE(tags.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 0);
     QCOMPARE(tags.countForKey(QStringLiteral("driving")), 0);
     QCOMPARE(tags.colorForKey(QStringLiteral("driving")), QColor(QStringLiteral("#AABBCC")));
+}
+
+void TagModelTest::retainsDirtyEmptyTagMetadataAcrossImmediateLibraryReset()
+{
+    // Catches model-reset reload preferring a stale on-disk snapshot over
+    // dirty in-memory directory metadata before its coalesced flush executes.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString storagePath = dir.filePath(QStringLiteral("tags.json"));
+    LibraryModel library;
+    TagModel tags(&library, storagePath);
+    QVERIFY(tags.createTag(QStringLiteral("Driving")));
+    QVERIFY(tags.setTagColor(QStringLiteral("driving"), QStringLiteral("#AABBCC")));
+
+    library.replaceAll({makeTrack(QStringLiteral("a"), {QStringLiteral("Rock")})});
+
+    QCOMPARE(tags.countForKey(QStringLiteral("driving")), 0);
+    QCOMPARE(tags.colorForKey(QStringLiteral("driving")), QColor(QStringLiteral("#AABBCC")));
+    QVERIFY(tags.flush());
+    TagModel restored(&library, storagePath);
+    QCOMPARE(restored.countForKey(QStringLiteral("driving")), 0);
+    QCOMPARE(restored.colorForKey(QStringLiteral("driving")), QColor(QStringLiteral("#AABBCC")));
+}
+
+void TagModelTest::doesNotResurrectDirtyDeletedTagOnLibraryReset()
+{
+    // Catches a dirty-directory merge that treats stale disk metadata as
+    // authoritative and brings back an intentionally removed empty tag.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString storagePath = dir.filePath(QStringLiteral("tags.json"));
+    LibraryModel library;
+    TagModel tags(&library, storagePath);
+    QVERIFY(tags.createTag(QStringLiteral("Driving")));
+    QVERIFY(tags.flush());
+    QCOMPARE(tags.removeTag(QStringLiteral("driving")), 0);
+
+    library.replaceAll({makeTrack(QStringLiteral("a"), {QStringLiteral("Rock")})});
+
+    QCOMPARE(tags.countForKey(QStringLiteral("driving")), 0);
+    QVERIFY(!tags.colorForKey(QStringLiteral("driving")).isValid());
+}
+
+void TagModelTest::rebuildsDirtyDirectoryCountsExactlyOnceOnLibraryReset()
+{
+    // Catches reset aggregation adding to an in-memory dirty count instead of
+    // recomputing it from the LibraryModel source of truth.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryModel library;
+    library.replaceAll({makeTrack(QStringLiteral("a"), {QStringLiteral("Rock")}),
+                        makeTrack(QStringLiteral("b"), {QStringLiteral("Rock")})});
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    QCOMPARE(tags.countForKey(QStringLiteral("rock")), 2);
+
+    library.replaceAll({makeTrack(QStringLiteral("a"), {QStringLiteral("Rock")}),
+                        makeTrack(QStringLiteral("b"), {QStringLiteral("Rock")})});
+
+    QCOMPARE(tags.countForKey(QStringLiteral("rock")), 2);
 }
 
 QTEST_GUILESS_MAIN(TagModelTest)

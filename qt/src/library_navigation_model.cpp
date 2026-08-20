@@ -24,11 +24,18 @@ LibraryNavigationModel::LibraryNavigationModel(LibraryModel* library,
     rebuildBaseRows();
     if (library_ != nullptr) {
         connect(library_, &QAbstractItemModel::rowsInserted, this,
-                [this] { refreshCounts(); });
-        connect(library_, &QAbstractItemModel::rowsRemoved, this,
-                [this] { refreshCounts(); });
+                [this](const QModelIndex&, int first, int last) {
+                    handleRowsInserted(first, last);
+                });
+        connect(library_, &QAbstractItemModel::rowsAboutToBeRemoved, this,
+                [this](const QModelIndex&, int first, int last) {
+                    handleRowsAboutToBeRemoved(first, last);
+                });
         connect(library_, &QAbstractItemModel::dataChanged, this,
-                [this] { refreshCounts(); });
+                [this](const QModelIndex& first, const QModelIndex& last,
+                       const QList<int>& roles) {
+                    handleDataChanged(first, last, roles);
+                });
         connect(library_, &QAbstractItemModel::modelReset, this,
                 [this] { rebuildBaseRows(); });
     }
@@ -38,17 +45,18 @@ LibraryNavigationModel::LibraryNavigationModel(LibraryModel* library,
         connect(playlists_, &QAbstractItemModel::rowsRemoved, this,
                 [this] { rebuildBaseRows(); });
         connect(playlists_, &QAbstractItemModel::dataChanged, this,
-                [this] { rebuildBaseRows(); });
+                [this](const QModelIndex& first, const QModelIndex& last,
+                       const QList<int>&) { updatePlaylistCounts(first, last); });
         connect(playlists_, &QAbstractItemModel::modelReset, this,
                 [this] { rebuildBaseRows(); });
     }
     if (tags_ != nullptr) {
         connect(tags_, &QAbstractItemModel::rowsInserted, this,
-                [this] { refreshCounts(); });
+                [this] { updateTagCount(); });
         connect(tags_, &QAbstractItemModel::rowsRemoved, this,
-                [this] { refreshCounts(); });
-        connect(tags_, &QAbstractItemModel::dataChanged, this,
-                [this] { refreshCounts(); });
+                [this] { updateTagCount(); });
+        connect(tags_, &QAbstractItemModel::modelReset, this,
+                [this] { updateTagCount(); });
     }
     if (manager_ != nullptr) {
         connect(manager_, &LibraryManagerController::resourceRootsChanged, this,
@@ -125,6 +133,11 @@ bool LibraryNavigationModel::removeResourceFolder(const QString& folder)
     return manager_ != nullptr && manager_->removeMonitoredFolder(folder);
 }
 
+int LibraryNavigationModel::lastIncrementalTrackVisits() const noexcept
+{
+    return lastIncrementalTrackVisits_;
+}
+
 QString LibraryNavigationModel::navigationNodeId(const QString& type,
                                                  const QString& stableValue)
 {
@@ -146,6 +159,7 @@ int LibraryNavigationModel::rowForNodeId(const QString& nodeId) const
 
 void LibraryNavigationModel::rebuildBaseRows()
 {
+    rebuildTrackStates();
     QList<Node> rows;
     const int libraryCount = library_ == nullptr ? 0 : library_->count();
     const int favoriteCount = library_ == nullptr ? 0 : library_->favoriteCount();
@@ -178,20 +192,159 @@ void LibraryNavigationModel::rebuildBaseRows()
     endResetModel();
 }
 
-void LibraryNavigationModel::refreshCounts()
+void LibraryNavigationModel::rebuildTrackStates()
 {
+    trackStates_.clear();
+    if (library_ == nullptr) return;
+    trackStates_.reserve(library_->count());
+    for (const TrackRecord& track : library_->tracks()) {
+        trackStates_.insert(track.trackId,
+                            {QDir::fromNativeSeparators(QDir::cleanPath(track.path)),
+                             track.favorite});
+    }
+}
+
+void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
+{
+    if (library_ == nullptr) return;
+    lastIncrementalTrackVisits_ = 0;
+    int favoriteDelta = 0;
+    for (int row = first; row <= last; ++row) {
+        const QModelIndex sourceIndex = library_->index(row, 0);
+        const QString trackId = library_->data(sourceIndex, LibraryModel::TrackIdRole).toString();
+        const QString path = QDir::fromNativeSeparators(QDir::cleanPath(
+            library_->data(sourceIndex, LibraryModel::PathRole).toString()));
+        const bool favorite = library_->data(sourceIndex, LibraryModel::FavoriteRole).toBool();
+        trackStates_.insert(trackId, {path, favorite});
+        applyPathDelta(path, 1);
+        favoriteDelta += favorite ? 1 : 0;
+        ++lastIncrementalTrackVisits_;
+    }
     for (int row = 0; row < nodes_.size(); ++row) {
-        Node& node = nodes_[row];
-        int next = node.count;
-        if (node.nodeType == QStringLiteral("library")) next = library_ == nullptr ? 0 : library_->count();
-        else if (node.nodeType == QStringLiteral("favorites")) next = library_ == nullptr ? 0 : library_->favoriteCount();
-        else if (node.nodeType == QStringLiteral("tags")) next = tags_ == nullptr ? 0 : tags_->count();
-        else if (node.nodeType == QStringLiteral("resourceRoot") || node.nodeType == QStringLiteral("resourceFolder")) next = countForFolder(node.resourceFolder);
-        if (node.count != next) {
-            node.count = next;
-            emit dataChanged(index(row, 0), index(row, 0), {CountRole});
+        if (nodes_.at(row).nodeType == QStringLiteral("library")) {
+            updateNodeCount(row, nodes_.at(row).count + last - first + 1, {CountRole});
+        } else if (nodes_.at(row).nodeType == QStringLiteral("favorites") && favoriteDelta != 0) {
+            updateNodeCount(row, nodes_.at(row).count + favoriteDelta, {CountRole});
         }
     }
+}
+
+void LibraryNavigationModel::handleRowsAboutToBeRemoved(const int first, const int last)
+{
+    lastIncrementalTrackVisits_ = 0;
+    int favoriteDelta = 0;
+    for (int row = first; row <= last; ++row) {
+        const QModelIndex sourceIndex = library_->index(row, 0);
+        const QString trackId = library_->data(sourceIndex, LibraryModel::TrackIdRole).toString();
+        const TrackState state = trackStates_.value(trackId);
+        applyPathDelta(state.path, -1);
+        favoriteDelta -= state.favorite ? 1 : 0;
+        trackStates_.remove(trackId);
+        ++lastIncrementalTrackVisits_;
+    }
+    for (int row = 0; row < nodes_.size(); ++row) {
+        if (nodes_.at(row).nodeType == QStringLiteral("library")) {
+            updateNodeCount(row, nodes_.at(row).count - (last - first + 1), {CountRole});
+        } else if (nodes_.at(row).nodeType == QStringLiteral("favorites") && favoriteDelta != 0) {
+            updateNodeCount(row, nodes_.at(row).count + favoriteDelta, {CountRole});
+        }
+    }
+}
+
+void LibraryNavigationModel::handleDataChanged(const QModelIndex& first,
+                                               const QModelIndex& last,
+                                               const QList<int>& roles)
+{
+    const bool pathChanged = roles.isEmpty() || roles.contains(LibraryModel::PathRole);
+    const bool favoriteChanged = roles.isEmpty() || roles.contains(LibraryModel::FavoriteRole);
+    lastIncrementalTrackVisits_ = 0;
+    if (library_ == nullptr || (!pathChanged && !favoriteChanged)) return;
+    for (int row = first.row(); row <= last.row(); ++row) {
+        const QModelIndex sourceIndex = library_->index(row, 0);
+        const QString trackId = library_->data(sourceIndex, LibraryModel::TrackIdRole).toString();
+        TrackState& state = trackStates_[trackId];
+        if (pathChanged) {
+            const QString nextPath = QDir::fromNativeSeparators(QDir::cleanPath(
+                library_->data(sourceIndex, LibraryModel::PathRole).toString()));
+            if (state.path != nextPath) {
+                applyPathChange(state.path, nextPath);
+                state.path = nextPath;
+            }
+            ++lastIncrementalTrackVisits_;
+        }
+        if (favoriteChanged) {
+            const bool favorite = library_->data(sourceIndex, LibraryModel::FavoriteRole).toBool();
+            if (state.favorite != favorite) {
+                const int delta = favorite ? 1 : -1;
+                state.favorite = favorite;
+                for (int nodeRow = 0; nodeRow < nodes_.size(); ++nodeRow) {
+                    if (nodes_.at(nodeRow).nodeType == QStringLiteral("favorites")) {
+                        updateNodeCount(nodeRow, nodes_.at(nodeRow).count + delta, {CountRole});
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void LibraryNavigationModel::applyPathDelta(const QString& path, const int delta)
+{
+    if (path.isEmpty() || delta == 0) return;
+    for (int row = 0; row < nodes_.size(); ++row) {
+        const Node& node = nodes_.at(row);
+        if ((node.nodeType == QStringLiteral("resourceRoot")
+             || node.nodeType == QStringLiteral("resourceFolder"))
+            && path.startsWith(node.resourceFolder + QLatin1Char('/'), Qt::CaseInsensitive)) {
+            updateNodeCount(row, qMax(0, node.count + delta), {CountRole});
+        }
+    }
+}
+
+void LibraryNavigationModel::applyPathChange(const QString& oldPath, const QString& newPath)
+{
+    for (int row = 0; row < nodes_.size(); ++row) {
+        const Node& node = nodes_.at(row);
+        if (node.nodeType != QStringLiteral("resourceRoot")
+            && node.nodeType != QStringLiteral("resourceFolder")) continue;
+        const QString prefix = node.resourceFolder + QLatin1Char('/');
+        const bool wasMember = oldPath.startsWith(prefix, Qt::CaseInsensitive);
+        const bool isMember = newPath.startsWith(prefix, Qt::CaseInsensitive);
+        if (wasMember == isMember) continue;
+        updateNodeCount(row, qMax(0, node.count + (isMember ? 1 : -1)), {CountRole});
+    }
+}
+
+void LibraryNavigationModel::updateTagCount()
+{
+    for (int row = 0; row < nodes_.size(); ++row) {
+        if (nodes_.at(row).nodeType == QStringLiteral("tags")) {
+            updateNodeCount(row, tags_ == nullptr ? 0 : tags_->count(), {CountRole});
+            return;
+        }
+    }
+}
+
+void LibraryNavigationModel::updatePlaylistCounts(const QModelIndex& first,
+                                                  const QModelIndex& last)
+{
+    if (playlists_ == nullptr) return;
+    for (int sourceRow = first.row(); sourceRow <= last.row(); ++sourceRow) {
+        const QModelIndex sourceIndex = playlists_->index(sourceRow, 0);
+        const QString id = playlists_->data(sourceIndex, PlaylistModel::PlaylistIdRole).toString();
+        const int row = rowForNodeId(navigationNodeId(QStringLiteral("playlist"), id));
+        if (row >= 0) updateNodeCount(row,
+                                      playlists_->data(sourceIndex, PlaylistModel::TrackCountRole).toInt(),
+                                      {CountRole});
+    }
+}
+
+void LibraryNavigationModel::updateNodeCount(const int row, const int nextCount,
+                                             const QList<int>& roles)
+{
+    if (row < 0 || row >= nodes_.size() || nodes_.at(row).count == nextCount) return;
+    nodes_[row].count = nextCount;
+    emit dataChanged(index(row, 0), index(row, 0), roles);
 }
 
 QList<LibraryNavigationModel::Node> LibraryNavigationModel::immediateChildren(const Node& parent) const

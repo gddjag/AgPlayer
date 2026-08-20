@@ -27,6 +27,7 @@ public:
     Q_INVOKABLE bool setExpanded(const QString& nodeId, bool expanded);
     Q_INVOKABLE bool addResourceFolder(const QUrl& folder);
     Q_INVOKABLE bool removeResourceFolder(const QString& folder);
+    int lastIncrementalTrackVisits() const noexcept;
 
 private:
     struct Node {
@@ -38,12 +39,25 @@ private:
         bool expanded = false;
         QString resourceFolder;
     };
+    struct TrackState {
+        QString path;
+        bool favorite = false;
+    };
 
     static QString navigationNodeId(const QString& type, const QString& stableValue);
     static QString normalizedFolder(const QString& folder);
     int rowForNodeId(const QString& nodeId) const;
     void rebuildBaseRows();
-    void refreshCounts();
+    void rebuildTrackStates();
+    void handleRowsInserted(int first, int last);
+    void handleRowsAboutToBeRemoved(int first, int last);
+    void handleDataChanged(const QModelIndex& first, const QModelIndex& last,
+                           const QList<int>& roles);
+    void applyPathDelta(const QString& path, int delta);
+    void applyPathChange(const QString& oldPath, const QString& newPath);
+    void updateTagCount();
+    void updatePlaylistCounts(const QModelIndex& first, const QModelIndex& last);
+    void updateNodeCount(int row, int nextCount, const QList<int>& roles);
     QList<Node> immediateChildren(const Node& parent) const;
     int countForFolder(const QString& folder) const;
 
@@ -52,4 +66,6 @@ private:
     QPointer<TagModel> tags_;
     QPointer<LibraryManagerController> manager_;
     QList<Node> nodes_;
+    QHash<QString, TrackState> trackStates_;
+    int lastIncrementalTrackVisits_ = 0;
 };
