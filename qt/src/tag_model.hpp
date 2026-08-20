@@ -5,6 +5,7 @@
 #include <QAbstractListModel>
 #include <QHash>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 
 class LibraryModel;
@@ -58,5 +59,6 @@ private:
     QHash<QString, QStringList> trackTags_;
     QString selectedKey_;
     QTimer flushTimer_;
+    QSet<QString> pendingRemovedKeys_;
     bool dirty_ = false;
 };
