@@ -57,6 +57,8 @@
 #include "runtime_log.hpp"
 #include "rename_journal_store.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
@@ -473,6 +475,10 @@ int main(int argc, char* argv[])
         if (!loaded.isEmpty()) {
             library.replaceAll(loaded);
         }
+        const QDir libraryDataDirectory = QFileInfo(libraryPath).dir();
+        TagModel tagModel(
+            &library,
+            libraryDataDirectory.filePath(QStringLiteral("tags.json")));
 
         PlaybackController playback(core, &library);
         EqualizerController equalizer(core);
@@ -647,6 +653,15 @@ int main(int argc, char* argv[])
             }
         });
         WaveformProvider waveformProvider(&settings);
+        TrackWaveformThumbnailProvider trackWaveformThumbnailProvider(
+            settings.cacheDirectory());
+        QObject::connect(
+            &settings, &SettingsController::cacheDirectoryChanged,
+            &trackWaveformThumbnailProvider,
+            [&settings, &trackWaveformThumbnailProvider]() {
+                trackWaveformThumbnailProvider.setCacheDirectory(
+                    settings.cacheDirectory());
+            });
         QObject::connect(&waveformProvider, &WaveformProvider::waveformReady,
                          &playback,
                          [&playback, &library, &settings](
@@ -742,7 +757,10 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &filenameProcessor,
                                     &settings, &waveformProvider, &playlists,
-                                    &equalizer, &audioEditor);
+                                    &equalizer, &audioEditor,
+                                    AgPlayerQmlRuntimeModels{
+                                        &tagModel,
+                                        &trackWaveformThumbnailProvider});
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

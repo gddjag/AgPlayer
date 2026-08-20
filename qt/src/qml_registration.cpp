@@ -16,6 +16,9 @@
 #include "replay_gain_scanner.hpp"
 #include "playlist_model.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "track_waveform_thumbnail_item.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_item.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
@@ -34,7 +37,8 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
                                  EqualizerController* equalizer,
-                                 AudioEditorController* audioEditor)
+                                 AudioEditorController* audioEditor,
+                                 const AgPlayerQmlRuntimeModels& runtime)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -66,6 +70,15 @@ void register_agplayer_qml_types(LibraryModel* library,
         [library](QQmlEngine*, QJSEngine*) -> QObject* {
             return new ReplayGainScanner(library);
         });
+    if (runtime.tagModel != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "TagModel",
+                                     runtime.tagModel);
+    }
+    if (runtime.trackWaveformThumbnailProvider != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "TrackWaveformThumbnailProvider",
+                                     runtime.trackWaveformThumbnailProvider);
+    }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows);
@@ -81,6 +94,8 @@ void register_agplayer_qml_types(LibraryModel* library,
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", waveformProvider);
     }
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
+    qmlRegisterType<TrackWaveformThumbnailItem>(
+        "AgPlayer", 1, 0, "TrackWaveformThumbnailItem");
     qmlRegisterType<AudioEditorWaveformItem>(
         "AgPlayer", 1, 0, "AudioEditorWaveformItem");
 }

@@ -89,6 +89,14 @@ TestCase {
         }
     }
 
+    Component {
+        id: trackWaveformThumbnailItemComponent
+        TrackWaveformThumbnailItem {
+            width: 128
+            height: 10
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -159,6 +167,21 @@ TestCase {
         verify(findChild(mainWindow, "trackRating"), "track rating should exist")
         verify(findChild(mainWindow, "mainWaveform"), "main waveform should exist")
         compare(findChild(mainWindow, "playerCover").radius, 14)
+    }
+
+    function test_thumbnail_runtime_types_are_unique_and_idle() {
+        // Catches registering factories/fallback objects instead of the exact
+        // application-owned model graph, or doing cache work before a Loader
+        // exists in TrackList (integration is deliberately a later task).
+        verify(TagModel === expectedTagModel)
+        verify(TrackWaveformThumbnailProvider === expectedThumbnailProvider)
+        compare(TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts, 0)
+        compare(TrackWaveformThumbnailProvider.diagnostics().queuedJobs, 0)
+
+        var item = trackWaveformThumbnailItemComponent.createObject(
+                    mainWindow.contentItem)
+        verify(item)
+        item.destroy()
     }
 
     function test_equalizer_opens_compact_real_control_window() {
@@ -1736,18 +1759,38 @@ TestCase {
         verify(page)
         page.open()
         page.selectedSection = 2
-        wait(50)
+        wait(250)
 
         var heightStepper = findChild(page, "waveformHeightStepper")
         var densityStepper = findChild(page, "waveformDensityStepper")
         var thicknessStepper = findChild(page, "waveformThicknessStepper")
         var aggregationCombo = findChild(page, "waveformAggregationCombo")
         var resetButton = findChild(page, "waveformResetButton")
+        var listThumbnailSwitch = findChild(
+                    page, "listWaveformThumbnailEnabledControl")
+        var listThumbnailMode = findChild(
+                    page, "listWaveformThumbnailModeControl")
         verify(heightStepper)
         verify(densityStepper)
         verify(thicknessStepper)
         verify(aggregationCombo)
         verify(resetButton)
+        verify(listThumbnailSwitch)
+        verify(listThumbnailMode)
+
+        SettingsController.listWaveformThumbnailEnabled = true
+        SettingsController.listWaveformThumbnailMode = "Color36"
+        tryCompare(listThumbnailSwitch, "checked", true)
+        tryCompare(listThumbnailMode, "currentValue", "Color36")
+        mouseClick(listThumbnailSwitch,
+                   listThumbnailSwitch.width / 2,
+                   listThumbnailSwitch.height / 2)
+        tryCompare(SettingsController, "listWaveformThumbnailEnabled", false)
+        tryCompare(listThumbnailMode, "enabled", false)
+        SettingsController.listWaveformThumbnailEnabled = true
+        listThumbnailMode.currentIndex = 1
+        listThumbnailMode.activated(1)
+        tryCompare(SettingsController, "listWaveformThumbnailMode", "Mono")
 
         SettingsController.waveformHeight = 1.2
         SettingsController.waveformDensity = 3.5
@@ -1770,6 +1813,8 @@ TestCase {
         tryCompare(SettingsController, "waveformDensity", 2.0)
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
+        tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
+        tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
         page.close()
     }
 
