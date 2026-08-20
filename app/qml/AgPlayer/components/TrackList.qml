@@ -36,12 +36,9 @@ ListView {
     readonly property int rowHeight: 42
     model: trackModel
 
-    // A list can be created after the playback state has already been restored.
-    // Sync on creation and after asynchronous model batches so the current song
-    // is never left off-screen merely because no new playback signal arrived.
-    Component.onCompleted: Qt.callLater(root.ensureCurrentTrackVisible)
-    onCountChanged: if (count > 0) Qt.callLater(root.ensureCurrentTrackVisible)
-    onVisibleChanged: if (visible) Qt.callLater(root.ensureCurrentTrackVisible)
+    // Category navigation is user-directed.  Start each category at its top;
+    // only an actual playback-track change may scroll back to the playing row.
+    onSelectedCategoryChanged: Qt.callLater(root.positionViewAtBeginning)
 
     readonly property bool customPlaylistSelected:
         selectedCategory !== "all" && selectedCategory !== "favorites"

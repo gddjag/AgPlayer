@@ -296,7 +296,12 @@ public slots:
         QStandardPaths::setTestModeEnabled(true);
         QCoreApplication::setOrganizationName("AgPlayer");
         QCoreApplication::setApplicationName("AgPlayer-test");
-        QSettings().remove(QStringLiteral("windows/settingsGeometry"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           settingsDirectory_.path());
+        // Keep edit-session expectations independent of test order and avoid
+        // touching the real Windows registry from an isolated UI test.
+        QSettings().clear();
 
         if (ag_player_create(&core_) != AG_OK) {
             return;
@@ -377,6 +382,7 @@ public slots:
     }
 
 private:
+    QTemporaryDir settingsDirectory_;
     ag_player* core_ = nullptr;
     std::unique_ptr<LibraryModel> library_;
     std::unique_ptr<PlaybackController> playback_;

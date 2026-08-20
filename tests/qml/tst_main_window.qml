@@ -505,6 +505,24 @@ TestCase {
         side.destroy()
     }
 
+    function test_category_change_returns_track_list_to_top() {
+        nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem,
+                                                   { "height": 90 })
+        verify(list)
+        tryVerify(function() { return list.count >= 3 })
+        list.positionViewAtEnd()
+        wait(30)
+        verify(list.contentY > list.originY + 1,
+               "precondition: the short list viewport must be scrolled")
+
+        list.selectedCategory = "favorites"
+        tryVerify(function() {
+            return list.contentY <= list.originY + 1
+        }, 500, "changing categories must show the category from its top")
+        list.destroy()
+    }
+
     function test_track_context_play_action_uses_real_mouse_click() {
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
