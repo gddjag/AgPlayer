@@ -123,6 +123,7 @@ public:
 signals:
     void libraryModelChanged();
     void monitoredFoldersChanged();
+    void resourceRootsChanged();
     void scanningChanged();
     void progressChanged();
     void summaryChanged();

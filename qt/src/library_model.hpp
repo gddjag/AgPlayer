@@ -111,6 +111,10 @@ public:
     Q_INVOKABLE bool setRating(int row, int rating);
     Q_INVOKABLE bool setBpm(const QString& trackId, double bpm);
     Q_INVOKABLE bool setTags(const QString& trackId, const QStringList& tags);
+    Q_INVOKABLE int setTagsForTracks(const QStringList& trackIds,
+                                     const QStringList& tags);
+    Q_INVOKABLE int renameTag(const QString& oldKey, const QString& displayName);
+    Q_INVOKABLE int removeTag(const QString& key);
     Q_INVOKABLE bool moveTrack(int fromRow, int toRow);
     Q_INVOKABLE int reorderTracks(const QStringList& trackIds,
                                   const QString& beforeTrackId);
@@ -143,8 +147,11 @@ signals:
     void neverPlayedCountChanged();
     void countChanged();
     void trackRemoved(const QString& trackId);
+    void tagsChanged(const QString& trackId, const QStringList& oldTags,
+                     const QStringList& newTags);
 
 private:
+    bool applyTagsAtRow(int row, const QStringList& tags);
     QList<TrackRecord> tracks_;
     QSet<QString> pathKeys_;
     QHash<QString, int> pathRows_;

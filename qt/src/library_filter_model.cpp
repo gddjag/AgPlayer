@@ -3,6 +3,8 @@
 
 #include <QAbstractItemModel>
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 
 #include <algorithm>
 
@@ -112,6 +114,38 @@ void LibraryFilterModel::setCategory(const QString& category)
     }
 }
 
+QString LibraryFilterModel::tagKey() const noexcept
+{
+    return tagKey_;
+}
+
+void LibraryFilterModel::setTagKey(const QString& key)
+{
+    const QString normalized = key.trimmed().toCaseFolded();
+    if (tagKey_ == normalized) return;
+    tagKey_ = normalized;
+    emit tagKeyChanged();
+    invalidateFilter();
+}
+
+QString LibraryFilterModel::resourceFolder() const noexcept
+{
+    return resourceFolder_;
+}
+
+void LibraryFilterModel::setResourceFolder(const QString& folder)
+{
+    QString normalized;
+    if (!folder.trimmed().isEmpty()) {
+        normalized = QDir::fromNativeSeparators(
+            QDir::cleanPath(QFileInfo(folder).absoluteFilePath()));
+    }
+    if (resourceFolder_ == normalized) return;
+    resourceFolder_ = normalized;
+    emit resourceFolderChanged();
+    invalidateFilter();
+}
+
 int LibraryFilterModel::count() const
 {
     return rowCount();
@@ -206,7 +240,14 @@ bool LibraryFilterModel::filterAcceptsRow(int sourceRow,
     }
 
     return rowMatchesCategory(sourceRow) && rowMatchesSearch(sourceRow)
-           && rowMatchesRating(sourceRow) && rowMatchesBpm(sourceRow);
+           && rowMatchesRating(sourceRow) && rowMatchesBpm(sourceRow)
+           && rowMatchesTag(sourceRow) && rowMatchesResourceFolder(sourceRow);
+}
+
+QModelIndex LibraryFilterModel::sourceIndexForRow(const int sourceRow) const
+{
+    QAbstractItemModel* model = sourceModel();
+    return model == nullptr ? QModelIndex{} : model->index(sourceRow, 0);
 }
 
 bool LibraryFilterModel::rowMatchesCategory(int sourceRow) const
@@ -328,4 +369,23 @@ bool LibraryFilterModel::rowMatchesBpm(int sourceRow) const
         return false;
     }
     return bpm >= minBpm_ && bpm <= maxBpm_;
+}
+
+bool LibraryFilterModel::rowMatchesTag(const int sourceRow) const
+{
+    if (tagKey_.isEmpty()) return true;
+    const QModelIndex sourceIndex = sourceIndexForRow(sourceRow);
+    const QStringList tags = sourceModel()->data(sourceIndex, LibraryModel::TagsRole).toStringList();
+    return std::any_of(tags.cbegin(), tags.cend(), [this](const QString& tag) {
+        return tag.toCaseFolded() == tagKey_;
+    });
+}
+
+bool LibraryFilterModel::rowMatchesResourceFolder(const int sourceRow) const
+{
+    if (resourceFolder_.isEmpty()) return true;
+    const QModelIndex sourceIndex = sourceIndexForRow(sourceRow);
+    const QString path = QDir::fromNativeSeparators(QDir::cleanPath(
+        sourceModel()->data(sourceIndex, LibraryModel::PathRole).toString()));
+    return path.startsWith(resourceFolder_ + QLatin1Char('/'), Qt::CaseInsensitive);
 }

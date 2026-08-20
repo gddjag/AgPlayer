@@ -22,6 +22,7 @@ private slots:
     void writesRatingThroughProxyRows();
     void filtersPlaylistMembershipAndTracksLiveChanges();
     void preservesCustomPlaylistOrder();
+    void intersectsTagFolderAndExistingFiltersWithoutSourceReset();
 };
 
 namespace {
@@ -282,6 +283,44 @@ void LibraryFilterModelTest::preservesCustomPlaylistOrder()
     QVERIFY(playlists.moveTrack(playlistId, 2, 0));
     QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
              QStringLiteral("beta"));
+}
+
+void LibraryFilterModelTest::intersectsTagFolderAndExistingFiltersWithoutSourceReset()
+{
+    // Catches an OR-combination that leaks tracks from another root/tag and a
+    // source-model reset caused by changing only proxy criteria.
+    TrackRecord road = makeTrack(QStringLiteral("road"), QStringLiteral("Night Ride"),
+                                 QStringLiteral("Artist"), QStringLiteral("Album"), 5, 128.0);
+    road.path = QStringLiteral("C:/Music/A/road.mp3");
+    road.tags = {QStringLiteral("Road")};
+    TrackRecord jazz = makeTrack(QStringLiteral("jazz"), QStringLiteral("Night Jazz"),
+                                 QStringLiteral("Artist"), QStringLiteral("Album"), 5, 128.0);
+    jazz.path = QStringLiteral("C:/Music/B/jazz.mp3");
+    jazz.tags = {QStringLiteral("Jazz")};
+    LibraryModel source;
+    source.replaceAll({road, jazz});
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    const QString playlist = playlists.createPlaylist(QStringLiteral("Road trips"));
+    QVERIFY(playlists.addTrack(playlist, QStringLiteral("road")));
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.setPlaylistModel(&playlists);
+    QSignalSpy reset(&source, &QAbstractItemModel::modelReset);
+
+    filter.setTagKey(QStringLiteral("road"));
+    filter.setResourceFolder(QStringLiteral("C:/Music/A"));
+    filter.setCategory(playlist);
+    filter.setSearchText(QStringLiteral("night"));
+    filter.setExactRating(5);
+    filter.setMinBpm(120.0);
+    filter.setMaxBpm(140.0);
+
+    QCOMPARE(filter.count(), 1);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("road"));
+    QCOMPARE(reset.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(LibraryFilterModelTest)

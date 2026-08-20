@@ -459,9 +459,11 @@ foreach(qt_test IN ITEMS
     filename_processing_test
     rename_transaction_test
     library_model_test
+    tag_model_test
     library_store_test
     playlist_model_test
     library_manager_controller_test
+    library_navigation_model_test
     library_file_operations_test
     import_controller_test
     library_filter_model_test

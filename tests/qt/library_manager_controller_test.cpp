@@ -18,6 +18,7 @@ class LibraryManagerControllerTest final : public QObject {
 private slots:
     void marksMissingFilesAndFindsLayeredDuplicates();
     void monitorsUniqueFolders();
+    void removesPersistedRootWithoutDeletingFiles();
     void persistsRootsAndImportsNewAudioRecursively();
     void exposesNonDestructiveLibrarySummary();
     void scanRunsAsCancelableBackgroundTask();
@@ -99,6 +100,30 @@ void LibraryManagerControllerTest::monitorsUniqueFolders()
     QCOMPARE(manager.monitoredFolders().size(), 1);
     QVERIFY(manager.removeMonitoredFolder(dir.path()));
     QCOMPARE(manager.monitoredFolders().size(), 0);
+}
+
+void LibraryManagerControllerTest::removesPersistedRootWithoutDeletingFiles()
+{
+    // Catches root removal accidentally deleting user audio or leaving the
+    // persisted reference/watch contract stale.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString root = dir.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(root));
+    const QString audioPath = writeFile(QDir(root).filePath(QStringLiteral("song.mp3")), "audio");
+    const QString settingsPath = dir.filePath(QStringLiteral("roots.json"));
+    LibraryManagerController manager;
+    manager.setStoragePath(settingsPath);
+    QSignalSpy rootsChanged(&manager, &LibraryManagerController::resourceRootsChanged);
+
+    QVERIFY(manager.addMonitoredFolder(root));
+    QVERIFY(manager.removeMonitoredFolder(root));
+    QVERIFY(QFileInfo::exists(audioPath));
+    QCOMPARE(rootsChanged.count(), 2);
+
+    LibraryManagerController restored;
+    restored.setStoragePath(settingsPath);
+    QVERIFY(restored.monitoredFolders().isEmpty());
 }
 
 void LibraryManagerControllerTest::persistsRootsAndImportsNewAudioRecursively()

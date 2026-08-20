@@ -272,6 +272,7 @@ bool LibraryManagerController::addMonitoredFolder(const QString& folder)
     rebuildDirectoryWatches();
     saveMonitoredFolders();
     emit monitoredFoldersChanged();
+    emit resourceRootsChanged();
     scheduleRescan();
     return true;
 }
@@ -284,12 +285,18 @@ bool LibraryManagerController::addMonitoredFolderUrl(const QUrl& folder)
 bool LibraryManagerController::removeMonitoredFolder(const QString& folder)
 {
     const QString path = QDir::cleanPath(QFileInfo(folder).absoluteFilePath());
-    const int index = monitoredRoots_.indexOf(path);
+    const auto root = std::find_if(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
+                                   [&path](const QString& candidate) {
+                                       return candidate.compare(path, Qt::CaseInsensitive) == 0;
+                                   });
+    const int index = root == monitoredRoots_.cend()
+        ? -1 : static_cast<int>(std::distance(monitoredRoots_.cbegin(), root));
     if (index < 0) return false;
     monitoredRoots_.removeAt(index);
     rebuildDirectoryWatches();
     saveMonitoredFolders();
     emit monitoredFoldersChanged();
+    emit resourceRootsChanged();
     return true;
 }
 
@@ -819,6 +826,7 @@ void LibraryManagerController::loadMonitoredFolders()
     }
     rebuildDirectoryWatches();
     emit monitoredFoldersChanged();
+    emit resourceRootsChanged();
 }
 
 void LibraryManagerController::saveMonitoredFolders() const
