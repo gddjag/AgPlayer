@@ -15,6 +15,21 @@
 #include <QAbstractItemModel>
 
 #include <atomic>
+#include <functional>
+
+namespace format_converter_detail {
+
+enum class OutputCommitMode {
+    CreateNoReplace,
+    Overwrite,
+};
+
+bool commit_staged_output(const QString& stagedPath,
+                          const QString& finalPath,
+                          OutputCommitMode mode,
+                          const std::function<void()>& beforeCommit = {});
+
+} // namespace format_converter_detail
 
 template <typename T>
 class QFutureWatcher;
