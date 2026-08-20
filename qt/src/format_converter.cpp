@@ -120,34 +120,43 @@ bool validate_audio_output(const QString& path)
     return valid;
 }
 
-bool commit_staged_output(const QString& stagedPath,
-                          const QString& finalPath,
-                          bool overwriteExisting)
+} // namespace
+
+bool format_converter_detail::commit_staged_output(
+    const QString& stagedPath,
+    const QString& finalPath,
+    const OutputCommitMode mode,
+    const std::function<void()>& beforeCommit)
 {
-    if (!overwriteExisting && QFileInfo::exists(finalPath)) {
-        return false;
+    if (beforeCommit) {
+        beforeCommit();
     }
 #ifdef Q_OS_WIN
     const std::wstring staged = QDir::toNativeSeparators(stagedPath).toStdWString();
     const std::wstring final = QDir::toNativeSeparators(finalPath).toStdWString();
-    if (QFileInfo::exists(finalPath)) {
-        return ReplaceFileW(final.c_str(), staged.c_str(), nullptr,
-                            REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)
-               != FALSE;
+    DWORD flags = MOVEFILE_WRITE_THROUGH;
+    if (mode == OutputCommitMode::Overwrite) {
+        flags |= MOVEFILE_REPLACE_EXISTING;
     }
-    return MoveFileExW(staged.c_str(), final.c_str(), MOVEFILE_WRITE_THROUGH)
-           != FALSE;
+    return MoveFileExW(staged.c_str(), final.c_str(), flags) != FALSE;
 #else
     std::error_code error;
-    if (overwriteExisting) {
-        std::filesystem::remove(finalPath.toStdString(), error);
-        error.clear();
+    if (mode == OutputCommitMode::CreateNoReplace) {
+        std::filesystem::create_hard_link(stagedPath.toStdString(),
+                                          finalPath.toStdString(), error);
+        if (error) {
+            return false;
+        }
+        std::filesystem::remove(stagedPath.toStdString(), error);
+        return true;
     }
     std::filesystem::rename(stagedPath.toStdString(), finalPath.toStdString(),
                             error);
     return !error;
 #endif
 }
+
+namespace {
 
 // Map format string to FFmpeg codec name + file extension.
 struct FormatInfo {
@@ -1069,6 +1078,25 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         return plan;
     };
 
+    QSet<QString> checkedIds;
+    for (int row = 0; row < taskModel_->rowCount(); ++row) {
+        if (taskModel_->taskAt(row).value(QStringLiteral("checked")).toBool()) {
+            checkedIds.insert(taskModel_->taskIdAt(row));
+        }
+    }
+    QList<FileEntry> selectedEntries;
+    {
+        QMutexLocker lock(&mutex_);
+        for (const FileEntry& entry : entries_) {
+            if (checkedIds.contains(entry.taskId)) {
+                selectedEntries.append(entry);
+            }
+        }
+    }
+    if (selectedEntries.isEmpty()) {
+        return failPreflight(tr("没有已选择的转换任务"));
+    }
+
     if (capability.isEmpty()) {
         return failPreflight(QStringLiteral("Invalid outputFormat: %1").arg(format));
     }
@@ -1100,9 +1128,25 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     conversionRequest.bitrateMode = request.value(
         QStringLiteral("bitrateMode"), bitrateMode_)
                                          .toString().trimmed().toLower();
+    const QString requestedBitrateMode = conversionRequest.bitrateMode;
     if (conversionRequest.bitrateMode != QStringLiteral("cbr")
         && conversionRequest.bitrateMode != QStringLiteral("vbr")) {
         return failPreflight(QStringLiteral("Invalid bitrateMode: %1")
+                                 .arg(conversionRequest.bitrateMode));
+    }
+    const QVariantList supportedBitrateModes = capability.value(
+        QStringLiteral("bitrateModes")).toList();
+    QSet<QString> supportedBitrateModeKeys;
+    for (const QVariant& mode : supportedBitrateModes) {
+        supportedBitrateModeKeys.insert(
+            mode.toMap().value(QStringLiteral("key")).toString());
+    }
+    const bool resolvesUnusedBitrateMode = supportedBitrateModeKeys.isEmpty();
+    if (resolvesUnusedBitrateMode) {
+        conversionRequest.bitrateMode.clear();
+    } else if (!supportedBitrateModeKeys.contains(
+                   conversionRequest.bitrateMode)) {
+        return failPreflight(QStringLiteral("Unsupported bitrateMode: %1")
                                  .arg(conversionRequest.bitrateMode));
     }
     bool validNumber = false;
@@ -1200,37 +1244,44 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         }
     }
     conversionRequest.outputDirectory = request.value(
-        QStringLiteral("outputDir")).toString();
-    const QFileInfo outputDirectoryInfo(conversionRequest.outputDirectory);
-    if (!conversionRequest.outputDirectory.isEmpty()
-        && outputDirectoryInfo.exists() && !outputDirectoryInfo.isDir()) {
-        return failPreflight(QStringLiteral("Invalid outputDir: not a directory"));
+        QStringLiteral("outputDir")).toString().trimmed();
+    if (!conversionRequest.outputDirectory.isEmpty()) {
+        conversionRequest.outputDirectory = QDir::cleanPath(
+            QFileInfo(conversionRequest.outputDirectory).absoluteFilePath());
+        if (!QDir().mkpath(conversionRequest.outputDirectory)) {
+            return failPreflight(
+                QStringLiteral("Invalid outputDir: cannot create directory"));
+        }
+        const QFileInfo outputDirectoryInfo(
+            conversionRequest.outputDirectory);
+        if (!outputDirectoryInfo.isDir()) {
+            return failPreflight(
+                QStringLiteral("Invalid outputDir: not a directory"));
+        }
+        if (!outputDirectoryInfo.isWritable()) {
+            return failPreflight(
+                QStringLiteral("Invalid outputDir: directory is not writable"));
+        }
     }
     conversionRequest.conflictPolicy = conflictPolicy;
     conversionRequest.keepMetadata = request.value(
         QStringLiteral("keepMetadata"), true).toBool();
     conversionRequest.keepCover = request.value(
         QStringLiteral("keepCover"), false).toBool();
+    if (conversionRequest.keepMetadata
+        && !capability.value(QStringLiteral("supportsMetadata")).toBool()) {
+        return failPreflight(QStringLiteral(
+            "Unsupported keepMetadata for output format: %1").arg(format));
+    }
+    if (conversionRequest.keepCover
+        && !capability.value(QStringLiteral("supportsCover")).toBool()) {
+        return failPreflight(QStringLiteral(
+            "Unsupported keepCover for output format: %1").arg(format));
+    }
     conversionRequest.preserveDirectories = request.value(
         QStringLiteral("preserveDirectories"), false).toBool();
     conversionRequest.extractAudio = request.value(
         QStringLiteral("extractAudio"), false).toBool();
-
-    QSet<QString> checkedIds;
-    for (int row = 0; row < taskModel_->rowCount(); ++row) {
-        if (taskModel_->taskAt(row).value(QStringLiteral("checked")).toBool()) {
-            checkedIds.insert(taskModel_->taskIdAt(row));
-        }
-    }
-    QList<FileEntry> selectedEntries;
-    {
-        QMutexLocker lock(&mutex_);
-        for (const FileEntry& entry : entries_) {
-            if (checkedIds.contains(entry.taskId)) {
-                selectedEntries.append(entry);
-            }
-        }
-    }
 
     static const QUuid taskNamespace(
         QStringLiteral("{76df29bf-589f-4dc4-a64a-9938f8b862d8}"));
@@ -1278,6 +1329,15 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         batch = build_format_conversion_plan(inputs, conversionRequest);
     } else {
         batch.fatalError = probeError;
+    }
+    if (resolvesUnusedBitrateMode && batch.ready) {
+        for (FormatTaskPlan& task : batch.tasks) {
+            task.differences.push_back({
+                QStringLiteral("bitrateMode"), requestedBitrateMode, QString(),
+                QStringLiteral("Output format does not use bitrate modes"),
+                true});
+        }
+        batch.requiresConfirmation = true;
     }
     if (adjustsOpusSampleRate && batch.ready) {
         for (FormatTaskPlan& task : batch.tasks) {
@@ -2183,8 +2243,11 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                 }
                 QFile::remove(stagedPath + QStringLiteral(".agbak"));
             }
-            if (!commit_staged_output(stagedPath, outputPath,
-                                      jobOverwriteExisting)) {
+            const auto commitMode = jobOverwriteExisting
+                ? format_converter_detail::OutputCommitMode::Overwrite
+                : format_converter_detail::OutputCommitMode::CreateNoReplace;
+            if (!format_converter_detail::commit_staged_output(
+                    stagedPath, outputPath, commitMode)) {
                 QFile::remove(stagedPath);
                 complete(FileStatus::Error,
                          tr("无法安全写入输出文件：%1").arg(outputPath));
