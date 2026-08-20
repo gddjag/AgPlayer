@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -86,27 +87,67 @@ void LibraryNavigationModelTest::updatesOnlyAffectedDirectoryCountsForTenThousan
     const QString rootId = QStringLiteral("root:")
         + QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(root).absoluteFilePath()));
     QVERIFY(navigation.setExpanded(rootId, true));
+    const QString albumId = QStringLiteral("folder:")
+        + QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(album).absoluteFilePath()));
+    QVERIFY(tags.createTag(QStringLiteral("Road")));
     QSignalSpy changed(&navigation, &QAbstractItemModel::dataChanged);
     QSignalSpy reset(&navigation, &QAbstractItemModel::modelReset);
+    QSignalSpy insertedRows(&navigation, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removedRows(&navigation, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy aboutToRemoveRows(&navigation, &QAbstractItemModel::rowsAboutToBeRemoved);
+    const auto countFor = [&navigation](const QString& nodeId) {
+        for (int row = 0; row < navigation.rowCount(); ++row) {
+            const QModelIndex index = navigation.index(row, 0);
+            if (navigation.data(index, LibraryNavigationModel::NodeIdRole).toString() == nodeId) {
+                return navigation.data(index, LibraryNavigationModel::CountRole).toInt();
+            }
+        }
+        return -1;
+    };
+    const auto changedNodes = [&navigation, &changed] {
+        QSet<QString> nodeIds;
+        for (const QList<QVariant>& arguments : changed) {
+            const QModelIndex first = arguments.at(0).value<QModelIndex>();
+            const QModelIndex last = arguments.at(1).value<QModelIndex>();
+            for (int row = first.row(); row <= last.row(); ++row) {
+                nodeIds.insert(navigation.data(navigation.index(row, 0),
+                                               LibraryNavigationModel::NodeIdRole).toString());
+            }
+        }
+        return nodeIds;
+    };
 
     TrackRecord inserted;
     inserted.trackId = QStringLiteral("inserted");
     inserted.path = QDir(album).filePath(QStringLiteral("inserted.mp3"));
     QVERIFY(library.append(inserted));
-    QCOMPARE(navigation.lastIncrementalTrackVisits(), 1);
-    QCOMPARE(changed.count(), 3); // library, root, and expanded album only
+    QCOMPARE(changedNodes(), QSet<QString>({QStringLiteral("library:all"), rootId, albumId}));
+    QCOMPARE(countFor(QStringLiteral("library:all")), 10'001);
+    QCOMPARE(countFor(rootId), 10'001);
+    QCOMPARE(countFor(albumId), 10'001);
     QCOMPARE(reset.count(), 0);
+    QCOMPARE(insertedRows.count(), 0);
+    QCOMPARE(removedRows.count(), 0);
+    QCOMPARE(aboutToRemoveRows.count(), 0);
 
     changed.clear();
     QVERIFY(library.setTags(QStringLiteral("track-0"), {QStringLiteral("Road")}));
-    QCOMPARE(navigation.lastIncrementalTrackVisits(), 0);
+    QCOMPARE(changed.count(), 0);
     QCOMPARE(reset.count(), 0);
+    QCOMPARE(insertedRows.count(), 0);
+    QCOMPARE(removedRows.count(), 0);
+    QCOMPARE(aboutToRemoveRows.count(), 0);
 
     changed.clear();
     QVERIFY(library.removeTrack(QStringLiteral("inserted")));
-    QCOMPARE(navigation.lastIncrementalTrackVisits(), 1);
-    QCOMPARE(changed.count(), 3);
+    QCOMPARE(changedNodes(), QSet<QString>({QStringLiteral("library:all"), rootId, albumId}));
+    QCOMPARE(countFor(QStringLiteral("library:all")), 10'000);
+    QCOMPARE(countFor(rootId), 10'000);
+    QCOMPARE(countFor(albumId), 10'000);
     QCOMPARE(reset.count(), 0);
+    QCOMPARE(insertedRows.count(), 0);
+    QCOMPARE(removedRows.count(), 0);
+    QCOMPARE(aboutToRemoveRows.count(), 0);
 
     const QString movedFolder = QDir(root).filePath(QStringLiteral("moved"));
     QVERIFY(QDir().mkpath(movedFolder));
@@ -116,9 +157,13 @@ void LibraryNavigationModelTest::updatesOnlyAffectedDirectoryCountsForTenThousan
     moved.close();
     changed.clear();
     QVERIFY(library.updateTrackPath(QStringLiteral("track-0"), movedPath));
-    QCOMPARE(navigation.lastIncrementalTrackVisits(), 1);
-    QCOMPARE(changed.count(), 1); // the expanded album alone loses one track
+    QCOMPARE(changedNodes(), QSet<QString>({albumId}));
+    QCOMPARE(countFor(rootId), 10'000);
+    QCOMPARE(countFor(albumId), 9'999);
     QCOMPARE(reset.count(), 0);
+    QCOMPARE(insertedRows.count(), 0);
+    QCOMPARE(removedRows.count(), 0);
+    QCOMPARE(aboutToRemoveRows.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(LibraryNavigationModelTest)

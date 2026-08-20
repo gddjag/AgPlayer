@@ -27,7 +27,6 @@ public:
     Q_INVOKABLE bool setExpanded(const QString& nodeId, bool expanded);
     Q_INVOKABLE bool addResourceFolder(const QUrl& folder);
     Q_INVOKABLE bool removeResourceFolder(const QString& folder);
-    int lastIncrementalTrackVisits() const noexcept;
 
 private:
     struct Node {
@@ -67,5 +66,4 @@ private:
     QPointer<LibraryManagerController> manager_;
     QList<Node> nodes_;
     QHash<QString, TrackState> trackStates_;
-    int lastIncrementalTrackVisits_ = 0;
 };

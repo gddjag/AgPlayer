@@ -133,11 +133,6 @@ bool LibraryNavigationModel::removeResourceFolder(const QString& folder)
     return manager_ != nullptr && manager_->removeMonitoredFolder(folder);
 }
 
-int LibraryNavigationModel::lastIncrementalTrackVisits() const noexcept
-{
-    return lastIncrementalTrackVisits_;
-}
-
 QString LibraryNavigationModel::navigationNodeId(const QString& type,
                                                  const QString& stableValue)
 {
@@ -207,7 +202,6 @@ void LibraryNavigationModel::rebuildTrackStates()
 void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
 {
     if (library_ == nullptr) return;
-    lastIncrementalTrackVisits_ = 0;
     int favoriteDelta = 0;
     for (int row = first; row <= last; ++row) {
         const QModelIndex sourceIndex = library_->index(row, 0);
@@ -218,7 +212,6 @@ void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
         trackStates_.insert(trackId, {path, favorite});
         applyPathDelta(path, 1);
         favoriteDelta += favorite ? 1 : 0;
-        ++lastIncrementalTrackVisits_;
     }
     for (int row = 0; row < nodes_.size(); ++row) {
         if (nodes_.at(row).nodeType == QStringLiteral("library")) {
@@ -231,7 +224,6 @@ void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
 
 void LibraryNavigationModel::handleRowsAboutToBeRemoved(const int first, const int last)
 {
-    lastIncrementalTrackVisits_ = 0;
     int favoriteDelta = 0;
     for (int row = first; row <= last; ++row) {
         const QModelIndex sourceIndex = library_->index(row, 0);
@@ -240,7 +232,6 @@ void LibraryNavigationModel::handleRowsAboutToBeRemoved(const int first, const i
         applyPathDelta(state.path, -1);
         favoriteDelta -= state.favorite ? 1 : 0;
         trackStates_.remove(trackId);
-        ++lastIncrementalTrackVisits_;
     }
     for (int row = 0; row < nodes_.size(); ++row) {
         if (nodes_.at(row).nodeType == QStringLiteral("library")) {
@@ -257,7 +248,6 @@ void LibraryNavigationModel::handleDataChanged(const QModelIndex& first,
 {
     const bool pathChanged = roles.isEmpty() || roles.contains(LibraryModel::PathRole);
     const bool favoriteChanged = roles.isEmpty() || roles.contains(LibraryModel::FavoriteRole);
-    lastIncrementalTrackVisits_ = 0;
     if (library_ == nullptr || (!pathChanged && !favoriteChanged)) return;
     for (int row = first.row(); row <= last.row(); ++row) {
         const QModelIndex sourceIndex = library_->index(row, 0);
@@ -270,7 +260,6 @@ void LibraryNavigationModel::handleDataChanged(const QModelIndex& first,
                 applyPathChange(state.path, nextPath);
                 state.path = nextPath;
             }
-            ++lastIncrementalTrackVisits_;
         }
         if (favoriteChanged) {
             const bool favorite = library_->data(sourceIndex, LibraryModel::FavoriteRole).toBool();
