@@ -13,7 +13,7 @@ agplayer_enable_warnings(dependency_smoke_test)
 add_test(NAME dependency_smoke_test COMMAND dependency_smoke_test)
 set_tests_properties(dependency_smoke_test PROPERTIES
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(bpm_analyzer_test
@@ -30,7 +30,7 @@ agplayer_enable_warnings(bpm_analyzer_test)
 add_test(NAME bpm_analyzer_test COMMAND bpm_analyzer_test)
 set_tests_properties(bpm_analyzer_test PROPERTIES
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(c_api_lifecycle_test
@@ -60,7 +60,7 @@ add_test(NAME format_matrix_test COMMAND format_matrix_test)
 set_tests_properties(format_matrix_test PROPERTIES
     TIMEOUT 120
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(pcm_ring_buffer_test
@@ -154,7 +154,7 @@ add_test(NAME document_writer_test
 set_tests_properties(document_writer_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(time_pitch_session_test
@@ -172,7 +172,7 @@ add_test(NAME time_pitch_session_test
 set_tests_properties(time_pitch_session_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(timeline_snapshot_compatibility_test
@@ -190,7 +190,7 @@ add_test(NAME timeline_snapshot_compatibility_test
 set_tests_properties(timeline_snapshot_compatibility_test PROPERTIES
     TIMEOUT 60
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(recording_session_test
@@ -205,7 +205,7 @@ add_test(NAME recording_session_test COMMAND recording_session_test)
 set_tests_properties(recording_session_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 # Opt-in real-device acceptance executable. It is deliberately not registered
@@ -261,7 +261,7 @@ agplayer_enable_warnings(playback_session_test)
 add_test(NAME playback_session_test COMMAND playback_session_test)
 set_tests_properties(playback_session_test PROPERTIES
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(fixture_generator
@@ -308,7 +308,7 @@ add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(decoder_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(waveform_analyzer_test
@@ -343,7 +343,7 @@ add_test(NAME waveform_cache_test
 set_tests_properties(waveform_cache_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(audio_engine_test
@@ -389,7 +389,7 @@ add_test(NAME transcoder_test COMMAND transcoder_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(transcoder_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(transcode_verifier_test
@@ -407,7 +407,7 @@ add_test(NAME transcode_verifier_test
 set_tests_properties(transcode_verifier_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(transcode_v2_api_test
@@ -422,7 +422,7 @@ add_test(NAME transcode_v2_api_test
 set_tests_properties(transcode_v2_api_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(transcode_capability_test
@@ -443,7 +443,7 @@ add_test(NAME transcode_capability_test COMMAND transcode_capability_test)
 set_tests_properties(transcode_capability_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(pitch_shifter_test
@@ -461,7 +461,7 @@ add_test(NAME pitch_shifter_test COMMAND pitch_shifter_test "${SINE_WAV_FIXTURE}
 set_tests_properties(pitch_shifter_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(metadata_writer_test
@@ -482,7 +482,7 @@ set_tests_properties(metadata_writer_test PROPERTIES
     # shared decoder fixture. Keep it isolated from QML metadata readers.
     RUN_SERIAL TRUE
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(queue_gapless_test
@@ -505,7 +505,7 @@ add_test(NAME queue_gapless_test
 set_tests_properties(queue_gapless_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(recovery_test
@@ -569,7 +569,7 @@ foreach(qt_test IN ITEMS
     set_tests_properties(${qt_test} PROPERTIES
         TIMEOUT 10
         ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
     )
 endforeach()
 
@@ -666,6 +666,12 @@ set_tests_properties(audio_editor_waveform_item_test PROPERTIES
 set_tests_properties(waveform_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+set_tests_properties(native_drop_router_test PROPERTIES
+    # Native drag-and-drop is a qwindows integration contract.  Pin the
+    # platform explicitly so an offscreen parent test environment cannot
+    # silently disable the native path.
+    ENVIRONMENT "QT_QPA_PLATFORM=windows"
+)
 
 add_test(
     NAME translation_catalog_test
@@ -719,7 +725,7 @@ set_tests_properties(qml_waveform_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(qml_main_window_test
@@ -745,7 +751,7 @@ set_tests_properties(qml_main_window_test PROPERTIES
     TIMEOUT 35
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(qml_mini_player_test
@@ -770,7 +776,7 @@ set_tests_properties(qml_mini_player_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(qml_error_states_test
@@ -795,7 +801,7 @@ set_tests_properties(qml_error_states_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(qml_audio_tools_test
@@ -823,7 +829,7 @@ set_tests_properties(qml_format_converter_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_test(NAME qml_filename_process_test
@@ -832,7 +838,7 @@ set_tests_properties(qml_filename_process_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_test(NAME qml_metadata_editor_test
@@ -841,7 +847,7 @@ set_tests_properties(qml_metadata_editor_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_test(NAME metadata_editor_layout_contract_test
@@ -899,7 +905,7 @@ add_dependencies(replay_gain_scanner_test decoder_fixture)
 set_tests_properties(replay_gain_scanner_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(library_stress_test
@@ -916,7 +922,7 @@ set_tests_properties(library_stress_test PROPERTIES
     TIMEOUT 120
     ENVIRONMENT "AGPLAYER_STRESS_COUNT=64"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_executable(track_waveform_thumbnail_stress_test
@@ -937,7 +943,7 @@ set_tests_properties(track_waveform_thumbnail_stress_test PROPERTIES
     TIMEOUT 60
     LABELS stress
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_test(NAME track_waveform_thumbnail_contract_test
@@ -961,7 +967,7 @@ set_tests_properties(library_model_stress_test PROPERTIES
     TIMEOUT 30
     LABELS stress
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 if (WIN32)
@@ -1021,7 +1027,7 @@ if (WIN32)
     set_tests_properties(single_instance_test PROPERTIES
         TIMEOUT 20
         ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
     )
 
     add_test(
