@@ -1347,7 +1347,24 @@ private:
                         }
                     }
                     decode_eof_.store(true, std::memory_order_release);
-                    return;
+                    // Keep the decoder-owning thread parked at EOF. A later
+                    // seek can then wake it and reuse the open decoder instead
+                    // of paying for a thread join/restart on every scrub near
+                    // the end of a short track. The wait is dormant (zero
+                    // polling CPU) and stop/unload wakes it through seek_cv_.
+                    {
+                        std::unique_lock<std::mutex> lock(seek_mutex_);
+                        seek_cv_.wait(lock, [this] {
+                            return seek_requested_.load(
+                                       std::memory_order_acquire)
+                                   || stop_decode_.load(
+                                          std::memory_order_acquire);
+                        });
+                    }
+                    if (stop_decode_.load(std::memory_order_acquire)) {
+                        return;
+                    }
+                    continue;
                 }
 
                 bool seek_preempted = false;

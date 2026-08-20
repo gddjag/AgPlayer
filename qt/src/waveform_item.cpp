@@ -834,22 +834,14 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             std::ceil(std::max(
                 0.0, width() * devicePixelRatio * density_ / 2.0))));
 
-    // Use the mix layer for geometry sizing when available; otherwise use the
-    // first present frequency layer so all layers share the same point count.
-    const std::vector<float>* sizeReference = nullptr;
-    if (hasMix) {
-        sizeReference = &snapshot->mix->values;
-    } else if (hasBass) {
-        sizeReference = &snapshot->bass->values;
-    } else if (hasMid) {
-        sizeReference = &snapshot->mid->values;
-    } else {
-        sizeReference = &snapshot->high->values;
-    }
-    const std::size_t rawPeakCount = sizeReference->size();
     const std::size_t peakCount = visualMode_ == 2
         ? renderedSpectrumBarCount(width(), devicePixelRatio)
-        : std::min(rawPeakCount, maxPoints);
+        // The analysed waveform stays immutable at its compact source
+        // resolution.  Map it onto the complete display budget here so a
+        // wider player gains visual detail instead of stretching a sparse
+        // set of vertical lines.  resampleValues() interpolates on expansion
+        // and preserves extrema when several source buckets share a pixel.
+        : maxPoints;
 
     const unsigned char layerMask =
         (hasMix ? 1U : 0U)
