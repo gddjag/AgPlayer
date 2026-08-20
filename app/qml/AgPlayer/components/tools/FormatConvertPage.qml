@@ -101,7 +101,7 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 8
+        spacing: 5
 
         Rectangle {
             id: toolbar

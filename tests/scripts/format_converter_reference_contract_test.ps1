@@ -66,6 +66,14 @@ if ($combined -notmatch 'taskId' -or
 if ($table -notmatch 'columnWidths:\s*\[\s*62,\s*260,\s*120,\s*100,\s*115,\s*130,\s*120,\s*120,\s*190\s*\]') {
     throw 'The reference-width task table must fit its progress percentage before the settings boundary.'
 }
+if ($table -notmatch 'objectName:[^\n]*"formatHeaderCell-"\s*\+\s*index' -or
+    $table -notmatch 'anchors\.leftMargin:\s*index\s*===\s*1\s*\?\s*30\s*:\s*10') {
+    throw 'The filename header must align with the reference column without moving task rows.'
+}
+if ($page -notmatch 'ColumnLayout\s*\{\s*anchors\.fill:\s*parent\s*spacing:\s*5' -or
+    $page -notmatch 'RowLayout\s*\{\s*Layout\.fillWidth:\s*true\s*Layout\.fillHeight:\s*true\s*spacing:\s*8') {
+    throw 'The main row must move up while preserving the task/settings horizontal gap.'
+}
 if ($table -notmatch 'formatTaskFirstFileIconBadge' -or
     $table -notmatch 'formatTaskFirstFileIcon' -or
     $table -notmatch 'Theme\.icon\("file-music-fill"\)') {

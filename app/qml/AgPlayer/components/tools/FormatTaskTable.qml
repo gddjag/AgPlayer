@@ -75,6 +75,7 @@ Rectangle {
                 Repeater {
                     model: ["", qsTr("文件名"), qsTr("原格式"), qsTr("时长"), qsTr("采样率"), qsTr("码率"), qsTr("输出格式"), qsTr("状态"), qsTr("进度")]
                     Item {
+                        objectName: "formatHeaderCell-" + index
                         width: root.columnWidths[index]
                         height: 40
                         CheckBox {
@@ -87,7 +88,7 @@ Rectangle {
                         Text {
                             visible: index !== 0
                             anchors.fill: parent
-                            anchors.leftMargin: 10
+                            anchors.leftMargin: index === 1 ? 30 : 10
                             verticalAlignment: Text.AlignVCenter
                             text: modelData
                             color: "#aeb9c1"

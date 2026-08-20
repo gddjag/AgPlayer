@@ -32,8 +32,21 @@ TestCase {
         compare(testCase.height, 941)
         compare(Math.round(toolbar.height), 60)
         compare(Math.round(bottomBar.height), 114)
+        tryVerify(function() {
+            return Math.round(taskPanel.mapToItem(page, 0, 0).y) === 65
+                   && Math.round(settingsPanel.mapToItem(page, 0, 0).y) === 65
+                   && Math.round(bottomBar.mapToItem(page, 0, 0).y) === 827
+        }, 1000)
         verify(settingsPanel.width >= 443 && settingsPanel.width <= 447)
         compare(Math.round(settingsPanel.x - (taskPanel.x + taskPanel.width)), 8)
+        let filenameHeaderCell = null
+        tryVerify(function() {
+            filenameHeaderCell = findChild(page, "formatHeaderCell-1")
+            return filenameHeaderCell && filenameHeaderCell.width > 0
+        }, 1000)
+        const filenameHeaderPosition = filenameHeaderCell.mapToItem(page, 30, 0)
+        verify(Math.round(filenameHeaderPosition.x) >= 92
+               && Math.round(filenameHeaderPosition.x) <= 96)
         verify(findChild(page, "formatSearchField"))
         verify(findChild(page, "formatSelectAllCheck"))
         verify(findChild(page, "formatEncoderBox"))
