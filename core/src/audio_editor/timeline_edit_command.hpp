@@ -11,8 +11,13 @@ class TimelineEditCommand final {
 public:
     [[nodiscard]] static std::optional<TimelineEditCommand> move(
         const EventTimeline& timeline, EventId id, SampleFrame timelineStart);
+    [[nodiscard]] static std::optional<TimelineEditCommand> move(
+        const TimelineSnapshot& timeline, EventId id, SampleFrame timelineStart);
     [[nodiscard]] static std::optional<TimelineEditCommand> trim(
         const EventTimeline& timeline, EventId id, SampleFrame sourceStart,
+        SampleFrame sourceEnd, SampleFrame timelineStart);
+    [[nodiscard]] static std::optional<TimelineEditCommand> trim(
+        const TimelineSnapshot& timeline, EventId id, SampleFrame sourceStart,
         SampleFrame sourceEnd, SampleFrame timelineStart);
 
     [[nodiscard]] bool execute(EventTimeline& timeline) const;

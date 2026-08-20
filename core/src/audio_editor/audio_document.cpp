@@ -138,6 +138,10 @@ AudioDocument AudioDocument::fromSource(AudioSource source)
     auto shared_source = std::make_shared<const AudioSource>(std::move(source));
     document.state_.spans.push_back(
         AudioSpan{shared_source, 0, shared_source->total_frames});
+    if (!document.timeline_.insert(AudioEvent{1, shared_source, 0,
+                                              shared_source->total_frames, 0})) {
+        document.state_.spans.clear();
+    }
     return document;
 }
 
@@ -276,6 +280,9 @@ bool AudioDocument::replaceRangeWithSource(
 
 SampleFrame AudioDocument::totalFrames() const noexcept
 {
+    if (timeline_metadata_active_) {
+        return timeline_.totalFrames();
+    }
     return spanFrames(state_.spans);
 }
 
@@ -388,6 +395,25 @@ void AudioDocument::commit(State candidate)
     undo_stack_.push_back(state_);
     state_ = std::move(candidate);
     redo_stack_.clear();
+    timeline_metadata_active_ = false;
+}
+
+bool AudioDocument::executeTimelineEdit(const TimelineEditCommand& command)
+{
+    if (!command.execute(timeline_)) {
+        return false;
+    }
+    timeline_metadata_active_ = true;
+    return true;
+}
+
+bool AudioDocument::undoTimelineEdit(const TimelineEditCommand& command)
+{
+    if (!command.undo(timeline_)) {
+        return false;
+    }
+    timeline_metadata_active_ = true;
+    return true;
 }
 
 bool AudioDocument::apply(const EditCommand& command)

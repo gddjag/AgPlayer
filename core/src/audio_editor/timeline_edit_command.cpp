@@ -8,14 +8,24 @@ std::optional<TimelineEditCommand> TimelineEditCommand::move(
     const EventTimeline& timeline, const EventId id,
     const SampleFrame timeline_start)
 {
-    const AudioEvent* const before = timeline.event(id);
-    if (!before || before->timelineStart == timeline_start) {
+    return move(timeline.snapshot(), id, timeline_start);
+}
+
+std::optional<TimelineEditCommand> TimelineEditCommand::move(
+    const TimelineSnapshot& timeline, const EventId id,
+    const SampleFrame timeline_start)
+{
+    const auto found = std::find_if(
+        timeline.events.begin(), timeline.events.end(), [id](const AudioEvent& event) {
+            return event.id == id;
+        });
+    if (found == timeline.events.end() || found->timelineStart == timeline_start) {
         return std::nullopt;
     }
 
-    AudioEvent after = *before;
+    AudioEvent after = *found;
     after.timelineStart = timeline_start;
-    return TimelineEditCommand{Kind::Move, *before, std::move(after)};
+    return TimelineEditCommand{Kind::Move, *found, std::move(after)};
 }
 
 std::optional<TimelineEditCommand> TimelineEditCommand::trim(
@@ -23,18 +33,29 @@ std::optional<TimelineEditCommand> TimelineEditCommand::trim(
     const SampleFrame source_start, const SampleFrame source_end,
     const SampleFrame timeline_start)
 {
-    const AudioEvent* const before = timeline.event(id);
-    if (!before || (before->sourceStart == source_start
-                    && before->sourceEnd == source_end
-                    && before->timelineStart == timeline_start)) {
+    return trim(timeline.snapshot(), id, source_start, source_end, timeline_start);
+}
+
+std::optional<TimelineEditCommand> TimelineEditCommand::trim(
+    const TimelineSnapshot& timeline, const EventId id,
+    const SampleFrame source_start, const SampleFrame source_end,
+    const SampleFrame timeline_start)
+{
+    const auto found = std::find_if(
+        timeline.events.begin(), timeline.events.end(), [id](const AudioEvent& event) {
+            return event.id == id;
+        });
+    if (found == timeline.events.end() || (found->sourceStart == source_start
+                                           && found->sourceEnd == source_end
+                                           && found->timelineStart == timeline_start)) {
         return std::nullopt;
     }
 
-    AudioEvent after = *before;
+    AudioEvent after = *found;
     after.sourceStart = source_start;
     after.sourceEnd = source_end;
     after.timelineStart = timeline_start;
-    return TimelineEditCommand{Kind::Trim, *before, std::move(after)};
+    return TimelineEditCommand{Kind::Trim, *found, std::move(after)};
 }
 
 bool TimelineEditCommand::execute(EventTimeline& timeline) const
