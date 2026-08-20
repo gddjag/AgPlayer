@@ -12,9 +12,6 @@ add_library(agplayer_core STATIC
     src/audio_editor/document_renderer.hpp
     src/audio_editor/document_writer.cpp
     src/audio_editor/document_writer.hpp
-    src/audio_editor/edit_command.hpp
-    src/audio_editor/noise_reducer.cpp
-    src/audio_editor/noise_reducer.hpp
     src/audio_editor/peak_pyramid.cpp
     src/audio_editor/peak_pyramid.hpp
     src/audio_editor/recording_session.cpp

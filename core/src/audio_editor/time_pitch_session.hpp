@@ -31,12 +31,6 @@ public:
     [[nodiscard]] int pitchCents() const noexcept { return pitch_cents_; }
 
     [[nodiscard]] TimePitchResult process(
-        const DocumentSnapshot& snapshot,
-        const std::filesystem::path& output,
-        std::optional<Selection> range = std::nullopt,
-        const std::atomic_bool* cancelled = nullptr,
-        std::function<void(float)> progress = {}) const;
-    [[nodiscard]] TimePitchResult process(
         const TimelineSnapshot& snapshot,
         const std::filesystem::path& output,
         std::optional<Selection> range = std::nullopt,

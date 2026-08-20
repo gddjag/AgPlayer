@@ -91,6 +91,22 @@ set_tests_properties(audio_document_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(event_edit_test
+    core/event_edit_test.cpp
+)
+set_target_properties(event_edit_test PROPERTIES AUTOMOC ON)
+target_include_directories(event_edit_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(event_edit_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(event_edit_test)
+add_test(NAME event_edit_test COMMAND event_edit_test)
+set_tests_properties(event_edit_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 add_executable(audio_event_test
     core/audio_event_test.cpp
 )

@@ -4,7 +4,6 @@
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/document_renderer.hpp"
 #include "audio_editor/document_writer.hpp"
-#include "audio_editor/noise_reducer.hpp"
 #include "bpm_analyzer.hpp"
 #include "transcode_capability.hpp"
 
@@ -28,12 +27,8 @@ using agplayer::editor::AudioDocument;
 using agplayer::editor::AudioFileAnalysis;
 using agplayer::editor::AudioFileAnalyzer;
 using agplayer::editor::AudioSource;
-using agplayer::editor::AudioSpan;
 using agplayer::editor::DocumentRenderer;
 using agplayer::editor::DocumentWriter;
-using agplayer::editor::DocumentSnapshot;
-using agplayer::editor::EditCommand;
-using agplayer::editor::NoiseReducer;
 using agplayer::editor::Selection;
 using agplayer::editor::WriteRequest;
 
@@ -626,7 +621,6 @@ AudioEditorController::~AudioEditorController()
     if (recording_start_watcher_) recording_start_watcher_->future().waitForFinished();
     if (recording_stop_watcher_) recording_stop_watcher_->future().waitForFinished();
     if (bpm_watcher_) bpm_watcher_->future().waitForFinished();
-    if (noise_reduction_watcher_) noise_reduction_watcher_->future().waitForFinished();
     if (preview_watcher_) preview_watcher_->future().waitForFinished();
     if (recording()) (void)recording_session_.stop();
     if (player_) {
@@ -723,19 +717,19 @@ bool AudioEditorController::busy() const noexcept
 
 qint64 AudioEditorController::selectionStart() const noexcept
 {
-    const auto selection = document_.snapshot().selection;
+    const auto selection = document_.selection();
     return selection ? selection->start : -1;
 }
 
 qint64 AudioEditorController::selectionEnd() const noexcept
 {
-    const auto selection = document_.snapshot().selection;
+    const auto selection = document_.selection();
     return selection ? selection->end : -1;
 }
 
 qint64 AudioEditorController::selectionFrames() const noexcept
 {
-    const auto selection = document_.snapshot().selection;
+    const auto selection = document_.selection();
     return selection ? selection->end - selection->start : 0;
 }
 
@@ -871,7 +865,7 @@ bool AudioEditorController::saveAs(const QUrl& target)
     setState(EditorSessionState::Saving);
     setProgress(0.0);
     WriteRequest request;
-    request.snapshot = document_.snapshot();
+    request.snapshot = document_.timelineSnapshot();
     request.output_path = std::filesystem::path(path.toStdWString());
     operation_cancelled_.store(false, std::memory_order_release);
     auto* watcher = new QFutureWatcher<agplayer::editor::WriteResult>(this);
@@ -915,7 +909,7 @@ bool AudioEditorController::exportTo(
     const bool keepMetadata, const bool variableBitRate, const int quality)
 {
     const QString path = local_path(target);
-    const auto selection = document_.snapshot().selection;
+    const auto selection = document_.selection();
     if (!has_document_ || path.isEmpty() || (selectionOnly && !selection)) {
         setError(tr("导出范围或路径无效"));
         return false;
@@ -933,7 +927,7 @@ bool AudioEditorController::exportTo(
     setState(EditorSessionState::Exporting);
     setProgress(0.0);
     WriteRequest request;
-    request.snapshot = document_.snapshot();
+    request.snapshot = document_.timelineSnapshot();
     request.output_path = std::filesystem::path(path.toStdWString());
     request.codec_name = codecName.toStdString();
     if (!source_path_.isEmpty()) {
@@ -1007,87 +1001,66 @@ void AudioEditorController::cancelOperation()
     preview_generation_.fetch_add(1, std::memory_order_acq_rel);
 }
 
-bool AudioEditorController::insertSilence(
-    const qint64 frame, const qint64 frameCount)
+bool AudioEditorController::moveEvent(const quint64 id, const qint64 timelineStart)
 {
-    return runDocumentCommand(EditCommand::insertSilence(frame, frameCount));
+    if (!has_document_ || busy()
+        || !document_.moveEvent(static_cast<agplayer::editor::EventId>(id),
+                                timelineStart)) return false;
+    modified_ = true;
+    playback_path_.clear();
+    viewport_.setDocumentFrames(document_.totalFrames());
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
+    return true;
 }
 
-bool AudioEditorController::applyGain(const double decibels)
+bool AudioEditorController::trimEvent(const quint64 id, const qint64 sourceStart,
+                                      const qint64 sourceEnd,
+                                      const qint64 timelineStart)
 {
-    if (!std::isfinite(decibels) || decibels < -60.0 || decibels > 24.0) {
+    if (!has_document_ || busy()
+        || !document_.trimEvent(static_cast<agplayer::editor::EventId>(id),
+                                sourceStart, sourceEnd, timelineStart)) return false;
+    modified_ = true;
+    playback_path_.clear();
+    viewport_.setDocumentFrames(document_.totalFrames());
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
+    return true;
+}
+
+bool AudioEditorController::splitEvent(const quint64 id, const qint64 frame)
+{
+    if (!has_document_ || busy()
+        || !document_.splitEventAt(static_cast<agplayer::editor::EventId>(id), frame)) {
         return false;
     }
-    return runDocumentCommand(EditCommand::gain(
-        static_cast<float>(std::pow(10.0, decibels / 20.0))));
+    modified_ = true;
+    playback_path_.clear();
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
+    return true;
 }
 
-bool AudioEditorController::reduceNoise()
+bool AudioEditorController::mergeEvents(const quint64 left, const quint64 right)
 {
-    if (!has_document_ || busy() || noise_reduction_watcher_
-        || !preview_directory_.isValid()) return false;
-    stopPlayback();
-    const auto snapshot = document_.snapshot();
-    const auto range = snapshot.selection;
-    const Selection replacement = range.value_or(
-        Selection{0, document_.totalFrames()});
-    const QString output = preview_directory_.filePath(
-        QStringLiteral("noise-reduced-%1.wav").arg(
-            QDateTime::currentMSecsSinceEpoch()));
-    operation_cancelled_.store(false, std::memory_order_release);
-    setProgress(0.0);
-    setError({});
-    setState(EditorSessionState::Processing);
-    auto* watcher = new QFutureWatcher<agplayer::editor::NoiseReductionResult>(this);
-    noise_reduction_watcher_ = watcher;
-    connect(watcher,
-            &QFutureWatcher<agplayer::editor::NoiseReductionResult>::finished,
-            this, [this, watcher, replacement] {
-        noise_reduction_watcher_ = nullptr;
-        const auto result = watcher->result();
-        watcher->deleteLater();
-        if (!result.success) {
-            const bool was_cancelled = operation_cancelled_.load(
-                std::memory_order_acquire);
-            setState(EditorSessionState::Ready);
-            setError(was_cancelled ? tr("操作已取消")
-                : QString::fromStdString(result.message));
-            return;
-        }
-        AudioSource source{result.output_path, result.sample_rate,
-                           result.channels, result.frames};
-        if (!document_.replaceRangeWithSource(source, replacement)) {
-            setState(EditorSessionState::Error);
-            setError(tr("无法提交降噪结果"));
-            return;
-        }
-        const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(
-            result.output_path, 2'048);
-        if (analysis.success) {
-            source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
-        }
-        modified_ = true;
-        playback_path_.clear();
-        viewport_.setDocumentFrames(document_.totalFrames());
-        rebuildEditorPeaks();
-        setProgress(1.0);
-        setState(EditorSessionState::Ready);
-        refreshActions();
-        emit waveformChanged();
-        emit documentChanged();
-    });
-    const QPointer<AudioEditorController> guard(this);
-    watcher->setFuture(QtConcurrent::run(
-        [this, snapshot, range, output, guard] {
-        return NoiseReducer::reduce(snapshot, range,
-            std::filesystem::path(output.toStdWString()),
-            &operation_cancelled_, [guard](const float value) {
-                if (guard) QMetaObject::invokeMethod(
-                    guard, [guard, value] {
-                        if (guard) guard->setProgress(value);
-                    }, Qt::QueuedConnection);
-            });
-    }));
+    if (!has_document_ || busy()
+        || !document_.mergeEvents(static_cast<agplayer::editor::EventId>(left),
+                                  static_cast<agplayer::editor::EventId>(right))) {
+        return false;
+    }
+    modified_ = true;
+    playback_path_.clear();
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
     return true;
 }
 
@@ -1095,7 +1068,7 @@ bool AudioEditorController::detectBpm()
 {
     if (!has_document_ || busy() || bpm_watcher_) return false;
     if (!preview_directory_.isValid()) return false;
-    const auto snapshot = document_.snapshot();
+    const auto snapshot = document_.timelineSnapshot();
     const QString path = preview_directory_.filePath(QStringLiteral("bpm-analysis.wav"));
     setState(EditorSessionState::Processing);
     setError({});
@@ -1117,7 +1090,7 @@ bool AudioEditorController::detectBpm()
     });
     watcher->setFuture(QtConcurrent::run([snapshot, path] {
         const auto rendered = DocumentRenderer{}.renderFloatWav(
-            snapshot, snapshot.selection,
+            snapshot, std::nullopt,
             std::filesystem::path(path.toStdWString()));
         return rendered.success ? analyze_bpm(path) : BpmAnalyzeResult{};
     }));
@@ -1174,76 +1147,6 @@ bool AudioEditorController::setPitch(const int semitones, const int cents)
         emit timePitchChanged();
     }
     return changed;
-}
-
-bool AudioEditorController::applyTimePitch()
-{
-    if (!has_document_ || !preview_directory_.isValid() || busy()) return false;
-    stopPlayback();
-    setState(EditorSessionState::Processing);
-    const auto snapshot = document_.snapshot();
-    const auto range = snapshot.selection;
-    const QString output = preview_directory_.filePath(
-        QStringLiteral("processed-%1.wav").arg(
-            QDateTime::currentMSecsSinceEpoch()));
-    operation_cancelled_.store(false, std::memory_order_release);
-    const auto parameters = time_pitch_;
-    auto* watcher = new QFutureWatcher<agplayer::editor::TimePitchResult>(this);
-    time_pitch_watcher_ = watcher;
-    connect(watcher, &QFutureWatcher<agplayer::editor::TimePitchResult>::finished,
-            this, [this, watcher, range] {
-        time_pitch_watcher_ = nullptr;
-        const auto result = watcher->result();
-        watcher->deleteLater();
-        if (!result.success) {
-            const bool cancelled = operation_cancelled_.load(
-                std::memory_order_acquire);
-            setState(cancelled ? EditorSessionState::Ready
-                               : EditorSessionState::Error);
-            setError(cancelled ? tr("操作已取消")
-                               : QString::fromStdString(result.message));
-            return;
-        }
-        const Selection replacement = range.value_or(
-            Selection{0, document_.totalFrames()});
-        if (!document_.replaceRangeWithSource(result.source, replacement)) {
-            setState(EditorSessionState::Error);
-            setError(tr("无法提交速度与音高处理结果"));
-            return;
-        }
-        modified_ = true;
-        playback_path_.clear();
-        (void)time_pitch_.setSpeedPercent(100.0);
-        (void)time_pitch_.setPitch(0, 0);
-        time_pitch_preview_active_ = false;
-        viewport_.setDocumentFrames(document_.totalFrames());
-        const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(
-            result.source.path, 2'048);
-        if (analysis.success) {
-            source_channel_peaks_ = to_variant_peaks(analysis.channel_peaks);
-        }
-        clearViewportWaveformCache();
-        rebuildEditorPeaks();
-        setProgress(1.0);
-        setState(EditorSessionState::Ready);
-        setError({});
-        refreshActions();
-        emit waveformChanged();
-        emit documentChanged();
-        emit timePitchChanged();
-    });
-    const QPointer<AudioEditorController> guard(this);
-    watcher->setFuture(QtConcurrent::run(
-        [this, parameters, snapshot, output, range, guard] {
-        return parameters.process(
-            snapshot, std::filesystem::path(output.toStdWString()), range,
-            &operation_cancelled_, [guard](const float value) {
-                if (guard) QMetaObject::invokeMethod(
-                    guard, [guard, value] { if (guard) guard->setProgress(value); },
-                    Qt::QueuedConnection);
-            });
-    }));
-    return true;
 }
 
 void AudioEditorController::refreshRecordingDevices()
@@ -1440,7 +1343,6 @@ bool AudioEditorController::stopRecording()
             modified_ = true;
             playback_path_.clear();
             viewport_.setDocumentFrames(document_.totalFrames());
-            rebuildEditorPeaks();
         } else {
             document_ = AudioDocument::fromSource(analysis.source);
             source_path_ = QString::fromStdWString(result.path.wstring());
@@ -1515,46 +1417,19 @@ bool AudioEditorController::triggerAction(const QString& id)
         return true;
     }
     bool changed = false;
-    if (id == QStringLiteral("editor.undo")) changed = document_.undo();
-    else if (id == QStringLiteral("editor.redo")) changed = document_.redo();
-    else if (id == QStringLiteral("editor.cut")) changed = document_.apply(EditCommand::cutSelection());
-    else if (id == QStringLiteral("editor.copy")) changed = document_.apply(EditCommand::copySelection());
+    if (id == QStringLiteral("editor.cut")) changed = document_.cutSelection();
+    else if (id == QStringLiteral("editor.copy")) changed = document_.copySelection();
     else if (id == QStringLiteral("editor.paste")) {
         const qint64 frame = position_ms_ * sample_rate_ / 1'000;
-        changed = document_.apply(EditCommand::pasteAt(frame));
+        changed = document_.pasteAt(frame);
     }
-    else if (id == QStringLiteral("editor.deleteSelection")) changed = document_.apply(EditCommand::deleteSelection());
-    else if (id == QStringLiteral("editor.cropToSelection")) changed = document_.apply(EditCommand::cropToSelection());
-    else if (id == QStringLiteral("editor.silenceSelection")) changed = document_.apply(EditCommand::silenceSelection());
-    else if (id == QStringLiteral("editor.fadeIn")) changed = document_.apply(EditCommand::fadeIn());
-    else if (id == QStringLiteral("editor.fadeOut")) changed = document_.apply(EditCommand::fadeOut());
+    else if (id == QStringLiteral("editor.deleteSelection")) changed = document_.deleteSelection();
     if (!changed) return false;
     if (id != QStringLiteral("editor.copy")) {
         stopPlayback();
         modified_ = true;
         playback_path_.clear();
-        viewport_.setDocumentFrames(document_.totalFrames());
         clearViewportWaveformCache();
-        rebuildEditorPeaks();
-    }
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
-    return true;
-}
-
-bool AudioEditorController::runDocumentCommand(
-    const EditCommand& command, const bool modifiesDocument)
-{
-    const bool changed = document_.apply(command);
-    if (!changed) return false;
-    if (modifiesDocument) {
-        stopPlayback();
-        modified_ = true;
-        playback_path_.clear();
-        viewport_.setDocumentFrames(document_.totalFrames());
-        clearViewportWaveformCache();
-        rebuildEditorPeaks();
     }
     refreshActions();
     emit waveformChanged();
@@ -1578,7 +1453,7 @@ bool AudioEditorController::preparePlayback()
                       : QStringLiteral("preview.wav"));
         const std::uint64_t generation = preview_generation_.fetch_add(
             1, std::memory_order_acq_rel) + 1;
-        const auto snapshot = document_.snapshot();
+        const auto snapshot = document_.timelineSnapshot();
         const auto parameters = time_pitch_;
         setState(EditorSessionState::Processing);
         auto* watcher = new QFutureWatcher<PreviewRenderResult>(this);
@@ -1649,7 +1524,7 @@ bool AudioEditorController::playPause()
         && main_playback_->state() != PlaybackController::Stopped) {
         main_playback_->stop();
     }
-    const auto selection = document_.snapshot().selection;
+    const auto selection = document_.selection();
     if (selection && sample_rate_ > 0) {
         const qint64 start = selection->start * 1'000 / sample_rate_;
         const qint64 end = selection->end * 1'000 / sample_rate_;
@@ -1763,7 +1638,7 @@ void AudioEditorController::pollPlayback()
             static_cast<double>(snapshot.position_ms)
             * time_pitch_.speedPercent() / 100.0))
         : snapshot.position_ms;
-    const auto selection = document_.snapshot().selection;
+    const auto selection = document_.selection();
     if (selection && sample_rate_ > 0) {
         const qint64 start = selection->start * 1'000 / sample_rate_;
         const qint64 end = selection->end * 1'000 / sample_rate_;
@@ -2192,55 +2067,9 @@ void AudioEditorController::requestViewportWaveform()
         }));
 }
 
-void AudioEditorController::rebuildEditorPeaks()
-{
-    if (source_channel_peaks_.isEmpty() || document_.totalFrames() <= 0) {
-        channel_peaks_.clear();
-        return;
-    }
-    const qsizetype points = source_channel_peaks_.constFirst().toList().size() / 2;
-    QVariantList rebuilt;
-    for (int channel = 0; channel < channels_; ++channel) {
-        const QVariantList source = source_channel_peaks_[
-            std::min<qsizetype>(static_cast<qsizetype>(channel),
-                                source_channel_peaks_.size() - 1)].toList();
-        QVariantList values;
-        values.reserve(points * 2);
-        const auto spans = document_.spans();
-        qint64 cursor = 0;
-        auto span = spans.cbegin();
-        for (qsizetype point = 0; point < points; ++point) {
-            const qint64 frame = document_.totalFrames() * point
-                / std::max<qsizetype>(1, points - 1);
-            while (span != spans.cend() && frame >= cursor + span->frame_count) {
-                cursor += span->frame_count;
-                ++span;
-            }
-            if (span == spans.cend() || span->silent || !span->source) {
-                values.append(0.0F);
-                values.append(0.0F);
-                continue;
-            }
-            const qint64 local = frame - cursor;
-            const qint64 sourceFrame = span->source_start + local;
-            const qsizetype sourcePoint = static_cast<qsizetype>(std::clamp<qint64>(
-                sourceFrame * points / std::max<qint64>(1, span->source->total_frames),
-                0, points - 1));
-            const float ratio = span->frame_count <= 1 ? 0.0F
-                : static_cast<float>(local) / static_cast<float>(span->frame_count - 1);
-            const float gain = span->gain_start
-                + (span->gain_end - span->gain_start) * ratio;
-            values.append(source[sourcePoint * 2].toFloat() * gain);
-            values.append(source[sourcePoint * 2 + 1].toFloat() * gain);
-        }
-        rebuilt.append(QVariant::fromValue(values));
-    }
-    channel_peaks_ = rebuilt;
-}
-
 void AudioEditorController::refreshActions()
 {
-    const bool selection = document_.snapshot().selection.has_value();
+    const bool selection = document_.selection().has_value();
     const bool idle = state_ != EditorSessionState::Saving
         && state_ != EditorSessionState::Exporting
         && state_ != EditorSessionState::Processing
@@ -2251,16 +2080,18 @@ void AudioEditorController::refreshActions()
     actions_.setEnabled(QStringLiteral("editor.newRecording"), idle);
     actions_.setEnabled(QStringLiteral("editor.save"), has_document_ && idle);
     actions_.setEnabled(QStringLiteral("editor.export"), has_document_ && idle);
-    actions_.setEnabled(QStringLiteral("editor.undo"), document_.canUndo() && idle);
-    actions_.setEnabled(QStringLiteral("editor.redo"), document_.canRedo() && idle);
+    actions_.setEnabled(QStringLiteral("editor.undo"), false);
+    actions_.setEnabled(QStringLiteral("editor.redo"), false);
     actions_.setEnabled(QStringLiteral("editor.paste"), document_.hasClipboard() && idle);
     for (const QString& id : {
              QStringLiteral("editor.cut"), QStringLiteral("editor.copy"),
-             QStringLiteral("editor.deleteSelection"),
-             QStringLiteral("editor.cropToSelection"),
-             QStringLiteral("editor.silenceSelection"),
-             QStringLiteral("editor.fadeIn"), QStringLiteral("editor.fadeOut")}) {
+             QStringLiteral("editor.deleteSelection")}) {
         actions_.setEnabled(id, has_document_ && selection && idle);
+    }
+    for (const QString& id : {QStringLiteral("editor.cropToSelection"),
+             QStringLiteral("editor.silenceSelection"), QStringLiteral("editor.fadeIn"),
+             QStringLiteral("editor.fadeOut")}) {
+        actions_.setEnabled(id, false);
     }
 }
 

@@ -16,6 +16,7 @@ struct TimelineSnapshot final {
 class EventTimeline final {
 public:
     [[nodiscard]] bool insert(AudioEvent event);
+    [[nodiscard]] bool replace(std::vector<AudioEvent> events);
     [[nodiscard]] bool moveEvent(EventId id, SampleFrame timelineStart);
     [[nodiscard]] bool trimEvent(EventId id, SampleFrame sourceStart,
                                  SampleFrame sourceEnd,

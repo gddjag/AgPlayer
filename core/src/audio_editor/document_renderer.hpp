@@ -21,12 +21,6 @@ struct RenderResult final {
 class DocumentRenderer final {
 public:
     [[nodiscard]] RenderResult renderFloatWav(
-        const DocumentSnapshot& snapshot,
-        const std::optional<Selection>& range,
-        const std::filesystem::path& output_path,
-        const std::atomic_bool* cancelled = nullptr,
-        std::function<void(float)> progress = {}) const;
-    [[nodiscard]] RenderResult renderFloatWav(
         const TimelineSnapshot& snapshot,
         const std::optional<Selection>& range,
         const std::filesystem::path& output_path,
