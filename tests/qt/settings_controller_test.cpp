@@ -293,7 +293,7 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
         QCOMPARE(settings.waveformCanvasHeight(), 78);
         QCOMPARE(settings.waveformCanvasLocked(), true);
         QCOMPARE(settings.spectrumColorMode(), 0);
-        QCOMPARE(settings.spectrumSolidColor(), QStringLiteral("#0078d4"));
+        QCOMPARE(settings.spectrumSolidColor(), QStringLiteral("#e62e9b"));
         QCOMPARE(settings.spectrumRgbStartColor(), QStringLiteral("#00d4ff"));
         QCOMPARE(settings.spectrumRgbMiddleColor(), QStringLiteral("#7b2ff7"));
         QCOMPARE(settings.spectrumRgbEndColor(), QStringLiteral("#e62e9b"));

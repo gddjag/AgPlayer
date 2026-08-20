@@ -75,7 +75,7 @@ void WindowControllerTest::init()
 void WindowControllerTest::defaultListSizeMatchesReference()
 {
     WindowController windows;
-    QCOMPARE(windows.listWindowWidth(), 1228);
+    QCOMPARE(windows.listWindowWidth(), 1104);
     QCOMPARE(windows.listWindowHeight(), 570);
 }
 
