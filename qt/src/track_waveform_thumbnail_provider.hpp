@@ -9,6 +9,7 @@
 #include <QThreadPool>
 #include <QVariantMap>
 
+#include <chrono>
 #include <cstdint>
 #include <list>
 #include <optional>
@@ -41,6 +42,7 @@ public:
                              quint64 generation);
     Q_INVOKABLE void cancel(const QString& trackId, quint64 generation);
     Q_INVOKABLE [[nodiscard]] QVariantMap diagnostics() const;
+    Q_INVOKABLE void refresh();
 
     void setCacheDirectory(const QString& cacheDirectory);
 
@@ -70,6 +72,11 @@ private:
         std::list<QString>::iterator order;
     };
 
+    struct NegativeEntry final {
+        std::chrono::steady_clock::time_point expiresAt;
+        std::list<QString>::iterator order;
+    };
+
     [[nodiscard]] static QByteArray loadFromV2CacheOnly(
         const QString& cacheDirectory, const QString& sourcePath);
     [[nodiscard]] static unsigned char quantizeAmplitude(float amplitude);
@@ -79,6 +86,12 @@ private:
     void insertCache(const QString& trackId,
                      const QString& sourcePath,
                      const QByteArray& peaks);
+    [[nodiscard]] QString negativeKey(const QString& sourcePath) const;
+    [[nodiscard]] bool hasNegativeCooldown(const QString& sourcePath);
+    void insertNegativeCooldown(const QString& sourcePath);
+    void removeNegativeCooldown(const QString& sourcePath);
+    void postThumbnailReady(const Request& request,
+                            const QByteArray& peaks = {});
     [[nodiscard]] int queuedIndexForTrack(const QString& trackId) const;
 
     QString cacheDirectory_;
@@ -87,9 +100,12 @@ private:
     std::optional<Request> activeRequest_;
     QHash<QString, CacheEntry> cache_;
     std::list<QString> lruOrder_;
+    QHash<QString, NegativeEntry> negativeCache_;
+    std::list<QString> negativeOrder_;
     QThreadPool workerPool_;
     QFutureWatcher<LoadResult> watcher_;
     int activeWorkers_ = 0;
     int maxActiveWorkers_ = 0;
     int maxInFlightTracks_ = 0;
+    qulonglong cacheReadAttempts_ = 0U;
 };
