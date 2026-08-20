@@ -39,6 +39,28 @@ TestCase {
         verify(findChild(page, "formatEncoderBox"))
         verify(findChild(page, "formatOutputDirectoryRow"))
         verify(findChild(page, "formatTotalProgress"))
+        const outputFormatGrid = findChild(page, "formatOutputFormatGrid")
+        const firstFormatButton = findChild(page, "formatOutputFormatButton-mp3")
+        const fourthFormatButton = findChild(page, "formatOutputFormatButton-aac")
+        const encoderBox = findChild(page, "formatEncoderBox")
+        const outputDirectoryRow = findChild(page, "formatOutputDirectoryRow")
+        verify(outputFormatGrid && firstFormatButton && fourthFormatButton
+               && encoderBox && outputDirectoryRow)
+        tryVerify(function() {
+            return outputFormatGrid.width > 0 && encoderBox.width > 0
+                   && outputDirectoryRow.width > 0
+        }, 1000)
+        const formatGridPosition = outputFormatGrid.mapToItem(settingsPanel, 0, 0)
+        const firstFormatPosition = firstFormatButton.mapToItem(settingsPanel, 0, 0)
+        const fourthFormatPosition = fourthFormatButton.mapToItem(settingsPanel, 0, 0)
+        const encoderPosition = encoderBox.mapToItem(settingsPanel, 0, 0)
+        const outputDirectoryPosition = outputDirectoryRow.mapToItem(settingsPanel, 0, 0)
+        verify(Math.round(formatGridPosition.x) === 16)
+        verify(Math.round(outputFormatGrid.width) >= 383 && Math.round(outputFormatGrid.width) <= 385)
+        verify(Math.round(firstFormatButton.width) >= 89 && Math.round(firstFormatButton.width) <= 91)
+        verify(Math.round(fourthFormatPosition.x - firstFormatPosition.x) === 294)
+        verify(Math.round(encoderPosition.x) === 149)
+        verify(Math.round(outputDirectoryPosition.x) === 149)
         const localProcessingHint = findChild(page, "formatLocalProcessingHint")
         verify(localProcessingHint.visible)
         verify(findChild(page, "formatSettingsAdvancedToggle"))

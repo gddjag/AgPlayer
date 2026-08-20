@@ -38,6 +38,16 @@ if ($settings -notmatch 'objectName:\s*"formatAdvancedSettings"[\s\S]*?Layout\.t
 if ($settings -notmatch 'objectName:\s*"formatLocalProcessingHint"[\s\S]*?Layout\.topMargin:\s*3[0-9]') {
     throw 'The local-processing hint must retain the reference vertical position.'
 }
+if ($settings -notmatch 'objectName:\s*"formatOutputFormatGrid"[\s\S]*?Layout\.preferredWidth:\s*384' -or
+    $settings -notmatch 'objectName:\s*"formatOutputFormatButton-"\s*\+\s*modelData\.key' -or
+    $settings -notmatch 'columnSpacing:\s*8') {
+    throw 'The output format grid must retain the 384px four-column reference geometry.'
+}
+if ($settings -notmatch 'id:\s*encodingGroup[\s\S]*?columnSpacing:\s*11' -or
+    $settings -notmatch 'id:\s*outputOptions[\s\S]*?columnSpacing:\s*11' -or
+    ([regex]::Matches($settings, 'Layout\.preferredWidth:\s*122')).Count -lt 8) {
+    throw 'Encoding and output-option labels must share the 122px reference column.'
+}
 if ($page -notmatch 'SettingsController\.parallelJobs' -or
     $settings -notmatch 'SettingsController\.parallelJobs') {
     throw 'Parallel jobs must synchronize through SettingsController.'
