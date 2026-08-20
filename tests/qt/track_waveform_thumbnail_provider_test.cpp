@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -41,6 +42,8 @@ private slots:
     void canceledCooldownRequestHasNoDelayedPublication();
     void refreshThenCacheHitHasNoStaleCooldownPublication();
     void tenThousandOverflowRequestsLeaveOnlyBoundedCompletionWork();
+    void workerCompletionSlotCanDeleteProviderWithPendingRequest();
+    void normalCompletionSourceGuardsPostSignalContinuation();
 };
 
 namespace {
@@ -884,6 +887,66 @@ void TrackWaveformThumbnailProviderTest::tenThousandOverflowRequestsLeaveOnlyBou
     const QVariantMap finalState = provider.diagnostics();
     QVERIFY(finalState.value(QStringLiteral("queuedJobs")).toInt() <= 256);
     QVERIFY(finalState.value(QStringLiteral("inFlightTracks")).toInt() <= 257);
+}
+
+void TrackWaveformThumbnailProviderTest::workerCompletionSlotCanDeleteProviderWithPendingRequest()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString firstSource =
+        createSource(directory, QStringLiteral("delete-first.wav"));
+    const QString secondSource =
+        createSource(directory, QStringLiteral("delete-pending.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(saveCache(cacheDirectory, firstSource, {0.25F}));
+    QVERIFY(saveCache(cacheDirectory, secondSource, {0.75F}));
+
+    QPointer<TrackWaveformThumbnailProvider> provider =
+        new TrackWaveformThumbnailProvider(cacheDirectory);
+    int publications = 0;
+    connect(provider, &TrackWaveformThumbnailProvider::thumbnailReady,
+            this,
+            [&provider, &publications] {
+                ++publications;
+                delete provider.data();
+            });
+
+    provider->request(QStringLiteral("delete-active"), firstSource, 1U);
+    provider->request(QStringLiteral("must-not-publish"), secondSource, 2U);
+    QTRY_VERIFY_WITH_TIMEOUT(provider.isNull(), 5000);
+    QTest::qWait(50);
+    QCOMPARE(publications, 1);
+}
+
+void TrackWaveformThumbnailProviderTest::normalCompletionSourceGuardsPostSignalContinuation()
+{
+    const QDir testSourceDirectory = QFileInfo(QString::fromUtf8(__FILE__)).dir();
+    QFile source(testSourceDirectory.absoluteFilePath(
+        QStringLiteral("../../qt/src/track_waveform_thumbnail_provider.cpp")));
+    QVERIFY(source.open(QIODevice::ReadOnly));
+    const QByteArray implementation = source.readAll();
+    const qsizetype finishBegin = implementation.indexOf(
+        "void TrackWaveformThumbnailProvider::finishActive()");
+    const qsizetype finishEnd = implementation.indexOf(
+        "void TrackWaveformThumbnailProvider::touchLru", finishBegin);
+    QVERIFY(finishBegin >= 0);
+    QVERIFY(finishEnd > finishBegin);
+    const QByteArray finishActive =
+        implementation.mid(finishBegin, finishEnd - finishBegin);
+
+    const qsizetype emitPosition = finishActive.indexOf(
+        "emit thumbnailReady(current.trackId, current.generation, loaded.peaks)");
+    const qsizetype guardDeclaration = finishActive.lastIndexOf(
+        "QPointer<TrackWaveformThumbnailProvider> guard(this)", emitPosition);
+    const qsizetype guardCheck =
+        finishActive.indexOf("if (guard.isNull())", emitPosition);
+    const qsizetype continuation =
+        finishActive.indexOf("startNext();", emitPosition);
+    QVERIFY(emitPosition >= 0);
+    QVERIFY2(guardDeclaration >= 0 && guardDeclaration < emitPosition,
+             "normal completion must establish a QObject lifetime guard");
+    QVERIFY2(guardCheck > emitPosition && guardCheck < continuation,
+             "normal completion must check lifetime before startNext");
 }
 
 QTEST_GUILESS_MAIN(TrackWaveformThumbnailProviderTest)
