@@ -106,3 +106,66 @@ Release 与 Debug 均为 `4/4` 通过。
 - 已执行 `git diff --check`。
 - 未运行完整 CTest、UI、真实播放/录音/硬件或正式多事件导出；后者明确不属于本阶段。
 - 回退点：`ad52f84`（Phase 1 冻结 `audio_event.hpp` 后的 Task 2 起点）。
+
+## Phase 3 — 移动与修剪（2026-08-20）
+
+### 需求追踪
+
+- 规格 5.2 / 6 / 17.3：新增 `EventTimeline::moveEvent()` 与
+  `trimEvent()`，操作均先验证候选状态，再以排序后的元数据副本原子替换；失败时
+  Event、顺序、总时长和 revision 不变。
+- Move 只改变 `timelineStart`；Trim 只改变 `sourceStart`、`sourceEnd` 与调用方
+  显式指定的锚点 `timelineStart`。两者均保留不可变 Source 及全部其余 Event
+  元数据。
+- `TimelineEditCommand` 只保存一个 Event 的前后元数据，`execute/undo` 在当前
+  状态精确匹配时才应用，避免覆盖并发/过期编辑；没有 PCM、解码器、编码器或 Peak
+  重建依赖。
+- 当前 `AudioEditorController::runDocumentCommand()` 会清空可见波形缓存并调用
+  `rebuildEditorPeaks()`。本阶段没有把 Move/Trim 接入该旧连续 `AudioDocument`
+  路径，避免把“无 Peak 重建”的合同伪装成可用 UI；Phase 4 迁移文档真源后再建立
+  控制器入口。
+
+### 修改文件
+
+- `core/src/audio_editor/event_timeline.hpp/.cpp`：添加事务式移动/修剪及私有替换。
+- `core/src/audio_editor/timeline_edit_command.hpp/.cpp`：添加小型、可逆的 Move/Trim
+  命令。
+- `core/CMakeLists.txt`、`tests/CMakeLists.txt`：编译命令实现并注册测试。
+- `tests/core/timeline_edit_command_test.cpp`：覆盖元数据不变、Source 共享、锚点、
+  排序、相邻边界、单帧、碰撞、未知 ID、no-op、溢出、revision 与
+  execute→undo→execute。
+
+### TDD 与验证证据
+
+**RED（预期失败）**
+
+```powershell
+cmake --build --preset windows-msvc-release --target timeline_edit_command_test --parallel 4
+```
+
+在实现前，测试以预期原因失败：`fatal error C1083: cannot open include file:
+"audio_editor/timeline_edit_command.hpp"`。
+
+**GREEN（通过）**
+
+```powershell
+ctest --test-dir build/release -R "^timeline_edit_command_test$" --output-on-failure
+ctest --test-dir build/release -R "^audio_editor_controller_test$" --output-on-failure
+ctest --test-dir build/debug -R "^(timeline_edit_command_test|audio_editor_controller_test)$" --output-on-failure
+```
+
+- Release：新命令测试 `1/1` 通过；既有控制器回归测试在先生成 `decoder_fixture`
+  后 `1/1` 通过。
+- Debug：两项聚焦测试 `2/2` 通过。
+- Release 与 Debug 完整构建目标均已完成；`git diff --check` 通过。
+
+### 已知失败、未验证项与回退点
+
+- 定向构建未自动生成控制器测试的 `decoder_fixture`，CTest 会向不存在的 fixture
+  路径传值并使既有控制器测试退出 10；先构建 `decoder_fixture` 后测试通过，未修改
+  生产或测试逻辑。
+- 在另一个并发 Ninja 访问同一 build 目录时可见 `premature end of file` 警告和短暂
+  的 EXE 文件锁；后续验证已串行执行。该环境竞争不改变 Phase 3 代码。
+- 未运行完整 CTest、真实编辑播放、UI、硬件、离线多 Event 导出或性能矩阵；它们不
+  属于本阶段门禁。
+- 回退点：`421c39f`（Phase 3 提交前 HEAD）。

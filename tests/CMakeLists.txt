@@ -123,6 +123,22 @@ set_tests_properties(event_timeline_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(timeline_edit_command_test
+    core/timeline_edit_command_test.cpp
+)
+set_target_properties(timeline_edit_command_test PROPERTIES AUTOMOC ON)
+target_include_directories(timeline_edit_command_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(timeline_edit_command_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(timeline_edit_command_test)
+add_test(NAME timeline_edit_command_test COMMAND timeline_edit_command_test)
+set_tests_properties(timeline_edit_command_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 add_executable(document_writer_test
     core/document_writer_test.cpp
 )

@@ -24,6 +24,42 @@ bool EventTimeline::insert(AudioEvent candidate)
     return true;
 }
 
+bool EventTimeline::moveEvent(const EventId id, const SampleFrame timeline_start)
+{
+    const auto found = std::find_if(
+        events_.begin(), events_.end(), [id](const AudioEvent& candidate) {
+            return candidate.id == id;
+        });
+    if (found == events_.end() || found->timelineStart == timeline_start) {
+        return false;
+    }
+
+    AudioEvent candidate = *found;
+    candidate.timelineStart = timeline_start;
+    return replaceEvent(id, std::move(candidate));
+}
+
+bool EventTimeline::trimEvent(const EventId id, const SampleFrame source_start,
+                              const SampleFrame source_end,
+                              const SampleFrame timeline_start)
+{
+    const auto found = std::find_if(
+        events_.begin(), events_.end(), [id](const AudioEvent& candidate) {
+            return candidate.id == id;
+        });
+    if (found == events_.end()
+        || (found->sourceStart == source_start && found->sourceEnd == source_end
+            && found->timelineStart == timeline_start)) {
+        return false;
+    }
+
+    AudioEvent candidate = *found;
+    candidate.sourceStart = source_start;
+    candidate.sourceEnd = source_end;
+    candidate.timelineStart = timeline_start;
+    return replaceEvent(id, std::move(candidate));
+}
+
 const AudioEvent* EventTimeline::event(const EventId id) const noexcept
 {
     const auto found = std::find_if(
@@ -75,6 +111,45 @@ bool EventTimeline::overlaps(const AudioEvent& candidate) const noexcept
         }
     }
     return false;
+}
+
+bool EventTimeline::replaceEvent(const EventId id, AudioEvent candidate)
+{
+    const auto found = std::find_if(
+        events_.begin(), events_.end(), [id](const AudioEvent& existing) {
+            return existing.id == id;
+        });
+    if (found == events_.end() || candidate.id != id || !isValid(candidate)
+        || candidate.timelineStart > std::numeric_limits<SampleFrame>::max()
+            - audibleFrames(candidate)) {
+        return false;
+    }
+
+    const SampleFrame candidate_end = endFrame(candidate);
+    for (const AudioEvent& existing : events_) {
+        if (existing.id == id) {
+            continue;
+        }
+        const SampleFrame existing_end = endFrame(existing);
+        if (candidate.timelineStart < existing_end
+            && existing.timelineStart < candidate_end) {
+            return false;
+        }
+    }
+
+    std::vector<AudioEvent> updated = events_;
+    const auto replacement = std::find_if(
+        updated.begin(), updated.end(), [id](const AudioEvent& existing) {
+            return existing.id == id;
+        });
+    *replacement = std::move(candidate);
+    std::sort(updated.begin(), updated.end(),
+              [](const AudioEvent& left, const AudioEvent& right) {
+                  return left.timelineStart < right.timelineStart;
+              });
+    events_.swap(updated);
+    ++revision_;
+    return true;
 }
 
 SampleFrame EventTimeline::endFrame(const AudioEvent& candidate) noexcept
