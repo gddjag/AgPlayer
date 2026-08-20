@@ -68,6 +68,8 @@ private slots:
     void formatConverterPreflightRejectsUnsupportedCapability();
     void formatConverterPreflightResolvesLosslessBitrateMode_data();
     void formatConverterPreflightResolvesLosslessBitrateMode();
+    void formatConverterPreflightRejectsBlockedPreservedOutputParent();
+    void formatConverterPreflightRejectsInvalidImplicitOutputParent();
     void formatConverterAskPolicyRequiresConflictConfirmationBeforeStarting();
     void formatConverterConfirmedPlanUsesAskOutputPath();
     void formatConverterConfirmedPlanUsesAutoNumberOutputPath();
@@ -694,6 +696,79 @@ void AudioToolsEndToEndTest::
              QString());
     QVERIFY(difference->toMap()
                 .value(QStringLiteral("requiresConfirmation")).toBool());
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterPreflightRejectsBlockedPreservedOutputParent()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString inputRoot = temp.filePath(QStringLiteral("input"));
+    const QString inputAlbum = QDir(inputRoot).filePath(QStringLiteral("album"));
+    const QString input = QDir(inputAlbum).filePath(QStringLiteral("song.wav"));
+    const QString outputRoot = temp.filePath(QStringLiteral("output"));
+    QVERIFY(QDir().mkpath(inputAlbum));
+    QVERIFY(QDir().mkpath(outputRoot));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+    QFile blocked(QDir(outputRoot).filePath(QStringLiteral("album")));
+    QVERIFY(blocked.open(QIODevice::WriteOnly));
+    QCOMPARE(blocked.write("not-a-directory"), 15);
+    blocked.close();
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(inputRoot)});
+    waitForConverterLoad(converter);
+    QSignalSpy errors(&converter, &FormatConverter::errorOccurred);
+    const QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("flac")},
+        {QStringLiteral("outputDir"), outputRoot},
+        {QStringLiteral("preserveDirectories"), true}});
+
+    QVERIFY(!plan.value(QStringLiteral("ready")).toBool());
+    QCOMPARE(plan.value(QStringLiteral("taskCount")).toInt(), 0);
+    QVERIFY(plan.value(QStringLiteral("reason")).toString().contains(
+        QStringLiteral("output"), Qt::CaseInsensitive));
+    QCOMPARE(errors.count(), 1);
+    QVERIFY(converter.pendingPlan().isEmpty());
+    converter.confirmPendingPlan();
+    QCOMPARE(errors.count(), 1);
+    QVERIFY(!converter.busy());
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterPreflightRejectsInvalidImplicitOutputParent()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString inputParent = temp.filePath(QStringLiteral("implicit-parent"));
+    const QString input = QDir(inputParent).filePath(QStringLiteral("song.wav"));
+    QVERIFY(QDir().mkpath(inputParent));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+    QVERIFY(QFile::remove(input));
+    QVERIFY(QDir().rmdir(inputParent));
+    QFile blockedParent(inputParent);
+    QVERIFY(blockedParent.open(QIODevice::WriteOnly));
+    QCOMPARE(blockedParent.write("not-a-directory"), 15);
+    blockedParent.close();
+
+    QSignalSpy errors(&converter, &FormatConverter::errorOccurred);
+    const QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("flac")},
+        {QStringLiteral("outputDir"), QString()}});
+
+    QVERIFY(!plan.value(QStringLiteral("ready")).toBool());
+    QCOMPARE(plan.value(QStringLiteral("taskCount")).toInt(), 0);
+    QVERIFY(plan.value(QStringLiteral("reason")).toString().contains(
+        QStringLiteral("output"), Qt::CaseInsensitive));
+    QCOMPARE(errors.count(), 1);
+    QVERIFY(converter.pendingPlan().isEmpty());
+    converter.confirmPendingPlan();
+    QCOMPARE(errors.count(), 1);
+    QVERIFY(!converter.busy());
 }
 
 void AudioToolsEndToEndTest::
