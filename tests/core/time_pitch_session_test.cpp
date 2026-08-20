@@ -66,7 +66,7 @@ int main(const int argc, char** argv)
     const AudioDocument document = AudioDocument::fromSource(AudioSource{
         input, static_cast<std::uint32_t>(metadata.sample_rate),
         static_cast<std::uint32_t>(metadata.channels), input_frames});
-    const auto before = document.snapshot();
+    const auto before = document.timelineSnapshot();
 
     TimePitchSession processor;
     require(processor.setSpeedPercent(125.0), "processing speed rejected");
@@ -75,10 +75,11 @@ int main(const int argc, char** argv)
     std::error_code ignored;
     fs::remove(output, ignored);
     const TimePitchResult result = processor.process(
-        document.snapshot(), output, std::nullopt);
+        document.timelineSnapshot(), output, std::nullopt);
     if (!result.success) std::cerr << result.message << '\n';
     require(result.success, "time/pitch processing failed");
-    require(document.snapshot() == before, "preview mutated document");
+    require(document.timelineSnapshot().revision == before.revision,
+            "preview mutated document");
     const SampleFrame output_frames = decoded_frames(
         output, metadata.sample_rate, metadata.channels);
     const SampleFrame expected = static_cast<SampleFrame>(
