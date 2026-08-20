@@ -1070,8 +1070,8 @@ TestCase {
     function test_waveform_mode_button_cycles_the_live_setting() {
         var button = findChild(mainWindow, "waveformModeButton")
         verify(button)
-        verify(button.icon.source.toString().endsWith("/pulse-line.svg"),
-               "waveform switch must use a thin line waveform icon")
+        verify(button.icon.source.toString().endsWith("/waveform-switch.svg"),
+               "waveform switch must use the user-provided shared waveform icon")
         var previousMode = SettingsController.waveformMode
         SettingsController.waveformMode = 0
         button.clicked()
@@ -1337,7 +1337,7 @@ TestCase {
         LibraryModel.setFavorite(row, false)
         tryVerify(function() {
             return favoriteButton.icon.source.toString()
-                    === Theme.icon("heart-outline").toString()
+                    === Theme.icon("heart-line").toString()
         })
 
         LibraryModel.setFavorite(row, true)
@@ -1379,7 +1379,7 @@ TestCase {
     function test_main_waveform_toggle_uses_complete_line_icon() {
         var button = findChild(mainWindow, "waveformModeButton")
         verify(button)
-        verify(button.icon.source.toString().endsWith("/pulse-line.svg"))
+        verify(button.icon.source.toString().endsWith("/waveform-switch.svg"))
         compare(button.icon.width, 20)
         compare(button.icon.height, 20)
     }

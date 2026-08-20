@@ -500,7 +500,7 @@ ListView {
                 Layout.minimumWidth: root.favoriteWidth
                 Layout.preferredWidth: root.favoriteWidth
                 Layout.maximumWidth: root.favoriteWidth
-                icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-outline")
+                icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                 icon.color: rowItem.favorite ? Theme.favoriteRed : Theme.secondaryText
                 icon.width: 23; icon.height: 23
                 onClicked: { var row = LibraryModel.indexForTrackId(rowItem.trackId); if (row >= 0) LibraryModel.setFavorite(row, !rowItem.favorite) }

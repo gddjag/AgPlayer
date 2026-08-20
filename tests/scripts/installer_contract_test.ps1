@@ -36,6 +36,19 @@ if (-not $installer.Contains($launchText)) {
 if (-not (Test-Path -LiteralPath (Join-Path $repo 'assets\brand\agplayer.ico'))) {
     throw "Windows package must include a multi-size application icon"
 }
+$iconSource = Join-Path $repo 'assets\brand\agplayer-icon.png'
+if (-not (Test-Path -LiteralPath $iconSource)) {
+    throw "Windows icon must retain the approved high-resolution source artwork"
+}
+Add-Type -AssemblyName System.Drawing
+$iconSourceImage = [System.Drawing.Image]::FromFile($iconSource)
+try {
+    if ($iconSourceImage.Width -lt 256 -or $iconSourceImage.Height -lt 256) {
+        throw "Windows icon source must remain high-resolution"
+    }
+} finally {
+    $iconSourceImage.Dispose()
+}
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $repo 'app\CMakeLists.txt')
 if ($appCmake -notmatch 'agplayer\.rc') {
     throw "AgPlayer.exe must embed the icon resource for Explorer and taskbar"

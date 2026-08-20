@@ -139,9 +139,9 @@ TestCase {
     function test_mini_player_can_cycle_the_shared_waveform_mode() {
         var button = findChild(miniPlayer, "miniWaveformModeButton")
         verify(button)
-        compare(button.icon.source.toString().endsWith("/pulse-line.svg"), true)
-        compare(button.icon.width, 17)
-        compare(button.icon.height, 17)
+        compare(button.icon.source.toString().endsWith("/waveform-switch.svg"), true)
+        compare(button.icon.width, 15)
+        compare(button.icon.height, 15)
         var previousMode = SettingsController.waveformMode
         mouseClick(button)
         compare(SettingsController.waveformMode, (previousMode + 1) % 3)
@@ -195,14 +195,21 @@ TestCase {
         verify(percent)
         var metadataRow = findChild(miniPlayer, "miniMetadataRow")
         var title = findChild(miniPlayer, "miniTrackTitle")
+        var metadata = findChild(miniPlayer, "miniArtistAlbumTags")
         var rating = findChild(miniPlayer, "miniRating")
         var favorite = findChild(miniPlayer, "miniFavoriteButton")
-        verify(metadataRow && title && rating && favorite)
+        verify(metadataRow && title && metadata && rating && favorite)
         verify(metadataRow.y >= title.y + title.height,
                "rating and favorite must follow artist/album instead of the title")
+        verify(rating.x >= metadata.x + metadata.width,
+               "rating must immediately follow artist, album and optional tags")
+        verify(favorite.x >= rating.x + rating.width,
+               "favorite must immediately follow rating in the metadata row")
+        verify(metadata.text.indexOf("无标签") < 0,
+               "empty tags must be omitted instead of showing placeholder text")
         compare(rating.spacing, 1)
-        compare(favorite.icon.width, 15)
-        compare(favorite.icon.height, 15)
+        compare(favorite.icon.width, 13)
+        compare(favorite.icon.height, 13)
         compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)
         compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize, 11)
         compare(play.width, 34)
@@ -232,22 +239,22 @@ TestCase {
                     Theme.iconPrimary.toString())
         }
         playbackFake.mode = PlaybackController.Sequential
-        compare(button.icon.width, 17)
-        compare(button.icon.height, 17)
-        compare(findChild(miniPlayer, "miniMuteButton").icon.width, 17)
+        compare(button.icon.width, 15)
+        compare(button.icon.height, 15)
+        compare(findChild(miniPlayer, "miniMuteButton").icon.width, 15)
     }
 
     function test_titlebar_uses_thin_system_icons() {
         verify(miniPlayer.pinButton.icon.source.toString().endsWith("/pushpin-line.svg"))
         verify(miniPlayer.restoreButton.icon.source.toString().endsWith("/restore-line.svg"))
-        compare(miniPlayer.pinButton.icon.width, 15)
-        compare(miniPlayer.restoreButton.icon.width, 15)
+        compare(miniPlayer.pinButton.icon.width, 14)
+        compare(miniPlayer.restoreButton.icon.width, 14)
         var close = findChild(miniPlayer, "miniCloseButton")
         var minimize = findChild(miniPlayer, "miniMinimizeButton")
         verify(close && minimize)
         verify(close.icon.source.toString().endsWith("/close-line.svg"))
-        compare(close.icon.width, 15)
-        compare(minimize.icon.width, 15)
+        compare(close.icon.width, 14)
+        compare(minimize.icon.width, 14)
     }
 
     function test_mini_spectrum_uses_same_fixed_bars_as_main() {

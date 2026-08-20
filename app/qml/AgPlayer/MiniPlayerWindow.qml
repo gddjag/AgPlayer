@@ -94,8 +94,8 @@ Window {
                         icon.source: Theme.icon("pushpin-line")
                         icon.color: windows && windows.alwaysOnTop ? Theme.cyan
                                                                    : Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 14
+                        icon.height: 14
                         Accessible.name: windows && windows.alwaysOnTop
                                          ? qsTr("Disable always on top")
                                          : qsTr("Pin on top")
@@ -115,8 +115,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 14
+                        icon.height: 14
                         Accessible.name: qsTr("Restore main window")
                         onClicked: windows.showMain()
                         background: Rectangle {
@@ -131,8 +131,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 14
+                        icon.height: 14
                         Accessible.name: qsTr("Minimize")
                         onClicked: miniWindow.showMinimized()
                         background: Rectangle {
@@ -147,8 +147,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 14
+                        icon.height: 14
                         Accessible.name: qsTr("Close")
                         onClicked: windows.requestClose()
                         background: Rectangle {

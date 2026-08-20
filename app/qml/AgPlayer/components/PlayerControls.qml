@@ -101,7 +101,7 @@ Rectangle {
         ToolButton {
             objectName: "waveformModeButton"
             flat: true
-            icon.source: Theme.icon("pulse-line")
+            icon.source: Theme.icon("waveform-switch")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20

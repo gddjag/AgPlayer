@@ -310,7 +310,7 @@ Rectangle {
                         flat: true
                         icon.source: root.currentTrackFavorite()
                                      ? Theme.icon("heart-fill")
-                                     : Theme.icon("heart-outline")
+                                     : Theme.icon("heart-line")
                         icon.color: root.currentTrackFavorite()
                                     ? Theme.favoriteRed
                                     : Theme.secondaryText

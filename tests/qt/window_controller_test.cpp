@@ -40,6 +40,7 @@ private slots:
     void auxiliaryWindowRemainsAboveDockedPlayerGroup();
 #endif
     void dockedListFollowsMainWindow();
+    void firstAttachedListAlignsWithMainWindow();
     void dockedGroupDoesNotClampMainMoveAtScreenEdge();
     void horizontalDockPreservesSizesAndKeepsWindowsAdjacent();
 #ifdef Q_OS_WIN
@@ -485,6 +486,24 @@ void WindowControllerTest::dockedListFollowsMainWindow()
     QCOMPARE(listWindow.x(), mainGeo.x());
     QCOMPARE(listWindow.y(), mainGeo.bottom() - 1);
     QCOMPARE(listWindow.width(), mainGeo.width());
+}
+
+void WindowControllerTest::firstAttachedListAlignsWithMainWindow()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(200, 150, 960, 298);
+    QWindow listWindow;
+    listWindow.setGeometry(50, 500, 1655, 570);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("bottom"));
+    QCOMPARE(listWindow.x(), mainWindow.x());
+    QCOMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
+    QCOMPARE(listWindow.width(), mainWindow.width());
+    QCOMPARE(listWindow.height(), 570);
 }
 
 void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
