@@ -6,10 +6,20 @@ import AgPlayer
 Rectangle {
     id: root
     property var converter
+    property var settingsPanel
     color: Theme.panel
     border.color: Theme.border
     radius: 6
     clip: true
+
+    function removeTask(taskId) {
+        for (let index = 0; index < converter.files.length; ++index) {
+            if (converter.files[index].taskId === taskId) {
+                converter.removeFile(index)
+                return
+            }
+        }
+    }
 
     readonly property var columnWidths: [54, 230, 120, 100, 115, 130, 120, 120, 210]
 
@@ -109,10 +119,22 @@ Rectangle {
                     checked: model.checked
                     onClicked: converter.setTaskChecked(model.taskId, checked)
                 }
+                ThemedIcon {
+                    visible: column === 1
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: Theme.icon("music-2-fill")
+                    tint: model.sourceFormat === "WAV" ? "#ff8a3d"
+                          : model.sourceFormat === "MP3" ? "#25aee4"
+                          : model.sourceFormat === "FLAC" ? "#8d63e8" : "#21bf83"
+                    sourceSize.width: 22
+                    sourceSize.height: 22
+                }
                 Text {
                     visible: column > 0 && column < 8
                     anchors.fill: parent
-                    anchors.leftMargin: 10
+                    anchors.leftMargin: column === 1 ? 42 : 10
                     anchors.rightMargin: 6
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -164,6 +186,17 @@ Rectangle {
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }
+                MouseArea {
+                    visible: column === 1
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    onClicked: function(mouse) {
+                        taskContextMenu.taskId = model.taskId
+                        taskContextMenu.status = model.status
+                        taskContextMenu.errorDetail = model.errorDetail
+                        taskContextMenu.popup()
+                    }
+                }
             }
         }
 
@@ -174,6 +207,41 @@ Rectangle {
             text: qsTr("共 %1 个任务 / 已选择 %2 个").arg(converter.fileCount).arg(converter.checkedCount)
             color: Theme.secondaryText
             font.pixelSize: 12
+        }
+    }
+
+    Menu {
+        id: taskContextMenu
+        objectName: "formatTaskContextMenu"
+        property string taskId: ""
+        property string status: ""
+        property string errorDetail: ""
+
+        MenuItem {
+            text: qsTr("移除任务")
+            onTriggered: root.removeTask(taskContextMenu.taskId)
+        }
+        MenuItem {
+            text: qsTr("重试失败任务")
+            enabled: taskContextMenu.status === "Error" && !converter.busy
+            onTriggered: converter.retryFailed(settingsPanel.outputFormat,
+                                               settingsPanel.bitRate,
+                                               settingsPanel.sampleRate,
+                                               settingsPanel.channels,
+                                               settingsPanel.outputDirectory,
+                                               settingsPanel.keepMetadata,
+                                               settingsPanel.volumeNormalize,
+                                               settingsPanel.extractAudio)
+        }
+        MenuItem {
+            text: qsTr("取消任务")
+            enabled: taskContextMenu.status === "Converting"
+            onTriggered: converter.cancelTask(taskContextMenu.taskId)
+        }
+        MenuItem {
+            text: qsTr("复制错误详情")
+            enabled: taskContextMenu.errorDetail.length > 0
+            onTriggered: converter.copyText(taskContextMenu.errorDetail)
         }
     }
 }

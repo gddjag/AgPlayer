@@ -7,6 +7,7 @@ Rectangle {
     id: root
     property var converter
     property string outputDirectory: ""
+    property bool expanded: true
     property string outputFormat: converter.selectedFormat
     property string preset: presetBox.currentValue || "recommended"
     property int bitRate: converter.currentCapability.lossy === true
@@ -26,6 +27,7 @@ Rectangle {
     property bool extractAudio: extractAudioCheck.checked
     property bool volumeNormalize: false
     signal chooseOutputDirectory()
+    signal outputDirectoryEdited(string directory)
 
     function indexForValue(model, key, value) {
         for (let index = 0; index < model.length; ++index) {
@@ -73,23 +75,44 @@ Rectangle {
     radius: 6
     clip: true
 
+    RowLayout {
+        id: settingsHeader
+        height: 44
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 16
+        anchors.rightMargin: 8
+        spacing: 8
+
+        Text {
+            visible: root.expanded
+            Layout.fillWidth: true
+            text: qsTr("转换设置")
+            color: "#eef3f6"
+            font.pixelSize: 16
+            font.weight: Font.DemiBold
+        }
+        ToolButton {
+            objectName: "formatSettingsAdvancedToggle"
+            Layout.alignment: Qt.AlignRight
+            icon.source: Theme.icon(root.expanded ? "arrow-go-back-line" : "arrow-go-forward-line")
+            onClicked: root.expanded = !root.expanded
+        }
+    }
+
     ScrollView {
-        anchors.fill: parent
+        visible: root.expanded
+        anchors.top: settingsHeader.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
         contentWidth: availableWidth
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         ColumnLayout {
             width: parent.width
             spacing: 6
-
-            Text {
-                Layout.leftMargin: 16
-                Layout.topMargin: 10
-                text: qsTr("转换设置")
-                color: Theme.primaryText
-                font.pixelSize: 16
-                font.weight: Font.DemiBold
-            }
 
             ColumnLayout {
                 id: formatGroup
@@ -261,9 +284,10 @@ Rectangle {
                     TextField {
                         objectName: "formatOutputDirectoryRow"
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 32
                         text: root.outputDirectory
                         placeholderText: qsTr("选择输出目录")
-                        onTextEdited: root.outputDirectory = text
+                        onTextEdited: root.outputDirectoryEdited(text)
                     }
                     ToolButton { icon.source: Theme.icon("folder-open-line"); onClicked: root.chooseOutputDirectory() }
                 }
@@ -276,6 +300,7 @@ Rectangle {
             }
 
             Rectangle {
+                objectName: "formatLocalProcessingHint"
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
@@ -290,6 +315,26 @@ Rectangle {
                     anchors.margins: 12
                     Text { text: "ⓘ"; color: Theme.accent; font.pixelSize: 19 }
                     Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: Theme.secondaryText; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                }
+            }
+
+            GridLayout {
+                objectName: "formatAdvancedSettings"
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                Layout.bottomMargin: 14
+                columns: 2
+                columnSpacing: 10
+                rowSpacing: 6
+                Text { text: qsTr("高级设置"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
+                Text { text: qsTr("并发任务"); color: "#aeb9c1" }
+                ComboBox {
+                    objectName: "converterParallelJobsBox"
+                    Layout.fillWidth: true
+                    model: [1, 2, 4]
+                    currentIndex: Math.max(0, model.indexOf(converter.parallelJobs))
+                    onActivated: converter.parallelJobs = currentValue
                 }
             }
         }
