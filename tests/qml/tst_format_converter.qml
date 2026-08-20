@@ -71,7 +71,7 @@ TestCase {
         verify(start.x + start.width <= bottomBar.width)
         verify(cancel.x + cancel.width <= bottomBar.width)
         testCase.width = 1672
-        testCase.height = 942
+        testCase.height = 941
     }
 
     function test_smart_profiles_keep_auto_channels_and_format_specific_rates() {

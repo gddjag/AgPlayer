@@ -1084,6 +1084,30 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     }
     plan.insert(QStringLiteral("capability"), capability);
 
+    const bool hasExplicitPreset = request.contains(QStringLiteral("preset"));
+    const QString presetKey = request.value(
+        QStringLiteral("preset"), QStringLiteral("recommended"))
+                                  .toString().trimmed().toLower();
+    const QVariantList availablePresets = capability.value(
+        QStringLiteral("presets")).toList();
+    QVariantMap selectedPreset;
+    for (const QVariant& value : availablePresets) {
+        const QVariantMap candidate = value.toMap();
+        if (candidate.value(QStringLiteral("key")).toString() == presetKey) {
+            selectedPreset = candidate;
+            break;
+        }
+    }
+    if (hasExplicitPreset && presetKey != QStringLiteral("custom")
+        && !selectedPreset.isEmpty()) {
+        for (const QString& key : {QStringLiteral("bitRate"),
+                                   QStringLiteral("bitrateMode"),
+                                   QStringLiteral("sampleRate"),
+                                   QStringLiteral("quality")}) {
+            plan.insert(key, selectedPreset.value(key));
+        }
+    }
+
     const auto failPreflight = [this, &plan](const QString& reason) {
         plan.insert(QStringLiteral("tasks"), QVariantList{});
         plan.insert(QStringLiteral("taskCount"), 0);
@@ -1148,15 +1172,10 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     conversionRequest.formatKey = format;
     conversionRequest.codecName = request.value(
         QStringLiteral("codecName")).toString();
-    conversionRequest.bitrateMode = request.value(
+    conversionRequest.bitrateMode = plan.value(
         QStringLiteral("bitrateMode"), bitrateMode_)
                                          .toString().trimmed().toLower();
     const QString requestedBitrateMode = conversionRequest.bitrateMode;
-    if (conversionRequest.bitrateMode != QStringLiteral("cbr")
-        && conversionRequest.bitrateMode != QStringLiteral("vbr")) {
-        return failPreflight(QStringLiteral("Invalid bitrateMode: %1")
-                                 .arg(conversionRequest.bitrateMode));
-    }
     const QVariantList supportedBitrateModes = capability.value(
         QStringLiteral("bitrateModes")).toList();
     QSet<QString> supportedBitrateModeKeys;
@@ -1167,26 +1186,30 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     const bool resolvesUnusedBitrateMode = supportedBitrateModeKeys.isEmpty();
     if (resolvesUnusedBitrateMode) {
         conversionRequest.bitrateMode.clear();
+    } else if (conversionRequest.bitrateMode != QStringLiteral("cbr")
+               && conversionRequest.bitrateMode != QStringLiteral("vbr")) {
+        return failPreflight(QStringLiteral("Invalid bitrateMode: %1")
+                                 .arg(conversionRequest.bitrateMode));
     } else if (!supportedBitrateModeKeys.contains(
                    conversionRequest.bitrateMode)) {
         return failPreflight(QStringLiteral("Unsupported bitrateMode: %1")
                                  .arg(conversionRequest.bitrateMode));
     }
     bool validNumber = false;
-    conversionRequest.bitrate = request.value(
+    conversionRequest.bitrate = plan.value(
         QStringLiteral("bitRate"), 192000).toLongLong(&validNumber);
     if (!validNumber || conversionRequest.bitrate < 0
         || conversionRequest.bitrate > 512000) {
         return failPreflight(
             QStringLiteral("Invalid bitRate: expected 0..512000"));
     }
-    conversionRequest.quality = request.value(
+    conversionRequest.quality = plan.value(
         QStringLiteral("quality"), 75).toInt(&validNumber);
     if (!validNumber || conversionRequest.quality < 0
         || conversionRequest.quality > 100) {
         return failPreflight(QStringLiteral("Invalid quality: expected 0..100"));
     }
-    const int requestedSampleRate = request.value(
+    const int requestedSampleRate = plan.value(
         QStringLiteral("sampleRate"), 0).toInt(&validNumber);
     if (!validNumber || (requestedSampleRate != 0
         && (requestedSampleRate < 8000 || requestedSampleRate > 192000))) {

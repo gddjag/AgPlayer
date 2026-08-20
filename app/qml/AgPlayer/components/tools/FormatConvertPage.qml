@@ -196,9 +196,12 @@ Rectangle {
             FormatSettingsPanel {
                 id: settingsPanel
                 objectName: "formatSettingsPanel"
-                Layout.preferredWidth: page.compactLayout ? 360 : 445
-                Layout.minimumWidth: page.compactLayout ? 340 : 420
-                Layout.maximumWidth: page.compactLayout ? 380 : 455
+                Layout.preferredWidth: settingsPanel.expanded
+                                       ? (page.compactLayout ? 360 : 445) : 40
+                Layout.minimumWidth: settingsPanel.expanded
+                                     ? (page.compactLayout ? 340 : 420) : 40
+                Layout.maximumWidth: settingsPanel.expanded
+                                     ? (page.compactLayout ? 380 : 455) : 40
                 Layout.fillHeight: true
                 converter: page.converter
                 outputDirectory: page.outputDirectory

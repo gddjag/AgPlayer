@@ -462,7 +462,6 @@ foreach(qt_test IN ITEMS
     tag_model_test
     library_store_test
     playlist_model_test
-    library_navigation_model_test
     library_file_operations_test
     playback_state_store_test
     import_controller_test

@@ -89,7 +89,7 @@ Rectangle {
             visible: root.expanded
             Layout.fillWidth: true
             text: qsTr("转换设置")
-            color: "#eef3f6"
+            color: Theme.primaryText
             font.pixelSize: 16
             font.weight: Font.DemiBold
         }
@@ -315,26 +315,6 @@ Rectangle {
                     anchors.margins: 12
                     Text { text: "ⓘ"; color: Theme.accent; font.pixelSize: 19 }
                     Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: Theme.secondaryText; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                }
-            }
-
-            GridLayout {
-                objectName: "formatAdvancedSettings"
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.bottomMargin: 14
-                columns: 2
-                columnSpacing: 10
-                rowSpacing: 6
-                Text { text: qsTr("高级设置"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
-                Text { text: qsTr("并发任务"); color: "#aeb9c1" }
-                ComboBox {
-                    objectName: "converterParallelJobsBox"
-                    Layout.fillWidth: true
-                    model: [1, 2, 4]
-                    currentIndex: Math.max(0, model.indexOf(converter.parallelJobs))
-                    onActivated: converter.parallelJobs = currentValue
                 }
             }
         }
