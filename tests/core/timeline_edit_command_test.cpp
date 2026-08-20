@@ -136,14 +136,10 @@ private slots:
         const TimelineSnapshot before = timeline.snapshot();
 
         QVERIFY(!timeline.moveEvent(1, 300));
-        QCOMPARE(timeline.snapshot().revision, before.revision);
-        QCOMPARE(timeline.event(1)->timelineStart, SampleFrame{0});
-        QCOMPARE(timeline.event(2)->timelineStart, SampleFrame{400});
+        compareSnapshot(timeline.snapshot(), before);
 
         QVERIFY(!timeline.trimEvent(1, 0, 300, 200));
-        QCOMPARE(timeline.snapshot().revision, before.revision);
-        QCOMPARE(timeline.event(1)->sourceStart, SampleFrame{0});
-        QCOMPARE(timeline.event(1)->sourceEnd, SampleFrame{200});
+        compareSnapshot(timeline.snapshot(), before);
     }
 
     void moveResortsEventsAndUpdatesTotalFrames()
@@ -213,7 +209,6 @@ private slots:
         QVERIFY(timeline.insert(event(1, 100, 0, 300)));
         const std::shared_ptr<const AudioSource> before_source = timeline.event(1)->source;
         const SampleFrame source_frames = before_source->total_frames;
-        int peak_build_count = 0;
 
         const auto move = TimelineEditCommand::move(timeline, 1, 500);
         QVERIFY(move.has_value());
@@ -224,7 +219,26 @@ private slots:
 
         QCOMPARE(timeline.event(1)->source.get(), before_source.get());
         QCOMPARE(timeline.event(1)->source->total_frames, source_frames);
-        QCOMPARE(peak_build_count, 0);
+    }
+
+    void staleCommandExecutionAndUndoPreserveTheEntireSnapshot()
+    {
+        EventTimeline timeline;
+        QVERIFY(timeline.insert(event(1, 0, 0, 200)));
+        const auto stale_execute = TimelineEditCommand::move(timeline, 1, 500);
+        QVERIFY(stale_execute.has_value());
+        QVERIFY(timeline.moveEvent(1, 300));
+        const TimelineSnapshot before_execute = timeline.snapshot();
+        QVERIFY(!stale_execute->execute(timeline));
+        compareSnapshot(timeline.snapshot(), before_execute);
+
+        const auto stale_undo = TimelineEditCommand::move(timeline, 1, 700);
+        QVERIFY(stale_undo.has_value());
+        QVERIFY(stale_undo->execute(timeline));
+        QVERIFY(timeline.moveEvent(1, 800));
+        const TimelineSnapshot before_undo = timeline.snapshot();
+        QVERIFY(!stale_undo->undo(timeline));
+        compareSnapshot(timeline.snapshot(), before_undo);
     }
 };
 
