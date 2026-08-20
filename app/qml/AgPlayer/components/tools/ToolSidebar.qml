@@ -14,8 +14,7 @@ Rectangle {
 
     readonly property var toolNames: [
         qsTr("音频编辑"), qsTr("格式转换"),
-        qsTr("元数据修改"), qsTr("文件名处理"),
-        qsTr("人声伴奏分离"), qsTr("人声克隆")
+        qsTr("元数据修改"), qsTr("文件名处理")
     ]
     property int currentTool: 0
     property Window window
@@ -34,9 +33,7 @@ Rectangle {
                 { name: qsTr("音频编辑"), icon: "equalizer-line" },
                 { name: qsTr("格式转换"), icon: "briefcase-4-line" },
                 { name: qsTr("元数据修改"), icon: "information-line" },
-                { name: qsTr("文件名处理"), icon: "file-copy-line" },
-                { name: qsTr("人声伴奏分离"), icon: "waveform-switch" },
-                { name: qsTr("人声克隆"), icon: "music-2-line" }
+                { name: qsTr("文件名处理"), icon: "file-copy-line" }
             ]
 
             Button {

@@ -168,7 +168,6 @@ Rectangle {
             _peakCount: Number(source._peakCount) || 0
         }
         waveform.layers = snapshot
-        playedWaveform.layers = snapshot
     }
 
     function loadWaveform() {
@@ -332,7 +331,6 @@ Rectangle {
                     id: artistRatingRow
                     objectName: "trackArtistRatingRow"
                     Layout.fillWidth: true
-                    spacing: Theme.spacingMd
                     visible: !root.minimalHeight
 
                     Item {
@@ -525,7 +523,8 @@ Rectangle {
             Rectangle {
                 id: waveformPlaybackGuide
                 objectName: "waveformPlaybackGuide"
-                visible: root.effectiveDurationMs > 0
+                visible: SettingsController.waveformPlaybackGuide
+                         && root.effectiveDurationMs > 0
                 x: Math.max(0, Math.min(
                                 waveformFrame.width - width,
                                 Math.round(waveformFrame.playbackX - width / 2)))

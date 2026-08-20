@@ -84,3 +84,4 @@ private:
 };
 
 double readEmbeddedBpmTag(const QString& requestedPath);
+ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm);

@@ -119,6 +119,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/LibraryManagerPage.qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
+        qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/FormatTaskTable.qml
@@ -129,8 +130,6 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
         qml/AgPlayer/components/tools/MetadataEditPage.qml
         qml/AgPlayer/components/tools/AudioEditorPage.qml
-        qml/AgPlayer/components/tools/VocalSeparationPage.qml
-        qml/AgPlayer/components/tools/VoiceClonePage.qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
         qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
         qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml

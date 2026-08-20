@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $installer = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:AGPLAYER_INSTALLER_SCRIPT
+$installer = $installer -replace "`r`n", "`n"
 $repo = Split-Path -Parent (Split-Path -Parent $env:AGPLAYER_INSTALLER_SCRIPT)
 
 if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}$') {

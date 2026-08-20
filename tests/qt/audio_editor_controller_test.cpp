@@ -316,7 +316,7 @@ private slots:
         QCOMPARE(controller.fileName(), QFileInfo(fixture).fileName());
     }
 
-    void exposesRealRecordingDevicesAndRejectsInvalidRecordingPath()
+    void exposesRealRecordingDevicesAndCreatesDefaultRecordingTarget()
     {
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         const QVariantList devices = controller.recordingDevices();
@@ -325,9 +325,11 @@ private slots:
             QVERIFY(!item.value(QStringLiteral("id")).toString().isEmpty());
             QVERIFY(!item.value(QStringLiteral("name")).toString().isEmpty());
         }
-        QVERIFY(!controller.startRecording(QUrl(), QString(), 48'000, 2,
-                                            false, false));
-        QVERIFY(!controller.errorMessage().isEmpty());
+        QVERIFY(controller.startRecording(QUrl(), QString(), 48'000, 2,
+                                           false, false));
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.state() != EditorSessionState::Processing, 5'000);
     }
 
     void recordingDeviceStartupFailureReturnsAsynchronously()

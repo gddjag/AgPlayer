@@ -59,6 +59,7 @@ Window {
         spacing: 0
 
         Item {
+            objectName: "equalizerHeaderPanel"
             Layout.fillWidth: true
             Layout.preferredHeight: 34
 
@@ -118,6 +119,7 @@ Window {
         }
 
         Rectangle {
+            objectName: "equalizerResponsePanel"
             Layout.fillWidth: true
             Layout.preferredHeight: 44
             color: Theme.panel
@@ -216,6 +218,7 @@ Window {
         }
 
         RowLayout {
+            objectName: "equalizerBandsPanel"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: 10
@@ -266,6 +269,7 @@ Window {
         }
 
         Rectangle {
+            objectName: "equalizerFooterPanel"
             Layout.fillWidth: true
             Layout.preferredHeight: 38
             color: Theme.panel

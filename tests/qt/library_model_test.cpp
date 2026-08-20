@@ -17,6 +17,7 @@ private slots:
     void replaceAllRebuildsCanonicalIndexForLargeLibrary();
     void countPropertyTracksRows();
     void findsRowByTrackId();
+    void updatesRenamedPathsAsOneBatchWithoutChangingTrackIds();
     void updatesRatingAndPlaybackHistory();
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();

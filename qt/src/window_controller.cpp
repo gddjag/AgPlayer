@@ -734,10 +734,12 @@ void WindowController::repositionDockedListWindow()
         return;
     }
 
-    // Top/bottom docking is one visual column: its two native frame edges
-    // must coincide.  The list height remains independent so its ten-row
-    // default and user-selected height are preserved.
+    // A docked player/list pair is one visual column. Keep the shared width
+    // aligned while preserving the independently resizable list height.
     updatingWindowGeometry_ = true;
+    if (listWindow_->width() != mainWindow_->width()) {
+        listWindow_->resize(mainWindow_->width(), listWindow_->height());
+    }
     // Keep docking in Qt's screen-independent coordinate space. Mixing HWND
     // outer-frame pixels with QWindow client geometry introduces a border/DPI
     // offset and makes the pair drift at monitor seams. WM_DPICHANGED below

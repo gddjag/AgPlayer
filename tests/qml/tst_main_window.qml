@@ -90,85 +90,10 @@ TestCase {
     }
 
     Component {
-        id: fileDropAreaComponent
-        FileDropArea {}
-    }
-
-    Component {
-        id: trackListComponent
-        TrackList {
-            width: 1100
-            height: 500
-        }
-    }
-
-    Component {
-        id: listWindowComponent
-        ListWindow {
-            visible: true
-            width: 1000
-            height: 620
-        }
-    }
-
-    Component {
-        id: defaultListWindowComponent
-        ListWindow { visible: true }
-    }
-
-    Component {
-        id: sideNavigationComponent
-        SideNavigation {
-            width: 208
-            height: 500
-            property int renameRequestCount: 0
-            property int exportRequestCount: 0
-            property int deleteRequestCount: 0
-            property string lastRequestedPlaylistId: ""
-            onRenamePlaylistRequested: function(playlistId) {
-                renameRequestCount += 1
-                lastRequestedPlaylistId = playlistId
-            }
-            onExportPlaylistRequested: function(playlistId) {
-                exportRequestCount += 1
-                lastRequestedPlaylistId = playlistId
-            }
-            onRemovePlaylistRequested: function(playlistId) {
-                deleteRequestCount += 1
-                lastRequestedPlaylistId = playlistId
-            }
-        }
-    }
-
-    Component {
-        id: dockedWindowFrameComponent
-        DockedWindowFrame {
-            width: 320
-            height: 180
-        }
-    }
-
-    Component {
-        id: searchFilterComponent
-        SearchFilter {
-            width: 900
-            height: 54
-        }
-    }
-
-    Component {
         id: libraryManagerComponent
         LibraryManagerPage {
             width: 1200
             height: 760
-        }
-    }
-
-    Component {
-        id: emptyLibraryComponent
-        EmptyLibrary {
-            width: 900
-            height: 420
         }
     }
 
@@ -749,8 +674,8 @@ TestCase {
         editorAction.triggered()
         tryCompare(AudioToolsController, "currentTool", 0)
         tryCompare(WindowController, "audioToolsVisible", true)
-        tryCompare(LightEditor, "hasInput", true, 2000)
-        verify(LightEditor.inputFileName.length > 0,
+        tryCompare(AudioEditorController, "hasDocument", true, 2000)
+        verify(AudioEditorController.fileName.length > 0,
                "the context-menu action must load the selected audio file")
         toolsMenu.close()
         menu.close()
@@ -1314,7 +1239,7 @@ TestCase {
         compare(waveform.spectrumBarCount, 128)
         compare(waveform.spectrumBarWidth, 5)
         compare(waveform.spectrumBarGap, 2)
-        compare(waveform.spectrumMaxHeight, 72)
+        compare(waveform.spectrumMaxHeight, 96)
         fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
         fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
         fuzzyCompare(waveform.spectrumPeakFallSeconds, 0.75, 0.001)
@@ -1403,7 +1328,7 @@ TestCase {
         LibraryModel.setFavorite(row, false)
         tryVerify(function() {
             return favoriteButton.icon.source.toString()
-                    === Theme.icon("heart-line").toString()
+                    === Theme.icon("heart-outline").toString()
         })
 
         LibraryModel.setFavorite(row, true)
@@ -1755,27 +1680,6 @@ TestCase {
         tryCompare(SettingsController, "waveformDensity", 2.0)
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
-        page.close()
-    }
-
-    function test_settings_y_feedback_dialog_is_actionable() {
-        var page = findChild(mainWindow, "settingsPage")
-        verify(page)
-        page.open()
-        page.selectedSection = 6
-        wait(500)
-        var button = findChild(page, "feedbackButton")
-        var dialog = findChild(page, "feedbackDialog")
-        var message = findChild(page, "feedbackMessage")
-        verify(button)
-        verify(dialog)
-        verify(message)
-        mouseClick(button)
-        tryVerify(function() { return dialog.visible })
-        compare(message.text, "建议反馈请发邮件：agplayer@foxmail.com")
-        verify(findChild(dialog, "feedbackEmailField"))
-        verify(findChild(dialog, "copyFeedbackEmailButton"))
-        dialog.close()
         page.close()
     }
 

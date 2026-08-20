@@ -480,6 +480,30 @@ void ImportControllerTest::writesBpmWhenAutoReadEnabled()
     QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
 }
 
+void ImportControllerTest::productionProbePrefersValidEmbeddedBpm()
+{
+    QTemporaryDir tempDirectory;
+    QVERIFY(tempDirectory.isValid());
+    const QString wavPath = tempDirectory.filePath(QStringLiteral("click-track.wav"));
+    const QString taggedPath = tempDirectory.filePath(QStringLiteral("click-track.flac"));
+    QVERIFY(agplayer::test::writeClickTrackWav(wavPath, 120, 8));
+
+    const QByteArray wavPathUtf8 = wavPath.toUtf8();
+    const QByteArray taggedPathUtf8 = taggedPath.toUtf8();
+    QCOMPARE(ag_transcode(wavPathUtf8.constData(), taggedPathUtf8.constData(),
+                         nullptr, 0, 0, 0, nullptr, nullptr, nullptr),
+             AG_OK);
+    QCOMPARE(ag_metadata_write_extended(
+                 taggedPathUtf8.constData(), nullptr, nullptr, nullptr, nullptr, nullptr,
+                 nullptr, nullptr, nullptr, nullptr, nullptr, "173.25",
+                 nullptr, nullptr, nullptr, nullptr, 0, nullptr),
+             AG_OK);
+
+    const ProbeResult result = probeMetadata(taggedPath, true);
+    QCOMPARE(result.result, AG_OK);
+    QCOMPARE(result.track.bpm, 173.25);
+}
+
 void ImportControllerTest::leavesBpmZeroWhenAutoReadDisabled()
 {
     QTemporaryFile tempFile(QDir::temp().filePath(QStringLiteral("ag_bpm_click_off_XXXXXX.wav")));

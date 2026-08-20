@@ -17,7 +17,6 @@
 #include "playback_controller.hpp"
 #include "replay_gain_scanner.hpp"
 #include "playlist_model.hpp"
-#include "plugin_install_manager.hpp"
 #include "settings_controller.hpp"
 #include "waveform_item.hpp"
 #include "waveform_provider.hpp"
@@ -37,8 +36,7 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
                                  EqualizerController* equalizer,
-                                 AudioEditorController* audioEditor,
-                                 PluginInstallManager* pluginInstallManager)
+                                 AudioEditorController* audioEditor)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -61,6 +59,11 @@ void register_agplayer_qml_types(LibraryModel* library,
             });
     }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
+    qmlRegisterSingletonType<ReplayGainScanner>(
+        "AgPlayer", 1, 0, "ReplayGainScanner",
+        [library](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new ReplayGainScanner(library);
+        });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
     qmlRegisterType<LibraryManagerController>("AgPlayer", 1, 0,
@@ -84,14 +87,4 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
     qmlRegisterType<AudioEditorWaveformItem>(
         "AgPlayer", 1, 0, "AudioEditorWaveformItem");
-    if (pluginInstallManager != nullptr) {
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PluginInstallManager",
-                                     pluginInstallManager);
-    } else {
-        qmlRegisterSingletonType<PluginInstallManager>(
-            "AgPlayer", 1, 0, "PluginInstallManager",
-            [](QQmlEngine*, QJSEngine*) -> QObject* {
-                return new PluginInstallManager();
-            });
-    }
 }

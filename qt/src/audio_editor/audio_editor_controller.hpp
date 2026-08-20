@@ -132,6 +132,8 @@ public:
     [[nodiscard]] int bitsPerSample() const noexcept { return bits_per_sample_; }
     [[nodiscard]] qint64 bitRate() const noexcept { return bit_rate_; }
     [[nodiscard]] QVariantList channelPeaks() const;
+    [[nodiscard]] QVariantList viewportChannelPeaks() const
+    { return viewport_channel_peaks_; }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] qint64 positionMs() const noexcept { return position_ms_; }
     [[nodiscard]] qint64 durationMs() const noexcept;

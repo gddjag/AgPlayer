@@ -49,7 +49,6 @@
 #include "library_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
-#include "plugin_install_manager.hpp"
 #include "native_drop_router.hpp"
 #include "filename_processor.hpp"
 #include "playback_controller.hpp"
@@ -700,7 +699,6 @@ int main(int argc, char* argv[])
         FilenameProcessor filenameProcessor;
         filenameProcessor.setLibraryModel(&library);
         FormatConverter formatConverter;
-        PluginInstallManager pluginInstaller;
         if (!qaScreenshotTools.isEmpty() && !qaPlayPath.isEmpty()
             && QFileInfo::exists(qaPlayPath)) {
             const QList<QUrl> qaToolUrls{QUrl::fromLocalFile(qaPlayPath)};
@@ -738,7 +736,7 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &filenameProcessor,
                                     &settings, &waveformProvider, &playlists,
-                                    &equalizer, &audioEditor, &pluginInstaller);
+                                    &equalizer, &audioEditor);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

@@ -1195,7 +1195,7 @@ void SettingsController::load()
         }
         if (normalizedColor(spectrumSolidColor_)
             == QStringLiteral("#e62e9b")) {
-            spectrumSolidColor_ = QStringLiteral("#e62e9b");
+            spectrumSolidColor_ = QStringLiteral("#0078d4");
             settings_.setValue(QStringLiteral("spectrumSolidColor"),
                                spectrumSolidColor_);
         }
@@ -1366,7 +1366,7 @@ void SettingsController::load()
     waveformRgbEndColor_ =
         validOr(waveformRgbEndColor_, QStringLiteral("#e62e9b"));
     spectrumSolidColor_ =
-        validOr(spectrumSolidColor_, QStringLiteral("#e62e9b"));
+        validOr(spectrumSolidColor_, QStringLiteral("#0078d4"));
     spectrumRgbStartColor_ =
         validOr(spectrumRgbStartColor_, QStringLiteral("#00d4ff"));
     spectrumRgbMiddleColor_ =
@@ -1533,7 +1533,7 @@ void SettingsController::restoreDefaults()
     waveformCanvasHeight_ = 78;
     waveformCanvasLocked_ = true;
     spectrumColorMode_ = 0;
-    spectrumSolidColor_ = QStringLiteral("#e62e9b");
+    spectrumSolidColor_ = QStringLiteral("#0078d4");
     spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
     spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     spectrumRgbEndColor_ = QStringLiteral("#e62e9b");

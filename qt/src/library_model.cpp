@@ -200,6 +200,9 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
         if (track.trackId.isEmpty()) {
             track.trackId = trackIdForPath(track.path);
         }
+        if (track.addedAtMs <= 0) {
+            track.addedAtMs = QDateTime::currentMSecsSinceEpoch();
+        }
         batchKeys.insert(key);
         accepted.append(std::move(track));
     }

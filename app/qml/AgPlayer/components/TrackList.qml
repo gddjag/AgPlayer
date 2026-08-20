@@ -163,7 +163,7 @@ ListView {
     function openInAudioTool(toolIndex) {
         var urls = selectedFileUrls()
         if (urls.length === 0) return
-        if (toolIndex === 0) LightEditor.queueFiles(urls)
+        if (toolIndex === 0) AudioEditorController.openFile(urls[0])
         else if (toolIndex === 1) FormatConverter.loadFiles(urls)
         else if (toolIndex === 2) MetadataEditor.loadFiles(urls)
         else FilenameProcessor.loadFiles(urls)

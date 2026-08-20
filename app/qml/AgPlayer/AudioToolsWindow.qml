@@ -199,8 +199,6 @@ Window {
                     FormatConvertPage { objectName: "formatConvertPage" }
                     MetadataEditPage {}
                     FilenameProcessPage {}
-                    VocalSeparationPage {}
-                    VoiceClonePage {}
                 }
             }
         }

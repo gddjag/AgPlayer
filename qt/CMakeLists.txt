@@ -17,14 +17,20 @@ add_library(agplayer_qt STATIC
     src/rename_transaction.hpp
     src/rename_journal_store.cpp
     src/rename_journal_store.hpp
-    src/plugin_install_manager.cpp
-    src/plugin_install_manager.hpp
     src/editor_timeline_math.cpp
     src/editor_timeline_math.hpp
     src/equalizer_controller.cpp
     src/equalizer_controller.hpp
     src/audio_tools_controller.cpp
     src/audio_tools_controller.hpp
+    src/audio_editor/editor_action_model.cpp
+    src/audio_editor/editor_action_model.hpp
+    src/audio_editor/audio_editor_controller.cpp
+    src/audio_editor/audio_editor_controller.hpp
+    src/audio_editor/audio_editor_waveform_item.cpp
+    src/audio_editor/audio_editor_waveform_item.hpp
+    src/audio_editor/editor_viewport.cpp
+    src/audio_editor/editor_viewport.hpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
     src/cache_janitor.cpp
