@@ -1,6 +1,7 @@
 #include "format_converter.hpp"
 
 #include "audio_file_discovery.hpp"
+#include "format_conversion_plan.hpp"
 #include "format_conversion_filter_model.hpp"
 #include "format_conversion_task_model.hpp"
 #include "transcode_capability.hpp"
@@ -906,19 +907,199 @@ void FormatConverter::clearFinished()
 
 QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
 {
+    const QString format = request.value(QStringLiteral("outputFormat"),
+                                         selectedFormat_)
+                               .toString().trimmed().toLower();
+    QString requestedConflictPolicy = request.value(
+        QStringLiteral("conflictPolicy"), conflictPolicy_)
+                                                .toString().trimmed().toLower();
+    FormatConflictPolicy conflictPolicy = FormatConflictPolicy::AutoNumber;
+    if (requestedConflictPolicy == QStringLiteral("skip")) {
+        conflictPolicy = FormatConflictPolicy::Skip;
+    } else if (requestedConflictPolicy == QStringLiteral("overwrite")) {
+        conflictPolicy = FormatConflictPolicy::Overwrite;
+    } else if (requestedConflictPolicy == QStringLiteral("ask")) {
+        conflictPolicy = FormatConflictPolicy::Ask;
+    } else {
+        requestedConflictPolicy = QStringLiteral("auto-number");
+    }
+
+    FormatConversionRequest conversionRequest;
+    conversionRequest.formatKey = format;
+    conversionRequest.codecName = request.value(
+        QStringLiteral("codecName")).toString();
+    conversionRequest.bitrateMode = request.value(
+        QStringLiteral("bitrateMode"), bitrateMode_)
+                                         .toString().trimmed().toLower();
+    if (conversionRequest.bitrateMode != QStringLiteral("cbr")
+        && conversionRequest.bitrateMode != QStringLiteral("vbr")) {
+        conversionRequest.bitrateMode = QStringLiteral("cbr");
+    }
+    conversionRequest.bitrate = request.value(
+        QStringLiteral("bitRate"), 192000).toLongLong();
+    conversionRequest.quality = request.value(
+        QStringLiteral("quality"), 75).toInt();
+    conversionRequest.sampleRate = request.value(
+        QStringLiteral("sampleRate"), 0).toInt();
+    conversionRequest.channelLayout = request.value(
+        QStringLiteral("channelLayout")).toString().trimmed().toLower();
+    conversionRequest.sampleFormat = request.value(
+        QStringLiteral("sampleFormat")).toString().trimmed().toLower();
+    conversionRequest.outputDirectory = request.value(
+        QStringLiteral("outputDir")).toString();
+    conversionRequest.conflictPolicy = conflictPolicy;
+    conversionRequest.keepMetadata = request.value(
+        QStringLiteral("keepMetadata"), true).toBool();
+    conversionRequest.keepCover = request.value(
+        QStringLiteral("keepCover"), false).toBool();
+    conversionRequest.preserveDirectories = request.value(
+        QStringLiteral("preserveDirectories"), false).toBool();
+    conversionRequest.extractAudio = request.value(
+        QStringLiteral("extractAudio"), false).toBool();
+
+    QSet<QString> checkedIds;
+    for (int row = 0; row < taskModel_->rowCount(); ++row) {
+        if (taskModel_->taskAt(row).value(QStringLiteral("checked")).toBool()) {
+            checkedIds.insert(taskModel_->taskIdAt(row));
+        }
+    }
+    QList<FileEntry> selectedEntries;
+    {
+        QMutexLocker lock(&mutex_);
+        for (const FileEntry& entry : entries_) {
+            if (checkedIds.contains(entry.taskId)) {
+                selectedEntries.append(entry);
+            }
+        }
+    }
+
+    static const QUuid taskNamespace(
+        QStringLiteral("{76df29bf-589f-4dc4-a64a-9938f8b862d8}"));
+    QList<FormatPlanInput> inputs;
+    QHash<QUuid, QString> externalTaskIds;
+    QString probeError;
+    for (const FileEntry& entry : selectedEntries) {
+        agplayer::MediaProbe probe;
+        std::string detail;
+        if (agplayer::probe_transcode_input(
+                entry.path.toUtf8().toStdString(), probe, detail) != AG_OK) {
+            probeError = detail.empty()
+                ? tr("无法读取输入文件：%1").arg(entry.path)
+                : QString::fromStdString(detail);
+            break;
+        }
+        // The queue has historically classified common video extensions as
+        // video even when a test fixture carries an audio-only container.
+        // Preserve that execution contract in the planner bridge.
+        probe.is_video = probe.is_video || is_video_file(entry.path);
+        const QUuid planTaskId = QUuid::createUuidV5(
+            taskNamespace, entry.taskId.toUtf8());
+        inputs.append({planTaskId, entry.path, entry.importRoot,
+                       std::move(probe),
+                       request.value(QStringLiteral("audioStreamIndex"), -1)
+                           .toInt()});
+        externalTaskIds.insert(planTaskId, entry.taskId);
+    }
+
+    FormatBatchPlan batch;
+    if (probeError.isEmpty()) {
+        batch = build_format_conversion_plan(inputs, conversionRequest);
+    } else {
+        batch.fatalError = probeError;
+    }
+
     QVariantMap plan = request;
-    const QString format = request.value(
-        QStringLiteral("outputFormat"), selectedFormat_).toString().toLower();
     plan.insert(QStringLiteral("outputFormat"), format);
-    plan.insert(QStringLiteral("taskCount"), checkedCount());
-    plan.insert(QStringLiteral("capability"), currentCapability());
-    const bool requiresConfirmation =
-        request.value(QStringLiteral("requiresConfirmation")).toBool()
-        || conflictPolicy_ == QStringLiteral("ask");
-    plan.insert(QStringLiteral("requiresConfirmation"), requiresConfirmation);
-    plan.insert(QStringLiteral("ready"), checkedCount() > 0
-        && currentCapability().value(QStringLiteral("available")).toBool());
-    pendingPlan_ = plan;
+    plan.insert(QStringLiteral("conflictPolicy"), requestedConflictPolicy);
+    QVariantMap capability;
+    for (const QVariant& candidate : supportedOutputFormats()) {
+        const QVariantMap candidateMap = candidate.toMap();
+        if (candidateMap.value(QStringLiteral("key")).toString() == format) {
+            capability = candidateMap;
+            break;
+        }
+    }
+    plan.insert(QStringLiteral("capability"), capability);
+
+    QVariantList serializedTasks;
+    QVariantList conflicts;
+    serializedTasks.reserve(batch.tasks.size());
+    for (const FormatTaskPlan& task : batch.tasks) {
+        QVariantList differences;
+        differences.reserve(task.differences.size());
+        for (const FormatPlanDifference& difference : task.differences) {
+            const QVariantMap serializedDifference{
+                {QStringLiteral("field"), difference.field},
+                {QStringLiteral("requested"), difference.requested},
+                {QStringLiteral("resolved"), difference.resolved},
+                {QStringLiteral("reason"), difference.reason},
+                {QStringLiteral("requiresConfirmation"),
+                 difference.requiresConfirmation}};
+            differences.append(serializedDifference);
+            if (difference.field == QStringLiteral("conflict")) {
+                conflicts.append(serializedDifference);
+            }
+        }
+        serializedTasks.append(QVariantMap{
+            {QStringLiteral("taskId"), externalTaskIds.value(task.taskId)},
+            {QStringLiteral("inputPath"), task.inputPath},
+            {QStringLiteral("outputPath"), task.outputPath},
+            {QStringLiteral("audioStreamIndex"), task.audioStreamIndex},
+            {QStringLiteral("resolvedProfile"), task.resolvedProfile},
+            {QStringLiteral("differences"), differences},
+            {QStringLiteral("skipped"), task.skipped}});
+    }
+    plan.insert(QStringLiteral("tasks"), serializedTasks);
+    plan.insert(QStringLiteral("taskCount"), serializedTasks.size());
+    plan.insert(QStringLiteral("conflicts"), conflicts);
+    plan.insert(QStringLiteral("conflictCount"), conflicts.size());
+    plan.insert(QStringLiteral("requiresConfirmation"),
+                batch.requiresConfirmation
+                    || request.value(QStringLiteral("requiresConfirmation"))
+                           .toBool());
+    plan.insert(QStringLiteral("ready"), batch.ready);
+    if (!batch.tasks.isEmpty()) {
+        plan.insert(QStringLiteral("resolvedProfile"),
+                    batch.tasks.first().resolvedProfile);
+    }
+    if (!batch.fatalError.isEmpty()) {
+        plan.insert(QStringLiteral("reason"), batch.fatalError);
+        plan.insert(QStringLiteral("error"), batch.fatalError);
+    }
+
+    pendingPlan_.clear();
+    pendingRequest_.clear();
+    pendingTaskIds_.clear();
+    if (batch.ready) {
+        pendingPlan_ = plan;
+        pendingRequest_ = request;
+        pendingRequest_.insert(QStringLiteral("outputFormat"), format);
+        pendingRequest_.insert(QStringLiteral("conflictPolicy"),
+                               requestedConflictPolicy);
+        pendingRequest_.insert(QStringLiteral("bitrateMode"),
+                               conversionRequest.bitrateMode);
+        pendingRequest_.insert(QStringLiteral("bitRate"),
+                               conversionRequest.bitrate);
+        pendingRequest_.insert(QStringLiteral("sampleRate"),
+                               conversionRequest.sampleRate);
+        pendingRequest_.insert(QStringLiteral("channelLayout"),
+                               conversionRequest.channelLayout);
+        pendingRequest_.insert(QStringLiteral("sampleFormat"),
+                               conversionRequest.sampleFormat);
+        pendingRequest_.insert(QStringLiteral("outputDir"),
+                               conversionRequest.outputDirectory);
+        pendingRequest_.insert(QStringLiteral("keepMetadata"),
+                               conversionRequest.keepMetadata);
+        pendingRequest_.insert(QStringLiteral("keepCover"),
+                               conversionRequest.keepCover);
+        pendingRequest_.insert(QStringLiteral("preserveDirectories"),
+                               conversionRequest.preserveDirectories);
+        pendingRequest_.insert(QStringLiteral("extractAudio"),
+                               conversionRequest.extractAudio);
+        for (const FormatTaskPlan& task : batch.tasks) {
+            pendingTaskIds_.append(externalTaskIds.value(task.taskId));
+        }
+    }
     emit pendingPlanChanged();
     return plan;
 }
@@ -926,44 +1107,75 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
 void FormatConverter::confirmPendingPlan()
 {
     if (pendingPlan_.isEmpty()) return;
-    const QVariantMap plan = pendingPlan_;
+    const QVariantMap request = pendingRequest_;
+    const QVector<QString> taskIds = pendingTaskIds_;
     pendingPlan_.clear();
+    pendingRequest_.clear();
+    pendingTaskIds_.clear();
     emit pendingPlanChanged();
-    QVector<int> checked;
+
+    QVector<int> frozenIndices;
+    QString staleTaskId;
     {
         QMutexLocker lock(&mutex_);
-        for (int index = 0; index < entries_.size(); ++index) {
-            const QString taskId = entries_.at(index).taskId;
-            for (int row = 0; row < taskModel_->rowCount(); ++row) {
-                if (taskModel_->taskIdAt(row) == taskId
-                    && taskModel_->taskAt(row)
-                           .value(QStringLiteral("checked")).toBool()) {
-                    checked.append(index);
+        frozenIndices.reserve(taskIds.size());
+        for (const QString& taskId : taskIds) {
+            int matchingIndex = -1;
+            for (int index = 0; index < entries_.size(); ++index) {
+                if (entries_.at(index).taskId == taskId
+                    && QFileInfo(entries_.at(index).path).isFile()) {
+                    matchingIndex = index;
                     break;
                 }
             }
+            if (matchingIndex < 0) {
+                staleTaskId = taskId;
+                break;
+            }
+            frozenIndices.append(matchingIndex);
         }
     }
-    startJobs(checked,
-              plan.value(QStringLiteral("outputFormat"), selectedFormat_).toString(),
-              plan.value(QStringLiteral("bitRate"), 192000).toInt(),
-              plan.value(QStringLiteral("sampleRate"), 0).toInt(),
-              plan.value(QStringLiteral("channels"), 0).toInt(),
-              plan.value(QStringLiteral("outputDir")).toString(),
-              plan.value(QStringLiteral("keepMetadata"), true).toBool(),
-              plan.value(QStringLiteral("volumeNormalize"), false).toBool(),
-              plan.value(QStringLiteral("extractAudio"), false).toBool(),
-              plan.value(QStringLiteral("keepCover"), false).toBool(),
-              plan.value(QStringLiteral("sampleFormat")).toString(),
-              plan.value(QStringLiteral("channelLayout")).toString(),
-              plan.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
-              plan.value(QStringLiteral("preserveDirectories"), false).toBool());
+    if (!staleTaskId.isEmpty()
+        || frozenIndices.size() != taskIds.size()) {
+        emit errorOccurred(tr("预检计划已失效，请重新预检后再开始"));
+        return;
+    }
+
+    setBitrateMode(request.value(QStringLiteral("bitrateMode"), bitrateMode_)
+                       .toString());
+    setConflictPolicy(request.value(QStringLiteral("conflictPolicy"),
+                                    conflictPolicy_).toString());
+    const QString channelLayout = request.value(
+        QStringLiteral("channelLayout")).toString();
+    int channels = request.value(QStringLiteral("channels"), 0).toInt();
+    if (!request.contains(QStringLiteral("channels"))) {
+        if (channelLayout == QStringLiteral("mono")) channels = 1;
+        if (channelLayout == QStringLiteral("stereo")) channels = 2;
+    }
+    startJobs(frozenIndices,
+              request.value(QStringLiteral("outputFormat"), selectedFormat_)
+                  .toString(),
+              request.value(QStringLiteral("bitRate"), 192000).toInt(),
+              request.value(QStringLiteral("sampleRate"), 0).toInt(),
+              channels,
+              request.value(QStringLiteral("outputDir")).toString(),
+              request.value(QStringLiteral("keepMetadata"), true).toBool(),
+              request.value(QStringLiteral("volumeNormalize"), false).toBool(),
+              request.value(QStringLiteral("extractAudio"), false).toBool(),
+              request.value(QStringLiteral("keepCover"), false).toBool(),
+              request.value(QStringLiteral("sampleFormat")).toString(),
+              channelLayout,
+              request.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
+              request.value(QStringLiteral("preserveDirectories"), false)
+                  .toBool());
 }
 
 void FormatConverter::rejectPendingPlan()
 {
     if (pendingPlan_.isEmpty()) return;
     pendingPlan_.clear();
+    pendingRequest_.clear();
+    pendingTaskIds_.clear();
     emit pendingPlanChanged();
 }
 
