@@ -32,6 +32,36 @@ Rectangle {
     radius: 6
     clip: true
 
+    component ReferenceCheckBox: CheckBox {
+        id: control
+        indicator: Rectangle {
+            objectName: control.objectName.length > 0 ? control.objectName + "Indicator" : ""
+            x: control.leftPadding
+            y: (control.height - height) / 2
+            width: 20
+            height: 20
+            radius: 3
+            color: control.checked ? "#1688ff" : (control.enabled ? "#0c1821" : "#10181e")
+            border.color: control.checked ? "#1688ff" : (control.enabled ? "#3a4a53" : "#26343c")
+            ThemedIcon {
+                objectName: control.objectName.length > 0 ? control.objectName + "Mark" : ""
+                anchors.centerIn: parent
+                visible: control.checked
+                source: Theme.icon("check-line")
+                tint: "#ffffff"
+                sourceSize.width: 14
+                sourceSize.height: 14
+            }
+        }
+        contentItem: Text {
+            text: control.text
+            leftPadding: control.indicator.width + 8
+            verticalAlignment: Text.AlignVCenter
+            color: control.enabled ? "#d7e0e6" : "#667782"
+            font.pixelSize: 13
+        }
+    }
+
     RowLayout {
         id: settingsHeader
         height: 44
@@ -210,10 +240,10 @@ Rectangle {
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("文件冲突策略"); color: "#aeb9c1" }
                 ComboBox { id: conflictBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动序号"),value:"auto-number"},{text:qsTr("跳过"),value:"skip"},{text:qsTr("覆盖"),value:"overwrite"},{text:qsTr("询问"),value:"ask"}]; textRole:"text"; valueRole:"value" }
-                CheckBox { id: keepMetadataCheck; objectName: "keepMetadataCheck"; Layout.preferredHeight: 28; text: qsTr("保留元数据"); checked: SettingsController.preserveMetadata; onToggled: SettingsController.preserveMetadata = checked }
-                CheckBox { id: keepCoverCheck; Layout.preferredHeight: 28; text: qsTr("保留封面"); checked: true; enabled: converter.currentCapability.supportsCover === true }
-                CheckBox { id: preserveDirectoriesCheck; Layout.preferredHeight: 28; text: qsTr("保留目录结构"); checked: true }
-                CheckBox { id: extractAudioCheck; objectName: "extractAudioCheck"; Layout.preferredHeight: 28; text: qsTr("从视频中提取音频"); checked: false }
+                ReferenceCheckBox { id: keepMetadataCheck; objectName: "keepMetadataCheck"; Layout.preferredHeight: 28; text: qsTr("保留元数据"); checked: SettingsController.preserveMetadata; onToggled: SettingsController.preserveMetadata = checked }
+                ReferenceCheckBox { id: keepCoverCheck; Layout.preferredHeight: 28; text: qsTr("保留封面"); checked: true; enabled: converter.currentCapability.supportsCover === true }
+                ReferenceCheckBox { id: preserveDirectoriesCheck; Layout.preferredHeight: 28; text: qsTr("保留目录结构"); checked: true }
+                ReferenceCheckBox { id: extractAudioCheck; objectName: "extractAudioCheck"; Layout.preferredHeight: 28; text: qsTr("从视频中提取音频"); checked: false }
             }
 
             Rectangle {

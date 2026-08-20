@@ -9,6 +9,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-circle-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/check-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg

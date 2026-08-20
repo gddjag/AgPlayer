@@ -79,6 +79,17 @@ if ($table -notmatch 'formatTaskFirstFileIconBadge' -or
     $table -notmatch 'Theme\.icon\("file-music-fill"\)') {
     throw 'Task file icons must use the official music asset inside the colored badge component.'
 }
+if ($table -notmatch 'component\s+ReferenceCheckBox\s*:\s*CheckBox' -or
+    $settings -notmatch 'component\s+ReferenceCheckBox\s*:\s*CheckBox' -or
+    $combined -notmatch 'Theme\.icon\("check-line"\)' -or
+    $combined -notmatch 'width:\s*20' -or
+    $combined -notmatch 'radius:\s*3' -or
+    $combined -notmatch 'color:\s*control\.checked\s*\?\s*"#1688ff"') {
+    throw 'Task and settings checkboxes must use the reference blue indicator with the official check asset.'
+}
+if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot 'assets/icons/check-line.svg'))) {
+    throw 'Missing approved check-line icon asset for the reference checkbox indicator.'
+}
 if ($page -match 'converterParallelJobsBox' -or
     $page -match 'formatOutputDirectoryRow') {
     throw 'The reference footer must not expose parallel-jobs or output-directory controls.'
@@ -96,6 +107,9 @@ foreach ($asset in @('checkbox-circle-line.svg', 'error-warning-line.svg')) {
     if ($cmake -notmatch [regex]::Escape("assets/icons/$asset")) {
         throw "The footer icon $asset is not registered as an application resource."
     }
+}
+if ($cmake -notmatch [regex]::Escape('assets/icons/check-line.svg')) {
+    throw 'The checkbox check-line icon is not registered as an application resource.'
 }
 if ($page -notmatch 'Theme\.icon\("checkbox-circle-line"\)' -or
     $page -notmatch 'Theme\.icon\("error-warning-line"\)') {

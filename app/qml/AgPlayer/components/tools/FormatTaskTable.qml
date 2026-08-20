@@ -23,6 +23,36 @@ Rectangle {
 
     readonly property var columnWidths: [62, 260, 120, 100, 115, 130, 120, 120, 190]
 
+    component ReferenceCheckBox: CheckBox {
+        id: control
+        indicator: Rectangle {
+            objectName: control.objectName.length > 0 ? control.objectName + "Indicator" : ""
+            x: control.leftPadding
+            y: (control.height - height) / 2
+            width: 20
+            height: 20
+            radius: 3
+            color: control.checked ? "#1688ff" : (control.enabled ? "#0c1821" : "#10181e")
+            border.color: control.checked ? "#1688ff" : (control.enabled ? "#3a4a53" : "#26343c")
+            ThemedIcon {
+                objectName: control.objectName.length > 0 ? control.objectName + "Mark" : ""
+                anchors.centerIn: parent
+                visible: control.checked
+                source: Theme.icon("check-line")
+                tint: "#ffffff"
+                sourceSize.width: 14
+                sourceSize.height: 14
+            }
+        }
+        contentItem: Text {
+            text: control.text
+            leftPadding: control.indicator.width + 8
+            verticalAlignment: Text.AlignVCenter
+            color: control.enabled ? "#d7e0e6" : "#667782"
+            font.pixelSize: 13
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -78,7 +108,7 @@ Rectangle {
                         objectName: "formatHeaderCell-" + index
                         width: root.columnWidths[index]
                         height: 40
-                        CheckBox {
+                        ReferenceCheckBox {
                             visible: index === 0
                             anchors.centerIn: parent
                             checked: converter.checkedCount > 0 && converter.checkedCount === converter.fileCount
@@ -116,7 +146,8 @@ Rectangle {
                 border.color: "#172a36"
                 border.width: 1
 
-                CheckBox {
+                ReferenceCheckBox {
+                    objectName: column === 0 && row === 0 ? "formatTaskFirstCheck" : ""
                     visible: column === 0
                     anchors.centerIn: parent
                     checked: model.checked
