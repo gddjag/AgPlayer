@@ -965,18 +965,25 @@ set_tests_properties(library_model_stress_test PROPERTIES
 )
 
 if (WIN32)
-    add_test(
-        NAME audio_editor_feature_options_test
-        COMMAND "${CMAKE_COMMAND}"
-            "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
-            "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/feature-options-contract"
-            "-DTOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
-            "-DQT_PREFIX=${CMAKE_PREFIX_PATH}"
-            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}"
-            "-DNINJA_EXECUTABLE=${CMAKE_MAKE_PROGRAM}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/audio_editor_feature_options_test.cmake"
-    )
-    set_tests_properties(audio_editor_feature_options_test PROPERTIES TIMEOUT 120)
+    # This contract intentionally performs a nested Ninja configure.  Do not
+    # register it from ad-hoc NMake builds that do not carry the preset's
+    # vcpkg toolchain context; the canonical Windows presets satisfy all three
+    # prerequisites and exercise it below.
+    if (CMAKE_GENERATOR MATCHES "Ninja" AND
+        CMAKE_TOOLCHAIN_FILE AND VCPKG_INSTALLED_DIR)
+        add_test(
+            NAME audio_editor_feature_options_test
+            COMMAND "${CMAKE_COMMAND}"
+                "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
+                "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/feature-options-contract"
+                "-DTOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+                "-DQT_PREFIX=${CMAKE_PREFIX_PATH}"
+                "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}"
+                "-DNINJA_EXECUTABLE=${CMAKE_MAKE_PROGRAM}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/audio_editor_feature_options_test.cmake"
+        )
+        set_tests_properties(audio_editor_feature_options_test PROPERTIES TIMEOUT 120)
+    endif()
 
     add_test(
         NAME audio_tools_layout_contract_test
