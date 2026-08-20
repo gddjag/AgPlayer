@@ -1016,6 +1016,33 @@ bool AudioEditorController::moveEvent(const quint64 id, const qint64 timelineSta
     return true;
 }
 
+std::optional<agplayer::editor::EventId> eventAtPlayhead(
+    const agplayer::editor::TimelineSnapshot& snapshot,
+    const qint64 frame)
+{
+    for (const auto& event : snapshot.events) {
+        const qint64 end = event.timelineStart + agplayer::editor::audibleFrames(event);
+        if (frame > event.timelineStart && frame < end) return event.id;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::pair<agplayer::editor::EventId, agplayer::editor::EventId>>
+mergePairCoveredBySelection(const agplayer::editor::TimelineSnapshot& snapshot,
+                            const std::optional<Selection>& selection)
+{
+    if (!selection) return std::nullopt;
+    std::vector<const agplayer::editor::AudioEvent*> covered;
+    for (const auto& event : snapshot.events) {
+        const qint64 end = event.timelineStart + agplayer::editor::audibleFrames(event);
+        if (event.timelineStart >= selection->start && end <= selection->end) {
+            covered.push_back(&event);
+        }
+    }
+    if (covered.size() != 2) return std::nullopt;
+    return std::make_pair(covered[0]->id, covered[1]->id);
+}
+
 bool AudioEditorController::trimEvent(const quint64 id, const qint64 sourceStart,
                                       const qint64 sourceEnd,
                                       const qint64 timelineStart)
@@ -1416,6 +1443,16 @@ bool AudioEditorController::triggerAction(const QString& id)
         emit exportRequested();
         return true;
     }
+    if (id == QStringLiteral("editor.split")) {
+        const qint64 frame = position_ms_ * sample_rate_ / 1'000;
+        const auto event = eventAtPlayhead(document_.timelineSnapshot(), frame);
+        return event && splitEvent(*event, frame);
+    }
+    if (id == QStringLiteral("editor.merge")) {
+        const auto pair = mergePairCoveredBySelection(
+            document_.timelineSnapshot(), document_.selection());
+        return pair && mergeEvents(pair->first, pair->second);
+    }
     bool changed = false;
     if (id == QStringLiteral("editor.cut")) changed = document_.cutSelection();
     else if (id == QStringLiteral("editor.copy")) changed = document_.copySelection();
@@ -1608,6 +1645,7 @@ bool AudioEditorController::seekMs(const qint64 value)
             : value;
         ag_player_seek(player_, preview_position);
     }
+    refreshActions();
     emit playbackChanged();
     return true;
 }
@@ -2083,6 +2121,12 @@ void AudioEditorController::refreshActions()
     actions_.setEnabled(QStringLiteral("editor.undo"), false);
     actions_.setEnabled(QStringLiteral("editor.redo"), false);
     actions_.setEnabled(QStringLiteral("editor.paste"), document_.hasClipboard() && idle);
+    const qint64 playhead = position_ms_ * sample_rate_ / 1'000;
+    actions_.setEnabled(QStringLiteral("editor.split"), has_document_ && idle
+        && eventAtPlayhead(document_.timelineSnapshot(), playhead).has_value());
+    actions_.setEnabled(QStringLiteral("editor.merge"), has_document_ && idle
+        && mergePairCoveredBySelection(document_.timelineSnapshot(),
+                                       document_.selection()).has_value());
     for (const QString& id : {
              QStringLiteral("editor.cut"), QStringLiteral("editor.copy"),
              QStringLiteral("editor.deleteSelection")}) {

@@ -53,6 +53,45 @@ private slots:
         QCOMPARE(snapshot.revision, std::uint64_t{2});
     }
 
+    void splitPreservesValidParametersAndRejectsInvalidCopiedParameters()
+    {
+        auto source = std::make_shared<const AudioSource>(
+            AudioSource{"fixture.wav", 48'000, 2, 1'000});
+        AudioEvent valid{7, source, 0, 1'000, 0};
+        valid.gain = 0.5F;
+        valid.fadeIn = 100;
+        valid.fadeOut = 100;
+        valid.speedRatio = 1.25;
+        valid.pitchSemitone = 3;
+        valid.mute = true;
+        valid.envelope = {{100, 0.25F}, {200, 0.75F}};
+        auto value = AudioDocument::fromEvents({valid});
+        QVERIFY(value.splitEventAt(7, 500));
+        const TimelineSnapshot split = value.timelineSnapshot();
+        QCOMPARE(split.events.size(), std::size_t{2});
+        for (const AudioEvent& event : split.events) {
+            QCOMPARE(event.source, source);
+            QCOMPARE(event.gain, valid.gain);
+            QCOMPARE(event.fadeIn, valid.fadeIn);
+            QCOMPARE(event.fadeOut, valid.fadeOut);
+            QCOMPARE(event.speedRatio, valid.speedRatio);
+            QCOMPARE(event.pitchSemitone, valid.pitchSemitone);
+            QCOMPARE(event.mute, valid.mute);
+            QCOMPARE(event.envelope.size(), valid.envelope.size());
+        }
+
+        AudioEvent invalid = valid;
+        invalid.id = 8;
+        invalid.fadeIn = 600;
+        auto rejected = AudioDocument::fromEvents({invalid});
+        const TimelineSnapshot before = rejected.timelineSnapshot();
+        QVERIFY(!rejected.splitEventAt(8, 500));
+        const TimelineSnapshot after = rejected.timelineSnapshot();
+        QCOMPARE(after.revision, before.revision);
+        QCOMPARE(after.events.front().sourceEnd, before.events.front().sourceEnd);
+        QCOMPARE(after.events.front().fadeIn, before.events.front().fadeIn);
+    }
+
     void deleteSelectionRetainsTheLaterEventTimelineStart()
     {
         auto value = document();
@@ -69,7 +108,9 @@ private slots:
     {
         auto value = document();
         QVERIFY(value.setSelection({100, 300}));
+        const TimelineSnapshot beforeCopy = value.timelineSnapshot();
         QVERIFY(value.copySelection());
+        QCOMPARE(value.timelineSnapshot().revision, beforeCopy.revision);
         const TimelineSnapshot copied = value.timelineSnapshot();
         QVERIFY(value.cutSelection());
         QVERIFY(value.pasteAt(100));
@@ -93,6 +134,54 @@ private slots:
         QVERIFY(cut.cutSelection());
         QCOMPARE(cut.timelineSnapshot().events.size(), std::size_t{2});
         QCOMPARE(cut.timelineSnapshot().events.at(1).timelineStart, SampleFrame{300});
+    }
+
+    void multiEventClipboardPreservesGapsIdsAndRollback()
+    {
+        auto value = document();
+        QVERIFY(value.splitEventAt(1, 200));
+        QVERIFY(value.moveEvent(2, 400));
+        QVERIFY(value.splitEventAt(2, 600));
+        QVERIFY(value.setSelection({100, 800}));
+        QVERIFY(value.cutSelection());
+        const TimelineSnapshot cut = value.timelineSnapshot();
+        QCOMPARE(cut.events.size(), std::size_t{2});
+        QCOMPARE(cut.events.at(0).timelineStart, SampleFrame{0});
+        QCOMPARE(cut.events.at(1).timelineStart, SampleFrame{800});
+        QCOMPARE(cut.revision, std::uint64_t{5});
+
+        QVERIFY(value.pasteAt(100));
+        const TimelineSnapshot pasted = value.timelineSnapshot();
+        QCOMPARE(pasted.events.size(), std::size_t{5});
+        QCOMPARE(pasted.events.at(1).timelineStart, SampleFrame{100});
+        QCOMPARE(pasted.events.at(2).timelineStart, SampleFrame{400});
+        QCOMPARE(pasted.events.at(3).timelineStart, SampleFrame{600});
+        QCOMPARE(pasted.events.at(1).id, EventId{6});
+        QCOMPARE(pasted.events.at(2).id, EventId{7});
+        QCOMPARE(pasted.events.at(3).id, EventId{8});
+        QCOMPARE(pasted.revision, cut.revision + 1);
+        for (std::size_t first = 0; first < pasted.events.size(); ++first) {
+            for (std::size_t second = first + 1; second < pasted.events.size(); ++second) {
+                QVERIFY(pasted.events.at(first).id != pasted.events.at(second).id);
+            }
+        }
+
+        const TimelineSnapshot beforeCollision = value.timelineSnapshot();
+        QVERIFY(!value.pasteAt(450));
+        const TimelineSnapshot afterCollision = value.timelineSnapshot();
+        QCOMPARE(afterCollision.revision, beforeCollision.revision);
+        QCOMPARE(afterCollision.events.size(), beforeCollision.events.size());
+
+        auto preserveClipboard = document();
+        QVERIFY(preserveClipboard.splitEventAt(1, 200));
+        QVERIFY(preserveClipboard.moveEvent(2, 400));
+        QVERIFY(preserveClipboard.setSelection({100, 200}));
+        QVERIFY(preserveClipboard.copySelection());
+        QVERIFY(preserveClipboard.setSelection({200, 400}));
+        const TimelineSnapshot beforeFailedCut = preserveClipboard.timelineSnapshot();
+        QVERIFY(!preserveClipboard.cutSelection());
+        QCOMPARE(preserveClipboard.timelineSnapshot().revision, beforeFailedCut.revision);
+        QVERIFY(preserveClipboard.pasteAt(200));
     }
 
     void mergeRejectsDifferentMetadataAndMergesOnlyExactNeighbors()

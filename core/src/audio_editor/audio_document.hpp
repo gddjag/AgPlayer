@@ -33,6 +33,7 @@ struct Marker final {
 class AudioDocument final {
 public:
     [[nodiscard]] static AudioDocument fromSource(AudioSource source);
+    [[nodiscard]] static AudioDocument fromEvents(std::vector<AudioEvent> events);
 
     bool setSelection(Selection selection) noexcept;
     bool clearSelection() noexcept;

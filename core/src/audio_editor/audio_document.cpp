@@ -30,6 +30,19 @@ AudioDocument AudioDocument::fromSource(AudioSource source)
     return document;
 }
 
+AudioDocument AudioDocument::fromEvents(std::vector<AudioEvent> events)
+{
+    AudioDocument document;
+    EventId highest{};
+    for (const AudioEvent& event : events) {
+        if (event.id == std::numeric_limits<EventId>::max()) return {};
+        highest = std::max(highest, event.id);
+    }
+    if (!document.timeline_.replace(std::move(events))) return {};
+    document.next_event_id_ = highest + 1;
+    return document;
+}
+
 bool AudioDocument::setSelection(const Selection selection) noexcept
 {
     if (!selection.valid() || selection.end > totalFrames()) return false;
