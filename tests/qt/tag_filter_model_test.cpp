@@ -1,0 +1,66 @@
+#include "library_model.hpp"
+#include "tag_filter_model.hpp"
+#include "tag_model.hpp"
+
+#include <QColor>
+#include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTest>
+
+class TagFilterModelTest final : public QObject {
+    Q_OBJECT
+
+private slots:
+    void filtersCaseInsensitivelyAndPropagatesIncrementalChanges();
+};
+
+void TagFilterModelTest::filtersCaseInsensitivelyAndPropagatesIncrementalChanges()
+{
+    // Catches filtering by copied QML rows or rebuilding/resetting the proxy
+    // when one source tag is inserted, removed, renamed, or recolored.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel library;
+    TagModel tags(&library, directory.filePath(QStringLiteral("tags.json")));
+    QVERIFY(tags.createTag(QStringLiteral("Alpha")));
+    QVERIFY(tags.createTag(QStringLiteral("Beta")));
+
+    TagFilterModel filter;
+    filter.setSourceModel(&tags);
+    QCOMPARE(filter.sourceModel(), &tags);
+    filter.setQuery(QStringLiteral("ALP"));
+    QCOMPARE(filter.rowCount(), 1);
+    QCOMPARE(filter.data(filter.index(0, 0), TagModel::DisplayNameRole).toString(),
+             QStringLiteral("Alpha"));
+
+    QSignalSpy sourceReset(&tags, &QAbstractItemModel::modelReset);
+    QSignalSpy proxyReset(&filter, &QAbstractItemModel::modelReset);
+    QSignalSpy inserted(&filter, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removed(&filter, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy changed(&filter, &QAbstractItemModel::dataChanged);
+
+    QVERIFY(tags.createTag(QStringLiteral("Alpine")));
+    QCOMPARE(filter.rowCount(), 2);
+    QCOMPARE(inserted.count(), 1);
+
+    tags.removeTag(QStringLiteral("alpha"));
+    QCOMPARE(filter.rowCount(), 1);
+    QCOMPARE(removed.count(), 1);
+
+    tags.renameTag(QStringLiteral("beta"), QStringLiteral("Alphabet"));
+    QCOMPARE(filter.rowCount(), 2);
+    QCOMPARE(inserted.count(), 2);
+
+    QVERIFY(tags.setTagColor(QStringLiteral("alphabet"),
+                             QStringLiteral("#AABBCC")));
+    QCOMPARE(changed.count(), 1);
+
+    tags.renameTag(QStringLiteral("alphabet"), QStringLiteral("Gamma"));
+    QCOMPARE(filter.rowCount(), 1);
+    QCOMPARE(removed.count(), 2);
+    QCOMPARE(sourceReset.count(), 0);
+    QCOMPARE(proxyReset.count(), 0);
+}
+
+QTEST_GUILESS_MAIN(TagFilterModelTest)
+#include "tag_filter_model_test.moc"

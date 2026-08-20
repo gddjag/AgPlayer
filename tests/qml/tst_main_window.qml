@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import QtTest
 import AgPlayer
 
@@ -8,6 +9,8 @@ TestCase {
     when: windowShown
 
     property var mainWindow: null
+    property var task4StateSnapshot: null
+    property var task4TemporaryTagKeys: []
     Component {
         id: fileDropAreaComponent
         FileDropArea {}
@@ -110,6 +113,8 @@ TestCase {
         QtObject {
             property int requestCount: 0
             property int cancelCount: 0
+            property var requests: []
+            property var cancellations: []
             property string lastTrackId: ""
             property string lastSourcePath: ""
             property int lastGeneration: -1
@@ -117,12 +122,21 @@ TestCase {
 
             function request(trackId, sourcePath, generation) {
                 requestCount += 1
+                var nextRequests = requests.slice()
+                nextRequests.push({ "trackId": trackId,
+                                    "sourcePath": sourcePath,
+                                    "generation": generation })
+                requests = nextRequests
                 lastTrackId = trackId
                 lastSourcePath = sourcePath
                 lastGeneration = generation
             }
             function cancel(trackId, generation) {
                 cancelCount += 1
+                var nextCancellations = cancellations.slice()
+                nextCancellations.push({ "trackId": trackId,
+                                         "generation": generation })
+                cancellations = nextCancellations
             }
             function colorForTrackId(trackId) {
                 return "#7f6aa8"
@@ -138,6 +152,35 @@ TestCase {
         }
     }
 
+    Component {
+        id: isolatedTrackModelComponent
+        ListModel {}
+    }
+
+    Component {
+        id: trackListHostComponent
+        Item {
+            width: 800
+            height: 210
+        }
+    }
+
+    Component {
+        id: stackedTrackListHostComponent
+        StackLayout {
+            width: 800
+            height: 210
+            currentIndex: 0
+            property alias list: stackedTrackList
+            TrackList {
+                id: stackedTrackList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+            Item {}
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -147,6 +190,43 @@ TestCase {
 
     function init() {
         failOnWarning(/.?/)
+        var filter = findChild(mainWindow, "filterModel")
+        task4StateSnapshot = {
+            "thumbnailEnabled": SettingsController.listWaveformThumbnailEnabled,
+            "thumbnailMode": SettingsController.listWaveformThumbnailMode,
+            "selectedTagKey": TagModel.selectedKey,
+            "tagKey": filter ? filter.tagKey : "",
+            "category": filter ? filter.category : "all",
+            "resourceFolder": filter ? filter.resourceFolder : "",
+            "searchText": filter ? filter.searchText : "",
+            "exactRating": filter ? filter.exactRating : 0,
+            "minBpm": filter ? filter.minBpm : 60,
+            "maxBpm": filter ? filter.maxBpm : 160
+        }
+        task4TemporaryTagKeys = []
+    }
+
+    function cleanup() {
+        for (var index = 0; index < task4TemporaryTagKeys.length; ++index)
+            TagModel.removeTag(task4TemporaryTagKeys[index])
+        if (!task4StateSnapshot)
+            return
+        var filter = findChild(mainWindow, "filterModel")
+        if (filter) {
+            filter.tagKey = task4StateSnapshot.tagKey
+            filter.category = task4StateSnapshot.category
+            filter.resourceFolder = task4StateSnapshot.resourceFolder
+            filter.searchText = task4StateSnapshot.searchText
+            filter.exactRating = task4StateSnapshot.exactRating
+            filter.minBpm = task4StateSnapshot.minBpm
+            filter.maxBpm = task4StateSnapshot.maxBpm
+        }
+        TagModel.selectedKey = task4StateSnapshot.selectedTagKey
+        SettingsController.listWaveformThumbnailMode =
+                task4StateSnapshot.thumbnailMode
+        SettingsController.listWaveformThumbnailEnabled =
+                task4StateSnapshot.thumbnailEnabled
+        task4StateSnapshot = null
     }
 
     function countObjectsNamed(parentObject, expectedName) {
@@ -157,6 +237,29 @@ TestCase {
         for (var index = 0; index < childItems.length; ++index)
             total += countObjectsNamed(childItems[index], expectedName)
         return total
+    }
+
+    function createIsolatedTrackModel(prefix, count) {
+        var model = isolatedTrackModelComponent.createObject(testCase)
+        var path = decodeURIComponent(testAudioUrl.toString()
+                                      .replace(/^file:\/\/\//, ""))
+        for (var row = 0; row < count; ++row) {
+            model.append({
+                "trackId": prefix + row,
+                "path": path,
+                "title": "Pool track " + row,
+                "artist": "AgPlayer QA",
+                "album": "Pool reuse",
+                "coverUrl": "",
+                "favorite": false,
+                "rating": 0,
+                "bpm": 120,
+                "durationMs": 1000,
+                "available": true,
+                "fileStatus": "available"
+            })
+        }
+        return model
     }
 
     function test_docked_window_frame_removes_shared_edge_and_contact_corners() {
@@ -1536,32 +1639,40 @@ TestCase {
         var panel = findChild(window, "tagManagementPanel")
         verify(panel)
 
+        var suffix = String(Date.now())
+        var alphaName = "Task4 Alpha " + suffix
+        var betaName = "Task4 Beta " + suffix
+        var alphaKey = alphaName.toLocaleLowerCase()
+        var betaKey = betaName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [alphaKey, betaKey]
         var initialCount = TagModel.count
-        verify(panel.addTag("Task4 Alpha"), "add must call the real TagModel")
-        verify(panel.addTag("Task4 Beta"), "second real tag should be added")
+        verify(panel.addTag(alphaName), "add must call the real TagModel")
+        verify(panel.addTag(betaName), "second real tag should be added")
         tryCompare(TagModel, "count", initialCount + 2)
 
-        panel.searchText = "Alpha"
+        var proxy = findChild(panel, "tagFilterProxy")
+        verify(proxy)
+        compare(proxy.sourceModel, TagModel)
+        panel.searchText = "Alpha " + suffix
         tryCompare(panel, "visibleTagCount", 1)
-        panel.selectTag("task4 alpha")
-        compare(TagModel.selectedKey, "task4 alpha")
-        compare(filterModel.tagKey, "task4 alpha")
+        panel.selectTag(alphaKey)
+        compare(TagModel.selectedKey, alphaKey)
+        compare(filterModel.tagKey, alphaKey)
         var navigation = findChild(window, "referenceSideNavigation")
         verify(navigation.nodeIsSelected("tags", "tags:manage", ""))
         verify(!navigation.nodeIsSelected("library", "library:all", ""),
                "tag filtering must not leave both library and tags selected")
 
-        panel.selectTag("task4 alpha")
+        panel.selectTag(alphaKey)
         compare(TagModel.selectedKey, "")
         compare(filterModel.tagKey, "")
 
-        TagModel.removeTag("task4 alpha")
-        TagModel.removeTag("task4 beta")
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_z_list_waveforms_only_exist_for_visible_rows_when_enabled() {
+        nativeDropHelper.ensureSortableTracks()
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         var previousMode = SettingsController.listWaveformThumbnailMode
         SettingsController.listWaveformThumbnailEnabled = false
@@ -1637,6 +1748,141 @@ TestCase {
 
         wrapper.destroy()
         tryCompare(provider, "cancelCount", 2)
+        provider.destroy()
+    }
+
+    function test_z_thumbnail_requests_follow_pool_reuse_and_host_visibility() {
+        SettingsController.listWaveformThumbnailEnabled = true
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var model = createIsolatedTrackModel("pool-track-", 24)
+        var host = trackListHostComponent.createObject(mainWindow.contentItem)
+        var list = trackListComponent.createObject(host, {
+            "width": host.width,
+            "height": host.height,
+            "trackModel": model,
+            "thumbnailProvider": provider
+        })
+        verify(provider && model && host && list)
+        tryVerify(function() { return provider.requestCount > 0 })
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow && findChild(firstRow, "trackWaveformThumbnail"))
+        var cancellationsBeforeHeaderCover = provider.cancelCount
+        list.contentY = list.rowHeight
+        tryVerify(function() {
+            var coveredRow = list.itemAtIndex(0)
+            return coveredRow
+                    && !findChild(coveredRow, "trackWaveformThumbnail")
+                    && provider.cancelCount > cancellationsBeforeHeaderCover
+        }, 1000)
+        list.positionViewAtBeginning()
+        tryVerify(function() {
+            var returnedRow = list.itemAtIndex(0)
+            return returnedRow
+                    && findChild(returnedRow, "trackWaveformThumbnail")
+        })
+
+        var requestsAtBeginning = provider.requestCount
+        var initialGenerations = ({})
+        for (var initialIndex = 0;
+             initialIndex < provider.requests.length; ++initialIndex) {
+            var initialRequest = provider.requests[initialIndex]
+            initialGenerations[initialRequest.trackId] =
+                    initialRequest.generation
+        }
+
+        list.positionViewAtEnd()
+        tryVerify(function() {
+            return provider.cancelCount > 0
+                    && provider.requestCount > requestsAtBeginning
+        })
+        var canceledInitialGenerations = ({})
+        for (var cancellationIndex = 0;
+             cancellationIndex < provider.cancellations.length;
+             ++cancellationIndex) {
+            var cancellation = provider.cancellations[cancellationIndex]
+            if (initialGenerations[cancellation.trackId]
+                    === cancellation.generation) {
+                canceledInitialGenerations[cancellation.trackId] =
+                        cancellation.generation
+            }
+        }
+        var requestsAtEnd = provider.requestCount
+        list.positionViewAtBeginning()
+        tryVerify(function() { return provider.requestCount > requestsAtEnd })
+        var reusedSafely = false
+        for (var requestIndex = requestsAtBeginning;
+             requestIndex < provider.requests.length; ++requestIndex) {
+            var request = provider.requests[requestIndex]
+            if (canceledInitialGenerations[request.trackId] !== undefined
+                    && request.generation
+                       > canceledInitialGenerations[request.trackId]) {
+                reusedSafely = true
+                break
+            }
+        }
+        verify(reusedSafely,
+               "a pooled delegate must request a returning track with a new generation")
+
+        var cancellationsBeforeHide = provider.cancelCount
+        host.visible = false
+        tryCompare(list, "thumbnailItemCount", 0)
+        tryVerify(function() {
+            return provider.cancelCount > cancellationsBeforeHide
+        })
+
+        host.destroy()
+        model.destroy()
+        provider.destroy()
+    }
+
+    function test_z_thumbnail_requests_cancel_for_stack_and_window_hiding() {
+        SettingsController.listWaveformThumbnailEnabled = false
+        var stackProvider = fakeThumbnailProviderComponent.createObject(testCase)
+        var stackModel = createIsolatedTrackModel("stack-track-", 12)
+        var stack = stackedTrackListHostComponent.createObject(
+                    mainWindow.contentItem)
+        verify(stackProvider && stackModel && stack)
+        stack.list.trackModel = stackModel
+        stack.list.thumbnailProvider = stackProvider
+        SettingsController.listWaveformThumbnailEnabled = true
+        tryVerify(function() { return stackProvider.requestCount > 0 })
+        var cancellationsBeforeStackHide = stackProvider.cancelCount
+        stack.currentIndex = 1
+        tryVerify(function() { return !stack.list.visible })
+        tryCompare(stack.list, "thumbnailItemCount", 0)
+        tryVerify(function() {
+            return stackProvider.cancelCount > cancellationsBeforeStackHide
+        })
+        stack.destroy()
+        stackModel.destroy()
+        stackProvider.destroy()
+
+        nativeDropHelper.ensureSortableTracks()
+        var filter = findChild(mainWindow, "filterModel")
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        filter.searchText = ""
+        filter.category = "all"
+        SettingsController.listWaveformThumbnailEnabled = false
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400
+        })
+        verify(provider && window)
+        var list = findChild(window, "sharedTrackList")
+        verify(list)
+        list.thumbnailProvider = provider
+        SettingsController.listWaveformThumbnailEnabled = true
+        tryVerify(function() { return provider.requestCount > 0 })
+        var cancellationsBeforeWindowHide = provider.cancelCount
+        window.hide()
+        tryCompare(list, "thumbnailItemCount", 0)
+        tryVerify(function() {
+            return provider.cancelCount > cancellationsBeforeWindowHide
+        })
+
+        window.destroy()
         provider.destroy()
     }
 

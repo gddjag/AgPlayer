@@ -45,6 +45,8 @@ Assert-Matches $tagPanel 'readonly property int gridColumnCount:\s*3' `
     'Tag panel must expose a fixed three-column contract'
 Assert-Matches $tagPanel 'cellWidth:\s*width\s*/\s*3' `
     'Tag GridView must compute cellWidth from width / 3'
+Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
+    'Tag search must use the incremental C++ proxy model'
 if ($tagPanel -match '\bcolumns\s*:') {
     throw 'Do not use the nonexistent GridView.columns property'
 }
@@ -57,7 +59,9 @@ Assert-Matches $trackList 'listWaveformThumbnailEnabled\s*\?\s*62\s*:\s*42' `
     'Track rows must switch directly between 62 px and 42 px'
 Assert-Matches $trackList '(?s)trackHeaderIndex.*trackHeaderTitle.*trackHeaderFavorite.*trackHeaderArtist.*trackHeaderAlbum.*trackHeaderRating.*trackHeaderBpm.*trackHeaderDuration' `
     'Track header order must match the reference table'
-Assert-Matches $trackList '(?s)active:\s*SettingsController\.listWaveformThumbnailEnabled\s*&&\s*rowItem\.inViewport' `
-    'Waveform wrapper Loader must be active only for enabled, visible rows'
+Assert-Matches $trackList '(?s)active:\s*SettingsController\.listWaveformThumbnailEnabled\s*&&\s*root\.thumbnailHostVisible\s*&&\s*rowItem\.inViewport' `
+    'Waveform wrapper Loader must require enabled and effective host visibility'
+Assert-Matches $trackList '(?s)ListView\.onPooled:\s*\{.*pooled\s*=\s*true.*ListView\.onReused:\s*\{.*waveformGeneration.*pooled\s*=\s*false' `
+    'Pooled delegates must deactivate and reused delegates must get a new generation'
 
 Write-Output 'Tag management layout contract passed.'

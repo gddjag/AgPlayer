@@ -11,32 +11,12 @@ Item {
     property var filterModel: null
     property alias searchText: tagSearchField.text
     readonly property int gridColumnCount: 3
-    readonly property int visibleTagCount: filteredTags.count
+    readonly property int visibleTagCount: tagGrid.count
 
     signal addTagRequested(string displayName)
     signal renameTagRequested(string key, string displayName)
     signal removeTagRequested(string key)
     signal changeTagColorRequested(string key, color tagColor)
-
-    function rebuildTags() {
-        filteredTags.clear()
-        if (!tagModel)
-            return
-        var query = searchText.trim().toLocaleLowerCase()
-        for (var row = 0; row < tagModel.count; ++row) {
-            var index = tagModel.index(row, 0)
-            var displayName = tagModel.data(index, TagModel.DisplayNameRole)
-            if (query.length > 0
-                    && String(displayName).toLocaleLowerCase().indexOf(query) < 0)
-                continue
-            filteredTags.append({
-                "tagKey": tagModel.data(index, TagModel.KeyRole),
-                "tagDisplayName": displayName,
-                "tagTrackCount": tagModel.data(index, TagModel.TrackCountRole),
-                "tagColor": tagModel.data(index, TagModel.ColorRole)
-            })
-        }
-    }
 
     function addTag(displayName) {
         if (!tagModel)
@@ -55,21 +35,12 @@ Item {
         filterModel.tagKey = nextKey
     }
 
-    onSearchTextChanged: rebuildTags()
-    Component.onCompleted: rebuildTags()
-
-    Connections {
-        target: root.tagModel
-        ignoreUnknownSignals: true
-        function onRowsInserted() { root.rebuildTags() }
-        function onRowsRemoved() { root.rebuildTags() }
-        function onModelReset() { root.rebuildTags() }
-        function onDataChanged() { root.rebuildTags() }
-        function onCountChanged() { root.rebuildTags() }
-        function onSelectedKeyChanged() { tagGrid.forceLayout() }
+    TagFilterModel {
+        id: filteredTags
+        objectName: "tagFilterProxy"
+        sourceModel: root.tagModel
+        query: root.searchText
     }
-
-    ListModel { id: filteredTags }
 
     Dialog {
         id: addTagDialog
@@ -188,25 +159,26 @@ Item {
 
             delegate: Item {
                 id: tagCell
-                required property string tagKey
-                required property string tagDisplayName
-                required property int tagTrackCount
-                required property color tagColor
+                required property string key
+                required property string displayName
+                required property int trackCount
+                required property color color
+                required property bool selected
                 width: tagGrid.cellWidth
                 height: tagGrid.cellHeight
 
                 Rectangle {
                     id: tagPill
-                    objectName: "tagPill-" + tagCell.tagKey
+                    objectName: "tagPill-" + tagCell.key
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     height: 28
                     radius: 14
-                    color: TagModel.selectedKey === tagCell.tagKey
-                           ? Theme.listSelectedSurface : "transparent"
-                    border.color: tagCell.tagColor
+                    color: tagCell.selected ? Theme.listSelectedSurface
+                                            : "transparent"
+                    border.color: tagCell.color
                     border.width: 1
 
                     RowLayout {
@@ -216,7 +188,7 @@ Item {
                         spacing: 5
                         Text {
                             id: tagName
-                            text: tagCell.tagDisplayName
+                            text: tagCell.displayName
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
                             font.pixelSize: 12
@@ -224,16 +196,16 @@ Item {
                             Layout.fillWidth: true
                         }
                         Text {
-                            text: tagCell.tagTrackCount
+                            text: tagCell.trackCount
                             color: Theme.tagSecondaryText
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
                     }
                     HoverHandler { id: tagHover }
-                    TapHandler { onTapped: root.selectTag(tagCell.tagKey) }
+                    TapHandler { onTapped: root.selectTag(tagCell.key) }
                     ToolTip.visible: tagHover.hovered && tagName.truncated
-                    ToolTip.text: tagCell.tagDisplayName
+                    ToolTip.text: tagCell.displayName
                     ToolTip.delay: 350
                 }
             }

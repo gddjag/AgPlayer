@@ -20,6 +20,7 @@
 #include "playlist_model.hpp"
 #include "settings_controller.hpp"
 #include "tag_model.hpp"
+#include "tag_filter_model.hpp"
 #include "track_waveform_thumbnail_item.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_item.hpp"
@@ -71,6 +72,7 @@ void register_agplayer_qml_types(LibraryModel* library,
         });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
+    qmlRegisterType<TagFilterModel>("AgPlayer", 1, 0, "TagFilterModel");
     if (runtime.libraryManagerController != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0,
                                      "LibraryManagerController",

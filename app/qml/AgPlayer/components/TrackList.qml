@@ -16,6 +16,7 @@ ListView {
 
     property var trackModel: LibraryModel
     property var playlistModel: PlaylistModel
+    property var thumbnailProvider: TrackWaveformThumbnailProvider
     property string selectedCategory: "all"
     property string searchText: ""
     property var selectedTrackIds: []
@@ -36,6 +37,11 @@ ListView {
                                      ? 62 : 42
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
+    readonly property bool thumbnailWindowVisible:
+        !root.Window.window || root.Window.window.visible
+    readonly property bool thumbnailHostVisible:
+        root.visible && root.width > 0 && root.height > 0
+        && root.thumbnailWindowVisible
     model: trackModel
 
     // A list can be created after the playback state has already been restored.
@@ -284,14 +290,25 @@ ListView {
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
         property int waveformGeneration: 0
+        property bool pooled: false
         readonly property bool inViewport:
-            y + height >= root.contentY && y <= root.contentY + root.height
+            rowItem.ListView.view === root && rowItem.visible && !pooled
+            && y + height > root.contentY
+                            + (root.headerItem ? root.headerItem.height : 0)
+            && y < root.contentY + root.height
         width: root.width; height: root.rowHeight
         color: systemHighlighted ? systemHighlightColor
                : rowHover.hovered ? Theme.hoverSurface : "transparent"
 
         Component.onCompleted: waveformGeneration = ++root.nextWaveformGeneration
-        ListView.onReused: waveformGeneration = ++root.nextWaveformGeneration
+        ListView.onPooled: {
+            pooled = true
+            waveformGeneration = ++root.nextWaveformGeneration
+        }
+        ListView.onReused: {
+            waveformGeneration = ++root.nextWaveformGeneration
+            pooled = false
+        }
 
         Item {
             id: rowDragProxy
@@ -432,6 +449,7 @@ ListView {
                             anchors.bottomMargin: 8
                             height: 9
                             active: SettingsController.listWaveformThumbnailEnabled
+                                    && root.thumbnailHostVisible
                                     && rowItem.inViewport
                             property bool counted: false
                             onLoaded: {
@@ -456,6 +474,7 @@ ListView {
                                     sourcePath: rowItem.path
                                     delegateGeneration: rowItem.waveformGeneration
                                     mode: SettingsController.listWaveformThumbnailMode
+                                    provider: root.thumbnailProvider
                                 }
                             }
                         }
