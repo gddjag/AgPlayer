@@ -33,7 +33,7 @@ cmake --build --preset windows-msvc-debug --parallel 4
 ctest --preset windows-msvc-debug --output-on-failure
 ```
 
-## Phase 1 — AudioEvent Data Model
+## Task 1 — Phase 1 — AudioEvent Data Model
 
 **Files:** add `core/src/audio_editor/audio_event.hpp`, `tests/core/audio_event_test.cpp`; modify `edit_command.hpp`, `core/CMakeLists.txt`, `tests/CMakeLists.txt`.
 
@@ -59,7 +59,7 @@ EXPECT_FALSE(isValid(AudioEvent{.sourceStart = 9, .sourceEnd = 8}));
 
 Run `ctest --test-dir build/release -R "^audio_event_test$" --output-on-failure`; expected failure is missing `AudioEvent`. GREEN adds validation and `audibleFrames()` only. Commit `feat(editor): add metadata-only audio events`.
 
-## Phase 2 — Single-Track Timeline and Time Mapping
+## Task 2 — Phase 2 — Single-Track Timeline and Time Mapping
 
 **Files:** add `event_timeline.hpp/.cpp`, `event_timeline_test.cpp`; modify `audio_document.*`, renderer/writer/time-pitch signatures, `time_pixel_mapper.hpp`, CMake/tests.
 
@@ -82,7 +82,7 @@ EXPECT_TRUE(timeline.eventsAt(gapFrame).empty());
 
 Migrate downstream snapshot inputs only enough to keep single-event behavior compiling. Run `audio_event_test|event_timeline_test|time_pixel_mapper_test|audio_document_test`. Commit `feat(editor): add gap-preserving event timeline`.
 
-## Phase 3 — Move and Trim
+## Task 3 — Phase 3 — Move and Trim
 
 **Files:** add `timeline_edit_command.hpp/.cpp`, `timeline_edit_command_test.cpp`; modify timeline, document, controller and CMake.
 
@@ -101,7 +101,7 @@ EXPECT_EQ(peakBuildCount, 0);
 
 GREEN uses tiny before/after event commands and controller seams. Run `timeline_edit_command_test|audio_editor_controller_test`, both builds and QA launch. Commit `feat(editor): move and trim audio events`.
 
-## Phase 4 — Split, Delete, Copy, Cut, Paste, Merge
+## Task 4 — Phase 4 — Split, Delete, Copy, Cut, Paste, Merge
 
 **Files:** extend commands/timeline/document/controller/action model/renderer compatibility and focused tests.
 
@@ -115,7 +115,7 @@ EXPECT_EQ(splitLeft.source.get(), splitRight.source.get());
 
 GREEN removes Ripple logic, `AudioSpan` and `DocumentSnapshot` only after all callers compile on `TimelineSnapshot`. Run `timeline_edit_command_test|audio_document_test|document_writer_test|audio_editor_controller_test`. Commit `feat(editor): add non-ripple event editing`.
 
-## Phase 5 — Delta Undo/Redo and Lightweight `.agproj`
+## Task 5 — Phase 5 — Delta Undo/Redo and Lightweight `.agproj`
 
 **Files:** add `timeline_undo_stack.*`, `project_document.*` and tests; modify document/commands/controller/CMake.
 
@@ -132,7 +132,7 @@ public:
 
 Use `QSaveFile`, schema versioning and explicit offline-source reporting. Run `timeline_undo_stack_test|project_document_test|audio_editor_controller_test`; inspect saved JSON. Commit `feat(editor): add bounded undo and agproj persistence`.
 
-## Phase 6 — Selection, Zoom, Pan, Visible Waveform and Reference Shell
+## Task 6 — Phase 6 — Selection, Zoom, Pan, Visible Waveform and Reference Shell
 
 **Files:** modify `editor_viewport.*`, waveform item, controller, `AudioToolsWindow.qml`, `AudioEditorPage.qml`, `ToolSidebar.qml`, audioeditor QML, tests and layout contract; delete `OverviewNavigator.qml` after replacement.
 
@@ -168,7 +168,7 @@ The desktop geometry contract (±2 px unless an exact shell boundary) is:
 
 The inspector owns A `inspectorRecordingGroup`, B `inspectorTempoGroup`, C `inspectorPitchGroup`, D `inspectorPreservePitchGroup`, and E `inspectorExportGroup`. `formantPreservationRow` is not instantiated unless `formantPreservationSupported == true`; the old `vocal_protection` flag is not proof.
 
-## Phase 7 — Gain and Volume Envelope
+## Task 7 — Phase 7 — Gain and Volume Envelope
 
 **Files:** modify event/commands/timeline/controller/waveform/QML/tests.
 
@@ -181,7 +181,7 @@ EXPECT_EQ(undoStack.size(), 1U);
 
 GREEN draws 0 dB/envelope in the existing SceneGraph item and publishes preview parameters atomically. Run command/controller/QML tests and audible fixture. Commit `feat(editor): add event gain envelope`.
 
-## Phase 8 — Fade In and Fade Out
+## Task 8 — Phase 8 — Fade In and Fade Out
 
 **Files:** extend command/timeline/controller/waveform/QML/tests.
 
@@ -192,7 +192,7 @@ bool EventTimeline::setFade(EventId, FadeSide, SampleFrame, FadeCurve);
 
 **RED:** Smooth default; handles clamp to event length; fade-in+out ≤ audible frames; three curves undo/redo exactly; no complex overlap/crossfade. GREEN adds only event-edge handles and compact metadata commands. Run command/controller/QML tests, build/run/capture. Commit `feat(editor): add bounded event fades`.
 
-## Phase 9 — Fixed-Buffer Recording
+## Task 9 — Phase 9 — Fixed-Buffer Recording
 
 **Files:** modify `recording_session.*`, `pcm_ring_buffer.*`, controller/QML/tests.
 
@@ -205,7 +205,7 @@ EXPECT_EQ(timeline.event(recordedId)->timelineStart, playhead);
 
 Keep existing ring/writer/WASAPI direction, create lazily, join on deactivation, and bind real device/meter/monitor/format state. Run unit plus opt-in microphone smoke. Commit `feat(editor): record into bounded timeline events`.
 
-## Phase 10 — Speed and BPM
+## Task 10 — Phase 10 — Speed and BPM
 
 **Files:** modify BPM analyzer/session, event command/timeline, controller/QML/tests.
 
@@ -218,7 +218,7 @@ EXPECT_DOUBLE_EQ(speedRatio, targetBpm / sourceBpm);
 
 GREEN runs one low-priority cancellable task and atomic speed preview; delete beat-grid/snap code/tests. Run BPM/time-pitch/controller/QML tests plus audible preview. Commit `feat(editor): add manual bpm speed control`.
 
-## Phase 11 — Pitch Shift
+## Task 11 — Phase 11 — Pitch Shift
 
 **Files:** modify event command/timeline, controller/QML/time-pitch tests.
 
@@ -231,7 +231,7 @@ EXPECT_FALSE(controller.commitPitch(id, 13));
 
 GREEN stores semitone metadata and updates the live adapter only; delete source replacement behavior; keep Formant hidden. Commit `feat(editor): add independent pitch shift`.
 
-## Phase 12 — Tempo Preserve Pitch and Shared Player Preview
+## Task 12 — Phase 12 — Tempo Preserve Pitch and Shared Player Preview
 
 **Files:** add `audio_decode_source.hpp`, `editor_playback_adapter.*`, `event_pcm_processor.*`; modify engine/context/private bridge/playback controller/editor controller/main/CMake/tests; delete obsolete preview members after migration.
 
@@ -248,7 +248,7 @@ public:
 
 GREEN performs decode/DSP on the existing decode thread, keeps miniaudio callback unchanged, atomically swaps immutable snapshots, and removes editor player/temp-dir/render watcher/poll timer. Run engine/playback/controller/time-pitch tests and real device seek/stop. Commit `refactor(editor): preview through shared player output`.
 
-## Phase 13 — One Export Renderer
+## Task 13 — Phase 13 — One Export Renderer
 
 **Files:** migrate `document_renderer.*` to `export_renderer.*` (one path only); modify writer/shared processor/controller/QML/CMake/tests.
 
@@ -261,7 +261,7 @@ EXPECT_EQ(targetBytesAfterCancel, targetBytesBefore);
 
 GREEN reuses FFmpeg/SoundTouch with one renderer/concurrency slot. Probe existing WAV/FLAC/MP3/AAC support. Commit `feat(editor): unify bounded event export`.
 
-## Phase 14 — Native Drag-Out Handoff
+## Task 14 — Phase 14 — Native Drag-Out Handoff
 
 **Files:** add `handoff_asset_manager.*`, `selection_drag_controller.*` and tests; modify Qt CMake/controller/QML seam.
 
@@ -274,7 +274,7 @@ EXPECT_TRUE(QFileInfo::exists(mime.urls().front().toLocalFile()));
 
 GREEN renders lazily through Phase 13 into `QStandardPaths::AppDataLocation/AudioEditor/Handoff`, caches completed files only with bounded cleanup, then `QDrag::exec(Qt::CopyAction)`. Verify Explorer and one URI-capable audio/NLE app. Commit `feat(editor): drag rendered selections to native apps`.
 
-## Phase 15 — Performance, Cleanup, Visual and Acceptance Matrix
+## Task 15 — Phase 15 — Performance, Cleanup, Visual and Acceptance Matrix
 
 **Files:** add performance test/measurement script; update QA build paths and 1672×941; remove dead files/build entries; complete `design-qa.md` and development evidence.
 
