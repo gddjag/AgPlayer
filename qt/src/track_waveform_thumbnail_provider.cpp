@@ -325,7 +325,11 @@ void TrackWaveformThumbnailProvider::finishActive()
         if (!loaded.peaks.isEmpty()) {
             insertCache(current.trackId, current.sourcePath, loaded.peaks);
         }
+        const QPointer<TrackWaveformThumbnailProvider> guard(this);
         emit thumbnailReady(current.trackId, current.generation, loaded.peaks);
+        if (guard.isNull()) {
+            return;
+        }
     }
     startNext();
 }
