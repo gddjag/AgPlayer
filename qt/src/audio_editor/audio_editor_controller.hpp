@@ -270,6 +270,9 @@ private:
     void markProjectClean() noexcept;
     void markProjectDirty() noexcept;
     void syncModifiedFromHistory() noexcept;
+    [[nodiscard]] bool projectSourcesOnline() const noexcept;
+    bool requireOnlineProjectSources();
+    void syncPrimarySourceSummary();
     bool exportWithSettings(const QUrl& target, bool selectionOnly,
                             const QString& codecName, int sampleRate,
                             int channels, qint64 bitRate, bool keepMetadata,

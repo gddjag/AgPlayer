@@ -5,9 +5,23 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 
 namespace agplayer::editor {
+namespace {
+
+struct ProbeDeadline final {
+    std::chrono::steady_clock::time_point expires;
+};
+
+int interruptProbe(void* opaque)
+{
+    const auto* deadline = static_cast<const ProbeDeadline*>(opaque);
+    return deadline != nullptr && std::chrono::steady_clock::now() >= deadline->expires;
+}
+
+} // namespace
 
 bool AudioSourceProbeResult::matchesFormat(const AudioSource& expected) const noexcept
 {
@@ -30,9 +44,22 @@ AudioSourceProbeResult AudioSourceProbe::probe(const std::filesystem::path& path
     }
     try {
         const std::string utf8Path = path.u8string();
-        AVFormatContext* context = nullptr;
-        if (avformat_open_input(&context, utf8Path.c_str(), nullptr, nullptr) < 0
-            || context == nullptr) {
+        AVFormatContext* context = avformat_alloc_context();
+        if (context == nullptr) {
+            result.message = "cannot allocate audio probe";
+            return result;
+        }
+        ProbeDeadline deadline{std::chrono::steady_clock::now()
+                               + std::chrono::seconds(2)};
+        context->interrupt_callback = {interruptProbe, &deadline};
+        AVDictionary* options = nullptr;
+        av_dict_set_int(&options, "probesize", 5 * 1024 * 1024, 0);
+        av_dict_set_int(&options, "analyzeduration", 2'000'000, 0);
+        const int openResult = avformat_open_input(
+            &context, utf8Path.c_str(), nullptr, &options);
+        av_dict_free(&options);
+        if (openResult < 0 || context == nullptr) {
+            avformat_close_input(&context);
             result.message = "cannot open audio file";
             return result;
         }

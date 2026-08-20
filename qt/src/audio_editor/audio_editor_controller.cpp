@@ -1044,17 +1044,8 @@ bool AudioEditorController::openProject(const QUrl& source)
     project_issues_ = to_project_issues(loaded.issues);
     project_export_settings_ = loaded.exportSettings;
     project_path_ = QFileInfo(path).absoluteFilePath();
-    const auto snapshot = document_.timelineSnapshot();
-    const auto first = snapshot.events.empty() ? std::shared_ptr<const AudioSource>{}
-                                               : snapshot.events.front().source;
-    source_path_ = first ? QString::fromStdWString(first->path.wstring()) : QString{};
+    syncPrimarySourceSummary();
     playback_path_.clear();
-    format_name_ = source_path_.isEmpty() ? QString{}
-                                          : QFileInfo(source_path_).suffix().toUpper();
-    sample_rate_ = first ? static_cast<int>(first->sample_rate) : 0;
-    channels_ = first ? static_cast<int>(first->channels) : 0;
-    bits_per_sample_ = 0;
-    bit_rate_ = 0;
     source_channel_peaks_.clear();
     channel_peaks_.clear();
     clearViewportWaveformCache();
@@ -1090,6 +1081,7 @@ bool AudioEditorController::relinkProjectSource(const quint64 sourceId,
             return value.toMap().value(QStringLiteral("sourceId")).toULongLong() == sourceId;
         }), project_issues_.end());
     markProjectDirty();
+    syncPrimarySourceSummary();
     playback_path_.clear();
     clearViewportWaveformCache();
     refreshActions();
@@ -1149,6 +1141,7 @@ bool AudioEditorController::exportWithSettings(
 {
     const QString path = local_path(target);
     const auto selection = document_.selection();
+    if (!requireOnlineProjectSources()) return false;
     if (!has_document_ || path.isEmpty() || (selectionOnly && !selection)) {
         setError(tr("导出范围或路径无效"));
         return false;
@@ -1361,6 +1354,7 @@ bool AudioEditorController::mergeEvents(const quint64 left, const quint64 right)
 
 bool AudioEditorController::detectBpm()
 {
+    if (!requireOnlineProjectSources()) return false;
     if (!has_document_ || busy() || bpm_watcher_) return false;
     if (!preview_directory_.isValid()) return false;
     const auto snapshot = document_.timelineSnapshot();
@@ -1706,9 +1700,11 @@ bool AudioEditorController::actionEnabled(const QString& id) const noexcept
 bool AudioEditorController::triggerAction(const QString& id)
 {
     EditorAction* const item = action(id);
-    if (!item || !item->enabled) {
+    if (!item) {
         return false;
     }
+    if (id == QStringLiteral("editor.export") && !requireOnlineProjectSources()) return false;
+    if (!item->enabled) return false;
     if (id == QStringLiteral("editor.open")) {
         emit openRequested();
         return true;
@@ -1759,6 +1755,7 @@ bool AudioEditorController::triggerAction(const QString& id)
 bool AudioEditorController::preparePlayback()
 {
     if (!has_document_ || !player_) return false;
+    if (!requireOnlineProjectSources()) return false;
     if (playback_path_.isEmpty()) {
         if (preview_watcher_) return true;
         if (!preview_directory_.isValid()) {
@@ -2421,7 +2418,8 @@ void AudioEditorController::refreshActions()
     actions_.setEnabled(QStringLiteral("editor.open"), idle);
     actions_.setEnabled(QStringLiteral("editor.newRecording"), idle);
     actions_.setEnabled(QStringLiteral("editor.save"), has_document_ && idle);
-    actions_.setEnabled(QStringLiteral("editor.export"), has_document_ && idle);
+    actions_.setEnabled(QStringLiteral("editor.export"), has_document_ && idle
+                        && projectSourcesOnline());
     actions_.setEnabled(QStringLiteral("editor.undo"), has_document_ && idle
                         && document_.canUndo());
     actions_.setEnabled(QStringLiteral("editor.redo"), has_document_ && idle
@@ -2443,6 +2441,32 @@ void AudioEditorController::refreshActions()
              QStringLiteral("editor.fadeOut")}) {
         actions_.setEnabled(id, false);
     }
+}
+
+bool AudioEditorController::projectSourcesOnline() const noexcept
+{
+    return project_issues_.isEmpty();
+}
+
+bool AudioEditorController::requireOnlineProjectSources()
+{
+    if (projectSourcesOnline()) return true;
+    setError(tr("工程音频源离线或已变更，请重新链接后再继续"));
+    return false;
+}
+
+void AudioEditorController::syncPrimarySourceSummary()
+{
+    const auto snapshot = document_.timelineSnapshot();
+    const auto first = snapshot.events.empty() ? std::shared_ptr<const AudioSource>{}
+                                               : snapshot.events.front().source;
+    source_path_ = first ? QString::fromStdWString(first->path.wstring()) : QString{};
+    format_name_ = source_path_.isEmpty() ? QString{}
+                                          : QFileInfo(source_path_).suffix().toUpper();
+    sample_rate_ = first ? static_cast<int>(first->sample_rate) : 0;
+    channels_ = first ? static_cast<int>(first->channels) : 0;
+    bits_per_sample_ = 0;
+    bit_rate_ = 0;
 }
 
 void AudioEditorController::setState(const EditorSessionState value)

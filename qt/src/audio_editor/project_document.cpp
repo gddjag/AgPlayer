@@ -67,6 +67,29 @@ bool within(const QString& child, const QString& parent)
         || cleanChild.startsWith(cleanParent + QLatin1Char('/'), sensitivity);
 }
 
+bool withinResolvedBoundary(const QString& child, const QString& parent)
+{
+    if (!within(child, parent)) return false;
+    const QString canonicalParent = QFileInfo(parent).canonicalFilePath();
+    if (canonicalParent.isEmpty()) return false;
+
+    QFileInfo childInfo(child);
+    QString canonicalChild = childInfo.canonicalFilePath();
+    if (!canonicalChild.isEmpty()) {
+        return within(canonicalChild, canonicalParent);
+    }
+
+    QString ancestor = childInfo.absolutePath();
+    while (!QFileInfo::exists(ancestor)) {
+        const QString next = QFileInfo(ancestor).absolutePath();
+        if (next == ancestor) return false;
+        ancestor = next;
+    }
+    const QString canonicalAncestor = QFileInfo(ancestor).canonicalFilePath();
+    return !canonicalAncestor.isEmpty()
+        && within(canonicalAncestor, canonicalParent);
+}
+
 bool safeRelative(const QString& path)
 {
     if (path.isEmpty() || QFileInfo(path).isAbsolute()) return false;
@@ -249,7 +272,8 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
         if (rawSourcePath.isEmpty()) return {false, QStringLiteral("source path is required")};
         const QString sourcePath = absolutePath(rawSourcePath);
         const QString relativePath = QDir(projectDir).relativeFilePath(sourcePath);
-        const bool relative = safeRelative(relativePath) && within(sourcePath, projectDir);
+        const bool relative = safeRelative(relativePath)
+            && withinResolvedBoundary(sourcePath, projectDir);
         const QFileInfo file(sourcePath);
         QString savedPath = relative ? relativePath : sourcePath;
         savedPath.replace(QLatin1Char('\\'), QLatin1Char('/'));
@@ -344,7 +368,7 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
         if (kind == QStringLiteral("relative")) {
             if (!safeRelative(stored)) { result.message = QStringLiteral("relative source escapes project"); return result; }
             resolved = absolutePath(QDir(projectDir).filePath(stored));
-            if (!within(resolved, projectDir)) { result.message = QStringLiteral("relative source escapes project"); return result; }
+            if (!withinResolvedBoundary(resolved, projectDir)) { result.message = QStringLiteral("relative source escapes project"); return result; }
         } else if (kind == QStringLiteral("absolute") && QFileInfo(stored).isAbsolute()) {
             resolved = absolutePath(stored);
         } else { result.message = QStringLiteral("invalid source path"); return result; }
@@ -425,6 +449,9 @@ ProjectRelinkResult ProjectDocument::relink(AudioDocument& document, std::vector
     const QString path = absolutePath(replacementPath); const QFileInfo file(path);
     if (!file.exists() || !file.isFile()) return {false, QStringLiteral("replacement source is missing")};
     const AudioSource& expected = *record->source;
+    if (record->fileSize >= 0 && file.size() != record->fileSize) {
+        return {false, QStringLiteral("replacement source identity does not match")};
+    }
     const AudioSourceProbeResult probe = AudioSourceProbe::probe(toPath(path));
     if (!probe.matchesFormat(expected)) {
         return {false, QStringLiteral("replacement source format does not match")};

@@ -60,8 +60,8 @@ bool AudioDocument::clearSelection() noexcept
 bool AudioDocument::addMarker(Marker marker)
 {
     if (marker.frame < 0 || marker.frame > totalFrames()) return false;
-    const auto position = std::lower_bound(markers_.begin(), markers_.end(), marker.frame,
-        [](const Marker& item, const SampleFrame frame) { return item.frame < frame; });
+    const auto position = std::upper_bound(markers_.begin(), markers_.end(), marker.frame,
+        [](const SampleFrame frame, const Marker& item) { return frame < item.frame; });
     markers_.insert(position, std::move(marker));
     return true;
 }
@@ -83,8 +83,12 @@ bool AudioDocument::removeMarker(const std::size_t index)
 bool AudioDocument::moveEvent(const EventId id, const SampleFrame timelineStart)
 {
     const auto command = TimelineEditCommand::move(timeline_, id, timelineStart);
-    return command && history_.executeAndPush(
-        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_);
+    if (!command || !history_.executeAndPush(
+            std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_)) {
+        return false;
+    }
+    normalizeEditorState();
+    return true;
 }
 
 bool AudioDocument::trimEvent(const EventId id, const SampleFrame sourceStart,
@@ -93,8 +97,12 @@ bool AudioDocument::trimEvent(const EventId id, const SampleFrame sourceStart,
 {
     const auto command = TimelineEditCommand::trim(
         timeline_, id, sourceStart, sourceEnd, timelineStart);
-    return command && history_.executeAndPush(
-        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_);
+    if (!command || !history_.executeAndPush(
+            std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_)) {
+        return false;
+    }
+    normalizeEditorState();
+    return true;
 }
 
 bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
@@ -294,20 +302,43 @@ SampleFrame AudioDocument::totalFrames() const noexcept
 
 bool AudioDocument::undo()
 {
-    return history_.undo(timeline_);
+    if (!history_.undo(timeline_)) return false;
+    normalizeEditorState();
+    return true;
 }
 
 bool AudioDocument::redo()
 {
-    return history_.redo(timeline_);
+    if (!history_.redo(timeline_)) return false;
+    normalizeEditorState();
+    return true;
 }
 
 bool AudioDocument::applyCandidate(std::vector<AudioEvent> candidate)
 {
     auto command = TimelineEditCommand::fromCandidate(
         timeline_, std::move(candidate));
-    return command && history_.executeAndPush(
-        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_);
+    if (!command || !history_.executeAndPush(
+            std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_)) {
+        return false;
+    }
+    normalizeEditorState();
+    return true;
+}
+
+void AudioDocument::normalizeEditorState() noexcept
+{
+    const SampleFrame total = totalFrames();
+    if (selection_) {
+        if (total <= 0 || selection_->start >= total) {
+            selection_.reset();
+        } else if (selection_->end > total) {
+            selection_->end = total;
+        }
+    }
+    for (Marker& marker : markers_) {
+        marker.frame = std::clamp(marker.frame, SampleFrame{0}, total);
+    }
 }
 
 } // namespace agplayer::editor

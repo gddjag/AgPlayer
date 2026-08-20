@@ -82,6 +82,7 @@ private:
                                              const AudioEvent& right) noexcept;
     [[nodiscard]] std::vector<AudioEvent> selectedEvents() const;
     [[nodiscard]] bool applyCandidate(std::vector<AudioEvent> candidate);
+    void normalizeEditorState() noexcept;
 
     EventTimeline timeline_;
     TimelineUndoStack history_;

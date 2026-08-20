@@ -303,6 +303,88 @@ private slots:
         QCOMPARE(projectChanges.count(), 1);
     }
 
+    void offlineProjectSourcesBlockSourceReadingOperations_data()
+    {
+        QTest::addColumn<bool>("removeSource");
+        QTest::addColumn<QString>("issueKind");
+        QTest::newRow("missing") << true << QStringLiteral("missing");
+        QTest::newRow("identity-mismatch") << false
+                                            << QStringLiteral("identityMismatch");
+    }
+
+    void offlineProjectSourcesBlockSourceReadingOperations()
+    {
+        QFETCH(bool, removeSource);
+        QFETCH(QString, issueKind);
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("original.wav"));
+        const QString replacement = temporary.filePath(QStringLiteral("replacement.wav"));
+        const QString project = temporary.filePath(QStringLiteral("offline.agproj"));
+        const QString blockedExport = temporary.filePath(QStringLiteral("blocked-export.wav"));
+        const QString blockedSaveAs = temporary.filePath(QStringLiteral("blocked-save-as.wav"));
+        const QString relinkedExport = temporary.filePath(QStringLiteral("relinked-export.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        QVERIFY(QFile::copy(fixture, replacement));
+
+        AudioEditorController original(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(original.openFile(QUrl::fromLocalFile(source)),
+                 qPrintable(original.errorMessage()));
+        const int expectedSampleRate = original.sampleRate();
+        const int expectedChannels = original.channels();
+        QVERIFY(original.saveProjectAs(QUrl::fromLocalFile(project)));
+        if (removeSource) {
+            QVERIFY(QFile::remove(source));
+        } else {
+            QFile changed(source);
+            QVERIFY(changed.open(QIODevice::Append));
+            QVERIFY(changed.write("identity mismatch") > 0);
+        }
+
+        AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(loaded.openProject(QUrl::fromLocalFile(project)),
+                 qPrintable(loaded.errorMessage()));
+        QCOMPARE(loaded.projectIssues().size(), 1);
+        const QVariantMap issue = loaded.projectIssues().constFirst().toMap();
+        QCOMPARE(issue.value(QStringLiteral("kind")).toString(), issueKind);
+        const quint64 sourceId = issue.value(QStringLiteral("sourceId")).toULongLong();
+        QCOMPARE(loaded.filePath(), QFileInfo(source).absoluteFilePath());
+        QVERIFY(loaded.channelPeaks().isEmpty());
+
+        QSignalSpy exportRequested(&loaded, &AudioEditorController::exportRequested);
+        QVERIFY(!loaded.actionEnabled(QStringLiteral("editor.export")));
+        QVERIFY(!loaded.triggerAction(QStringLiteral("editor.export")));
+        QCOMPARE(exportRequested.count(), 0);
+        QVERIFY(!loaded.playPause());
+        QVERIFY(loaded.errorMessage().contains(QStringLiteral("重新链接")));
+        QVERIFY(!loaded.detectBpm());
+        QVERIFY(loaded.errorMessage().contains(QStringLiteral("重新链接")));
+        QVERIFY(!loaded.exportTo(QUrl::fromLocalFile(blockedExport)));
+        QVERIFY(!QFileInfo::exists(blockedExport));
+        QVERIFY(!loaded.saveAs(QUrl::fromLocalFile(blockedSaveAs)));
+        QVERIFY(!QFileInfo::exists(blockedSaveAs));
+
+        QVERIFY2(loaded.relinkProjectSource(sourceId, QUrl::fromLocalFile(replacement)),
+                 qPrintable(loaded.errorMessage()));
+        QVERIFY(loaded.projectIssues().isEmpty());
+        QCOMPARE(loaded.filePath(), QFileInfo(replacement).absoluteFilePath());
+        QCOMPARE(loaded.sampleRate(), expectedSampleRate);
+        QCOMPARE(loaded.channels(), expectedChannels);
+        QCOMPARE(loaded.fileName(), QFileInfo(replacement).fileName());
+        QVERIFY(loaded.channelPeaks().isEmpty());
+        loaded.viewport()->setViewportWidth(512.0);
+        QCoreApplication::processEvents();
+        QVERIFY(loaded.viewportChannelPeaks().isEmpty());
+
+        QVERIFY2(loaded.exportTo(QUrl::fromLocalFile(relinkedExport), false,
+                                 {}, 0, 0, 0, true, true, 80),
+                 qPrintable(loaded.errorMessage()));
+        QTRY_COMPARE_WITH_TIMEOUT(loaded.state(), EditorSessionState::Ready, 10'000);
+        QVERIFY(QFileInfo::exists(relinkedExport));
+    }
+
     void failedProjectLoadLeavesActiveStateUnchanged()
     {
         AudioEditorController controller;

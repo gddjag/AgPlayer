@@ -10,6 +10,10 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
+
 #include <filesystem>
 #include <memory>
 
@@ -291,6 +295,50 @@ private slots:
 
         QVERIFY(writeBytes(project.projectPath, validBytes));
         QVERIFY(ProjectDocument::load(project.projectPath).ok());
+    }
+
+    void rejectsRelativeSourceResolvedThroughExternalDirectoryLink()
+    {
+        QTemporaryDir projectDirectory;
+        QTemporaryDir externalDirectory;
+        QVERIFY(projectDirectory.isValid());
+        QVERIFY(externalDirectory.isValid());
+        auto project = makeProject(projectDirectory);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+
+        const QString externalSource = externalDirectory.filePath(
+            QStringLiteral("outside.wav"));
+        QVERIFY(QFile::copy(fixturePath(), externalSource));
+        const QString linkPath = projectDirectory.filePath(QStringLiteral("linked"));
+        std::error_code linkError;
+        std::filesystem::create_directory_symlink(
+            nativePath(externalDirectory.path()), nativePath(linkPath), linkError);
+#ifdef Q_OS_WIN
+        if (linkError) {
+            constexpr DWORD allowUnprivilegedCreate = 0x2;
+            const std::wstring link = linkPath.toStdWString();
+            const std::wstring target = externalDirectory.path().toStdWString();
+            if (CreateSymbolicLinkW(link.c_str(), target.c_str(),
+                                    SYMBOLIC_LINK_FLAG_DIRECTORY
+                                        | allowUnprivilegedCreate)) {
+                linkError.clear();
+            }
+        }
+#endif
+        if (linkError) QSKIP("directory symlink creation is unavailable");
+
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+        QJsonObject source = sources[0].toObject();
+        source.insert(QStringLiteral("pathKind"), QStringLiteral("relative"));
+        source.insert(QStringLiteral("path"), QStringLiteral("linked/outside.wav"));
+        sources[0] = source;
+        root.insert(QStringLiteral("sources"), sources);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY(!loaded.ok());
+        QVERIFY(loaded.message.contains(QStringLiteral("escapes")));
     }
 
     void reportsMissingAndIdentityMismatchedSourcesWithoutRejectingProject()
@@ -641,6 +689,46 @@ private slots:
                  QStringLiteral("relative"));
     }
 #endif
+
+    void timelineShrinkMarkersRoundTrip()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(project.document.setSelection({30'000, 40'000}));
+        QVERIFY(project.document.deleteSelection());
+        QCOMPARE(project.document.totalFrames(), SampleFrame{20'000});
+        QCOMPARE(project.document.markers().back().frame, SampleFrame{20'000});
+        ProjectSaveRequest shrunk = request(project);
+        shrunk.visibleEndFrame = 20'000;
+        QVERIFY(ProjectDocument::save(project.projectPath, shrunk).ok());
+        ProjectLoadResult reloaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(reloaded.ok(), qPrintable(reloaded.message));
+        QCOMPARE(reloaded.document->markers(), project.document.markers());
+    }
+
+    void emptyTimelineMarkersRoundTrip()
+    {
+        QTemporaryDir emptyTemporary;
+        QVERIFY(emptyTemporary.isValid());
+        auto empty = makeProject(emptyTemporary);
+        QVERIFY(empty.document.setSelection({0, 40'000}));
+        QVERIFY(empty.document.deleteSelection());
+        QCOMPARE(empty.document.totalFrames(), SampleFrame{0});
+        QCOMPARE(empty.document.markers().front().frame, SampleFrame{0});
+        QCOMPARE(empty.document.markers().back().frame, SampleFrame{0});
+        ProjectSaveRequest emptyRequest;
+        emptyRequest.document = &empty.document;
+        emptyRequest.visibleStartFrame = 0;
+        emptyRequest.visibleEndFrame = 0;
+        emptyRequest.exportSettings = empty.exportSettings;
+        QVERIFY(ProjectDocument::save(empty.projectPath, emptyRequest).ok());
+        ProjectLoadResult emptyReloaded = ProjectDocument::load(empty.projectPath);
+        QVERIFY2(emptyReloaded.ok(), qPrintable(emptyReloaded.message));
+        QCOMPARE(emptyReloaded.document->totalFrames(), SampleFrame{0});
+        QCOMPARE(emptyReloaded.document->markers(), empty.document.markers());
+    }
+
 };
 
 QTEST_APPLESS_MAIN(ProjectDocumentTest)
