@@ -63,11 +63,6 @@ void TrackWaveformThumbnailItem::setWaveformColor(const QColor& color)
     emit waveformColorChanged();
 }
 
-int TrackWaveformThumbnailItem::geometryRevision() const noexcept
-{
-    return geometryRevision_;
-}
-
 void TrackWaveformThumbnailItem::geometryChange(const QRectF& newGeometry,
                                                 const QRectF& oldGeometry)
 {
@@ -95,8 +90,6 @@ QSGNode* TrackWaveformThumbnailItem::updatePaintNode(
         rebuildGeometry(&node->geometry);
         node->markDirty(QSGNode::DirtyGeometry);
         geometryDirty_ = false;
-        ++geometryRevision_;
-        emit geometryRevisionChanged();
     }
     if (colorDirty_) {
         node->material.setColor(waveformColor_);

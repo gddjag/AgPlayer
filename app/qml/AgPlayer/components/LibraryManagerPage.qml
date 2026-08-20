@@ -7,6 +7,7 @@ import AgPlayer
 Item {
     id: root
     objectName: "libraryManagerPage"
+    readonly property var manager: LibraryManagerController
 
     property string selectedTrackId: ""
     property var selectedTrackIds: []
@@ -83,14 +84,21 @@ Item {
         }
     }
 
-    LibraryManagerController {
-        id: manager
+    Binding {
         objectName: "libraryManagerController"
-        libraryModel: LibraryModel
-        importController: ImportController
-        keyword: root.searchText
-        formatFilter: root.formatFilter
-        exactRating: root.exactRating
+        target: root.manager
+        property: "keyword"
+        value: root.searchText
+    }
+    Binding {
+        target: root.manager
+        property: "formatFilter"
+        value: root.formatFilter
+    }
+    Binding {
+        target: root.manager
+        property: "exactRating"
+        value: root.exactRating
     }
 
     LibraryFileOperations { id: fileOps; libraryModel: LibraryModel }

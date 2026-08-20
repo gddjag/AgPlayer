@@ -3,11 +3,16 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
+#include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -302,6 +307,12 @@ public slots:
             return;
         }
         library_ = std::make_unique<LibraryModel>();
+        playlists_ = std::make_unique<PlaylistModel>(
+            runtimeDataDirectory_.filePath(QStringLiteral("playlists.json")));
+        playlists_->load();
+        tagModel_ = std::make_unique<TagModel>(
+            library_.get(),
+            runtimeDataDirectory_.filePath(QStringLiteral("tags.json")));
         nativeDropHelper_.setLibraryModel(library_.get());
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
         importer_ = std::make_unique<ImportController>(library_.get());
@@ -313,12 +324,37 @@ public slots:
         formatConverter_ = std::make_unique<FormatConverter>();
         settings_ = std::make_unique<SettingsController>();
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
+        thumbnailProvider_ = std::make_unique<TrackWaveformThumbnailProvider>(
+            settings_->cacheDirectory());
+        QObject::connect(
+            settings_.get(), &SettingsController::cacheDirectoryChanged,
+            thumbnailProvider_.get(), [this] {
+                thumbnailProvider_->setCacheDirectory(
+                    settings_->cacheDirectory());
+            });
+        libraryManager_ = std::make_unique<LibraryManagerController>();
+        const QString libraryPath = runtimeDataDirectory_.filePath(
+            QStringLiteral("library.json"));
+        libraryManager_->setStoragePath(runtimeDataDirectory_.filePath(
+            QStringLiteral("resource-roots.json")));
+        libraryManager_->setLibraryDataPath(libraryPath);
+        libraryManager_->setLibraryModel(library_.get());
+        libraryManager_->setImportController(importer_.get());
+        libraryNavigation_ = std::make_unique<LibraryNavigationModel>(
+            library_.get(), playlists_.get(), tagModel_.get(),
+            libraryManager_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), filenameProcessor_.get(),
-                                    settings_.get(), waveformProvider_.get());
+                                    settings_.get(), waveformProvider_.get(),
+                                    playlists_.get(), nullptr, nullptr,
+                                    AgPlayerQmlRuntimeModels{
+                                        tagModel_.get(),
+                                        libraryNavigation_.get(),
+                                        libraryManager_.get(),
+                                        thumbnailProvider_.get()});
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -330,6 +366,14 @@ public slots:
             "testAudioUrl", QUrl::fromLocalFile(fixture));
         engine->rootContext()->setContextProperty("nativeDropHelper",
                                                   &nativeDropHelper_);
+        engine->rootContext()->setContextProperty(
+            "expectedTagModel", tagModel_.get());
+        engine->rootContext()->setContextProperty(
+            "expectedLibraryNavigationModel", libraryNavigation_.get());
+        engine->rootContext()->setContextProperty(
+            "expectedLibraryManagerController", libraryManager_.get());
+        engine->rootContext()->setContextProperty(
+            "expectedThumbnailProvider", thumbnailProvider_.get());
 
         component_ = std::make_unique<QQmlComponent>(engine);
         component_->loadFromModule("AgPlayer", "Main");
@@ -378,7 +422,10 @@ public slots:
 
 private:
     ag_player* core_ = nullptr;
+    QTemporaryDir runtimeDataDirectory_;
     std::unique_ptr<LibraryModel> library_;
+    std::unique_ptr<PlaylistModel> playlists_;
+    std::unique_ptr<TagModel> tagModel_;
     std::unique_ptr<PlaybackController> playback_;
     std::unique_ptr<ImportController> importer_;
     std::unique_ptr<WindowController> windows_;
@@ -388,6 +435,9 @@ private:
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
+    std::unique_ptr<TrackWaveformThumbnailProvider> thumbnailProvider_;
+    std::unique_ptr<LibraryManagerController> libraryManager_;
+    std::unique_ptr<LibraryNavigationModel> libraryNavigation_;
     std::unique_ptr<NativeDropRouter> nativeDrops_;
     std::unique_ptr<QQmlComponent> component_;
     QObject* mainWindow_ = nullptr;

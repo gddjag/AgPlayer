@@ -11,8 +11,6 @@ class TrackWaveformThumbnailItem : public QQuickItem {
     Q_PROPERTY(QByteArray peaks READ peaks WRITE setPeaks NOTIFY peaksChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
-    Q_PROPERTY(int geometryRevision READ geometryRevision
-                   NOTIFY geometryRevisionChanged)
 
 public:
     static constexpr int kPeakCount = 128;
@@ -23,12 +21,10 @@ public:
     void setPeaks(const QByteArray& peaks);
     QColor waveformColor() const;
     void setWaveformColor(const QColor& color);
-    int geometryRevision() const noexcept;
 
 signals:
     void peaksChanged();
     void waveformColorChanged();
-    void geometryRevisionChanged();
 
 protected:
     void geometryChange(const QRectF& newGeometry,
@@ -45,5 +41,4 @@ private:
     QColor waveformColor_ = Qt::white;
     bool geometryDirty_ = true;
     bool colorDirty_ = true;
-    int geometryRevision_ = 0;
 };

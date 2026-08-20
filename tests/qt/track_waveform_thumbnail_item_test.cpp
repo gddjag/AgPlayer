@@ -77,15 +77,15 @@ void TrackWaveformThumbnailItemTest::reusesGeometryWhenOnlyColorChanges()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     QSGGeometry* const geometry = geometryNode(node)->geometry();
-    const void* const vertices = geometry->vertexDataAsPoint2D();
-    const int revision = item.geometryRevision();
+    auto* const vertices = geometry->vertexDataAsPoint2D();
+    vertices[0].y = -123.0F;
 
     item.setWaveformColor(QColor(QStringLiteral("#abcdef")));
     QSGNode* const recolored = item.updatePaintNode(node, nullptr);
     QCOMPARE(recolored, node);
     QCOMPARE(geometryNode(recolored)->geometry(), geometry);
     QCOMPARE(geometry->vertexDataAsPoint2D(), vertices);
-    QCOMPARE(item.geometryRevision(), revision);
+    QCOMPARE(vertices[0].y, -123.0F);
     QCOMPARE(static_cast<QSGFlatColorMaterial*>(
                  geometryNode(recolored)->material())->color(),
              QColor(QStringLiteral("#abcdef")));
@@ -104,23 +104,24 @@ void TrackWaveformThumbnailItemTest::rebuildsOnlyForPeaksOrSize()
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    const int initialRevision = item.geometryRevision();
+    auto* vertices = geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    vertices[0].y = -123.0F;
 
     item.setPeaks(initial);
     node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(item.geometryRevision(), initialRevision);
+    QCOMPARE(vertices[0].y, -123.0F);
 
     item.setPeaks(fullPeaks(192U));
     node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(item.geometryRevision(), initialRevision + 1);
+    QVERIFY(vertices[0].y >= 0.0F);
 
     item.setWidth(256.0);
     node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(item.geometryRevision(), initialRevision + 2);
+    QCOMPARE(vertices[254].x, 256.0F);
 
     item.setHeight(20.0);
     node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(item.geometryRevision(), initialRevision + 3);
+    QCOMPARE(vertices[0].y, 10.0F - 10.0F * 192.0F / 255.0F);
     delete node;
 }
 

@@ -109,6 +109,14 @@ bool SettingsController::waveformHoverTimePreview() const noexcept { return wave
 bool SettingsController::waveformPlaybackGuide() const noexcept { return waveformPlaybackGuide_; }
 int SettingsController::waveformCanvasHeight() const noexcept { return waveformCanvasHeight_; }
 bool SettingsController::waveformCanvasLocked() const noexcept { return waveformCanvasLocked_; }
+bool SettingsController::listWaveformThumbnailEnabled() const noexcept
+{
+    return listWaveformThumbnailEnabled_;
+}
+QString SettingsController::listWaveformThumbnailMode() const
+{
+    return listWaveformThumbnailMode_;
+}
 int SettingsController::spectrumColorMode() const noexcept { return spectrumColorMode_; }
 QString SettingsController::spectrumSolidColor() const { return spectrumSolidColor_; }
 QString SettingsController::spectrumRgbStartColor() const { return spectrumRgbStartColor_; }
@@ -503,10 +511,27 @@ void SettingsController::setWaveformCanvasHeight(int value)
 
 AGPLAYER_BOOL_SETTER(setWaveformCanvasLocked, waveformCanvasLocked_,
                      "appearance/waveformCanvasLocked", waveformCanvasLockedChanged)
+AGPLAYER_BOOL_SETTER(setListWaveformThumbnailEnabled,
+                     listWaveformThumbnailEnabled_,
+                     "appearance/listWaveformThumbnailEnabled",
+                     listWaveformThumbnailEnabledChanged)
 AGPLAYER_BOOL_SETTER(setReplayGainClipProtection, replayGainClipProtection_,
                      "playback/replayGainClipProtection", replayGainClipProtectionChanged)
 
 #undef AGPLAYER_BOOL_SETTER
+
+void SettingsController::setListWaveformThumbnailMode(const QString& value)
+{
+    const QString normalized = value == QStringLiteral("Mono")
+        ? QStringLiteral("Mono") : QStringLiteral("Color36");
+    if (listWaveformThumbnailMode_ == normalized) {
+        return;
+    }
+    listWaveformThumbnailMode_ = normalized;
+    persistValue(QStringLiteral("appearance/listWaveformThumbnailMode"),
+                 normalized);
+    emit listWaveformThumbnailModeChanged();
+}
 
 void SettingsController::setSpectrumColorMode(int value)
 {
@@ -802,6 +827,8 @@ void SettingsController::resetWaveformDefaults()
     setWaveformCanvasLocked(true);
     setSpectrumColorMode(0);
     setSpectrumSolidColor(QStringLiteral("#e62e9b"));
+    setListWaveformThumbnailEnabled(true);
+    setListWaveformThumbnailMode(QStringLiteral("Color36"));
 }
 
 void SettingsController::beginEdit()
@@ -906,6 +933,8 @@ void SettingsController::emitAllChanged()
     emit waveformPlaybackGuideChanged();
     emit waveformCanvasHeightChanged();
     emit waveformCanvasLockedChanged();
+    emit listWaveformThumbnailEnabledChanged();
+    emit listWaveformThumbnailModeChanged();
     emit spectrumColorModeChanged();
     emit spectrumSolidColorChanged();
     emit spectrumRgbStartColorChanged();
@@ -1168,6 +1197,19 @@ void SettingsController::load()
         QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_).toInt();
     waveformCanvasLocked_ = settings_.value(
         QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_).toBool();
+    listWaveformThumbnailEnabled_ = settings_.value(
+        QStringLiteral("listWaveformThumbnailEnabled"),
+        listWaveformThumbnailEnabled_).toBool();
+    const QString storedListWaveformThumbnailMode = settings_.value(
+        QStringLiteral("listWaveformThumbnailMode"),
+        listWaveformThumbnailMode_).toString();
+    listWaveformThumbnailMode_ =
+        storedListWaveformThumbnailMode == QStringLiteral("Mono")
+            ? QStringLiteral("Mono") : QStringLiteral("Color36");
+    if (storedListWaveformThumbnailMode != listWaveformThumbnailMode_) {
+        settings_.setValue(QStringLiteral("listWaveformThumbnailMode"),
+                           listWaveformThumbnailMode_);
+    }
     spectrumColorMode_ = settings_.value(
         QStringLiteral("spectrumColorMode"), spectrumColorMode_).toInt();
     spectrumSolidColor_ = settings_.value(
@@ -1454,6 +1496,10 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_);
     persistValue(QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_);
     persistValue(QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_);
+    persistValue(QStringLiteral("listWaveformThumbnailEnabled"),
+                 listWaveformThumbnailEnabled_);
+    persistValue(QStringLiteral("listWaveformThumbnailMode"),
+                 listWaveformThumbnailMode_);
     persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
     persistValue(QStringLiteral("spectrumSolidColor"), spectrumSolidColor_);
     persistValue(QStringLiteral("spectrumRgbStartColor"), spectrumRgbStartColor_);
@@ -1532,6 +1578,8 @@ void SettingsController::restoreDefaults()
     waveformPlaybackGuide_ = false;
     waveformCanvasHeight_ = 78;
     waveformCanvasLocked_ = true;
+    listWaveformThumbnailEnabled_ = true;
+    listWaveformThumbnailMode_ = QStringLiteral("Color36");
     spectrumColorMode_ = 0;
     spectrumSolidColor_ = QStringLiteral("#0078d4");
     spectrumRgbStartColor_ = QStringLiteral("#00d4ff");

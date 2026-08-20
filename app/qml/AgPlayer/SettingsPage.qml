@@ -1570,6 +1570,34 @@ Item {
             }
 
             SettingCard {
+                title: qsTr("歌曲列表")
+
+                SettingSwitch {
+                    objectName: "listWaveformThumbnailEnabledControl"
+                    text: qsTr("显示歌曲列表波形缩略图")
+                    checked: SettingsController.listWaveformThumbnailEnabled
+                    onToggled: SettingsController.listWaveformThumbnailEnabled = checked
+                }
+
+                SettingRow {
+                    label: qsTr("缩略波形颜色")
+                    SettingCombo {
+                        objectName: "listWaveformThumbnailModeControl"
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: SettingsController.listWaveformThumbnailEnabled
+                        valueModel: [
+                            { text: qsTr("36 色"), value: "Color36" },
+                            { text: qsTr("纯色"), value: "Mono" }
+                        ]
+                        currentIndex: SettingsController.listWaveformThumbnailMode
+                                      === "Mono" ? 1 : 0
+                        onActivated: SettingsController.listWaveformThumbnailMode
+                                     = currentValue
+                    }
+                }
+            }
+
+            SettingCard {
                 title: qsTr("Waveform RGB 波形设置")
 
                 SettingRow {

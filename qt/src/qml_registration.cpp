@@ -13,11 +13,15 @@
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
 #include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "replay_gain_scanner.hpp"
 #include "playlist_model.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "track_waveform_thumbnail_item.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_item.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
@@ -36,7 +40,8 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
                                  EqualizerController* equalizer,
-                                 AudioEditorController* audioEditor)
+                                 AudioEditorController* audioEditor,
+                                 const AgPlayerQmlRuntimeModels& runtime)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -66,8 +71,25 @@ void register_agplayer_qml_types(LibraryModel* library,
         });
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
-    qmlRegisterType<LibraryManagerController>("AgPlayer", 1, 0,
-                                               "LibraryManagerController");
+    if (runtime.libraryManagerController != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "LibraryManagerController",
+                                     runtime.libraryManagerController);
+    }
+    if (runtime.tagModel != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "TagModel",
+                                     runtime.tagModel);
+    }
+    if (runtime.libraryNavigationModel != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "LibraryNavigationModel",
+                                     runtime.libraryNavigationModel);
+    }
+    if (runtime.trackWaveformThumbnailProvider != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "TrackWaveformThumbnailProvider",
+                                     runtime.trackWaveformThumbnailProvider);
+    }
     qmlRegisterType<LibraryFileOperations>("AgPlayer", 1, 0,
                                            "LibraryFileOperations");
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
@@ -85,6 +107,8 @@ void register_agplayer_qml_types(LibraryModel* library,
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", waveformProvider);
     }
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
+    qmlRegisterType<TrackWaveformThumbnailItem>(
+        "AgPlayer", 1, 0, "TrackWaveformThumbnailItem");
     qmlRegisterType<AudioEditorWaveformItem>(
         "AgPlayer", 1, 0, "AudioEditorWaveformItem");
 }

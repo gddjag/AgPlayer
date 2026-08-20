@@ -47,6 +47,8 @@
 #include "import_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
@@ -58,6 +60,8 @@
 #include "runtime_log.hpp"
 #include "rename_journal_store.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
@@ -467,6 +471,10 @@ int main(int argc, char* argv[])
         if (!loaded.isEmpty()) {
             library.replaceAll(loaded);
         }
+        const QDir libraryDataDirectory = QFileInfo(libraryPath).dir();
+        TagModel tagModel(
+            &library,
+            libraryDataDirectory.filePath(QStringLiteral("tags.json")));
 
         PlaybackController playback(core, &library);
         EqualizerController equalizer(core);
@@ -641,6 +649,15 @@ int main(int argc, char* argv[])
             }
         });
         WaveformProvider waveformProvider(&settings);
+        TrackWaveformThumbnailProvider trackWaveformThumbnailProvider(
+            settings.cacheDirectory());
+        QObject::connect(
+            &settings, &SettingsController::cacheDirectoryChanged,
+            &trackWaveformThumbnailProvider,
+            [&settings, &trackWaveformThumbnailProvider]() {
+                trackWaveformThumbnailProvider.setCacheDirectory(
+                    settings.cacheDirectory());
+            });
         QObject::connect(&waveformProvider, &WaveformProvider::waveformReady,
                          &playback,
                          [&playback, &library, &settings](
@@ -663,6 +680,14 @@ int main(int argc, char* argv[])
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
         });
+        LibraryManagerController libraryManager;
+        libraryManager.setStoragePath(libraryDataDirectory.filePath(
+            QStringLiteral("resource-roots.json")));
+        libraryManager.setLibraryDataPath(libraryPath);
+        libraryManager.setLibraryModel(&library);
+        libraryManager.setImportController(&importer);
+        LibraryNavigationModel libraryNavigation(
+            &library, &playlists, &tagModel, &libraryManager);
         QObject::connect(&settings, &SettingsController::autoReadBpmChanged, &app,
                          [autoReadBpmFlag, &settings]() {
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
@@ -736,7 +761,12 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &filenameProcessor,
                                     &settings, &waveformProvider, &playlists,
-                                    &equalizer, &audioEditor);
+                                    &equalizer, &audioEditor,
+                                    AgPlayerQmlRuntimeModels{
+                                        &tagModel,
+                                        &libraryNavigation,
+                                        &libraryManager,
+                                        &trackWaveformThumbnailProvider});
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

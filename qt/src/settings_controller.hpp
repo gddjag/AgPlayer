@@ -84,6 +84,14 @@ class SettingsController final : public QObject {
                    WRITE setWaveformCanvasHeight NOTIFY waveformCanvasHeightChanged)
     Q_PROPERTY(bool waveformCanvasLocked READ waveformCanvasLocked
                    WRITE setWaveformCanvasLocked NOTIFY waveformCanvasLockedChanged)
+    Q_PROPERTY(bool listWaveformThumbnailEnabled
+                   READ listWaveformThumbnailEnabled
+                   WRITE setListWaveformThumbnailEnabled
+                   NOTIFY listWaveformThumbnailEnabledChanged)
+    Q_PROPERTY(QString listWaveformThumbnailMode
+                   READ listWaveformThumbnailMode
+                   WRITE setListWaveformThumbnailMode
+                   NOTIFY listWaveformThumbnailModeChanged)
     Q_PROPERTY(int spectrumColorMode READ spectrumColorMode WRITE setSpectrumColorMode
                    NOTIFY spectrumColorModeChanged)
     Q_PROPERTY(QString spectrumSolidColor READ spectrumSolidColor WRITE setSpectrumSolidColor
@@ -190,6 +198,8 @@ public:
     bool waveformPlaybackGuide() const noexcept;
     int waveformCanvasHeight() const noexcept;
     bool waveformCanvasLocked() const noexcept;
+    bool listWaveformThumbnailEnabled() const noexcept;
+    QString listWaveformThumbnailMode() const;
     int spectrumColorMode() const noexcept;
     QString spectrumSolidColor() const;
     QString spectrumRgbStartColor() const;
@@ -268,6 +278,8 @@ public:
     void setWaveformPlaybackGuide(bool value);
     void setWaveformCanvasHeight(int value);
     void setWaveformCanvasLocked(bool value);
+    void setListWaveformThumbnailEnabled(bool value);
+    void setListWaveformThumbnailMode(const QString& value);
     void setSpectrumColorMode(int value);
     void setSpectrumSolidColor(const QString& value);
     void setSpectrumRgbStartColor(const QString& value);
@@ -355,6 +367,8 @@ signals:
     void waveformPlaybackGuideChanged();
     void waveformCanvasHeightChanged();
     void waveformCanvasLockedChanged();
+    void listWaveformThumbnailEnabledChanged();
+    void listWaveformThumbnailModeChanged();
     void spectrumColorModeChanged();
     void spectrumSolidColorChanged();
     void spectrumRgbStartColorChanged();
@@ -451,6 +465,8 @@ private:
     bool waveformPlaybackGuide_ = false;
     int waveformCanvasHeight_ = 78;
     bool waveformCanvasLocked_ = true;
+    bool listWaveformThumbnailEnabled_ = true;
+    QString listWaveformThumbnailMode_ = QStringLiteral("Color36");
     int spectrumColorMode_ = 0;
     QString spectrumSolidColor_ = QStringLiteral("#0078d4");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");

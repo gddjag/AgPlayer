@@ -27,6 +27,7 @@ private slots:
     void migratesLegacyPlaybackModes();
     void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
     void waveformAppearanceSettingsClampPersistAndReset();
+    void listWaveformThumbnailSettingsPersistFallbackAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
@@ -281,6 +282,68 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformRgbBaseColor(), QStringLiteral("#00b4a0"));
     QCOMPARE(reloaded.waveformMode(), 0);
     QCOMPARE(reloaded.waveformPlaybackGuide(), false);
+    persisted.clear();
+}
+
+void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndReset()
+{
+    // Catches missing appearance persistence, accepting an unsupported mode,
+    // or either reset path leaving list-thumbnail state non-default.
+    QSettings persisted;
+    persisted.clear();
+    {
+        SettingsController settings;
+        QCOMPARE(settings.listWaveformThumbnailEnabled(), true);
+        QCOMPARE(settings.listWaveformThumbnailMode(),
+                 QStringLiteral("Color36"));
+
+        settings.setListWaveformThumbnailEnabled(false);
+        settings.setListWaveformThumbnailMode(QStringLiteral("Mono"));
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.listWaveformThumbnailEnabled(), false);
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Mono"));
+    QCOMPARE(persisted.value(
+                 QStringLiteral("appearance/listWaveformThumbnailEnabled"))
+                 .toBool(),
+             false);
+    QCOMPARE(persisted.value(
+                 QStringLiteral("appearance/listWaveformThumbnailMode"))
+                 .toString(),
+             QStringLiteral("Mono"));
+
+    QSignalSpy modeChanged(&reloaded,
+                           &SettingsController::listWaveformThumbnailModeChanged);
+    reloaded.setListWaveformThumbnailMode(QStringLiteral("unsupported"));
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+    QCOMPARE(modeChanged.count(), 1);
+
+    reloaded.setListWaveformThumbnailEnabled(false);
+    reloaded.setListWaveformThumbnailMode(QStringLiteral("Mono"));
+    reloaded.resetWaveformDefaults();
+    QCOMPARE(reloaded.listWaveformThumbnailEnabled(), true);
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+
+    reloaded.setListWaveformThumbnailEnabled(false);
+    reloaded.setListWaveformThumbnailMode(QStringLiteral("Mono"));
+    QSignalSpy enabledReset(
+        &reloaded,
+        &SettingsController::listWaveformThumbnailEnabledChanged);
+    QSignalSpy modeReset(
+        &reloaded,
+        &SettingsController::listWaveformThumbnailModeChanged);
+    reloaded.resetToDefaults();
+    QCOMPARE(reloaded.listWaveformThumbnailEnabled(), true);
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+    QVERIFY(enabledReset.count() >= 1);
+    QVERIFY(modeReset.count() >= 1);
+
+    persisted.setValue(QStringLiteral("appearance/listWaveformThumbnailMode"),
+                       QStringLiteral("invalid-on-disk"));
+    SettingsController invalidReload;
+    QCOMPARE(invalidReload.listWaveformThumbnailMode(),
+             QStringLiteral("Color36"));
     persisted.clear();
 }
 
