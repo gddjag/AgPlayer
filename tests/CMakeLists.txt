@@ -473,6 +473,7 @@ foreach(qt_test IN ITEMS
     waveform_coordinate_mapper_test
     waveform_item_test
     waveform_provider_test
+    track_waveform_thumbnail_provider_test
     shutdown_test
     runtime_log_test
     settings_controller_test
@@ -792,6 +793,9 @@ target_include_directories(import_controller_test PRIVATE
 target_include_directories(waveform_provider_test PRIVATE
     "${CMAKE_SOURCE_DIR}/tests/core"
 )
+target_include_directories(track_waveform_thumbnail_provider_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
 
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
@@ -841,6 +845,34 @@ set_tests_properties(library_stress_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
+
+add_executable(track_waveform_thumbnail_stress_test
+    stress/track_waveform_thumbnail_stress_test.cpp
+)
+set_target_properties(track_waveform_thumbnail_stress_test PROPERTIES AUTOMOC ON)
+target_include_directories(track_waveform_thumbnail_stress_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(track_waveform_thumbnail_stress_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+agplayer_enable_warnings(track_waveform_thumbnail_stress_test)
+add_test(NAME track_waveform_thumbnail_stress_test
+    COMMAND track_waveform_thumbnail_stress_test)
+set_tests_properties(track_waveform_thumbnail_stress_test PROPERTIES
+    TIMEOUT 60
+    LABELS stress
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_test(NAME track_waveform_thumbnail_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/track_waveform_thumbnail_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(track_waveform_thumbnail_contract_test PROPERTIES TIMEOUT 10)
 
 add_executable(library_model_stress_test
     stress/library_model_stress_test.cpp

@@ -82,6 +82,8 @@ add_library(agplayer_qt STATIC
     src/settings_controller.hpp
     src/translation_manager.cpp
     src/translation_manager.hpp
+    src/track_waveform_thumbnail_provider.cpp
+    src/track_waveform_thumbnail_provider.hpp
     src/runtime_log.hpp
     src/waveform_provider.cpp
     src/waveform_provider.hpp
