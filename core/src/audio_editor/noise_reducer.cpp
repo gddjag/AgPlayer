@@ -125,7 +125,7 @@ NoiseReductionResult NoiseReducer::reduce(
         snapshot, range, rendered, cancel,
         progress ? [progress](const float value) { progress(value * 0.2F); }
                  : std::function<void(float)>{});
-    if (!render.success) return {false, render.message};
+    if (!render.success) return {false, render.message, {}};
     const auto cleanup = [&rendered] {
         std::error_code ignored;
         std::filesystem::remove(rendered, ignored);
@@ -135,24 +135,24 @@ NoiseReductionResult NoiseReducer::reduce(
     if (decoder.open(rendered.u8string(), static_cast<int>(render.sample_rate),
                      static_cast<int>(render.channels)) != AG_OK) {
         cleanup();
-        return {false, "cannot decode rendered audio"};
+        return {false, "cannot decode rendered audio", {}};
     }
     std::vector<float> input;
     agplayer::DecodedAudioBlock block;
     do {
         if (cancelled(cancel)) {
             cleanup();
-            return {false, "cancelled"};
+            return {false, "cancelled", {}};
         }
         if (decoder.read(block) != AG_OK) {
             cleanup();
-            return {false, "cannot read rendered audio"};
+            return {false, "cannot read rendered audio", {}};
         }
         input.insert(input.end(), block.samples.begin(), block.samples.end());
     } while (!block.end_of_stream);
     cleanup();
     if (input.empty() || render.channels == 0) {
-        return {false, "rendered audio is empty"};
+        return {false, "rendered audio is empty", {}};
     }
 
     const std::size_t channels = render.channels;
@@ -198,7 +198,7 @@ NoiseReductionResult NoiseReducer::reduce(
             if (cancelled(cancel)) {
                 std::error_code ignored;
                 std::filesystem::remove(output_path, ignored);
-                return {false, "cancelled"};
+                return {false, "cancelled", {}};
             }
             const std::size_t offset = window_index * hop_size;
             for (std::size_t index = 0; index < fft_size; ++index) {
@@ -236,7 +236,7 @@ NoiseReductionResult NoiseReducer::reduce(
     }
     if (!write_float_wav(output_path, output, render.sample_rate,
                          static_cast<std::uint16_t>(render.channels))) {
-        return {false, "cannot write noise-reduced audio"};
+        return {false, "cannot write noise-reduced audio", {}};
     }
     if (progress) progress(1.0F);
     return {true, {}, output_path, render.sample_rate, render.channels,
