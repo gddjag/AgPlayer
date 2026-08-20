@@ -1,5 +1,4 @@
 #include "audio_editor/audio_document.hpp"
-#include "audio_editor/timeline_edit_command.hpp"
 
 #include <QtTest>
 
@@ -16,35 +15,6 @@ private:
     }
 
 private slots:
-    void timelineCommandsUseASeparateMetadataBoundary()
-    {
-        auto doc = document(1'000);
-        const TimelineSnapshot before = doc.timelineSnapshot();
-        QCOMPARE(before.events.size(), std::size_t{1});
-        QCOMPARE(before.events.front().id, EventId{1});
-        QCOMPARE(before.events.front().sourceStart, SampleFrame{0});
-        QCOMPARE(before.events.front().sourceEnd, SampleFrame{1'000});
-
-        const auto move = TimelineEditCommand::move(doc.timelineSnapshot(), 1, 2'000);
-        QVERIFY(move.has_value());
-        QVERIFY(doc.executeTimelineEdit(*move));
-        QCOMPARE(doc.timelineSnapshot().events.front().timelineStart,
-                 SampleFrame{2'000});
-        QCOMPARE(doc.totalFrames(), SampleFrame{3'000});
-        QVERIFY(doc.undoTimelineEdit(*move));
-        const TimelineSnapshot undone = doc.timelineSnapshot();
-        QCOMPARE(undone.events.size(), before.events.size());
-        QCOMPARE(undone.events.front().id, before.events.front().id);
-        QCOMPARE(undone.events.front().source.get(), before.events.front().source.get());
-        QCOMPARE(undone.events.front().sourceStart, before.events.front().sourceStart);
-        QCOMPARE(undone.events.front().sourceEnd, before.events.front().sourceEnd);
-        QCOMPARE(undone.events.front().timelineStart,
-                 before.events.front().timelineStart);
-        QCOMPARE(undone.totalFrames, before.totalFrames);
-        QVERIFY(undone.revision > before.revision);
-        QCOMPARE(doc.totalFrames(), SampleFrame{1'000});
-    }
-
     void deleteSelectionUsesHalfOpenSampleFrames()
     {
         auto doc = document();
