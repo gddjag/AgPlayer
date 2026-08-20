@@ -231,6 +231,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
+                Layout.topMargin: 40
                 Layout.bottomMargin: 14
                 columns: 2
                 columnSpacing: 10

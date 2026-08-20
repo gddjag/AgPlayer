@@ -55,13 +55,16 @@ TestCase {
         wait(0)
         const settingsPanel = findChild(page, "formatSettingsPanel")
         const hint = findChild(page, "formatLocalProcessingHint")
-        verify(settingsPanel && hint)
+        const advanced = findChild(page, "formatAdvancedSettings")
+        verify(settingsPanel && hint && advanced)
         tryVerify(function() {
             return settingsPanel.height > 630 && hint.visible && hint.height > 0
         }, 1000)
         const hintPosition = hint.mapToItem(settingsPanel, 0, 0)
         verify(hintPosition.y >= 44)
         verify(hintPosition.y + hint.height <= settingsPanel.height)
+        const advancedPosition = advanced.mapToItem(settingsPanel, 0, 0)
+        verify(advancedPosition.y >= settingsPanel.height)
     }
 
     function test_outputDirectoryTracksSettingsController() {

@@ -32,6 +32,9 @@ if ($combined -notmatch 'modelData\.available') {
 if ($page -notmatch 'SettingsController\.defaultOutputDirectory') {
     throw 'The output directory must initialize from and persist through SettingsController.'
 }
+if ($settings -notmatch 'objectName:\s*"formatAdvancedSettings"[\s\S]*?Layout\.topMargin:\s*(?:2[4-9]|[3-9]\d)') {
+    throw 'Advanced concurrency controls must begin below the default reference fold.'
+}
 if ($page -notmatch 'SettingsController\.parallelJobs' -or
     $settings -notmatch 'SettingsController\.parallelJobs') {
     throw 'Parallel jobs must synchronize through SettingsController.'
