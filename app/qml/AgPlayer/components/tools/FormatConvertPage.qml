@@ -313,9 +313,9 @@ Rectangle {
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 18
-                        ThemedIcon { source: Theme.icon("checkbox-blank-circle-fill"); tint: "#19c37d"; sourceSize.width: 18; sourceSize.height: 18 }
+                        ThemedIcon { objectName: "formatSummaryCompleteIcon"; source: Theme.icon("checkbox-circle-line"); tint: "#19c37d"; sourceSize.width: 18; sourceSize.height: 18 }
                         Text { text: qsTr("已完成 %1").arg(converter.completedCount); color: "#19c37d" }
-                        ThemedIcon { source: Theme.icon("close-fill"); tint: "#ff4d4f"; sourceSize.width: 18; sourceSize.height: 18 }
+                        ThemedIcon { objectName: "formatSummaryFailedIcon"; source: Theme.icon("error-warning-line"); tint: "#ff4d4f"; sourceSize.width: 18; sourceSize.height: 18 }
                         Text { text: qsTr("失败 %1").arg(converter.failedCount); color: "#ff4d4f" }
                     }
                 }

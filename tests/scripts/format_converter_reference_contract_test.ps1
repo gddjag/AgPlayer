@@ -57,3 +57,26 @@ foreach ($asset in @(
         throw "Missing approved format-workbench icon asset: $asset"
     }
 }
+
+$cmake = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/CMakeLists.txt')
+foreach ($asset in @('checkbox-circle-line.svg', 'error-warning-line.svg')) {
+    if ($cmake -notmatch [regex]::Escape("assets/icons/$asset")) {
+        throw "The footer icon $asset is not registered as an application resource."
+    }
+}
+if ($page -notmatch 'Theme\.icon\("checkbox-circle-line"\)' -or
+    $page -notmatch 'Theme\.icon\("error-warning-line"\)') {
+    throw 'The footer summary must render the approved check-circle and warning icons.'
+}
+
+$iconNotice = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'assets/licenses/AgPlayer-Icons-License.txt')
+$remixLicense = Join-Path $SourceRoot 'assets/licenses/RemixIcon-Apache-2.0.txt'
+if ($iconNotice -notmatch 'Remix Icon v4\.6\.0' -or
+    $iconNotice -notmatch 'arrow-up-s-line\.svg' -or
+    $iconNotice -match 'does not redistribute any Remix') {
+    throw 'The icon notice must accurately list the redistributed Remix Icon v4.6.0 assets.'
+}
+if (-not (Test-Path -LiteralPath $remixLicense) -or
+    (Get-Content -Raw -LiteralPath $remixLicense) -notmatch 'Apache License\s+Version 2\.0') {
+    throw 'The Remix Icon v4.6.0 Apache-2.0 license copy is missing or invalid.'
+}

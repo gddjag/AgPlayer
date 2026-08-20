@@ -41,8 +41,6 @@ TestCase {
         verify(findChild(page, "formatTotalProgress"))
         const localProcessingHint = findChild(page, "formatLocalProcessingHint")
         verify(localProcessingHint.visible)
-        const hintPosition = localProcessingHint.mapToItem(settingsPanel, 0, 0)
-        verify(hintPosition.y + localProcessingHint.height <= settingsPanel.height)
         verify(findChild(page, "formatSettingsAdvancedToggle"))
         verify(findChild(page, "formatTaskContextMenu"))
         verify(!findChild(bottomBar, "converterParallelJobsBox"))
@@ -50,6 +48,20 @@ TestCase {
         const formatBox = findChild(page, "converterOutputFormatBox")
         verify(formatBox)
         compare(formatBox.count, 8)
+    }
+
+    function test_realShellBodyShowsCompleteLocalProcessingHint() {
+        testCase.height = 833
+        wait(0)
+        const settingsPanel = findChild(page, "formatSettingsPanel")
+        const hint = findChild(page, "formatLocalProcessingHint")
+        verify(settingsPanel && hint)
+        tryVerify(function() {
+            return settingsPanel.height > 630 && hint.visible && hint.height > 0
+        }, 1000)
+        const hintPosition = hint.mapToItem(settingsPanel, 0, 0)
+        verify(hintPosition.y >= 44)
+        verify(hintPosition.y + hint.height <= settingsPanel.height)
     }
 
     function test_outputDirectoryTracksSettingsController() {
@@ -99,8 +111,14 @@ TestCase {
         const menu = findChild(page, "formatTaskContextMenu")
         const remove = findChild(page, "formatTaskRemoveMenuItem")
         verify(table && menu && remove)
-        mouseClick(table, 100, 22, Qt.RightButton)
-        tryVerify(function() { return menu.visible }, 1000)
+        let firstCell = null
+        tryVerify(function() {
+            firstCell = findChild(table, "formatTaskFirstFilenameCell")
+            return firstCell && firstCell.visible && firstCell.width > 0 && firstCell.height > 0
+        }, 3000)
+        const clickPoint = firstCell.mapToItem(table, firstCell.width / 2, firstCell.height / 2)
+        mouseClick(table, clickPoint.x, clickPoint.y, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 2000)
         mouseClick(remove, remove.width / 2, remove.height / 2, Qt.LeftButton)
         tryCompare(FormatConverter, "fileCount", 1, 3000)
     }
@@ -115,13 +133,33 @@ TestCase {
     }
 
     function test_minimumWindowKeepsCoreActionsAndTableReachable() {
+        testCase.width = 880
+        testCase.height = 560
+        wait(0)
         const taskPanel = findChild(page, "formatTaskPanel")
+        const settingsPanel = findChild(page, "formatSettingsPanel")
         const addFile = findChild(page, "formatAddFileButton")
         const convert = findChild(page, "convertAllButton")
         const table = findChild(page, "formatTaskTableView")
-        verify(taskPanel && addFile && convert && table)
-        verify(page.usesCompactLayout(880))
-        verify(!page.usesCompactLayout(1672))
+        const search = findChild(page, "formatSearchField")
+        verify(taskPanel && settingsPanel && addFile && convert && table && search)
+        tryCompare(settingsPanel, "width", 40, 1000)
+        verify(addFile.visible && convert.visible && !search.visible)
+        const addPosition = addFile.mapToItem(testCase, 0, 0)
+        const convertPosition = convert.mapToItem(testCase, 0, 0)
+        verify(addPosition.x >= 0 && addPosition.y >= 0)
+        verify(addPosition.x + addFile.width <= testCase.width && addPosition.y + addFile.height <= testCase.height)
+        verify(convertPosition.x >= 0 && convertPosition.y >= 0)
+        verify(convertPosition.x + convert.width <= testCase.width && convertPosition.y + convert.height <= testCase.height)
+        FormatConverter.addUrls([testAudioUrl])
+        tryVerify(function() { return !FormatConverter.busy }, 5000)
+        tryCompare(FormatConverter, "fileCount", 1, 3000)
+        tryVerify(function() {
+            return table.width > 0 && table.height > 0 && table.contentWidth > table.width
+        }, 3000)
+        const startContentX = table.contentX
+        table.contentX = table.contentWidth - table.width
+        tryVerify(function() { return table.contentX > startContentX }, 1000)
     }
 
     function test_realImportSelectionAndPreflight() {

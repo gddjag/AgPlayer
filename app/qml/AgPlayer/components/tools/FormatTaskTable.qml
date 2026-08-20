@@ -188,6 +188,7 @@ Rectangle {
                     font.pixelSize: 12
                 }
                 MouseArea {
+                    objectName: column === 1 && row === 0 ? "formatTaskFirstFilenameCell" : ""
                     visible: column === 1
                     anchors.fill: parent
                     acceptedButtons: Qt.RightButton
