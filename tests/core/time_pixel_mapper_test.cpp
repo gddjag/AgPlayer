@@ -1,8 +1,10 @@
+#include "audio_editor/event_timeline.hpp"
 #include "audio_editor/time_pixel_mapper.hpp"
 
 #include <QtTest>
 
 #include <cstdlib>
+#include <memory>
 
 using namespace agplayer::editor;
 
@@ -10,6 +12,26 @@ class TimePixelMapperTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void mapsTimelineSnapshotAtCommonSampleRatesWithinOneFrame()
+    {
+        for (const std::uint32_t sample_rate : {44'100U, 48'000U, 96'000U}) {
+            EventTimeline timeline;
+            const SampleFrame two_hours = static_cast<SampleFrame>(sample_rate)
+                * 60 * 60 * 2;
+            QVERIFY(timeline.insert(AudioEvent{
+                1, std::make_shared<const AudioSource>(AudioSource{
+                       "fixture.wav", sample_rate, 2, two_hours}),
+                0, two_hours, 0}));
+
+            TimePixelMapper mapper{timeline.snapshot(), 3'840.0, 64.0};
+            for (const SampleFrame frame : {0LL, 1LL, two_hours / 2,
+                                             two_hours - 1}) {
+                const double pixel = mapper.frameToPixel(frame);
+                QVERIFY(std::llabs(mapper.pixelToFrame(pixel) - frame) <= 1);
+            }
+        }
+    }
+
     void roundTripsAtFourKAndExtremeZoom()
     {
         TimePixelMapper mapper{SampleFrame{172'800'000}, 3'840.0, 64.0};

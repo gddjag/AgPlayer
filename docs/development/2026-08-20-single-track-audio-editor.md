@@ -60,3 +60,49 @@ ctest --test-dir build/debug -R "^audio_event_test$" --output-on-failure
 - 当前 PowerShell 没有 MSVC `INCLUDE` 环境变量；未载入 VS 开发环境时，首次 GREEN 编译报 `<cmath>` 未找到。使用 `VsDevCmd.bat -arch=x64 -host_arch=x64` 后通过，非产品代码问题。
 - 未运行完整 CTest、真实音频、录音、UI、硬件、拖放或性能矩阵；它们不属于 Phase 1 的数据模型门禁。
 - 回退点：`9226ad7409d2bdae1ea335a51b22d9eadc25fd65`（Phase 1 提交前 HEAD）。
+
+## Phase 2 — 单轨 EventTimeline 与统一时间映射（2026-08-20）
+
+### 需求追踪
+
+- 规格 3.1 / 3.3：未增加运行时依赖；沿用冻结的有符号 64 位 `SampleFrame` 与半开区间约定。
+- 规格 5.2：`EventTimeline` 按 `timelineStart` 排序保存事件，拒绝重叠；空隙不被压缩，总时长为最后事件的 `timelineStart + audibleFrames`。
+- 规格 7.1：`TimelineSnapshot` 可直接作为 `TimePixelMapper` 的统一时间输入，并覆盖 44.1 / 48 / 96 kHz 的两小时端点回环精度。
+- 规格 17 / 18.1：先记录缺失接口的 RED，再完成最小实现；覆盖命中、空隙、事务拒绝、revision 与映射。
+
+### 修改文件
+
+- `core/src/audio_editor/event_timeline.hpp/.cpp`：新增单轨 `EventTimeline` 和按值 `TimelineSnapshot`；仅成功插入时增加 revision，拒绝无效、重复 ID、溢出与区间重叠。
+- `core/src/audio_editor/time_pixel_mapper.hpp`：接受 `TimelineSnapshot`，以其 `totalFrames` 作为唯一映射范围。
+- `core/src/audio_editor/audio_document.*`、`document_renderer.*`、`document_writer.*`、`time_pitch_session.*`：为既有单事件、未变换快照提供受限适配；多事件、空隙或效果事件明确拒绝，正式多事件渲染仍留给后续导出阶段。
+- `core/CMakeLists.txt`、`tests/CMakeLists.txt`：编译 Timeline 并注册 `event_timeline_test`。
+- `tests/core/event_timeline_test.cpp`、`tests/core/time_pixel_mapper_test.cpp`：覆盖保留空隙、半开命中、重叠事务、revision、单事件适配及长时长映射。
+
+### TDD 与调试证据
+
+**RED（预期失败）**
+
+```powershell
+cmake --build build/release --target event_timeline_test time_pixel_mapper_test --parallel 4
+```
+
+在实现前，两个新测试均以 `fatal error C1083: cannot open include file: "audio_editor/event_timeline.hpp"` 失败。新增单事件适配测试后，未声明适配函数时也以 `C3861: 'singleEventDocumentSnapshot': identifier not found` 失败。
+
+**GREEN（通过）**
+
+```powershell
+ctest --test-dir build/release -R "^(audio_event_test|event_timeline_test|time_pixel_mapper_test|audio_document_test)$" --output-on-failure
+ctest --test-dir build/debug -R "^(audio_event_test|event_timeline_test|time_pixel_mapper_test|audio_document_test)$" --output-on-failure
+```
+
+Release 与 Debug 均为 `4/4` 通过。
+
+曾有 `audio_document_test` 在增量重链后发生 `0xc0000005`。稳定复现表明只影响含已改 `AudioDocument` 头的旧测试对象；`ninja -t deps` 显示该对象依赖数为 0，且 `rules.ninja` 的 `msvc_deps_prefix` 与本机中文 `/showIncludes` 输出编码不符。`--clean-first` 全量重编/重链后该测试稳定通过，确认是构建依赖跟踪的本地化编码问题，不是 Timeline 或文档业务逻辑缺陷；本任务未修改构建系统。
+
+### 构建与未验证项
+
+- `cmake --build build/release --clean-first --parallel 4`：通过。
+- `cmake --build build/debug --clean-first --parallel 4`：通过。
+- 已执行 `git diff --check`。
+- 未运行完整 CTest、UI、真实播放/录音/硬件或正式多事件导出；后者明确不属于本阶段。
+- 回退点：`ad52f84`（Phase 1 冻结 `audio_event.hpp` 后的 Task 2 起点）。

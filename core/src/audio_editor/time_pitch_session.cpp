@@ -72,6 +72,20 @@ bool TimePitchSession::setPitch(const int semitones, const int cents) noexcept
 }
 
 TimePitchResult TimePitchSession::process(
+    const TimelineSnapshot& snapshot,
+    const std::filesystem::path& output,
+    const std::optional<Selection> range,
+    const std::atomic_bool* cancelled,
+    std::function<void(float)> progress) const
+{
+    const auto legacy = singleEventDocumentSnapshot(snapshot);
+    if (!legacy) {
+        return {false, "timeline processing requires a single unmodified event", {}};
+    }
+    return process(*legacy, output, range, cancelled, std::move(progress));
+}
+
+TimePitchResult TimePitchSession::process(
     const DocumentSnapshot& snapshot,
     const std::filesystem::path& output,
     const std::optional<Selection> range,

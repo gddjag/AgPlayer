@@ -106,6 +106,28 @@ bool operator==(const DocumentSnapshot& left,
         && left.selection == right.selection;
 }
 
+std::optional<DocumentSnapshot> singleEventDocumentSnapshot(
+    const TimelineSnapshot& snapshot)
+{
+    if (snapshot.events.size() != 1) {
+        return std::nullopt;
+    }
+    const AudioEvent& event = snapshot.events.front();
+    if (!isValid(event) || event.timelineStart != 0
+        || snapshot.totalFrames != audibleFrames(event)
+        || event.fadeIn != 0 || event.fadeOut != 0
+        || event.speedRatio != 1.0 || event.pitchSemitone != 0
+        || !event.envelope.empty()) {
+        return std::nullopt;
+    }
+
+    DocumentSnapshot result;
+    result.spans.push_back(AudioSpan{event.source, event.sourceStart,
+                                     audibleFrames(event), event.mute,
+                                     event.gain, event.gain});
+    return result;
+}
+
 AudioDocument AudioDocument::fromSource(AudioSource source)
 {
     AudioDocument document;
