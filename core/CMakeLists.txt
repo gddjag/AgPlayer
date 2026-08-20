@@ -3,6 +3,7 @@ add_library(agplayer_core STATIC
     src/audio_editor/audio_file_analyzer.hpp
     src/audio_editor/audio_document.cpp
     src/audio_editor/audio_document.hpp
+    src/audio_editor/audio_event.hpp
     src/audio_editor/document_renderer.cpp
     src/audio_editor/document_renderer.hpp
     src/audio_editor/document_writer.cpp

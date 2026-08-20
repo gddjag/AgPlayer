@@ -1,10 +1,8 @@
 #pragma once
 
-#include <cstdint>
+#include "audio_event.hpp"
 
 namespace agplayer::editor {
-
-using SampleFrame = std::int64_t;
 
 class EditCommand final {
 public:
