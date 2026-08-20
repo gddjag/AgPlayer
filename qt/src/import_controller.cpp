@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <mutex>

@@ -656,7 +656,7 @@ public:
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
-        equalizer_.process(output, frames, channels_);
+        equalizer_.process(output, frames, channels);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
                                : volume_.load(std::memory_order_relaxed)
@@ -1768,6 +1768,7 @@ private:
             settings = equalizer_settings_;
             revision = equalizer_revision_;
         }
+
         equalizer_sample_rate_status_.store(sample_rate,
                                             std::memory_order_release);
         if (!is_graphic_eq_sample_rate_supported(sample_rate)) {
@@ -1782,6 +1783,7 @@ private:
                                                std::memory_order_release);
             return;
         }
+
         const auto program = prepare_graphic_eq(settings, sample_rate, revision);
         if (!program.has_value()) {
             equalizer_active_status_.store(false, std::memory_order_release);

@@ -452,7 +452,7 @@ private:
     int waveformCanvasHeight_ = 78;
     bool waveformCanvasLocked_ = true;
     int spectrumColorMode_ = 0;
-    QString spectrumSolidColor_ = QStringLiteral("#0078d4");
+    QString spectrumSolidColor_ = QStringLiteral("#e62e9b");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
     QString spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString spectrumRgbEndColor_ = QStringLiteral("#e62e9b");

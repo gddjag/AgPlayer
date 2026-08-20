@@ -1,6 +1,7 @@
 #pragma once
 
 class AudioToolsController;
+class AudioEditorController;
 class EqualizerController;
 class FormatConverter;
 class FilenameProcessor;
@@ -8,7 +9,6 @@ class ImportController;
 class LibraryFilterModel;
 class LibraryModel;
 class MetadataEditor;
-class AudioEditorController;
 class PlaybackController;
 class PlaylistModel;
 class SettingsController;

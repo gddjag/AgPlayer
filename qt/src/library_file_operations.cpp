@@ -116,15 +116,36 @@ int LibraryFileOperations::copyTracksToUrl(const QStringList& trackIds,
                : 0;
 }
 
-int LibraryFileOperations::trashTracks(const QStringList& trackIds)
+QVariantMap LibraryFileOperations::trashTracks(const QStringList& trackIds)
 {
-    if (library_ == nullptr) return 0;
+    QVariantMap result{{QStringLiteral("successCount"), 0},
+                       {QStringLiteral("failureCount"), 0},
+                       {QStringLiteral("failures"), QVariantList{}}};
+    if (library_ == nullptr) return result;
     int removed = 0;
+    QVariantList failures;
     for (const QString& trackId : trackIds) {
         const QString path = library_->trackForId(trackId).value(QStringLiteral("path")).toString();
-        if (!path.isEmpty() && QFile::moveToTrash(path) && library_->removeTrack(trackId)) ++removed;
+        QString reason;
+        if (path.isEmpty() || !QFileInfo(path).isFile()) {
+            reason = tr("文件不存在或路径无效");
+        } else if (!QFile::moveToTrash(path)) {
+            reason = tr("系统未能把文件移入回收站");
+        } else if (!library_->removeTrack(trackId)) {
+            reason = tr("文件已移入回收站，但曲库记录移除失败");
+        } else {
+            ++removed;
+        }
+        if (!reason.isEmpty()) {
+            failures.append(QVariantMap{{QStringLiteral("trackId"), trackId},
+                                        {QStringLiteral("path"), path},
+                                        {QStringLiteral("reason"), reason}});
+        }
     }
-    return removed;
+    result.insert(QStringLiteral("successCount"), removed);
+    result.insert(QStringLiteral("failureCount"), failures.size());
+    result.insert(QStringLiteral("failures"), failures);
+    return result;
 }
 
 bool LibraryFileOperations::relocateTrack(const QString& trackId, const QString& newPath)

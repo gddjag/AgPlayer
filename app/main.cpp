@@ -35,22 +35,21 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <shobjidl.h>
-#include <propsys.h>
 #include <propkey.h>
+#include <shobjidl.h>
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
 #include "equalizer_controller.hpp"
+#include "filename_processor.hpp"
 #include "format_converter.hpp"
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
-#include "audio_editor/audio_editor_controller.hpp"
 #include "library_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
-#include "filename_processor.hpp"
 #include "playback_controller.hpp"
 #include "playback_state_store.hpp"
 #include "playlist_model.hpp"
@@ -198,7 +197,8 @@ private:
 int main(int argc, char* argv[])
 {
 #ifdef Q_OS_WIN
-    // Keep taskbar grouping identical to the installed shortcut identity.
+    // Must be set before Qt creates any native window so taskbar grouping and
+    // the installed shortcut resolve to the same stable application identity.
     SetCurrentProcessExplicitAppUserModelID(L"AgPlayer.Desktop");
 #endif
     // The application supplies its own control visuals. A non-native style
@@ -208,8 +208,14 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
-    app.setWindowIcon(QIcon(QStringLiteral(
-        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico")));
+    const QIcon applicationIcon(QStringLiteral(
+        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
+    app.setWindowIcon(applicationIcon);
+#ifdef Q_OS_WIN
+    WindowsShellIdentityFilter shellIdentityFilter(
+        applicationIcon, loadNativeWindowIcons(), &app);
+    app.installEventFilter(&shellIdentityFilter);
+#endif
 
     // Development-only QA arguments. Parsed before ag_player_create so the
     // production player instance is reused (controllers are never bypassed).

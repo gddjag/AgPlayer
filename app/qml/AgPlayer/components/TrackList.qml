@@ -18,6 +18,7 @@ ListView {
     property string searchText: ""
     property var selectedTrackIds: []
     property int selectionAnchor: -1
+    property var lastTrashResult: ({ successCount: 0, failureCount: 0, failures: [] })
     readonly property bool windowActive: root.Window.active
     readonly property bool showAlbumColumn: true
     readonly property bool compactColumns: width < 900
@@ -44,7 +45,8 @@ ListView {
 
     readonly property bool customPlaylistSelected:
         selectedCategory !== "all" && selectedCategory !== "favorites"
-        && selectedCategory !== "history" && selectedCategory !== "library"
+        && selectedCategory !== "history" && selectedCategory !== "recentAdded"
+        && selectedCategory !== "neverPlayed"
 
     LibraryFileOperations { id: fileOps; libraryModel: LibraryModel }
 
@@ -55,11 +57,26 @@ ListView {
         return (minutes < 10 ? "0" : "") + minutes + ":"
                 + (total % 60 < 10 ? "0" : "") + total % 60
     }
+    function formatBpm(value) {
+        var bpm = Number(value)
+        if (!isFinite(bpm) || bpm <= 0) return "—"
+        var rounded = Math.round(bpm * 10) / 10
+        return Math.abs(rounded - Math.round(rounded)) < 0.001
+                ? Math.round(rounded).toString() : rounded.toFixed(1)
+    }
     function isCurrentTrack(trackId) { return PlaybackController.currentTrackId === trackId }
     function isSelected(trackId) { return selectedTrackIds.indexOf(trackId) >= 0 }
     function trackIdAt(row) {
         if (row < 0 || row >= count) return ""
         return trackModel.data(trackModel.index(row, 0), LibraryModel.TrackIdRole)
+    }
+    function visibleTrackIds() {
+        var ids = []
+        for (var row = 0; row < count; ++row) {
+            var id = trackIdAt(row)
+            if (id) ids.push(id)
+        }
+        return ids
     }
     function ensureCurrentTrackVisible() {
         var currentTrackId = PlaybackController.currentTrackId
@@ -160,15 +177,36 @@ ListView {
         }
         return urls
     }
+    function actionTrackIds() {
+        return trackMenu.targetTrackIds.length > 0
+                ? trackMenu.targetTrackIds.slice()
+                : selectedTrackIds.slice()
+    }
     function openInAudioTool(toolIndex) {
-        var urls = selectedFileUrls()
+        var ids = actionTrackIds()
+        var urls = []
+        for (var index = 0; index < ids.length; ++index) {
+            var url = fileOps.fileUrl(ids[index])
+            if (url && String(url).length > 0)
+                urls.push(url)
+        }
         if (urls.length === 0) return
-        if (toolIndex === 0) AudioEditorController.openFile(urls[0])
-        else if (toolIndex === 1) FormatConverter.loadFiles(urls)
-        else if (toolIndex === 2) MetadataEditor.loadFiles(urls)
-        else FilenameProcessor.loadFiles(urls)
+        // Present the destination first: a loader issue must not make a real
+        // context-menu click appear to do nothing.
         AudioToolsController.selectTool(toolIndex)
         WindowController.showAudioTools()
+        if (toolIndex === 0) {
+            AudioEditorController.openFile(urls[0])
+        } else if (toolIndex === 1) {
+            if (typeof FormatConverter.loadFiles === "function") FormatConverter.loadFiles(urls)
+            else FormatConverter.loadFile(urls[0])
+        } else if (toolIndex === 2) {
+            if (typeof MetadataEditor.loadFiles === "function") MetadataEditor.loadFiles(urls)
+            else MetadataEditor.loadFile(urls[0])
+        } else {
+            if (typeof FilenameProcessor.loadFiles === "function") FilenameProcessor.loadFiles(urls)
+            else FilenameProcessor.loadFile(urls[0])
+        }
     }
 
     Keys.onPressed: function(event) {
@@ -235,7 +273,32 @@ ListView {
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         contentItem: Label { text: qsTr("确定把选中的音乐文件移到系统回收站？"); color: Theme.primaryText }
-        onAccepted: { fileOps.trashTracks(trackMenu.targetTrackIds); root.selectedTrackIds = [] }
+        onAccepted: {
+            root.lastTrashResult = fileOps.trashTracks(trackMenu.targetTrackIds)
+            root.selectedTrackIds = []
+            if (root.lastTrashResult.failureCount > 0)
+                trashResultDialog.open()
+        }
+        background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
+    }
+    Dialog {
+        id: trashResultDialog
+        width: 520
+        title: qsTr("部分文件未删除")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Close
+        contentItem: Label {
+            width: 480
+            wrapMode: Text.WordWrap
+            color: Theme.primaryText
+            text: qsTr("已移入回收站 %1 个，失败 %2 个。\n%3")
+                .arg(root.lastTrashResult.successCount || 0)
+                .arg(root.lastTrashResult.failureCount || 0)
+                .arg((root.lastTrashResult.failures || []).map(function(item) {
+                    return (item.path || item.trackId) + "：" + item.reason
+                }).join("\n"))
+        }
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
     }
 
@@ -271,12 +334,16 @@ ListView {
         required property string fileStatus
 
         objectName: root.isCurrentTrack(trackId) ? "currentTrackRow" : "trackRow"
-        readonly property bool systemHighlighted:
-            root.isCurrentTrack(trackId) || root.isSelected(trackId)
+        readonly property bool currentTrack: root.isCurrentTrack(trackId)
+        readonly property bool selectedTrack: root.isSelected(trackId)
+        readonly property bool systemHighlighted: currentTrack || selectedTrack
         readonly property color systemHighlightColor:
-            root.windowActive ? Theme.activeSelection : Theme.inactiveSelection
-        readonly property color systemHighlightText:
-            root.windowActive ? Theme.activeSelectionText : Theme.inactiveSelectionText
+            root.windowActive
+            ? (currentTrack ? Theme.currentTrackSelection
+                            : Theme.selectedTrackSelection)
+            : (currentTrack ? Theme.currentTrackSelectionInactive
+                            : Theme.selectedTrackSelectionInactive)
+        readonly property color systemHighlightText: Theme.primaryText
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
         width: root.width; height: root.rowHeight
@@ -425,8 +492,8 @@ ListView {
                                                    point.modifiers)
                     onDoubleTapped: {
                         if (rowItem.available) {
-                            var row = LibraryModel.indexForTrackId(rowItem.trackId)
-                            if (row >= 0) LibraryModel.playRow(row)
+                            PlaybackController.playTrackIds(
+                                        root.visibleTrackIds(), rowItem.trackId)
                         }
                     }
                 }
@@ -436,7 +503,7 @@ ListView {
                 Layout.minimumWidth: root.favoriteWidth
                 Layout.preferredWidth: root.favoriteWidth
                 Layout.maximumWidth: root.favoriteWidth
-                icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-line")
+                icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-outline")
                 icon.color: rowItem.favorite ? Theme.favoriteRed : Theme.secondaryText
                 icon.width: 23; icon.height: 23
                 onClicked: { var row = LibraryModel.indexForTrackId(rowItem.trackId); if (row >= 0) LibraryModel.setFavorite(row, !rowItem.favorite) }
@@ -499,7 +566,7 @@ ListView {
                     }
                 }
             }
-            BodyText { objectName: "trackBpmCell"; text: rowItem.bpm > 0 ? Math.round(rowItem.bpm) : "—"; horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
+            BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
             BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
         }
 
@@ -545,6 +612,7 @@ ListView {
         palette.highlight: Theme.activeSelection
         palette.highlightedText: Theme.activeSelectionText
         palette.mid: Theme.border
+        delegate: ThemedMenuItem {}
         background: Rectangle {
             color: Theme.elevated
             border.color: Theme.border
@@ -554,14 +622,19 @@ ListView {
         property string targetTrackId
         property var targetTrackIds: []
         property bool targetFavorite: false
-        SystemMenuItem { objectName: "trackMenuPlay"; text: qsTr("播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: { var row = LibraryModel.indexForTrackId(trackMenu.targetTrackId); if (row >= 0) LibraryModel.playRow(row) } }
+        SystemMenuItem { objectName: "trackMenuPlay"; text: qsTr("播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.playTrackIds(root.visibleTrackIds(), trackMenu.targetTrackId) }
         SystemMenuItem { objectName: "trackMenuPlayNext"; text: qsTr("下一首播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.queueNext(trackMenu.targetTrackId) }
         Menu {
             id: moveMenu
+            width: 240
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
+            palette.button: Theme.elevated
+            palette.buttonText: Theme.primaryText
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
+            palette.mid: Theme.border
+            delegate: ThemedMenuItem {}
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
             objectName: "moveTracksMenu"
             title: qsTr("加入歌单")
@@ -573,26 +646,39 @@ ListView {
                     required property string name
                     objectName: "playlistMoveTarget-" + playlistId
                     text: name; enabled: playlistId !== root.selectedCategory
-                    onTriggered: root.customPlaylistSelected
-                                 ? root.playlistModel.moveTracks(root.selectedCategory, playlistId, trackMenu.targetTrackIds)
-                                 : root.playlistModel.addTracks(playlistId, trackMenu.targetTrackIds)
+                    onClicked: {
+                        var ids = root.actionTrackIds()
+                        if (ids.length === 0)
+                            return
+                        if (root.customPlaylistSelected)
+                            root.playlistModel.moveTracks(root.selectedCategory,
+                                                          playlistId, ids)
+                        else
+                            root.playlistModel.addTracks(playlistId, ids)
+                    }
                 }
                 onObjectAdded: function(index, object) { moveMenu.insertItem(index, object) }
                 onObjectRemoved: function(index, object) { moveMenu.removeItem(object) }
             }
         }
         Menu {
+            id: audioToolsMenu
             objectName: "audioToolsTrackMenu"
+            width: 240
             title: qsTr("使用音频工具打开")
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
+            palette.button: Theme.elevated
+            palette.buttonText: Theme.primaryText
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
+            palette.mid: Theme.border
+            delegate: ThemedMenuItem {}
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
-            SystemMenuItem { objectName: "trackMenuLightEditor"; text: qsTr("轻度剪辑"); onTriggered: root.openInAudioTool(0) }
-            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onTriggered: root.openInAudioTool(1) }
-            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onTriggered: root.openInAudioTool(2) }
-            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onTriggered: root.openInAudioTool(3) }
+            SystemMenuItem { objectName: "trackMenuAudioEditor"; text: qsTr("音频编辑"); onClicked: root.openInAudioTool(0) }
+            SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
+            SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onClicked: root.openInAudioTool(2) }
+            SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onClicked: root.openInAudioTool(3) }
         }
         MenuSeparator {}
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }
@@ -611,27 +697,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuRelocate"; text: qsTr("重新定位文件"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: relocateDialog.open() }
     }
 
-    component SystemMenuItem: MenuItem {
-        id: systemMenuItem
-        width: 230
-        implicitWidth: 230
-        implicitHeight: 34
-        contentItem: Text {
-            text: systemMenuItem.text
-            color: systemMenuItem.highlighted || systemMenuItem.hovered
-                   ? Theme.activeSelectionText
-                   : systemMenuItem.enabled ? Theme.primaryText : Theme.secondaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        background: Rectangle {
-            color: systemMenuItem.highlighted || systemMenuItem.hovered
-                   ? Theme.activeSelection : "transparent"
-            radius: Theme.radiusSm
-        }
-    }
+    component SystemMenuItem: ThemedMenuItem { width: 230 }
 
     Popup {
         id: detailsPanel
@@ -715,9 +781,14 @@ ListView {
             font.pixelSize: 13
             wrapMode: Text.NoWrap
         }
-        HoverHandler { id: marqueeHover }
+        MouseArea {
+            id: marqueeHover
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            hoverEnabled: true
+        }
         SequentialAnimation {
-            running: marqueeHover.hovered && marqueeRoot.overflowing
+            running: marqueeHover.containsMouse && marqueeRoot.overflowing
             loops: Animation.Infinite
             onRunningChanged: if (!running) marqueeText.x = 0
             PauseAnimation { duration: 350 }

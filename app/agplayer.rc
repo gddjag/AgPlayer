@@ -1,1 +1,9 @@
+#define IDI_AGPLAYER_ICON 101
+#define IDS_AGPLAYER_TITLE 102
+
 IDI_AGPLAYER_ICON ICON "../assets/brand/agplayer.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_AGPLAYER_TITLE "AgPlayer"
+END

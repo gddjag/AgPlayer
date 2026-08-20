@@ -358,7 +358,7 @@ Item {
                 id: settingsSidebar
                 objectName: "settingsSidebar"
                 property string designRole: "settingsCategoryRail"
-                Layout.preferredWidth: 208
+                Layout.preferredWidth: 184
                 Layout.fillHeight: true
                 color: "transparent"
 
@@ -1745,6 +1745,13 @@ Item {
                     text: qsTr("鼠标悬停波形时显示时间预览胶囊")
                     checked: SettingsController.waveformHoverTimePreview
                     onToggled: SettingsController.waveformHoverTimePreview = checked
+                }
+
+                SettingSwitch {
+                    objectName: "waveformPlaybackGuideSwitch"
+                    text: qsTr("播放进度竖条")
+                    checked: SettingsController.waveformPlaybackGuide
+                    onToggled: SettingsController.waveformPlaybackGuide = checked
                 }
 
                 SettingRow {

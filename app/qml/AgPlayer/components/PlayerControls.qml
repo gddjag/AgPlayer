@@ -31,9 +31,10 @@ Rectangle {
 
     Timer {
         id: volumeCloseTimer
-        interval: 280
+        objectName: "mainVolumeCloseTimer"
+        interval: 2000
         onTriggered: {
-            if (!volumeSlider.pressed && !volumeSlider.activeFocus)
+            if (!volumeSlider.pressed && !volumeHover.hovered)
                 root.volumeExpanded = false
         }
     }
@@ -49,8 +50,8 @@ Rectangle {
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
                     ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: 24
-        icon.height: 24
+        icon.width: 20
+        icon.height: 20
         Accessible.name: WindowController.listWindowVisible
                          ? qsTr("Hide playlist window")
                          : qsTr("Show playlist window")
@@ -73,8 +74,8 @@ Rectangle {
             flat: true
             icon.source: Theme.icon("briefcase-4-line")
             icon.color: Theme.iconPrimary
-            icon.width: root.emptyMode ? 28 : 24
-            icon.height: root.emptyMode ? 28 : 24
+            icon.width: 20
+            icon.height: 20
             Accessible.name: qsTr("Open audio tools")
             onClicked: WindowController.showAudioTools()
             ToolTip.text: Accessible.name
@@ -87,8 +88,8 @@ Rectangle {
             flat: true
             icon.source: Theme.icon("equalizer-line")
             icon.color: Theme.isLight ? "#000000" : "#ffffff"
-            icon.width: root.emptyMode ? 28 : 24
-            icon.height: root.emptyMode ? 28 : 24
+            icon.width: 20
+            icon.height: 20
             contentItem.rotation: 90
             Accessible.name: qsTr("十段图形均衡器")
             onClicked: root.openEqualizerRequested()
@@ -100,10 +101,10 @@ Rectangle {
         ToolButton {
             objectName: "waveformModeButton"
             flat: true
-            icon.source: Theme.icon("waveform-switch")
+            icon.source: Theme.icon("pulse-line")
             icon.color: Theme.iconPrimary
-            icon.width: root.emptyMode ? 28 : 24
-            icon.height: root.emptyMode ? 28 : 24
+            icon.width: 20
+            icon.height: 20
             Accessible.name: qsTr("Change waveform mode")
             onClicked: SettingsController.waveformMode =
                        (SettingsController.waveformMode + 1) % 3
@@ -194,8 +195,8 @@ Rectangle {
                 }
             }
             icon.color: Theme.iconPrimary
-            icon.width: 24
-            icon.height: 24
+            icon.width: 20
+            icon.height: 20
             Accessible.name: root.playbackModeName()
             onClicked: PlaybackController.cycleMode()
             ToolTip.text: Accessible.name
@@ -205,6 +206,8 @@ Rectangle {
 
         Item {
             id: volumeControl
+            objectName: "mainVolumeControl"
+            property alias expandedForQa: root.volumeExpanded
             Layout.preferredWidth: root.emptyMode
                                    ? 44 : 44 + volumeSlider.width
                                           + volumePercent.width
@@ -212,6 +215,7 @@ Rectangle {
             clip: false
 
             HoverHandler {
+                id: volumeHover
                 onHoveredChanged: {
                     if (hovered) {
                         volumeCloseTimer.stop()
@@ -233,10 +237,10 @@ Rectangle {
                 flat: true
                 icon.source: PlaybackController.muted
                              ? Theme.icon("volume-mute-line")
-                             : Theme.icon("volume-up-fill")
+                             : Theme.icon("volume-up-line")
                 icon.color: Theme.iconPrimary
-                icon.width: 24
-                icon.height: 24
+                icon.width: 20
+                icon.height: 20
                 Accessible.name: PlaybackController.muted
                                  ? qsTr("Unmute") : qsTr("Mute")
                 onClicked: PlaybackController.toggleMuted()
@@ -349,8 +353,8 @@ Rectangle {
         flat: true
         icon.source: Theme.icon("picture-in-picture-2-line")
         icon.color: Theme.iconPrimary
-        icon.width: 24
-        icon.height: 24
+        icon.width: 20
+        icon.height: 20
         Accessible.name: qsTr("Switch to mini player")
         onClicked: WindowController.showMini()
         ToolTip.text: Accessible.name

@@ -221,7 +221,7 @@ void WindowController::setListWindow(QWindow* listWindow)
     setListWindowWidth(listWindow_->width());
     setListWindowHeight(listWindow_->height());
     if (!listWindowDetached_) {
-        repositionDockedListWindow();
+        repositionDockedListWindow(true);
     } else {
         setListWindowX(listWindow_->x());
         setListWindowY(listWindow_->y());
@@ -372,7 +372,7 @@ void WindowController::setPreferredDockEdge(int edge)
     emit preferredDockEdgeChanged();
     if (!listWindowDetached_ && (!initialCall || !hasPersistedDockEdge_)) {
         setListDockEdge(edgeForPreference(preferredDockEdge_));
-        repositionDockedListWindow();
+        repositionDockedListWindow(true);
     }
 }
 
@@ -406,7 +406,7 @@ void WindowController::setListWindowDetached(bool detached)
         setListDockEdge(QStringLiteral("none"));
     } else {
         setListDockEdge(edgeForPreference(preferredDockEdge_));
-        repositionDockedListWindow();
+        repositionDockedListWindow(true);
     }
     applyListWindowVisible(shouldShowListWindow());
 }
@@ -595,7 +595,7 @@ void WindowController::moveListWindow(int x, int y)
             emit listWindowDetachedChanged();
         }
         setListDockEdge(edge);
-        repositionDockedListWindow();
+        repositionDockedListWindow(true);
         return;
     }
 
@@ -622,7 +622,7 @@ void WindowController::snapListWindow(const QString& direction)
         emit listWindowDetachedChanged();
     }
     setListDockEdge(direction);
-    repositionDockedListWindow();
+    repositionDockedListWindow(true);
 }
 
 void WindowController::activateSearch()
@@ -700,7 +700,7 @@ void WindowController::applyListWindowVisible(bool visible)
     if (listWindow_ != nullptr) {
         if (visible && !listWindowGeometryInitialized_) {
             if (!listWindowDetached_) {
-                repositionDockedListWindow();
+                repositionDockedListWindow(true);
             }
             listWindowGeometryInitialized_ = true;
         }
@@ -724,7 +724,7 @@ void WindowController::updateListWindowPosition()
     repositionDockedListWindow();
 }
 
-void WindowController::repositionDockedListWindow()
+void WindowController::repositionDockedListWindow(bool alignWidth)
 {
     if (listWindow_ == nullptr || mainWindow_ == nullptr || listWindowDetached_) {
         return;
@@ -734,17 +734,60 @@ void WindowController::repositionDockedListWindow()
         return;
     }
 
-    // A docked player/list pair is one visual column. Keep the shared width
-    // aligned while preserving the independently resizable list height.
+    // Top/bottom docking is one visual column: its two native frame edges
+    // must coincide.  The list height remains independent so its ten-row
+    // default and user-selected height are preserved.
     updatingWindowGeometry_ = true;
-    if (listWindow_->width() != mainWindow_->width()) {
-        listWindow_->resize(mainWindow_->width(), listWindow_->height());
+    const bool verticalDock = listDockEdge_ == QStringLiteral("top")
+        || listDockEdge_ == QStringLiteral("bottom");
+#ifdef Q_OS_WIN
+    const HWND mainHandle = reinterpret_cast<HWND>(mainWindowHandle_);
+    const HWND listHandle = reinterpret_cast<HWND>(listWindowHandle_);
+    RECT mainRect{};
+    RECT listRect{};
+    if (mainHandle != nullptr && listHandle != nullptr
+        && GetWindowRect(mainHandle, &mainRect)
+        && GetWindowRect(listHandle, &listRect)) {
+        const int mainWidth = mainRect.right - mainRect.left;
+        const int listWidth = listRect.right - listRect.left;
+        const int listHeight = listRect.bottom - listRect.top;
+        const int targetWidth = alignWidth && verticalDock ? mainWidth : listWidth;
+        int targetX = listRect.left;
+        int targetY = listRect.top;
+        if (listDockEdge_ == QStringLiteral("left")) {
+            targetX = mainRect.left - listWidth + kDockOverlap;
+            targetY = mainRect.top;
+        } else if (listDockEdge_ == QStringLiteral("right")) {
+            targetX = mainRect.right - kDockOverlap;
+            targetY = mainRect.top;
+        } else if (listDockEdge_ == QStringLiteral("top")) {
+            targetX = mainRect.left;
+            targetY = mainRect.top - listHeight + kDockOverlap;
+        } else {
+            targetX = mainRect.left;
+            targetY = mainRect.bottom - kDockOverlap;
+        }
+        if (targetX != listRect.left || targetY != listRect.top
+            || targetWidth != listWidth) {
+            SetWindowPos(listHandle, nullptr, targetX, targetY,
+                         targetWidth, listHeight,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        if (alignWidth && verticalDock) {
+            listNativePixelSize_.setWidth(targetWidth);
+        }
+    } else
+#endif
+    {
+        if (alignWidth && verticalDock) {
+            QSize targetSize = listWindow_->size();
+            targetSize.setWidth(mainWindow_->width());
+            listWindow_->setGeometry(
+                QRect(computeSnapForEdge(listDockEdge_), targetSize));
+        } else {
+            listWindow_->setPosition(computeSnapForEdge(listDockEdge_));
+        }
     }
-    // Keep docking in Qt's screen-independent coordinate space. Mixing HWND
-    // outer-frame pixels with QWindow client geometry introduces a border/DPI
-    // offset and makes the pair drift at monitor seams. WM_DPICHANGED below
-    // independently preserves each native window's pixel size.
-    listWindow_->setPosition(computeSnapForEdge(listDockEdge_));
     updatingWindowGeometry_ = false;
     const QPoint position = listWindow_->position();
     setListWindowX(position.x());
@@ -779,7 +822,7 @@ void WindowController::finishListWindowInteraction()
             listWindowDetached_ = false;
             emit listWindowDetachedChanged();
             setListDockEdge(pendingListSnapEdge_);
-            repositionDockedListWindow();
+            repositionDockedListWindow(true);
         }
     } else if (pendingListDetach_) {
         setListWindowDetached(true);
@@ -876,9 +919,6 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
                                  adjusted.width(), adjusted.height(),
                                  SWP_NOZORDER | SWP_NOACTIVATE);
                     updatingWindowGeometry_ = false;
-                    if (mainChanged && !listWindowDetached_) {
-                        repositionDockedListWindow();
-                    }
                 });
             }
         }
@@ -1158,7 +1198,14 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
 #endif
             scheduleWindowStateSync();
             if (!updatingWindowGeometry_ && !listWindowDetached_) {
-                repositionDockedListWindow();
+                bool alignWidth = event->type() == QEvent::Resize;
+#ifdef Q_OS_WIN
+                if (alignWidth) {
+                    alignWidth = qFuzzyCompare(
+                        mainTrackedDpr_, mainWindow_->devicePixelRatio());
+                }
+#endif
+                repositionDockedListWindow(alignWidth);
             }
         } else if (event->type() == QEvent::WindowStateChange) {
             applyPlatformWindowStyle(mainWindow_);
@@ -1205,7 +1252,11 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
             rememberNativePixelSize(listWindow_);
         }
 #endif
-        if (!updatingWindowGeometry_ && magneticSnapEnabled_
+        const bool listMoveMayChangeDock =
+            QGuiApplication::platformName().compare(
+                QStringLiteral("windows"), Qt::CaseInsensitive) != 0
+            || listUserInteraction_;
+        if (!updatingWindowGeometry_ && listMoveMayChangeDock && magneticSnapEnabled_
             && mainWindow_ != nullptr) {
             if (listWindowDetached_) {
                 const QString candidate = snapEdgeForPosition(

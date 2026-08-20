@@ -135,7 +135,7 @@ private:
     void applyListWindowDetached(bool detached);
     void shutdown();
     bool shouldShowListWindow() const;
-    void repositionDockedListWindow();
+    void repositionDockedListWindow(bool alignWidth = false);
     void setListDockEdge(const QString& edge);
     QString snapEdgeForPosition(int x, int y) const;
     void loadPersistedWindowState();
@@ -183,7 +183,7 @@ private:
     bool listWindowDetached_ = false;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
-    int listWindowWidth_ = 1228;
+    int listWindowWidth_ = 1104;
     int listWindowHeight_ = 570;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;

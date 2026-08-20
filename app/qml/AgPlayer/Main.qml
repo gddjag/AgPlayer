@@ -8,15 +8,15 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 1104
-    height: 342
+    width: 960
+    height: 298
     minimumWidth: 612
     minimumHeight: 228
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
     }
-    flags: Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     background: null
     title: "AgPlayer"
@@ -187,7 +187,10 @@ ApplicationWindow {
             id: playerControls
             objectName: "playerControls"
             Layout.fillWidth: true
-            Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 64
+            // Empty startup reserves enough room for the responsive action
+            // area.  The controls stay anchored at the bottom instead of
+            // cutting through the format hint on compact windows.
+            Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
             emptyMode: LibraryModel.count === 0
             onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
@@ -244,7 +247,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Space"
         context: Qt.WindowShortcut
-        enabled: !mainWindow.editingText()
+        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
         onActivated: PlaybackController.togglePlayback()
     }
 

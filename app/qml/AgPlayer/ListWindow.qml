@@ -8,11 +8,11 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1228
+    width: 1104
     height: 570
-    minimumWidth: 720
+    minimumWidth: 612
     minimumHeight: 320
-    flags: Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer 音乐列表")
     palette.window: Theme.background
@@ -42,28 +42,6 @@ Window {
         function onSearchRequested() { searchFilter.focusSearch() }
     }
     Connections {
-        target: filterModel
-        function onCategoryChanged() {
-            listWindow.ensureLibraryManagerHeight()
-        }
-    }
-
-    function ensureLibraryManagerHeight() {
-        if (!filterModel || filterModel.category !== "library") {
-            listWindow.minimumHeight = 420
-            return
-        }
-        var geometry = listWindow.screen
-                       ? listWindow.screen.availableGeometry : null
-        var available = geometry && geometry.height > 0
-                        ? geometry.height : 1080
-        var targetHeight = Math.min(available,
-                                    libraryManagerPage.preferredWindowHeight)
-        listWindow.minimumHeight = targetHeight
-        if (listWindow.height < targetHeight)
-            listWindow.height = targetHeight
-    }
-    Connections {
         target: ImportController
         function onFinished() {
             if (listWindow.importTargetPlaylistId
@@ -79,7 +57,8 @@ Window {
     function customCategory(): string {
         var category = filterModel ? filterModel.category : "all"
         return category !== "all" && category !== "favorites"
-                && category !== "history" && category !== "library" ? category : ""
+                && category !== "history" && category !== "recentAdded"
+                && category !== "neverPlayed" ? category : ""
     }
     function customPlaylistEmpty(): bool {
         var playlistId = customCategory()
@@ -313,6 +292,8 @@ Window {
                     allCount: LibraryModel.count
                     favoriteCount: LibraryModel.favoriteCount
                     historyCount: LibraryModel.historyCount
+                    recentAddedCount: LibraryModel.recentAddedCount
+                    neverPlayedCount: LibraryModel.neverPlayedCount
                     playlistModel: listWindow.playlistModel
                     onCategorySelected: function(category) {
                         if (filterModel) filterModel.category = category
@@ -345,8 +326,7 @@ Window {
                     StackLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        currentIndex: filterModel && filterModel.category === "library" ? 3
-                                      : LibraryModel.count === 0
+                        currentIndex: LibraryModel.count === 0
                                         || listWindow.customPlaylistEmpty() ? 1
                                       : filterModel && filterModel.count > 0
                                         ? 0 : 2
@@ -384,21 +364,12 @@ Window {
                             }
                             }
                         }
-                        LibraryManagerPage {
-                            id: libraryManagerPage
-                            objectName: "libraryManagerPageInList"
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            onPreferredWindowHeightChanged:
-                                listWindow.ensureLibraryManagerHeight()
-                        }
                     }
 
                     SearchFilter {
                         id: searchFilter
                         objectName: "librarySearchFilter"
                         Layout.fillWidth: true
-                        visible: !filterModel || filterModel.category !== "library"
                         searchText: filterModel ? filterModel.searchText : ""
                         exactRating: filterModel ? filterModel.exactRating : 0
                         minBpm: filterModel ? filterModel.minBpm : 60
