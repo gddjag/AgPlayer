@@ -1,6 +1,6 @@
 #include "project_document.hpp"
 
-#include "../../../core/src/audio_editor/audio_file_analyzer.hpp"
+#include "../../../core/src/audio_editor/audio_source_probe.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -19,6 +19,16 @@
 #include <unordered_set>
 
 namespace agplayer::editor {
+
+bool isValidProjectExportSettings(const ProjectExportSettings& settings) noexcept
+{
+    const bool validSampleRate = settings.sampleRate == 0
+        || (settings.sampleRate >= 8'000 && settings.sampleRate <= 384'000);
+    return validSampleRate && settings.channels >= 0 && settings.channels <= 2
+        && settings.bitRate >= 0 && settings.bitRate <= 1'536'000
+        && settings.quality >= 0 && settings.quality <= 100;
+}
+
 namespace {
 
 QString toQString(const std::filesystem::path& path)
@@ -152,6 +162,10 @@ bool boolValue(const QJsonObject& object, const char* key, bool& output)
 bool validViewport(const ProjectSaveRequest& request)
 {
     const SampleFrame total = request.document->totalFrames();
+    if (total == 0) {
+        return request.playheadFrame == 0 && request.visibleStartFrame == 0
+            && request.visibleEndFrame == 0;
+    }
     return request.playheadFrame >= 0 && request.playheadFrame <= total
         && request.visibleStartFrame >= 0 && request.visibleEndFrame > request.visibleStartFrame
         && request.visibleEndFrame <= total;
@@ -173,23 +187,26 @@ bool parseExport(const QJsonValue& value, ProjectExportSettings& output)
 {
     if (!value.isObject()) return false;
     const QJsonObject object = value.toObject();
+    ProjectExportSettings parsed;
     qint64 rate{}, channels{}, bitRate{}, quality{};
-    if (!stringValue(object, "codecName", output.codecName)
+    if (!stringValue(object, "codecName", parsed.codecName)
         || !integer(object.value(QStringLiteral("sampleRate")), rate)
         || !integer(object.value(QStringLiteral("channels")), channels)
         || !integer(object.value(QStringLiteral("bitRate")), bitRate)
-        || !boolValue(object, "keepMetadata", output.keepMetadata)
-        || !boolValue(object, "variableBitRate", output.variableBitRate)
+        || !boolValue(object, "keepMetadata", parsed.keepMetadata)
+        || !boolValue(object, "variableBitRate", parsed.variableBitRate)
         || !integer(object.value(QStringLiteral("quality")), quality)
-        || !stringValue(object, "outputDirectory", output.outputDirectory)
+        || !stringValue(object, "outputDirectory", parsed.outputDirectory)
         || rate < 0 || rate > std::numeric_limits<int>::max()
         || channels < 0 || channels > std::numeric_limits<int>::max()
         || quality < std::numeric_limits<int>::min()
         || quality > std::numeric_limits<int>::max()) return false;
-    output.sampleRate = static_cast<int>(rate);
-    output.channels = static_cast<int>(channels);
-    output.bitRate = bitRate;
-    output.quality = static_cast<int>(quality);
+    parsed.sampleRate = static_cast<int>(rate);
+    parsed.channels = static_cast<int>(channels);
+    parsed.bitRate = bitRate;
+    parsed.quality = static_cast<int>(quality);
+    if (!isValidProjectExportSettings(parsed)) return false;
+    output = std::move(parsed);
     return true;
 }
 
@@ -197,7 +214,8 @@ bool parseExport(const QJsonValue& value, ProjectExportSettings& output)
 
 ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRequest& request)
 {
-    if (path.isEmpty() || request.document == nullptr || !validViewport(request)) {
+    if (path.isEmpty() || request.document == nullptr || !validViewport(request)
+        || !isValidProjectExportSettings(request.exportSettings)) {
         return {false, QStringLiteral("invalid project save request")};
     }
     const QString projectPath = absolutePath(path);
@@ -341,12 +359,10 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
             const bool statMismatch = (fileSize >= 0 && actual.size() != fileSize)
                 || (modified >= 0
                     && actual.lastModified().toUTC().toMSecsSinceEpoch() != modified);
-            const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(
-                toPath(resolved), 1);
-            const bool formatMismatch = !analysis.success
-                || analysis.source.sample_rate != static_cast<std::uint32_t>(rate)
-                || analysis.source.channels != static_cast<std::uint32_t>(channels)
-                || analysis.source.total_frames != frames;
+            const AudioSourceProbeResult probe = AudioSourceProbe::probe(toPath(resolved));
+            const AudioSource expected{toPath(resolved), static_cast<std::uint32_t>(rate),
+                                       static_cast<std::uint32_t>(channels), frames};
+            const bool formatMismatch = !probe.matchesFormat(expected);
             if (statMismatch || formatMismatch) {
                 result.issues.push_back({ProjectSourceIssueKind::IdentityMismatch,
                     id, resolved, QStringLiteral("source identity changed or is unreadable")});
@@ -390,7 +406,14 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
         if (!integer(object.value(QStringLiteral("start")), start) || !integer(object.value(QStringLiteral("end")), end) || !document.setSelection({start, end})) { result.message = QStringLiteral("invalid selection"); return result; }
     }
     if (!integer(root.value(QStringLiteral("playheadFrame")), result.playheadFrame) || !integer(root.value(QStringLiteral("visibleStartFrame")), result.visibleStartFrame) || !integer(root.value(QStringLiteral("visibleEndFrame")), result.visibleEndFrame)
-        || result.playheadFrame < 0 || result.playheadFrame > document.totalFrames() || result.visibleStartFrame < 0 || result.visibleEndFrame <= result.visibleStartFrame || result.visibleEndFrame > document.totalFrames() || !parseExport(root.value(QStringLiteral("exportSettings")), result.exportSettings)) { result.message = QStringLiteral("invalid editor state"); return result; }
+        || result.playheadFrame < 0 || result.playheadFrame > document.totalFrames()
+        || (document.totalFrames() == 0
+                ? (result.playheadFrame != 0 || result.visibleStartFrame != 0
+                   || result.visibleEndFrame != 0)
+                : (result.visibleStartFrame < 0
+                   || result.visibleEndFrame <= result.visibleStartFrame
+                   || result.visibleEndFrame > document.totalFrames()))
+        || !parseExport(root.value(QStringLiteral("exportSettings")), result.exportSettings)) { result.message = QStringLiteral("invalid editor state"); return result; }
     result.document = std::make_unique<AudioDocument>(std::move(document));
     return result;
 }
@@ -402,10 +425,8 @@ ProjectRelinkResult ProjectDocument::relink(AudioDocument& document, std::vector
     const QString path = absolutePath(replacementPath); const QFileInfo file(path);
     if (!file.exists() || !file.isFile()) return {false, QStringLiteral("replacement source is missing")};
     const AudioSource& expected = *record->source;
-    const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(toPath(path), 1);
-    if (!analysis.success || analysis.source.sample_rate != expected.sample_rate
-        || analysis.source.channels != expected.channels
-        || analysis.source.total_frames != expected.total_frames) {
+    const AudioSourceProbeResult probe = AudioSourceProbe::probe(toPath(path));
+    if (!probe.matchesFormat(expected)) {
         return {false, QStringLiteral("replacement source format does not match")};
     }
     auto replacement = std::make_shared<const AudioSource>(AudioSource{toPath(path), expected.sample_rate, expected.channels, expected.total_frames});

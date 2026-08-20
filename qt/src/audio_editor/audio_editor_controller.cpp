@@ -544,15 +544,6 @@ ProjectSourceRecord project_source_record(const quint64 sourceId,
             file.exists() ? file.lastModified().toUTC().toMSecsSinceEpoch() : -1};
 }
 
-bool valid_project_export_settings(const ProjectExportSettings& settings)
-{
-    return (settings.sampleRate == 0
-            || (settings.sampleRate >= 8'000 && settings.sampleRate <= 384'000))
-        && settings.channels >= 0 && settings.channels <= 2
-        && settings.bitRate >= 0 && settings.bitRate <= 1'536'000
-        && settings.quality >= 0 && settings.quality <= 100;
-}
-
 bool same_project_export_settings(const ProjectExportSettings& left,
                                   const ProjectExportSettings& right)
 {
@@ -815,7 +806,7 @@ QVariantMap AudioEditorController::projectExportSettingsMap() const
 bool AudioEditorController::setProjectExportSettings(
     const ProjectExportSettings& settings)
 {
-    if (!valid_project_export_settings(settings)) {
+    if (!isValidProjectExportSettings(settings)) {
         setError(tr("导出参数无效"));
         return false;
     }
@@ -1172,7 +1163,7 @@ bool AudioEditorController::exportWithSettings(
         effective = project_export_settings_;
         effective.outputDirectory = QFileInfo(path).absolutePath();
     }
-    if (!valid_project_export_settings(effective)) {
+    if (!isValidProjectExportSettings(effective)) {
         setError(tr("导出参数无效"));
         return false;
     }
@@ -1343,6 +1334,7 @@ bool AudioEditorController::splitEvent(const quint64 id, const qint64 frame)
     }
     syncModifiedFromHistory();
     playback_path_.clear();
+    viewport_.setDocumentFrames(document_.totalFrames());
     clearViewportWaveformCache();
     refreshActions();
     emit waveformChanged();
@@ -1359,6 +1351,7 @@ bool AudioEditorController::mergeEvents(const quint64 left, const quint64 right)
     }
     syncModifiedFromHistory();
     playback_path_.clear();
+    viewport_.setDocumentFrames(document_.totalFrames());
     clearViewportWaveformCache();
     refreshActions();
     emit waveformChanged();
@@ -1754,6 +1747,7 @@ bool AudioEditorController::triggerAction(const QString& id)
         stopPlayback();
         syncModifiedFromHistory();
         playback_path_.clear();
+        viewport_.setDocumentFrames(document_.totalFrames());
         clearViewportWaveformCache();
     }
     refreshActions();

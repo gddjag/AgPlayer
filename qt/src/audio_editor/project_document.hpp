@@ -21,6 +21,9 @@ struct ProjectExportSettings final {
     QString outputDirectory;
 };
 
+[[nodiscard]] bool isValidProjectExportSettings(
+    const ProjectExportSettings& settings) noexcept;
+
 struct ProjectSourceRecord final {
     quint64 sourceId{};
     std::shared_ptr<const AudioSource> source;

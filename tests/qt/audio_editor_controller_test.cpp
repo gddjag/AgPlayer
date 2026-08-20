@@ -95,6 +95,78 @@ private slots:
         QCOMPARE(controller.totalFrames(), qint64{1'000});
     }
 
+    void tailRemovalClampsViewportAndProjectSave_data()
+    {
+        QTest::addColumn<QString>("actionId");
+        QTest::newRow("delete") << QStringLiteral("editor.deleteSelection");
+        QTest::newRow("cut") << QStringLiteral("editor.cut");
+    }
+
+    void tailRemovalClampsViewportAndProjectSave()
+    {
+        QFETCH(QString, actionId);
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        const qint64 originalFrames = controller.totalFrames();
+        const qint64 splitFrame = originalFrames / 2;
+        QVERIFY(splitFrame > 0);
+        QVERIFY(controller.splitEvent(1, splitFrame));
+        QVERIFY(controller.viewport()->setVisibleRange(splitFrame, originalFrames));
+        QVERIFY(controller.setSelection(splitFrame, originalFrames));
+        const QVariantList sourcePeaks = controller.channelPeaks();
+        QSignalSpy stateChanges(&controller, &AudioEditorController::stateChanged);
+
+        QVERIFY(controller.triggerAction(actionId));
+        QCOMPARE(controller.totalFrames(), splitFrame);
+        QCOMPARE(controller.viewport()->documentFrames(), splitFrame);
+        QVERIFY(controller.viewport()->visibleEndFrame() <= splitFrame);
+        QCOMPARE(controller.channelPeaks(), sourcePeaks);
+        QCOMPARE(stateChanges.count(), 0);
+
+        const QString project = temporary.filePath(actionId.endsWith(
+            QStringLiteral("cut")) ? QStringLiteral("cut.agproj")
+                                   : QStringLiteral("delete.agproj"));
+        QVERIFY2(controller.saveProjectAs(QUrl::fromLocalFile(project)),
+                 qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        QCOMPARE(stateChanges.count(), 0);
+        QCOMPARE(controller.channelPeaks(), sourcePeaks);
+    }
+
+    void clearingTimelinePublishesZeroViewport()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.setSelection(0, controller.totalFrames()));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        QCOMPARE(controller.totalFrames(), qint64{0});
+        QCOMPARE(controller.viewport()->documentFrames(), qint64{0});
+        QCOMPARE(controller.viewport()->visibleStartFrame(), qint64{0});
+        QCOMPARE(controller.viewport()->visibleEndFrame(), qint64{0});
+
+        const QString project = temporary.filePath(QStringLiteral("empty.agproj"));
+        QVERIFY2(controller.saveProjectAs(QUrl::fromLocalFile(project)),
+                 qPrintable(controller.errorMessage()));
+        AudioEditorController restored(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(restored.openProject(QUrl::fromLocalFile(project)),
+                 qPrintable(restored.errorMessage()));
+        QCOMPARE(restored.totalFrames(), qint64{0});
+        QCOMPARE(restored.viewport()->visibleStartFrame(), qint64{0});
+        QCOMPARE(restored.viewport()->visibleEndFrame(), qint64{0});
+    }
+
     void undoRedoActionsRouteThroughDocumentHistory()
     {
         AudioEditorController controller;

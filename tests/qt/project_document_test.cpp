@@ -408,7 +408,7 @@ private slots:
         request.playheadFrame = exact;
         request.visibleStartFrame = exact - 100;
         request.visibleEndFrame = exact;
-        request.exportSettings.bitRate = exact;
+        request.exportSettings.bitRate = 128'000;
         const std::vector<ProjectSourceRecord> records{{1, source, exact, exact}};
         request.sourceRecords = &records;
         const QString projectPath = temporary.filePath(QStringLiteral("exact.agproj"));
@@ -428,7 +428,7 @@ private slots:
         QCOMPARE(loaded.playheadFrame, exact);
         QCOMPARE(loaded.visibleStartFrame, exact - 100);
         QCOMPARE(loaded.visibleEndFrame, exact);
-        QCOMPARE(loaded.exportSettings.bitRate, exact);
+        QCOMPARE(loaded.exportSettings.bitRate, qint64{128'000});
         QCOMPARE(loaded.sources[0].fileSize, exact);
         QCOMPARE(loaded.sources[0].lastModifiedUtcMs, exact);
     }
@@ -499,6 +499,68 @@ private slots:
         QCOMPARE(loaded.issues.size(), std::size_t{1});
         QCOMPARE(loaded.issues[0].kind,
                  ProjectSourceIssueKind::IdentityMismatch);
+    }
+
+    void saveRejectsExportSettingsOutsideControllerContract()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+
+        const auto rejects = [&project](const ProjectExportSettings& settings) {
+            ProjectSaveRequest invalid = request(project);
+            invalid.exportSettings = settings;
+            QVERIFY(!ProjectDocument::save(project.projectPath, invalid).ok());
+        };
+
+        ProjectExportSettings invalid = project.exportSettings;
+        invalid.sampleRate = 7'999;
+        rejects(invalid);
+        invalid.sampleRate = 384'001;
+        rejects(invalid);
+        invalid = project.exportSettings;
+        invalid.channels = -1;
+        rejects(invalid);
+        invalid.channels = 3;
+        rejects(invalid);
+        invalid = project.exportSettings;
+        invalid.bitRate = -1;
+        rejects(invalid);
+        invalid.bitRate = 1'536'001;
+        rejects(invalid);
+        invalid = project.exportSettings;
+        invalid.quality = -1;
+        rejects(invalid);
+        invalid.quality = 101;
+        rejects(invalid);
+    }
+
+    void loadRejectsExportSettingsOutsideControllerContract()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        const QJsonObject valid = readObject(project.projectPath);
+
+        const auto rejects = [&project, &valid](const char* field,
+                                                 const QJsonValue& value) {
+            QJsonObject root = valid;
+            QJsonObject settings = root.value(QStringLiteral("exportSettings")).toObject();
+            settings.insert(QLatin1String(field), value);
+            root.insert(QStringLiteral("exportSettings"), settings);
+            QVERIFY(writeObject(project.projectPath, root));
+            QVERIFY(!ProjectDocument::load(project.projectPath).ok());
+        };
+
+        rejects("sampleRate", 7'999);
+        rejects("sampleRate", 384'001);
+        rejects("channels", -1);
+        rejects("channels", 3);
+        rejects("bitRate", QStringLiteral("-1"));
+        rejects("bitRate", QStringLiteral("1536001"));
+        rejects("quality", -1);
+        rejects("quality", 101);
     }
 
     void sourceIdsRemainStableWhenNewSourcesAreInsertedBetweenSaves()

@@ -1,6 +1,8 @@
 add_library(agplayer_core STATIC
     src/audio_editor/audio_file_analyzer.cpp
     src/audio_editor/audio_file_analyzer.hpp
+    src/audio_editor/audio_source_probe.cpp
+    src/audio_editor/audio_source_probe.hpp
     src/audio_editor/audio_document.cpp
     src/audio_editor/audio_document.hpp
     src/audio_editor/audio_event.hpp
