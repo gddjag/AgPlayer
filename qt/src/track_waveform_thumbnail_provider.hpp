@@ -90,8 +90,6 @@ private:
     [[nodiscard]] bool hasNegativeCooldown(const QString& sourcePath);
     void insertNegativeCooldown(const QString& sourcePath);
     void removeNegativeCooldown(const QString& sourcePath);
-    void postThumbnailReady(const Request& request,
-                            const QByteArray& peaks = {});
     [[nodiscard]] int queuedIndexForTrack(const QString& trackId) const;
 
     QString cacheDirectory_;

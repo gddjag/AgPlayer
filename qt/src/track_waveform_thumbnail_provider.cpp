@@ -2,6 +2,7 @@
 #include "waveform_cache.hpp"
 
 #include <QDir>
+#include <QPointer>
 #include <QThread>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -139,12 +140,12 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
     }
 
     if (sourcePath.isEmpty()) {
-        postThumbnailReady(Request{trackId, sourcePath, generation, false});
+        emit thumbnailReady(trackId, generation, {});
         return;
     }
 
     if (hasNegativeCooldown(sourcePath)) {
-        postThumbnailReady(Request{trackId, sourcePath, generation, false});
+        emit thumbnailReady(trackId, generation, {});
         return;
     }
 
@@ -159,7 +160,7 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
         static_cast<int>(pending_.size())
             + (activeRequest_.has_value() ? 1 : 0));
     if (dropped.has_value() && !dropped->canceled) {
-        postThumbnailReady(*dropped);
+        emit thumbnailReady(dropped->trackId, dropped->generation, {});
     }
 }
 
@@ -263,7 +264,11 @@ void TrackWaveformThumbnailProvider::startNext()
             break;
         }
         if (!cooled.canceled) {
-            postThumbnailReady(cooled);
+            const QPointer<TrackWaveformThumbnailProvider> guard(this);
+            emit thumbnailReady(cooled.trackId, cooled.generation, {});
+            if (guard.isNull() || activeRequest_.has_value()) {
+                return;
+            }
         }
     }
     if (!activeRequest_.has_value()) {
@@ -414,17 +419,6 @@ void TrackWaveformThumbnailProvider::removeNegativeCooldown(
     }
     negativeOrder_.erase(existing->order);
     negativeCache_.erase(existing);
-}
-
-void TrackWaveformThumbnailProvider::postThumbnailReady(
-    const Request& request, const QByteArray& peaks)
-{
-    QMetaObject::invokeMethod(
-        this,
-        [this, request, peaks] {
-            emit thumbnailReady(request.trackId, request.generation, peaks);
-        },
-        Qt::QueuedConnection);
 }
 
 int TrackWaveformThumbnailProvider::queuedIndexForTrack(
