@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QClipboard>
+#include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -804,8 +805,14 @@ void FormatConverter::loadFiles(const QList<QUrl>& urls)
             FileEntry entry;
             entry.path = path;
             entry.taskId = QDir::cleanPath(path).toCaseFolded();
+            entry.importInstanceId = QUuid::createUuid().toString(
+                QUuid::WithoutBraces);
             const QFileInfo info(path);
             const QString absolutePath = QDir::cleanPath(info.absoluteFilePath());
+            entry.canonicalPath = info.canonicalFilePath();
+            if (entry.canonicalPath.isEmpty()) {
+                entry.canonicalPath = absolutePath;
+            }
             for (const QString& root : importRoots) {
                 const QString relative = QDir(root).relativeFilePath(absolutePath);
                 const bool insideRoot = relative != QStringLiteral("..")
@@ -817,6 +824,7 @@ void FormatConverter::loadFiles(const QList<QUrl>& urls)
             }
             entry.fileName = info.fileName();
             entry.fileSize = info.size();
+            entry.sourceLastModifiedMs = info.lastModified().toMSecsSinceEpoch();
             entry.status = FileStatus::Waiting;
 
             ag_metadata* metadata = nullptr;
@@ -831,6 +839,34 @@ void FormatConverter::loadFiles(const QList<QUrl>& urls)
             }
             if (entry.format.isEmpty()) {
                 entry.format = info.suffix().toUpper();
+            }
+            agplayer::MediaProbe probe;
+            std::string probeDetail;
+            if (agplayer::probe_transcode_input(
+                    path.toUtf8().toStdString(), probe, probeDetail) == AG_OK) {
+                entry.probeContainer = QString::fromStdString(probe.container);
+                entry.probeIsVideo = probe.is_video || is_video_file(path);
+                entry.probeHasCover = probe.has_cover;
+                entry.audioStreams.reserve(
+                    static_cast<qsizetype>(probe.audio_streams.size()));
+                for (const agplayer::AudioStreamProbe& audio
+                     : probe.audio_streams) {
+                    entry.audioStreams.append({
+                        audio.stream_index,
+                        QString::fromStdString(audio.codec),
+                        QString::fromStdString(audio.language),
+                        QString::fromStdString(audio.title),
+                        audio.is_default,
+                        audio.sample_rate,
+                        QString::fromStdString(audio.sample_format),
+                        QString::fromStdString(audio.channel_layout),
+                        audio.bit_rate,
+                        audio.duration_ms});
+                }
+            } else {
+                entry.probeError = probeDetail.empty()
+                    ? QStringLiteral("Failed to probe input")
+                    : QString::fromStdString(probeDetail);
             }
             discovered.append(std::move(entry));
             seen.insert(path);
@@ -910,18 +946,61 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     const QString format = request.value(QStringLiteral("outputFormat"),
                                          selectedFormat_)
                                .toString().trimmed().toLower();
-    QString requestedConflictPolicy = request.value(
+    const QString requestedConflictPolicy = request.value(
         QStringLiteral("conflictPolicy"), conflictPolicy_)
                                                 .toString().trimmed().toLower();
+    QVariantMap plan = request;
+    plan.insert(QStringLiteral("outputFormat"), format);
+    plan.insert(QStringLiteral("conflictPolicy"), requestedConflictPolicy);
+    QVariantMap capability;
+    for (const QVariant& candidate : supportedOutputFormats()) {
+        const QVariantMap candidateMap = candidate.toMap();
+        if (candidateMap.value(QStringLiteral("key")).toString() == format) {
+            capability = candidateMap;
+            break;
+        }
+    }
+    plan.insert(QStringLiteral("capability"), capability);
+
+    const auto failPreflight = [this, &plan](const QString& reason) {
+        plan.insert(QStringLiteral("tasks"), QVariantList{});
+        plan.insert(QStringLiteral("taskCount"), 0);
+        plan.insert(QStringLiteral("conflicts"), QVariantList{});
+        plan.insert(QStringLiteral("conflictCount"), 0);
+        plan.insert(QStringLiteral("requiresConfirmation"), false);
+        plan.insert(QStringLiteral("ready"), false);
+        plan.insert(QStringLiteral("reason"), reason);
+        plan.insert(QStringLiteral("error"), reason);
+        pendingPlan_.clear();
+        pendingRequest_.clear();
+        pendingJobs_.clear();
+        emit pendingPlanChanged();
+        emit errorOccurred(reason);
+        return plan;
+    };
+
+    if (capability.isEmpty()) {
+        return failPreflight(QStringLiteral("Invalid outputFormat: %1").arg(format));
+    }
+    if (!capability.value(QStringLiteral("available")).toBool()) {
+        const QString reason = capability.value(QStringLiteral("reason")).toString();
+        return failPreflight(reason.isEmpty()
+            ? QStringLiteral("Unavailable outputFormat: %1").arg(format)
+            : reason);
+    }
+
     FormatConflictPolicy conflictPolicy = FormatConflictPolicy::AutoNumber;
-    if (requestedConflictPolicy == QStringLiteral("skip")) {
+    if (requestedConflictPolicy == QStringLiteral("auto-number")) {
+        conflictPolicy = FormatConflictPolicy::AutoNumber;
+    } else if (requestedConflictPolicy == QStringLiteral("skip")) {
         conflictPolicy = FormatConflictPolicy::Skip;
     } else if (requestedConflictPolicy == QStringLiteral("overwrite")) {
         conflictPolicy = FormatConflictPolicy::Overwrite;
     } else if (requestedConflictPolicy == QStringLiteral("ask")) {
         conflictPolicy = FormatConflictPolicy::Ask;
     } else {
-        requestedConflictPolicy = QStringLiteral("auto-number");
+        return failPreflight(QStringLiteral("Invalid conflictPolicy: %1")
+                                 .arg(requestedConflictPolicy));
     }
 
     FormatConversionRequest conversionRequest;
@@ -933,20 +1012,110 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
                                          .toString().trimmed().toLower();
     if (conversionRequest.bitrateMode != QStringLiteral("cbr")
         && conversionRequest.bitrateMode != QStringLiteral("vbr")) {
-        conversionRequest.bitrateMode = QStringLiteral("cbr");
+        return failPreflight(QStringLiteral("Invalid bitrateMode: %1")
+                                 .arg(conversionRequest.bitrateMode));
     }
+    bool validNumber = false;
     conversionRequest.bitrate = request.value(
-        QStringLiteral("bitRate"), 192000).toLongLong();
+        QStringLiteral("bitRate"), 192000).toLongLong(&validNumber);
+    if (!validNumber || conversionRequest.bitrate < 0
+        || conversionRequest.bitrate > 512000) {
+        return failPreflight(
+            QStringLiteral("Invalid bitRate: expected 0..512000"));
+    }
     conversionRequest.quality = request.value(
-        QStringLiteral("quality"), 75).toInt();
-    conversionRequest.sampleRate = request.value(
-        QStringLiteral("sampleRate"), 0).toInt();
+        QStringLiteral("quality"), 75).toInt(&validNumber);
+    if (!validNumber || conversionRequest.quality < 0
+        || conversionRequest.quality > 100) {
+        return failPreflight(QStringLiteral("Invalid quality: expected 0..100"));
+    }
+    const int requestedSampleRate = request.value(
+        QStringLiteral("sampleRate"), 0).toInt(&validNumber);
+    if (!validNumber || (requestedSampleRate != 0
+        && (requestedSampleRate < 8000 || requestedSampleRate > 192000))) {
+        return failPreflight(
+            QStringLiteral("Invalid sampleRate: expected 0 or 8000..192000"));
+    }
+    conversionRequest.sampleRate = requestedSampleRate;
+    const bool adjustsOpusSampleRate = format == QStringLiteral("opus")
+        && requestedSampleRate != 0 && requestedSampleRate != 48000;
+    if (adjustsOpusSampleRate) {
+        conversionRequest.sampleRate = 48000;
+    }
     conversionRequest.channelLayout = request.value(
         QStringLiteral("channelLayout")).toString().trimmed().toLower();
+    if (!conversionRequest.channelLayout.isEmpty()
+        && conversionRequest.channelLayout != QStringLiteral("mono")
+        && conversionRequest.channelLayout != QStringLiteral("stereo")) {
+        return failPreflight(QStringLiteral("Invalid channelLayout: %1")
+                                 .arg(conversionRequest.channelLayout));
+    }
+    if (request.contains(QStringLiteral("channels"))) {
+        const int channels = request.value(QStringLiteral("channels"))
+                                 .toInt(&validNumber);
+        if (!validNumber || channels < 0 || channels > 2) {
+            return failPreflight(
+                QStringLiteral("Invalid channels: expected 0, 1, or 2"));
+        }
+        if (conversionRequest.channelLayout.isEmpty()) {
+            if (channels == 1) {
+                conversionRequest.channelLayout = QStringLiteral("mono");
+            } else if (channels == 2) {
+                conversionRequest.channelLayout = QStringLiteral("stereo");
+            }
+        }
+    }
     conversionRequest.sampleFormat = request.value(
         QStringLiteral("sampleFormat")).toString().trimmed().toLower();
+    const QVariantList supportedSampleFormats = capability.value(
+        QStringLiteral("sampleFormats")).toList();
+    if (!conversionRequest.sampleFormat.isEmpty()
+        && !supportedSampleFormats.contains(conversionRequest.sampleFormat)) {
+        return failPreflight(QStringLiteral("Invalid sampleFormat: %1")
+                                 .arg(conversionRequest.sampleFormat));
+    }
+    const QVariantList supportedLayouts = capability.value(
+        QStringLiteral("channelLayouts")).toList();
+    if (!conversionRequest.channelLayout.isEmpty()
+        && !supportedLayouts.contains(conversionRequest.channelLayout)) {
+        return failPreflight(QStringLiteral("Unsupported channelLayout: %1")
+                                 .arg(conversionRequest.channelLayout));
+    }
+    const QVariantList supportedRates = capability.value(
+        QStringLiteral("sampleRates")).toList();
+    if (conversionRequest.sampleRate != 0
+        && !supportedRates.contains(conversionRequest.sampleRate)) {
+        return failPreflight(QStringLiteral("Unsupported sampleRate: %1")
+                                 .arg(conversionRequest.sampleRate));
+    }
+    if (capability.value(QStringLiteral("lossy")).toBool()
+        && (conversionRequest.bitrate < 8000
+            || conversionRequest.bitrate > 512000)) {
+        return failPreflight(
+            QStringLiteral("Invalid bitRate: expected 8000..512000"));
+    }
+    const QString requestedCodec = conversionRequest.codecName.trimmed();
+    if (!requestedCodec.isEmpty()
+        && requestedCodec != capability.value(QStringLiteral("codec")).toString()) {
+        return failPreflight(QStringLiteral("Invalid codecName: %1")
+                                 .arg(requestedCodec));
+    }
+    int selectedAudioStreamIndex = -1;
+    if (request.contains(QStringLiteral("audioStreamIndex"))) {
+        selectedAudioStreamIndex = request.value(
+            QStringLiteral("audioStreamIndex")).toInt(&validNumber);
+        if (!validNumber || selectedAudioStreamIndex < -1) {
+            return failPreflight(
+                QStringLiteral("Invalid audioStreamIndex: expected -1 or greater"));
+        }
+    }
     conversionRequest.outputDirectory = request.value(
         QStringLiteral("outputDir")).toString();
+    const QFileInfo outputDirectoryInfo(conversionRequest.outputDirectory);
+    if (!conversionRequest.outputDirectory.isEmpty()
+        && outputDirectoryInfo.exists() && !outputDirectoryInfo.isDir()) {
+        return failPreflight(QStringLiteral("Invalid outputDir: not a directory"));
+    }
     conversionRequest.conflictPolicy = conflictPolicy;
     conversionRequest.keepMetadata = request.value(
         QStringLiteral("keepMetadata"), true).toBool();
@@ -977,28 +1146,41 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         QStringLiteral("{76df29bf-589f-4dc4-a64a-9938f8b862d8}"));
     QList<FormatPlanInput> inputs;
     QHash<QUuid, QString> externalTaskIds;
+    QHash<QString, FileEntry> selectedByTaskId;
     QString probeError;
     for (const FileEntry& entry : selectedEntries) {
-        agplayer::MediaProbe probe;
-        std::string detail;
-        if (agplayer::probe_transcode_input(
-                entry.path.toUtf8().toStdString(), probe, detail) != AG_OK) {
-            probeError = detail.empty()
-                ? tr("无法读取输入文件：%1").arg(entry.path)
-                : QString::fromStdString(detail);
+        if (!entry.probeError.isEmpty() || entry.audioStreams.isEmpty()) {
+            probeError = entry.probeError.isEmpty()
+                ? tr("输入文件不包含音频流：%1").arg(entry.path)
+                : entry.probeError;
             break;
         }
-        // The queue has historically classified common video extensions as
-        // video even when a test fixture carries an audio-only container.
-        // Preserve that execution contract in the planner bridge.
-        probe.is_video = probe.is_video || is_video_file(entry.path);
+        agplayer::MediaProbe probe;
+        probe.container = entry.probeContainer.toStdString();
+        probe.is_video = entry.probeIsVideo;
+        probe.has_cover = entry.probeHasCover;
+        probe.audio_streams.reserve(
+            static_cast<std::size_t>(entry.audioStreams.size()));
+        for (const AudioStreamSnapshot& snapshot : entry.audioStreams) {
+            probe.audio_streams.push_back({
+                snapshot.streamIndex,
+                snapshot.codec.toStdString(),
+                snapshot.language.toStdString(),
+                snapshot.title.toStdString(),
+                snapshot.isDefault,
+                snapshot.sampleRate,
+                snapshot.sampleFormat.toStdString(),
+                snapshot.channelLayout.toStdString(),
+                snapshot.bitRate,
+                snapshot.durationMs});
+        }
         const QUuid planTaskId = QUuid::createUuidV5(
-            taskNamespace, entry.taskId.toUtf8());
+            taskNamespace, entry.importInstanceId.toUtf8());
         inputs.append({planTaskId, entry.path, entry.importRoot,
                        std::move(probe),
-                       request.value(QStringLiteral("audioStreamIndex"), -1)
-                           .toInt()});
+                       selectedAudioStreamIndex});
         externalTaskIds.insert(planTaskId, entry.taskId);
+        selectedByTaskId.insert(entry.taskId, entry);
     }
 
     FormatBatchPlan batch;
@@ -1007,23 +1189,23 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     } else {
         batch.fatalError = probeError;
     }
-
-    QVariantMap plan = request;
-    plan.insert(QStringLiteral("outputFormat"), format);
-    plan.insert(QStringLiteral("conflictPolicy"), requestedConflictPolicy);
-    QVariantMap capability;
-    for (const QVariant& candidate : supportedOutputFormats()) {
-        const QVariantMap candidateMap = candidate.toMap();
-        if (candidateMap.value(QStringLiteral("key")).toString() == format) {
-            capability = candidateMap;
-            break;
+    if (adjustsOpusSampleRate && batch.ready) {
+        for (FormatTaskPlan& task : batch.tasks) {
+            task.differences.push_back({
+                QStringLiteral("sampleRate"), requestedSampleRate, 48000,
+                QStringLiteral("Opus output requires 48 kHz"), true});
         }
+        batch.requiresConfirmation = true;
     }
-    plan.insert(QStringLiteral("capability"), capability);
+    if (!batch.fatalError.isEmpty()) {
+        return failPreflight(batch.fatalError);
+    }
 
     QVariantList serializedTasks;
     QVariantList conflicts;
+    QVector<FrozenConversionJob> frozenJobs;
     serializedTasks.reserve(batch.tasks.size());
+    frozenJobs.reserve(batch.tasks.size());
     for (const FormatTaskPlan& task : batch.tasks) {
         QVariantList differences;
         differences.reserve(task.differences.size());
@@ -1040,14 +1222,39 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
                 conflicts.append(serializedDifference);
             }
         }
+        const QString externalTaskId = externalTaskIds.value(task.taskId);
+        const FileEntry entry = selectedByTaskId.value(externalTaskId);
+        const bool confirmedOverwrite = conflictPolicy
+                == FormatConflictPolicy::Overwrite
+            || (conflictPolicy == FormatConflictPolicy::Ask
+                && std::any_of(task.differences.cbegin(), task.differences.cend(),
+                    [](const FormatPlanDifference& difference) {
+                        return difference.field == QStringLiteral("conflict");
+                    }));
         serializedTasks.append(QVariantMap{
-            {QStringLiteral("taskId"), externalTaskIds.value(task.taskId)},
+            {QStringLiteral("taskId"), externalTaskId},
             {QStringLiteral("inputPath"), task.inputPath},
             {QStringLiteral("outputPath"), task.outputPath},
             {QStringLiteral("audioStreamIndex"), task.audioStreamIndex},
             {QStringLiteral("resolvedProfile"), task.resolvedProfile},
             {QStringLiteral("differences"), differences},
-            {QStringLiteral("skipped"), task.skipped}});
+            {QStringLiteral("skipped"), task.skipped},
+            {QStringLiteral("action"), task.skipped
+                ? QStringLiteral("skip")
+                : confirmedOverwrite ? QStringLiteral("overwrite")
+                                     : QStringLiteral("create")}});
+        frozenJobs.append({
+            externalTaskId,
+            entry.importInstanceId,
+            entry.path,
+            entry.canonicalPath,
+            entry.importRoot,
+            task.outputPath,
+            entry.fileSize,
+            entry.sourceLastModifiedMs,
+            task.resolvedProfile,
+            task.skipped,
+            confirmedOverwrite});
     }
     plan.insert(QStringLiteral("tasks"), serializedTasks);
     plan.insert(QStringLiteral("taskCount"), serializedTasks.size());
@@ -1062,14 +1269,9 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         plan.insert(QStringLiteral("resolvedProfile"),
                     batch.tasks.first().resolvedProfile);
     }
-    if (!batch.fatalError.isEmpty()) {
-        plan.insert(QStringLiteral("reason"), batch.fatalError);
-        plan.insert(QStringLiteral("error"), batch.fatalError);
-    }
-
     pendingPlan_.clear();
     pendingRequest_.clear();
-    pendingTaskIds_.clear();
+    pendingJobs_.clear();
     if (batch.ready) {
         pendingPlan_ = plan;
         pendingRequest_ = request;
@@ -1096,9 +1298,7 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
                                conversionRequest.preserveDirectories);
         pendingRequest_.insert(QStringLiteral("extractAudio"),
                                conversionRequest.extractAudio);
-        for (const FormatTaskPlan& task : batch.tasks) {
-            pendingTaskIds_.append(externalTaskIds.value(task.taskId));
-        }
+        pendingJobs_ = frozenJobs;
     }
     emit pendingPlanChanged();
     return plan;
@@ -1108,66 +1308,93 @@ void FormatConverter::confirmPendingPlan()
 {
     if (pendingPlan_.isEmpty()) return;
     const QVariantMap request = pendingRequest_;
-    const QVector<QString> taskIds = pendingTaskIds_;
+    const QVector<FrozenConversionJob> jobs = pendingJobs_;
     pendingPlan_.clear();
     pendingRequest_.clear();
-    pendingTaskIds_.clear();
+    pendingJobs_.clear();
     emit pendingPlanChanged();
 
     QVector<int> frozenIndices;
-    QString staleTaskId;
+    QVector<FileEntry> currentEntries;
     {
         QMutexLocker lock(&mutex_);
-        frozenIndices.reserve(taskIds.size());
-        for (const QString& taskId : taskIds) {
-            int matchingIndex = -1;
-            for (int index = 0; index < entries_.size(); ++index) {
-                if (entries_.at(index).taskId == taskId
-                    && QFileInfo(entries_.at(index).path).isFile()) {
-                    matchingIndex = index;
-                    break;
-                }
-            }
-            if (matchingIndex < 0) {
-                staleTaskId = taskId;
-                break;
-            }
-            frozenIndices.append(matchingIndex);
-        }
+        currentEntries = entries_.toVector();
     }
-    if (!staleTaskId.isEmpty()
-        || frozenIndices.size() != taskIds.size()) {
+    QHash<QString, int> currentIndexByTaskId;
+    for (int index = 0; index < currentEntries.size(); ++index) {
+        currentIndexByTaskId.insert(currentEntries.at(index).taskId, index);
+    }
+    frozenIndices.reserve(jobs.size());
+    for (const FrozenConversionJob& job : jobs) {
+        const int matchingIndex = currentIndexByTaskId.value(job.taskId, -1);
+        const FileEntry current = matchingIndex >= 0
+            ? currentEntries.at(matchingIndex) : FileEntry{};
+        if (matchingIndex < 0
+            || current.importInstanceId != job.importInstanceId
+            || current.path != job.inputPath
+            || current.canonicalPath != job.canonicalPath
+            || current.importRoot != job.importRoot
+            || (current.status != FileStatus::Waiting
+                && current.status != FileStatus::Ready
+                && current.status != FileStatus::PendingConfirmation)) {
+            emit errorOccurred(tr("预检计划已失效，请重新预检后再开始"));
+            return;
+        }
+        const QFileInfo source(job.inputPath);
+        QString canonicalPath = source.canonicalFilePath();
+        if (canonicalPath.isEmpty()) {
+            canonicalPath = QDir::cleanPath(source.absoluteFilePath());
+        }
+        if (!source.isFile()
+            || canonicalPath.compare(job.canonicalPath,
+                                     Qt::CaseInsensitive) != 0
+            || source.size() != job.sourceSize
+            || source.lastModified().toMSecsSinceEpoch()
+                != job.sourceLastModifiedMs) {
+            emit errorOccurred(tr("源文件在预检后发生变化，请重新预检"));
+            return;
+        }
+        if (job.outputPath.isEmpty()
+            || QDir::cleanPath(QFileInfo(job.outputPath).absoluteFilePath())
+                   .compare(QDir::cleanPath(source.absoluteFilePath()),
+                            Qt::CaseInsensitive) == 0) {
+            emit errorOccurred(tr("预检输出路径无效，请重新预检"));
+            return;
+        }
+        if (!job.skipped && !job.overwriteExisting
+            && QFileInfo::exists(job.outputPath)) {
+            emit errorOccurred(tr("输出路径在预检后发生变化，请重新预检"));
+            return;
+        }
+        frozenIndices.append(matchingIndex);
+    }
+    if (frozenIndices.size() != jobs.size() || jobs.isEmpty()) {
         emit errorOccurred(tr("预检计划已失效，请重新预检后再开始"));
         return;
     }
 
-    setBitrateMode(request.value(QStringLiteral("bitrateMode"), bitrateMode_)
-                       .toString());
-    setConflictPolicy(request.value(QStringLiteral("conflictPolicy"),
-                                    conflictPolicy_).toString());
-    const QString channelLayout = request.value(
+    const QVariantMap firstProfile = jobs.first().resolvedProfile;
+    const QString channelLayout = firstProfile.value(
         QStringLiteral("channelLayout")).toString();
-    int channels = request.value(QStringLiteral("channels"), 0).toInt();
-    if (!request.contains(QStringLiteral("channels"))) {
-        if (channelLayout == QStringLiteral("mono")) channels = 1;
-        if (channelLayout == QStringLiteral("stereo")) channels = 2;
-    }
+    int channels = 0;
+    if (channelLayout == QStringLiteral("mono")) channels = 1;
+    if (channelLayout == QStringLiteral("stereo")) channels = 2;
     startJobs(frozenIndices,
-              request.value(QStringLiteral("outputFormat"), selectedFormat_)
-                  .toString(),
-              request.value(QStringLiteral("bitRate"), 192000).toInt(),
-              request.value(QStringLiteral("sampleRate"), 0).toInt(),
+              firstProfile.value(QStringLiteral("format")).toString(),
+              firstProfile.value(QStringLiteral("bitrate")).toInt(),
+              firstProfile.value(QStringLiteral("sampleRate")).toInt(),
               channels,
               request.value(QStringLiteral("outputDir")).toString(),
-              request.value(QStringLiteral("keepMetadata"), true).toBool(),
+              firstProfile.value(QStringLiteral("keepMetadata")).toBool(),
               request.value(QStringLiteral("volumeNormalize"), false).toBool(),
               request.value(QStringLiteral("extractAudio"), false).toBool(),
-              request.value(QStringLiteral("keepCover"), false).toBool(),
-              request.value(QStringLiteral("sampleFormat")).toString(),
+              firstProfile.value(QStringLiteral("keepCover")).toBool(),
+              firstProfile.value(QStringLiteral("sampleFormat")).toString(),
               channelLayout,
-              request.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
+              firstProfile.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
               request.value(QStringLiteral("preserveDirectories"), false)
-                  .toBool());
+                  .toBool(),
+              jobs);
 }
 
 void FormatConverter::rejectPendingPlan()
@@ -1175,7 +1402,7 @@ void FormatConverter::rejectPendingPlan()
     if (pendingPlan_.isEmpty()) return;
     pendingPlan_.clear();
     pendingRequest_.clear();
-    pendingTaskIds_.clear();
+    pendingJobs_.clear();
     emit pendingPlanChanged();
 }
 
@@ -1433,7 +1660,8 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
                                 const QString& sampleFormat,
                                 const QString& channelLayout,
                                 int audioStreamIndex,
-                                bool preserveDirectories)
+                                bool preserveDirectories,
+                                const QVector<FrozenConversionJob>& plannedJobs)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
@@ -1442,6 +1670,10 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
     const int fileCount = jobIndices.size();
     if (fileCount == 0) {
         emit errorOccurred(tr("没有可转换的文件"));
+        return;
+    }
+    if (!plannedJobs.isEmpty() && plannedJobs.size() != fileCount) {
+        emit errorOccurred(tr("冻结计划与任务队列不一致，请重新预检"));
         return;
     }
     const QString normalizedFormat = outputFormat.trimmed().toLower();
@@ -1547,14 +1779,14 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
          keepMetadata, volumeNormalize, extractAudio, overwriteExisting,
          bitrateMode, conflictPolicy, metadataFields, metadataCoverData,
          metadataCoverMime, keepCover, sampleFormat, channelLayout,
-         audioStreamIndex, preserveDirectories,
+         audioStreamIndex, preserveDirectories, plannedJobs,
          jobIndices]() {
             runTranscode(outputFormat, bitRate, effectiveSampleRate, channels,
                          outputDir, keepMetadata, volumeNormalize,
                          extractAudio, overwriteExisting, bitrateMode, conflictPolicy,
                          metadataFields, metadataCoverData, metadataCoverMime,
-                         jobIndices, keepCover, sampleFormat, channelLayout,
-                         audioStreamIndex, preserveDirectories);
+                          jobIndices, keepCover, sampleFormat, channelLayout,
+                          audioStreamIndex, preserveDirectories, plannedJobs);
         });
     watcher->setFuture(future);
 }
@@ -1578,17 +1810,24 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    const QString& sampleFormat,
                                    const QString& channelLayout,
                                    int audioStreamIndex,
-                                   bool preserveDirectories)
+                                   bool preserveDirectories,
+                                   const QVector<FrozenConversionJob>& plannedJobs)
 {
-    const FormatInfo fi = format_info(outputFormat);
-    const QByteArray codecName = QByteArray(fi.codec_name);
     (void)volumeNormalize; // The versioned core request has no normalize field.
     const agplayer::MetadataEditPlan plan = metadata_plan(
         metadataFields, metadataCoverData, metadataCoverMime);
 
     QVector<QString> inputPaths;
     QVector<QString> importRoots;
-    {
+    const bool usesPlannedJobs = !plannedJobs.isEmpty();
+    if (usesPlannedJobs) {
+        inputPaths.reserve(plannedJobs.size());
+        importRoots.reserve(plannedJobs.size());
+        for (const FrozenConversionJob& job : plannedJobs) {
+            inputPaths.push_back(job.inputPath);
+            importRoots.push_back(job.importRoot);
+        }
+    } else {
         QMutexLocker lock(&mutex_);
         inputPaths.reserve(jobIndices.size());
         importRoots.reserve(jobIndices.size());
@@ -1606,6 +1845,10 @@ void FormatConverter::runTranscode(const QString& outputFormat,
     QSet<QString> reservedPaths;
     for (int index = 0; index < inputPaths.size(); ++index) {
         const QString& inputPath = inputPaths.at(index);
+        if (usesPlannedJobs) {
+            outputPaths.push_back(plannedJobs.at(index).outputPath);
+            continue;
+        }
         QString effectiveOutputDir = outputDir;
         if (preserveDirectories && !outputDir.isEmpty()
             && index < importRoots.size() && !importRoots.at(index).isEmpty()) {
@@ -1630,7 +1873,11 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         for (int index = 0; index < outputPaths.size()
              && index < jobIndices.size(); ++index) {
             const int entryIndex = jobIndices.at(index);
-            entries_[entryIndex].outputFormat = outputFormat.toUpper();
+            const QString entryFormat = usesPlannedJobs
+                ? plannedJobs.at(index).resolvedProfile
+                      .value(QStringLiteral("format")).toString()
+                : outputFormat;
+            entries_[entryIndex].outputFormat = entryFormat.toUpper();
             entries_[entryIndex].outputPath = outputPaths.at(index);
             entries_[entryIndex].progress = 0.0;
         }
@@ -1678,14 +1925,81 @@ void FormatConverter::runTranscode(const QString& outputFormat,
 
         const QString& inputPath = inputPaths.at(i);
         const QString& outputPath = outputPaths.at(i);
+        const FrozenConversionJob* plannedJob = usesPlannedJobs
+            ? &plannedJobs.at(i) : nullptr;
+        const QVariantMap resolvedProfile = plannedJob != nullptr
+            ? plannedJob->resolvedProfile : QVariantMap{};
+        const QString jobFormat = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("format")).toString()
+            : outputFormat;
+        const FormatInfo formatInfo = format_info(jobFormat);
+        const QByteArray codecName = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("codec")).toString().toUtf8()
+            : QByteArray(formatInfo.codec_name);
+        const QByteArray muxerName = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("muxer")).toString().toUtf8()
+            : QByteArray(formatInfo.muxer_name);
+        const qint64 jobBitRate = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("bitrate")).toLongLong()
+            : bitRate;
+        const int jobSampleRate = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("sampleRate")).toInt()
+            : sampleRate;
+        const QString jobSampleFormat = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("sampleFormat")).toString()
+            : sampleFormat;
+        QString resolvedLayout = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("channelLayout")).toString()
+            : channelLayout.trimmed().toLower();
+        if (resolvedLayout.isEmpty()) {
+            if (channels == 1) resolvedLayout = QStringLiteral("mono");
+            if (channels == 2) resolvedLayout = QStringLiteral("stereo");
+        }
+        const int jobAudioStreamIndex = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("audioStreamIndex"), -1).toInt()
+            : audioStreamIndex;
+        const bool jobKeepMetadata = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("keepMetadata")).toBool()
+            : keepMetadata;
+        const bool jobKeepCover = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("keepCover")).toBool()
+            : keepCover;
+        const QString jobBitrateMode = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("bitrateMode")).toString()
+            : bitrateMode;
+        const int jobQuality = plannedJob != nullptr
+            ? resolvedProfile.value(QStringLiteral("quality"), 75).toInt()
+            : 75;
+        const bool jobOverwriteExisting = plannedJob != nullptr
+            ? plannedJob->overwriteExisting : overwriteExisting;
+        if (plannedJob != nullptr && !plannedJob->skipped) {
+            const QFileInfo currentSource(inputPath);
+            QString currentCanonicalPath = currentSource.canonicalFilePath();
+            if (currentCanonicalPath.isEmpty()) {
+                currentCanonicalPath = QDir::cleanPath(
+                    currentSource.absoluteFilePath());
+            }
+            if (!currentSource.isFile()
+                || currentCanonicalPath.compare(plannedJob->canonicalPath,
+                                                Qt::CaseInsensitive) != 0
+                || currentSource.size() != plannedJob->sourceSize
+                || currentSource.lastModified().toMSecsSinceEpoch()
+                    != plannedJob->sourceLastModifiedMs) {
+                complete(FileStatus::Error,
+                         tr("源文件在预检后发生变化，请重新预检"));
+                return;
+            }
+        }
         if (!QDir().mkpath(QFileInfo(outputPath).absolutePath())) {
             complete(FileStatus::Error,
                      tr("无法创建输出目录：%1")
                          .arg(QFileInfo(outputPath).absolutePath()));
             return;
         }
-        if (conflictPolicy == QStringLiteral("skip")
-            && QFileInfo::exists(outputPath)) {
+        if ((plannedJob != nullptr && plannedJob->skipped)
+            || (plannedJob == nullptr
+                && conflictPolicy == QStringLiteral("skip")
+                && QFileInfo::exists(outputPath))) {
             setEntryStatus(entryIndex, FileStatus::Skipped);
             const int completed = completedCount_.fetch_add(
                 1, std::memory_order_acq_rel) + 1;
@@ -1712,13 +2026,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         }
         const QByteArray inputUtf8 = inputPath.toUtf8();
         const QByteArray outputUtf8 = stagedPath.toUtf8();
-        const QByteArray muxerName(fi.muxer_name);
-        const QByteArray sampleFormatUtf8 = sampleFormat.toUtf8();
-        QString resolvedLayout = channelLayout.trimmed().toLower();
-        if (resolvedLayout.isEmpty()) {
-            if (channels == 1) resolvedLayout = QStringLiteral("mono");
-            if (channels == 2) resolvedLayout = QStringLiteral("stereo");
-        }
+        const QByteArray sampleFormatUtf8 = jobSampleFormat.toUtf8();
         const QByteArray channelLayoutUtf8 = resolvedLayout.toUtf8();
 
         struct EntryProgressContext {
@@ -1738,17 +2046,17 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         request.output_path = outputUtf8.constData();
         request.muxer_name = muxerName.constData();
         request.codec_name = codecName.isEmpty() ? nullptr : codecName.constData();
-        request.bit_rate = static_cast<long long>(bitRate);
-        request.sample_rate = sampleRate;
+        request.bit_rate = static_cast<long long>(jobBitRate);
+        request.sample_rate = jobSampleRate;
         request.channel_layout = channelLayoutUtf8.isEmpty()
             ? nullptr : channelLayoutUtf8.constData();
         request.sample_format = sampleFormatUtf8.isEmpty()
             ? nullptr : sampleFormatUtf8.constData();
-        request.audio_stream_index = audioStreamIndex;
-        request.keep_metadata = keepMetadata ? 1 : 0;
-        request.keep_cover = keepCover ? 1 : 0;
-        request.bitrate_mode = bitrateMode == QStringLiteral("vbr") ? 1 : 0;
-        request.quality = 75;
+        request.audio_stream_index = jobAudioStreamIndex;
+        request.keep_metadata = jobKeepMetadata ? 1 : 0;
+        request.keep_cover = jobKeepCover ? 1 : 0;
+        request.bitrate_mode = jobBitrateMode == QStringLiteral("vbr") ? 1 : 0;
+        request.quality = jobQuality;
         const ag_result result = ag_transcode_v2(
             inputUtf8.constData(), &request, token, progressCallback,
             &progressContext);
@@ -1786,7 +2094,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                 QFile::remove(stagedPath + QStringLiteral(".agbak"));
             }
             if (!commit_staged_output(stagedPath, outputPath,
-                                      overwriteExisting)) {
+                                      jobOverwriteExisting)) {
                 QFile::remove(stagedPath);
                 complete(FileStatus::Error,
                          tr("无法安全写入输出文件：%1").arg(outputPath));
@@ -1803,8 +2111,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             const QString detail = coreError.isEmpty()
                 ? RuntimeLog::mapResult(result) : coreError;
             RuntimeLog::log(result, QStringLiteral("FormatConverter"),
-                            QStringLiteral("input=%1 output=%2 format=%3: %4")
-                                .arg(inputPath, outputPath, outputFormat, detail));
+                             QStringLiteral("input=%1 output=%2 format=%3: %4")
+                                .arg(inputPath, outputPath, jobFormat, detail));
             complete(FileStatus::Error,
                      tr("转换失败：%1").arg(detail));
             return;
