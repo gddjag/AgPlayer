@@ -37,6 +37,10 @@ private slots:
     void cacheDirectoryChangeSuppressesActiveOldFixture();
     void prefersAverageThenFallsBackToRmsAndLegacy();
     void sourceMismatchedAverageFallsBackToValidRms();
+    void droppedGenerationHasNoDelayedPublicationAfterReplacement();
+    void canceledCooldownRequestHasNoDelayedPublication();
+    void refreshThenCacheHitHasNoStaleCooldownPublication();
+    void tenThousandOverflowRequestsLeaveOnlyBoundedCompletionWork();
 };
 
 namespace {
@@ -747,6 +751,139 @@ void TrackWaveformThumbnailProviderTest::sourceMismatchedAverageFallsBackToValid
     QCOMPARE(result.size(), 3);
     QCOMPARE(static_cast<unsigned char>(result.at(2).toByteArray().at(0)),
              128U);
+}
+
+void TrackWaveformThumbnailProviderTest::droppedGenerationHasNoDelayedPublicationAfterReplacement()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("dropped-generation.wav"));
+    TrackWaveformThumbnailProvider provider(
+        directory.filePath(QStringLiteral("cache")));
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+
+    provider.request(QStringLiteral("active"), sourcePath, 1U);
+    provider.request(QStringLiteral("victim"), sourcePath, 10U);
+    for (int index = 1;
+         index < TrackWaveformThumbnailProvider::kMaxQueuedJobs;
+         ++index) {
+        provider.request(QStringLiteral("queued-%1").arg(index), sourcePath,
+                         static_cast<quint64>(index + 10));
+    }
+    provider.request(QStringLiteral("overflow"), sourcePath, 500U);
+
+    // A direct drop notification, if any, has completed by this point. Only
+    // publications delayed until after the replacement request are relevant.
+    spy.clear();
+    provider.request(QStringLiteral("victim"), sourcePath, 11U);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        provider.diagnostics().value(QStringLiteral("inFlightTracks")).toInt(),
+        0, 10000);
+    QTest::qWait(30);
+
+    bool sawLatest = false;
+    for (const QList<QVariant>& publication : spy) {
+        if (publication.at(0).toString() != QStringLiteral("victim")) {
+            continue;
+        }
+        QVERIFY2(publication.at(1).toULongLong() != 10U,
+                 "the dropped generation was published after replacement");
+        sawLatest = sawLatest || publication.at(1).toULongLong() == 11U;
+    }
+    QVERIFY(sawLatest);
+}
+
+void TrackWaveformThumbnailProviderTest::canceledCooldownRequestHasNoDelayedPublication()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("cancel-cooldown.wav"));
+    TrackWaveformThumbnailProvider provider(
+        directory.filePath(QStringLiteral("cache")));
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+
+    provider.request(QStringLiteral("prime-miss"), sourcePath, 1U);
+    QVERIFY(!waitForResult(spy).isEmpty());
+    spy.clear();
+
+    provider.request(QStringLiteral("cooled-cancel"), sourcePath, 2U);
+    // Synchronous cooldown publication is defined to precede this cancel and
+    // is deliberately discarded; cancel must not leave a queued callback.
+    spy.clear();
+    provider.cancel(QStringLiteral("cooled-cancel"), 2U);
+    QTest::qWait(30);
+    QCOMPARE(spy.count(), 0);
+}
+
+void TrackWaveformThumbnailProviderTest::refreshThenCacheHitHasNoStaleCooldownPublication()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("refresh-cooldown.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+
+    provider.request(QStringLiteral("prime-miss"), sourcePath, 1U);
+    QVERIFY(!waitForResult(spy).isEmpty());
+    QVERIFY(saveCache(cacheDirectory, sourcePath, {0.75F}));
+    spy.clear();
+
+    provider.request(QStringLiteral("refresh-track"), sourcePath, 2U);
+    // A synchronous cooldown result is complete here and cannot survive the
+    // refresh. Discard it before observing the refreshed cache hit.
+    spy.clear();
+    provider.refresh();
+    provider.request(QStringLiteral("refresh-track"), sourcePath, 3U);
+
+    const QList<QVariant> result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QCOMPARE(result.at(1).toULongLong(), 3U);
+    QCOMPARE(result.at(2).toByteArray().size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+    QTest::qWait(30);
+    QCOMPARE(spy.count(), 0);
+}
+
+void TrackWaveformThumbnailProviderTest::tenThousandOverflowRequestsLeaveOnlyBoundedCompletionWork()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("overflow-burst.wav"));
+    int publications = 0;
+    TrackWaveformThumbnailProvider provider(
+        directory.filePath(QStringLiteral("cache")));
+    connect(&provider, &TrackWaveformThumbnailProvider::thumbnailReady,
+            &provider,
+            [&publications] { ++publications; });
+
+    for (int index = 0; index < 10000; ++index) {
+        provider.request(QStringLiteral("burst-%1").arg(index), sourcePath,
+                         static_cast<quint64>(index + 1));
+        const QVariantMap state = provider.diagnostics();
+        QVERIFY(state.value(QStringLiteral("queuedJobs")).toInt() <= 256);
+        QVERIFY(state.value(QStringLiteral("inFlightTracks")).toInt() <= 257);
+    }
+    const int publicationsBeforeEvents = publications;
+
+    QTRY_COMPARE_WITH_TIMEOUT(
+        provider.diagnostics().value(QStringLiteral("inFlightTracks")).toInt(),
+        0, 10000);
+    QTest::qWait(50);
+    const int completionPublications = publications - publicationsBeforeEvents;
+    QVERIFY2(completionPublications <= 257,
+             qPrintable(QStringLiteral("unexpected delayed publications: %1")
+                            .arg(completionPublications)));
+    const QVariantMap finalState = provider.diagnostics();
+    QVERIFY(finalState.value(QStringLiteral("queuedJobs")).toInt() <= 256);
+    QVERIFY(finalState.value(QStringLiteral("inFlightTracks")).toInt() <= 257);
 }
 
 QTEST_GUILESS_MAIN(TrackWaveformThumbnailProviderTest)
