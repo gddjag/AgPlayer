@@ -1,0 +1,389 @@
+#include "track_waveform_thumbnail_provider.hpp"
+#include "waveform_cache.hpp"
+
+#include <QColor>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTest>
+#include <QVariantMap>
+
+#include <array>
+#include <cstdint>
+#include <limits>
+#include <vector>
+
+class TrackWaveformThumbnailProviderTest final : public QObject {
+    Q_OBJECT
+
+private slots:
+    void quantizesContinuousTimeBucketsToExactly128Bytes();
+    void ignoresNonFiniteSamplesAndClampsFiniteAmplitude();
+    void mapsPersistentUtf8TrackIdsToExactPalette();
+    void readsExistingV2CacheWithoutChangingIt();
+    void returnsEmptyForMissCorruptionMismatchAndEmptyMix();
+    void coalescesSameTrackAndPublishesOnlyLatestGeneration();
+    void cancelSuppressesMatchingGeneration();
+    void retainsAtMost256SuccessfulTracks();
+    void destructionWaitsSafelyForOutstandingRead();
+};
+
+namespace {
+
+std::filesystem::path filesystemPath(const QString& path)
+{
+#ifdef Q_OS_WIN
+    return std::filesystem::path(path.toStdWString());
+#else
+    return std::filesystem::u8path(path.toUtf8().constData());
+#endif
+}
+
+QString createSource(QTemporaryDir& directory, const QString& name)
+{
+    const QString path = directory.filePath(name);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write("source-audio", 12) != 12
+        || !file.flush()) {
+        return {};
+    }
+    return path;
+}
+
+QString cachePath(const QString& cacheDirectory,
+                  const QString& sourcePath,
+                  const QString& suffix = QStringLiteral("-average"))
+{
+    const std::string key =
+        agplayer::WaveformCache::key_for(filesystemPath(sourcePath));
+    if (key.empty()) {
+        return {};
+    }
+    return QDir(cacheDirectory)
+        .filePath(QString::fromStdString(key) + suffix
+                  + QStringLiteral(".agwf"));
+}
+
+bool saveCache(const QString& cacheDirectory,
+               const QString& sourcePath,
+               const std::vector<float>& mix)
+{
+    if (!QDir().mkpath(cacheDirectory)) {
+        return false;
+    }
+    agplayer::WaveformCacheData data;
+    data.mix = mix;
+    return agplayer::WaveformCache::save_v2(
+        filesystemPath(cachePath(cacheDirectory, sourcePath)),
+        filesystemPath(sourcePath), data);
+}
+
+QList<QVariant> waitForResult(QSignalSpy& spy, int timeoutMs = 5000)
+{
+    if (spy.isEmpty() && !spy.wait(timeoutMs)) {
+        return {};
+    }
+    return spy.takeFirst();
+}
+
+} // namespace
+
+void TrackWaveformThumbnailProviderTest::quantizesContinuousTimeBucketsToExactly128Bytes()
+{
+    std::vector<float> mix(256U, 0.0F);
+    mix[129] = -0.8F;
+
+    const QByteArray bytes =
+        TrackWaveformThumbnailProvider::quantizeMixPeaks(mix);
+
+    QCOMPARE(bytes.size(), TrackWaveformThumbnailProvider::kPeakCount);
+    QCOMPARE(static_cast<unsigned char>(bytes.at(64)), 204U);
+    QCOMPARE(static_cast<unsigned char>(bytes.at(63)), 0U);
+}
+
+void TrackWaveformThumbnailProviderTest::ignoresNonFiniteSamplesAndClampsFiniteAmplitude()
+{
+    const std::vector<float> mix{
+        0.0F,
+        -0.25F,
+        std::numeric_limits<float>::quiet_NaN(),
+        1.5F,
+        -std::numeric_limits<float>::infinity(),
+    };
+
+    const QByteArray bytes =
+        TrackWaveformThumbnailProvider::quantizeMixPeaks(mix);
+
+    QCOMPARE(bytes.size(), TrackWaveformThumbnailProvider::kPeakCount);
+    QCOMPARE(static_cast<unsigned char>(bytes.at(0)), 0U);
+    QCOMPARE(static_cast<unsigned char>(bytes.at(25)), 64U);
+    QCOMPARE(static_cast<unsigned char>(bytes.at(76)), 255U);
+    QCOMPARE(static_cast<unsigned char>(bytes.at(127)), 0U);
+    QCOMPARE(TrackWaveformThumbnailProvider::quantizeMixPeaks({}).size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+}
+
+void TrackWaveformThumbnailProviderTest::mapsPersistentUtf8TrackIdsToExactPalette()
+{
+    struct PaletteCase final {
+        const char* trackId;
+        std::uint32_t hash;
+        const char* color;
+    };
+    static constexpr std::array<PaletteCase, 36> cases{{
+        {"track-3", 0x5cd3b3d0U, "#E11D48"},
+        {"track-116", 0xef7f1609U, "#DC2626"},
+        {"track-117", 0xee7f1476U, "#EA580C"},
+        {"track-48", 0x13558f17U, "#F59E0B"},
+        {"track-49", 0x12558d84U, "#CA8A04"},
+        {"track-91", 0x9e5d25adU, "#65A30D"},
+        {"track-90", 0x9d5d241aU, "#16A34A"},
+        {"track-93", 0x9c5d2287U, "#059669"},
+        {"track-92", 0x9b5d20f4U, "#0D9488"},
+        {"track-42", 0x0d5585a5U, "#0891B2"},
+        {"track-43", 0x0c558412U, "#0284C7"},
+        {"track-40", 0x0b55827fU, "#2563EB"},
+        {"track-41", 0x0a5580ecU, "#4F46E5"},
+        {"track-19", 0x1648c7ddU, "#7C3AED"},
+        {"track-18", 0x1548c64aU, "#9333EA"},
+        {"track-44", 0x07557c33U, "#C026D3"},
+        {"track-45", 0x06557aa0U, "#DB2777"},
+        {"track-51", 0x06533c09U, "#BE185D"},
+        {"track-50", 0x05533a76U, "#9F1239"},
+        {"track-53", 0x045338e3U, "#B91C1C"},
+        {"track-52", 0x03533750U, "#C2410C"},
+        {"track-11", 0x0e48bb45U, "#B45309"},
+        {"track-10", 0x0d48b9b2U, "#A16207"},
+        {"track-13", 0x0c48b81fU, "#4D7C0F"},
+        {"track-12", 0x0b48b68cU, "#15803D"},
+        {"track-8", 0x67d3c521U, "#047857"},
+        {"track-9", 0x66d3c38eU, "#0F766E"},
+        {"track-17", 0x0848b1d3U, "#155E75"},
+        {"track-16", 0x0748b040U, "#1E40AF"},
+        {"track-4", 0x63d3bed5U, "#3730A3"},
+        {"track-5", 0x62d3bd42U, "#5B21B6"},
+        {"track-6", 0x61d3bbafU, "#6B21A8"},
+        {"track-7", 0x60d3ba1cU, "#86198F"},
+        {"track-0", 0x5fd3b889U, "#9D174D"},
+        {"track-1", 0x5ed3b6f6U, "#9F2A2A"},
+        {"track-2", 0x5dd3b563U, "#7C2D12"},
+    }};
+
+    for (const PaletteCase& testCase : cases) {
+        const QString trackId = QString::fromLatin1(testCase.trackId);
+        QCOMPARE(TrackWaveformThumbnailProvider::fnv1a32(trackId),
+                 testCase.hash);
+        QCOMPARE(TrackWaveformThumbnailProvider::colorForTrackId(trackId),
+                 QColor(QString::fromLatin1(testCase.color)));
+        QCOMPARE(TrackWaveformThumbnailProvider::colorForTrackId(trackId),
+                 TrackWaveformThumbnailProvider::colorForTrackId(trackId));
+    }
+
+    QCOMPARE(TrackWaveformThumbnailProvider::fnv1a32(
+                 QString::fromUtf8("\xE9\x9F\xB3\xE4\xB9\x90")),
+             0xa555aad7U);
+}
+
+void TrackWaveformThumbnailProviderTest::readsExistingV2CacheWithoutChangingIt()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath = createSource(directory, QStringLiteral("hit.wav"));
+    QVERIFY(!sourcePath.isEmpty());
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    std::vector<float> mix(256U, 0.0F);
+    mix[129] = 0.8F;
+    QVERIFY(saveCache(cacheDirectory, sourcePath, mix));
+
+    const QString existingCache = cachePath(cacheDirectory, sourcePath);
+    QFile cacheFile(existingCache);
+    QVERIFY(cacheFile.open(QIODevice::ReadOnly));
+    const QByteArray before = cacheFile.readAll();
+    cacheFile.close();
+    const QDateTime beforeModified = QFileInfo(existingCache).lastModified();
+
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+    provider.request(QStringLiteral("persistent-track"), sourcePath, 7U);
+
+    const QList<QVariant> result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QCOMPARE(result.at(0).toString(), QStringLiteral("persistent-track"));
+    QCOMPARE(result.at(1).toULongLong(), 7U);
+    const QByteArray peaks = result.at(2).toByteArray();
+    QCOMPARE(peaks.size(), TrackWaveformThumbnailProvider::kPeakCount);
+    QCOMPARE(static_cast<unsigned char>(peaks.at(64)), 204U);
+
+    QVERIFY(cacheFile.open(QIODevice::ReadOnly));
+    QCOMPARE(cacheFile.readAll(), before);
+    QCOMPARE(QFileInfo(existingCache).lastModified(), beforeModified);
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             1);
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("maxActiveWorkers"))
+                 .toInt(),
+             1);
+}
+
+void TrackWaveformThumbnailProviderTest::returnsEmptyForMissCorruptionMismatchAndEmptyMix()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(QDir().mkpath(cacheDirectory));
+
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+
+    const QString missPath = createSource(directory, QStringLiteral("miss.wav"));
+    QVERIFY(!missPath.isEmpty());
+    provider.request(QStringLiteral("miss"), missPath, 1U);
+    QList<QVariant> result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QVERIFY(result.at(2).toByteArray().isEmpty());
+    QVERIFY(QDir(cacheDirectory).entryList(QDir::Files).isEmpty());
+
+    const QString corruptPath =
+        createSource(directory, QStringLiteral("corrupt.wav"));
+    QVERIFY(!corruptPath.isEmpty());
+    QFile corruptCache(cachePath(cacheDirectory, corruptPath));
+    QVERIFY(corruptCache.open(QIODevice::WriteOnly));
+    QCOMPARE(corruptCache.write("not-an-agwf", 11), 11);
+    corruptCache.close();
+    provider.request(QStringLiteral("corrupt"), corruptPath, 2U);
+    result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QVERIFY(result.at(2).toByteArray().isEmpty());
+
+    const QString mismatchPath =
+        createSource(directory, QStringLiteral("mismatch.wav"));
+    QVERIFY(!mismatchPath.isEmpty());
+    QVERIFY(saveCache(cacheDirectory, mismatchPath, {0.5F}));
+    const QString oldCachePath = cachePath(cacheDirectory, mismatchPath);
+    QFile mismatchSource(mismatchPath);
+    QVERIFY(mismatchSource.open(QIODevice::Append));
+    QCOMPARE(mismatchSource.write("changed", 7), 7);
+    mismatchSource.close();
+    const QString currentCachePath = cachePath(cacheDirectory, mismatchPath);
+    QVERIFY(QFile::copy(oldCachePath, currentCachePath));
+    provider.request(QStringLiteral("mismatch"), mismatchPath, 3U);
+    result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QVERIFY(result.at(2).toByteArray().isEmpty());
+
+    const QString emptyPath =
+        createSource(directory, QStringLiteral("empty.wav"));
+    QVERIFY(!emptyPath.isEmpty());
+    QVERIFY(saveCache(cacheDirectory, emptyPath, {}));
+    provider.request(QStringLiteral("empty"), emptyPath, 4U);
+    result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QVERIFY(result.at(2).toByteArray().isEmpty());
+
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             0);
+}
+
+void TrackWaveformThumbnailProviderTest::coalescesSameTrackAndPublishesOnlyLatestGeneration()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("coalesced.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(saveCache(cacheDirectory, sourcePath, {0.75F}));
+
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+    for (quint64 generation = 1U; generation <= 100U; ++generation) {
+        provider.request(QStringLiteral("same-track"), sourcePath, generation);
+    }
+
+    const QVariantMap running = provider.diagnostics();
+    QCOMPARE(running.value(QStringLiteral("inFlightTracks")).toInt(), 1);
+    QCOMPARE(running.value(QStringLiteral("queuedJobs")).toInt(), 0);
+    const QList<QVariant> result = waitForResult(spy);
+    QCOMPARE(result.size(), 3);
+    QCOMPARE(result.at(1).toULongLong(), 100U);
+    QCOMPARE(result.at(2).toByteArray().size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+    QTest::qWait(20);
+    QCOMPARE(spy.count(), 0);
+}
+
+void TrackWaveformThumbnailProviderTest::cancelSuppressesMatchingGeneration()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("cancel.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(saveCache(cacheDirectory, sourcePath, {0.5F}));
+
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+    provider.request(QStringLiteral("cancelled-track"), sourcePath, 9U);
+    provider.cancel(QStringLiteral("cancelled-track"), 9U);
+
+    QTRY_COMPARE_WITH_TIMEOUT(
+        provider.diagnostics().value(QStringLiteral("inFlightTracks")).toInt(),
+        0, 5000);
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             0);
+}
+
+void TrackWaveformThumbnailProviderTest::retainsAtMost256SuccessfulTracks()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath = createSource(directory, QStringLiteral("lru.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(saveCache(cacheDirectory, sourcePath, {0.25F, 0.75F}));
+
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider,
+                   &TrackWaveformThumbnailProvider::thumbnailReady);
+    for (int track = 0; track < 257; ++track) {
+        provider.request(QStringLiteral("track-%1").arg(track), sourcePath,
+                         static_cast<quint64>(track + 1));
+        const QList<QVariant> result = waitForResult(spy);
+        QCOMPARE(result.size(), 3);
+        QCOMPARE(result.at(2).toByteArray().size(),
+                 TrackWaveformThumbnailProvider::kPeakCount);
+    }
+
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             256);
+    QVERIFY(QFile::remove(cachePath(cacheDirectory, sourcePath)));
+    provider.request(QStringLiteral("track-0"), sourcePath, 999U);
+    const QList<QVariant> evictedResult = waitForResult(spy);
+    QCOMPARE(evictedResult.size(), 3);
+    QVERIFY(evictedResult.at(2).toByteArray().isEmpty());
+}
+
+void TrackWaveformThumbnailProviderTest::destructionWaitsSafelyForOutstandingRead()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath =
+        createSource(directory, QStringLiteral("destruction.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(saveCache(cacheDirectory, sourcePath,
+                      std::vector<float>(1'000'000U, 0.5F)));
+
+    auto* provider = new TrackWaveformThumbnailProvider(cacheDirectory);
+    provider->request(QStringLiteral("destroyed-track"), sourcePath, 1U);
+    delete provider;
+    QVERIFY(true);
+}
+
+QTEST_GUILESS_MAIN(TrackWaveformThumbnailProviderTest)
+
+#include "track_waveform_thumbnail_provider_test.moc"
