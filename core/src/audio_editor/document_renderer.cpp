@@ -103,6 +103,22 @@ std::vector<AudioSpan> spans_for_range(
 } // namespace
 
 RenderResult DocumentRenderer::renderFloatWav(
+    const TimelineSnapshot& snapshot,
+    const std::optional<Selection>& range,
+    const std::filesystem::path& output_path,
+    const std::atomic_bool* cancelled,
+    std::function<void(float)> progress) const
+{
+    const auto legacy = singleEventDocumentSnapshot(snapshot);
+    if (!legacy) {
+        return {false, 0, 0, 0,
+                "timeline render requires a single unmodified event"};
+    }
+    return renderFloatWav(*legacy, range, output_path, cancelled,
+                          std::move(progress));
+}
+
+RenderResult DocumentRenderer::renderFloatWav(
     const DocumentSnapshot& snapshot,
     const std::optional<Selection>& range,
     const std::filesystem::path& output_path,

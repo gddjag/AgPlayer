@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_document.hpp"
+#include "event_timeline.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +10,12 @@ namespace agplayer::editor {
 
 class TimePixelMapper final {
 public:
+    TimePixelMapper(const TimelineSnapshot& snapshot, const double pixel_width,
+                    const double frames_per_pixel) noexcept
+        : TimePixelMapper(snapshot.totalFrames, pixel_width, frames_per_pixel)
+    {
+    }
+
     TimePixelMapper(const SampleFrame document_frames,
                     const double pixel_width,
                     const double frames_per_pixel) noexcept

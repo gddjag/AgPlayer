@@ -107,6 +107,22 @@ set_tests_properties(audio_event_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(event_timeline_test
+    core/event_timeline_test.cpp
+)
+set_target_properties(event_timeline_test PROPERTIES AUTOMOC ON)
+target_include_directories(event_timeline_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(event_timeline_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(event_timeline_test)
+add_test(NAME event_timeline_test COMMAND event_timeline_test)
+set_tests_properties(event_timeline_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 add_executable(document_writer_test
     core/document_writer_test.cpp
 )
@@ -186,6 +202,9 @@ foreach(audio_editor_core_test IN ITEMS
         "${CMAKE_SOURCE_DIR}/core/src"
     )
     target_link_libraries(${audio_editor_core_test} PRIVATE Qt6::Test)
+    if(audio_editor_core_test STREQUAL "time_pixel_mapper_test")
+        target_link_libraries(${audio_editor_core_test} PRIVATE agplayer_core)
+    endif()
     agplayer_enable_warnings(${audio_editor_core_test})
     add_test(NAME ${audio_editor_core_test} COMMAND ${audio_editor_core_test})
     set_tests_properties(${audio_editor_core_test} PROPERTIES

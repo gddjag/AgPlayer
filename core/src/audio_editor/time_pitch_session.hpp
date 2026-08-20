@@ -36,6 +36,12 @@ public:
         std::optional<Selection> range = std::nullopt,
         const std::atomic_bool* cancelled = nullptr,
         std::function<void(float)> progress = {}) const;
+    [[nodiscard]] TimePitchResult process(
+        const TimelineSnapshot& snapshot,
+        const std::filesystem::path& output,
+        std::optional<Selection> range = std::nullopt,
+        const std::atomic_bool* cancelled = nullptr,
+        std::function<void(float)> progress = {}) const;
 
 private:
     double original_bpm_{};

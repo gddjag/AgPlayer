@@ -1,6 +1,7 @@
 #pragma once
 
 #include "edit_command.hpp"
+#include "event_timeline.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -48,6 +49,9 @@ struct DocumentSnapshot final {
                               const Marker& right) noexcept;
 [[nodiscard]] bool operator==(const DocumentSnapshot& left,
                               const DocumentSnapshot& right) noexcept;
+
+[[nodiscard]] std::optional<DocumentSnapshot> singleEventDocumentSnapshot(
+    const TimelineSnapshot& snapshot);
 
 class AudioDocument final {
 public:
