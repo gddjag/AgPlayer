@@ -14,6 +14,8 @@
 
 namespace {
 
+constexpr auto kNegativeCooldown = std::chrono::milliseconds(200);
+
 constexpr std::array<const char*, 36> kThumbnailPalette{{
     "#E11D48", "#DC2626", "#EA580C", "#F59E0B", "#CA8A04", "#65A30D",
     "#16A34A", "#059669", "#0D9488", "#0891B2", "#0284C7", "#2563EB",
@@ -137,15 +139,18 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
     }
 
     if (sourcePath.isEmpty()) {
-        emit thumbnailReady(trackId, generation, {});
+        postThumbnailReady(Request{trackId, sourcePath, generation, false});
         return;
     }
 
+    if (hasNegativeCooldown(sourcePath)) {
+        postThumbnailReady(Request{trackId, sourcePath, generation, false});
+        return;
+    }
+
+    std::optional<Request> dropped;
     if (pending_.size() >= kMaxQueuedJobs) {
-        const Request dropped = pending_.takeFirst();
-        if (!dropped.canceled) {
-            emit thumbnailReady(dropped.trackId, dropped.generation, {});
-        }
+        dropped = pending_.takeFirst();
     }
     pending_.append(Request{trackId, sourcePath, generation, false});
     startNext();
@@ -153,6 +158,9 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
         maxInFlightTracks_,
         static_cast<int>(pending_.size())
             + (activeRequest_.has_value() ? 1 : 0));
+    if (dropped.has_value() && !dropped->canceled) {
+        postThumbnailReady(*dropped);
+    }
 }
 
 void TrackWaveformThumbnailProvider::cancel(const QString& trackId,
@@ -181,6 +189,8 @@ QVariantMap TrackWaveformThumbnailProvider::diagnostics() const
         {QStringLiteral("maxActiveWorkers"), maxActiveWorkers_},
         {QStringLiteral("maxInFlightTracks"), maxInFlightTracks_},
         {QStringLiteral("maxQueuedJobs"), kMaxQueuedJobs},
+        {QStringLiteral("negativeCacheEntries"), negativeCache_.size()},
+        {QStringLiteral("cacheReadAttempts"), cacheReadAttempts_},
     };
 }
 
@@ -191,9 +201,16 @@ void TrackWaveformThumbnailProvider::setCacheDirectory(
         return;
     }
     cacheDirectory_ = cacheDirectory;
+    refresh();
+}
+
+void TrackWaveformThumbnailProvider::refresh()
+{
     ++cacheEpoch_;
     cache_.clear();
     lruOrder_.clear();
+    negativeCache_.clear();
+    negativeOrder_.clear();
 }
 
 QByteArray TrackWaveformThumbnailProvider::loadFromV2CacheOnly(
@@ -235,16 +252,30 @@ unsigned char TrackWaveformThumbnailProvider::quantizeAmplitude(
 
 void TrackWaveformThumbnailProvider::startNext()
 {
-    if (activeRequest_.has_value() || pending_.isEmpty()) {
+    if (activeRequest_.has_value()) {
         return;
     }
 
-    activeRequest_ = pending_.takeFirst();
+    while (!pending_.isEmpty()) {
+        const Request cooled = pending_.takeFirst();
+        if (!hasNegativeCooldown(cooled.sourcePath)) {
+            activeRequest_ = cooled;
+            break;
+        }
+        if (!cooled.canceled) {
+            postThumbnailReady(cooled);
+        }
+    }
+    if (!activeRequest_.has_value()) {
+        return;
+    }
+
     const Request started = *activeRequest_;
     const QString cacheDirectory = cacheDirectory_;
     const quint64 cacheEpoch = cacheEpoch_;
     activeWorkers_ = 1;
     maxActiveWorkers_ = std::max(maxActiveWorkers_, activeWorkers_);
+    ++cacheReadAttempts_;
 
     watcher_.setFuture(QtConcurrent::run(
         &workerPool_,
@@ -280,6 +311,11 @@ void TrackWaveformThumbnailProvider::finishActive()
         return;
     }
 
+    if (loaded.peaks.isEmpty()) {
+        insertNegativeCooldown(current.sourcePath);
+    } else {
+        removeNegativeCooldown(current.sourcePath);
+    }
     if (!current.canceled) {
         if (!loaded.peaks.isEmpty()) {
             insertCache(current.trackId, current.sourcePath, loaded.peaks);
@@ -318,6 +354,77 @@ void TrackWaveformThumbnailProvider::insertCache(const QString& trackId,
         lruOrder_.pop_back();
         cache_.remove(evicted);
     }
+}
+
+QString TrackWaveformThumbnailProvider::negativeKey(
+    const QString& sourcePath) const
+{
+    return QString::number(cacheEpoch_) + QChar(u'\0') + sourcePath;
+}
+
+bool TrackWaveformThumbnailProvider::hasNegativeCooldown(
+    const QString& sourcePath)
+{
+    const QString key = negativeKey(sourcePath);
+    auto entry = negativeCache_.find(key);
+    if (entry == negativeCache_.end()) {
+        return false;
+    }
+    if (entry->expiresAt <= std::chrono::steady_clock::now()) {
+        negativeOrder_.erase(entry->order);
+        negativeCache_.erase(entry);
+        return false;
+    }
+
+    negativeOrder_.erase(entry->order);
+    negativeOrder_.push_front(key);
+    entry->order = negativeOrder_.begin();
+    return true;
+}
+
+void TrackWaveformThumbnailProvider::insertNegativeCooldown(
+    const QString& sourcePath)
+{
+    const QString key = negativeKey(sourcePath);
+    auto existing = negativeCache_.find(key);
+    if (existing != negativeCache_.end()) {
+        negativeOrder_.erase(existing->order);
+        negativeCache_.erase(existing);
+    }
+
+    negativeOrder_.push_front(key);
+    negativeCache_.insert(
+        key,
+        NegativeEntry{std::chrono::steady_clock::now() + kNegativeCooldown,
+                      negativeOrder_.begin()});
+    while (negativeCache_.size() > kMaxCacheEntries) {
+        const QString evicted = negativeOrder_.back();
+        negativeOrder_.pop_back();
+        negativeCache_.remove(evicted);
+    }
+}
+
+void TrackWaveformThumbnailProvider::removeNegativeCooldown(
+    const QString& sourcePath)
+{
+    const QString key = negativeKey(sourcePath);
+    auto existing = negativeCache_.find(key);
+    if (existing == negativeCache_.end()) {
+        return;
+    }
+    negativeOrder_.erase(existing->order);
+    negativeCache_.erase(existing);
+}
+
+void TrackWaveformThumbnailProvider::postThumbnailReady(
+    const Request& request, const QByteArray& peaks)
+{
+    QMetaObject::invokeMethod(
+        this,
+        [this, request, peaks] {
+            emit thumbnailReady(request.trackId, request.generation, peaks);
+        },
+        Qt::QueuedConnection);
 }
 
 int TrackWaveformThumbnailProvider::queuedIndexForTrack(
