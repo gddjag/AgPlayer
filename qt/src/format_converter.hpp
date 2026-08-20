@@ -210,6 +210,8 @@ private:
     FormatConversionTaskModel* taskModel_ = nullptr;
     FormatConversionFilterModel* filteredTaskModel_ = nullptr;
     QVariantMap pendingPlan_;
+    QVariantMap pendingRequest_;
+    QVector<QString> pendingTaskIds_;
     QString selectedFormat_ = QStringLiteral("mp3");
 
     void setBusy(bool value);
