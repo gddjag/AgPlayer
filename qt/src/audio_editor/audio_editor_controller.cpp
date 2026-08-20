@@ -30,6 +30,12 @@ using agplayer::editor::AudioFileAnalyzer;
 using agplayer::editor::AudioSource;
 using agplayer::editor::DocumentRenderer;
 using agplayer::editor::DocumentWriter;
+using agplayer::editor::ProjectDocument;
+using agplayer::editor::ProjectLoadResult;
+using agplayer::editor::ProjectSourceIssue;
+using agplayer::editor::ProjectSourceIssueKind;
+using agplayer::editor::ProjectSourceRecord;
+using agplayer::editor::ProjectSaveRequest;
 using agplayer::editor::Selection;
 using agplayer::editor::WriteRequest;
 
@@ -528,6 +534,31 @@ QString local_path(const QUrl& url)
     return url.isLocalFile() ? url.toLocalFile() : QString{};
 }
 
+ProjectSourceRecord project_source_record(const quint64 sourceId,
+                                          const std::shared_ptr<const AudioSource>& source)
+{
+    const QString path = source ? QString::fromStdWString(source->path.wstring()) : QString{};
+    const QFileInfo file(path);
+    return {sourceId, source, file.exists() ? file.size() : -1,
+            file.exists() ? file.lastModified().toUTC().toMSecsSinceEpoch() : -1};
+}
+
+QVariantList to_project_issues(const std::vector<ProjectSourceIssue>& issues)
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(issues.size()));
+    for (const ProjectSourceIssue& issue : issues) {
+        result.append(QVariantMap{{QStringLiteral("kind"),
+                                   issue.kind == ProjectSourceIssueKind::Missing
+                                       ? QStringLiteral("missing")
+                                       : QStringLiteral("identityMismatch")},
+                                  {QStringLiteral("sourceId"), issue.sourceId},
+                                  {QStringLiteral("path"), issue.path},
+                                  {QStringLiteral("message"), issue.message}});
+    }
+    return result;
+}
+
 qint64 effectiveDocumentFramesForViewport(
     const bool hasDocument, const qint64 documentFrames,
     const bool recording, const qint64 recordingInsertFrame,
@@ -756,6 +787,9 @@ bool AudioEditorController::createUntitledDocument(
     stopPlayback();
     document_ = std::move(candidate);
     source_path_.clear();
+    project_path_.clear();
+    project_sources_.clear();
+    project_issues_.clear();
     playback_path_.clear();
     format_name_ = QStringLiteral("WAV");
     sample_rate_ = static_cast<int>(sampleRate);
@@ -776,11 +810,13 @@ bool AudioEditorController::createUntitledDocument(
     }
     has_document_ = true;
     modified_ = false;
+    playhead_frame_ = 0;
     viewport_.setDocumentFrames(frames);
     setState(EditorSessionState::Ready);
     refreshActions();
     emit waveformChanged();
     emit documentChanged();
+    emit projectChanged();
     return true;
 }
 
@@ -808,6 +844,10 @@ bool AudioEditorController::openFile(const QUrl& source)
     }
     document_ = AudioDocument::fromSource(analysis.source);
     source_path_ = path;
+    project_path_.clear();
+    project_sources_ = {project_source_record(1,
+        document_.timelineSnapshot().events.front().source)};
+    project_issues_.clear();
     playback_path_ = path;
     format_name_ = QString::fromStdString(analysis.format).toUpper();
     sample_rate_ = static_cast<int>(analysis.source.sample_rate);
@@ -820,6 +860,7 @@ bool AudioEditorController::openFile(const QUrl& source)
     has_document_ = true;
     modified_ = false;
     position_ms_ = 0;
+    playhead_frame_ = 0;
     viewport_.setDocumentFrames(document_.totalFrames());
     setState(EditorSessionState::Ready);
     setProgress(1.0);
@@ -828,6 +869,7 @@ bool AudioEditorController::openFile(const QUrl& source)
     emit waveformChanged();
     emit playbackChanged();
     emit documentChanged();
+    emit projectChanged();
     return true;
 }
 
@@ -847,61 +889,151 @@ void AudioEditorController::cancelDiscardAndOpen()
 
 bool AudioEditorController::save()
 {
-    if (source_path_.isEmpty()) {
-        emit saveAsRequested();
+    if (project_path_.isEmpty()) {
+        emit saveProjectAsRequested();
         return false;
     }
-    return saveAs(QUrl::fromLocalFile(source_path_));
+    return saveProject(QUrl::fromLocalFile(project_path_));
+}
+
+bool AudioEditorController::saveProject(const QUrl& target)
+{
+    const QString requestedPath = local_path(target);
+    const QString path = requestedPath.isEmpty() ? project_path_ : requestedPath;
+    if (!has_document_ || path.isEmpty() || busy()) {
+        if (path.isEmpty()) setError(tr("保存工程路径无效"));
+        return false;
+    }
+    ProjectSaveRequest request;
+    request.document = &document_;
+    request.playheadFrame = playhead_frame_;
+    request.visibleStartFrame = viewport_.visibleStartFrame();
+    request.visibleEndFrame = viewport_.visibleEndFrame();
+    request.exportSettings = project_export_settings_;
+    request.sourceRecords = &project_sources_;
+    const auto result = ProjectDocument::save(path, request);
+    if (!result.ok()) {
+        setError(result.message);
+        return false;
+    }
+    project_path_ = QFileInfo(path).absoluteFilePath();
+    modified_ = false;
+    setError({});
+    refreshActions();
+    emit documentChanged();
+    emit projectChanged();
+    return true;
+}
+
+bool AudioEditorController::saveProjectAs(const QUrl& target)
+{
+    return saveProject(target);
+}
+
+bool AudioEditorController::openProject(const QUrl& source)
+{
+    const QString path = local_path(source);
+    if (path.isEmpty() || busy()) {
+        if (path.isEmpty()) setError(tr("请选择本地工程文件"));
+        return false;
+    }
+    ProjectLoadResult loaded = ProjectDocument::load(path);
+    if (!loaded.ok()) {
+        setError(loaded.message);
+        return false;
+    }
+
+    // Every fallible operation completed before the active document is replaced.
+    stopPlayback();
+    document_ = std::move(*loaded.document);
+    project_sources_ = std::move(loaded.sources);
+    project_issues_ = to_project_issues(loaded.issues);
+    project_export_settings_ = loaded.exportSettings;
+    project_path_ = QFileInfo(path).absoluteFilePath();
+    const auto snapshot = document_.timelineSnapshot();
+    const auto first = snapshot.events.empty() ? std::shared_ptr<const AudioSource>{}
+                                               : snapshot.events.front().source;
+    source_path_ = first ? QString::fromStdWString(first->path.wstring()) : QString{};
+    playback_path_.clear();
+    format_name_ = source_path_.isEmpty() ? QString{}
+                                          : QFileInfo(source_path_).suffix().toUpper();
+    sample_rate_ = first ? static_cast<int>(first->sample_rate) : 0;
+    channels_ = first ? static_cast<int>(first->channels) : 0;
+    bits_per_sample_ = 0;
+    bit_rate_ = 0;
+    source_channel_peaks_.clear();
+    channel_peaks_.clear();
+    clearViewportWaveformCache();
+    has_document_ = true;
+    modified_ = false;
+    playhead_frame_ = loaded.playheadFrame;
+    position_ms_ = sample_rate_ > 0 ? playhead_frame_ * 1'000 / sample_rate_ : 0;
+    viewport_.setDocumentFrames(document_.totalFrames());
+    (void)viewport_.setVisibleRange(loaded.visibleStartFrame, loaded.visibleEndFrame);
+    setState(EditorSessionState::Ready);
+    setProgress(1.0);
+    setError({});
+    refreshActions();
+    emit waveformChanged();
+    emit playbackChanged();
+    emit documentChanged();
+    emit projectChanged();
+    return true;
+}
+
+bool AudioEditorController::relinkProjectSource(const quint64 sourceId,
+                                                 const QUrl& replacement)
+{
+    const QString path = local_path(replacement);
+    if (!has_document_ || path.isEmpty() || busy()) return false;
+    const auto result = ProjectDocument::relink(document_, project_sources_, sourceId, path);
+    if (!result.ok()) {
+        setError(result.message);
+        return false;
+    }
+    project_issues_.erase(std::remove_if(project_issues_.begin(), project_issues_.end(),
+        [sourceId](const QVariant& value) {
+            return value.toMap().value(QStringLiteral("sourceId")).toULongLong() == sourceId;
+        }), project_issues_.end());
+    modified_ = true;
+    playback_path_.clear();
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
+    emit projectChanged();
+    return true;
+}
+
+bool AudioEditorController::undo()
+{
+    if (!has_document_ || busy() || !document_.undo()) return false;
+    modified_ = true;
+    playback_path_.clear();
+    viewport_.setDocumentFrames(document_.totalFrames());
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
+    return true;
+}
+
+bool AudioEditorController::redo()
+{
+    if (!has_document_ || busy() || !document_.redo()) return false;
+    modified_ = true;
+    playback_path_.clear();
+    viewport_.setDocumentFrames(document_.totalFrames());
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit documentChanged();
+    return true;
 }
 
 bool AudioEditorController::saveAs(const QUrl& target)
 {
-    const QString path = local_path(target);
-    if (!has_document_ || path.isEmpty()) {
-        setError(tr("保存路径无效"));
-        return false;
-    }
-    if (busy()) return false;
-    stopPlayback();
-    setState(EditorSessionState::Saving);
-    setProgress(0.0);
-    WriteRequest request;
-    request.snapshot = document_.timelineSnapshot();
-    request.output_path = std::filesystem::path(path.toStdWString());
-    operation_cancelled_.store(false, std::memory_order_release);
-    auto* watcher = new QFutureWatcher<agplayer::editor::WriteResult>(this);
-    write_watcher_ = watcher;
-    connect(watcher, &QFutureWatcher<agplayer::editor::WriteResult>::finished,
-            this, [this, watcher, path] {
-        write_watcher_ = nullptr;
-        const auto result = watcher->result();
-        watcher->deleteLater();
-        if (!result.ok()) {
-            setState(result.error == agplayer::editor::WriteError::Cancelled
-                ? EditorSessionState::Ready : EditorSessionState::Error);
-            setError(result.error == agplayer::editor::WriteError::Cancelled
-                ? tr("操作已取消") : QString::fromStdString(result.message));
-            return;
-        }
-        source_path_ = path;
-        playback_path_ = path;
-        modified_ = false;
-        setProgress(1.0);
-        setState(EditorSessionState::Ready);
-        setError({});
-        refreshActions();
-        emit documentChanged();
-    });
-    const QPointer<AudioEditorController> guard(this);
-    watcher->setFuture(QtConcurrent::run([this, request, guard] {
-        return DocumentWriter{}.write(request, &operation_cancelled_,
-            [guard](const float value) {
-                if (guard) QMetaObject::invokeMethod(
-                    guard, [guard, value] { if (guard) guard->setProgress(value); },
-                    Qt::QueuedConnection);
-            });
-    }));
-    return true;
+    return saveProjectAs(target);
 }
 
 bool AudioEditorController::exportTo(
@@ -925,6 +1057,9 @@ bool AudioEditorController::exportTo(
         return false;
     }
     if (busy()) return false;
+    project_export_settings_ = {codecName, sampleRate, channels, bitRate,
+                                keepMetadata, variableBitRate, quality,
+                                QFileInfo(path).absolutePath()};
     setState(EditorSessionState::Exporting);
     setProgress(0.0);
     WriteRequest request;
@@ -1246,7 +1381,7 @@ bool AudioEditorController::startRecording(
     config.channels = static_cast<std::uint32_t>(effectiveChannels);
     config.monitor = monitor;
     insert_recording_at_cursor_ = insertAtCursor && has_document_;
-    recording_insert_frame_ = position_ms_ * sample_rate_ / 1'000;
+    recording_insert_frame_ = playhead_frame_;
     setError({});
     setState(EditorSessionState::Processing);
     emit recordingChanged();
@@ -1318,6 +1453,9 @@ bool AudioEditorController::clearDocument()
     stopPlayback();
     document_ = AudioDocument{};
     source_path_.clear();
+    project_path_.clear();
+    project_sources_.clear();
+    project_issues_.clear();
     playback_path_.clear();
     format_name_.clear();
     sample_rate_ = 0;
@@ -1329,12 +1467,14 @@ bool AudioEditorController::clearDocument()
     has_document_ = false;
     modified_ = false;
     position_ms_ = 0;
+    playhead_frame_ = 0;
     viewport_.setDocumentFrames(0);
     setState(EditorSessionState::Empty);
     refreshActions();
     emit waveformChanged();
     emit playbackChanged();
     emit documentChanged();
+    emit projectChanged();
     return true;
 }
 
@@ -1454,12 +1594,14 @@ bool AudioEditorController::triggerAction(const QString& id)
         return true;
     }
     if (id == QStringLiteral("editor.save")) return save();
+    if (id == QStringLiteral("editor.undo")) return undo();
+    if (id == QStringLiteral("editor.redo")) return redo();
     if (id == QStringLiteral("editor.export")) {
         emit exportRequested();
         return true;
     }
     if (id == QStringLiteral("editor.split")) {
-        const qint64 frame = position_ms_ * sample_rate_ / 1'000;
+        const qint64 frame = playhead_frame_;
         const auto event = eventAtPlayhead(document_.timelineSnapshot(), frame);
         return event && splitEvent(*event, frame);
     }
@@ -1472,7 +1614,7 @@ bool AudioEditorController::triggerAction(const QString& id)
     if (id == QStringLiteral("editor.cut")) changed = document_.cutSelection();
     else if (id == QStringLiteral("editor.copy")) changed = document_.copySelection();
     else if (id == QStringLiteral("editor.paste")) {
-        const qint64 frame = position_ms_ * sample_rate_ / 1'000;
+        const qint64 frame = playhead_frame_;
         changed = document_.pasteAt(frame);
     }
     else if (id == QStringLiteral("editor.deleteSelection")) changed = document_.deleteSelection();
@@ -1582,6 +1724,7 @@ bool AudioEditorController::playPause()
         const qint64 end = selection->end * 1'000 / sample_rate_;
         if (position_ms_ < start || position_ms_ >= end) {
             position_ms_ = start;
+            playhead_frame_ = selection->start;
         }
     }
     ag_playback_snapshot snapshot{};
@@ -1641,6 +1784,7 @@ bool AudioEditorController::stopPlayback()
     playback_timer_.stop();
     playing_ = false;
     position_ms_ = 0;
+    playhead_frame_ = 0;
     if (has_document_ && state_ == EditorSessionState::Playing) {
         setState(EditorSessionState::Ready);
     }
@@ -1652,6 +1796,7 @@ bool AudioEditorController::seekMs(const qint64 value)
 {
     if (!has_document_ || value < 0 || value > durationMs()) return false;
     position_ms_ = value;
+    playhead_frame_ = sample_rate_ > 0 ? value * sample_rate_ / 1'000 : 0;
     if (player_) {
         const qint64 preview_position = time_pitch_preview_active_
             ? static_cast<qint64>(std::llround(
@@ -1659,6 +1804,23 @@ bool AudioEditorController::seekMs(const qint64 value)
                 / time_pitch_.speedPercent()))
             : value;
         ag_player_seek(player_, preview_position);
+    }
+    refreshActions();
+    emit playbackChanged();
+    return true;
+}
+
+bool AudioEditorController::seekFrame(const qint64 frame)
+{
+    if (!has_document_ || frame < 0 || frame > document_.totalFrames()) return false;
+    playhead_frame_ = frame;
+    position_ms_ = sample_rate_ > 0 ? frame * 1'000 / sample_rate_ : 0;
+    if (player_) {
+        const qint64 previewPosition = time_pitch_preview_active_
+            ? static_cast<qint64>(std::llround(static_cast<double>(position_ms_) * 100.0
+                                                / time_pitch_.speedPercent()))
+            : position_ms_;
+        ag_player_seek(player_, previewPosition);
     }
     refreshActions();
     emit playbackChanged();
@@ -1691,6 +1853,7 @@ void AudioEditorController::pollPlayback()
             static_cast<double>(snapshot.position_ms)
             * time_pitch_.speedPercent() / 100.0))
         : snapshot.position_ms;
+    playhead_frame_ = sample_rate_ > 0 ? position_ms_ * sample_rate_ / 1'000 : 0;
     const auto selection = document_.selection();
     if (selection && sample_rate_ > 0) {
         const qint64 start = selection->start * 1'000 / sample_rate_;
@@ -1704,6 +1867,7 @@ void AudioEditorController::pollPlayback()
                     : start;
                 ag_player_seek(player_, previewStart);
                 position_ms_ = start;
+                playhead_frame_ = selection->start;
             }
         }
     }
@@ -2133,10 +2297,12 @@ void AudioEditorController::refreshActions()
     actions_.setEnabled(QStringLiteral("editor.newRecording"), idle);
     actions_.setEnabled(QStringLiteral("editor.save"), has_document_ && idle);
     actions_.setEnabled(QStringLiteral("editor.export"), has_document_ && idle);
-    actions_.setEnabled(QStringLiteral("editor.undo"), false);
-    actions_.setEnabled(QStringLiteral("editor.redo"), false);
+    actions_.setEnabled(QStringLiteral("editor.undo"), has_document_ && idle
+                        && document_.canUndo());
+    actions_.setEnabled(QStringLiteral("editor.redo"), has_document_ && idle
+                        && document_.canRedo());
     actions_.setEnabled(QStringLiteral("editor.paste"), document_.hasClipboard() && idle);
-    const qint64 playhead = position_ms_ * sample_rate_ / 1'000;
+    const qint64 playhead = playhead_frame_;
     actions_.setEnabled(QStringLiteral("editor.split"), has_document_ && idle
         && eventAtPlayhead(document_.timelineSnapshot(), playhead).has_value());
     actions_.setEnabled(QStringLiteral("editor.merge"), has_document_ && idle

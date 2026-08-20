@@ -82,14 +82,19 @@ bool AudioDocument::removeMarker(const std::size_t index)
 
 bool AudioDocument::moveEvent(const EventId id, const SampleFrame timelineStart)
 {
-    return timeline_.moveEvent(id, timelineStart);
+    const auto command = TimelineEditCommand::move(timeline_, id, timelineStart);
+    return command && history_.executeAndPush(
+        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_);
 }
 
 bool AudioDocument::trimEvent(const EventId id, const SampleFrame sourceStart,
                               const SampleFrame sourceEnd,
                               const SampleFrame timelineStart)
 {
-    return timeline_.trimEvent(id, sourceStart, sourceEnd, timelineStart);
+    const auto command = TimelineEditCommand::trim(
+        timeline_, id, sourceStart, sourceEnd, timelineStart);
+    return command && history_.executeAndPush(
+        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_);
 }
 
 bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
@@ -131,7 +136,7 @@ bool AudioDocument::splitEventAt(const EventId id, const SampleFrame frame)
 {
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     if (!splitAt(candidate, id, frame, next_event_id_)
-        || !timeline_.replace(std::move(candidate))) return false;
+        || !applyCandidate(std::move(candidate))) return false;
     ++next_event_id_;
     return true;
 }
@@ -171,7 +176,7 @@ bool AudioDocument::deleteSelection()
             const SampleFrame end = event.timelineStart + audibleFrames(event);
             return event.timelineStart >= selection_->start && end <= selection_->end;
         }), candidate.end());
-    if (candidate.size() == oldSize || !timeline_.replace(std::move(candidate))) return false;
+    if (candidate.size() == oldSize || !applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
     selection_.reset();
     return true;
@@ -199,7 +204,7 @@ bool AudioDocument::cutSelection()
             const SampleFrame end = event.timelineStart + audibleFrames(event);
             return event.timelineStart >= selection_->start && end <= selection_->end;
         }), candidate.end());
-    if (!timeline_.replace(std::move(candidate))) return false;
+    if (!applyCandidate(std::move(candidate))) return false;
     clipboard_ = copied;
     next_event_id_ = candidateId;
     selection_.reset();
@@ -222,7 +227,7 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
         clone.timelineStart = playhead + offset;
         candidate.push_back(std::move(clone));
     }
-    if (!timeline_.replace(std::move(candidate))) return false;
+    if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
     selection_.reset();
     return true;
@@ -259,7 +264,7 @@ bool AudioDocument::mergeEvents(const EventId leftId, const EventId rightId)
     }
     left->sourceEnd = right->sourceEnd;
     candidate.erase(right);
-    return timeline_.replace(std::move(candidate));
+    return applyCandidate(std::move(candidate));
 }
 
 bool AudioDocument::insertSource(AudioSource source, const SampleFrame timelineStart)
@@ -277,7 +282,7 @@ bool AudioDocument::insertSource(AudioSource source, const SampleFrame timelineS
     std::vector<AudioEvent> candidate = current.events;
     candidate.push_back(AudioEvent{next_event_id_, shared, 0, shared->total_frames,
                                    timelineStart});
-    if (!timeline_.replace(std::move(candidate))) return false;
+    if (!applyCandidate(std::move(candidate))) return false;
     ++next_event_id_;
     return true;
 }
@@ -285,6 +290,24 @@ bool AudioDocument::insertSource(AudioSource source, const SampleFrame timelineS
 SampleFrame AudioDocument::totalFrames() const noexcept
 {
     return timeline_.totalFrames();
+}
+
+bool AudioDocument::undo()
+{
+    return history_.undo(timeline_);
+}
+
+bool AudioDocument::redo()
+{
+    return history_.redo(timeline_);
+}
+
+bool AudioDocument::applyCandidate(std::vector<AudioEvent> candidate)
+{
+    auto command = TimelineEditCommand::fromCandidate(
+        timeline_, std::move(candidate));
+    return command && history_.executeAndPush(
+        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_);
 }
 
 } // namespace agplayer::editor

@@ -31,6 +31,8 @@ add_library(agplayer_qt STATIC
     src/audio_editor/audio_editor_waveform_item.hpp
     src/audio_editor/editor_viewport.cpp
     src/audio_editor/editor_viewport.hpp
+    src/audio_editor/project_document.cpp
+    src/audio_editor/project_document.hpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
     src/cache_janitor.cpp

@@ -1,0 +1,84 @@
+#pragma once
+
+#include "../../../core/src/audio_editor/audio_document.hpp"
+
+#include <QString>
+#include <QtGlobal>
+
+#include <memory>
+#include <vector>
+
+namespace agplayer::editor {
+
+struct ProjectExportSettings final {
+    QString codecName;
+    int sampleRate{};
+    int channels{};
+    qint64 bitRate{};
+    bool keepMetadata{true};
+    bool variableBitRate{true};
+    int quality{80};
+    QString outputDirectory;
+};
+
+struct ProjectSourceRecord final {
+    quint64 sourceId{};
+    std::shared_ptr<const AudioSource> source;
+    qint64 fileSize{-1};
+    qint64 lastModifiedUtcMs{-1};
+};
+
+enum class ProjectSourceIssueKind { Missing, IdentityMismatch };
+
+struct ProjectSourceIssue final {
+    ProjectSourceIssueKind kind{ProjectSourceIssueKind::Missing};
+    quint64 sourceId{};
+    QString path;
+    QString message;
+};
+
+struct ProjectSaveRequest final {
+    const AudioDocument* document{};
+    SampleFrame playheadFrame{};
+    SampleFrame visibleStartFrame{};
+    SampleFrame visibleEndFrame{};
+    ProjectExportSettings exportSettings;
+    const std::vector<ProjectSourceRecord>* sourceRecords{};
+};
+
+struct ProjectSaveResult final {
+    bool success{};
+    QString message;
+    [[nodiscard]] bool ok() const noexcept { return success; }
+};
+
+struct ProjectLoadResult final {
+    std::unique_ptr<AudioDocument> document;
+    std::vector<ProjectSourceRecord> sources;
+    std::vector<ProjectSourceIssue> issues;
+    SampleFrame playheadFrame{};
+    SampleFrame visibleStartFrame{};
+    SampleFrame visibleEndFrame{};
+    ProjectExportSettings exportSettings;
+    QString message;
+    [[nodiscard]] bool ok() const noexcept { return document != nullptr; }
+};
+
+struct ProjectRelinkResult final {
+    bool success{};
+    QString message;
+    [[nodiscard]] bool ok() const noexcept { return success; }
+};
+
+class ProjectDocument final {
+public:
+    [[nodiscard]] static constexpr int schemaVersion() noexcept { return 1; }
+    [[nodiscard]] static ProjectSaveResult save(
+        const QString& path, const ProjectSaveRequest& request);
+    [[nodiscard]] static ProjectLoadResult load(const QString& path);
+    [[nodiscard]] static ProjectRelinkResult relink(
+        AudioDocument& document, std::vector<ProjectSourceRecord>& sources,
+        quint64 sourceId, const QString& replacementPath);
+};
+
+} // namespace agplayer::editor

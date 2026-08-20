@@ -8,6 +8,8 @@ add_library(agplayer_core STATIC
     src/audio_editor/event_timeline.hpp
     src/audio_editor/timeline_edit_command.cpp
     src/audio_editor/timeline_edit_command.hpp
+    src/audio_editor/timeline_undo_stack.cpp
+    src/audio_editor/timeline_undo_stack.hpp
     src/audio_editor/document_renderer.cpp
     src/audio_editor/document_renderer.hpp
     src/audio_editor/document_writer.cpp

@@ -155,6 +155,22 @@ set_tests_properties(timeline_edit_command_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(timeline_undo_stack_test
+    core/timeline_undo_stack_test.cpp
+)
+set_target_properties(timeline_undo_stack_test PROPERTIES AUTOMOC ON)
+target_include_directories(timeline_undo_stack_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(timeline_undo_stack_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(timeline_undo_stack_test)
+add_test(NAME timeline_undo_stack_test COMMAND timeline_undo_stack_test)
+set_tests_properties(timeline_undo_stack_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
 add_executable(document_writer_test
     core/document_writer_test.cpp
 )
@@ -616,6 +632,26 @@ add_executable(audio_editor_controller_test
     qt/audio_editor_controller_test.cpp
 )
 
+add_executable(project_document_test
+    qt/project_document_test.cpp
+)
+set_target_properties(project_document_test PROPERTIES AUTOMOC ON)
+target_include_directories(project_document_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(project_document_test PRIVATE agplayer_qt Qt6::Test)
+agplayer_enable_warnings(project_document_test)
+add_dependencies(project_document_test decoder_fixture gapless_fixtures)
+add_test(NAME project_document_test COMMAND project_document_test)
+set_tests_properties(project_document_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT
+        "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE};AGPLAYER_EDITOR_MISMATCH_FIXTURE=${GAPLESS_B_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(qml_audio_editor_test
     qt/qml_audio_editor_test_main.cpp
 )
@@ -650,6 +686,7 @@ target_include_directories(audio_editor_controller_test PRIVATE
 )
 target_link_libraries(audio_editor_controller_test PRIVATE agplayer_qt Qt6::Test)
 agplayer_enable_warnings(audio_editor_controller_test)
+add_dependencies(audio_editor_controller_test decoder_fixture)
 add_test(NAME audio_editor_controller_test COMMAND audio_editor_controller_test)
 set_tests_properties(audio_editor_controller_test PROPERTIES
     TIMEOUT 30

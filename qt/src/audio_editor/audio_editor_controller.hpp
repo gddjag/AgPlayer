@@ -3,6 +3,7 @@
 #include "../../../core/src/audio_editor/audio_document.hpp"
 #include "editor_action_model.hpp"
 #include "editor_viewport.hpp"
+#include "project_document.hpp"
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
 #include "../../../core/src/audio_editor/recording_session.hpp"
 #include "../../../core/src/audio_editor/document_writer.hpp"
@@ -71,6 +72,9 @@ class AudioEditorController final : public QObject {
                    NOTIFY playbackChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
+    Q_PROPERTY(QVariantList projectIssues READ projectIssues NOTIFY projectChanged)
+    Q_PROPERTY(qint64 playheadFrame READ playheadFrame NOTIFY playbackChanged)
     Q_PROPERTY(double originalBpm READ originalBpm NOTIFY timePitchChanged)
     Q_PROPERTY(double targetBpm READ targetBpm NOTIFY timePitchChanged)
     Q_PROPERTY(double speedPercent READ speedPercent NOTIFY timePitchChanged)
@@ -131,6 +135,9 @@ public:
     [[nodiscard]] bool loopEnabled() const noexcept { return loop_enabled_; }
     [[nodiscard]] QString errorMessage() const { return error_message_; }
     [[nodiscard]] double progress() const noexcept { return progress_; }
+    [[nodiscard]] QString projectPath() const { return project_path_; }
+    [[nodiscard]] QVariantList projectIssues() const { return project_issues_; }
+    [[nodiscard]] qint64 playheadFrame() const noexcept { return playhead_frame_; }
     [[nodiscard]] double originalBpm() const noexcept { return time_pitch_.originalBpm(); }
     [[nodiscard]] double targetBpm() const noexcept { return time_pitch_.targetBpm(); }
     [[nodiscard]] double speedPercent() const noexcept { return time_pitch_.speedPercent(); }
@@ -165,6 +172,12 @@ public:
     Q_INVOKABLE void cancelDiscardAndOpen();
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(const QUrl& target);
+    Q_INVOKABLE bool saveProject(const QUrl& target);
+    Q_INVOKABLE bool saveProjectAs(const QUrl& target);
+    Q_INVOKABLE bool openProject(const QUrl& source);
+    Q_INVOKABLE bool relinkProjectSource(quint64 sourceId, const QUrl& replacement);
+    Q_INVOKABLE bool undo();
+    Q_INVOKABLE bool redo();
     Q_INVOKABLE bool exportTo(const QUrl& target, bool selectionOnly = false,
                               const QString& codecName = QString(),
                               int sampleRate = 0, int channels = 0,
@@ -182,6 +195,7 @@ public:
     Q_INVOKABLE bool playPause();
     Q_INVOKABLE bool stopPlayback();
     Q_INVOKABLE bool seekMs(qint64 value);
+    Q_INVOKABLE bool seekFrame(qint64 frame);
     Q_INVOKABLE void setVolume(double value);
     Q_INVOKABLE void setLoopEnabled(bool enabled);
     Q_INVOKABLE bool detectBpm();
@@ -213,12 +227,14 @@ signals:
     void playbackChanged();
     void errorMessageChanged();
     void progressChanged();
+    void projectChanged();
     void timePitchChanged();
     void recordingDevicesChanged();
     void recordingPreferencesChanged();
     void recordingChanged();
     void openRequested();
     void saveAsRequested();
+    void saveProjectAsRequested();
     void exportRequested();
     void newRecordingRequested();
     void discardConfirmationRequested();
@@ -250,6 +266,7 @@ private:
     QTimer playback_timer_;
     QTemporaryDir preview_directory_;
     QString source_path_;
+    QString project_path_;
     QString playback_path_;
     QUrl pending_open_url_;
     QString format_name_;
@@ -288,9 +305,13 @@ private:
     bool playing_{};
     bool loop_enabled_{};
     qint64 position_ms_{};
+    qint64 playhead_frame_{};
     double volume_{1.0};
     QString error_message_;
     double progress_{};
+    agplayer::editor::ProjectExportSettings project_export_settings_;
+    std::vector<agplayer::editor::ProjectSourceRecord> project_sources_;
+    QVariantList project_issues_;
     agplayer::editor::TimePitchSession time_pitch_;
     agplayer::editor::RecordingSession recording_session_;
     QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};

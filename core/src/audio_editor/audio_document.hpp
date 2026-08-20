@@ -1,6 +1,6 @@
 #pragma once
 
-#include "event_timeline.hpp"
+#include "timeline_undo_stack.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -50,9 +50,14 @@ public:
     bool pasteAt(SampleFrame playhead);
     bool mergeEvents(EventId left, EventId right);
     bool insertSource(AudioSource source, SampleFrame timelineStart);
+    bool undo();
+    bool redo();
+    void beginCoalescedEdit(EventId id) noexcept
+    { history_.beginCoalescedEdit(id); }
+    void endCoalescedEdit() noexcept { history_.endCoalescedEdit(); }
 
-    [[nodiscard]] bool canUndo() const noexcept { return false; }
-    [[nodiscard]] bool canRedo() const noexcept { return false; }
+    [[nodiscard]] bool canUndo() const noexcept { return history_.canUndo(); }
+    [[nodiscard]] bool canRedo() const noexcept { return history_.canRedo(); }
     [[nodiscard]] bool hasClipboard() const noexcept { return !clipboard_.empty(); }
     [[nodiscard]] SampleFrame totalFrames() const noexcept;
     [[nodiscard]] const std::vector<Marker>& markers() const noexcept
@@ -74,8 +79,10 @@ private:
     [[nodiscard]] static bool sameParameters(const AudioEvent& left,
                                              const AudioEvent& right) noexcept;
     [[nodiscard]] std::vector<AudioEvent> selectedEvents() const;
+    [[nodiscard]] bool applyCandidate(std::vector<AudioEvent> candidate);
 
     EventTimeline timeline_;
+    TimelineUndoStack history_;
     std::vector<Marker> markers_;
     std::optional<Selection> selection_;
     std::vector<AudioEvent> clipboard_;
