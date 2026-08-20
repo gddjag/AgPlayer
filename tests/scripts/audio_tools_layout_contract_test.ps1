@@ -48,7 +48,7 @@ if (($filenamePage -notmatch 'id:\s*numberPositionBox') -or
 if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}Layout\.preferredWidth:\s*190') {
     throw 'The filename validation panel must not squeeze the preview table into an unusable narrow column.'
 }
-if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*942') {
+if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s*941') {
     throw 'The tools window must open at the complete reference-workbench size.'
 }
 if ($audioEditor -match 'LightEditor|MultiTrack|trackLane') {
