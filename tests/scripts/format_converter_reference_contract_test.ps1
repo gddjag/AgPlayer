@@ -12,7 +12,9 @@ $combined = $page + "`n" + $table + "`n" + $settings
 foreach ($control in @(
     'formatToolbar', 'formatFilterButton', 'formatSelectAllCheck',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
-    'formatEncoderBox', 'formatOutputDirectoryRow', 'formatSummaryCard')) {
+    'formatEncoderBox', 'formatOutputDirectoryRow', 'formatSummaryCard',
+    'formatLocalProcessingHint', 'formatSettingsAdvancedToggle',
+    'formatTaskContextMenu')) {
     if ($combined -notmatch [regex]::Escape($control)) {
         throw "The reference format-conversion workbench is missing $control."
     }
@@ -26,4 +28,20 @@ if ($combined -notmatch 'model\.status\s*===\s*"Converting"') {
 }
 if ($combined -notmatch 'modelData\.available') {
     throw 'Output format buttons must still bind availability to the backend catalog.'
+}
+if ($page -notmatch 'SettingsController\.defaultOutputDirectory') {
+    throw 'The output directory must initialize from and persist through SettingsController.'
+}
+if ($page -notmatch 'plan\.error\s*\|\|\s*plan\.reason') {
+    throw 'Every preflight rejection must surface the backend reason.'
+}
+if ($combined -notmatch 'cancelTask\(' -or
+    $combined -notmatch 'copyText\(' -or
+    $combined -notmatch 'removeFile\(' -or
+    $combined -notmatch 'retryFailed\(') {
+    throw 'The task context menu must reuse real cancel, copy, and remove APIs.'
+}
+if ($page -match 'objectName:\s*"formatFooterParallelJobs"' -or
+    $page -match 'objectName:\s*"formatFooterOutputDirectory"') {
+    throw 'The reference footer must not expose parallel-jobs or output-directory controls.'
 }

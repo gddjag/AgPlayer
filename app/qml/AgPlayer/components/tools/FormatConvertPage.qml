@@ -11,7 +11,12 @@ Rectangle {
     focus: true
 
     property var converter: FormatConverter
-    property string outputDirectory: ""
+    property string outputDirectory: SettingsController.defaultOutputDirectory
+
+    onOutputDirectoryChanged: {
+        if (SettingsController.defaultOutputDirectory !== outputDirectory)
+            SettingsController.defaultOutputDirectory = outputDirectory
+    }
 
     function addCurrentPlayerTrack() {
         const urls = []
@@ -47,9 +52,10 @@ Rectangle {
         })
         if (plan.ready)
             preflightDialog.open()
-        else if (converter.checkedCount <= 0) {
-            errorDialog.summary = qsTr("请至少选择一个转换任务")
-            errorDialog.detail = qsTr("任务列表中没有已勾选的文件。")
+        else {
+            const reason = plan.error || plan.reason || qsTr("转换预检失败")
+            errorDialog.summary = reason
+            errorDialog.detail = reason
             errorDialog.open()
         }
     }
@@ -220,17 +226,19 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 converter: page.converter
+                settingsPanel: settingsPanel
             }
 
             FormatSettingsPanel {
                 id: settingsPanel
                 objectName: "formatSettingsPanel"
                 Layout.preferredWidth: 445
-                Layout.minimumWidth: 420
-                Layout.maximumWidth: 455
+                Layout.minimumWidth: settingsPanel.expanded ? 420 : 40
+                Layout.maximumWidth: settingsPanel.expanded ? 455 : 40
                 Layout.fillHeight: true
                 converter: page.converter
                 outputDirectory: page.outputDirectory
+                onOutputDirectoryEdited: function(directory) { page.outputDirectory = directory }
                 onChooseOutputDirectory: outputDialogComponent.createObject(page).open()
             }
         }
@@ -283,27 +291,6 @@ Rectangle {
 
                 Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: "#263b49" }
 
-                ComboBox {
-                    id: parallelBox
-                    objectName: "converterParallelJobsBox"
-                    Layout.preferredWidth: 160
-                    Layout.preferredHeight: 46
-                    model: [1, 2, 4]
-                    currentIndex: 2
-                    displayText: qsTr("并发  %1").arg(currentValue)
-                    onActivated: converter.parallelJobs = currentValue
-                }
-
-                Button {
-                    Layout.preferredWidth: 310
-                    Layout.preferredHeight: 46
-                    text: page.outputDirectory.length > 0
-                          ? qsTr("输出目录  %1").arg(page.outputDirectory)
-                          : qsTr("选择输出目录")
-                    icon.source: Theme.icon("folder-open-line")
-                    onClicked: outputDialogComponent.createObject(page).open()
-                }
-
                 Item { Layout.fillWidth: true }
 
                 Rectangle {
@@ -316,8 +303,10 @@ Rectangle {
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 18
-                        Text { text: qsTr("✓ 已完成 %1").arg(converter.completedCount); color: "#19c37d" }
-                        Text { text: qsTr("! 失败 %1").arg(converter.failedCount); color: "#ff4d4f" }
+                        ThemedIcon { source: Theme.icon("checkbox-blank-circle-fill"); tint: "#19c37d"; sourceSize.width: 18; sourceSize.height: 18 }
+                        Text { text: qsTr("已完成 %1").arg(converter.completedCount); color: "#19c37d" }
+                        ThemedIcon { source: Theme.icon("close-fill"); tint: "#ff4d4f"; sourceSize.width: 18; sourceSize.height: 18 }
+                        Text { text: qsTr("失败 %1").arg(converter.failedCount); color: "#ff4d4f" }
                     }
                 }
 
@@ -327,10 +316,15 @@ Rectangle {
                     Layout.preferredWidth: 174
                     Layout.preferredHeight: 68
                     enabled: converter.checkedCount > 0 && !converter.busy
-                    text: qsTr("▶  开始处理")
+                    text: qsTr("开始处理")
+                    icon.source: Theme.icon("play-fill")
                     onClicked: page.requestPlan()
                     background: Rectangle { color: parent.enabled ? "#087cf0" : "#23313b"; radius: 6 }
-                    contentItem: Text { text: parent.text; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 17 }
+                    contentItem: RowLayout {
+                        spacing: 10
+                        ThemedIcon { source: parent.parent.icon.source; tint: "white"; sourceSize.width: 22; sourceSize.height: 22 }
+                        Text { text: parent.parent.text; color: "white"; font.pixelSize: 17 }
+                    }
                 }
 
                 Button {
@@ -338,7 +332,8 @@ Rectangle {
                     Layout.preferredWidth: 168
                     Layout.preferredHeight: 68
                     enabled: converter.busy
-                    text: qsTr("■  取消全部")
+                    text: qsTr("取消全部")
+                    icon.source: Theme.icon("close-fill")
                     onClicked: converter.cancelAll()
                 }
             }
@@ -378,6 +373,14 @@ Rectangle {
             errorDialog.summary = message
             errorDialog.detail = message
             errorDialog.open()
+        }
+    }
+
+    Connections {
+        target: SettingsController
+        function onDefaultOutputDirectoryChanged() {
+            if (page.outputDirectory !== SettingsController.defaultOutputDirectory)
+                page.outputDirectory = SettingsController.defaultOutputDirectory
         }
     }
 }
