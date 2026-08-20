@@ -3,6 +3,7 @@
 
 #include <QtTest>
 
+#include <limits>
 #include <memory>
 
 using namespace agplayer::editor;
@@ -23,6 +24,23 @@ private:
                             const SampleFrame source_end)
     {
         return {id, source(), source_start, source_end, timeline_start};
+    }
+
+    static void compareRetainedState(const TimelineSnapshot& before,
+                                     const TimelineSnapshot& after)
+    {
+        QCOMPARE(after.totalFrames, before.totalFrames);
+        QCOMPARE(after.revision, before.revision);
+        QCOMPARE(after.events.size(), before.events.size());
+        for (std::size_t index = 0; index < before.events.size(); ++index) {
+            QCOMPARE(after.events.at(index).id, before.events.at(index).id);
+            QCOMPARE(after.events.at(index).sourceStart,
+                     before.events.at(index).sourceStart);
+            QCOMPARE(after.events.at(index).sourceEnd,
+                     before.events.at(index).sourceEnd);
+            QCOMPARE(after.events.at(index).timelineStart,
+                     before.events.at(index).timelineStart);
+        }
     }
 
 private slots:
@@ -65,6 +83,26 @@ private slots:
         QCOMPARE(timeline.snapshot().events.size(), before.events.size());
         QCOMPARE(timeline.event(1)->timelineStart, SampleFrame{100});
         QVERIFY(timeline.event(2) == nullptr);
+    }
+
+    void rejectedInvalidAndOverflowEventsLeaveStateUnchanged()
+    {
+        EventTimeline timeline;
+        QVERIFY(timeline.insert(event(1, 100, 0, 100)));
+
+        const TimelineSnapshot before_invalid = timeline.snapshot();
+        AudioEvent invalid = event(2, 300, 0, 100);
+        invalid.sourceEnd = invalid.sourceStart;
+        QVERIFY(!timeline.insert(invalid));
+        compareRetainedState(before_invalid, timeline.snapshot());
+
+        const TimelineSnapshot before_overflow = timeline.snapshot();
+        const auto large_source = std::make_shared<const AudioSource>(AudioSource{
+            "large.wav", 48'000, 2, std::numeric_limits<SampleFrame>::max()});
+        const AudioEvent overflow{3, large_source, 0, 100,
+                                  std::numeric_limits<SampleFrame>::max() - 50};
+        QVERIFY(!timeline.insert(overflow));
+        compareRetainedState(before_overflow, timeline.snapshot());
     }
 
     void singleEventSnapshotAdaptsToTheLegacyRenderInput()

@@ -23,9 +23,21 @@ private slots:
                        "fixture.wav", sample_rate, 2, two_hours}),
                 0, two_hours, 0}));
 
-            TimePixelMapper mapper{timeline.snapshot(), 3'840.0, 64.0};
-            for (const SampleFrame frame : {0LL, 1LL, two_hours / 2,
-                                             two_hours - 1}) {
+            TimePixelMapper mapper{timeline.snapshot(), 3'841.5, 73.25};
+            mapper.setVisibleStart(two_hours / 3 + 17);
+            const Selection middle = mapper.visibleFrameRange();
+            QVERIFY(middle.start > 0);
+            for (const SampleFrame frame : {middle.start, middle.start + 1,
+                                             middle.end - 1, middle.end}) {
+                const double pixel = mapper.frameToPixel(frame);
+                QVERIFY(std::llabs(mapper.pixelToFrame(pixel) - frame) <= 1);
+            }
+
+            mapper.setVisibleStart(two_hours);
+            const Selection final = mapper.visibleFrameRange();
+            QVERIFY(final.start > 0);
+            QCOMPARE(final.end, two_hours);
+            for (const SampleFrame frame : {two_hours - 1, two_hours}) {
                 const double pixel = mapper.frameToPixel(frame);
                 QVERIFY(std::llabs(mapper.pixelToFrame(pixel) - frame) <= 1);
             }

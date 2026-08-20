@@ -159,6 +159,24 @@ set_tests_properties(time_pitch_session_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(timeline_snapshot_compatibility_test
+    core/timeline_snapshot_compatibility_test.cpp
+)
+add_dependencies(timeline_snapshot_compatibility_test decoder_fixture)
+target_include_directories(timeline_snapshot_compatibility_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(timeline_snapshot_compatibility_test PRIVATE agplayer_core)
+agplayer_enable_warnings(timeline_snapshot_compatibility_test)
+add_test(NAME timeline_snapshot_compatibility_test
+    COMMAND timeline_snapshot_compatibility_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(timeline_snapshot_compatibility_test PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(recording_session_test
     core/recording_session_test.cpp
 )
