@@ -169,9 +169,24 @@ private:
 
     static QString statusString(FileStatus status);
 
+    struct AudioStreamSnapshot {
+        int streamIndex = -1;
+        QString codec;
+        QString language;
+        QString title;
+        bool isDefault = false;
+        int sampleRate = 0;
+        QString sampleFormat;
+        QString channelLayout;
+        qint64 bitRate = 0;
+        qint64 durationMs = 0;
+    };
+
     struct FileEntry {
         QString taskId;
+        QString importInstanceId;
         QString path;
+        QString canonicalPath;
         QString importRoot;
         QString fileName;
         QString format;
@@ -183,8 +198,28 @@ private:
         double progress = 0.0;
         QString outputFormat;
         QString outputPath;
+        qint64 sourceLastModifiedMs = 0;
+        QString probeContainer;
+        QString probeError;
+        QVector<AudioStreamSnapshot> audioStreams;
+        bool probeIsVideo = false;
+        bool probeHasCover = false;
         FileStatus status = FileStatus::Waiting;
         QString errorMessage;
+    };
+
+    struct FrozenConversionJob {
+        QString taskId;
+        QString importInstanceId;
+        QString inputPath;
+        QString canonicalPath;
+        QString importRoot;
+        QString outputPath;
+        qint64 sourceSize = 0;
+        qint64 sourceLastModifiedMs = 0;
+        QVariantMap resolvedProfile;
+        bool skipped = false;
+        bool overwriteExisting = false;
     };
 
     mutable QMutex mutex_;
@@ -211,7 +246,7 @@ private:
     FormatConversionFilterModel* filteredTaskModel_ = nullptr;
     QVariantMap pendingPlan_;
     QVariantMap pendingRequest_;
-    QVector<QString> pendingTaskIds_;
+    QVector<FrozenConversionJob> pendingJobs_;
     QString selectedFormat_ = QStringLiteral("mp3");
 
     void setBusy(bool value);
@@ -245,7 +280,7 @@ private:
                    const QString& channelLayout = {},
                    int audioStreamIndex = -1,
                    bool preserveDirectories = false,
-                   int quality = 75);
+                   const QVector<FrozenConversionJob>& plannedJobs = {});
 
     // Bounded parallel transcode worker. Runs in a background thread.
     void runTranscode(const QString& outputFormat,
@@ -255,12 +290,12 @@ private:
                       const QString& outputDir,
                       bool keepMetadata,
                       bool volumeNormalize,
-                   bool extractAudio,
-                   bool overwriteExisting,
-                   const QString& bitrateMode,
-                   const QString& conflictPolicy,
-                   const QVariantMap& metadataFields,
-                   const QByteArray& metadataCoverData,
+                      bool extractAudio,
+                      bool overwriteExisting,
+                      const QString& bitrateMode,
+                      const QString& conflictPolicy,
+                      const QVariantMap& metadataFields,
+                      const QByteArray& metadataCoverData,
                       const QString& metadataCoverMime,
                       const QVector<int>& jobIndices,
                       bool keepCover,
@@ -268,5 +303,5 @@ private:
                       const QString& channelLayout,
                       int audioStreamIndex,
                       bool preserveDirectories,
-                      int quality);
+                      const QVector<FrozenConversionJob>& plannedJobs);
 };
