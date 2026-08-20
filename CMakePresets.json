@@ -5,6 +5,9 @@
       "name": "windows-msvc-debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/debug",
+      "environment": {
+        "VSLANG": "1033"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake",
@@ -17,6 +20,9 @@
       "name": "windows-msvc-release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
+      "environment": {
+        "VSLANG": "1033"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake",
