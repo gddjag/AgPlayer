@@ -40,6 +40,7 @@ if ($settings -notmatch 'objectName:\s*"formatLocalProcessingHint"[\s\S]*?Layout
 }
 if ($settings -notmatch 'objectName:\s*"formatOutputFormatGrid"[\s\S]*?Layout\.preferredWidth:\s*384' -or
     $settings -notmatch 'objectName:\s*"formatOutputFormatButton-"\s*\+\s*modelData\.key' -or
+    $settings -notmatch 'Layout\.minimumWidth:\s*0[\s\S]*?Layout\.preferredWidth:\s*90[\s\S]*?Layout\.maximumWidth:\s*90' -or
     $settings -notmatch 'columnSpacing:\s*8') {
     throw 'The output format grid must retain the 384px four-column reference geometry.'
 }

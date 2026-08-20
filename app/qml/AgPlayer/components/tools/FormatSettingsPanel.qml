@@ -96,6 +96,9 @@ Rectangle {
                         Button {
                             objectName: "formatOutputFormatButton-" + modelData.key
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            Layout.preferredWidth: 90
+                            Layout.maximumWidth: 90
                             Layout.preferredHeight: 32
                             enabled: modelData.available
                             text: modelData.label
