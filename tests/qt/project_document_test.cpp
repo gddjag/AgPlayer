@@ -729,6 +729,73 @@ private slots:
         QCOMPARE(emptyReloaded.document->markers(), empty.document.markers());
     }
 
+    void rejectsOversizedProjectBeforeJsonParsing()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString path = temporary.filePath(QStringLiteral("oversized.agproj"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.resize(16LL * 1024LL * 1024LL + 1LL));
+        file.close();
+
+        const ProjectLoadResult loaded = ProjectDocument::load(path);
+
+        QVERIFY(!loaded.ok());
+        QCOMPARE(loaded.message, QStringLiteral("project resource limit exceeded"));
+    }
+
+    void rejectsOversizedProjectCollectionsBeforeDomainAllocation_data()
+    {
+        QTest::addColumn<QString>("collection");
+        QTest::newRow("sources") << QStringLiteral("sources");
+        QTest::newRow("events") << QStringLiteral("events");
+        QTest::newRow("markers") << QStringLiteral("markers");
+    }
+
+    void rejectsOversizedProjectCollectionsBeforeDomainAllocation()
+    {
+        QFETCH(QString, collection);
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray oversized;
+        for (int index = 0; index < 4'097; ++index) {
+            oversized.append(QJsonObject{});
+        }
+        root.insert(collection, oversized);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+
+        QVERIFY(!loaded.ok());
+        QCOMPARE(loaded.message, QStringLiteral("project resource limit exceeded"));
+    }
+
+    void rejectsExcessiveEnvelopePointsBeforeEventAllocation()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray envelope;
+        for (int index = 0; index < 64; ++index) envelope.append(0);
+        QJsonArray events;
+        for (int index = 0; index < 1'025; ++index) {
+            events.append(QJsonObject{{QStringLiteral("envelope"), envelope}});
+        }
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+
+        QVERIFY(!loaded.ok());
+        QCOMPARE(loaded.message, QStringLiteral("project resource limit exceeded"));
+    }
+
 };
 
 QTEST_APPLESS_MAIN(ProjectDocumentTest)

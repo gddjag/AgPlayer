@@ -269,7 +269,10 @@ private:
     void setProgress(double value);
     void markProjectClean() noexcept;
     void markProjectDirty() noexcept;
-    void syncModifiedFromHistory() noexcept;
+    [[nodiscard]] bool syncModifiedFromHistory() noexcept;
+    void finishTimelineMutation();
+    void syncProjectSourcesAndIssues();
+    void setViewportDocumentFrames(qint64 frames) noexcept;
     [[nodiscard]] bool projectSourcesOnline() const noexcept;
     bool requireOnlineProjectSources();
     void syncPrimarySourceSummary();
@@ -291,6 +294,7 @@ private:
     QString playback_path_;
     QUrl pending_open_url_;
     bool pending_open_is_project_{};
+    bool pending_clear_document_{};
     QString format_name_;
     int sample_rate_{};
     int channels_{};
@@ -334,6 +338,7 @@ private:
     agplayer::editor::ProjectExportSettings project_export_settings_;
     std::vector<agplayer::editor::ProjectSourceRecord> project_sources_;
     QVariantList project_issues_;
+    QVariantList known_project_issues_;
     agplayer::editor::TimePitchSession time_pitch_;
     agplayer::editor::RecordingSession recording_session_;
     QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};
@@ -355,7 +360,16 @@ private:
     bool insert_recording_at_cursor_{};
     bool time_pitch_preview_active_{};
     bool allow_document_replace_{};
+    bool suppress_persisted_state_tracking_{};
+    bool viewport_persisted_dirty_{};
+    bool playhead_persisted_dirty_{};
+    bool forced_project_dirty_{};
     std::optional<std::uint64_t> saved_history_state_;
+    std::optional<agplayer::editor::Selection> saved_selection_;
+    qint64 saved_playhead_frame_{};
+    qint64 saved_visible_start_frame_{};
+    qint64 saved_visible_end_frame_{};
+    agplayer::editor::ProjectExportSettings saved_export_settings_;
     qint64 recording_insert_frame_{};
     QPointer<PlaybackController> main_playback_;
     std::atomic_uint64_t preview_generation_{0};

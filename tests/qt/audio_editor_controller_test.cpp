@@ -118,6 +118,7 @@ private slots:
         QVERIFY(splitFrame > 0);
         QVERIFY(controller.splitEvent(1, splitFrame));
         QVERIFY(controller.viewport()->setVisibleRange(splitFrame, originalFrames));
+        QVERIFY(controller.seekFrame(originalFrames));
         QVERIFY(controller.setSelection(splitFrame, originalFrames));
         const QVariantList sourcePeaks = controller.channelPeaks();
         QSignalSpy stateChanges(&controller, &AudioEditorController::stateChanged);
@@ -126,6 +127,8 @@ private slots:
         QCOMPARE(controller.totalFrames(), splitFrame);
         QCOMPARE(controller.viewport()->documentFrames(), splitFrame);
         QVERIFY(controller.viewport()->visibleEndFrame() <= splitFrame);
+        QCOMPARE(controller.playheadFrame(), splitFrame);
+        QCOMPARE(controller.positionMs(), controller.durationMs());
         QCOMPARE(controller.channelPeaks(), sourcePeaks);
         QCOMPARE(stateChanges.count(), 0);
 
@@ -137,6 +140,35 @@ private slots:
         QCOMPARE(controller.state(), EditorSessionState::Ready);
         QCOMPARE(stateChanges.count(), 0);
         QCOMPARE(controller.channelPeaks(), sourcePeaks);
+    }
+
+    void undoThatShrinksTimelineClampsPlayheadAndViewportBeforeSave()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("undo-shrink.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        const qint64 originalFrames = controller.totalFrames();
+        QVERIFY(controller.moveEvent(1, originalFrames / 2));
+        const qint64 expandedFrames = controller.totalFrames();
+        QVERIFY(expandedFrames > originalFrames);
+        QVERIFY(controller.viewport()->setVisibleRange(originalFrames, expandedFrames));
+        QVERIFY(controller.seekFrame(expandedFrames));
+
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.totalFrames(), originalFrames);
+        QCOMPARE(controller.viewport()->documentFrames(), originalFrames);
+        QVERIFY(controller.viewport()->visibleEndFrame() <= originalFrames);
+        QCOMPARE(controller.playheadFrame(), originalFrames);
+        QCOMPARE(controller.positionMs(), controller.durationMs());
+        QVERIFY2(controller.saveProjectAs(QUrl::fromLocalFile(project)),
+                 qPrintable(controller.errorMessage()));
     }
 
     void clearingTimelinePublishesZeroViewport()
@@ -184,12 +216,43 @@ private slots:
 
         QVERIFY(controller.triggerAction(QStringLiteral("editor.undo")));
         QCOMPARE(controller.totalFrames(), qint64{1'000});
-        QVERIFY(!controller.modified());
+        QVERIFY(controller.modified());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.redo")));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.redo")));
         QCOMPARE(controller.totalFrames(), qint64{800});
         QVERIFY(controller.modified());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.undo")));
+    }
+
+    void undoToSavedTimelineStaysDirtyWhenPersistedViewWasClamped()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("clamped-state.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        const qint64 total = controller.totalFrames();
+        const qint64 split = total / 2;
+        QVERIFY(controller.splitEvent(1, split));
+        QVERIFY(controller.viewport()->setVisibleRange(split, total));
+        QVERIFY(controller.seekFrame(total));
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+        QVERIFY(!controller.modified());
+
+        QVERIFY(controller.setSelection(split, total));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        QCOMPARE(controller.playheadFrame(), split);
+        QCOMPARE(controller.viewport()->visibleEndFrame(), split);
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.totalFrames(), total);
+        QCOMPARE(controller.playheadFrame(), split);
+        QVERIFY(controller.viewport()->visibleEndFrame() < total);
+        QVERIFY(controller.modified());
     }
 
     void saveAndOpenProjectRoundTripsControllerStateWithoutRendering()
@@ -480,6 +543,149 @@ private slots:
         QVERIFY(controller.confirmDiscardAndOpen());
         QCOMPARE(controller.projectPath(), QFileInfo(project).absoluteFilePath());
         QVERIFY(!controller.modified());
+    }
+
+    void modifiedClearUsesDiscardConfirmationBeforeReplacement()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(controller.trimEvent(1, 100, 900, 0));
+        const qint64 changedFrames = controller.totalFrames();
+        const qint64 playhead = controller.playheadFrame();
+        QSignalSpy requested(&controller,
+                             &AudioEditorController::discardConfirmationRequested);
+
+        QVERIFY(!controller.clearDocument());
+        QCOMPARE(requested.count(), 1);
+        QVERIFY(controller.hasDocument());
+        QCOMPARE(controller.totalFrames(), changedFrames);
+        QCOMPARE(controller.playheadFrame(), playhead);
+        QVERIFY(controller.modified());
+
+        controller.cancelDiscardAndOpen();
+        QVERIFY(controller.hasDocument());
+        QVERIFY(!controller.clearDocument());
+        QCOMPARE(requested.count(), 2);
+        QVERIFY(controller.confirmDiscardAndOpen());
+        QVERIFY(!controller.hasDocument());
+        QCOMPARE(controller.totalFrames(), qint64{0});
+        QVERIFY(!controller.modified());
+    }
+
+    void persistedEditorStateTracksDirtyAgainstTheSavepoint()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("state.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        controller.viewport()->setViewportWidth(512.0);
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+        QVERIFY(!controller.modified());
+
+        QVERIFY(controller.setSelection(10, 100));
+        QVERIFY(controller.modified());
+        QVERIFY(controller.save());
+        QVERIFY(!controller.modified());
+        QVERIFY(controller.clearSelection());
+        QVERIFY(controller.modified());
+        QVERIFY(controller.setSelection(10, 100));
+        QVERIFY(!controller.modified());
+
+        QVERIFY(controller.seekFrame(123));
+        QVERIFY(controller.modified());
+        QVERIFY(controller.save());
+        QVERIFY(!controller.modified());
+        QVERIFY(controller.seekFrame(456));
+        QVERIFY(controller.modified());
+        QVERIFY(controller.seekFrame(123));
+        QVERIFY(!controller.modified());
+
+        const qint64 firstEnd = qMin<qint64>(controller.totalFrames(), 10'000);
+        const qint64 secondEnd = qMin<qint64>(controller.totalFrames(), 20'000);
+        QVERIFY(firstEnd > 100);
+        QVERIFY(secondEnd > firstEnd);
+        QVERIFY(controller.viewport()->setVisibleRange(100, firstEnd));
+        QVERIFY(controller.modified());
+        QVERIFY(controller.save());
+        QVERIFY(!controller.modified());
+        QVERIFY(controller.viewport()->setVisibleRange(200, secondEnd));
+        QVERIFY(controller.modified());
+        QVERIFY(controller.viewport()->setVisibleRange(100, firstEnd));
+        QVERIFY(!controller.modified());
+    }
+
+    void offlineGateTracksOnlySourcesReferencedByTheCurrentTimeline()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString firstSource = temporary.filePath(QStringLiteral("first.wav"));
+        const QString secondSource = temporary.filePath(QStringLiteral("second.wav"));
+        const QString project = temporary.filePath(QStringLiteral("two-sources.agproj"));
+        QVERIFY(QFile::copy(fixture, firstSource));
+        QVERIFY(QFile::copy(fixture, secondSource));
+
+        AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(maker.openFile(QUrl::fromLocalFile(firstSource)));
+        const qint64 total = maker.totalFrames();
+        const qint64 split = total / 2;
+        QVERIFY(split > 0);
+        QVERIFY(maker.splitEvent(1, split));
+        QVERIFY(maker.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        QFile projectFile(project);
+        QVERIFY(projectFile.open(QIODevice::ReadOnly));
+        QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
+        projectFile.close();
+        QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+        QCOMPARE(sources.size(), 1);
+        QJsonObject secondRecord = sources.at(0).toObject();
+        secondRecord.insert(QStringLiteral("sourceId"), QStringLiteral("2"));
+        secondRecord.insert(QStringLiteral("pathKind"), QStringLiteral("relative"));
+        secondRecord.insert(QStringLiteral("path"), QStringLiteral("second.wav"));
+        const QFileInfo secondInfo(secondSource);
+        secondRecord.insert(QStringLiteral("fileSize"),
+                            QString::number(secondInfo.size()));
+        secondRecord.insert(QStringLiteral("lastModifiedUtcMs"),
+                            QString::number(secondInfo.lastModified().toUTC().toMSecsSinceEpoch()));
+        sources.append(secondRecord);
+        root.insert(QStringLiteral("sources"), sources);
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QCOMPARE(events.size(), 2);
+        QJsonObject secondEvent = events.at(1).toObject();
+        secondEvent.insert(QStringLiteral("sourceId"), QStringLiteral("2"));
+        events.replace(1, secondEvent);
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(projectFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(projectFile.write(QJsonDocument(root).toJson()) > 0);
+        projectFile.close();
+        QVERIFY(QFile::remove(secondSource));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(controller.openProject(QUrl::fromLocalFile(project)),
+                 qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.projectIssues().size(), 1);
+        QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
+
+        QVERIFY(controller.setSelection(split, total));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        QVERIFY(controller.projectIssues().isEmpty());
+        QVERIFY(controller.actionEnabled(QStringLiteral("editor.export")));
+        QVERIFY2(controller.save(), qPrintable(controller.errorMessage()));
+        QVERIFY(!controller.modified());
+
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.projectIssues().size(), 1);
+        QCOMPARE(controller.projectIssues().constFirst().toMap()
+                     .value(QStringLiteral("sourceId")).toULongLong(), quint64{2});
+        QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
     }
 
     void redoBackToSavedHistoryPointClearsDirtyState()

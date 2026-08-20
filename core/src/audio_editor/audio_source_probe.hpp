@@ -2,6 +2,7 @@
 
 #include "audio_event.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <string>
 
@@ -9,6 +10,7 @@ namespace agplayer::editor {
 
 struct AudioSourceProbeResult final {
     bool success{};
+    bool timed_out{};
     AudioSource source;
     SampleFrame frame_tolerance{};
     std::string message;
@@ -21,6 +23,9 @@ class AudioSourceProbe final {
 public:
     [[nodiscard]] static AudioSourceProbeResult probe(
         const std::filesystem::path& path) noexcept;
+    [[nodiscard]] static AudioSourceProbeResult probe(
+        const std::filesystem::path& path,
+        std::chrono::steady_clock::time_point deadline) noexcept;
 };
 
 } // namespace agplayer::editor

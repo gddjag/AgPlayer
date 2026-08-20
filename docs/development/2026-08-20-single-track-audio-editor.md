@@ -179,3 +179,79 @@ ctest --test-dir build/debug -R "^(timeline_edit_command_test|audio_editor_contr
   或 Peak 构建；碰撞和 stale execute/undo 都以完整快照与 revision 验证事务回滚。
 - Phase 4 的首要门槛是迁移 Document/Controller 的所有调用方至单一 EventTimeline
   真源，然后才能公开 Move/Trim UI 或控制器入口；在此之前控制器测试仅作为既有回归。
+
+## Phase 5 — 差量 Undo/Redo 与轻量 `.agproj`（2026-08-20）
+
+### 需求追踪
+
+- `P5-HIST-01`（规格 6 / 17.5，Task 5 ruling 1–5）：`AudioDocument` 持有唯一
+  `EventTimeline` 与有界历史；命令只保留受影响 Event 元数据，默认 256 条 / 1 MiB，
+  支持失败事务、Redo 失效、最旧优先淘汰及显式 Move/Trim 手势合并。
+- `P5-PROJ-01`（规格 13，Task 5 ruling 6–7）：schema v1 通过 `QSaveFile`
+  原子保存 Source、Event、Marker、Selection、Playhead、Viewport 与 Export Settings；
+  64 位整数使用十进制字符串，不保存 PCM、Peak、Decoded、Render、Cache、Handoff、
+  Clipboard 或临时路径。
+- `P5-PROJ-02`（Task 5 ruling 8–9）：加载先完整验证再替换活动文档；相对路径同时做
+  词法与 canonical/junction 边界检查；Missing/IdentityMismatch 保持离线，完成 Relink
+  前禁止播放和导出；保存点、Undo/Redo 与非历史工程状态共同决定 `modified`。
+- `P5-PROJ-03`（轻量性与输入稳健性）：工程 JSON 最大 16 MiB；Sources、Events、
+  Markers 各最多 4096；Envelope 总点数最多 65536，单 Event 仍受 64 点域上限约束。
+  文件大小先于 `QJsonDocument` 分配检查，集合与 Envelope 预检先于 Source/Event 域对象
+  分配及媒体 probe。单独 probe 默认 2 秒；工程加载的全部 probe 共享 5 秒绝对 deadline，
+  FFmpeg interrupt callback 可中断单个超时源。
+- `P5-CTRL-01`（Task 5 ruling 9–10）：Controller 提供工程保存/打开/Relink、Undo/Redo、
+  dirty、Playhead 与 Viewport seam；工程保存不进入音频编码路径；本阶段不改 QML。
+
+### 提交与关键文件
+
+- `b52a41c` `feat(editor): add bounded undo and agproj persistence`：
+  `timeline_undo_stack.*`、`timeline_edit_command.*`、`audio_document.*`、
+  `project_document.*`、Controller 与三组 Phase 5 测试。
+- `a5071d1` `fix(editor): close project persistence review gaps`：稳定 Source ID、
+  Source identity、保存点 dirty、Discard gate、Export Settings seam 与旧 `saveAs` 合同。
+- `ae3a0fc` `fix(editor): harden project validation and viewport sync`：
+  `audio_source_probe.*`、Project 验证、尾部删除/剪切后的 Viewport 同步及空工程状态。
+- `a0086f8` `fix(editor): enforce project offline and state invariants`：canonical 路径边界、
+  unresolved Source 媒体门禁，以及非历史工程状态保存点。
+- 最终门禁修复集（本次提交）：`audio_source_probe.*`、`timeline_edit_command.cpp`、
+  `project_document.cpp`、Controller、对应四组测试与本记录。它加入工程资源预算、
+  Move/Trim 单 Event 热路径、持久状态 savepoint、modified clear gate 及当前引用源离线门禁；
+  未新增线程、运行时依赖或 QML 修改。
+
+### TDD RED / GREEN 与验证证据
+
+**RED（资源预算实现前）**
+
+- Release `project_document_test` 成功编译，但 CTest 为 `0/1`，测试进程退出码 5；新增的
+  超大文件、Sources、Events、Markers 与 Envelope 总量五类输入均未得到资源上限错误。
+- Release `audio_source_probe_test` 构建按预期失败：C2660（缺少 deadline 重载）与
+  C2039（缺少 `timed_out` 结果字段）。
+
+**GREEN（本轮聚焦范围）**
+
+```powershell
+cmake --build build/release --target project_document_test audio_source_probe_test --parallel 4
+ctest --test-dir build/release -R "^(project_document_test|audio_source_probe_test)$" --output-on-failure
+# 2/2 passed（最终复跑：project 1.03 s，probe 0.05 s）
+
+cmake --build build/debug --target project_document_test audio_source_probe_test --parallel 4
+ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test)$" --output-on-failure
+# 2/2 passed（最终复跑：project 1.47 s，probe 0.05 s）
+```
+
+- 稳定共享树最终验证：Phase 5 聚焦矩阵 Release `7/7`（3.88 s）、Debug `7/7`
+  （6.30 s）；完整构建 Release `337/337`、Debug `71/71`，均 exit 0。Release 构建仍出现
+  仓库既有的 `premature end of file; recovering` 警告，随后完整重建并链接成功。
+- Release `AgPlayer.exe --qa-test-mode` 以隐藏窗口启动，精确工作树路径的进程保持存活
+  5 秒，再按 PID 停止。这只是启动/部署 smoke，不是 UI、音频或硬件验收。
+
+### 未验证项、验收边界与回退点
+
+- 未运行完整 CTest、真实 `.agproj` 多源长延迟/网络源矩阵、UI 交互、真实播放/导出、
+  音频硬件或完整 Phase 5 acceptance；上述 7/7 聚焦测试、双配置完整构建和启动 smoke
+  不代表完整产品验收。
+- 5 秒工程预算已由共享绝对 deadline 与 FFmpeg interrupt callback 实现；真实慢盘、
+  UNC、损坏大媒体上的墙钟上界仍需独立系统测试。`QFileInfo` 等文件系统元数据调用不受
+  FFmpeg callback 中断。
+- 最终门禁修复集的回退点为 `a0086f8`；若回退本次提交，会同时移除资源预算、共享 probe
+  deadline、Move/Trim 热路径、persisted-state dirty、modified clear gate 与引用源 issue 同步。

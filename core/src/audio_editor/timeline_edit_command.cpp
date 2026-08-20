@@ -106,6 +106,25 @@ bool TimelineEditCommand::apply(EventTimeline& timeline,
                                 const std::vector<AudioEvent>& expected,
                                 const std::vector<AudioEvent>& replacement) const
 {
+    if (kind_ == Kind::Move || kind_ == Kind::Trim) {
+        if (expected.size() != 1 || replacement.size() != 1
+            || expected.front().id != replacement.front().id) {
+            return false;
+        }
+        const AudioEvent* const current = timeline.event(expected.front().id);
+        if (!current || !sameEvent(*current, expected.front())) {
+            return false;
+        }
+        if (kind_ == Kind::Move) {
+            return timeline.moveEvent(replacement.front().id,
+                                      replacement.front().timelineStart);
+        }
+        return timeline.trimEvent(replacement.front().id,
+                                  replacement.front().sourceStart,
+                                  replacement.front().sourceEnd,
+                                  replacement.front().timelineStart);
+    }
+
     const TimelineSnapshot snapshot = timeline.snapshot();
     for (const AudioEvent& event : expected) {
         const AudioEvent* const current = timeline.event(event.id);

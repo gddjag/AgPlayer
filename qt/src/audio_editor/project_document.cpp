@@ -12,6 +12,7 @@
 #include <QSaveFile>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <limits>
@@ -30,6 +31,14 @@ bool isValidProjectExportSettings(const ProjectExportSettings& settings) noexcep
 }
 
 namespace {
+
+constexpr qint64 kMaxProjectJsonBytes = 16LL * 1024LL * 1024LL;
+constexpr qsizetype kMaxProjectSources = 4'096;
+constexpr qsizetype kMaxProjectEvents = 4'096;
+constexpr qsizetype kMaxProjectMarkers = 4'096;
+constexpr qsizetype kMaxProjectEnvelopePoints = 65'536;
+constexpr auto kProjectProbeBudget = std::chrono::seconds(5);
+constexpr auto kResourceLimitMessage = "project resource limit exceeded";
 
 QString toQString(const std::filesystem::path& path)
 {
@@ -233,6 +242,30 @@ bool parseExport(const QJsonValue& value, ProjectExportSettings& output)
     return true;
 }
 
+bool exceedsProjectResourceLimits(const QJsonObject& root)
+{
+    const QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+    const QJsonArray events = root.value(QStringLiteral("events")).toArray();
+    const QJsonArray markers = root.value(QStringLiteral("markers")).toArray();
+    if (sources.size() > kMaxProjectSources || events.size() > kMaxProjectEvents
+        || markers.size() > kMaxProjectMarkers) {
+        return true;
+    }
+    qsizetype envelopePoints = 0;
+    for (const QJsonValue& value : events) {
+        if (!value.isObject()) continue;
+        const QJsonValue envelope = value.toObject().value(QStringLiteral("envelope"));
+        if (!envelope.isArray()) continue;
+        const qsizetype count = envelope.toArray().size();
+        if (count > static_cast<qsizetype>(kMaxEnvelopePoints)
+            || envelopePoints > kMaxProjectEnvelopePoints - count) {
+            return true;
+        }
+        envelopePoints += count;
+    }
+    return false;
+}
+
 } // namespace
 
 ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRequest& request)
@@ -343,14 +376,29 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
     ProjectLoadResult result;
     QFile input(absolutePath(path));
     if (!input.open(QIODevice::ReadOnly)) { result.message = QStringLiteral("could not open project"); return result; }
+    if (input.size() < 0 || input.size() > kMaxProjectJsonBytes) {
+        result.message = QString::fromLatin1(kResourceLimitMessage);
+        return result;
+    }
+    const QByteArray payload = input.read(kMaxProjectJsonBytes + 1);
+    if (payload.size() > kMaxProjectJsonBytes || !input.atEnd()) {
+        result.message = QString::fromLatin1(kResourceLimitMessage);
+        return result;
+    }
     QJsonParseError error;
-    const QJsonDocument json = QJsonDocument::fromJson(input.readAll(), &error);
+    const QJsonDocument json = QJsonDocument::fromJson(payload, &error);
     if (error.error != QJsonParseError::NoError || !json.isObject()) { result.message = QStringLiteral("malformed project JSON"); return result; }
     const QJsonObject root = json.object();
     qint64 version{};
     if (!integer(root.value(QStringLiteral("schemaVersion")), version) || version != schemaVersion()) { result.message = QStringLiteral("unsupported project schema"); return result; }
     if (!root.value(QStringLiteral("sources")).isArray() || !root.value(QStringLiteral("events")).isArray() || !root.value(QStringLiteral("markers")).isArray()) { result.message = QStringLiteral("invalid project arrays"); return result; }
+    if (exceedsProjectResourceLimits(root)) {
+        result.message = QString::fromLatin1(kResourceLimitMessage);
+        return result;
+    }
     const QString projectDir = QFileInfo(input.fileName()).dir().absolutePath();
+    const auto probeDeadline = std::chrono::steady_clock::now()
+        + kProjectProbeBudget;
     std::unordered_map<quint64, std::shared_ptr<const AudioSource>> sourceMap;
     std::unordered_set<quint64> sourceIds;
     for (const QJsonValue& value : root.value(QStringLiteral("sources")).toArray()) {
@@ -383,7 +431,12 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
             const bool statMismatch = (fileSize >= 0 && actual.size() != fileSize)
                 || (modified >= 0
                     && actual.lastModified().toUTC().toMSecsSinceEpoch() != modified);
-            const AudioSourceProbeResult probe = AudioSourceProbe::probe(toPath(resolved));
+            const AudioSourceProbeResult probe = AudioSourceProbe::probe(
+                toPath(resolved), probeDeadline);
+            if (probe.timed_out) {
+                result.message = QStringLiteral("project source probe budget exceeded");
+                return result;
+            }
             const AudioSource expected{toPath(resolved), static_cast<std::uint32_t>(rate),
                                        static_cast<std::uint32_t>(channels), frames};
             const bool formatMismatch = !probe.matchesFormat(expected);

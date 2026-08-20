@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <limits>
 #include <list>
+#include <unordered_set>
 
 using agplayer::editor::AudioDocument;
 using agplayer::editor::AudioFileAnalysis;
@@ -557,6 +558,13 @@ bool same_project_export_settings(const ProjectExportSettings& left,
         && left.outputDirectory == right.outputDirectory;
 }
 
+bool same_selection(const std::optional<Selection>& left,
+                    const std::optional<Selection>& right) noexcept
+{
+    if (left.has_value() != right.has_value()) return false;
+    return !left || (left->start == right->start && left->end == right->end);
+}
+
 QVariantList to_project_issues(const std::vector<ProjectSourceIssue>& issues)
 {
     QVariantList result;
@@ -616,6 +624,13 @@ AudioEditorController::AudioEditorController(
     viewport_cache_size_limit_ = kViewportWaveformCacheDefaultLimit;
     connect(&viewport_, &EditorViewport::viewportChanged, this,
             &AudioEditorController::requestViewportWaveform);
+    connect(&viewport_, &EditorViewport::viewportChanged, this, [this] {
+        if (suppress_persisted_state_tracking_) return;
+        viewport_persisted_dirty_ = viewport_.visibleStartFrame()
+                != saved_visible_start_frame_
+            || viewport_.visibleEndFrame() != saved_visible_end_frame_;
+        if (syncModifiedFromHistory()) emit documentChanged();
+    });
     recording_timer_.setInterval(33);
     connect(&recording_timer_, &QTimer::timeout, this, [this] {
         QVariantList points;
@@ -814,7 +829,7 @@ bool AudioEditorController::setProjectExportSettings(
         return true;
     }
     project_export_settings_ = settings;
-    markProjectDirty();
+    (void)syncModifiedFromHistory();
     setError({});
     emit documentChanged();
     emit projectChanged();
@@ -842,19 +857,44 @@ void AudioEditorController::setProjectExportSettingsMap(
 void AudioEditorController::markProjectClean() noexcept
 {
     saved_history_state_ = document_.historyStateId();
+    saved_selection_ = document_.selection();
+    saved_playhead_frame_ = playhead_frame_;
+    playhead_persisted_dirty_ = false;
+    saved_visible_start_frame_ = viewport_.visibleStartFrame();
+    saved_visible_end_frame_ = viewport_.visibleEndFrame();
+    viewport_persisted_dirty_ = false;
+    saved_export_settings_ = project_export_settings_;
+    forced_project_dirty_ = false;
     modified_ = false;
 }
 
 void AudioEditorController::markProjectDirty() noexcept
 {
-    saved_history_state_.reset();
+    forced_project_dirty_ = true;
     modified_ = true;
 }
 
-void AudioEditorController::syncModifiedFromHistory() noexcept
+bool AudioEditorController::syncModifiedFromHistory() noexcept
 {
-    modified_ = !saved_history_state_.has_value()
-        || document_.historyStateId() != *saved_history_state_;
+    const bool previous = modified_;
+    modified_ = forced_project_dirty_ || !saved_history_state_.has_value()
+        || document_.historyStateId() != *saved_history_state_
+        || !same_selection(document_.selection(), saved_selection_)
+        || playhead_persisted_dirty_
+        || viewport_persisted_dirty_
+        || !same_project_export_settings(project_export_settings_,
+                                         saved_export_settings_);
+    return previous != modified_;
+}
+
+void AudioEditorController::setViewportDocumentFrames(const qint64 frames) noexcept
+{
+    suppress_persisted_state_tracking_ = true;
+    viewport_.setDocumentFrames(frames);
+    suppress_persisted_state_tracking_ = false;
+    viewport_persisted_dirty_ = viewport_.visibleStartFrame()
+            != saved_visible_start_frame_
+        || viewport_.visibleEndFrame() != saved_visible_end_frame_;
 }
 
 bool AudioEditorController::createUntitledDocument(
@@ -871,6 +911,7 @@ bool AudioEditorController::createUntitledDocument(
     project_path_.clear();
     project_sources_.clear();
     project_issues_.clear();
+    known_project_issues_.clear();
     project_export_settings_ = {};
     playback_path_.clear();
     format_name_ = QStringLiteral("WAV");
@@ -891,9 +932,10 @@ bool AudioEditorController::createUntitledDocument(
         channel_peaks_.append(QVariant::fromValue(flat));
     }
     has_document_ = true;
-    markProjectClean();
+    position_ms_ = 0;
     playhead_frame_ = 0;
-    viewport_.setDocumentFrames(frames);
+    setViewportDocumentFrames(frames);
+    markProjectClean();
     setState(EditorSessionState::Ready);
     refreshActions();
     emit waveformChanged();
@@ -907,6 +949,7 @@ bool AudioEditorController::openFile(const QUrl& source)
     if (modified_ && !allow_document_replace_) {
         pending_open_url_ = source;
         pending_open_is_project_ = false;
+        pending_clear_document_ = false;
         emit discardConfirmationRequested();
         return false;
     }
@@ -931,6 +974,7 @@ bool AudioEditorController::openFile(const QUrl& source)
     project_sources_ = {project_source_record(1,
         document_.timelineSnapshot().events.front().source)};
     project_issues_.clear();
+    known_project_issues_.clear();
     project_export_settings_ = {};
     playback_path_ = path;
     format_name_ = QString::fromStdString(analysis.format).toUpper();
@@ -942,10 +986,10 @@ bool AudioEditorController::openFile(const QUrl& source)
     channel_peaks_ = source_channel_peaks_;
     clearViewportWaveformCache();
     has_document_ = true;
-    markProjectClean();
     position_ms_ = 0;
     playhead_frame_ = 0;
-    viewport_.setDocumentFrames(document_.totalFrames());
+    setViewportDocumentFrames(document_.totalFrames());
+    markProjectClean();
     setState(EditorSessionState::Ready);
     setProgress(1.0);
     setError({});
@@ -959,6 +1003,11 @@ bool AudioEditorController::openFile(const QUrl& source)
 
 bool AudioEditorController::confirmDiscardAndOpen()
 {
+    if (pending_clear_document_) {
+        pending_clear_document_ = false;
+        allow_document_replace_ = true;
+        return clearDocument();
+    }
     if (!pending_open_url_.isValid()) return false;
     const QUrl source = pending_open_url_;
     const bool openProjectFile = pending_open_is_project_;
@@ -972,6 +1021,7 @@ void AudioEditorController::cancelDiscardAndOpen()
 {
     pending_open_url_.clear();
     pending_open_is_project_ = false;
+    pending_clear_document_ = false;
 }
 
 bool AudioEditorController::save()
@@ -990,6 +1040,8 @@ bool AudioEditorController::saveProject(const QUrl& target)
         if (path.isEmpty()) setError(tr("保存工程路径无效"));
         return false;
     }
+    syncProjectSourcesAndIssues();
+    syncPrimarySourceSummary();
     ProjectSaveRequest request;
     request.document = &document_;
     request.playheadFrame = playhead_frame_;
@@ -1002,7 +1054,15 @@ bool AudioEditorController::saveProject(const QUrl& target)
         setError(result.message);
         return false;
     }
-    project_sources_ = result.sources;
+    for (const ProjectSourceRecord& saved : result.sources) {
+        const auto existing = std::find_if(project_sources_.begin(), project_sources_.end(),
+            [&saved](const ProjectSourceRecord& record) {
+                return record.sourceId == saved.sourceId;
+            });
+        if (existing == project_sources_.end()) project_sources_.push_back(saved);
+        else *existing = saved;
+    }
+    syncProjectSourcesAndIssues();
     project_path_ = QFileInfo(path).absoluteFilePath();
     markProjectClean();
     setError({});
@@ -1022,6 +1082,7 @@ bool AudioEditorController::openProject(const QUrl& source)
     if (modified_ && !allow_document_replace_) {
         pending_open_url_ = source;
         pending_open_is_project_ = true;
+        pending_clear_document_ = false;
         emit discardConfirmationRequested();
         return false;
     }
@@ -1041,7 +1102,8 @@ bool AudioEditorController::openProject(const QUrl& source)
     stopPlayback();
     document_ = std::move(*loaded.document);
     project_sources_ = std::move(loaded.sources);
-    project_issues_ = to_project_issues(loaded.issues);
+    known_project_issues_ = to_project_issues(loaded.issues);
+    syncProjectSourcesAndIssues();
     project_export_settings_ = loaded.exportSettings;
     project_path_ = QFileInfo(path).absoluteFilePath();
     syncPrimarySourceSummary();
@@ -1050,11 +1112,13 @@ bool AudioEditorController::openProject(const QUrl& source)
     channel_peaks_.clear();
     clearViewportWaveformCache();
     has_document_ = true;
-    markProjectClean();
     playhead_frame_ = loaded.playheadFrame;
     position_ms_ = sample_rate_ > 0 ? playhead_frame_ * 1'000 / sample_rate_ : 0;
-    viewport_.setDocumentFrames(document_.totalFrames());
+    setViewportDocumentFrames(document_.totalFrames());
+    suppress_persisted_state_tracking_ = true;
     (void)viewport_.setVisibleRange(loaded.visibleStartFrame, loaded.visibleEndFrame);
+    suppress_persisted_state_tracking_ = false;
+    markProjectClean();
     setState(EditorSessionState::Ready);
     setProgress(1.0);
     setError({});
@@ -1076,10 +1140,11 @@ bool AudioEditorController::relinkProjectSource(const quint64 sourceId,
         setError(result.message);
         return false;
     }
-    project_issues_.erase(std::remove_if(project_issues_.begin(), project_issues_.end(),
+    known_project_issues_.erase(std::remove_if(known_project_issues_.begin(), known_project_issues_.end(),
         [sourceId](const QVariant& value) {
             return value.toMap().value(QStringLiteral("sourceId")).toULongLong() == sourceId;
-        }), project_issues_.end());
+        }), known_project_issues_.end());
+    syncProjectSourcesAndIssues();
     markProjectDirty();
     syncPrimarySourceSummary();
     playback_path_.clear();
@@ -1094,26 +1159,14 @@ bool AudioEditorController::relinkProjectSource(const quint64 sourceId,
 bool AudioEditorController::undo()
 {
     if (!has_document_ || busy() || !document_.undo()) return false;
-    syncModifiedFromHistory();
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    clearViewportWaveformCache();
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
+    finishTimelineMutation();
     return true;
 }
 
 bool AudioEditorController::redo()
 {
     if (!has_document_ || busy() || !document_.redo()) return false;
-    syncModifiedFromHistory();
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    clearViewportWaveformCache();
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
+    finishTimelineMutation();
     return true;
 }
 
@@ -1225,8 +1278,10 @@ bool AudioEditorController::setSelection(
     if (!has_document_ || !document_.setSelection({startFrame, endFrame})) {
         return false;
     }
+    (void)syncModifiedFromHistory();
     refreshActions();
     emit documentChanged();
+    emit projectChanged();
     return true;
 }
 
@@ -1235,8 +1290,10 @@ bool AudioEditorController::clearSelection()
     if (!document_.clearSelection()) {
         return false;
     }
+    (void)syncModifiedFromHistory();
     refreshActions();
     emit documentChanged();
+    emit projectChanged();
     return true;
 }
 
@@ -1251,13 +1308,7 @@ bool AudioEditorController::moveEvent(const quint64 id, const qint64 timelineSta
     if (!has_document_ || busy()
         || !document_.moveEvent(static_cast<agplayer::editor::EventId>(id),
                                 timelineStart)) return false;
-    syncModifiedFromHistory();
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    clearViewportWaveformCache();
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
+    finishTimelineMutation();
     return true;
 }
 
@@ -1309,13 +1360,7 @@ bool AudioEditorController::trimEvent(const quint64 id, const qint64 sourceStart
     if (!has_document_ || busy()
         || !document_.trimEvent(static_cast<agplayer::editor::EventId>(id),
                                 sourceStart, sourceEnd, timelineStart)) return false;
-    syncModifiedFromHistory();
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    clearViewportWaveformCache();
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
+    finishTimelineMutation();
     return true;
 }
 
@@ -1325,13 +1370,7 @@ bool AudioEditorController::splitEvent(const quint64 id, const qint64 frame)
         || !document_.splitEventAt(static_cast<agplayer::editor::EventId>(id), frame)) {
         return false;
     }
-    syncModifiedFromHistory();
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    clearViewportWaveformCache();
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
+    finishTimelineMutation();
     return true;
 }
 
@@ -1342,13 +1381,7 @@ bool AudioEditorController::mergeEvents(const quint64 left, const quint64 right)
                                   static_cast<agplayer::editor::EventId>(right))) {
         return false;
     }
-    syncModifiedFromHistory();
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    clearViewportWaveformCache();
-    refreshActions();
-    emit waveformChanged();
-    emit documentChanged();
+    finishTimelineMutation();
     return true;
 }
 
@@ -1562,12 +1595,22 @@ bool AudioEditorController::createRecordingDocument(
 bool AudioEditorController::clearDocument()
 {
     if (recording() || busy()) return false;
+    if (modified_ && !allow_document_replace_) {
+        pending_open_url_.clear();
+        pending_open_is_project_ = false;
+        pending_clear_document_ = true;
+        emit discardConfirmationRequested();
+        return false;
+    }
+    allow_document_replace_ = false;
+    pending_clear_document_ = false;
     stopPlayback();
     document_ = AudioDocument{};
     source_path_.clear();
     project_path_.clear();
     project_sources_.clear();
     project_issues_.clear();
+    known_project_issues_.clear();
     project_export_settings_ = {};
     playback_path_.clear();
     format_name_.clear();
@@ -1578,10 +1621,10 @@ bool AudioEditorController::clearDocument()
     source_channel_peaks_.clear();
     channel_peaks_.clear();
     has_document_ = false;
-    markProjectClean();
     position_ms_ = 0;
     playhead_frame_ = 0;
-    viewport_.setDocumentFrames(0);
+    setViewportDocumentFrames(0);
+    markProjectClean();
     setState(EditorSessionState::Empty);
     refreshActions();
     emit waveformChanged();
@@ -1635,9 +1678,7 @@ bool AudioEditorController::stopRecording()
                 emit recordingChanged();
                 return;
             }
-            syncModifiedFromHistory();
-            playback_path_.clear();
-            viewport_.setDocumentFrames(document_.totalFrames());
+            finishTimelineMutation();
         } else {
             document_ = AudioDocument::fromSource(analysis.source);
             source_path_ = QString::fromStdWString(result.path.wstring());
@@ -1654,9 +1695,10 @@ bool AudioEditorController::stopRecording()
             project_sources_ = {project_source_record(1,
                 document_.timelineSnapshot().events.front().source)};
             project_issues_.clear();
+            known_project_issues_.clear();
             project_export_settings_ = {};
+            setViewportDocumentFrames(document_.totalFrames());
             markProjectClean();
-            viewport_.setDocumentFrames(document_.totalFrames());
         }
         setState(EditorSessionState::Ready);
         refreshActions();
@@ -1740,11 +1782,8 @@ bool AudioEditorController::triggerAction(const QString& id)
     else if (id == QStringLiteral("editor.deleteSelection")) changed = document_.deleteSelection();
     if (!changed) return false;
     if (id != QStringLiteral("editor.copy")) {
-        stopPlayback();
-        syncModifiedFromHistory();
-        playback_path_.clear();
-        viewport_.setDocumentFrames(document_.totalFrames());
-        clearViewportWaveformCache();
+        finishTimelineMutation();
+        return true;
     }
     refreshActions();
     emit waveformChanged();
@@ -1919,6 +1958,7 @@ bool AudioEditorController::seekMs(const qint64 value)
     if (!has_document_ || value < 0 || value > durationMs()) return false;
     position_ms_ = value;
     playhead_frame_ = sample_rate_ > 0 ? value * sample_rate_ / 1'000 : 0;
+    playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
     if (player_) {
         const qint64 preview_position = time_pitch_preview_active_
             ? static_cast<qint64>(std::llround(
@@ -1927,8 +1967,10 @@ bool AudioEditorController::seekMs(const qint64 value)
             : value;
         ag_player_seek(player_, preview_position);
     }
+    const bool modifiedChanged = syncModifiedFromHistory();
     refreshActions();
     emit playbackChanged();
+    if (modifiedChanged) emit documentChanged();
     return true;
 }
 
@@ -1936,6 +1978,7 @@ bool AudioEditorController::seekFrame(const qint64 frame)
 {
     if (!has_document_ || frame < 0 || frame > document_.totalFrames()) return false;
     playhead_frame_ = frame;
+    playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
     position_ms_ = sample_rate_ > 0 ? frame * 1'000 / sample_rate_ : 0;
     if (player_) {
         const qint64 previewPosition = time_pitch_preview_active_
@@ -1944,8 +1987,10 @@ bool AudioEditorController::seekFrame(const qint64 frame)
             : position_ms_;
         ag_player_seek(player_, previewPosition);
     }
+    const bool modifiedChanged = syncModifiedFromHistory();
     refreshActions();
     emit playbackChanged();
+    if (modifiedChanged) emit documentChanged();
     return true;
 }
 
@@ -2453,6 +2498,70 @@ bool AudioEditorController::requireOnlineProjectSources()
     if (projectSourcesOnline()) return true;
     setError(tr("工程音频源离线或已变更，请重新链接后再继续"));
     return false;
+}
+
+void AudioEditorController::syncProjectSourcesAndIssues()
+{
+    const auto snapshot = document_.timelineSnapshot();
+    std::unordered_set<const AudioSource*> referencedSources;
+    std::unordered_set<quint64> referencedIds;
+    quint64 nextId = 1;
+    for (const ProjectSourceRecord& record : project_sources_) {
+        if (record.sourceId < std::numeric_limits<quint64>::max()) {
+            nextId = std::max(nextId, record.sourceId + 1);
+        }
+    }
+    for (const auto& event : snapshot.events) {
+        if (!event.source || !referencedSources.insert(event.source.get()).second) {
+            continue;
+        }
+        auto record = std::find_if(project_sources_.begin(), project_sources_.end(),
+            [&event](const ProjectSourceRecord& value) {
+                return value.source.get() == event.source.get();
+            });
+        if (record == project_sources_.end()) {
+            project_sources_.push_back(project_source_record(nextId++, event.source));
+            record = std::prev(project_sources_.end());
+            const QString path = QString::fromStdWString(event.source->path.wstring());
+            if (!path.isEmpty() && !QFileInfo::exists(path)) {
+                known_project_issues_.append(QVariantMap{
+                    {QStringLiteral("kind"), QStringLiteral("missing")},
+                    {QStringLiteral("sourceId"), record->sourceId},
+                    {QStringLiteral("path"), path},
+                    {QStringLiteral("message"), QStringLiteral("source file is missing")}});
+            }
+        }
+        referencedIds.insert(record->sourceId);
+    }
+
+    project_issues_.clear();
+    for (const QVariant& issue : std::as_const(known_project_issues_)) {
+        const quint64 sourceId = issue.toMap().value(
+            QStringLiteral("sourceId")).toULongLong();
+        if (referencedIds.count(sourceId) != 0) project_issues_.append(issue);
+    }
+}
+
+void AudioEditorController::finishTimelineMutation()
+{
+    const qint64 requestedPlayhead = playhead_frame_;
+    stopPlayback();
+    playback_path_.clear();
+    syncProjectSourcesAndIssues();
+    syncPrimarySourceSummary();
+    const qint64 frames = std::max<qint64>(0, document_.totalFrames());
+    setViewportDocumentFrames(frames);
+    playhead_frame_ = std::clamp<qint64>(requestedPlayhead, 0, frames);
+    position_ms_ = sample_rate_ > 0
+        ? playhead_frame_ * 1'000 / sample_rate_ : 0;
+    playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
+    (void)syncModifiedFromHistory();
+    clearViewportWaveformCache();
+    refreshActions();
+    emit waveformChanged();
+    emit playbackChanged();
+    emit documentChanged();
+    emit projectChanged();
 }
 
 void AudioEditorController::syncPrimarySourceSummary()

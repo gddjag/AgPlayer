@@ -6,6 +6,7 @@
 #include <QtTest>
 
 #include <filesystem>
+#include <chrono>
 
 using namespace agplayer::editor;
 
@@ -66,6 +67,18 @@ private slots:
         QVERIFY(!probe.matchesFormat(AudioSource{{}, 48'000, 2, 100'801}));
         QVERIFY(!probe.matchesFormat(AudioSource{{}, 44'100, 2, 96'000}));
         QVERIFY(!probe.matchesFormat(AudioSource{{}, 48'000, 1, 96'000}));
+    }
+
+    void expiredDeadlineStopsProbeBeforeOpeningSource()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        QVERIFY2(QFileInfo::exists(fixture), "decoder fixture is required");
+
+        const AudioSourceProbeResult result = AudioSourceProbe::probe(
+            nativePath(fixture), std::chrono::steady_clock::now());
+
+        QVERIFY(!result.ok());
+        QVERIFY(result.timed_out);
     }
 };
 

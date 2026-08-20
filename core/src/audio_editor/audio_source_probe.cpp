@@ -21,6 +21,11 @@ int interruptProbe(void* opaque)
     return deadline != nullptr && std::chrono::steady_clock::now() >= deadline->expires;
 }
 
+bool deadlineExpired(const ProbeDeadline& deadline) noexcept
+{
+    return std::chrono::steady_clock::now() >= deadline.expires;
+}
+
 } // namespace
 
 bool AudioSourceProbeResult::matchesFormat(const AudioSource& expected) const noexcept
@@ -37,7 +42,20 @@ bool AudioSourceProbeResult::matchesFormat(const AudioSource& expected) const no
 
 AudioSourceProbeResult AudioSourceProbe::probe(const std::filesystem::path& path) noexcept
 {
+    return probe(path, std::chrono::steady_clock::now() + std::chrono::seconds(2));
+}
+
+AudioSourceProbeResult AudioSourceProbe::probe(
+    const std::filesystem::path& path,
+    const std::chrono::steady_clock::time_point deadline) noexcept
+{
     AudioSourceProbeResult result;
+    ProbeDeadline probeDeadline{deadline};
+    if (deadlineExpired(probeDeadline)) {
+        result.timed_out = true;
+        result.message = "audio source probe timed out";
+        return result;
+    }
     if (path.empty()) {
         result.message = "invalid source path";
         return result;
@@ -49,9 +67,7 @@ AudioSourceProbeResult AudioSourceProbe::probe(const std::filesystem::path& path
             result.message = "cannot allocate audio probe";
             return result;
         }
-        ProbeDeadline deadline{std::chrono::steady_clock::now()
-                               + std::chrono::seconds(2)};
-        context->interrupt_callback = {interruptProbe, &deadline};
+        context->interrupt_callback = {interruptProbe, &probeDeadline};
         AVDictionary* options = nullptr;
         av_dict_set_int(&options, "probesize", 5 * 1024 * 1024, 0);
         av_dict_set_int(&options, "analyzeduration", 2'000'000, 0);
@@ -60,13 +76,23 @@ AudioSourceProbeResult AudioSourceProbe::probe(const std::filesystem::path& path
         av_dict_free(&options);
         if (openResult < 0 || context == nullptr) {
             avformat_close_input(&context);
-            result.message = "cannot open audio file";
+            result.timed_out = deadlineExpired(probeDeadline);
+            result.message = result.timed_out ? "audio source probe timed out"
+                                              : "cannot open audio file";
             return result;
         }
         const auto close = [&context] { avformat_close_input(&context); };
         if (avformat_find_stream_info(context, nullptr) < 0) {
             close();
-            result.message = "cannot read audio stream information";
+            result.timed_out = deadlineExpired(probeDeadline);
+            result.message = result.timed_out ? "audio source probe timed out"
+                                              : "cannot read audio stream information";
+            return result;
+        }
+        if (deadlineExpired(probeDeadline)) {
+            close();
+            result.timed_out = true;
+            result.message = "audio source probe timed out";
             return result;
         }
         const int streamIndex = av_find_best_stream(
