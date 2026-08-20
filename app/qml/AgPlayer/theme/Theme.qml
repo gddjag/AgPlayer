@@ -32,6 +32,8 @@ QtObject {
     readonly property color accent: systemPalette.highlight
     readonly property color activeSelection: systemPalette.highlight
     readonly property color activeSelectionText: systemPalette.highlightedText
+    readonly property color selectedTrackSelection: Qt.rgba(
+        accent.r, accent.g, accent.b, isLight ? 0.18 : 0.28)
     readonly property color inactiveSelection: inactiveSystemPalette.highlight
     readonly property color inactiveSelectionText: inactiveSystemPalette.highlightedText
     readonly property color cyan: accent
@@ -49,6 +51,15 @@ QtObject {
     readonly property color playButtonBorder: isLight ? "#1B1B1B" : "#FFFFFF"
     readonly property color playRingPlaying: waveformGreen
     readonly property color playRingPaused: "#FFB020"
+    readonly property color editorCanvas: isLight ? "#F5F7FA" : "#171A1F"
+    readonly property color editorRuler: isLight ? "#E9EDF3" : "#20252C"
+    readonly property color editorWaveform: isLight ? "#1769D2" : "#55A7FF"
+    readonly property color editorSelection: Qt.rgba(
+        accent.r, accent.g, accent.b, isLight ? 0.20 : 0.26)
+    readonly property color editorOverview: isLight ? "#EEF2F7" : "#1B2027"
+    readonly property color editorOverviewWaveform: isLight ? "#667085" : "#A8B3C2"
+    readonly property color editorOverviewSelection: Qt.rgba(
+        accent.r, accent.g, accent.b, isLight ? 0.16 : 0.22)
 
     readonly property int radiusSm: 8
     readonly property int radiusMd: 12
