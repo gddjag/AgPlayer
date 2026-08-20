@@ -16,6 +16,8 @@ class LibraryFilterModel : public QSortFilterProxyModel {
     Q_PROPERTY(double minBpm READ minBpm WRITE setMinBpm NOTIFY minBpmChanged)
     Q_PROPERTY(double maxBpm READ maxBpm WRITE setMaxBpm NOTIFY maxBpmChanged)
     Q_PROPERTY(QString category READ category WRITE setCategory NOTIFY categoryChanged)
+    Q_PROPERTY(QString tagKey READ tagKey WRITE setTagKey NOTIFY tagKeyChanged)
+    Q_PROPERTY(QString resourceFolder READ resourceFolder WRITE setResourceFolder NOTIFY resourceFolderChanged)
     Q_PROPERTY(PlaylistModel* playlistModel READ playlistModel WRITE setPlaylistModel NOTIFY
                    playlistModelChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
@@ -40,6 +42,11 @@ public:
     QString category() const noexcept;
     void setCategory(const QString& category);
 
+    QString tagKey() const noexcept;
+    void setTagKey(const QString& key);
+    QString resourceFolder() const noexcept;
+    void setResourceFolder(const QString& folder);
+
     PlaylistModel* playlistModel() const noexcept;
     void setPlaylistModel(PlaylistModel* playlistModel);
 
@@ -57,6 +64,8 @@ signals:
     void minBpmChanged();
     void maxBpmChanged();
     void categoryChanged();
+    void tagKeyChanged();
+    void resourceFolderChanged();
     void playlistModelChanged();
     void countChanged();
 
@@ -70,11 +79,16 @@ private:
     bool rowMatchesSearch(int sourceRow) const;
     bool rowMatchesRating(int sourceRow) const;
     bool rowMatchesBpm(int sourceRow) const;
+    bool rowMatchesTag(int sourceRow) const;
+    bool rowMatchesResourceFolder(int sourceRow) const;
+    QModelIndex sourceIndexForRow(int sourceRow) const;
 
     QString searchText_;
     int exactRating_ = 0;
     double minBpm_ = 60.0;
     double maxBpm_ = 160.0;
     QString category_ = QStringLiteral("all");
+    QString tagKey_;
+    QString resourceFolder_;
     QPointer<PlaylistModel> playlistModel_;
 };
