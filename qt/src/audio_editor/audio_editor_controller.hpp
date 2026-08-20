@@ -186,9 +186,6 @@ public:
     Q_INVOKABLE bool clearSelection();
     Q_INVOKABLE bool insertSilence(qint64 frame, qint64 frameCount);
     Q_INVOKABLE bool applyGain(double decibels);
-    Q_INVOKABLE bool moveEvent(qint64 eventId, qint64 timelineStart);
-    Q_INVOKABLE bool trimEvent(qint64 eventId, qint64 sourceStart,
-                               qint64 sourceEnd, qint64 timelineStart);
     Q_INVOKABLE bool reduceNoise();
     Q_INVOKABLE bool actionEnabled(const QString& id) const noexcept;
     Q_INVOKABLE bool triggerAction(const QString& id);
@@ -254,8 +251,6 @@ private:
     void startPreparedPlayback();
     bool runDocumentCommand(const agplayer::editor::EditCommand& command,
                             bool modifiesDocument = true);
-    bool runTimelineEditCommand(
-        const agplayer::editor::TimelineEditCommand& command);
     void pollPlayback();
     void setState(EditorSessionState value);
     void setError(QString message);

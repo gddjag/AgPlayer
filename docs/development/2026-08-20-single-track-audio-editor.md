@@ -170,18 +170,12 @@ ctest --test-dir build/debug -R "^(timeline_edit_command_test|audio_editor_contr
   属于本阶段门禁。
 - 回退点：`421c39f`（Phase 3 提交前 HEAD）。
 
-### 审查修正（round 1）
+### 审查修正（round 2）
 
-- `AudioDocument` 现在在 `fromSource()` 同时建立 ID 为 1 的单 Event
-  `EventTimeline`，并公开按值 `timelineSnapshot()` 与窄的
-  `executeTimelineEdit()` / `undoTimelineEdit()` 边界。
-- 为兼容尚未迁移的 `DocumentSnapshot` 调用者，Phase 3 暂存两种元数据表示：传统
-  Span 编辑提交时回到 Span 时长；执行 Timeline Move/Trim 时以 Timeline 时长为准。
-  这不是第二套音频或缓存，且只允许到 Phase 4 完成真源迁移。
-- `AudioEditorController::moveEvent()` / `trimEvent()` 只经上述 Timeline 边界更新
-  modified、播放视口范围、动作状态和文档通知；它们不调用
-  `runDocumentCommand()`、`triggerAction()`、`clearViewportWaveformCache()` 或
-  `rebuildEditorPeaks()`，也不解码/编码。
-- 新控制器测试确认 Source/可见 Peak 数据保持、控制器未进入异步 busy 状态，且初始
-  视口同步通知之后不再出现延后波形通知。命令测试删除永真 Peak 计数，改为完整快照
-  回滚及 stale execute/undo 断言。
+- 已撤回提前暴露到 `AudioDocument` 和 `AudioEditorController` 的 Move/Trim 入口：
+  现有播放、保存、导出与波形仍读取传统 `DocumentSnapshot`；局部接入会造成显示时长
+  与实际音频分叉，违反单一真源。
+- Phase 3 的已批准验收面仅为 `EventTimeline` 的核心命令。它不依赖 decoder、encoder
+  或 Peak 构建；碰撞和 stale execute/undo 都以完整快照与 revision 验证事务回滚。
+- Phase 4 的首要门槛是迁移 Document/Controller 的所有调用方至单一 EventTimeline
+  真源，然后才能公开 Move/Trim UI 或控制器入口；在此之前控制器测试仅作为既有回归。

@@ -2,7 +2,6 @@
 
 #include "edit_command.hpp"
 #include "event_timeline.hpp"
-#include "timeline_edit_command.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -68,8 +67,6 @@ public:
     bool apply(const EditCommand& command);
     bool undo();
     bool redo();
-    bool executeTimelineEdit(const TimelineEditCommand& command);
-    bool undoTimelineEdit(const TimelineEditCommand& command);
 
     [[nodiscard]] bool canUndo() const noexcept { return !undo_stack_.empty(); }
     [[nodiscard]] bool canRedo() const noexcept { return !redo_stack_.empty(); }
@@ -84,8 +81,6 @@ public:
         return state_.markers;
     }
     [[nodiscard]] DocumentSnapshot snapshot() const { return state_; }
-    [[nodiscard]] TimelineSnapshot timelineSnapshot() const
-    { return timeline_.snapshot(); }
 
 private:
     using State = DocumentSnapshot;
@@ -99,10 +94,6 @@ private:
     void commit(State candidate);
 
     State state_;
-    // Temporary Phase 3 dual representation.  Legacy span edits remain the
-    // compatibility path until Phase 4 migrates all callers to EventTimeline.
-    EventTimeline timeline_;
-    bool timeline_metadata_active_{};
     std::vector<AudioSpan> clipboard_;
     std::vector<State> undo_stack_;
     std::vector<State> redo_stack_;

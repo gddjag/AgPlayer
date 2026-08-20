@@ -11,34 +11,6 @@ class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void moveAndTrimUseTheMetadataOnlyControllerSeam()
-    {
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
-        const QVariantList source_peaks = controller.channelPeaks();
-        const QVariantList viewport_peaks = controller.viewportChannelPeaks();
-        QSignalSpy waveform_signal(&controller, &AudioEditorController::waveformChanged);
-
-        QVERIFY(controller.moveEvent(1, 120'000));
-        QCOMPARE(controller.totalFrames(), qint64{216'000});
-        QCOMPARE(controller.channelPeaks(), source_peaks);
-        QCOMPARE(controller.viewportChannelPeaks(), viewport_peaks);
-        QVERIFY(!controller.busy());
-        const int move_waveform_updates = waveform_signal.size();
-        QTest::qWait(25);
-        QCOMPARE(waveform_signal.size(), move_waveform_updates);
-        QVERIFY(controller.modified());
-
-        QVERIFY(controller.trimEvent(1, 1'000, 95'000, 121'000));
-        QCOMPARE(controller.totalFrames(), qint64{215'000});
-        QCOMPARE(controller.channelPeaks(), source_peaks);
-        QCOMPARE(controller.viewportChannelPeaks(), viewport_peaks);
-        QVERIFY(!controller.busy());
-        const int trim_waveform_updates = waveform_signal.size();
-        QTest::qWait(25);
-        QCOMPARE(waveform_signal.size(), trim_waveform_updates);
-    }
-
     void stopsMainPlaybackBeforeEditorPreview()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));

@@ -1022,32 +1022,6 @@ bool AudioEditorController::applyGain(const double decibels)
         static_cast<float>(std::pow(10.0, decibels / 20.0))));
 }
 
-bool AudioEditorController::moveEvent(const qint64 event_id,
-                                      const qint64 timeline_start)
-{
-    if (event_id < 0 || timeline_start < 0) {
-        return false;
-    }
-    const auto command = agplayer::editor::TimelineEditCommand::move(
-        document_.timelineSnapshot(), static_cast<agplayer::editor::EventId>(event_id),
-        timeline_start);
-    return command && runTimelineEditCommand(*command);
-}
-
-bool AudioEditorController::trimEvent(const qint64 event_id,
-                                      const qint64 source_start,
-                                      const qint64 source_end,
-                                      const qint64 timeline_start)
-{
-    if (event_id < 0) {
-        return false;
-    }
-    const auto command = agplayer::editor::TimelineEditCommand::trim(
-        document_.timelineSnapshot(), static_cast<agplayer::editor::EventId>(event_id),
-        source_start, source_end, timeline_start);
-    return command && runTimelineEditCommand(*command);
-}
-
 bool AudioEditorController::reduceNoise()
 {
     if (!has_document_ || busy() || noise_reduction_watcher_
@@ -1584,20 +1558,6 @@ bool AudioEditorController::runDocumentCommand(
     }
     refreshActions();
     emit waveformChanged();
-    emit documentChanged();
-    return true;
-}
-
-bool AudioEditorController::runTimelineEditCommand(
-    const agplayer::editor::TimelineEditCommand& command)
-{
-    if (!document_.executeTimelineEdit(command)) {
-        return false;
-    }
-    modified_ = true;
-    playback_path_.clear();
-    viewport_.setDocumentFrames(document_.totalFrames());
-    refreshActions();
     emit documentChanged();
     return true;
 }
