@@ -12,8 +12,11 @@ Third-party Remix Icon assets
 
 The following unmodified SVG assets are redistributed from Remix Icon v4.6.0:
 
+  - assets/icons/arrow-down-s-line.svg
   - assets/icons/arrow-up-s-line.svg
+  - assets/icons/checkbox-blank-fill.svg
   - assets/icons/checkbox-circle-line.svg
+  - assets/icons/check-line.svg
   - assets/icons/error-warning-line.svg
   - assets/icons/file-music-fill.svg
   - assets/icons/filter-3-line.svg

@@ -6,7 +6,7 @@ import AgPlayer
 Rectangle {
     id: navigation
     objectName: "audioToolsTopNav"
-    color: Theme.panel
+    color: Theme.isLight ? Theme.panel : "#0F1921"
     border.color: Theme.border
     border.width: 1
     radius: Theme.radiusSm
@@ -22,7 +22,7 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 16
+        anchors.leftMargin: 3
         spacing: 0
 
         Repeater {
@@ -35,7 +35,7 @@ Rectangle {
 
             Button {
                 objectName: "audioToolNavButton"
-                Layout.preferredWidth: index === 2 ? 156 : 154
+                Layout.preferredWidth: index === 2 ? 156 : index === 3 ? 155 : 154
                 Layout.maximumWidth: Layout.preferredWidth
                 Layout.preferredHeight: 53
                 Layout.maximumHeight: 53

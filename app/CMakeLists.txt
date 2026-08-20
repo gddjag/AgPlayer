@@ -2,10 +2,12 @@ set(CMAKE_AUTOMOC ON)
 
 set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/add-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-back-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-up-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-circle-line.svg

@@ -345,8 +345,20 @@ Rectangle {
                     Layout.preferredHeight: 68
                     enabled: converter.busy
                     text: qsTr("取消全部")
-                    icon.source: Theme.icon("close-fill")
+                    icon.source: Theme.icon("checkbox-blank-fill")
                     onClicked: converter.cancelAll()
+                    background: Rectangle { color: parent.enabled ? "#253541" : "#1c2a34"; radius: 6 }
+                    contentItem: RowLayout {
+                        spacing: 10
+                        ThemedIcon {
+                            objectName: "cancelAllButtonStopIcon"
+                            source: parent.parent.icon.source
+                            tint: "white"
+                            sourceSize.width: 22
+                            sourceSize.height: 22
+                        }
+                        Text { text: parent.parent.text; color: "white"; font.pixelSize: 17 }
+                    }
                 }
             }
         }

@@ -49,6 +49,15 @@ if ($settings -notmatch 'id:\s*encodingGroup[\s\S]*?columnSpacing:\s*11' -or
     ([regex]::Matches($settings, 'Layout\.preferredWidth:\s*122')).Count -lt 8) {
     throw 'Encoding and output-option labels must share the 122px reference column.'
 }
+if ($settings -notmatch 'component\s+ReferenceComboBox\s*:\s*ComboBox' -or
+    $settings -notmatch 'Theme\.icon\("arrow-down-s-line"\)' -or
+    $settings -match 'SpinBox') {
+    throw 'Format setting combo boxes must use one official down-chevron rather than spin indicators.'
+}
+if ($page -notmatch 'objectName:\s*"cancelAllButton"[\s\S]{0,1000}?Theme\.icon\("checkbox-blank-fill"\)' -or
+    $page -match 'objectName:\s*"cancelAllButton"[\s\S]{0,1000}?Theme\.icon\("close-fill"\)') {
+    throw 'Cancel all must use the filled stop-square icon instead of a close icon.'
+}
 if ($page -notmatch 'SettingsController\.parallelJobs' -or
     $settings -notmatch 'SettingsController\.parallelJobs') {
     throw 'Parallel jobs must synchronize through SettingsController.'
@@ -96,7 +105,8 @@ if ($page -match 'converterParallelJobsBox' -or
 }
 foreach ($asset in @(
     'filter-3-line.svg', 'arrow-up-s-line.svg', 'checkbox-circle-line.svg',
-    'error-warning-line.svg', 'file-music-fill.svg')) {
+    'arrow-down-s-line.svg', 'checkbox-blank-fill.svg', 'error-warning-line.svg',
+    'file-music-fill.svg')) {
     if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot "assets/icons/$asset"))) {
         throw "Missing approved format-workbench icon asset: $asset"
     }
@@ -111,6 +121,11 @@ foreach ($asset in @('checkbox-circle-line.svg', 'error-warning-line.svg')) {
 if ($cmake -notmatch [regex]::Escape('assets/icons/check-line.svg')) {
     throw 'The checkbox check-line icon is not registered as an application resource.'
 }
+foreach ($asset in @('arrow-down-s-line.svg', 'checkbox-blank-fill.svg')) {
+    if ($cmake -notmatch [regex]::Escape("assets/icons/$asset")) {
+        throw "The format icon $asset is not registered as an application resource."
+    }
+}
 if ($page -notmatch 'Theme\.icon\("checkbox-circle-line"\)' -or
     $page -notmatch 'Theme\.icon\("error-warning-line"\)') {
     throw 'The footer summary must render the approved check-circle and warning icons.'
@@ -120,6 +135,9 @@ $iconNotice = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'assets/licen
 $remixLicense = Join-Path $SourceRoot 'assets/licenses/RemixIcon-Apache-2.0.txt'
 if ($iconNotice -notmatch 'Remix Icon v4\.6\.0' -or
     $iconNotice -notmatch 'arrow-up-s-line\.svg' -or
+    $iconNotice -notmatch 'check-line\.svg' -or
+    $iconNotice -notmatch 'arrow-down-s-line\.svg' -or
+    $iconNotice -notmatch 'checkbox-blank-fill\.svg' -or
     $iconNotice -match 'does not redistribute any Remix') {
     throw 'The icon notice must accurately list the redistributed Remix Icon v4.6.0 assets.'
 }

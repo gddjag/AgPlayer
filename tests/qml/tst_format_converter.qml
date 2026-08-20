@@ -68,9 +68,10 @@ TestCase {
         const firstFormatButton = findChild(page, "formatOutputFormatButton-mp3")
         const fourthFormatButton = findChild(page, "formatOutputFormatButton-aac")
         const encoderBox = findChild(page, "formatEncoderBox")
+        const encoderChevron = findChild(page, "formatEncoderBoxChevron")
         const outputDirectoryRow = findChild(page, "formatOutputDirectoryRow")
         verify(outputFormatGrid && firstFormatButton && fourthFormatButton
-               && encoderBox && outputDirectoryRow)
+               && encoderBox && encoderChevron && outputDirectoryRow)
         tryVerify(function() {
             return outputFormatGrid.width > 0 && encoderBox.width > 0
                    && outputDirectoryRow.width > 0
@@ -86,6 +87,12 @@ TestCase {
         verify(Math.round(fourthFormatPosition.x - firstFormatPosition.x) === 294)
         verify(Math.round(encoderPosition.x) === 149)
         verify(Math.round(outputDirectoryPosition.x) === 149)
+        verify(encoderChevron.visible)
+        verify(encoderChevron.source.toString().indexOf("arrow-down-s-line") >= 0)
+        const cancelAll = findChild(page, "cancelAllButton")
+        const cancelIcon = findChild(page, "cancelAllButtonStopIcon")
+        verify(cancelAll && cancelIcon)
+        verify(cancelIcon.source.toString().indexOf("checkbox-blank-fill") >= 0)
         const localProcessingHint = findChild(page, "formatLocalProcessingHint")
         verify(localProcessingHint.visible)
         verify(findChild(page, "formatSettingsAdvancedToggle"))

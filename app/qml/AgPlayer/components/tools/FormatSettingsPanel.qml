@@ -62,6 +62,33 @@ Rectangle {
         }
     }
 
+    component ReferenceComboBox: ComboBox {
+        id: control
+        indicator: ThemedIcon {
+            objectName: control.objectName.length > 0 ? control.objectName + "Chevron" : ""
+            x: control.width - width - 10
+            y: (control.height - height) / 2
+            source: Theme.icon("arrow-down-s-line")
+            tint: control.enabled ? "#d7e0e6" : "#667782"
+            sourceSize.width: 18
+            sourceSize.height: 18
+        }
+        contentItem: Text {
+            text: control.displayText
+            leftPadding: 12
+            rightPadding: control.indicator.width + 16
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            color: control.enabled ? "#eef3f6" : "#667782"
+            font.pixelSize: 13
+        }
+        background: Rectangle {
+            color: "#0c1821"
+            border.color: control.activeFocus ? "#1688ff" : "#263b49"
+            radius: 5
+        }
+    }
+
     RowLayout {
         id: settingsHeader
         height: 44
@@ -170,7 +197,7 @@ Rectangle {
                 rowSpacing: 4
                 Text { text: qsTr("B. 编码参数"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("编码器"); color: "#aeb9c1" }
-                ComboBox { objectName: "formatEncoderBox"; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [converter.currentCapability.encoderLabel || "--"] }
+                ReferenceComboBox { objectName: "formatEncoderBox"; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [converter.currentCapability.encoderLabel || "--"] }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("码率模式"); color: "#aeb9c1" }
                 RowLayout {
                     Button {
@@ -187,9 +214,9 @@ Rectangle {
                     }
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("目标码率"); color: "#aeb9c1" }
-                ComboBox { id: bitRateBox; Layout.fillWidth: true; Layout.preferredHeight: 32; enabled: converter.currentCapability.lossy === true; model: [{text:"128 kbps",value:128000},{text:"192 kbps",value:192000},{text:"256 kbps",value:256000},{text:"320 kbps",value:320000}]; textRole:"text"; valueRole:"value"; currentIndex:3 }
+                ReferenceComboBox { id: bitRateBox; Layout.fillWidth: true; Layout.preferredHeight: 32; enabled: converter.currentCapability.lossy === true; model: [{text:"128 kbps",value:128000},{text:"192 kbps",value:192000},{text:"256 kbps",value:256000},{text:"320 kbps",value:320000}]; textRole:"text"; valueRole:"value"; currentIndex:3 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("采样率"); color: "#aeb9c1" }
-                ComboBox {
+                ReferenceComboBox {
                     id: sampleRateBox
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
@@ -200,9 +227,9 @@ Rectangle {
                     textRole: "text"; valueRole: "value"
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("声道"); color: "#aeb9c1" }
-                ComboBox { id: channelBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动"),value:""},{text:qsTr("单声道"),value:"mono"},{text:qsTr("立体声"),value:"stereo"}]; textRole:"text"; valueRole:"value"; currentIndex:2 }
+                ReferenceComboBox { id: channelBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动"),value:""},{text:qsTr("单声道"),value:"mono"},{text:qsTr("立体声"),value:"stereo"}]; textRole:"text"; valueRole:"value"; currentIndex:2 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: "#aeb9c1" }
-                ComboBox {
+                ReferenceComboBox {
                     id: sampleFormatBox
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
@@ -239,7 +266,7 @@ Rectangle {
                     ToolButton { icon.source: Theme.icon("folder-open-line"); onClicked: root.chooseOutputDirectory() }
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("文件冲突策略"); color: "#aeb9c1" }
-                ComboBox { id: conflictBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动序号"),value:"auto-number"},{text:qsTr("跳过"),value:"skip"},{text:qsTr("覆盖"),value:"overwrite"},{text:qsTr("询问"),value:"ask"}]; textRole:"text"; valueRole:"value" }
+                ReferenceComboBox { id: conflictBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动序号"),value:"auto-number"},{text:qsTr("跳过"),value:"skip"},{text:qsTr("覆盖"),value:"overwrite"},{text:qsTr("询问"),value:"ask"}]; textRole:"text"; valueRole:"value" }
                 ReferenceCheckBox { id: keepMetadataCheck; objectName: "keepMetadataCheck"; Layout.preferredHeight: 28; text: qsTr("保留元数据"); checked: SettingsController.preserveMetadata; onToggled: SettingsController.preserveMetadata = checked }
                 ReferenceCheckBox { id: keepCoverCheck; Layout.preferredHeight: 28; text: qsTr("保留封面"); checked: true; enabled: converter.currentCapability.supportsCover === true }
                 ReferenceCheckBox { id: preserveDirectoriesCheck; Layout.preferredHeight: 28; text: qsTr("保留目录结构"); checked: true }
@@ -277,7 +304,7 @@ Rectangle {
                 rowSpacing: 6
                 Text { text: qsTr("高级设置"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
                 Text { text: qsTr("并发任务"); color: "#aeb9c1" }
-                ComboBox {
+                ReferenceComboBox {
                     objectName: "converterParallelJobsBox"
                     Layout.fillWidth: true
                     model: [1, 2, 3, 4]

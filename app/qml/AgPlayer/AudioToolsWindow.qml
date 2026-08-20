@@ -9,12 +9,12 @@ Window {
     visible: false
     // Reference workbench baseline. Layouts still contract below this size.
     width: 1672
-    height: 942
+    height: 941
     minimumWidth: 880
     minimumHeight: 560
     flags: Qt.FramelessWindowHint
     color: "transparent"
-    title: "AgPlayer · " + qsTr("音频工具")
+    title: "Agplayer · " + qsTr("音频工具")
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -79,12 +79,12 @@ Window {
 
                     Image {
                         source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
+                        Layout.preferredWidth: 36
+                        Layout.preferredHeight: 36
                         fillMode: Image.PreserveAspectFit
                     }
                     Text {
-                        text: "AgPlayer"
+                        text: "Agplayer"
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
                         font.pixelSize: 17
