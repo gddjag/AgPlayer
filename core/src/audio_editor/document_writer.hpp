@@ -23,7 +23,8 @@ enum class WriteError {
 };
 
 struct WriteRequest final {
-    TimelineSnapshot snapshot;
+    DocumentSnapshot snapshot;
+    std::optional<TimelineSnapshot> timeline_snapshot;
     std::filesystem::path output_path;
     std::string codec_name;
     std::filesystem::path metadata_source_path;

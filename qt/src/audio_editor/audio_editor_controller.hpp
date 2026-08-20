@@ -6,6 +6,7 @@
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
 #include "../../../core/src/audio_editor/recording_session.hpp"
 #include "../../../core/src/audio_editor/document_writer.hpp"
+#include "../../../core/src/audio_editor/noise_reducer.hpp"
 #include "../bpm_analyzer.hpp"
 
 #include <agplayer/c_api.h>
@@ -24,6 +25,14 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+
+namespace agplayer {
+namespace editor {
+class AudioDocument;
+struct DocumentSnapshot;
+struct AudioSpan;
+} // namespace editor
+}
 
 class PlaybackController;
 
@@ -95,6 +104,7 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(double inputLevel READ inputLevel NOTIFY recordingChanged)
     Q_PROPERTY(qint64 recordingFrames READ recordingFrames NOTIFY recordingChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(bool noiseReductionActive READ noiseReductionActive NOTIFY stateChanged)
 
 public:
     explicit AudioEditorController(
@@ -150,6 +160,8 @@ public:
     [[nodiscard]] double inputLevel() const noexcept;
     [[nodiscard]] qint64 recordingFrames() const noexcept;
     [[nodiscard]] bool busy() const noexcept;
+    [[nodiscard]] bool noiseReductionActive() const noexcept
+    { return noise_reduction_watcher_ != nullptr; }
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
@@ -172,11 +184,9 @@ public:
                               bool variableBitRate = true, int quality = 80);
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
-    Q_INVOKABLE bool moveEvent(quint64 id, qint64 timelineStart);
-    Q_INVOKABLE bool trimEvent(quint64 id, qint64 sourceStart,
-                               qint64 sourceEnd, qint64 timelineStart);
-    Q_INVOKABLE bool splitEvent(quint64 id, qint64 frame);
-    Q_INVOKABLE bool mergeEvents(quint64 left, quint64 right);
+    Q_INVOKABLE bool insertSilence(qint64 frame, qint64 frameCount);
+    Q_INVOKABLE bool applyGain(double decibels);
+    Q_INVOKABLE bool reduceNoise();
     Q_INVOKABLE bool actionEnabled(const QString& id) const noexcept;
     Q_INVOKABLE bool triggerAction(const QString& id);
     Q_INVOKABLE bool playPause();
@@ -190,6 +200,7 @@ public:
     Q_INVOKABLE bool setSpeedPercent(double value);
     Q_INVOKABLE void setKeepPitch(bool value);
     Q_INVOKABLE bool setPitch(int semitones, int cents);
+    Q_INVOKABLE bool applyTimePitch();
     Q_INVOKABLE void refreshRecordingDevices();
     Q_INVOKABLE bool startRecording(const QUrl& target,
                                     const QString& deviceId,
@@ -228,6 +239,7 @@ private:
     struct PreviewRenderResult;
     void refreshActions();
     [[nodiscard]] QVariantList buildExportFormats() const;
+    void rebuildEditorPeaks();
     void requestViewportWaveform();
     void clearViewportWaveformCache();
     [[nodiscard]] QString activeWaveformCacheKey(
@@ -237,6 +249,8 @@ private:
         const std::vector<std::vector<float>>& channels) const;
     bool preparePlayback();
     void startPreparedPlayback();
+    bool runDocumentCommand(const agplayer::editor::EditCommand& command,
+                            bool modifiesDocument = true);
     void pollPlayback();
     void setState(EditorSessionState value);
     void setError(QString message);
@@ -298,6 +312,7 @@ private:
     QFutureWatcher<bool>* recording_start_watcher_{};
     QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
+    QFutureWatcher<agplayer::editor::NoiseReductionResult>* noise_reduction_watcher_{};
     QFutureWatcher<PreviewRenderResult>* preview_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;

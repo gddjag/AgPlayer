@@ -1,5 +1,6 @@
 #pragma once
 
+#include "edit_command.hpp"
 #include "event_timeline.hpp"
 
 #include <filesystem>
@@ -9,6 +10,15 @@
 #include <vector>
 
 namespace agplayer::editor {
+
+struct AudioSpan final {
+    std::shared_ptr<const AudioSource> source;
+    SampleFrame source_start{};
+    SampleFrame frame_count{};
+    bool silent{};
+    float gain_start{1.0F};
+    float gain_end{1.0F};
+};
 
 struct Selection final {
     SampleFrame start{};
@@ -25,10 +35,23 @@ struct Marker final {
     SampleFrame frame{};
 };
 
+struct DocumentSnapshot final {
+    std::vector<AudioSpan> spans;
+    std::vector<Marker> markers;
+    std::optional<Selection> selection;
+};
+
+[[nodiscard]] bool operator==(const AudioSpan& left,
+                              const AudioSpan& right) noexcept;
 [[nodiscard]] bool operator==(const Selection& left,
                               const Selection& right) noexcept;
 [[nodiscard]] bool operator==(const Marker& left,
                               const Marker& right) noexcept;
+[[nodiscard]] bool operator==(const DocumentSnapshot& left,
+                              const DocumentSnapshot& right) noexcept;
+
+[[nodiscard]] std::optional<DocumentSnapshot> singleEventDocumentSnapshot(
+    const TimelineSnapshot& snapshot);
 
 class AudioDocument final {
 public:
@@ -39,46 +62,41 @@ public:
     bool addMarker(Marker marker);
     bool renameMarker(std::size_t index, std::string name);
     bool removeMarker(std::size_t index);
-    bool moveEvent(EventId id, SampleFrame timelineStart);
-    bool trimEvent(EventId id, SampleFrame sourceStart, SampleFrame sourceEnd,
-                   SampleFrame timelineStart);
-    bool splitEventAt(EventId id, SampleFrame frame);
-    bool deleteSelection();
-    bool copySelection();
-    bool cutSelection();
-    bool pasteAt(SampleFrame playhead);
-    bool mergeEvents(EventId left, EventId right);
-    bool insertSource(AudioSource source, SampleFrame timelineStart);
+    bool insertSource(AudioSource source, SampleFrame frame);
+    bool replaceRangeWithSource(AudioSource source, Selection range);
+    bool apply(const EditCommand& command);
+    bool undo();
+    bool redo();
 
-    [[nodiscard]] bool canUndo() const noexcept { return false; }
-    [[nodiscard]] bool canRedo() const noexcept { return false; }
+    [[nodiscard]] bool canUndo() const noexcept { return !undo_stack_.empty(); }
+    [[nodiscard]] bool canRedo() const noexcept { return !redo_stack_.empty(); }
     [[nodiscard]] bool hasClipboard() const noexcept { return !clipboard_.empty(); }
     [[nodiscard]] SampleFrame totalFrames() const noexcept;
+    [[nodiscard]] const std::vector<AudioSpan>& spans() const noexcept
+    {
+        return state_.spans;
+    }
     [[nodiscard]] const std::vector<Marker>& markers() const noexcept
     {
-        return markers_;
+        return state_.markers;
     }
-    [[nodiscard]] const std::optional<Selection>& selection() const noexcept
-    { return selection_; }
-    [[nodiscard]] TimelineSnapshot timelineSnapshot() const
-    { return timeline_.snapshot(); }
+    [[nodiscard]] DocumentSnapshot snapshot() const { return state_; }
 
 private:
-    [[nodiscard]] bool hasValidSelection() const noexcept;
-    [[nodiscard]] static bool splitAt(std::vector<AudioEvent>& events,
-                                      EventId id, SampleFrame frame,
-                                      EventId rightId);
-    [[nodiscard]] static bool splitAtFrame(std::vector<AudioEvent>& events,
-                                           SampleFrame frame, EventId& nextId);
-    [[nodiscard]] static bool sameParameters(const AudioEvent& left,
-                                             const AudioEvent& right) noexcept;
-    [[nodiscard]] std::vector<AudioEvent> selectedEvents() const;
+    using State = DocumentSnapshot;
 
-    EventTimeline timeline_;
-    std::vector<Marker> markers_;
-    std::optional<Selection> selection_;
-    std::vector<AudioEvent> clipboard_;
-    EventId next_event_id_{1};
+    [[nodiscard]] bool hasValidSelection() const noexcept;
+    [[nodiscard]] bool splitAt(std::vector<AudioSpan>& spans,
+                               SampleFrame frame) const;
+    [[nodiscard]] std::vector<AudioSpan> selectedSpans(
+        std::vector<AudioSpan> spans) const;
+    [[nodiscard]] bool deleteSelectedRange(State& candidate) const;
+    void commit(State candidate);
+
+    State state_;
+    std::vector<AudioSpan> clipboard_;
+    std::vector<State> undo_stack_;
+    std::vector<State> redo_stack_;
 };
 
 } // namespace agplayer::editor

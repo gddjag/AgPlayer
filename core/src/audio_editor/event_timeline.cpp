@@ -24,32 +24,6 @@ bool EventTimeline::insert(AudioEvent candidate)
     return true;
 }
 
-bool EventTimeline::replace(std::vector<AudioEvent> events)
-{
-    std::sort(events.begin(), events.end(),
-              [](const AudioEvent& left, const AudioEvent& right) {
-                  return left.timelineStart < right.timelineStart;
-              });
-    for (std::size_t left = 0; left < events.size(); ++left) {
-        const AudioEvent& candidate = events[left];
-        if (!isValid(candidate)
-            || candidate.timelineStart > std::numeric_limits<SampleFrame>::max()
-                - audibleFrames(candidate)) {
-            return false;
-        }
-        for (std::size_t right = left + 1; right < events.size(); ++right) {
-            if (candidate.id == events[right].id
-                || (candidate.timelineStart < endFrame(events[right])
-                    && events[right].timelineStart < endFrame(candidate))) {
-                return false;
-            }
-        }
-    }
-    events_.swap(events);
-    ++revision_;
-    return true;
-}
-
 bool EventTimeline::moveEvent(const EventId id, const SampleFrame timeline_start)
 {
     const auto found = std::find_if(

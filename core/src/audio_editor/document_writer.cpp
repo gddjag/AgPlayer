@@ -153,7 +153,10 @@ WriteResult DocumentWriter::write(
     const std::atomic_bool* cancelled,
     std::function<void(float)> progress) const
 {
-    if (request.output_path.empty() || request.snapshot.events.empty()
+    const bool uses_timeline = request.timeline_snapshot.has_value();
+    if (request.output_path.empty()
+        || (uses_timeline ? request.timeline_snapshot->events.empty()
+                          : request.snapshot.spans.empty())
         || (request.range && !request.range->valid())) {
         return {WriteError::InvalidRequest, "invalid write request", 0};
     }
@@ -182,8 +185,11 @@ WriteResult DocumentWriter::write(
     };
 
     DocumentRenderer renderer;
-    const RenderResult rendered = renderer.renderFloatWav(
-        request.snapshot, request.range, render_path, cancelled, progress);
+    const RenderResult rendered = uses_timeline
+        ? renderer.renderFloatWav(*request.timeline_snapshot, request.range,
+                                  render_path, cancelled, progress)
+        : renderer.renderFloatWav(request.snapshot, request.range, render_path,
+                                  cancelled, progress);
     if (!rendered.success) {
         cleanup();
         return {rendered.message == "cancelled" ? WriteError::Cancelled

@@ -105,15 +105,17 @@ private slots:
         compareRetainedState(before_overflow, timeline.snapshot());
     }
 
-    void singleEventSnapshotRetainsExactSourceCoordinates()
+    void singleEventSnapshotAdaptsToTheLegacyRenderInput()
     {
         EventTimeline timeline;
         QVERIFY(timeline.insert(event(1, 0, 100, 600)));
 
-        const auto snapshot = timeline.snapshot();
-        QCOMPARE(snapshot.events.size(), std::size_t{1});
-        QCOMPARE(snapshot.events.front().sourceStart, SampleFrame{100});
-        QCOMPARE(audibleFrames(snapshot.events.front()), SampleFrame{500});
+        const auto legacy = singleEventDocumentSnapshot(timeline.snapshot());
+
+        QVERIFY(legacy.has_value());
+        QCOMPARE(legacy->spans.size(), std::size_t{1});
+        QCOMPARE(legacy->spans.front().source_start, SampleFrame{100});
+        QCOMPARE(legacy->spans.front().frame_count, SampleFrame{500});
     }
 };
 

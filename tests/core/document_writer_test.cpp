@@ -79,7 +79,7 @@ int main(const int argc, char** argv)
     }
     const auto before = read_bytes(protected_output);
     WriteRequest invalid;
-    invalid.snapshot = document.timelineSnapshot();
+    invalid.snapshot = document.snapshot();
     invalid.output_path = protected_output;
     invalid.codec_name = "encoder-that-does-not-exist";
     DocumentWriter writer;
@@ -92,7 +92,7 @@ int main(const int argc, char** argv)
     const fs::path selection_output = input.parent_path() / "writer-selection.wav";
     fs::remove(selection_output);
     WriteRequest selection;
-    selection.snapshot = document.timelineSnapshot();
+    selection.snapshot = document.snapshot();
     selection.output_path = selection_output;
     selection.range = Selection{100, 1'100};
     const WriteResult written = writer.write(selection);
@@ -108,7 +108,7 @@ int main(const int argc, char** argv)
     const fs::path parameter_output = input.parent_path() / "writer-parameters.flac";
     fs::remove(parameter_output);
     WriteRequest parameters;
-    parameters.snapshot = document.timelineSnapshot();
+    parameters.snapshot = document.snapshot();
     parameters.output_path = parameter_output;
     parameters.codec_name = "flac";
     parameters.sample_rate = 48'000;
@@ -140,7 +140,7 @@ int main(const int argc, char** argv)
         const fs::path output = input.parent_path() / output_case.name;
         fs::remove(output);
         WriteRequest matrix;
-        matrix.snapshot = document.timelineSnapshot();
+        matrix.snapshot = document.snapshot();
         matrix.output_path = output;
         matrix.codec_name = output_case.codec;
         matrix.range = Selection{0, 44'100};

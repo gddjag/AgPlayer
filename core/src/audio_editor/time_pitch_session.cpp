@@ -78,7 +78,21 @@ TimePitchResult TimePitchSession::process(
     const std::atomic_bool* cancelled,
     std::function<void(float)> progress) const
 {
-    if (snapshot.events.empty() || output.empty()) {
+    const auto legacy = singleEventDocumentSnapshot(snapshot);
+    if (!legacy) {
+        return {false, "timeline processing requires a single unmodified event", {}};
+    }
+    return process(*legacy, output, range, cancelled, std::move(progress));
+}
+
+TimePitchResult TimePitchSession::process(
+    const DocumentSnapshot& snapshot,
+    const std::filesystem::path& output,
+    const std::optional<Selection> range,
+    const std::atomic_bool* cancelled,
+    std::function<void(float)> progress) const
+{
+    if (snapshot.spans.empty() || output.empty()) {
         return {false, "invalid time/pitch request", {}};
     }
     const auto rendered_path = render_path_for(output);
