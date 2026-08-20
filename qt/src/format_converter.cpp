@@ -402,6 +402,7 @@ QVariantList FormatConverter::files() const
     list.reserve(entries_.size());
     for (const FileEntry& entry : entries_) {
         QVariantMap map;
+        map[QStringLiteral("taskId")] = entry.taskId;
         map[QStringLiteral("fileName")] = entry.fileName;
         map[QStringLiteral("format")] = entry.format;
         map[QStringLiteral("fileSize")] = entry.fileSize;
@@ -1585,6 +1586,7 @@ void FormatConverter::removeFile(int index)
         }
         entries_.removeAt(index);
     }
+    syncTaskModel();
     emit fileCountChanged();
     emit filesChanged();
 }
@@ -1599,6 +1601,7 @@ void FormatConverter::clear()
         QMutexLocker lock(&mutex_);
         entries_.clear();
     }
+    syncTaskModel();
     setProgress(0.0);
     setCompletedCount(0);
     setFailedCount(0);

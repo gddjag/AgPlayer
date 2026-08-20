@@ -7,7 +7,7 @@ Rectangle {
     id: root
     property var converter
     property var settingsPanel
-    color: "#0b1721"
+    color: "#101a21"
     border.color: "#203340"
     radius: 6
     clip: true
@@ -21,7 +21,7 @@ Rectangle {
         }
     }
 
-    readonly property var columnWidths: [54, 230, 120, 100, 115, 130, 120, 120, 210]
+    readonly property var columnWidths: [62, 260, 120, 100, 115, 130, 120, 120, 210]
 
     ColumnLayout {
         anchors.fill: parent
@@ -69,7 +69,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            color: "#101e28"
+            color: "#162129"
             Row {
                 anchors.fill: parent
                 Repeater {
@@ -100,6 +100,7 @@ Rectangle {
 
         TableView {
             id: table
+            objectName: "formatTaskTableView"
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: converter.filteredTaskModel
@@ -109,7 +110,7 @@ Rectangle {
             delegate: Rectangle {
                 implicitWidth: root.columnWidths[column]
                 implicitHeight: 44
-                color: row % 2 ? "#0d1a24" : "#0a1720"
+                color: row % 2 ? "#101a21" : "#0f1820"
                 border.color: "#172a36"
                 border.width: 1
 
@@ -124,7 +125,7 @@ Rectangle {
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    source: Theme.icon("music-2-fill")
+                    source: Theme.icon("file-music-fill")
                     tint: model.sourceFormat === "WAV" ? "#ff8a3d"
                           : model.sourceFormat === "MP3" ? "#25aee4"
                           : model.sourceFormat === "FLAC" ? "#8d63e8" : "#21bf83"
@@ -218,6 +219,7 @@ Rectangle {
         property string errorDetail: ""
 
         MenuItem {
+            objectName: "formatTaskRemoveMenuItem"
             text: qsTr("移除任务")
             onTriggered: root.removeTask(taskContextMenu.taskId)
         }

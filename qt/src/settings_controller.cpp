@@ -119,6 +119,7 @@ bool SettingsController::replayGainClipProtection() const noexcept { return repl
 
 // Audio Tools getters
 QString SettingsController::defaultOutputDirectory() const { return defaultOutputDirectory_; }
+int SettingsController::parallelJobs() const noexcept { return parallelJobs_; }
 int SettingsController::overwritePolicy() const noexcept { return overwritePolicy_; }
 QString SettingsController::transcodeFormat() const { return transcodeFormat_; }
 int SettingsController::transcodeBitrateKbps() const noexcept { return transcodeBitrateKbps_; }
@@ -566,6 +567,17 @@ void SettingsController::setDefaultOutputDirectory(const QString& value)
     emit defaultOutputDirectoryChanged();
 }
 
+void SettingsController::setParallelJobs(int value)
+{
+    value = clampValue(value, 1, 4);
+    if (parallelJobs_ == value) {
+        return;
+    }
+    parallelJobs_ = value;
+    persistValue(QStringLiteral("audioTools/parallelJobs"), value);
+    emit parallelJobsChanged();
+}
+
 void SettingsController::setOverwritePolicy(int value)
 {
     value = clampValue(value, 0, 1);
@@ -915,6 +927,7 @@ void SettingsController::emitAllChanged()
     emit replayGainClipProtectionChanged();
 
     emit defaultOutputDirectoryChanged();
+    emit parallelJobsChanged();
     emit overwritePolicyChanged();
     emit transcodeFormatChanged();
     emit transcodeBitrateKbpsChanged();
@@ -1241,6 +1254,8 @@ void SettingsController::load()
             QStringLiteral("Failed to create default output directory: ")
                 + defaultOutputDirectory_);
     }
+    parallelJobs_ = clampValue(
+        settings_.value(QStringLiteral("parallelJobs"), parallelJobs_).toInt(), 1, 4);
     overwritePolicy_ = settings_.value(QStringLiteral("overwritePolicy"), overwritePolicy_).toInt();
     const bool hasSplitTranscodeSettings =
         settings_.contains(QStringLiteral("transcodeFormat"))
@@ -1463,6 +1478,7 @@ void SettingsController::saveAll()
 
     settings_.beginGroup(QStringLiteral("audioTools"));
     persistValue(QStringLiteral("defaultOutputDirectory"), defaultOutputDirectory_);
+    persistValue(QStringLiteral("parallelJobs"), parallelJobs_);
     persistValue(QStringLiteral("overwritePolicy"), overwritePolicy_);
     persistValue(QStringLiteral("transcodeFormat"), transcodeFormat_);
     persistValue(QStringLiteral("transcodeBitrateKbps"),
@@ -1541,6 +1557,7 @@ void SettingsController::restoreDefaults()
     replayGainClipProtection_ = true;
 
     defaultOutputDirectory_ = defaultExportDir();
+    parallelJobs_ = 4;
     overwritePolicy_ = 0;
     transcodeFormat_ = QStringLiteral("MP3");
     transcodeBitrateKbps_ = 320;

@@ -16,6 +16,8 @@ TestCase {
     }
 
     function init() {
+        testCase.width = 1672
+        testCase.height = 941
         if (!FormatConverter.busy)
             FormatConverter.clear()
         tryCompare(FormatConverter, "fileCount", 0, 3000)
@@ -43,8 +45,8 @@ TestCase {
         verify(hintPosition.y + localProcessingHint.height <= settingsPanel.height)
         verify(findChild(page, "formatSettingsAdvancedToggle"))
         verify(findChild(page, "formatTaskContextMenu"))
-        verify(!findChild(page, "formatFooterParallelJobs"))
-        verify(!findChild(page, "formatFooterOutputDirectory"))
+        verify(!findChild(bottomBar, "converterParallelJobsBox"))
+        verify(!findChild(bottomBar, "formatOutputDirectoryRow"))
         const formatBox = findChild(page, "converterOutputFormatBox")
         verify(formatBox)
         compare(formatBox.count, 8)
@@ -65,14 +67,61 @@ TestCase {
     function test_settingsPanelChevronCollapsesWorkbench() {
         const taskPanel = findChild(page, "formatTaskPanel")
         const settingsPanel = findChild(page, "formatSettingsPanel")
-        verify(taskPanel && settingsPanel)
+        const toggle = findChild(page, "formatSettingsAdvancedToggle")
+        verify(taskPanel && settingsPanel && toggle)
 
-        settingsPanel.expanded = false
+        mouseClick(toggle, toggle.width / 2, toggle.height / 2, Qt.LeftButton)
         tryCompare(settingsPanel, "width", 40, 1000)
         verify(taskPanel.width > settingsPanel.width)
 
-        settingsPanel.expanded = true
+        mouseClick(toggle, toggle.width / 2, toggle.height / 2, Qt.LeftButton)
         tryVerify(function() { return settingsPanel.width >= 443 }, 1000)
+    }
+
+    function test_parallelJobsPersistThroughSettingsController() {
+        const parallelBox = findChild(page, "converterParallelJobsBox")
+        verify(parallelBox)
+        SettingsController.parallelJobs = 3
+        tryCompare(FormatConverter, "parallelJobs", 3, 1000)
+        compare(parallelBox.currentValue, 3)
+        SettingsController.parallelJobs = 4
+        tryCompare(FormatConverter, "parallelJobs", 4, 1000)
+    }
+
+    function test_rowContextMenuRemovesExactlyOneTask() {
+        const secondUrl = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(secondUrl.toString().length > 0)
+        FormatConverter.addUrls([testAudioUrl, secondUrl])
+        tryVerify(function() { return !FormatConverter.busy }, 5000)
+        tryCompare(FormatConverter, "fileCount", 2, 3000)
+
+        const table = findChild(page, "formatTaskTableView")
+        const menu = findChild(page, "formatTaskContextMenu")
+        const remove = findChild(page, "formatTaskRemoveMenuItem")
+        verify(table && menu && remove)
+        mouseClick(table, 100, 22, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 1000)
+        mouseClick(remove, remove.width / 2, remove.height / 2, Qt.LeftButton)
+        tryCompare(FormatConverter, "fileCount", 1, 3000)
+    }
+
+    function test_fatalPreflightOpensErrorDialog() {
+        const errorDialog = findChild(page, "formatErrorDialog")
+        verify(errorDialog)
+        page.requestPlan()
+        tryVerify(function() { return errorDialog.visible }, 1000)
+        verify(errorDialog.summary.length > 0)
+        errorDialog.close()
+    }
+
+    function test_minimumWindowKeepsCoreActionsAndTableReachable() {
+        const taskPanel = findChild(page, "formatTaskPanel")
+        const addFile = findChild(page, "formatAddFileButton")
+        const convert = findChild(page, "convertAllButton")
+        const table = findChild(page, "formatTaskTableView")
+        verify(taskPanel && addFile && convert && table)
+        verify(page.usesCompactLayout(880))
+        verify(!page.usesCompactLayout(1672))
     }
 
     function test_realImportSelectionAndPreflight() {

@@ -19,6 +19,7 @@ private slots:
     void initTestCase();
     void defaultCacheDirectoryUsesStandardPaths();
     void defaultOutputDirectoryUsesStandardPaths();
+    void parallelJobsClampAndPersistAcrossReload();
     void transcodeDefaultsAreSplitAndPersisted();
     void migratesCombinedTranscodePreset();
     void loadCreatesDefaultDirectories();
@@ -75,6 +76,27 @@ void SettingsControllerTest::loadCreatesDefaultDirectories()
     QVERIFY(!exportDir.isEmpty());
     QVERIFY(QDir(cacheDir).exists());
     QVERIFY(QDir(exportDir).exists());
+}
+
+void SettingsControllerTest::parallelJobsClampAndPersistAcrossReload()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    {
+        SettingsController settings;
+        QCOMPARE(settings.parallelJobs(), 4);
+        settings.setParallelJobs(0);
+        QCOMPARE(settings.parallelJobs(), 1);
+        settings.setParallelJobs(9);
+        QCOMPARE(settings.parallelJobs(), 4);
+        settings.setParallelJobs(3);
+        QCOMPARE(settings.parallelJobs(), 3);
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.parallelJobs(), 3);
+    persisted.clear();
 }
 
 void SettingsControllerTest::transcodeDefaultsAreSplitAndPersisted()

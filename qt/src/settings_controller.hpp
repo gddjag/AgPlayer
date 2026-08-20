@@ -102,6 +102,8 @@ class SettingsController final : public QObject {
     // Audio Tools
     Q_PROPERTY(QString defaultOutputDirectory READ defaultOutputDirectory
                    WRITE setDefaultOutputDirectory NOTIFY defaultOutputDirectoryChanged)
+    Q_PROPERTY(int parallelJobs READ parallelJobs WRITE setParallelJobs
+                   NOTIFY parallelJobsChanged)
     Q_PROPERTY(int overwritePolicy READ overwritePolicy WRITE setOverwritePolicy
                    NOTIFY overwritePolicyChanged)
     Q_PROPERTY(QString transcodeFormat READ transcodeFormat WRITE setTranscodeFormat
@@ -200,6 +202,7 @@ public:
 
     // Audio Tools getters
     QString defaultOutputDirectory() const;
+    int parallelJobs() const noexcept;
     int overwritePolicy() const noexcept;
     QString transcodeFormat() const;
     int transcodeBitrateKbps() const noexcept;
@@ -278,6 +281,7 @@ public:
 
     // Audio Tools setters
     void setDefaultOutputDirectory(const QString& value);
+    void setParallelJobs(int value);
     void setOverwritePolicy(int value);
     void setTranscodeFormat(const QString& value);
     void setTranscodeBitrateKbps(int value);
@@ -364,6 +368,7 @@ signals:
     void replayGainClipProtectionChanged();
 
     void defaultOutputDirectoryChanged();
+    void parallelJobsChanged();
     void overwritePolicyChanged();
     void transcodeFormatChanged();
     void transcodeBitrateKbpsChanged();
@@ -461,6 +466,7 @@ private:
 
     // Audio Tools
     QString defaultOutputDirectory_;
+    int parallelJobs_ = 4;
     int overwritePolicy_ = 0;
     QString transcodeFormat_ = QStringLiteral("MP3");
     int transcodeBitrateKbps_ = 320;

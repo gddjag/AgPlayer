@@ -32,16 +32,28 @@ if ($combined -notmatch 'modelData\.available') {
 if ($page -notmatch 'SettingsController\.defaultOutputDirectory') {
     throw 'The output directory must initialize from and persist through SettingsController.'
 }
+if ($page -notmatch 'SettingsController\.parallelJobs' -or
+    $settings -notmatch 'SettingsController\.parallelJobs') {
+    throw 'Parallel jobs must synchronize through SettingsController.'
+}
 if ($page -notmatch 'plan\.error\s*\|\|\s*plan\.reason') {
     throw 'Every preflight rejection must surface the backend reason.'
 }
-if ($combined -notmatch 'cancelTask\(' -or
+if ($combined -notmatch 'taskId' -or
+    $combined -notmatch 'cancelTask\(' -or
     $combined -notmatch 'copyText\(' -or
     $combined -notmatch 'removeFile\(' -or
     $combined -notmatch 'retryFailed\(') {
     throw 'The task context menu must reuse real cancel, copy, and remove APIs.'
 }
-if ($page -match 'objectName:\s*"formatFooterParallelJobs"' -or
-    $page -match 'objectName:\s*"formatFooterOutputDirectory"') {
+if ($page -match 'converterParallelJobsBox' -or
+    $page -match 'formatOutputDirectoryRow') {
     throw 'The reference footer must not expose parallel-jobs or output-directory controls.'
+}
+foreach ($asset in @(
+    'filter-3-line.svg', 'arrow-up-s-line.svg', 'checkbox-circle-line.svg',
+    'error-warning-line.svg', 'file-music-fill.svg')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot "assets/icons/$asset"))) {
+        throw "Missing approved format-workbench icon asset: $asset"
+    }
 }

@@ -7,11 +7,15 @@ import AgPlayer
 Rectangle {
     id: page
     objectName: "formatConvertPage"
-    color: "#071018"
+    color: "#0f1820"
     focus: true
 
     property var converter: FormatConverter
     property string outputDirectory: SettingsController.defaultOutputDirectory
+    function usesCompactLayout(availableWidth) { return availableWidth <= 1000 }
+    readonly property bool compactLayout: usesCompactLayout(width)
+
+    Component.onCompleted: converter.parallelJobs = SettingsController.parallelJobs
 
     onOutputDirectoryChanged: {
         if (SettingsController.defaultOutputDirectory !== outputDirectory)
@@ -104,7 +108,7 @@ Rectangle {
             objectName: "formatToolbar"
             Layout.fillWidth: true
             Layout.preferredHeight: 60
-            color: "#0b1721"
+            color: "#101a21"
             border.color: "#203340"
             radius: 6
 
@@ -123,6 +127,10 @@ Rectangle {
                         { text: qsTr("清空列表"), icon: "delete-bin-line", action: "clear" }
                     ]
                     Button {
+                        objectName: modelData.action === "file" ? "formatAddFileButton" : ""
+                        visible: !page.compactLayout
+                                 || modelData.action === "file"
+                                 || modelData.action === "folder"
                         Layout.preferredWidth: modelData.action === "playlist" ? 158
                                                : modelData.action === "file" ? 130
                                                : modelData.action === "folder" ? 142
@@ -174,6 +182,7 @@ Rectangle {
                 TextField {
                     id: searchField
                     objectName: "formatSearchField"
+                    visible: !page.compactLayout
                     Layout.preferredWidth: 360
                     Layout.preferredHeight: 40
                     placeholderText: qsTr("搜索文件名、格式或标签...")
@@ -190,7 +199,7 @@ Rectangle {
                     objectName: "formatFilterButton"
                     Layout.preferredWidth: 40
                     Layout.preferredHeight: 40
-                    icon.source: Theme.icon("equalizer-line")
+                    icon.source: Theme.icon("filter-3-line")
                     onClicked: filterMenu.open()
                     background: Rectangle {
                         color: parent.hovered ? "#172a37" : "#09141c"
@@ -232,11 +241,12 @@ Rectangle {
             FormatSettingsPanel {
                 id: settingsPanel
                 objectName: "formatSettingsPanel"
-                Layout.preferredWidth: 445
-                Layout.minimumWidth: settingsPanel.expanded ? 420 : 40
-                Layout.maximumWidth: settingsPanel.expanded ? 455 : 40
+                Layout.preferredWidth: settingsPanel.isExpanded ? 445 : 40
+                Layout.minimumWidth: settingsPanel.isExpanded ? 420 : 40
+                Layout.maximumWidth: settingsPanel.isExpanded ? 455 : 40
                 Layout.fillHeight: true
                 converter: page.converter
+                forceCollapsed: page.compactLayout
                 outputDirectory: page.outputDirectory
                 onOutputDirectoryEdited: function(directory) { page.outputDirectory = directory }
                 onChooseOutputDirectory: outputDialogComponent.createObject(page).open()
@@ -248,7 +258,7 @@ Rectangle {
             objectName: "formatBottomBar"
             Layout.fillWidth: true
             Layout.preferredHeight: 114
-            color: "#0b1721"
+            color: "#101a21"
             border.color: "#203340"
             radius: 6
 
@@ -259,14 +269,14 @@ Rectangle {
                 spacing: 16
 
                 ColumnLayout {
-                    Layout.preferredWidth: 430
+                    Layout.preferredWidth: page.compactLayout ? 220 : 430
                     spacing: 8
                     RowLayout {
                         Text { text: qsTr("总进度"); color: "#d7e0e6"; font.pixelSize: 14 }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
-                            Layout.preferredWidth: 320
+                            Layout.preferredWidth: page.compactLayout ? 130 : 320
                             from: 0; to: 1; value: converter.progress
                             background: Rectangle { implicitHeight: 10; color: "#20303b"; radius: 5 }
                             contentItem: Item {
@@ -310,10 +320,12 @@ Rectangle {
                     }
                 }
 
+                Item { Layout.preferredWidth: page.compactLayout ? 0 : 159 }
+
                 Button {
                     id: convertAllButton
                     objectName: "convertAllButton"
-                    Layout.preferredWidth: 174
+                    Layout.preferredWidth: page.compactLayout ? 125 : 174
                     Layout.preferredHeight: 68
                     enabled: converter.checkedCount > 0 && !converter.busy
                     text: qsTr("开始处理")
@@ -329,7 +341,7 @@ Rectangle {
 
                 Button {
                     objectName: "cancelAllButton"
-                    Layout.preferredWidth: 168
+                    Layout.preferredWidth: page.compactLayout ? 115 : 168
                     Layout.preferredHeight: 68
                     enabled: converter.busy
                     text: qsTr("取消全部")
@@ -381,6 +393,18 @@ Rectangle {
         function onDefaultOutputDirectoryChanged() {
             if (page.outputDirectory !== SettingsController.defaultOutputDirectory)
                 page.outputDirectory = SettingsController.defaultOutputDirectory
+        }
+        function onParallelJobsChanged() {
+            if (converter.parallelJobs !== SettingsController.parallelJobs)
+                converter.parallelJobs = SettingsController.parallelJobs
+        }
+    }
+
+    Connections {
+        target: converter
+        function onParallelJobsChanged() {
+            if (SettingsController.parallelJobs !== converter.parallelJobs)
+                SettingsController.parallelJobs = converter.parallelJobs
         }
     }
 }

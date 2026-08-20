@@ -4,16 +4,21 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/add-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-back-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-up-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-circle-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/error-warning-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/file-copy-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/file-music-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/filter-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-add-line.svg
