@@ -17,6 +17,7 @@
 
 #include "decoder.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -1040,6 +1041,20 @@ mergePairCoveredBySelection(const agplayer::editor::TimelineSnapshot& snapshot,
         }
     }
     if (covered.size() != 2) return std::nullopt;
+    const auto& left = *covered[0];
+    const auto& right = *covered[1];
+    const bool sameEnvelope = left.envelope.size() == right.envelope.size()
+        && std::equal(left.envelope.begin(), left.envelope.end(),
+                      right.envelope.begin(), [](const auto& first, const auto& second) {
+                          return first.offset == second.offset && first.gain == second.gain;
+                      });
+    if (left.timelineStart + agplayer::editor::audibleFrames(left)
+            != right.timelineStart
+        || left.sourceEnd != right.sourceStart || left.source != right.source
+        || left.gain != right.gain || left.fadeIn != right.fadeIn
+        || left.fadeOut != right.fadeOut || left.speedRatio != right.speedRatio
+        || left.pitchSemitone != right.pitchSemitone || left.mute != right.mute
+        || !sameEnvelope) return std::nullopt;
     return std::make_pair(covered[0]->id, covered[1]->id);
 }
 

@@ -182,6 +182,19 @@ private slots:
         QVERIFY(!preserveClipboard.cutSelection());
         QCOMPARE(preserveClipboard.timelineSnapshot().revision, beforeFailedCut.revision);
         QVERIFY(preserveClipboard.pasteAt(200));
+
+        auto deleted = document();
+        QVERIFY(deleted.splitEventAt(1, 200));
+        QVERIFY(deleted.moveEvent(2, 400));
+        QVERIFY(deleted.splitEventAt(2, 600));
+        QVERIFY(deleted.setSelection({100, 800}));
+        const TimelineSnapshot beforeDelete = deleted.timelineSnapshot();
+        QVERIFY(deleted.deleteSelection());
+        const TimelineSnapshot afterDelete = deleted.timelineSnapshot();
+        QCOMPARE(afterDelete.revision, beforeDelete.revision + 1);
+        QCOMPARE(afterDelete.events.size(), std::size_t{2});
+        QCOMPARE(afterDelete.events.at(0).timelineStart, SampleFrame{0});
+        QCOMPARE(afterDelete.events.at(1).timelineStart, SampleFrame{800});
     }
 
     void mergeRejectsDifferentMetadataAndMergesOnlyExactNeighbors()
@@ -190,6 +203,7 @@ private slots:
         QVERIFY(value.splitEventAt(1, 400));
         const TimelineSnapshot before = value.timelineSnapshot();
         QVERIFY(value.mergeEvents(before.events.at(0).id, before.events.at(1).id));
+        QCOMPARE(value.timelineSnapshot().revision, before.revision + 1);
         QCOMPARE(value.timelineSnapshot().events.size(), std::size_t{1});
 
         auto rejected = document();
@@ -199,6 +213,33 @@ private slots:
         const TimelineSnapshot rejected_before = rejected.timelineSnapshot();
         QVERIFY(!rejected.mergeEvents(parts.events.at(0).id, parts.events.at(1).id));
         QCOMPARE(rejected.timelineSnapshot().revision, rejected_before.revision);
+    }
+
+    void mergeRejectsEveryMismatchedParameter()
+    {
+        const auto source = std::make_shared<const AudioSource>(
+            AudioSource{"fixture.wav", 48'000, 2, 1'000});
+        const auto other = std::make_shared<const AudioSource>(
+            AudioSource{"other.wav", 48'000, 2, 1'000});
+        for (int mismatch = 0; mismatch < 7; ++mismatch) {
+            AudioEvent left{1, source, 0, 500, 0};
+            AudioEvent right{2, source, 500, 1'000, 500};
+            switch (mismatch) {
+            case 0: right.source = other; break;
+            case 1: right.gain = 0.5F; break;
+            case 2: right.fadeIn = 1; break;
+            case 3: right.speedRatio = 1.25; break;
+            case 4: right.pitchSemitone = 1; break;
+            case 5: right.mute = true; break;
+            case 6: right.envelope = {{1, 0.5F}}; break;
+            default: Q_UNREACHABLE();
+            }
+            auto value = AudioDocument::fromEvents({left, right});
+            const TimelineSnapshot before = value.timelineSnapshot();
+            QVERIFY(!value.mergeEvents(1, 2));
+            QCOMPARE(value.timelineSnapshot().revision, before.revision);
+            QCOMPARE(value.timelineSnapshot().events.size(), before.events.size());
+        }
     }
 };
 

@@ -67,6 +67,17 @@ private slots:
         QCOMPARE(controller.totalFrames(), qint64{48'000});
     }
 
+    void mergeActionIsDisabledForSelectionCoveringAVisibilityGap()
+    {
+        AudioEditorController controller;
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 48'000));
+        QVERIFY(controller.splitEvent(1, 24'000));
+        QVERIFY(controller.moveEvent(2, 30'000));
+        QVERIFY(controller.setSelection(0, 54'000));
+        QVERIFY(!controller.actionEnabled(QStringLiteral("editor.merge")));
+        QVERIFY(!controller.triggerAction(QStringLiteral("editor.merge")));
+    }
+
     void copyCutAndPasteActionsUseMetadataClipboard()
     {
         AudioEditorController controller;
