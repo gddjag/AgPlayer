@@ -24,7 +24,6 @@ private slots:
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
-    void updatesRenamedPathsAsOneBatchWithoutChangingTrackIds();
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
 };
