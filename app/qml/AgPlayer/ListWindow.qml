@@ -8,9 +8,9 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1228
+    width: 1447
     height: 570
-    minimumWidth: 720
+    minimumWidth: 1284
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: "transparent"
@@ -31,6 +31,29 @@ Window {
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
     property string exportPlaylistId: ""
+
+    function routeNavigationNode(nodeType, nodeId, resourceFolder) {
+        if (!filterModel)
+            return
+        if (nodeType === "library" || nodeType === "favorites"
+                || nodeType === "playlist") {
+            filterModel.tagKey = ""
+            TagModel.selectedKey = ""
+            filterModel.resourceFolder = ""
+            filterModel.category = nodeType === "library" ? "all"
+                                 : nodeType === "favorites" ? "favorites"
+                                 : nodeId.substring("playlist:".length)
+        } else if (nodeType === "tags") {
+            filterModel.resourceFolder = ""
+            filterModel.category = "all"
+        } else if (nodeType === "resourceRoot"
+                   || nodeType === "resourceFolder") {
+            filterModel.tagKey = ""
+            TagModel.selectedKey = ""
+            filterModel.category = "all"
+            filterModel.resourceFolder = resourceFolder
+        }
+    }
 
     onClosing: function(close) {
         close.accepted = false
@@ -300,117 +323,165 @@ Window {
                 }
             }
 
-            RowLayout {
+            Rectangle {
+                id: listWorkspace
+                objectName: "listWorkspace"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 0
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+                Layout.bottomMargin: 8
+                readonly property int leftColumnWidth: 256
+                readonly property int rightColumnWidth: 328
+                readonly property int centerMinimumWidth: 680
+                readonly property int dividerWidth: 1
+                readonly property real centerWidth: centerColumn.width
+                color: Theme.listWorkspaceSurface
+                border.color: Theme.listWorkspaceBorder
+                border.width: 1
+                radius: Theme.radiusMd
+                clip: true
 
-                SideNavigation {
-                    id: sideNavigation
-                    Layout.preferredWidth: 208
-                    Layout.fillHeight: true
-                    selectedCategory: filterModel ? filterModel.category : "all"
-                    allCount: LibraryModel.count
-                    favoriteCount: LibraryModel.favoriteCount
-                    historyCount: LibraryModel.historyCount
-                    playlistModel: listWindow.playlistModel
-                    onCategorySelected: function(category) {
-                        if (filterModel) filterModel.category = category
-                    }
-                    onCreatePlaylistRequested: createPlaylistDialog.open()
-                    onRenamePlaylistRequested: function(playlistId) {
-                        listWindow.openRenameDialog(playlistId)
-                    }
-                    onRemovePlaylistRequested: function(playlistId) {
-                        removePlaylistDialog.playlistId = playlistId
-                        removePlaylistDialog.open()
-                    }
-                    onImportRequested: listWindow.openImportDialog()
-                    onImportPlaylistRequested: importPlaylistDialog.open()
-                    onExportPlaylistRequested: function(playlistId) {
-                        listWindow.exportPlaylistId = playlistId
-                        copyPlaylistFiles.checked = false
-                        exportOptionsDialog.open()
-                    }
-                }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    spacing: 0
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.leftMargin: 8
-                    Layout.rightMargin: 8
-                    Layout.bottomMargin: 8
-                    spacing: 7
+                    SideNavigation {
+                        id: sideNavigation
+                        objectName: "referenceSideNavigation"
+                        Layout.preferredWidth: listWorkspace.leftColumnWidth
+                        Layout.minimumWidth: listWorkspace.leftColumnWidth
+                        Layout.maximumWidth: listWorkspace.leftColumnWidth
+                        Layout.fillHeight: true
+                        navigationModel: LibraryNavigationModel
+                        selectedCategory: filterModel ? filterModel.category : "all"
+                        selectedTagKey: filterModel ? filterModel.tagKey : ""
+                        selectedResourceFolder: filterModel
+                                                ? filterModel.resourceFolder : ""
+                        playlistModel: listWindow.playlistModel
+                        onNavigationSelected: function(nodeType, nodeId,
+                                                       resourceFolder) {
+                            listWindow.routeNavigationNode(nodeType, nodeId,
+                                                           resourceFolder)
+                        }
+                        onCreatePlaylistRequested: createPlaylistDialog.open()
+                        onRenamePlaylistRequested: function(playlistId) {
+                            listWindow.openRenameDialog(playlistId)
+                        }
+                        onRemovePlaylistRequested: function(playlistId) {
+                            removePlaylistDialog.playlistId = playlistId
+                            removePlaylistDialog.open()
+                        }
+                        onImportRequested: listWindow.openImportDialog()
+                        onImportPlaylistRequested: importPlaylistDialog.open()
+                        onExportPlaylistRequested: function(playlistId) {
+                            listWindow.exportPlaylistId = playlistId
+                            copyPlaylistFiles.checked = false
+                            exportOptionsDialog.open()
+                        }
+                    }
 
-                    StackLayout {
+                    Rectangle {
+                        Layout.preferredWidth: listWorkspace.dividerWidth
+                        Layout.fillHeight: true
+                        color: Theme.listDivider
+                    }
+
+                    ColumnLayout {
+                        id: centerColumn
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        currentIndex: filterModel && filterModel.category === "library" ? 3
-                                      : LibraryModel.count === 0
-                                        || listWindow.customPlaylistEmpty() ? 1
-                                      : filterModel && filterModel.count > 0
-                                        ? 0 : 2
-                        TrackList {
-                            objectName: "detachedTrackList"
+                        Layout.minimumWidth: listWorkspace.centerMinimumWidth
+                        spacing: 0
+
+                        StackLayout {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            trackModel: filterModel
-                            playlistModel: listWindow.playlistModel
-                            selectedCategory: filterModel
-                                              ? filterModel.category : "all"
-                            searchText: filterModel
-                                        ? filterModel.searchText : ""
-                        }
-                        EmptyLibrary {
-                            objectName: "emptyLibrary"
-                            playlistMode: listWindow.customPlaylistEmpty()
-                            onImportRequested: listWindow.openImportDialog()
-                        }
-                        Item {
-                            objectName: "emptyFilteredResult"
-                            ColumnLayout {
-                                anchors.centerIn: parent
-                                spacing: 10
-                            Label {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: qsTr("未找到符合条件的歌曲")
-                                color: Theme.secondaryText
-                                font.pixelSize: 16
+                            currentIndex: filterModel && filterModel.category === "library" ? 3
+                                          : LibraryModel.count === 0
+                                            || listWindow.customPlaylistEmpty() ? 1
+                                          : filterModel && filterModel.count > 0
+                                            ? 0 : 2
+                            TrackList {
+                                objectName: "sharedTrackList"
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                trackModel: filterModel
+                                playlistModel: listWindow.playlistModel
+                                selectedCategory: filterModel
+                                                  ? filterModel.category : "all"
+                                searchText: filterModel
+                                            ? filterModel.searchText : ""
                             }
-                            Button {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: qsTr("一键清空筛选")
-                                onClicked: searchFilter.clearFilters()
+                            EmptyLibrary {
+                                objectName: "emptyLibrary"
+                                playlistMode: listWindow.customPlaylistEmpty()
+                                onImportRequested: listWindow.openImportDialog()
                             }
+                            Item {
+                                objectName: "emptyFilteredResult"
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 10
+                                    Label {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: qsTr("未找到符合条件的歌曲")
+                                        color: Theme.secondaryText
+                                        font.pixelSize: 16
+                                    }
+                                    Button {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: qsTr("一键清空筛选")
+                                        onClicked: searchFilter.clearFilters()
+                                    }
+                                }
+                            }
+                            LibraryManagerPage {
+                                id: libraryManagerPage
+                                objectName: "libraryManagerPageInList"
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                onPreferredWindowHeightChanged:
+                                    listWindow.ensureLibraryManagerHeight()
                             }
                         }
-                        LibraryManagerPage {
-                            id: libraryManagerPage
-                            objectName: "libraryManagerPageInList"
+
+                        SearchFilter {
+                            id: searchFilter
+                            objectName: "librarySearchFilter"
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            onPreferredWindowHeightChanged:
-                                listWindow.ensureLibraryManagerHeight()
+                            Layout.preferredHeight: 66
+                            visible: !filterModel || filterModel.category !== "library"
+                            searchText: filterModel ? filterModel.searchText : ""
+                            exactRating: filterModel ? filterModel.exactRating : 0
+                            minBpm: filterModel ? filterModel.minBpm : 60
+                            maxBpm: filterModel ? filterModel.maxBpm : 160
+                            onSearchTextChanged: if (filterModel)
+                                                     filterModel.searchText = searchText
+                            onExactRatingChanged: if (filterModel)
+                                                      filterModel.exactRating = exactRating
+                            onMinBpmChanged: if (filterModel)
+                                                 filterModel.minBpm = minBpm
+                            onMaxBpmChanged: if (filterModel)
+                                                 filterModel.maxBpm = maxBpm
                         }
                     }
 
-                    SearchFilter {
-                        id: searchFilter
-                        objectName: "librarySearchFilter"
-                        Layout.fillWidth: true
-                        visible: !filterModel || filterModel.category !== "library"
-                        searchText: filterModel ? filterModel.searchText : ""
-                        exactRating: filterModel ? filterModel.exactRating : 0
-                        minBpm: filterModel ? filterModel.minBpm : 60
-                        maxBpm: filterModel ? filterModel.maxBpm : 160
-                        onSearchTextChanged: if (filterModel)
-                                                 filterModel.searchText = searchText
-                        onExactRatingChanged: if (filterModel)
-                                                  filterModel.exactRating = exactRating
-                        onMinBpmChanged: if (filterModel)
-                                             filterModel.minBpm = minBpm
-                        onMaxBpmChanged: if (filterModel)
-                                             filterModel.maxBpm = maxBpm
+                    Rectangle {
+                        Layout.preferredWidth: listWorkspace.dividerWidth
+                        Layout.fillHeight: true
+                        color: Theme.listDivider
+                    }
+
+                    TagManagementPanel {
+                        objectName: "tagManagementPanel"
+                        Layout.preferredWidth: listWorkspace.rightColumnWidth
+                        Layout.minimumWidth: listWorkspace.rightColumnWidth
+                        Layout.maximumWidth: listWorkspace.rightColumnWidth
+                        Layout.fillHeight: true
+                        tagModel: TagModel
+                        filterModel: listWindow.filterModel
                     }
                 }
             }

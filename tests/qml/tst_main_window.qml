@@ -105,6 +105,39 @@ TestCase {
         }
     }
 
+    Component {
+        id: fakeThumbnailProviderComponent
+        QtObject {
+            property int requestCount: 0
+            property int cancelCount: 0
+            property string lastTrackId: ""
+            property string lastSourcePath: ""
+            property int lastGeneration: -1
+            signal thumbnailReady(string trackId, int generation, var peaks)
+
+            function request(trackId, sourcePath, generation) {
+                requestCount += 1
+                lastTrackId = trackId
+                lastSourcePath = sourcePath
+                lastGeneration = generation
+            }
+            function cancel(trackId, generation) {
+                cancelCount += 1
+            }
+            function colorForTrackId(trackId) {
+                return "#7f6aa8"
+            }
+        }
+    }
+
+    Component {
+        id: trackWaveformThumbnailComponent
+        TrackWaveformThumbnail {
+            width: 128
+            height: 9
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -114,6 +147,16 @@ TestCase {
 
     function init() {
         failOnWarning(/.?/)
+    }
+
+    function countObjectsNamed(parentObject, expectedName) {
+        if (!parentObject)
+            return 0
+        var total = parentObject.objectName === expectedName ? 1 : 0
+        var childItems = parentObject.children || []
+        for (var index = 0; index < childItems.length; ++index)
+            total += countObjectsNamed(childItems[index], expectedName)
+        return total
     }
 
     function test_docked_window_frame_removes_shared_edge_and_contact_corners() {
@@ -179,19 +222,24 @@ TestCase {
 
     function test_thumbnail_runtime_types_are_unique_and_idle() {
         // Catches registering factories/fallback objects instead of the exact
-        // application-owned model graph, or doing cache work before a Loader
-        // exists in TrackList (integration is deliberately a later task).
+        // application-owned model graph. The list integration now owns visible
+        // thumbnail requests, so only the disabled state is required to be idle.
         verify(TagModel === expectedTagModel)
         verify(LibraryNavigationModel === expectedLibraryNavigationModel)
         verify(LibraryManagerController === expectedLibraryManagerController)
         verify(TrackWaveformThumbnailProvider === expectedThumbnailProvider)
-        compare(TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts, 0)
-        compare(TrackWaveformThumbnailProvider.diagnostics().queuedJobs, 0)
+
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        tryVerify(function() {
+            return TrackWaveformThumbnailProvider.diagnostics().queuedJobs === 0
+        })
 
         var item = trackWaveformThumbnailItemComponent.createObject(
                     mainWindow.contentItem)
         verify(item)
         item.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_equalizer_opens_compact_real_control_window() {
@@ -579,9 +627,11 @@ TestCase {
     }
 
     function test_zzzzz_default_queue_density_keeps_ten_rows_visible() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         nativeDropHelper.ensureSortableTracks()
         var list = trackListComponent.createObject(mainWindow.contentItem,
-                                                   { width: 960, height: 460 })
+                                                   { width: 960, height: 476 })
         verify(list)
         compare(list.rowHeight, 42)
         verify(list.headerItem)
@@ -589,6 +639,7 @@ TestCase {
                           / list.rowHeight) >= 10,
                "the default queue viewport must show ten full songs")
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_list_window_default_height_keeps_ten_songs_visible() {
@@ -733,6 +784,8 @@ TestCase {
     }
 
     function test_z_album_and_artist_use_fixed_hover_marquee_columns() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var trackId = nativeDropHelper.ensureLongAlbumArtistTrack()
         var rowIndex = LibraryModel.indexForTrackId(trackId)
         verify(rowIndex >= 0)
@@ -759,6 +812,7 @@ TestCase {
         mouseMove(list, 2, list.height - 2)
         tryCompare(album, "textOffset", 0, 500)
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_z_fixed_track_columns_share_header_axis() {
@@ -858,9 +912,13 @@ TestCase {
     }
 
     function test_track_title_surface_honors_ctrl_selection_and_double_click() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var ids = nativeDropHelper.ensureSortableTracks()
         var list = trackListComponent.createObject(mainWindow.contentItem)
         verify(list)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
         list.positionViewAtBeginning()
         wait(30)
         var first = list.itemAtIndex(LibraryModel.indexForTrackId(ids[0]))
@@ -898,9 +956,12 @@ TestCase {
                    LibraryModel.data(LibraryModel.index(playableIndex, 0),
                                      LibraryModel.TrackIdRole))
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_selected_tracks_drag_into_playlist_with_real_mouse() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var ids = nativeDropHelper.ensureSortableTracks()
         compare(ids.length, 3)
         var playlistId = PlaylistModel.createPlaylist(
@@ -913,7 +974,7 @@ TestCase {
                     mainWindow.contentItem, { "x": 220, "y": 0 })
         verify(navigation && list)
         mainWindow.requestActivate()
-        wait(50)
+        tryVerify(function() { return mainWindow.active }, 1000)
 
         var firstIndex = LibraryModel.indexForTrackId(ids[0])
         var secondIndex = LibraryModel.indexForTrackId(ids[1])
@@ -957,6 +1018,7 @@ TestCase {
         PlaylistModel.removePlaylist(playlistId)
         list.destroy()
         navigation.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_playlist_context_actions_use_real_mouse_and_keep_playlist_id() {
@@ -1003,6 +1065,8 @@ TestCase {
     }
 
     function test_z_delete_key_uses_current_view_semantics() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var ids = nativeDropHelper.ensureSortableTracks()
         compare(ids.length, 3)
         var playlistId = PlaylistModel.createPlaylist(
@@ -1013,6 +1077,7 @@ TestCase {
         var list = trackListComponent.createObject(mainWindow.contentItem)
         verify(list)
         mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
         list.forceActiveFocus()
         wait(30)
 
@@ -1062,6 +1127,7 @@ TestCase {
 
         PlaylistModel.removePlaylist(playlistId)
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_waveform_click_seeks_real_playback_controller() {
@@ -1407,6 +1473,171 @@ TestCase {
         compare(findChild(filter, "bpmModule").width, 216)
         compare(findChild(filter, "bpmRange").width, 104)
         filter.destroy()
+    }
+
+    function test_z_tag_workspace_is_one_continuous_three_column_surface() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400
+        })
+        verify(window)
+
+        var workspace = findChild(window, "listWorkspace")
+        verify(workspace, "ListWindow must expose one continuous workspace")
+        compare(workspace.leftColumnWidth, 256)
+        compare(workspace.rightColumnWidth, 328)
+        compare(workspace.dividerWidth, 1)
+        verify(workspace.centerWidth >= 680)
+        verify(window.minimumWidth >= 1284)
+        window.width = window.minimumWidth
+        tryVerify(function() { return workspace.centerWidth >= 680 })
+        compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+
+        var navigation = findChild(workspace, "referenceSideNavigation")
+        verify(navigation)
+        compare(findChild(navigation, "libraryNavigationList").model,
+                LibraryNavigationModel)
+
+        var trackList = findChild(workspace, "sharedTrackList")
+        verify(trackList)
+        compare(findChild(trackList, "trackHeaderIndex").text, "#")
+        compare(findChild(trackList, "trackHeaderTitle").text, "歌曲")
+        compare(findChild(trackList, "trackHeaderFavorite").text, "收藏")
+        verify(findChild(trackList, "trackHeaderArtist").x
+               < findChild(trackList, "trackHeaderAlbum").x,
+               "艺术家列必须在专辑列之前")
+        compare(findChild(trackList, "trackHeaderDuration").text, "时长")
+
+        var tagPanel = findChild(workspace, "tagManagementPanel")
+        verify(tagPanel)
+        compare(tagPanel.gridColumnCount, 3)
+        var tagGrid = findChild(tagPanel, "tagGrid")
+        verify(tagGrid)
+        compare(tagGrid.cellWidth, tagGrid.width / 3)
+
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_tag_panel_add_search_and_selection_update_real_models() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var filterModel = findChild(mainWindow, "filterModel")
+        filterModel.tagKey = ""
+        TagModel.selectedKey = ""
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400
+        })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+
+        var initialCount = TagModel.count
+        verify(panel.addTag("Task4 Alpha"), "add must call the real TagModel")
+        verify(panel.addTag("Task4 Beta"), "second real tag should be added")
+        tryCompare(TagModel, "count", initialCount + 2)
+
+        panel.searchText = "Alpha"
+        tryCompare(panel, "visibleTagCount", 1)
+        panel.selectTag("task4 alpha")
+        compare(TagModel.selectedKey, "task4 alpha")
+        compare(filterModel.tagKey, "task4 alpha")
+        var navigation = findChild(window, "referenceSideNavigation")
+        verify(navigation.nodeIsSelected("tags", "tags:manage", ""))
+        verify(!navigation.nodeIsSelected("library", "library:all", ""),
+               "tag filtering must not leave both library and tags selected")
+
+        panel.selectTag("task4 alpha")
+        compare(TagModel.selectedKey, "")
+        compare(filterModel.tagKey, "")
+
+        TagModel.removeTag("task4 alpha")
+        TagModel.removeTag("task4 beta")
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_list_waveforms_only_exist_for_visible_rows_when_enabled() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        var previousMode = SettingsController.listWaveformThumbnailMode
+        SettingsController.listWaveformThumbnailEnabled = false
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        tryVerify(function() { return list.count > 0 })
+        compare(list.rowHeight, 42)
+        compare(list.thumbnailItemCount, 0)
+        verify(!findChild(list, "trackWaveformThumbnail"))
+
+        TrackWaveformThumbnailProvider.refresh()
+        var readsBefore = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
+        SettingsController.listWaveformThumbnailEnabled = true
+        tryCompare(list, "rowHeight", 62)
+        tryVerify(function() { return list.thumbnailItemCount > 0 })
+        verify(findChild(list.itemAtIndex(0), "trackWaveformThumbnail"))
+        compare(findChild(list.itemAtIndex(0), "trackCover").width, 34)
+        compare(findChild(list.itemAtIndex(0), "trackCover").height, 34)
+        tryVerify(function() {
+            return TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
+                    > readsBefore
+        }, 3000)
+
+        wait(100)
+        var settledReads = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
+        SettingsController.listWaveformThumbnailMode = "Mono"
+        wait(100)
+        compare(TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts,
+                settledReads,
+                "mode changes must recolor without reading waveform data again")
+
+        SettingsController.listWaveformThumbnailEnabled = false
+        tryCompare(list, "rowHeight", 42)
+        tryCompare(list, "thumbnailItemCount", 0)
+        verify(!findChild(list, "trackWaveformThumbnail"))
+        list.destroy()
+        SettingsController.listWaveformThumbnailMode = previousMode
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_thumbnail_wrapper_cancels_and_rejects_stale_generations() {
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var wrapper = trackWaveformThumbnailComponent.createObject(
+                    mainWindow.contentItem, {
+                        "provider": provider,
+                        "trackId": "track-a",
+                        "sourcePath": "a.wav",
+                        "delegateGeneration": 11,
+                        "mode": "Color36"
+                    })
+        verify(provider && wrapper)
+        tryCompare(provider, "requestCount", 1)
+        compare(provider.lastTrackId, "track-a")
+        compare(provider.lastSourcePath, "a.wav")
+        compare(provider.lastGeneration, 11)
+
+        wrapper.trackId = "track-b"
+        wrapper.sourcePath = "b.wav"
+        wrapper.delegateGeneration = 12
+        tryCompare(provider, "requestCount", 2)
+        compare(provider.cancelCount, 1)
+
+        provider.thumbnailReady("track-a", 11, "stale")
+        compare(wrapper.waveformPeaks, "")
+        provider.thumbnailReady("track-b", 12, "current")
+        compare(wrapper.waveformPeaks, "current")
+
+        var settledRequests = provider.requestCount
+        wrapper.mode = "Mono"
+        wait(50)
+        compare(provider.requestCount, settledRequests,
+                "mode changes must not request waveform data again")
+
+        wrapper.destroy()
+        tryCompare(provider, "cancelCount", 2)
+        provider.destroy()
     }
 
     function test_empty_startup_uses_compact_reference_structure() {

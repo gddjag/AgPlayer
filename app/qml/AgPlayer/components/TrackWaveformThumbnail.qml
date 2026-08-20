@@ -1,0 +1,76 @@
+import QtQuick
+import AgPlayer
+
+Item {
+    id: root
+    objectName: "trackWaveformThumbnail"
+
+    property string trackId: ""
+    property string sourcePath: ""
+    property int delegateGeneration: 0
+    property string mode: "Color36"
+    property var provider: TrackWaveformThumbnailProvider
+    property var waveformPeaks: ""
+
+    property string requestedTrackId: ""
+    property int requestedGeneration: 0
+    property bool requestScheduled: false
+
+    function cancelRequest() {
+        if (requestedTrackId.length > 0 && provider)
+            provider.cancel(requestedTrackId, requestedGeneration)
+        requestedTrackId = ""
+        requestedGeneration = 0
+    }
+
+    function performRequest() {
+        requestScheduled = false
+        cancelRequest()
+        waveformPeaks = ""
+        if (!enabled || !provider || trackId.length === 0
+                || sourcePath.length === 0)
+            return
+        requestedTrackId = trackId
+        requestedGeneration = delegateGeneration
+        provider.request(requestedTrackId, sourcePath, requestedGeneration)
+    }
+
+    function scheduleRequest() {
+        if (requestScheduled)
+            return
+        requestScheduled = true
+        Qt.callLater(root.performRequest)
+    }
+
+    onTrackIdChanged: scheduleRequest()
+    onSourcePathChanged: scheduleRequest()
+    onDelegateGenerationChanged: scheduleRequest()
+    onEnabledChanged: scheduleRequest()
+    Component.onCompleted: scheduleRequest()
+    Component.onDestruction: cancelRequest()
+
+    Connections {
+        target: root.provider
+        function onThumbnailReady(readyTrackId, readyGeneration, peaks) {
+            if (readyTrackId === root.requestedTrackId
+                    && readyGeneration === root.requestedGeneration)
+                root.waveformPeaks = peaks
+        }
+    }
+
+    Loader {
+        id: thumbnailItemLoader
+        objectName: "trackWaveformThumbnailItemLoader"
+        anchors.fill: parent
+        active: root.enabled
+        sourceComponent: Component {
+            TrackWaveformThumbnailItem {
+                objectName: "trackWaveformThumbnailItem"
+                peaks: root.waveformPeaks
+                waveformColor: root.mode === "Mono"
+                               ? Theme.listWaveformMono
+                               : root.provider.colorForTrackId(root.trackId)
+            }
+        }
+    }
+}

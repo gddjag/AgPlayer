@@ -11,6 +11,8 @@ ListView {
     focus: true
     boundsBehavior: Flickable.StopAtBounds
     headerPositioning: ListView.OverlayHeader
+    reuseItems: true
+    cacheBuffer: 0
 
     property var trackModel: LibraryModel
     property var playlistModel: PlaylistModel
@@ -30,9 +32,10 @@ ListView {
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
     readonly property int titleMinimumWidth: compactColumns ? 150 : 180
-    // 42 px rows keep ten songs visible in the 600 px default queue window
-    // after reserving the title bar, sticky header and compact filter bar.
-    readonly property int rowHeight: 42
+    readonly property int rowHeight: SettingsController.listWaveformThumbnailEnabled
+                                     ? 62 : 42
+    property int thumbnailItemCount: 0
+    property int nextWaveformGeneration: 0
     model: trackModel
 
     // A list can be created after the playback state has already been restored.
@@ -240,15 +243,15 @@ ListView {
     }
 
     header: Rectangle {
-        width: root.width; height: 34; color: Theme.panel; z: 20
+        width: root.width; height: 56; color: Theme.listHeaderSurface; z: 20
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 0
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
             HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.fillWidth: true; Layout.minimumWidth: root.titleMinimumWidth }
             HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
             Item { objectName: "trackHeaderFavoriteAlbumGap"; Layout.minimumWidth: root.favoriteAlbumGap; Layout.preferredWidth: root.favoriteAlbumGap; Layout.maximumWidth: root.favoriteAlbumGap }
-            HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             HeaderText { objectName: "trackHeaderArtist"; text: qsTr("艺术家"); Layout.minimumWidth: root.artistWidth; Layout.preferredWidth: root.artistWidth; Layout.maximumWidth: root.artistWidth }
+            HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
             HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
             HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); horizontalAlignment: Text.AlignRight; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
@@ -259,6 +262,7 @@ ListView {
         id: rowItem
         required property int index
         required property string trackId
+        required property string path
         required property string title
         required property string artist
         required property string album
@@ -279,9 +283,15 @@ ListView {
             root.windowActive ? Theme.activeSelectionText : Theme.inactiveSelectionText
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
+        property int waveformGeneration: 0
+        readonly property bool inViewport:
+            y + height >= root.contentY && y <= root.contentY + root.height
         width: root.width; height: root.rowHeight
         color: systemHighlighted ? systemHighlightColor
                : rowHover.hovered ? Theme.hoverSurface : "transparent"
+
+        Component.onCompleted: waveformGeneration = ++root.nextWaveformGeneration
+        ListView.onReused: waveformGeneration = ++root.nextWaveformGeneration
 
         Item {
             id: rowDragProxy
@@ -387,14 +397,68 @@ ListView {
                 RowLayout {
                     anchors.fill: parent
                     spacing: 6
-                    Image { source: rowItem.coverUrl ? rowItem.coverUrl : Theme.icon("music-2-fill"); Layout.preferredWidth: 34; Layout.preferredHeight: 34; sourceSize.width: 34; sourceSize.height: 34; fillMode: Image.PreserveAspectFit }
-                    MarqueeBodyText {
-                        objectName: "trackTitleMarquee"
-                        text: rowItem.title || qsTr("未知歌曲")
-                        trackAvailable: rowItem.available
-                        highlighted: rowItem.systemHighlighted
-                        highlightText: rowItem.systemHighlightText
+                    Image {
+                        objectName: "trackCover"
+                        source: rowItem.coverUrl ? rowItem.coverUrl
+                                                 : Theme.icon("music-2-fill")
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 34
+                        sourceSize.width: 34
+                        sourceSize.height: 34
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Item {
                         Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        MarqueeBodyText {
+                            objectName: "trackTitleMarquee"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            y: SettingsController.listWaveformThumbnailEnabled
+                               ? 9 : (parent.height - height) / 2
+                            height: implicitHeight
+                            text: rowItem.title || qsTr("未知歌曲")
+                            trackAvailable: rowItem.available
+                            highlighted: rowItem.systemHighlighted
+                            highlightText: rowItem.systemHighlightText
+                        }
+
+                        Loader {
+                            id: waveformWrapperLoader
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 8
+                            height: 9
+                            active: SettingsController.listWaveformThumbnailEnabled
+                                    && rowItem.inViewport
+                            property bool counted: false
+                            onLoaded: {
+                                if (!counted) {
+                                    counted = true
+                                    root.thumbnailItemCount += 1
+                                }
+                            }
+                            onItemChanged: {
+                                if (!item && counted) {
+                                    counted = false
+                                    root.thumbnailItemCount -= 1
+                                }
+                            }
+                            Component.onDestruction: {
+                                if (counted)
+                                    root.thumbnailItemCount -= 1
+                            }
+                            sourceComponent: Component {
+                                TrackWaveformThumbnail {
+                                    trackId: rowItem.trackId
+                                    sourcePath: rowItem.path
+                                    delegateGeneration: rowItem.waveformGeneration
+                                    mode: SettingsController.listWaveformThumbnailMode
+                                }
+                            }
+                        }
                     }
                 }
                 DragHandler {
@@ -449,6 +513,21 @@ ListView {
                 Layout.maximumWidth: root.favoriteAlbumGap
             }
             Item {
+                objectName: "trackArtistCell"
+                Layout.minimumWidth: root.artistWidth
+                Layout.preferredWidth: root.artistWidth
+                Layout.maximumWidth: root.artistWidth
+                Layout.fillHeight: true
+                MarqueeBodyText {
+                    objectName: "trackArtistMarquee"
+                    anchors.fill: parent
+                    text: rowItem.artist || "—"
+                    trackAvailable: rowItem.available
+                    highlighted: rowItem.systemHighlighted
+                    highlightText: rowItem.systemHighlightText
+                }
+            }
+            Item {
                 objectName: "trackAlbumCell"
                 visible: root.showAlbumColumn
                 Layout.minimumWidth: visible ? root.albumWidth : 0
@@ -459,21 +538,6 @@ ListView {
                     objectName: "trackAlbumMarquee"
                     anchors.fill: parent
                     text: rowItem.album || "—"
-                    trackAvailable: rowItem.available
-                    highlighted: rowItem.systemHighlighted
-                    highlightText: rowItem.systemHighlightText
-                }
-            }
-            Item {
-                objectName: "trackArtistCell"
-                Layout.minimumWidth: root.artistWidth
-                Layout.preferredWidth: root.artistWidth
-                Layout.maximumWidth: root.artistWidth
-                Layout.fillHeight: true
-                MarqueeBodyText {
-                    objectName: "trackArtistMarquee"
-                    anchors.fill: parent
-                    text: rowItem.artist || "—"
                     trackAvailable: rowItem.available
                     highlighted: rowItem.systemHighlighted
                     highlightText: rowItem.systemHighlightText

@@ -878,6 +878,13 @@ add_test(NAME track_waveform_thumbnail_contract_test
 )
 set_tests_properties(track_waveform_thumbnail_contract_test PROPERTIES TIMEOUT 10)
 
+add_test(NAME tag_management_layout_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/tag_management_layout_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(tag_management_layout_contract_test PROPERTIES TIMEOUT 10)
+
 add_executable(library_model_stress_test
     stress/library_model_stress_test.cpp
 )
