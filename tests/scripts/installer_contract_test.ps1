@@ -1,6 +1,14 @@
 $ErrorActionPreference = "Stop"
 $installer = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:AGPLAYER_INSTALLER_SCRIPT
 $repo = Split-Path -Parent (Split-Path -Parent $env:AGPLAYER_INSTALLER_SCRIPT)
+$packageScriptPath = Join-Path $repo 'scripts\package-windows.ps1'
+$packageScript = Get-Content -Raw -Encoding UTF8 -LiteralPath $packageScriptPath
+
+if ($packageScript -match 'Visual Studio\\2022\\Community' -or
+    $packageScript -notmatch 'vswhere\.exe' -or
+    $packageScript -notmatch 'Microsoft\.VisualStudio\.Product\.BuildTools') {
+    throw "Release packaging must select the current complete MSVC Build Tools instead of a stale hard-coded IDE"
+}
 
 if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}\r?$') {
     throw "Installed Apps must display only AgPlayer"

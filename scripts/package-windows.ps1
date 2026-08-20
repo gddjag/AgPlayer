@@ -24,7 +24,23 @@ if ($null -eq $qtDirEntry) {
 $qtCmakeDir = $qtDirEntry.Matches[0].Groups[1].Value
 $qtRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $qtCmakeDir))
 $windeployqt = Join-Path $qtRoot "bin/windeployqt.exe"
-$vsShell = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1"
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path -LiteralPath $vswhere)) {
+    throw "Visual Studio locator was not found: $vswhere"
+}
+$vsInstall = & $vswhere -latest `
+    -products Microsoft.VisualStudio.Product.BuildTools `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+    -property installationPath
+if (-not $vsInstall) {
+    $vsInstall = & $vswhere -latest -products * `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath
+}
+if (-not $vsInstall) {
+    throw "A complete Visual C++ Build Tools installation was not found"
+}
+$vsShell = Join-Path $vsInstall "Common7\Tools\Launch-VsDevShell.ps1"
 $isccCandidates = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
