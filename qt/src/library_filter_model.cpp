@@ -1,5 +1,6 @@
 #include "library_filter_model.hpp"
 #include "playlist_model.hpp"
+#include "resource_path.hpp"
 
 #include <QAbstractItemModel>
 #include <QDateTime>

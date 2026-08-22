@@ -11,9 +11,12 @@ ListView {
     focus: true
     boundsBehavior: Flickable.StopAtBounds
     headerPositioning: ListView.OverlayHeader
+    reuseItems: true
+    cacheBuffer: 0
 
     property var trackModel: LibraryModel
     property var playlistModel: PlaylistModel
+    property var thumbnailProvider: TrackWaveformThumbnailProvider
     property string selectedCategory: "all"
     property string searchText: ""
     property var selectedTrackIds: []
@@ -31,9 +34,25 @@ ListView {
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
     readonly property int titleMinimumWidth: compactColumns ? 150 : 180
-    // 42 px rows keep ten songs visible in the 600 px default queue window
-    // after reserving the title bar, sticky header and compact filter bar.
-    readonly property int rowHeight: 42
+    readonly property int rowHeight: SettingsController.listWaveformThumbnailEnabled
+                                     ? 62 : 42
+    property int thumbnailItemCount: 0
+    property int nextWaveformGeneration: 0
+    property int dragPreviewCreationCount: 0
+    property var dragTrackIds: []
+    property var activeDragProxy: null
+    property bool dragSessionActive: false
+    property bool dragDropInProgress: false
+    property string draggedTrackId: ""
+    property real dragOriginY: 0
+    property real draggedRowHeight: 0
+    property string dragPreviewTitle: ""
+    property url dragPreviewCover: ""
+    readonly property bool thumbnailWindowVisible:
+        !root.Window.window || root.Window.window.visible
+    readonly property bool thumbnailHostVisible:
+        root.visible && root.width > 0 && root.height > 0
+        && root.thumbnailWindowVisible
     model: trackModel
 
     // Category navigation is user-directed.  Start each category at its top;
@@ -123,6 +142,62 @@ ListView {
         else if (selectedCategory === "all")
             LibraryModel.reorderTracks(ids, targetId)
     }
+    function beginTrackDrag(trackId, ids, title, coverSource, proxy,
+                            originY, rowHeight) {
+        if (dragSessionActive)
+            cancelTrackDrag()
+        proxy.x = 0
+        proxy.y = 0
+        dragTrackIds = ids.slice()
+        dragPreviewTitle = title || qsTr("未知歌曲")
+        dragPreviewCover = coverSource
+        draggedTrackId = trackId
+        dragOriginY = originY
+        draggedRowHeight = rowHeight
+        activeDragProxy = proxy
+        dragSessionActive = true
+        dragPreviewLoader.active = true
+    }
+    function clearTrackDragSession() {
+        if (!dragSessionActive && !dragPreviewLoader.active
+                && !activeDragProxy && dragTrackIds.length === 0)
+            return
+        dragSessionActive = false
+        dragPreviewLoader.active = false
+        activeDragProxy = null
+        dragTrackIds = []
+        draggedTrackId = ""
+        dragOriginY = 0
+        draggedRowHeight = 0
+    }
+    function cancelTrackDrag() {
+        var proxy = activeDragProxy
+        clearTrackDragSession()
+        if (proxy && proxy.Drag.active)
+            proxy.Drag.cancel()
+    }
+    function cancelTrackDragForProxy(proxy) {
+        if (activeDragProxy !== proxy)
+            return
+        if (dragDropInProgress)
+            clearTrackDragSession()
+        else
+            cancelTrackDrag()
+    }
+    function completeTrackDrag(proxy) {
+        if (!dragSessionActive || activeDragProxy !== proxy)
+            return
+        var trackId = draggedTrackId
+        var originY = dragOriginY
+        var deltaY = proxy.y
+        var rowHeight = draggedRowHeight
+        dragDropInProgress = true
+        var dropAction = proxy.Drag.drop()
+        dragDropInProgress = false
+        clearTrackDragSession()
+        if (dropAction === Qt.IgnoreAction)
+            finishRowDrag(trackId, originY, deltaY, rowHeight)
+    }
     function removeSelectedFromCurrentView() {
         var ids = selectedTrackIds.slice()
         if (ids.length === 0) return
@@ -165,6 +240,9 @@ ListView {
         trackMenu.targetTrackId = trackId
         trackMenu.targetTrackIds = [trackId]
         openDetails()
+    }
+    function applyTagsToTracks(trackIds, values) {
+        return LibraryModel.setTagsForTracks(trackIds, values)
     }
     function selectedFileUrls() {
         var urls = []
@@ -214,6 +292,19 @@ ListView {
         }
     }
     Shortcut { sequence: StandardKey.SelectAll; context: Qt.WindowShortcut; enabled: root.activeFocus; onActivated: root.selectAllVisible() }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: root.dragSessionActive
+        onActivated: root.cancelTrackDrag()
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() {
+            if (root.Window.window && !root.Window.window.active)
+                root.cancelTrackDrag()
+        }
+    }
 
     FolderDialog {
         id: moveFolderDialog
@@ -231,7 +322,7 @@ ListView {
         id: relocateDialog
         title: qsTr("重新定位文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Audio (*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+        nameFilters: [LibraryManagerController.audioFileNameFilter]
         onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId, selectedFile)
     }
     Dialog {
@@ -256,8 +347,7 @@ ListView {
         }
         onAccepted: {
             var values = tagField.text.split(/[,，]/).map(function(value) { return value.trim() })
-            for (var index = 0; index < trackMenu.targetTrackIds.length; ++index)
-                LibraryModel.setTags(trackMenu.targetTrackIds[index], values)
+            root.applyTagsToTracks(trackMenu.targetTrackIds, values)
         }
         contentItem: TextField { id: tagField; placeholderText: qsTr("用逗号分隔多个标签") }
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
@@ -300,18 +390,67 @@ ListView {
     }
 
     header: Rectangle {
-        width: root.width; height: 34; color: Theme.panel; z: 20
+        width: root.width; height: 56; color: Theme.listHeaderSurface; z: 20
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 0
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
             HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.fillWidth: true; Layout.minimumWidth: root.titleMinimumWidth }
             HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
             Item { objectName: "trackHeaderFavoriteAlbumGap"; Layout.minimumWidth: root.favoriteAlbumGap; Layout.preferredWidth: root.favoriteAlbumGap; Layout.maximumWidth: root.favoriteAlbumGap }
-            HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             HeaderText { objectName: "trackHeaderArtist"; text: qsTr("艺术家"); Layout.minimumWidth: root.artistWidth; Layout.preferredWidth: root.artistWidth; Layout.maximumWidth: root.artistWidth }
+            HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
             HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
             HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); horizontalAlignment: Text.AlignRight; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
+        }
+    }
+
+    Loader {
+        id: dragPreviewLoader
+        active: false
+        onLoaded: root.dragPreviewCreationCount += 1
+        z: 1000
+        x: root.activeDragProxy
+           ? root.activeDragProxy.mapToItem(root, 12, 12).x : 0
+        y: root.activeDragProxy
+           ? root.activeDragProxy.mapToItem(root, 12, 12).y : 0
+        sourceComponent: Component {
+            Rectangle {
+                objectName: "trackDragPreview"
+                readonly property int selectedCount: root.dragTrackIds.length
+                width: Math.min(300, previewLayout.implicitWidth + 24)
+                height: 46
+                radius: Theme.radiusSm
+                color: Theme.elevated
+                border.color: Theme.listWorkspaceBorder
+                border.width: 1
+                opacity: 0.68
+
+                RowLayout {
+                    id: previewLayout
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    spacing: 8
+                    Image {
+                        source: root.dragPreviewCover
+                        sourceSize.width: 34
+                        sourceSize.height: 34
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 34
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Text {
+                        text: root.dragTrackIds.length > 1
+                              ? qsTr("已选择 %1 首").arg(root.dragTrackIds.length)
+                              : root.dragPreviewTitle
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 230
+                    }
+                }
+            }
         }
     }
 
@@ -319,6 +458,7 @@ ListView {
         id: rowItem
         required property int index
         required property string trackId
+        required property string path
         required property string title
         required property string artist
         required property string album
@@ -343,9 +483,27 @@ ListView {
         readonly property color systemHighlightText: Theme.primaryText
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
+        property int waveformGeneration: 0
+        property bool pooled: false
+        readonly property bool inViewport:
+            rowItem.ListView.view === root && rowItem.visible && !pooled
+            && y + height > root.contentY
+                            + (root.headerItem ? root.headerItem.height : 0)
+            && y < root.contentY + root.height
         width: root.width; height: root.rowHeight
         color: systemHighlighted ? systemHighlightColor
                : rowHover.hovered ? Theme.hoverSurface : "transparent"
+
+        Component.onCompleted: waveformGeneration = ++root.nextWaveformGeneration
+        ListView.onPooled: {
+            root.cancelTrackDragForProxy(rowDragProxy)
+            pooled = true
+            waveformGeneration = ++root.nextWaveformGeneration
+        }
+        ListView.onReused: {
+            waveformGeneration = ++root.nextWaveformGeneration
+            pooled = false
+        }
 
         Item {
             id: rowDragProxy
@@ -356,11 +514,12 @@ ListView {
             Drag.dragType: Drag.Internal
             Drag.supportedActions: Qt.MoveAction
             Drag.keys: ["application/x-agplayer-track-ids"]
-            Drag.source: rowItem
+            Drag.source: root
             Drag.hotSpot.x: 0
             Drag.hotSpot.y: 0
             Drag.mimeData: ({"application/x-agplayer-track-ids":
-                             JSON.stringify(rowItem.dragTrackIds)})
+                             JSON.stringify(root.dragTrackIds)})
+            Component.onDestruction: root.cancelTrackDragForProxy(rowDragProxy)
         }
 
         RowLayout {
@@ -451,14 +610,73 @@ ListView {
                 RowLayout {
                     anchors.fill: parent
                     spacing: 6
-                    Image { source: rowItem.coverUrl ? rowItem.coverUrl : Theme.icon("music-2-fill"); Layout.preferredWidth: 34; Layout.preferredHeight: 34; sourceSize.width: 34; sourceSize.height: 34; fillMode: Image.PreserveAspectFit }
-                    MarqueeBodyText {
-                        objectName: "trackTitleMarquee"
-                        text: rowItem.title || qsTr("未知歌曲")
-                        trackAvailable: rowItem.available
-                        highlighted: rowItem.systemHighlighted
-                        highlightText: rowItem.systemHighlightText
+                    Image {
+                        id: trackCoverImage
+                        objectName: "trackCover"
+                        source: rowItem.coverUrl ? rowItem.coverUrl
+                                                 : Theme.icon("music-2-fill")
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 34
+                        sourceSize.width: 34
+                        sourceSize.height: 34
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Item {
                         Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        MarqueeBodyText {
+                            objectName: "trackTitleMarquee"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            y: SettingsController.listWaveformThumbnailEnabled
+                               ? 9 : (parent.height - height) / 2
+                            height: implicitHeight
+                            text: rowItem.title || qsTr("未知歌曲")
+                            trackAvailable: rowItem.available
+                            highlighted: rowItem.systemHighlighted
+                            highlightText: rowItem.systemHighlightText
+                        }
+
+                        Loader {
+                            id: waveformWrapperLoader
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 8
+                            height: 9
+                            active: SettingsController.listWaveformThumbnailEnabled
+                                    && root && root.thumbnailHostVisible
+                                    && rowItem.inViewport
+                            property bool counted: false
+                            onLoaded: {
+                                if (!counted) {
+                                    counted = true
+                                    if (root)
+                                        root.thumbnailItemCount += 1
+                                }
+                            }
+                            onItemChanged: {
+                                if (!item && counted) {
+                                    counted = false
+                                    if (root)
+                                        root.thumbnailItemCount -= 1
+                                }
+                            }
+                            Component.onDestruction: {
+                                if (counted && root)
+                                    root.thumbnailItemCount -= 1
+                            }
+                            sourceComponent: Component {
+                                TrackWaveformThumbnail {
+                                    trackId: rowItem.trackId
+                                    sourcePath: rowItem.path
+                                    delegateGeneration: rowItem.waveformGeneration
+                                    mode: SettingsController.listWaveformThumbnailMode
+                                    provider: root.thumbnailProvider
+                                }
+                            }
+                        }
                     }
                 }
                 DragHandler {
@@ -469,15 +687,17 @@ ListView {
                         if (active) {
                             if (!root.isSelected(rowItem.trackId))
                                 root.selectOnly(rowItem.trackId, rowItem.index)
+                            root.beginTrackDrag(
+                                        rowItem.trackId,
+                                        rowItem.dragTrackIds,
+                                        rowItem.title,
+                                        trackCoverImage.source,
+                                        rowDragProxy,
+                                        rowItem.y,
+                                        rowItem.height)
                             rowDragProxy.Drag.active = true
                         } else if (rowDragProxy.Drag.active) {
-                            var dropAction = rowDragProxy.Drag.drop()
-                            if (dropAction === Qt.IgnoreAction) {
-                                root.finishRowDrag(rowItem.trackId, rowItem.y,
-                                                   rowDragProxy.y, rowItem.height)
-                            }
-                            rowDragProxy.x = 0
-                            rowDragProxy.y = 0
+                            root.completeTrackDrag(rowDragProxy)
                         }
                     }
                 }
@@ -513,6 +733,21 @@ ListView {
                 Layout.maximumWidth: root.favoriteAlbumGap
             }
             Item {
+                objectName: "trackArtistCell"
+                Layout.minimumWidth: root.artistWidth
+                Layout.preferredWidth: root.artistWidth
+                Layout.maximumWidth: root.artistWidth
+                Layout.fillHeight: true
+                MarqueeBodyText {
+                    objectName: "trackArtistMarquee"
+                    anchors.fill: parent
+                    text: rowItem.artist || "—"
+                    trackAvailable: rowItem.available
+                    highlighted: rowItem.systemHighlighted
+                    highlightText: rowItem.systemHighlightText
+                }
+            }
+            Item {
                 objectName: "trackAlbumCell"
                 visible: root.showAlbumColumn
                 Layout.minimumWidth: visible ? root.albumWidth : 0
@@ -523,21 +758,6 @@ ListView {
                     objectName: "trackAlbumMarquee"
                     anchors.fill: parent
                     text: rowItem.album || "—"
-                    trackAvailable: rowItem.available
-                    highlighted: rowItem.systemHighlighted
-                    highlightText: rowItem.systemHighlightText
-                }
-            }
-            Item {
-                objectName: "trackArtistCell"
-                Layout.minimumWidth: root.artistWidth
-                Layout.preferredWidth: root.artistWidth
-                Layout.maximumWidth: root.artistWidth
-                Layout.fillHeight: true
-                MarqueeBodyText {
-                    objectName: "trackArtistMarquee"
-                    anchors.fill: parent
-                    text: rowItem.artist || "—"
                     trackAvailable: rowItem.available
                     highlighted: rowItem.systemHighlighted
                     highlightText: rowItem.systemHighlightText

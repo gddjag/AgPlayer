@@ -67,6 +67,17 @@ QtObject {
     readonly property color playRingPlaying: waveformGreen
     readonly property color playRingPaused: "#FFB020"
 
+    // Shared list/tag workspace semantics. These keep the reference's near-black
+    // blue and muted purple hierarchy while retaining light-theme contrast.
+    readonly property color listWorkspaceSurface: isLight ? "#FCFAFD" : "#06101F"
+    readonly property color listWorkspaceBorder: isLight ? "#B8A9BC" : "#60475F"
+    readonly property color listDivider: isLight ? "#D8CFDC" : "#33283D"
+    readonly property color listHeaderSurface: isLight ? "#F4EFF6" : "#091728"
+    readonly property color listSelectedSurface: isLight ? "#E7DCEF" : "#231238"
+    readonly property color tagAddSurface: isLight ? "#EEE2F3" : "#241039"
+    readonly property color tagSecondaryText: isLight ? "#745B43" : "#C8A77D"
+    readonly property color listWaveformMono: isLight ? "#6B5A70" : "#C7B8CB"
+
     readonly property int radiusSm: 8
     readonly property int radiusMd: 12
     readonly property int radiusLg: 18

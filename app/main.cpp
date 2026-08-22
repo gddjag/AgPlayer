@@ -47,6 +47,8 @@
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
@@ -662,6 +664,10 @@ int main(int argc, char* argv[])
                 trackWaveformThumbnailProvider.setCacheDirectory(
                     settings.cacheDirectory());
             });
+        QObject::connect(
+            &waveformProvider, &WaveformProvider::waveformCacheReady,
+            &trackWaveformThumbnailProvider,
+            &TrackWaveformThumbnailProvider::invalidateSourceCache);
         QObject::connect(&waveformProvider, &WaveformProvider::waveformReady,
                          &playback,
                          [&playback, &library, &settings](
@@ -684,6 +690,14 @@ int main(int argc, char* argv[])
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
         });
+        LibraryManagerController libraryManager;
+        libraryManager.setStoragePath(libraryDataDirectory.filePath(
+            QStringLiteral("resource-roots.json")));
+        libraryManager.setLibraryDataPath(libraryPath);
+        libraryManager.setLibraryModel(&library);
+        libraryManager.setImportController(&importer);
+        LibraryNavigationModel libraryNavigation(
+            &library, &playlists, &tagModel, &libraryManager);
         QObject::connect(&settings, &SettingsController::autoReadBpmChanged, &app,
                          [autoReadBpmFlag, &settings]() {
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
@@ -760,6 +774,8 @@ int main(int argc, char* argv[])
                                     &equalizer, &audioEditor,
                                     AgPlayerQmlRuntimeModels{
                                         &tagModel,
+                                        &libraryNavigation,
+                                        &libraryManager,
                                         &trackWaveformThumbnailProvider});
 
         QString pendingPlayFilePath;
@@ -929,9 +945,14 @@ int main(int argc, char* argv[])
                 }
             };
         shutdownActions.flushLibrary =
-            [&library, &playlists, &settings, &savePlaybackState]() {
+            [&library, &playlists, &tagModel, &settings, &savePlaybackState]() {
             library.flush();
             playlists.flush();
+            if (!tagModel.flush()) {
+                qWarning().noquote()
+                    << QCoreApplication::translate(
+                           "Main", "Failed to save tag data during shutdown");
+            }
             savePlaybackState(true);
             if (settings.cleanTempOnExit()) {
                 settings.clearTempFiles();
@@ -1030,6 +1051,22 @@ int main(int argc, char* argv[])
                     << listComponent.errorString();
             }
 
+            // The existing screenshot category seam must enter the real
+            // navigation state before docking. This lets page-specific width
+            // constraints participate in the same first-show path as a user
+            // opening Tag Management.
+            if (qaListCategory == QStringLiteral("tags")
+                && listWindow != nullptr) {
+                if (QObject* navigation = listWindow->findChild<QObject*>(
+                        QStringLiteral("referenceSideNavigation"))) {
+                    QMetaObject::invokeMethod(
+                        navigation, "activateNode",
+                        Q_ARG(QVariant, QStringLiteral("tags")),
+                        Q_ARG(QVariant, QStringLiteral("tags:manage")),
+                        Q_ARG(QVariant, QString{}));
+                }
+            }
+
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
             windows.setListWindow(qobject_cast<QWindow*>(listWindow));
@@ -1043,6 +1080,19 @@ int main(int argc, char* argv[])
                                        NativeDropRouter::Target::Main);
             nativeDrops.registerWindow(nativeListWindow,
                                        NativeDropRouter::Target::List);
+            const QPointer<QObject> listDropTarget = listWindow;
+            nativeDrops.registerHitTarget(
+                nativeListWindow, NativeDropRouter::Target::ResourceFolder,
+                [listDropTarget](const QPointF& position) {
+                    if (listDropTarget == nullptr) return false;
+                    QVariant hit;
+                    return QMetaObject::invokeMethod(
+                               listDropTarget, "resourceDropContainsPoint",
+                               Q_RETURN_ARG(QVariant, hit),
+                               Q_ARG(QVariant, position.x()),
+                               Q_ARG(QVariant, position.y()))
+                        && hit.toBool();
+                });
             nativeDrops.registerWindow(nativeAudioToolsWindow,
                                        NativeDropRouter::Target::AudioTools);
             QObject::connect(
@@ -1063,20 +1113,20 @@ int main(int argc, char* argv[])
                         break;
                     case NativeDropRouter::Target::List:
                         {
-                        const QString category = filterModel != nullptr
-                            ? filterModel->property("category").toString()
-                            : QString();
-                        const bool isCustom = category != QStringLiteral("all")
-                            && category != QStringLiteral("favorites")
-                            && category != QStringLiteral("history")
-                            && category != QStringLiteral("recentAdded")
-                            && category != QStringLiteral("neverPlayed");
-                        if (listWindow != nullptr) {
-                            listWindow->setProperty(
-                                "importTargetPlaylistId",
-                                isCustom ? category : QString());
+                        const bool invoked = listWindow != nullptr
+                            && QMetaObject::invokeMethod(
+                                listWindow, "handleListDropUrls",
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        if (!invoked) importer.importPaths(paths);
                         }
-                        importer.importPaths(paths);
+                        break;
+                    case NativeDropRouter::Target::ResourceFolder:
+                        {
+                        if (listWindow != nullptr) {
+                            QMetaObject::invokeMethod(
+                                listWindow, "handleResourceDropUrls",
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        }
                         }
                         break;
                     case NativeDropRouter::Target::AudioTools:
@@ -1264,7 +1314,8 @@ int main(int argc, char* argv[])
                 }
             }
             if (wantScreenshotList && listWindow != nullptr) {
-                if (filterModel != nullptr && !qaListCategory.isEmpty()) {
+                if (qaListCategory != QStringLiteral("tags")
+                    && filterModel != nullptr && !qaListCategory.isEmpty()) {
                     filterModel->setProperty("category", qaListCategory);
                 }
                 if (auto* listWin = qobject_cast<QWindow*>(listWindow)) {
@@ -1375,6 +1426,11 @@ int main(int argc, char* argv[])
             }
             result = app.exec();
             savePlaybackState(true);
+            if (!tagModel.flush()) {
+                qWarning().noquote()
+                    << QCoreApplication::translate(
+                           "Main", "Failed to save tag data after event loop exit");
+            }
 
             app.removeNativeEventFilter(&hotkeys);
             hotkeys.unregisterAll();

@@ -53,10 +53,16 @@ add_library(agplayer_qt STATIC
     src/library_file_operations.hpp
     src/library_model.cpp
     src/library_model.hpp
+    src/library_manager_controller.cpp
+    src/library_manager_controller.hpp
+    src/library_navigation_model.cpp
+    src/library_navigation_model.hpp
     src/library_store.cpp
     src/library_store.hpp
     src/tag_model.cpp
     src/tag_model.hpp
+    src/tag_filter_model.cpp
+    src/tag_filter_model.hpp
     src/tag_store.cpp
     src/tag_store.hpp
     src/metadata_editor.cpp
@@ -69,6 +75,8 @@ add_library(agplayer_qt STATIC
     src/playback_state_store.hpp
     src/replay_gain_scanner.cpp
     src/replay_gain_scanner.hpp
+    src/resource_path.cpp
+    src/resource_path.hpp
     src/playlist_model.cpp
     src/playlist_model.hpp
     src/qml_registration.cpp

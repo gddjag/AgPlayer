@@ -43,6 +43,7 @@ public:
     Q_INVOKABLE void cancel(const QString& trackId, quint64 generation);
     Q_INVOKABLE [[nodiscard]] QVariantMap diagnostics() const;
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void invalidateSourceCache(const QString& sourcePath);
 
     void setCacheDirectory(const QString& cacheDirectory);
 
@@ -50,6 +51,7 @@ signals:
     void thumbnailReady(const QString& trackId,
                         quint64 generation,
                         const QByteArray& peaks);
+    void sourceCacheInvalidated(const QString& sourcePath);
 
 private:
     struct Request final {
@@ -106,4 +108,5 @@ private:
     int maxActiveWorkers_ = 0;
     int maxInFlightTracks_ = 0;
     qulonglong cacheReadAttempts_ = 0U;
+    bool activeSourceInvalidated_ = false;
 };

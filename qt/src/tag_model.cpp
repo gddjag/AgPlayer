@@ -47,10 +47,11 @@ QColor nextColor(const QList<TagEntry>& entries, const QString& key)
 }
 }
 
-TagModel::TagModel(LibraryModel* library, QString storagePath, QObject* parent)
+TagModel::TagModel(LibraryModel* library, QString storagePath, QObject* parent,
+                   TagStore::WriteFunction writer)
     : QAbstractListModel(parent)
     , library_(library)
-    , store_(std::move(storagePath))
+    , store_(std::move(storagePath), std::move(writer))
 {
     flushTimer_.setSingleShot(true);
     flushTimer_.setInterval(0);
@@ -144,13 +145,14 @@ bool TagModel::createTag(const QString& displayName)
     return true;
 }
 
-int TagModel::renameTag(const QString& key, const QString& displayName)
+bool TagModel::renameTag(const QString& key, const QString& displayName)
 {
     const QString oldKey = keyFor(key);
     const QString newName = displayName.trimmed();
     const QString newKey = keyFor(newName);
     const int oldRow = rowForKey(oldKey);
-    if (oldRow < 0 || newKey.isEmpty()) return 0;
+    if (oldRow < 0 || newKey.isEmpty()) return false;
+    if (oldKey != newKey && rowForKey(newKey) >= 0) return false;
     const QColor preservedColor = entries_.at(oldRow).color;
     const int changed = library_ == nullptr ? 0 : library_->renameTag(oldKey, newName);
     const int refreshedOldRow = rowForKey(oldKey);
@@ -182,7 +184,8 @@ int TagModel::renameTag(const QString& key, const QString& displayName)
         pendingRemovedKeys_.remove(newKey);
     }
     scheduleFlush();
-    return changed;
+    Q_UNUSED(changed)
+    return true;
 }
 
 int TagModel::removeTag(const QString& key)
@@ -229,13 +232,29 @@ QColor TagModel::colorForKey(const QString& key) const
     return row < 0 ? QColor{} : entries_.at(row).color;
 }
 
+bool TagModel::dirty() const noexcept { return dirty_; }
+QString TagModel::persistenceError() const { return persistenceError_; }
+
 bool TagModel::flush()
 {
     flushTimer_.stop();
     if (!dirty_) return true;
-    if (!store_.save(entries_)) return false;
+    if (!store_.save(entries_)) {
+        if (persistenceError_.isEmpty()) {
+            persistenceError_ = tr("无法保存标签数据");
+            emit persistenceStateChanged();
+        }
+        if (retryAttempts_ < kMaxFlushRetries) {
+            ++retryAttempts_;
+            flushTimer_.start(kFlushRetryIntervalMs);
+        }
+        return false;
+    }
     dirty_ = false;
+    retryAttempts_ = 0;
     pendingRemovedKeys_.clear();
+    persistenceError_.clear();
+    emit persistenceStateChanged();
     return true;
 }
 
@@ -359,6 +378,9 @@ void TagModel::rememberTrackTags(const int firstRow, const int lastRow, const in
 
 void TagModel::scheduleFlush()
 {
+    const bool wasDirty = dirty_;
     dirty_ = true;
+    retryAttempts_ = 0;
     flushTimer_.start();
+    if (!wasDirty) emit persistenceStateChanged();
 }

@@ -39,6 +39,7 @@ public:
 
 signals:
     void waveformReady(const QString& path, const QVariantMap& layers);
+    void waveformCacheReady(const QString& sourcePath);
     void analysisProgressChanged();
     void activeGenerationChanged();
 

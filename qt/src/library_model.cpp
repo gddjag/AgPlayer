@@ -207,6 +207,7 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
     QList<TrackRecord> accepted;
     accepted.reserve(tracks.size());
     QSet<QString> batchKeys;
+    const qint64 batchAddedAtMs = QDateTime::currentMSecsSinceEpoch();
     for (TrackRecord& track : tracks) {
         track.path = canonicalLibraryPath(track.path);
         const QString key = normalizedCanonicalKey(track.path);
@@ -217,7 +218,7 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
             track.trackId = trackIdForPath(track.path);
         }
         if (track.addedAtMs <= 0) {
-            track.addedAtMs = QDateTime::currentMSecsSinceEpoch();
+            track.addedAtMs = batchAddedAtMs;
         }
         batchKeys.insert(key);
         accepted.append(std::move(track));
@@ -451,6 +452,39 @@ int LibraryModel::setTagsForTracks(const QStringList& trackIds,
         requestedIds.insert(trackId);
         const int row = indexForTrackId(trackId);
         if (row >= 0 && applyTagsAtRow(row, normalized)) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
+int LibraryModel::addTagToTracks(const QStringList& trackIds,
+                                 const QString& tag)
+{
+    const QStringList normalizedTag = normalizeTags({tag});
+    if (normalizedTag.isEmpty()) return 0;
+
+    const QString targetKey = normalizedTag.constFirst().toCaseFolded();
+    QSet<QString> requestedIds;
+    QList<int> requestedRows;
+    requestedRows.reserve(trackIds.size());
+    for (const QString& trackId : trackIds) {
+        if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
+        requestedIds.insert(trackId);
+        const int row = indexForTrackId(trackId);
+        if (row < 0) return 0;
+        requestedRows.append(row);
+    }
+
+    int changed = 0;
+    for (const int row : requestedRows) {
+        QStringList next = tracks_.at(row).tags;
+        const bool alreadyPresent = std::any_of(
+            next.cbegin(), next.cend(), [&targetKey](const QString& existing) {
+                return existing.toCaseFolded() == targetKey;
+            });
+        if (alreadyPresent) continue;
+        next.append(normalizedTag.constFirst());
+        if (applyTagsAtRow(row, normalizeTags(next))) ++changed;
     }
     if (changed > 0) emit flushRequested();
     return changed;

@@ -7,6 +7,8 @@ class FormatConverter;
 class FilenameProcessor;
 class ImportController;
 class LibraryFilterModel;
+class LibraryManagerController;
+class LibraryNavigationModel;
 class LibraryModel;
 class MetadataEditor;
 class PlaybackController;
@@ -19,6 +21,8 @@ class WindowController;
 
 struct AgPlayerQmlRuntimeModels final {
     TagModel* tagModel = nullptr;
+    LibraryNavigationModel* libraryNavigationModel = nullptr;
+    LibraryManagerController* libraryManagerController = nullptr;
     TrackWaveformThumbnailProvider* trackWaveformThumbnailProvider = nullptr;
 };
 

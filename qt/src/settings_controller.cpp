@@ -14,6 +14,7 @@
 #include <QUrl>
 
 #include "cache_janitor.hpp"
+#include "audio_file_discovery.hpp"
 #include "runtime_log.hpp"
 #include "file_association_controller.hpp"
 
@@ -60,6 +61,7 @@ SettingsController::SettingsController(QObject* parent)
       settings_(this),
       fileAssociationController_(std::make_unique<FileAssociationController>(this))
 {
+    fileAssociations_ = agplayer::qt::supportedAudioExtensions();
     retireLegacySmartPlaylists();
     load();
     applyAutoStartWithWindows();
@@ -1349,13 +1351,14 @@ void SettingsController::load()
     settings_.beginGroup(QStringLiteral("cache"));
     const QString storedCacheDirectory =
         settings_.value(QStringLiteral("directory"), QString()).toString();
-    const QString oldBuiltInCacheDirectory =
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-        + QStringLiteral("/waveform");
+    const QString oldBuiltInCacheLocation =
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     const bool usesOldBuiltInCacheDirectory =
-        !storedCacheDirectory.isEmpty()
+        !oldBuiltInCacheLocation.isEmpty()
+        && !storedCacheDirectory.isEmpty()
         && QDir::cleanPath(storedCacheDirectory)
-            == QDir::cleanPath(oldBuiltInCacheDirectory);
+            == QDir::cleanPath(QDir(oldBuiltInCacheLocation).filePath(
+                QStringLiteral("waveform")));
     cacheDirectory_ = storedCacheDirectory;
     if (cacheDirectory_.isEmpty() || usesOldBuiltInCacheDirectory) {
         cacheDirectory_ = defaultCacheDirectory();
@@ -1543,9 +1546,7 @@ void SettingsController::restoreDefaults()
     closeBehavior_ = 0;
     language_ = QStringLiteral("zh");
     setAsDefaultPlayer_ = false;
-    fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
-        QStringLiteral("ogg")};
+    fileAssociations_ = agplayer::qt::supportedAudioExtensions();
     outputDevice_.clear();
     exclusiveMode_ = false;
     matchTrackSampleRate_ = true;
@@ -1640,12 +1641,33 @@ QString SettingsController::defaultMusicDirectory()
 
 QString SettingsController::defaultCacheDirectory()
 {
+    if (QStandardPaths::isTestModeEnabled()) {
+        return resolveTestCacheDirectory(
+            QStandardPaths::writableLocation(QStandardPaths::CacheLocation),
+            QStandardPaths::writableLocation(QStandardPaths::TempLocation),
+            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    }
     QString documents =
         QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     if (documents.isEmpty()) {
         documents = QDir::homePath() + QStringLiteral("/Documents");
     }
     return documents + QStringLiteral("/AgPlayer/Cache");
+}
+
+QString SettingsController::resolveTestCacheDirectory(
+    const QString& cacheLocation, const QString& tempLocation,
+    const QString& appDataLocation)
+{
+    QString base = cacheLocation;
+    if (base.isEmpty()) base = tempLocation;
+    if (base.isEmpty()) base = appDataLocation;
+    if (base.isEmpty()) base = QDir::tempPath();
+    if (base.isEmpty()) {
+        base = QDir(QDir::currentPath()).filePath(
+            QStringLiteral(".agplayer-test-cache"));
+    }
+    return QDir(base).filePath(QStringLiteral("AgPlayer/Cache"));
 }
 
 QString SettingsController::defaultExportDir()

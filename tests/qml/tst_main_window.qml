@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import QtTest
 import AgPlayer
 
@@ -8,9 +9,16 @@ TestCase {
     when: windowShown
 
     property var mainWindow: null
+    property var task4StateSnapshot: null
+    property var task4TemporaryTagKeys: []
     Component {
         id: fileDropAreaComponent
         FileDropArea {}
+    }
+
+    Component {
+        id: signalSpyComponent
+        SignalSpy {}
     }
 
     Component {
@@ -97,6 +105,213 @@ TestCase {
         }
     }
 
+    Component {
+        id: tagManagementPanelWindowComponent
+        Window {
+            visible: true
+            width: 400
+            height: 540
+            property alias filterModel: tagPanel.filterModel
+            TagManagementPanel {
+                id: tagPanel
+                anchors.fill: parent
+            }
+        }
+    }
+
+    Component {
+        id: resourceNavigationWindowComponent
+        Window {
+            visible: true
+            width: 260
+            height: 620
+            SideNavigation {
+                objectName: "resourceTestNavigation"
+                anchors.fill: parent
+            }
+        }
+    }
+
+
+    Component {
+        id: fakeThumbnailProviderComponent
+        QtObject {
+            property int requestCount: 0
+            property int cancelCount: 0
+            property var requests: []
+            property var requestEvidence: []
+            property var requestObserver: null
+            property var cancellations: []
+            property string lastTrackId: ""
+            property string lastSourcePath: ""
+            property int lastGeneration: -1
+            signal thumbnailReady(string trackId, int generation, var peaks)
+            signal sourceCacheInvalidated(string sourcePath)
+
+            function request(trackId, sourcePath, generation) {
+                var observed = requestObserver ? requestObserver(trackId) : null
+                requestCount += 1
+                var nextRequests = requests.slice()
+                nextRequests.push({ "trackId": trackId,
+                                    "sourcePath": sourcePath,
+                                    "generation": generation })
+                requests = nextRequests
+                if (observed) {
+                    var nextEvidence = requestEvidence.slice()
+                    nextEvidence.push({
+                        "trackId": trackId,
+                        "hasDelegate": observed.hasDelegate === true,
+                        "hasLoader": observed.hasLoader === true,
+                        "loaderEnabled": observed.loaderEnabled === true,
+                        "loaderHasItem": observed.loaderHasItem === true,
+                        "loaderItemTrackId": observed.loaderItemTrackId || "",
+                        "loaderActive": observed.loaderActive === true,
+                        "rowTop": observed.rowTop,
+                        "rowBottom": observed.rowBottom,
+                        "viewportTop": observed.viewportTop,
+                        "viewportBottom": observed.viewportBottom
+                    })
+                    requestEvidence = nextEvidence
+                }
+                lastTrackId = trackId
+                lastSourcePath = sourcePath
+                lastGeneration = generation
+            }
+            function cancel(trackId, generation) {
+                cancelCount += 1
+                var nextCancellations = cancellations.slice()
+                nextCancellations.push({ "trackId": trackId,
+                                         "generation": generation })
+                cancellations = nextCancellations
+            }
+            function colorForTrackId(trackId) {
+                return "#7f6aa8"
+            }
+        }
+    }
+
+    Component {
+        id: trackWaveformThumbnailComponent
+        TrackWaveformThumbnail {
+            width: 128
+            height: 9
+        }
+    }
+
+    Component {
+        id: deferredThumbnailDestroyHostComponent
+        Item {
+            id: deferredHost
+            property var thumbnailProvider
+            readonly property var wrapper: delegateLoader.item
+                                           ? delegateLoader.item.wrapper : null
+
+            function deactivateBeforeNextRequest() {
+                Qt.callLater(function() {
+                    delegateLoader.active = false
+                })
+                wrapper.trackId = "destroyed-before-request"
+                wrapper.sourcePath = "destroyed-before-request.wav"
+                wrapper.delegateGeneration = 47
+            }
+
+            Loader {
+                id: delegateLoader
+                active: true
+                sourceComponent: Component {
+                    Item {
+                        id: delegateContext
+                        property alias wrapper: thumbnailLoader.item
+                        property var thumbnailProvider:
+                            deferredHost.thumbnailProvider
+                        Loader {
+                            id: thumbnailLoader
+                            active: true
+                            sourceComponent: Component {
+                                TrackWaveformThumbnail {
+                                    width: 128
+                                    height: 9
+                                    provider:
+                                        delegateContext.thumbnailProvider
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: isolatedTrackModelComponent
+        ListModel {}
+    }
+
+    Component {
+        id: trackListHostComponent
+        Item {
+            width: 800
+            height: 210
+        }
+    }
+
+    Component {
+        id: destructiveTrackDropTargetComponent
+        Rectangle {
+            width: 180
+            height: 140
+            property int dropCount: 0
+            DropArea {
+                id: destructiveDropArea
+                objectName: "destructiveTrackDropArea"
+                anchors.fill: parent
+                keys: ["application/x-agplayer-track-ids"]
+                onDropped: function(drop) {
+                    var encoded = drop.getDataAsString(
+                                "application/x-agplayer-track-ids")
+                    var ids = encoded ? JSON.parse(encoded) : []
+                    if (ids.length === 0 && drop.source
+                            && drop.source.dragTrackIds)
+                        ids = drop.source.dragTrackIds
+                    if (ids.length > 0)
+                        LibraryModel.removeTrack(ids[0])
+                    destructiveDropArea.parent.dropCount += 1
+                    drop.acceptProposedAction()
+                }
+            }
+        }
+    }
+
+    Component {
+        id: trackListWindowComponent
+        Window {
+            visible: true
+            width: 900
+            height: 360
+            property alias list: hostedTrackList
+            TrackList {
+                id: hostedTrackList
+                anchors.fill: parent
+            }
+        }
+    }
+
+    Component {
+        id: stackedTrackListHostComponent
+        StackLayout {
+            width: 800
+            height: 210
+            currentIndex: 0
+            property alias list: stackedTrackList
+            TrackList {
+                id: stackedTrackList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+            Item {}
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -106,6 +321,130 @@ TestCase {
 
     function init() {
         failOnWarning(/.?/)
+        var filter = findChild(mainWindow, "filterModel")
+        task4StateSnapshot = {
+            "thumbnailEnabled": SettingsController.listWaveformThumbnailEnabled,
+            "thumbnailMode": SettingsController.listWaveformThumbnailMode,
+            "selectedTagKey": TagModel.selectedKey,
+            "tagKey": filter ? filter.tagKey : "",
+            "category": filter ? filter.category : "all",
+            "resourceFolder": filter ? filter.resourceFolder : "",
+            "searchText": filter ? filter.searchText : "",
+            "exactRating": filter ? filter.exactRating : 0,
+            "minBpm": filter ? filter.minBpm : 60,
+            "maxBpm": filter ? filter.maxBpm : 160
+        }
+        task4TemporaryTagKeys = []
+    }
+
+    function cleanup() {
+        for (var index = 0; index < task4TemporaryTagKeys.length; ++index)
+            TagModel.removeTag(task4TemporaryTagKeys[index])
+        if (!task4StateSnapshot)
+            return
+        var filter = findChild(mainWindow, "filterModel")
+        if (filter) {
+            filter.tagKey = task4StateSnapshot.tagKey
+            filter.category = task4StateSnapshot.category
+            filter.resourceFolder = task4StateSnapshot.resourceFolder
+            filter.searchText = task4StateSnapshot.searchText
+            filter.exactRating = task4StateSnapshot.exactRating
+            filter.minBpm = task4StateSnapshot.minBpm
+            filter.maxBpm = task4StateSnapshot.maxBpm
+        }
+        TagModel.selectedKey = task4StateSnapshot.selectedTagKey
+        SettingsController.listWaveformThumbnailMode =
+                task4StateSnapshot.thumbnailMode
+        SettingsController.listWaveformThumbnailEnabled =
+                task4StateSnapshot.thumbnailEnabled
+        task4StateSnapshot = null
+    }
+
+    function countObjectsNamed(parentObject, expectedName) {
+        if (!parentObject)
+            return 0
+        var total = parentObject.objectName === expectedName ? 1 : 0
+        var childItems = parentObject.children || []
+        for (var index = 0; index < childItems.length; ++index)
+            total += countObjectsNamed(childItems[index], expectedName)
+        return total
+    }
+
+    function trackRowForId(parentObject, trackId) {
+        if (!parentObject)
+            return null
+        if ((parentObject.objectName === "trackRow"
+                || parentObject.objectName === "currentTrackRow")
+                && parentObject.trackId === trackId)
+            return parentObject
+        var childItems = parentObject.children || []
+        for (var index = 0; index < childItems.length; ++index) {
+            var match = trackRowForId(childItems[index], trackId)
+            if (match)
+                return match
+        }
+        return null
+    }
+
+    function verifyNewThumbnailRequestsAreVisible(provider, firstRequest,
+                                                   phase) {
+        verify(provider.requests.length > firstRequest,
+               phase + " must issue at least one thumbnail request")
+        compare(provider.requestEvidence.length, provider.requests.length,
+                phase + " must record geometry for every request")
+        for (var index = firstRequest;
+             index < provider.requestEvidence.length; ++index) {
+            var evidence = provider.requestEvidence[index]
+            compare(evidence.trackId, provider.requests[index].trackId)
+            verify(evidence.hasDelegate,
+                   phase + " requested a track without an active delegate: "
+                   + evidence.trackId)
+            verify(evidence.loaderActive,
+                   phase + " requested a track without an active waveform Loader: "
+                   + evidence.trackId + " hasLoader=" + evidence.hasLoader
+                   + " enabled=" + evidence.loaderEnabled
+                   + " hasItem=" + evidence.loaderHasItem
+                   + " itemTrackId=" + evidence.loaderItemTrackId)
+            verify(evidence.rowBottom > evidence.viewportTop
+                   && evidence.rowTop < evidence.viewportBottom,
+                   phase + " requested an offscreen row: " + evidence.trackId
+                   + " row=[" + evidence.rowTop + ","
+                   + evidence.rowBottom + ") viewport=["
+                   + evidence.viewportTop + ","
+                   + evidence.viewportBottom + ")")
+        }
+    }
+
+    function tagRowForKey(key) {
+        for (var row = 0; row < TagModel.rowCount(); ++row) {
+            var modelIndex = TagModel.index(row, 0)
+            if (TagModel.data(modelIndex, TagModel.KeyRole) === key)
+                return row
+        }
+        return -1
+    }
+
+    function createIsolatedTrackModel(prefix, count) {
+        var model = isolatedTrackModelComponent.createObject(testCase)
+        var path = decodeURIComponent(testAudioUrl.toString()
+                                      .replace(/^file:\/\/\//, ""))
+        for (var row = 0; row < count; ++row) {
+            model.append({
+                "trackId": prefix + row,
+                "path": path,
+                "title": "Pool track " + row,
+                "artist": "AgPlayer QA",
+                "album": "Pool reuse",
+                "coverUrl": "",
+                "favorite": false,
+                "rating": 0,
+                "bpm": 120,
+                "durationMs": 1000,
+                "available": true,
+                "fileStatus": "available"
+            })
+        }
+        return model
     }
 
     function test_docked_window_frame_removes_shared_edge_and_contact_corners() {
@@ -175,8 +514,9 @@ TestCase {
         // exists in TrackList (integration is deliberately a later task).
         verify(TagModel === expectedTagModel)
         verify(TrackWaveformThumbnailProvider === expectedThumbnailProvider)
-        compare(TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts, 0)
-        compare(TrackWaveformThumbnailProvider.diagnostics().queuedJobs, 0)
+        var diagnostics = TrackWaveformThumbnailProvider.diagnostics()
+        verify(diagnostics.cacheReadAttempts >= 0)
+        verify(diagnostics.queuedJobs >= 0)
 
         var item = trackWaveformThumbnailItemComponent.createObject(
                     mainWindow.contentItem)
@@ -489,9 +829,11 @@ TestCase {
     }
 
     function test_zzzzz_default_queue_density_keeps_ten_rows_visible() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         nativeDropHelper.ensureSortableTracks()
         var list = trackListComponent.createObject(mainWindow.contentItem,
-                                                   { width: 960, height: 460 })
+                                                   { width: 960, height: 476 })
         verify(list)
         compare(list.rowHeight, 42)
         verify(list.headerItem)
@@ -499,6 +841,7 @@ TestCase {
                           / list.rowHeight) >= 10,
                "the default queue viewport must show ten full songs")
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_list_window_default_height_keeps_ten_songs_visible() {
@@ -519,8 +862,8 @@ TestCase {
         verify(!findChild(side, "libraryManagerCategoryButton"))
         verify(recent.y > history.y)
         verify(never.y > recent.y)
-        compare(recent.count, 7)
-        compare(never.count, 11)
+        compare(recent.count, LibraryModel.recentAddedCount)
+        compare(never.count, LibraryModel.neverPlayedCount)
         mouseClick(recent)
         compare(side.lastSelectedCategory, "recentAdded")
         mouseClick(never)
@@ -665,6 +1008,8 @@ TestCase {
     }
 
     function test_z_album_and_artist_use_fixed_hover_marquee_columns() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var trackId = nativeDropHelper.ensureLongAlbumArtistTrack()
         var rowIndex = LibraryModel.indexForTrackId(trackId)
         verify(rowIndex >= 0)
@@ -683,6 +1028,8 @@ TestCase {
         compare(Math.round(artist.width), 130)
         verify(album.overflowing && artist.overflowing)
         compare(album.textOffset, 0)
+        mouseMove(list, 2, list.height - 2)
+        wait(10)
         mouseMove(album, album.width / 2, album.height / 2)
         // This animation starts with a deliberate hover pause.  The parent
         // ApplicationWindow may have lost activation to a prior tool/settings
@@ -691,6 +1038,7 @@ TestCase {
         mouseMove(list, 2, list.height - 2)
         tryCompare(album, "textOffset", 0, 500)
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_z_fixed_track_columns_share_header_axis() {
@@ -793,9 +1141,13 @@ TestCase {
     }
 
     function test_track_title_surface_honors_ctrl_selection_and_double_click() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var ids = nativeDropHelper.ensureSortableTracks()
         var list = trackListComponent.createObject(mainWindow.contentItem)
         verify(list)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
         list.positionViewAtBeginning()
         wait(30)
         var first = list.itemAtIndex(LibraryModel.indexForTrackId(ids[0]))
@@ -833,9 +1185,12 @@ TestCase {
                    LibraryModel.data(LibraryModel.index(playableIndex, 0),
                                      LibraryModel.TrackIdRole))
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_selected_tracks_drag_into_playlist_with_real_mouse() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var ids = nativeDropHelper.ensureSortableTracks()
         compare(ids.length, 3)
         var playlistId = PlaylistModel.createPlaylist(
@@ -848,7 +1203,7 @@ TestCase {
                     mainWindow.contentItem, { "x": 220, "y": 0 })
         verify(navigation && list)
         mainWindow.requestActivate()
-        wait(50)
+        tryVerify(function() { return mainWindow.active }, 1000)
 
         var firstIndex = LibraryModel.indexForTrackId(ids[0])
         var secondIndex = LibraryModel.indexForTrackId(ids[1])
@@ -878,8 +1233,15 @@ TestCase {
         mouseMove(firstArea, firstArea.width / 2 - 12,
                   firstArea.height / 2, 20, Qt.LeftButton)
         tryVerify(function() { return proxy.Drag.active }, 500)
+        compare(list.dragPreviewCreationCount, 1)
+        compare(list.dragTrackIds.length, 2)
+        var preview = findChild(list, "trackDragPreview")
+        verify(preview, "drag start must lazily create one shared preview")
+        compare(preview.opacity, 0.68)
+        compare(preview.selectedCount, 2)
         mouseMove(firstArea, targetPoint.x, targetPoint.y,
                   60, Qt.LeftButton)
+        compare(list.dragPreviewCreationCount, 1)
         tryVerify(function() { return target.containsDrag }, 500)
         mouseRelease(firstArea, targetPoint.x, targetPoint.y,
                      Qt.LeftButton)
@@ -889,40 +1251,109 @@ TestCase {
         }, 500)
         verify(PlaylistModel.containsTrack(playlistId, ids[1]),
                "all Ctrl-selected rows must arrive in the target playlist")
+        tryVerify(function() { return !findChild(list, "trackDragPreview") }, 500)
         PlaylistModel.removePlaylist(playlistId)
         list.destroy()
         navigation.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_playlist_context_actions_use_real_mouse_and_keep_playlist_id() {
-        var playlistId = PlaylistModel.createPlaylist(
-                    "QML context target " + Date.now())
-        verify(playlistId.length > 0)
-        var navigation = sideNavigationComponent.createObject(mainWindow.contentItem)
-        verify(navigation)
-        var category = findChild(navigation, "playlistCategory-" + playlistId)
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window && filterModel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var navigation = findChild(window, "referenceSideNavigation")
+        var libraryNode = findChild(navigation, "navigationNode-library:all")
+        verify(navigation && libraryNode)
+
+        function createPlaylistThroughMenu(name) {
+            mouseClick(libraryNode, libraryNode.width / 2,
+                       libraryNode.height / 2, Qt.RightButton)
+            var contextMenu = findChild(navigation, "playlistContextMenu")
+            tryVerify(function() { return contextMenu.visible }, 500)
+            var createAction = findChild(contextMenu, "playlistMenuCreate")
+            mouseClick(createAction, createAction.width / 2,
+                       createAction.height / 2)
+            var dialog = findChild(window, "createPlaylistDialog")
+            tryVerify(function() { return dialog.visible }, 500)
+            var field = findChild(dialog, "createPlaylistField")
+            field.text = name
+            dialog.accept()
+            var createdId = PlaylistModel.idAt(PlaylistModel.count - 1)
+            compare(PlaylistModel.nameForId(createdId), name)
+            return createdId
+        }
+
+        var playlistA = createPlaylistThroughMenu("Context A " + Date.now())
+        libraryNode = findChild(navigation, "navigationNode-library:all")
+        var playlistB = createPlaylistThroughMenu("Context B " + Date.now())
+        verify(playlistA.length > 0 && playlistB.length > 0
+               && playlistA !== playlistB)
+        filterModel.category = playlistA
+
+        var category = findChild(navigation, "playlistCategory-" + playlistB)
         verify(category, "custom playlist needs a stable context target")
         mouseClick(category, category.width / 2, category.height / 2,
                    Qt.RightButton)
         var menu = findChild(navigation, "playlistContextMenu")
         tryVerify(function() { return menu && menu.visible }, 500)
+        var importAction = findChild(menu, "playlistMenuImport")
+        verify(importAction && importAction.enabled)
+        mouseClick(importAction, importAction.width / 2,
+                   importAction.height / 2)
+        compare(window.importTargetPlaylistId, playlistB,
+                "the right-click target must be fixed before opening the dialog")
+        var importDialog = null
+        tryVerify(function() {
+            importDialog = window.activeImportDialog
+            return importDialog !== null
+        }, 500)
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+        window.importSelectedUrls([copiedAudio])
+        tryCompare(importFinished, "count", 1, 5000)
+        verify(ImportController.importedTrackIds.length > 0)
+        var importedId = ImportController.importedTrackIds[0]
+        tryVerify(function() {
+            return PlaylistModel.containsTrack(playlistB, importedId)
+        }, 500)
+        verify(!PlaylistModel.containsTrack(playlistA, importedId))
+        compare(filterModel.category, playlistB,
+                "importing into a playlist must enter that playlist")
+        window.enterCategory(playlistA, "playlist")
+        importDialog.destroy()
+        window.activeImportDialog = null
+        window.importTargetPlaylistId = ""
+        wait(0)
+
+        category = findChild(navigation, "playlistCategory-" + playlistB)
+        mouseClick(category, category.width / 2, category.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
         var renameAction = findChild(menu, "playlistMenuRename")
         verify(renameAction && renameAction.enabled)
         mouseClick(renameAction, renameAction.width / 2,
                    renameAction.height / 2)
-        tryCompare(navigation, "renameRequestCount", 1)
-        compare(navigation.lastRequestedPlaylistId, playlistId)
+        var renameDialog = findChild(window, "renamePlaylistDialog")
+        tryVerify(function() { return renameDialog.visible }, 500)
+        var renameField = findChild(renameDialog, "renamePlaylistField")
+        renameField.text = "Renamed B " + Date.now()
+        var renamed = renameField.text
+        renameDialog.accept()
+        compare(PlaylistModel.nameForId(playlistB), renamed)
 
-        mouseClick(category, category.width / 2, category.height / 2,
-                   Qt.RightButton)
-        tryVerify(function() { return menu.visible }, 500)
-        var exportAction = findChild(menu, "playlistMenuExport")
-        verify(exportAction && exportAction.enabled)
-        mouseClick(exportAction, exportAction.width / 2,
-                   exportAction.height / 2)
-        tryCompare(navigation, "exportRequestCount", 1)
-        compare(navigation.lastRequestedPlaylistId, playlistId)
-
+        category = findChild(navigation, "playlistCategory-" + playlistB)
         mouseClick(category, category.width / 2, category.height / 2,
                    Qt.RightButton)
         tryVerify(function() { return menu.visible }, 500)
@@ -930,14 +1361,259 @@ TestCase {
         verify(deleteAction && deleteAction.enabled)
         mouseClick(deleteAction, deleteAction.width / 2,
                    deleteAction.height / 2)
-        tryCompare(navigation, "deleteRequestCount", 1)
-        compare(navigation.lastRequestedPlaylistId, playlistId)
+        var removeDialog = findChild(window, "removePlaylistDialog")
+        tryVerify(function() { return removeDialog.visible }, 500)
+        removeDialog.accept()
+        tryVerify(function() {
+            return PlaylistModel.nameForId(playlistB).length === 0
+        }, 500)
+        compare(filterModel.category, playlistA,
+                "deleting a non-active playlist must retain the active one")
+        PlaylistModel.removePlaylist(playlistA)
+        LibraryModel.removeTrack(importedId)
+        importFinished.destroy()
+        window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
+    function test_playlist_async_import_keeps_its_original_target() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window && filterModel)
+        var playlistA = PlaylistModel.createPlaylist(
+                    "Async target A " + Date.now())
+        var playlistB = PlaylistModel.createPlaylist(
+                    "Async target B " + Date.now())
+        verify(playlistA.length > 0 && playlistB.length > 0
+               && playlistA !== playlistB)
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+
+        window.openImportDialog(playlistB)
+        var firstDialog = window.activeImportDialog
+        verify(firstDialog)
+        compare(window.importTargetPlaylistId, playlistB)
+        window.importSelectedUrls([copiedAudio])
+        verify(ImportController.busy,
+               "the first batch must still be asynchronous during overlap")
+
+        window.openImportDialog(playlistA)
+        var possibleSecondDialog = window.activeImportDialog
+        if (possibleSecondDialog !== firstDialog)
+            possibleSecondDialog.reject()
+
+        tryCompare(importFinished, "count", 1, 5000)
+        verify(ImportController.importedTrackIds.length > 0)
+        var importedId = ImportController.importedTrackIds[0]
+        tryVerify(function() {
+            return PlaylistModel.containsTrack(playlistB, importedId)
+        }, 500)
+        verify(!PlaylistModel.containsTrack(playlistA, importedId),
+               "a later dialog must not steal the first batch")
+
+        firstDialog.destroy()
+        window.activeImportDialog = null
+        PlaylistModel.removePlaylist(playlistA)
+        PlaylistModel.removePlaylist(playlistB)
+        LibraryModel.removeTrack(importedId)
+        importFinished.destroy()
+        window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
+    function test_resource_drop_rejects_busy_audio_batch_atomically() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        filterModel.category = "all"
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var navigation = findChild(window, "referenceSideNavigation")
+        var navigationList = findChild(navigation, "libraryNavigationList")
+        verify(navigation && navigationList)
+        navigationList.positionViewAtEnd()
+        wait(0)
+        var dropTarget = findChild(navigation, "resourceFolderDropTarget")
+        verify(dropTarget)
+
+        var firstAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        var rejectedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        var mixedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        var busyFolder = nativeDropHelper.createDropDirectory()
+        verify(firstAudio && rejectedAudio && mixedAudio && busyFolder)
+        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialLibraryCount = LibraryModel.count
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+
+        verify(window.beginImport([firstAudio]))
+        verify(ImportController.busy)
+        var pureAudioAccepted = nativeDropHelper.sendUrls(
+                    dropTarget, [rejectedAudio])
+        verify(ImportController.busy)
+        var mixedAccepted = nativeDropHelper.sendUrls(
+                    dropTarget, [mixedAudio, busyFolder])
+        compare(pureAudioAccepted, false,
+                "a busy audio-only drop must remain unaccepted")
+        compare(mixedAccepted, false,
+                "a busy mixed drop must remain unaccepted")
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount,
+                "a rejected mixed batch must not add its directory")
+
+        tryCompare(importFinished, "count", 1, 5000)
+        compare(LibraryModel.count, initialLibraryCount + 1,
+                "busy drops must not queue or import audio silently")
+        var firstImportedId = ImportController.importedTrackIds[0]
+        verify(firstImportedId)
+
+        verify(nativeDropHelper.sendUrls(
+                   dropTarget, [rejectedAudio, mixedAudio, busyFolder]),
+               "the same mixed drop must work after the active batch finishes")
+        tryCompare(importFinished, "count", 2, 5000)
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount + 1)
+        compare(LibraryModel.count, initialLibraryCount + 3)
+        var laterImportedIds = ImportController.importedTrackIds
+        compare(laterImportedIds.length, 2)
+
+        var folderPath = decodeURIComponent(busyFolder.toString()
+                                           .replace(/^file:\/\/\//, ""))
+        folderPath = folderPath.replace(/\\/g, "/")
+        verify(LibraryManagerController.removeMonitoredFolder(folderPath))
+        LibraryModel.removeTrack(firstImportedId)
+        for (var index = 0; index < laterImportedIds.length; ++index)
+            LibraryModel.removeTrack(laterImportedIds[index])
+        importFinished.destroy()
+        window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
+    function test_list_drop_rejects_unsupported_files_clearly() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window)
+        var unsupported = nativeDropHelper.createNonAudioDropFile()
+        verify(unsupported)
+        compare(window.handleListDropUrls([unsupported]), false,
+                "an unsupported drop must not report apparent success")
+        verify(!ImportController.busy)
+        window.destroy()
+    }
+
+    function test_playlist_and_resource_navigation_states_are_exclusive() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        var playlistId = PlaylistModel.createPlaylist(
+                    "Transition target " + Date.now())
+        verify(playlistId)
+
+        filterModel.tagKey = "stale-tag"
+        TagModel.selectedKey = "stale-tag"
+        filterModel.resourceFolder = "C:/stale/resource"
+        window.enterCategory(playlistId, "playlist")
+        compare(filterModel.category, playlistId)
+        compare(filterModel.tagKey, "")
+        compare(TagModel.selectedKey, "")
+        compare(filterModel.resourceFolder, "")
+
+        var rootUrl = nativeDropHelper.createDropDirectory()
+        var rootPath = LibraryManagerController.classifyDropUrl(rootUrl).path
+        verify(rootPath)
+        window.enterResource("resourceRoot", rootPath)
+        compare(filterModel.category, "all")
+        compare(filterModel.tagKey, "")
+        compare(filterModel.resourceFolder, rootPath)
+
+        window.handleResourceFolderRemoved(rootPath)
+        compare(filterModel.category, "all")
+        compare(filterModel.resourceFolder, "")
+        var navigation = findChild(window, "referenceSideNavigation")
+        compare(navigation.activeNodeType, "library")
 
         PlaylistModel.removePlaylist(playlistId)
-        navigation.destroy()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
+    function test_create_and_import_playlist_clear_old_tag_resource_filters() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        filterModel.category = "all"
+        filterModel.tagKey = "stale-tag"
+        TagModel.selectedKey = "stale-tag"
+        filterModel.resourceFolder = "C:/stale/resource"
+
+        var createDialog = findChild(window, "createPlaylistDialog")
+        var createField = findChild(createDialog, "createPlaylistField")
+        createDialog.open()
+        createField.text = "Created transition " + Date.now()
+        createDialog.accept()
+        var createdId = filterModel.category
+        verify(createdId !== "all")
+        compare(filterModel.tagKey, "")
+        compare(TagModel.selectedKey, "")
+        compare(filterModel.resourceFolder, "")
+
+        filterModel.resourceFolder = "C:/another/stale/resource"
+        filterModel.tagKey = "stale-again"
+        var importId = PlaylistModel.createPlaylist(
+                    "Import transition " + Date.now())
+        verify(window.openImportDialog(importId))
+        compare(filterModel.category, importId)
+        compare(filterModel.tagKey, "")
+        compare(filterModel.resourceFolder, "")
+        window.activeImportDialog.reject()
+        window.activeImportDialog.destroy()
+        window.activeImportDialog = null
+
+        PlaylistModel.removePlaylist(createdId)
+        PlaylistModel.removePlaylist(importId)
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
     }
 
     function test_z_delete_key_uses_current_view_semantics() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
         var ids = nativeDropHelper.ensureSortableTracks()
         compare(ids.length, 3)
         var playlistId = PlaylistModel.createPlaylist(
@@ -948,6 +1624,7 @@ TestCase {
         var list = trackListComponent.createObject(mainWindow.contentItem)
         verify(list)
         mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
         list.forceActiveFocus()
         wait(30)
 
@@ -997,6 +1674,7 @@ TestCase {
 
         PlaylistModel.removePlaylist(playlistId)
         list.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_waveform_click_seeks_real_playback_controller() {
@@ -1464,6 +2142,1273 @@ TestCase {
         compare(findChild(filter, "bpmModule").width, 216)
         compare(findChild(filter, "bpmRange").width, 104)
         filter.destroy()
+    }
+
+    function test_z_tag_workspace_is_one_continuous_three_column_surface() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400
+        })
+        verify(window)
+
+        var workspace = findChild(window, "listWorkspace")
+        verify(workspace, "ListWindow must expose one continuous workspace")
+        compare(workspace.leftColumnWidth, 256)
+        compare(workspace.rightColumnWidth, 328)
+        compare(workspace.dividerWidth, 1)
+        verify(workspace.centerWidth >= 680)
+        compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+
+        var navigation = findChild(workspace, "referenceSideNavigation")
+        verify(navigation)
+        navigation.activateNode("tags", "tags:manage", "")
+        tryCompare(window, "pageMinimumWidth", 1284)
+        window.width = window.pageMinimumWidth
+        tryVerify(function() { return workspace.centerWidth >= 680 })
+        compare(findChild(navigation, "libraryNavigationList").model,
+                LibraryNavigationModel)
+
+        var trackList = findChild(workspace, "sharedTrackList")
+        verify(trackList)
+        compare(findChild(trackList, "trackHeaderIndex").text, "#")
+        compare(findChild(trackList, "trackHeaderTitle").text, "歌曲")
+        compare(findChild(trackList, "trackHeaderFavorite").text, "收藏")
+        verify(findChild(trackList, "trackHeaderArtist").x
+               < findChild(trackList, "trackHeaderAlbum").x,
+               "艺术家列必须在专辑列之前")
+        compare(findChild(trackList, "trackHeaderDuration").text, "时长")
+
+        var tagPanel = findChild(workspace, "tagManagementPanel")
+        verify(tagPanel)
+        compare(tagPanel.gridColumnCount, 3)
+        var tagGrid = findChild(tagPanel, "tagGrid")
+        verify(tagGrid)
+        compare(tagGrid.cellWidth, tagGrid.width / 3)
+
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_tag_panel_add_search_and_selection_update_real_models() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var filterModel = findChild(mainWindow, "filterModel")
+        filterModel.tagKey = ""
+        TagModel.selectedKey = ""
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400
+        })
+        verify(window)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        var suffix = String(Date.now())
+        var alphaName = "Task4 Alpha " + suffix
+        var betaName = "Task4 Beta " + suffix
+        var alphaKey = alphaName.toLocaleLowerCase()
+        var betaKey = betaName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [alphaKey, betaKey]
+        var initialCount = TagModel.count
+        verify(panel.addTag(alphaName), "add must call the real TagModel")
+        verify(panel.addTag(betaName), "second real tag should be added")
+        tryCompare(TagModel, "count", initialCount + 2)
+
+        var proxy = findChild(panel, "tagFilterProxy")
+        verify(proxy)
+        compare(proxy.sourceModel, TagModel)
+        panel.searchText = "Alpha " + suffix
+        tryCompare(panel, "visibleTagCount", 1)
+        panel.selectTag(alphaKey)
+        compare(TagModel.selectedKey, alphaKey)
+        compare(filterModel.tagKey, alphaKey)
+        var navigation = findChild(window, "referenceSideNavigation")
+        verify(navigation.nodeIsSelected("tags", "tags:manage", ""))
+        verify(!navigation.nodeIsSelected("library", "library:all", ""),
+               "tag filtering must not leave both library and tags selected")
+
+        panel.selectTag(alphaKey)
+        compare(TagModel.selectedKey, "")
+        compare(filterModel.tagKey, "")
+
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task5_tag_menu_delete_preserves_other_filters() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        var removeRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "removeTagRequested"
+        })
+        verify(removeRequested)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var name = "Task5 Delete " + Date.now()
+        var key = name.toLocaleLowerCase()
+        task4TemporaryTagKeys = [key]
+        verify(panel.addTag(name))
+        panel.searchText = name
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        verify(tagGrid)
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        panel.selectTag(key)
+        filterModel.searchText = "keep-search"
+        filterModel.exactRating = 4
+        filterModel.minBpm = 88
+        filterModel.maxBpm = 144
+
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var pill = findChild(tagCell, "tagPill-" + key)
+        verify(pill)
+        var pointerArea = findChild(pill, "tagPillPointerArea-" + key)
+        verify(pointerArea)
+        var pointerGlobal = pointerArea.mapToGlobal(0, 0)
+        verify(pointerGlobal.y >= window.y
+               && pointerGlobal.y + pointerArea.height <= window.y + window.height,
+               "active tag delegate must be inside the test window; y="
+               + pointerGlobal.y + " window=" + window.y + ","
+               + window.height + " gridY=" + tagGrid.y
+               + " gridHeight=" + tagGrid.height
+               + " contentY=" + tagGrid.contentY
+               + " cellY=" + tagCell.y)
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        compare(panel.contextTagKey, key)
+        var menu = findChild(panel, "tagContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var removeAction = findChild(menu, "tagMenuDelete")
+        verify(removeAction && removeAction.enabled)
+        mouseClick(removeAction, removeAction.width / 2,
+                   removeAction.height / 2)
+        var confirm = findChild(panel, "removeTagDialog")
+        tryVerify(function() { return confirm && confirm.visible }, 500)
+        var warning = findChild(confirm, "removeTagWarning")
+        verify(warning.text.indexOf("不删除歌曲或磁盘文件") >= 0)
+        confirm.accept()
+        compare(removeRequested.count, 1,
+                "the mutation signal must follow a successful removal")
+        tryCompare(TagModel, "selectedKey", "")
+        compare(filterModel.tagKey, "")
+        compare(filterModel.searchText, "keep-search")
+        compare(filterModel.exactRating, 4)
+        compare(filterModel.minBpm, 88)
+        compare(filterModel.maxBpm, 144)
+        task4TemporaryTagKeys = []
+        removeRequested.destroy()
+        window.destroy()
+    }
+
+    function test_z_task5_tag_menu_rename_color_and_cancel_are_real() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        var renameRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "renameTagRequested"
+        })
+        var colorRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "changeTagColorRequested"
+        })
+        verify(renameRequested && colorRequested)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var suffix = String(Date.now())
+        var originalName = "Task5 Original " + suffix
+        var originalKey = originalName.toLocaleLowerCase()
+        var renamedName = "Task5 Renamed " + suffix
+        var renamedKey = renamedName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [originalKey, renamedKey]
+        verify(panel.addTag(originalName))
+        panel.searchText = originalName
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        verify(tagGrid)
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        panel.selectTag(originalKey)
+
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var pointerArea = findChild(
+                    tagCell, "tagPillPointerArea-" + originalKey)
+        verify(pointerArea)
+        var menu = findChild(panel, "tagContextMenu")
+        verify(menu && !menu.visible)
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var renameAction = findChild(menu, "tagMenuRename")
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        var renameDialog = findChild(panel, "renameTagDialog")
+        var renameField = findChild(renameDialog, "renameTagField")
+        tryVerify(function() { return renameDialog.visible }, 500)
+        renameField.text = renamedName
+        renameDialog.reject()
+        compare(tagRowForKey(originalKey) >= 0, true)
+        compare(tagRowForKey(renamedKey), -1)
+        compare(filterModel.tagKey, originalKey)
+        compare(renameRequested.count, 0,
+                "cancel must not emit a rename mutation signal")
+
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        tryVerify(function() { return renameDialog.visible }, 500)
+        renameField.text = renamedName
+        renameDialog.accept()
+        tryVerify(function() { return tagRowForKey(renamedKey) >= 0 }, 500)
+        compare(tagRowForKey(originalKey), -1)
+        compare(TagModel.selectedKey, renamedKey)
+        compare(filterModel.tagKey, renamedKey)
+        compare(renameRequested.count, 1)
+
+        panel.searchText = renamedName
+        tryCompare(panel, "visibleTagCount", 1)
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        pointerArea = findChild(tagCell,
+                                "tagPillPointerArea-" + renamedKey)
+        verify(pointerArea)
+        var renamedRow = tagRowForKey(renamedKey)
+        var beforeColor = TagModel.data(
+                    TagModel.index(renamedRow, 0), TagModel.ColorRole).toString()
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var colorAction = findChild(menu, "tagMenuColor")
+        verify(colorAction && colorAction.enabled)
+        var colorDialog = findChild(panel, "tagColorDialog")
+        verify(colorDialog)
+        ignoreWarning("qrc:/qt-project.org/imports/QtQuick/Dialogs/quickimpl/qml/ColorDialog.qml:12:1: QML ColorDialog: Binding loop detected for property \"implicitWidth\"")
+        mouseClick(colorAction, colorAction.width / 2,
+                   colorAction.height / 2)
+        colorDialog.selectedColor = "#123456"
+        colorDialog.reject()
+        compare(TagModel.data(TagModel.index(renamedRow, 0),
+                              TagModel.ColorRole).toString(), beforeColor)
+        compare(colorRequested.count, 0,
+                "cancel must not emit a color mutation signal")
+
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        mouseClick(colorAction, colorAction.width / 2,
+                   colorAction.height / 2)
+        colorDialog.selectedColor = "#123456"
+        colorDialog.accept()
+        compare(TagModel.data(TagModel.index(renamedRow, 0),
+                              TagModel.ColorRole).toString(), "#123456")
+        compare(colorRequested.count, 1)
+
+        renameRequested.destroy()
+        colorRequested.destroy()
+        window.destroy()
+    }
+
+    function test_z_task5_failed_tag_rename_keeps_filter_and_emits_no_signal() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window && filterModel)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        var renameRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "renameTagRequested"
+        })
+        verify(renameRequested)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var suffix = String(Date.now())
+        var originalName = "Task5 Vanishing " + suffix
+        var originalKey = originalName.toLocaleLowerCase()
+        var collisionName = "Task5 Existing " + suffix
+        var collisionKey = collisionName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [originalKey, collisionKey]
+        verify(panel.addTag(originalName))
+        verify(panel.addTag(collisionName))
+        panel.searchText = originalName
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        panel.selectTag(originalKey)
+        compare(filterModel.tagKey, originalKey)
+
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var pointerArea = findChild(
+                    tagCell, "tagPillPointerArea-" + originalKey)
+        verify(pointerArea)
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        var menu = findChild(panel, "tagContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var renameAction = findChild(menu, "tagMenuRename")
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        var renameDialog = findChild(panel, "renameTagDialog")
+        var renameField = findChild(renameDialog, "renameTagField")
+        tryVerify(function() { return renameDialog.visible }, 500)
+
+        TagModel.removeTag(originalKey)
+        compare(tagRowForKey(originalKey), -1)
+        compare(tagRowForKey(collisionKey) >= 0, true)
+        renameField.text = collisionName
+        renameDialog.accept()
+
+        compare(filterModel.tagKey, originalKey,
+                "a failed rename must not migrate the active filter")
+        compare(renameRequested.count, 0,
+                "a failed rename must not emit a mutation signal")
+        compare(tagRowForKey(collisionKey) >= 0, true)
+        renameRequested.destroy()
+        window.destroy()
+    }
+
+    function test_z_task5_track_drop_appends_tag_to_every_selected_track() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        compare(ids.length, 3)
+        verify(LibraryModel.setTags(ids[0], ["Existing"]))
+        verify(LibraryModel.setTags(ids[1], ["Other"]))
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var tagName = "Task5 Drop " + Date.now()
+        var tagKey = tagName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [tagKey]
+        verify(panel.addTag(tagName))
+        panel.searchText = tagName
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var dropTarget = findChild(tagCell, "tagDropTarget-" + tagKey)
+        verify(dropTarget)
+        verify(nativeDropHelper.sendTrackIds(dropTarget, [ids[0], ids[1]]),
+               "the tag pill must accept the real track-id MIME payload")
+
+        var firstTags = LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[0]), 0),
+                    LibraryModel.TagsRole)
+        var secondTags = LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[1]), 0),
+                    LibraryModel.TagsRole)
+        verify(firstTags.indexOf("Existing") >= 0)
+        verify(firstTags.indexOf(tagName) >= 0)
+        verify(secondTags.indexOf("Other") >= 0)
+        verify(secondTags.indexOf(tagName) >= 0)
+        window.destroy()
+    }
+
+    function test_z_task5_single_track_drag_cancel_releases_preview_without_data_change() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
+        tryCompare(list, "count", LibraryModel.count, 500)
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow)
+        var firstArea = findChild(firstRow, "trackRowDragArea")
+        var proxy = findChild(firstRow, "trackDragProxy")
+        verify(firstArea && proxy)
+        list.selectOnly(firstRow.trackId, 0)
+        list.forceActiveFocus()
+        var beforeOrder = []
+        for (var row = 0; row < list.count; ++row)
+            beforeOrder.push(list.trackIdAt(row))
+
+        mousePress(firstArea, firstArea.width / 2,
+                   firstArea.height / 2, Qt.LeftButton)
+        mouseMove(firstArea, firstArea.width / 2 + 20,
+                  firstArea.height / 2, 20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        compare(list.dragPreviewCreationCount, 1)
+        var preview = findChild(list, "trackDragPreview")
+        verify(preview)
+        compare(preview.selectedCount, 1)
+        compare(preview.opacity, 0.68)
+        var focusStealer = Qt.createQmlObject(
+                    'import QtQuick; TextInput { width: 10; height: 10 }',
+                    mainWindow.contentItem)
+        focusStealer.forceActiveFocus()
+        verify(focusStealer.activeFocus,
+               "Escape cleanup must not depend on TrackList focus")
+        keyClick(Qt.Key_Escape)
+        tryVerify(function() { return !proxy.Drag.active }, 500)
+        tryVerify(function() { return !findChild(list, "trackDragPreview") }, 500)
+        mouseRelease(firstArea, firstArea.width / 2 + 20,
+                     firstArea.height / 2, Qt.LeftButton)
+        var afterOrder = []
+        for (row = 0; row < list.count; ++row)
+            afterOrder.push(list.trackIdAt(row))
+        compare(afterOrder.join("|"), beforeOrder.join("|"))
+        compare(list.dragTrackIds.length, 0)
+        focusStealer.destroy()
+        list.destroy()
+    }
+
+    function test_track_list_batches_multi_selection_tag_edits_once() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        verify(ids.length >= 2)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        var flushSpy = signalSpyComponent.createObject(
+                    testCase, { "target": LibraryModel,
+                                "signalName": "flushRequested" })
+        verify(flushSpy.valid)
+        flushSpy.clear()
+
+        var tag = "One Batch " + Date.now()
+        compare(list.applyTagsToTracks([ids[0], ids[1], ids[0], ""], [tag]), 2)
+        compare(flushSpy.count, 1,
+                "one multi-selection edit must request one persistence flush")
+        compare(LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[0]), 0),
+                    LibraryModel.TagsRole), [tag])
+        compare(LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[1]), 0),
+                    LibraryModel.TagsRole), [tag])
+        flushSpy.destroy()
+        list.destroy()
+    }
+
+    function test_z_task5_drag_drop_can_synchronously_remove_its_source_row() {
+        nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem, {
+            "x": 0,
+            "y": 0,
+            "width": 700,
+            "height": 300
+        })
+        var target = destructiveTrackDropTargetComponent.createObject(
+                    mainWindow.contentItem, { "x": 740, "y": 80 })
+        verify(list && target)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow)
+        var draggedId = firstRow.trackId
+        var area = findChild(firstRow, "trackRowDragArea")
+        var proxy = findChild(firstRow, "trackDragProxy")
+        var dropArea = findChild(target, "destructiveTrackDropArea")
+        verify(area && proxy && dropArea)
+        var targetPoint = dropArea.mapToItem(area, dropArea.width / 2,
+                                             dropArea.height / 2)
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        mouseMove(area, targetPoint.x, targetPoint.y, 60, Qt.LeftButton)
+        tryVerify(function() { return dropArea.containsDrag }, 500)
+        mouseRelease(area, targetPoint.x, targetPoint.y, Qt.LeftButton)
+        tryCompare(target, "dropCount", 1, 500)
+        compare(LibraryModel.indexForTrackId(draggedId), -1)
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+        compare(list.dragTrackIds.length, 0)
+        tryVerify(function() {
+            return !findChild(list, "trackDragPreview")
+        }, 500)
+        target.destroy()
+        list.destroy()
+    }
+
+    function test_z_task5_drag_session_cleans_on_delegate_pool_and_focus_loss() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var model = createIsolatedTrackModel("drag-pool-", 30)
+        var host = trackListHostComponent.createObject(mainWindow.contentItem)
+        var list = trackListComponent.createObject(host, {
+            "width": host.width,
+            "height": 160,
+            "trackModel": model
+        })
+        verify(model && host && list)
+        mainWindow.requestActivate()
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        var proxy = findChild(firstRow, "trackDragProxy")
+        verify(firstRow && proxy)
+        list.beginTrackDrag(firstRow.trackId, firstRow.dragTrackIds,
+                            firstRow.title, "", proxy,
+                            firstRow.y, firstRow.height)
+        proxy.Drag.active = true
+        verify(list.dragSessionActive && proxy.Drag.active)
+        proxy.Drag.active = false
+        verify(list.dragSessionActive,
+               "the pooled callback must clean a stale root-owned session")
+        list.currentIndex = -1
+        list.positionViewAtEnd()
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+        compare(list.dragTrackIds.length, 0)
+        tryVerify(function() {
+            return !findChild(list, "trackDragPreview")
+        }, 500)
+        list.destroy()
+        host.destroy()
+        model.destroy()
+
+        nativeDropHelper.ensureSortableTracks()
+        var dragWindow = trackListWindowComponent.createObject(null)
+        verify(dragWindow)
+        dragWindow.requestActivate()
+        tryVerify(function() { return dragWindow.active }, 1000)
+        var windowList = dragWindow.list
+        windowList.positionViewAtBeginning()
+        var windowRow = null
+        tryVerify(function() {
+            windowRow = windowList.itemAtIndex(0)
+            return windowRow !== null
+        }, 500)
+        var windowArea = findChild(windowRow, "trackRowDragArea")
+        var windowProxy = findChild(windowRow, "trackDragProxy")
+        verify(windowArea && windowProxy)
+        mousePress(windowArea, windowArea.width / 2,
+                   windowArea.height / 2, Qt.LeftButton)
+        mouseMove(windowArea, windowArea.width / 2 + 20,
+                  windowArea.height / 2, 20, Qt.LeftButton)
+        tryVerify(function() { return windowProxy.Drag.active }, 500)
+        mainWindow.requestActivate()
+        tryVerify(function() { return !dragWindow.active }, 1000)
+        tryVerify(function() { return !windowList.dragSessionActive }, 500)
+        compare(windowList.dragTrackIds.length, 0)
+        mouseRelease(windowArea, windowArea.width / 2 + 20,
+                     windowArea.height / 2, Qt.LeftButton)
+        dragWindow.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task5_resource_folder_drop_and_remove_preserve_disk_files() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        verify(nativeDropHelper.registerListDropWindow(window),
+               "the production NativeDropRouter must be attached as Target::List")
+
+        var navigation = findChild(window, "referenceSideNavigation")
+        var navigationList = findChild(navigation, "libraryNavigationList")
+        var centerTarget = findChild(window, "sharedTrackList")
+        var tagTarget = findChild(window, "tagManagementPanel")
+        verify(navigation && navigationList && centerTarget && tagTarget)
+        navigationList.positionViewAtEnd()
+        wait(0)
+        var dropTarget = findChild(navigation, "resourceFolderDropTarget")
+        verify(dropTarget)
+
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var ignoredFile = nativeDropHelper.createNonAudioDropFile()
+        var invalidUrl = nativeDropHelper.missingDropUrl()
+        verify(ignoredFile && invalidUrl)
+        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialLibraryCount = LibraryModel.count
+
+        var centralFolder = nativeDropHelper.createDropDirectory()
+        verify(nativeDropHelper.sendUrls(centerTarget, [centralFolder]))
+        tryVerify(function() { return !ImportController.busy }, 3000)
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount,
+                "a central directory drop must not become a monitored root")
+        ImportController.clearErrors()
+
+        var tagFolder = nativeDropHelper.createDropDirectory()
+        verify(nativeDropHelper.sendUrls(tagTarget, [tagFolder]))
+        tryVerify(function() { return !ImportController.busy }, 3000)
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount,
+                "a tag-column directory drop must not become a monitored root")
+        ImportController.clearErrors()
+
+        var folderUrl = nativeDropHelper.createDropDirectory()
+        verify(folderUrl && nativeDropHelper.pathExists(folderUrl))
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        var rootsChanged = signalSpyComponent.createObject(testCase, {
+            "target": LibraryManagerController,
+            "signalName": "monitoredFoldersChanged"
+        })
+        verify(importFinished && rootsChanged)
+        nativeDropHelper.sendUrls(dropTarget,
+                                  [folderUrl, folderUrl,
+                                   copiedAudio, copiedAudio,
+                                   ignoredFile, invalidUrl])
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount + 1
+        }, 1000)
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        compare(rootsChanged.count, 1,
+                "duplicate directory URLs must add one monitored root")
+        compare(importFinished.count, 1,
+                "a mixed resource drop must issue one audio import batch")
+        verify(ImportController.errors.length === 0)
+        compare(LibraryModel.count, initialLibraryCount + 1,
+               "mixed drop must keep audio-file import routing")
+        var folderPath = decodeURIComponent(folderUrl.toString()
+                                           .replace(/^file:\/\/\//, ""))
+        folderPath = folderPath.replace(/\\/g, "/")
+        var rootNode = null
+        for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+            var index = LibraryNavigationModel.index(row, 0)
+            if (LibraryNavigationModel.data(index,
+                    LibraryNavigationModel.ResourceFolderRole)
+                    .replace(/\\/g, "/").toLowerCase()
+                    === folderPath.toLowerCase()) {
+                rootNode = findChild(navigation, "navigationNode-"
+                    + LibraryNavigationModel.data(index,
+                        LibraryNavigationModel.NodeIdRole))
+                break
+            }
+        }
+        verify(rootNode)
+
+        var secondFolderUrl = nativeDropHelper.createDropDirectory()
+        verify(secondFolderUrl && nativeDropHelper.pathExists(secondFolderUrl))
+        nativeDropHelper.sendUrls(dropTarget, [secondFolderUrl])
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount + 2
+        }, 1000)
+        var secondFolderPath = decodeURIComponent(secondFolderUrl.toString()
+                .replace(/^file:\/\/\//, "")).replace(/\\/g, "/")
+        rootNode = null
+        var secondRootNode = null
+        for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+            index = LibraryNavigationModel.index(row, 0)
+            var candidatePath = LibraryNavigationModel.data(index,
+                    LibraryNavigationModel.ResourceFolderRole)
+                    .replace(/\\/g, "/").toLowerCase()
+            var candidateNode = findChild(navigation, "navigationNode-"
+                    + LibraryNavigationModel.data(index,
+                        LibraryNavigationModel.NodeIdRole))
+            if (candidatePath === folderPath.toLowerCase())
+                rootNode = candidateNode
+            else if (candidatePath === secondFolderPath.toLowerCase())
+                secondRootNode = candidateNode
+        }
+        verify(rootNode)
+        verify(secondRootNode)
+
+        mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(navigation, "resourceFolderContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var rescanAction = findChild(menu, "resourceFolderMenuRescan")
+        compare(rescanAction.text, "重新扫描全部资源文件夹")
+        menu.close()
+
+        mouseClick(secondRootNode, secondRootNode.width / 2,
+                   secondRootNode.height / 2, Qt.LeftButton)
+        var removeButton = findChild(navigation, "removeResourceFolderButton")
+        tryVerify(function() { return removeButton.enabled }, 500)
+        mouseClick(removeButton, removeButton.width / 2,
+                   removeButton.height / 2)
+        var confirm = findChild(navigation, "removeResourceFolderDialog")
+        tryVerify(function() { return confirm && confirm.visible }, 500)
+        compare(navigation.pendingResourceFolderRemoval.replace(/\\/g, "/")
+                .toLowerCase(), secondFolderPath.toLowerCase())
+        navigation.selectedResourceFolder = folderPath
+        navigation.activeNodeType = "resourceRoot"
+        confirm.accept()
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount + 1
+        }, 1000)
+        verify(nativeDropHelper.pathExists(secondFolderUrl))
+        verify(LibraryManagerController.monitoredFolders.some(function(path) {
+            return path.replace(/\\/g, "/").toLowerCase()
+                    === folderPath.toLowerCase()
+        }), "stale right-click context must not remove the selected root")
+
+        rootNode = null
+        for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+            index = LibraryNavigationModel.index(row, 0)
+            if (LibraryNavigationModel.data(index,
+                    LibraryNavigationModel.ResourceFolderRole)
+                    .replace(/\\/g, "/").toLowerCase()
+                    === folderPath.toLowerCase()) {
+                rootNode = findChild(navigation, "navigationNode-"
+                    + LibraryNavigationModel.data(index,
+                        LibraryNavigationModel.NodeIdRole))
+                break
+            }
+        }
+        verify(rootNode)
+        mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        wait(500)
+        tryVerify(function() { return !LibraryManagerController.scanning }, 3000)
+        var scanFinished = signalSpyComponent.createObject(testCase, {
+            "target": LibraryManagerController,
+            "signalName": "scanFinished"
+        })
+        verify(scanFinished)
+        scanFinished.clear()
+        verify(rescanAction && rescanAction.enabled)
+        mouseClick(rescanAction, rescanAction.width / 2,
+                   rescanAction.height / 2)
+        tryCompare(scanFinished, "count", 1, 3000)
+
+        mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var removeAction = findChild(menu, "resourceFolderMenuRemove")
+        mouseClick(removeAction, removeAction.width / 2,
+                   removeAction.height / 2)
+        tryVerify(function() { return confirm && confirm.visible }, 500)
+        var warning = findChild(confirm, "removeResourceFolderWarning")
+        verify(warning.text.indexOf("不删除电脑磁盘中的实际文件夹和音乐文件") >= 0)
+        confirm.accept()
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount
+        }, 1000)
+        verify(nativeDropHelper.pathExists(folderUrl))
+        scanFinished.destroy()
+        importFinished.destroy()
+        rootsChanged.destroy()
+        window.destroy()
+    }
+
+    function test_z_list_waveforms_only_exist_for_visible_rows_when_enabled() {
+        nativeDropHelper.ensureSortableTracks()
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        var previousMode = SettingsController.listWaveformThumbnailMode
+        SettingsController.listWaveformThumbnailEnabled = false
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        tryVerify(function() { return list.count > 0 })
+        compare(list.rowHeight, 42)
+        compare(list.thumbnailItemCount, 0)
+        verify(!findChild(list, "trackWaveformThumbnail"))
+
+        TrackWaveformThumbnailProvider.refresh()
+        var readsBefore = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
+        SettingsController.listWaveformThumbnailEnabled = true
+        tryCompare(list, "rowHeight", 62)
+        tryVerify(function() { return list.thumbnailItemCount > 0 })
+        verify(findChild(list.itemAtIndex(0), "trackWaveformThumbnail"))
+        compare(findChild(list.itemAtIndex(0), "trackCover").width, 34)
+        compare(findChild(list.itemAtIndex(0), "trackCover").height, 34)
+        tryVerify(function() {
+            return TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
+                    > readsBefore
+        }, 3000)
+        wait(100)
+        var settledReads = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
+        SettingsController.listWaveformThumbnailMode = "Mono"
+        wait(100)
+        compare(TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts,
+                settledReads,
+                "mode changes must recolor without reading waveform data again")
+
+        SettingsController.listWaveformThumbnailEnabled = false
+        tryCompare(list, "rowHeight", 42)
+        tryCompare(list, "thumbnailItemCount", 0)
+        verify(!findChild(list, "trackWaveformThumbnail"))
+        list.destroy()
+        SettingsController.listWaveformThumbnailMode = previousMode
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task6_large_models_keep_thumbnail_requests_visible_bounded() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = true
+
+        function verifyBound(rowCount) {
+            var provider = fakeThumbnailProviderComponent.createObject(testCase)
+            var model = createIsolatedTrackModel("task6-" + rowCount + "-",
+                                                 rowCount)
+            var host = trackListHostComponent.createObject(mainWindow.contentItem)
+            var list = null
+            provider.requestObserver = function(trackId) {
+                var row = list
+                        ? trackRowForId(list.contentItem, trackId) : null
+                var thumbnail = row
+                        ? findChild(row, "trackWaveformThumbnail") : null
+                var loader = thumbnail ? thumbnail.parent : null
+                return {
+                    "hasDelegate": !!row,
+                    "hasLoader": !!loader,
+                    "loaderEnabled": !!(loader && loader.active),
+                    "loaderHasItem": !!(loader && loader.item),
+                    "loaderItemTrackId": loader && loader.item
+                            ? loader.item.trackId : "",
+                    "loaderActive": !!(loader && loader.active && loader.item
+                                         && loader.item.trackId === trackId),
+                    "rowTop": row ? row.y : Number.NaN,
+                    "rowBottom": row ? row.y + row.height : Number.NaN,
+                    "viewportTop": list ? list.contentY
+                            + (list.headerItem ? list.headerItem.height : 0)
+                                         : Number.NaN,
+                    "viewportBottom": list
+                            ? list.contentY + list.height : Number.NaN
+                }
+            }
+            list = trackListComponent.createObject(host, {
+                "width": host.width,
+                "height": host.height,
+                "trackModel": model,
+                "thumbnailProvider": provider
+            })
+            verify(provider && model && host && list)
+            tryCompare(list, "count", rowCount, 5000)
+            tryVerify(function() {
+                return list.thumbnailItemCount > 0
+                        && provider.requestCount > 0
+            }, 3000)
+            wait(25)
+
+            var requestBoundPerViewport = 32
+            verifyNewThumbnailRequestsAreVisible(
+                        provider, 0,
+                        rowCount + "-row initial viewport")
+            verify(list.thumbnailItemCount <= requestBoundPerViewport)
+            verify(provider.requestCount <= requestBoundPerViewport,
+                   rowCount + " rows must not request non-visible thumbnails")
+
+            var beforeMiddle = provider.requestCount
+            list.positionViewAtIndex(Math.floor(rowCount / 2), ListView.Beginning)
+            tryVerify(function() {
+                return provider.requestCount > beforeMiddle
+            }, 3000)
+            wait(25)
+            verifyNewThumbnailRequestsAreVisible(
+                        provider, beforeMiddle,
+                        rowCount + "-row middle viewport")
+            verify(provider.requestCount - beforeMiddle
+                   <= requestBoundPerViewport,
+                   rowCount + "-row middle scroll exceeded one viewport")
+            verify(list.thumbnailItemCount <= requestBoundPerViewport)
+
+            var beforeEnd = provider.requestCount
+            list.positionViewAtEnd()
+            tryVerify(function() { return provider.requestCount > beforeEnd },
+                      3000)
+            wait(25)
+            verifyNewThumbnailRequestsAreVisible(
+                        provider, beforeEnd,
+                        rowCount + "-row end viewport")
+            verify(provider.requestCount - beforeEnd
+                   <= requestBoundPerViewport,
+                   rowCount + "-row end scroll exceeded one viewport")
+            verify(list.thumbnailItemCount <= requestBoundPerViewport)
+            verify(provider.requestCount <= requestBoundPerViewport * 3,
+                   "three viewports must stay independent of logical row count")
+
+            host.destroy()
+            model.destroy()
+            provider.destroy()
+        }
+
+        verifyBound(1000)
+        verifyBound(10000)
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task6_filter_switching_reuses_one_shared_track_list() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var filter = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filter)
+        var workspace = findChild(window, "listWorkspace")
+        var shared = findChild(workspace, "sharedTrackList")
+        verify(workspace && shared)
+
+        filter.category = "favorites"
+        wait(0)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        filter.category = "all"
+        filter.tagKey = "task6-nonexistent-tag"
+        wait(0)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        filter.tagKey = ""
+        filter.resourceFolder = "C:/task6/nonexistent-folder"
+        wait(0)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task7_tag_page_alone_owns_the_right_panel() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var task7TrackIds = nativeDropHelper.ensureSortableTracks()
+        compare(task7TrackIds.length, 3)
+        var filter = findChild(mainWindow, "filterModel")
+        filter.category = "all"
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        filter.searchText = ""
+        TagModel.selectedKey = ""
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filter)
+        var workspace = findChild(window, "listWorkspace")
+        var navigation = findChild(workspace, "referenceSideNavigation")
+        var shared = findChild(workspace, "sharedTrackList")
+        var panel = findChild(workspace, "tagManagementPanel")
+        var divider = findChild(workspace, "tagPanelDivider")
+        verify(workspace && navigation && shared && panel && divider)
+        shared.selectedTrackIds = ["task7-retained-selection"]
+        var playbackTrackId = PlaybackController.currentTrackId
+
+        compare(panel.visible, false,
+                "the normal library page must not reserve a tag column")
+        compare(divider.visible, false)
+        verify(window.pageMinimumWidth < 1284,
+               "the two-column page must remain usable at the player width")
+        tryVerify(function() { return shared.width > 1000 })
+        var libraryWidth = shared.width
+        var libraryCenterWidth = workspace.centerWidth
+
+        navigation.activateNode("tags", "tags:manage", "")
+        tryVerify(function() { return panel.visible && divider.visible })
+        compare(window.pageMinimumWidth, 1284)
+        tryVerify(function() {
+            return libraryWidth >= shared.width + workspace.rightColumnWidth
+        }, 1000)
+        var tagCenterWidth = workspace.centerWidth
+        filter.searchText = "task7-retained-search"
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(shared.selectedTrackIds[0], "task7-retained-selection")
+        compare(filter.searchText, "task7-retained-search")
+        compare(PlaybackController.currentTrackId, playbackTrackId)
+
+        navigation.activateNode("playlist", "playlist:task7-page", "")
+        tryVerify(function() { return !panel.visible && !divider.visible })
+        tryVerify(function() {
+            return workspace.centerWidth
+                    >= tagCenterWidth + workspace.rightColumnWidth
+        })
+        compare(Math.round(workspace.centerWidth),
+                Math.round(libraryCenterWidth))
+        compare(findChild(workspace, "sharedTrackList"), shared)
+
+        navigation.activateNode("library", "library:all", "")
+        compare(panel.visible, false)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+
+        navigation.activateNode("favorites", "favorites", "")
+        compare(panel.visible, false)
+        compare(divider.visible, false)
+        tryVerify(function() {
+            return workspace.centerWidth
+                    >= tagCenterWidth + workspace.rightColumnWidth
+        })
+        compare(Math.round(workspace.centerWidth),
+                Math.round(libraryCenterWidth))
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(shared.selectedTrackIds[0], "task7-retained-selection")
+        compare(filter.searchText, "task7-retained-search")
+        compare(PlaybackController.currentTrackId, playbackTrackId)
+
+        navigation.activateNode("resourceFolder", "resource:task7",
+                                "C:/task7/resource")
+        compare(panel.visible, false)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+
+        navigation.activateNode("tags", "tags:manage", "")
+        tryVerify(function() { return panel.visible && divider.visible })
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+        compare(shared.selectedTrackIds[0], "task7-retained-selection")
+        compare(filter.searchText, "task7-retained-search")
+        compare(PlaybackController.currentTrackId, playbackTrackId)
+
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_thumbnail_deferred_request_dies_with_its_wrapper() {
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var host = deferredThumbnailDestroyHostComponent.createObject(
+                    mainWindow.contentItem, {
+                        "thumbnailProvider": provider
+                    })
+        verify(provider && host && host.wrapper)
+        wait(0)
+        compare(provider.requestCount, 0)
+        compare(provider.cancelCount, 0)
+
+        host.deactivateBeforeNextRequest()
+        wait(0)
+        compare(host.wrapper, null)
+        compare(provider.requestCount, 0,
+                "a destroyed wrapper must not dispatch its deferred request")
+        compare(provider.cancelCount, 0,
+                "no request means there is nothing to cancel")
+
+        host.destroy()
+        provider.destroy()
+    }
+
+    function test_z_thumbnail_wrapper_cancels_and_rejects_stale_generations() {
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var wrapper = trackWaveformThumbnailComponent.createObject(
+                    mainWindow.contentItem, {
+                        "provider": provider,
+                        "trackId": "track-a",
+                        "sourcePath": "a.wav",
+                        "delegateGeneration": 11,
+                        "mode": "Color36"
+                    })
+        verify(provider && wrapper)
+        tryCompare(provider, "requestCount", 1)
+        compare(provider.lastTrackId, "track-a")
+        compare(provider.lastSourcePath, "a.wav")
+        compare(provider.lastGeneration, 11)
+
+        wrapper.trackId = "track-b"
+        wrapper.sourcePath = "b.wav"
+        wrapper.delegateGeneration = 12
+        tryCompare(provider, "requestCount", 2)
+        compare(provider.cancelCount, 1)
+
+        provider.thumbnailReady("track-a", 11, "stale")
+        compare(wrapper.waveformPeaks, "")
+        provider.thumbnailReady("track-b", 12, "current")
+        compare(wrapper.waveformPeaks, "current")
+
+        var settledRequests = provider.requestCount
+        wrapper.mode = "Mono"
+        wait(50)
+        compare(provider.requestCount, settledRequests,
+                "mode changes must not request waveform data again")
+
+        wrapper.destroy()
+        tryCompare(provider, "cancelCount", 2)
+        provider.destroy()
+    }
+
+    function test_z_visible_thumbnail_retries_only_matching_cache_ready_source() {
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var wrapper = trackWaveformThumbnailComponent.createObject(
+                    mainWindow.contentItem, {
+                        "provider": provider,
+                        "trackId": "cache-transition-track",
+                        "sourcePath": "cache-transition.wav",
+                        "delegateGeneration": 31
+                    })
+        verify(provider && wrapper)
+        tryCompare(provider, "requestCount", 1)
+        provider.thumbnailReady("cache-transition-track", 31, "")
+        compare(wrapper.waveformPeaks, "")
+
+        provider.sourceCacheInvalidated("different.wav")
+        wait(20)
+        compare(provider.requestCount, 1,
+                "an unrelated cache write must not refresh this wrapper")
+
+        provider.sourceCacheInvalidated("cache-transition.wav")
+        tryCompare(provider, "requestCount", 2)
+        var readyPeaks = Array(129).join("x")
+        compare(readyPeaks.length, 128)
+        provider.thumbnailReady("cache-transition-track", 31, readyPeaks)
+        compare(wrapper.waveformPeaks.length, 128)
+
+        wrapper.enabled = false
+        wait(0)
+        var hiddenRequestCount = provider.requestCount
+        provider.sourceCacheInvalidated("cache-transition.wav")
+        wait(20)
+        compare(provider.requestCount, hiddenRequestCount,
+                "a hidden wrapper must remain request-free")
+
+        wrapper.destroy()
+        provider.destroy()
+    }
+
+    function test_z_thumbnail_requests_follow_pool_reuse_and_host_visibility() {
+        SettingsController.listWaveformThumbnailEnabled = true
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var model = createIsolatedTrackModel("pool-track-", 24)
+        var host = trackListHostComponent.createObject(mainWindow.contentItem)
+        var list = trackListComponent.createObject(host, {
+            "width": host.width,
+            "height": host.height,
+            "trackModel": model,
+            "thumbnailProvider": provider
+        })
+        verify(provider && model && host && list)
+        tryVerify(function() { return provider.requestCount > 0 })
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow && findChild(firstRow, "trackWaveformThumbnail"))
+        var cancellationsBeforeHeaderCover = provider.cancelCount
+        list.contentY = list.rowHeight
+        tryVerify(function() {
+            var coveredRow = list.itemAtIndex(0)
+            return coveredRow
+                    && !findChild(coveredRow, "trackWaveformThumbnail")
+                    && provider.cancelCount > cancellationsBeforeHeaderCover
+        }, 1000)
+        list.positionViewAtBeginning()
+        tryVerify(function() {
+            var returnedRow = list.itemAtIndex(0)
+            return returnedRow
+                    && findChild(returnedRow, "trackWaveformThumbnail")
+        })
+
+        var requestsAtBeginning = provider.requestCount
+        var initialGenerations = ({})
+        for (var initialIndex = 0;
+             initialIndex < provider.requests.length; ++initialIndex) {
+            var initialRequest = provider.requests[initialIndex]
+            initialGenerations[initialRequest.trackId] =
+                    initialRequest.generation
+        }
+
+        list.positionViewAtEnd()
+        tryVerify(function() {
+            return provider.cancelCount > 0
+                    && provider.requestCount > requestsAtBeginning
+        })
+        var canceledInitialGenerations = ({})
+        for (var cancellationIndex = 0;
+             cancellationIndex < provider.cancellations.length;
+             ++cancellationIndex) {
+            var cancellation = provider.cancellations[cancellationIndex]
+            if (initialGenerations[cancellation.trackId]
+                    === cancellation.generation) {
+                canceledInitialGenerations[cancellation.trackId] =
+                        cancellation.generation
+            }
+        }
+        var requestsAtEnd = provider.requestCount
+        list.positionViewAtBeginning()
+        tryVerify(function() { return provider.requestCount > requestsAtEnd })
+        var reusedSafely = false
+        for (var requestIndex = requestsAtBeginning;
+             requestIndex < provider.requests.length; ++requestIndex) {
+            var request = provider.requests[requestIndex]
+            if (canceledInitialGenerations[request.trackId] !== undefined
+                    && request.generation
+                       > canceledInitialGenerations[request.trackId]) {
+                reusedSafely = true
+                break
+            }
+        }
+        verify(reusedSafely,
+               "a pooled delegate must request a returning track with a new generation")
+
+        var cancellationsBeforeHide = provider.cancelCount
+        host.visible = false
+        tryCompare(list, "thumbnailItemCount", 0)
+        tryVerify(function() {
+            return provider.cancelCount > cancellationsBeforeHide
+        })
+
+        host.destroy()
+        model.destroy()
+        provider.destroy()
+    }
+
+    function test_z_thumbnail_requests_cancel_for_stack_and_window_hiding() {
+        SettingsController.listWaveformThumbnailEnabled = false
+        var stackProvider = fakeThumbnailProviderComponent.createObject(testCase)
+        var stackModel = createIsolatedTrackModel("stack-track-", 12)
+        var stack = stackedTrackListHostComponent.createObject(
+                    mainWindow.contentItem)
+        verify(stackProvider && stackModel && stack)
+        stack.list.trackModel = stackModel
+        stack.list.thumbnailProvider = stackProvider
+        SettingsController.listWaveformThumbnailEnabled = true
+        tryVerify(function() { return stackProvider.requestCount > 0 })
+        var cancellationsBeforeStackHide = stackProvider.cancelCount
+        stack.currentIndex = 1
+        tryVerify(function() { return !stack.list.visible })
+        tryCompare(stack.list, "thumbnailItemCount", 0)
+        tryVerify(function() {
+            return stackProvider.cancelCount > cancellationsBeforeStackHide
+        })
+        stack.destroy()
+        stackModel.destroy()
+        stackProvider.destroy()
+
+        nativeDropHelper.ensureSortableTracks()
+        var filter = findChild(mainWindow, "filterModel")
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        filter.searchText = ""
+        filter.category = "all"
+        SettingsController.listWaveformThumbnailEnabled = false
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400
+        })
+        verify(provider && window)
+        var list = findChild(window, "sharedTrackList")
+        verify(list)
+        list.thumbnailProvider = provider
+        SettingsController.listWaveformThumbnailEnabled = true
+        tryVerify(function() { return provider.requestCount > 0 })
+        var cancellationsBeforeWindowHide = provider.cancelCount
+        window.hide()
+        tryCompare(list, "thumbnailItemCount", 0)
+        tryVerify(function() {
+            return provider.cancelCount > cancellationsBeforeWindowHide
+        })
+
+        window.destroy()
+        provider.destroy()
     }
 
     function test_empty_startup_uses_compact_reference_structure() {

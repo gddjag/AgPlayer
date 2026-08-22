@@ -529,8 +529,12 @@ foreach(qt_test IN ITEMS
     rename_transaction_test
     library_model_test
     tag_model_test
+    tag_filter_model_test
     library_store_test
     playlist_model_test
+    library_manager_controller_test
+    library_navigation_model_test
+    resource_path_test
     library_file_operations_test
     playback_state_store_test
     import_controller_test
@@ -952,6 +956,13 @@ add_test(NAME track_waveform_thumbnail_contract_test
         -SourceRoot ${CMAKE_SOURCE_DIR}
 )
 set_tests_properties(track_waveform_thumbnail_contract_test PROPERTIES TIMEOUT 10)
+
+add_test(NAME tag_management_layout_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/tag_management_layout_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(tag_management_layout_contract_test PROPERTIES TIMEOUT 10)
 
 add_executable(library_model_stress_test
     stress/library_model_stress_test.cpp

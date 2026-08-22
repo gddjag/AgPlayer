@@ -140,7 +140,7 @@ ApplicationWindow {
         id: importDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+            nameFilters: [LibraryManagerController.audioFileNameFilter]
             onAccepted: mainWindow.importFiles(selectedFiles)
         }
     }

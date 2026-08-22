@@ -11,12 +11,15 @@
 #include "library_filter_model.hpp"
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
 #include "replay_gain_scanner.hpp"
 #include "playlist_model.hpp"
 #include "settings_controller.hpp"
 #include "tag_model.hpp"
+#include "tag_filter_model.hpp"
 #include "track_waveform_thumbnail_item.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_item.hpp"
@@ -63,6 +66,7 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaylistModel", playlists);
     qmlRegisterType<LibraryFilterModel>("AgPlayer", 1, 0, "LibraryFilterModel");
+    qmlRegisterType<TagFilterModel>("AgPlayer", 1, 0, "TagFilterModel");
     qmlRegisterType<LibraryFileOperations>("AgPlayer", 1, 0,
                                            "LibraryFileOperations");
     qmlRegisterSingletonType<ReplayGainScanner>(
@@ -73,6 +77,16 @@ void register_agplayer_qml_types(LibraryModel* library,
     if (runtime.tagModel != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "TagModel",
                                      runtime.tagModel);
+    }
+    if (runtime.libraryNavigationModel != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "LibraryNavigationModel",
+                                     runtime.libraryNavigationModel);
+    }
+    if (runtime.libraryManagerController != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "LibraryManagerController",
+                                     runtime.libraryManagerController);
     }
     if (runtime.trackWaveformThumbnailProvider != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0,

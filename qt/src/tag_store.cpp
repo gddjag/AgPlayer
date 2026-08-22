@@ -14,9 +14,15 @@ QString normalizedKey(const QString& value)
 }
 }
 
-TagStore::TagStore(QString filePath)
+TagStore::TagStore(QString filePath, WriteFunction writer)
     : filePath_(std::move(filePath))
+    , writer_(std::move(writer))
 {
+    if (!writer_) {
+        writer_ = [](QIODevice& device, const QByteArray& payload) {
+            return device.write(payload);
+        };
+    }
 }
 
 QList<TagEntry> TagStore::load() const
@@ -64,9 +70,11 @@ bool TagStore::save(const QList<TagEntry>& entries) const
     QJsonObject root;
     root.insert(QStringLiteral("version"), 1);
     root.insert(QStringLiteral("tags"), tags);
+    const QByteArray payload =
+        QJsonDocument(root).toJson(QJsonDocument::Compact);
     QSaveFile file(filePath_);
     if (!file.open(QIODevice::WriteOnly)) return false;
-    if (file.write(QJsonDocument(root).toJson(QJsonDocument::Compact)) < 0) {
+    if (writer_(file, payload) != payload.size()) {
         file.cancelWriting();
         return false;
     }

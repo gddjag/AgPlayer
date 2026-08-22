@@ -9,6 +9,7 @@
 #include <memory>
 
 class FileAssociationController;
+class SettingsControllerTest;
 
 class SettingsController final : public QObject {
     Q_OBJECT
@@ -403,6 +404,8 @@ signals:
     void cacheTrimReport(qint64 bytesFreed, int filesRemoved);
 
 private:
+    friend class SettingsControllerTest;
+
     void load();
     void saveAll();
     void restoreDefaults();
@@ -414,6 +417,9 @@ private:
     void enforceCacheSizeLimit();
     static qint64 directorySizeBytes(const QString& path);
     static QString defaultMusicDirectory();
+    static QString resolveTestCacheDirectory(const QString& cacheLocation,
+                                             const QString& tempLocation,
+                                             const QString& appDataLocation);
     static QString defaultCacheDirectory();
     static QString defaultExportDir();
     static QString validatedLanguage(const QString& value);
@@ -433,9 +439,7 @@ private:
     int closeBehavior_ = 0;
     QString language_ = QStringLiteral("zh");
     bool setAsDefaultPlayer_ = false;
-    QStringList fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
-        QStringLiteral("ogg")};
+    QStringList fileAssociations_;
 
     // Playback & Engine
     QString outputDevice_;

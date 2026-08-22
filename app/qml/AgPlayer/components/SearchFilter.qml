@@ -7,7 +7,7 @@ Rectangle {
     id: root
     color: "transparent"
     border.width: 0
-    implicitHeight: 54
+    implicitHeight: 66
 
     property string searchText: ""
     property int exactRating: 0
