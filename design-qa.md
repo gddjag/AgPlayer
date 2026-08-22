@@ -43,7 +43,7 @@ Dark and light were exercised through the real application theme path: `design-q
 | Scroll state | Blocked | Left, middle and right independent scrolling was not externally driven or captured. |
 | Image quality/assets | Blocked | Real waveform thumbnails rendered, but reference cover art, metadata and tag corpus were unavailable in the isolated state. |
 | Tag panel | Structurally fixed, content blocked | Search/Add and narrow panel are present only on Tag Management; real pill layout, counts, rename/color/delete menus and scrolling were not exercised. |
-| Two-/three-column switching | Passed by production-path QML tests | One `sharedTrackList` instance survives tag → playlist/library/resource → tag; search, selection and playback identity are retained. |
+| Two-/three-column switching | Passed by production-path QML tests | One `sharedTrackList` instance survives tag → playlist/library/favorites/resource → tag; search, selection and playback identity are retained. |
 
 ## P0 / P1 / P2 / P3 history
 
@@ -77,8 +77,8 @@ Dark and light were exercised through the real application theme path: `design-q
 - Debug `AgPlayer`, `qml_main_window_test`, `settings_controller_test` and `window_controller_test` built successfully.
 - Focused CTest: 5/5 passed (`window_controller`, settings, thumbnail provider/item/contract).
 - Task 7 shared-list transition: 3 passed, 0 failed.
-- Full QML: 78 passed, 0 failed, 1 skipped; the skip is the native WM_DROPFILES test under the offscreen platform.
-- Thumbnail lifecycle RED: 17 passed, 1 failed with invalid-context/`cancelRequest` warnings; GREEN after the child Timer fix: 18 passed, 0 failed. Full QML then returned to 0 failures.
+- Full QML: 79 passed, 0 failed, 1 skipped; the skip is the native WM_DROPFILES test under the offscreen platform.
+- Thumbnail lifecycle deterministic RED: 2 passed, 1 failed because the destroyed wrapper dispatched one provider request; GREEN after the child Timer fix: 3 passed, 0 failed with zero requests/cancels and no warning. The earlier real-import sequence also changed from invalid-context failure to pass.
 
 ## Exit criteria
 

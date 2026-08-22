@@ -36,10 +36,10 @@ Task 7 只允许为视觉验收发现的 P0/P1/P2 做最小生产修复。没有
 
 | Contract | RED | GREEN |
 | --- | --- | --- |
-| 右栏仅属于标签页；普通页回收宽度；共享列表身份/状态保留 | 新 Task 7 QML：77 pass / 1 fail / 1 offscreen skip，失败于右栏常驻 | 专用测试：3 pass / 0 fail；全量最终 78 pass / 0 fail / 1 offscreen skip |
+| 右栏仅属于标签页；普通页回收宽度；共享列表身份/状态保留 | 新 Task 7 QML：77 pass / 1 fail / 1 offscreen skip，失败于右栏常驻 | 专用测试：3 pass / 0 fail，覆盖 library/playlist/favorites/resource；全量最终 79 pass / 0 fail / 1 offscreen skip |
 | 停靠宽度遵守动态页面最小宽度且不抖动 | 新 `WindowController` contracts 在旧实现失败 | `window_controller_test` 通过 |
 | 测试模式默认缓存不进入 Documents | 更新后的 `settings_controller_test` 在旧默认路径失败 | `settings_controller_test` 通过 |
-| 缩略图延迟调用不会跨 delegate 生命周期 | 累计真实导入序列：17 pass / 1 fail，invalid QML context + `cancelRequest` warning | 相同序列：18 pass / 0 fail；全量 QML 0 fail |
+| 缩略图延迟调用不会跨 delegate 生命周期 | 独立 nested Loader/context：2 pass / 1 fail，销毁后仍发出 1 个 provider request；累计真实导入序列另有 invalid-context warning | 独立测试：3 pass / 0 fail、0 request/cancel、无 warning；全量 QML 0 fail |
 
 ## 真实应用证据
 
@@ -55,7 +55,7 @@ Task 7 只允许为视觉验收发现的 P0/P1/P2 做最小生产修复。没有
 
 - MSVC Debug 构建 `AgPlayer`、`qml_main_window_test`、`settings_controller_test`、`window_controller_test`：通过。
 - focused CTest 5/5：通过（窗口控制、设置、缩略图 provider/item/contract）。
-- 全量 QML：78 passed, 0 failed, 1 skipped；唯一跳过项为 offscreen 环境不支持的真实 WM_DROPFILES。
+- 全量 QML：79 passed, 0 failed, 1 skipped；唯一跳过项为 offscreen 环境不支持的真实 WM_DROPFILES。
 - `git diff --check` 与最终 diff review 在提交前执行，结果记录在验收文档。
 
 ## 尚未完成的实机验收

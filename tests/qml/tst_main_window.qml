@@ -205,6 +205,50 @@ TestCase {
     }
 
     Component {
+        id: deferredThumbnailDestroyHostComponent
+        Item {
+            id: deferredHost
+            property var thumbnailProvider
+            readonly property var wrapper: delegateLoader.item
+                                           ? delegateLoader.item.wrapper : null
+
+            function deactivateBeforeNextRequest() {
+                Qt.callLater(function() {
+                    delegateLoader.active = false
+                })
+                wrapper.trackId = "destroyed-before-request"
+                wrapper.sourcePath = "destroyed-before-request.wav"
+                wrapper.delegateGeneration = 47
+            }
+
+            Loader {
+                id: delegateLoader
+                active: true
+                sourceComponent: Component {
+                    Item {
+                        id: delegateContext
+                        property alias wrapper: thumbnailLoader.item
+                        property var thumbnailProvider:
+                            deferredHost.thumbnailProvider
+                        Loader {
+                            id: thumbnailLoader
+                            active: true
+                            sourceComponent: Component {
+                                TrackWaveformThumbnail {
+                                    width: 128
+                                    height: 9
+                                    provider:
+                                        delegateContext.thumbnailProvider
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
         id: isolatedTrackModelComponent
         ListModel {}
     }
@@ -2920,6 +2964,20 @@ TestCase {
         compare(panel.visible, false)
         compare(findChild(workspace, "sharedTrackList"), shared)
 
+        navigation.activateNode("favorites", "favorites", "")
+        compare(panel.visible, false)
+        compare(divider.visible, false)
+        tryVerify(function() {
+            return workspace.centerWidth
+                    >= tagCenterWidth + workspace.rightColumnWidth
+        })
+        compare(Math.round(workspace.centerWidth),
+                Math.round(libraryCenterWidth))
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(shared.selectedTrackIds[0], "task7-retained-selection")
+        compare(filter.searchText, "task7-retained-search")
+        compare(PlaybackController.currentTrackId, playbackTrackId)
+
         navigation.activateNode("resourceFolder", "resource:task7",
                                 "C:/task7/resource")
         compare(panel.visible, false)
@@ -2935,6 +2993,29 @@ TestCase {
 
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_thumbnail_deferred_request_dies_with_its_wrapper() {
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var host = deferredThumbnailDestroyHostComponent.createObject(
+                    mainWindow.contentItem, {
+                        "thumbnailProvider": provider
+                    })
+        verify(provider && host && host.wrapper)
+        wait(0)
+        compare(provider.requestCount, 0)
+        compare(provider.cancelCount, 0)
+
+        host.deactivateBeforeNextRequest()
+        wait(0)
+        compare(host.wrapper, null)
+        compare(provider.requestCount, 0,
+                "a destroyed wrapper must not dispatch its deferred request")
+        compare(provider.cancelCount, 0,
+                "no request means there is nothing to cancel")
+
+        host.destroy()
+        provider.destroy()
     }
 
     function test_z_thumbnail_wrapper_cancels_and_rejects_stale_generations() {

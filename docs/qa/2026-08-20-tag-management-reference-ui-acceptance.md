@@ -9,7 +9,7 @@
 | 必须达到的要求 | 生产实现 / 自动验证 | 真实应用证据 | 状态 |
 | --- | --- | --- | --- |
 | 标签页为导航 + 共享列表 + 标签栏 | `ListWindow.tagManagementMode`; Task 7 transition test | `implementation-tag-three-column-1447.png` | 结构通过 |
-| 普通库/收藏/歌单/资源页完全隐藏标签栏并回收宽度 | 同一 transition test，覆盖 tag → playlist/library/resource → tag | `implementation-non-tag-two-column.png` | 通过 |
+| 普通库/收藏/歌单/资源页完全隐藏标签栏并回收宽度 | 同一 transition test，覆盖 tag → playlist/library/favorites/resource → tag | `implementation-non-tag-two-column.png` | 通过 |
 | 仅一个共享 TrackList，切页保留相关状态 | 指针身份、selection/search/currentTrack assertions | 同一窗口结构截图 | 通过 |
 | 1447×1087 同尺寸同状态并排比较 | 参考与诊断 implementation canvas 均为 1447×1087 | `combined-final-blocked-source-vs-real-app.png` | 阻塞：实现为两次 app-owned grab 的诊断组合，不是单帧桌面；状态/高度不等价 |
 | 字体、间距、列宽、62/42 行高、颜色、边框、圆角、选中态、滚动态 | 列宽/62/42 有 QML contract | combined + focused region | 阻塞：P2 差异和真实滚动状态未清零 |
@@ -53,8 +53,8 @@
 - Debug build：通过。
 - focused CTest：5/5 passed。
 - Task 7 共享列表专用 QML：3/3 passed。
-- thumbnail delayed lifecycle RED：17 passed / 1 failed；GREEN：18/18 passed。
-- full QML：78 passed / 0 failed / 1 skipped（native WM_DROPFILES requires qwindows，offscreen 跳过）。
+- thumbnail delayed lifecycle 独立 RED：2 passed / 1 failed（销毁后仍 dispatch）；GREEN：3/3 passed、0 request/cancel、无 warning。
+- full QML：79 passed / 0 failed / 1 skipped（native WM_DROPFILES requires qwindows，offscreen 跳过）。
 - `git diff --check`：通过。
 
 ## Computer Use 恢复记录
