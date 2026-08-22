@@ -1959,13 +1959,14 @@ TestCase {
         compare(workspace.rightColumnWidth, 328)
         compare(workspace.dividerWidth, 1)
         verify(workspace.centerWidth >= 680)
-        verify(window.minimumWidth >= 1284)
-        window.width = window.minimumWidth
-        tryVerify(function() { return workspace.centerWidth >= 680 })
         compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
 
         var navigation = findChild(workspace, "referenceSideNavigation")
         verify(navigation)
+        navigation.activateNode("tags", "tags:manage", "")
+        tryCompare(window, "pageMinimumWidth", 1284)
+        window.width = window.pageMinimumWidth
+        tryVerify(function() { return workspace.centerWidth >= 680 })
         compare(findChild(navigation, "libraryNavigationList").model,
                 LibraryNavigationModel)
 
@@ -2852,6 +2853,85 @@ TestCase {
         wait(0)
         compare(findChild(workspace, "sharedTrackList"), shared)
         compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task7_tag_page_alone_owns_the_right_panel() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var task7TrackIds = nativeDropHelper.ensureSortableTracks()
+        compare(task7TrackIds.length, 3)
+        var filter = findChild(mainWindow, "filterModel")
+        filter.category = "all"
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        filter.searchText = ""
+        TagModel.selectedKey = ""
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filter)
+        var workspace = findChild(window, "listWorkspace")
+        var navigation = findChild(workspace, "referenceSideNavigation")
+        var shared = findChild(workspace, "sharedTrackList")
+        var panel = findChild(workspace, "tagManagementPanel")
+        var divider = findChild(workspace, "tagPanelDivider")
+        verify(workspace && navigation && shared && panel && divider)
+        shared.selectedTrackIds = ["task7-retained-selection"]
+        var playbackTrackId = PlaybackController.currentTrackId
+
+        compare(panel.visible, false,
+                "the normal library page must not reserve a tag column")
+        compare(divider.visible, false)
+        verify(window.pageMinimumWidth < 1284,
+               "the two-column page must remain usable at the player width")
+        tryVerify(function() { return shared.width > 1000 })
+        var libraryWidth = shared.width
+        var libraryCenterWidth = workspace.centerWidth
+
+        navigation.activateNode("tags", "tags:manage", "")
+        tryVerify(function() { return panel.visible && divider.visible })
+        compare(window.pageMinimumWidth, 1284)
+        tryVerify(function() {
+            return libraryWidth >= shared.width + workspace.rightColumnWidth
+        }, 1000)
+        var tagCenterWidth = workspace.centerWidth
+        filter.searchText = "task7-retained-search"
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(shared.selectedTrackIds[0], "task7-retained-selection")
+        compare(filter.searchText, "task7-retained-search")
+        compare(PlaybackController.currentTrackId, playbackTrackId)
+
+        navigation.activateNode("playlist", "playlist:task7-page", "")
+        tryVerify(function() { return !panel.visible && !divider.visible })
+        tryVerify(function() {
+            return workspace.centerWidth
+                    >= tagCenterWidth + workspace.rightColumnWidth
+        })
+        compare(Math.round(workspace.centerWidth),
+                Math.round(libraryCenterWidth))
+        compare(findChild(workspace, "sharedTrackList"), shared)
+
+        navigation.activateNode("library", "library:all", "")
+        compare(panel.visible, false)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+
+        navigation.activateNode("resourceFolder", "resource:task7",
+                                "C:/task7/resource")
+        compare(panel.visible, false)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+
+        navigation.activateNode("tags", "tags:manage", "")
+        tryVerify(function() { return panel.visible && divider.visible })
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+        compare(shared.selectedTrackIds[0], "task7-retained-selection")
+        compare(filter.searchText, "task7-retained-search")
+        compare(PlaybackController.currentTrackId, playbackTrackId)
 
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled

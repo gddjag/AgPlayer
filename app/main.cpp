@@ -1036,6 +1036,22 @@ int main(int argc, char* argv[])
                     << listComponent.errorString();
             }
 
+            // The existing screenshot category seam must enter the real
+            // navigation state before docking. This lets page-specific width
+            // constraints participate in the same first-show path as a user
+            // opening Tag Management.
+            if (qaListCategory == QStringLiteral("tags")
+                && listWindow != nullptr) {
+                if (QObject* navigation = listWindow->findChild<QObject*>(
+                        QStringLiteral("referenceSideNavigation"))) {
+                    QMetaObject::invokeMethod(
+                        navigation, "activateNode",
+                        Q_ARG(QVariant, QStringLiteral("tags")),
+                        Q_ARG(QVariant, QStringLiteral("tags:manage")),
+                        Q_ARG(QVariant, QString{}));
+                }
+            }
+
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
             windows.setListWindow(qobject_cast<QWindow*>(listWindow));
@@ -1283,7 +1299,8 @@ int main(int argc, char* argv[])
                 }
             }
             if (wantScreenshotList && listWindow != nullptr) {
-                if (filterModel != nullptr && !qaListCategory.isEmpty()) {
+                if (qaListCategory != QStringLiteral("tags")
+                    && filterModel != nullptr && !qaListCategory.isEmpty()) {
                     filterModel->setProperty("category", qaListCategory);
                 }
                 if (auto* listWin = qobject_cast<QWindow*>(listWindow)) {

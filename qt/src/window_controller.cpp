@@ -193,6 +193,7 @@ void WindowController::setListWindow(QWindow* listWindow)
 {
     if (listWindow_ != nullptr) {
         listWindow_->removeEventFilter(this);
+        listWindow_->disconnect(this);
     }
     if (listWindow == nullptr) {
         listWindow_ = nullptr;
@@ -217,6 +218,12 @@ void WindowController::setListWindow(QWindow* listWindow)
     rememberNativePixelSize(listWindow_);
 
     listWindow_->installEventFilter(this);
+    connect(listWindow_, &QWindow::minimumWidthChanged, this,
+            [this](int) {
+                if (!listWindowDetached_) {
+                    repositionDockedListWindow();
+                }
+            });
     setListDockEdge(listWindowDetached_ ? QStringLiteral("none") : listDockEdge_);
     setListWindowWidth(listWindow_->width());
     setListWindowHeight(listWindow_->height());
@@ -735,10 +742,20 @@ void WindowController::repositionDockedListWindow()
     }
 
     // A docked player/list pair is one visual column. Keep the shared width
-    // aligned while preserving the independently resizable list height.
+    // aligned while preserving the independently resizable list height. A
+    // page may raise the list minimum width (the tag page does); promote the
+    // pair instead of silently clipping that page back to the player width.
     updatingWindowGeometry_ = true;
-    if (listWindow_->width() != mainWindow_->width()) {
-        listWindow_->resize(mainWindow_->width(), listWindow_->height());
+    int sharedWidth = qMax(mainWindow_->width(), listWindow_->minimumWidth());
+    if (!listWindowGeometryInitialized_
+        && listWindow_->minimumWidth() > mainWindow_->width()) {
+        sharedWidth = qMax(sharedWidth, listWindow_->width());
+    }
+    if (mainWindow_->width() != sharedWidth) {
+        mainWindow_->resize(sharedWidth, mainWindow_->height());
+    }
+    if (listWindow_->width() != sharedWidth) {
+        listWindow_->resize(sharedWidth, listWindow_->height());
     }
     // Keep docking in Qt's screen-independent coordinate space. Mixing HWND
     // outer-frame pixels with QWindow client geometry introduces a border/DPI

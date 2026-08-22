@@ -40,6 +40,8 @@ private slots:
     void auxiliaryWindowRemainsAboveDockedPlayerGroup();
 #endif
     void dockedListFollowsMainWindow();
+    void dockedListHonorsItsPageMinimumWidth();
+    void dockedListTracksDynamicPageMinimumWithoutWidthChurn();
     void dockedGroupDoesNotClampMainMoveAtScreenEdge();
     void horizontalDockPreservesSizesAndKeepsWindowsAdjacent();
 #ifdef Q_OS_WIN
@@ -542,6 +544,55 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
                    .intersects(listWindow.geometry()));
     QVERIFY(mainWindow.width() >= mainWindow.minimumWidth());
     QVERIFY(listWindow.width() >= listWindow.minimumWidth());
+}
+
+void WindowControllerTest::dockedListHonorsItsPageMinimumWidth()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(40, 40, 1104, 342);
+    QWindow listWindow;
+    listWindow.setMinimumSize(QSize(1284, 320));
+    listWindow.setGeometry(40, 380, 1447, 570);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+
+    QCOMPARE(mainWindow.width(), 1447);
+    QCOMPARE(listWindow.width(), 1447);
+    QCOMPARE(listWindow.x(), mainWindow.x());
+}
+
+void WindowControllerTest::dockedListTracksDynamicPageMinimumWithoutWidthChurn()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(60, 60, 1104, 342);
+    QWindow listWindow;
+    listWindow.setMinimumSize(QSize(956, 320));
+    listWindow.setGeometry(60, 400, 1104, 570);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    QCOMPARE(mainWindow.width(), 1104);
+    QCOMPARE(listWindow.width(), 1104);
+
+    listWindow.setMinimumWidth(1284);
+    QTRY_COMPARE(mainWindow.width(), 1284);
+    QTRY_COMPARE(listWindow.width(), 1284);
+    const QPoint tagPagePosition = listWindow.position();
+
+    listWindow.setMinimumWidth(956);
+    QCoreApplication::processEvents();
+    QCOMPARE(mainWindow.width(), 1284);
+    QCOMPARE(listWindow.width(), 1284);
+    QCOMPARE(listWindow.position(), tagPagePosition);
+
+    mainWindow.resize(1104, mainWindow.height());
+    QTRY_COMPARE(listWindow.width(), 1104);
+    QCOMPARE(listWindow.x(), mainWindow.x());
 }
 
 #ifdef Q_OS_WIN

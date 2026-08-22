@@ -42,7 +42,17 @@ Item {
         if (requestScheduled)
             return
         requestScheduled = true
-        Qt.callLater(root.performRequest)
+        requestTimer.start()
+    }
+
+    // The timer is owned by the wrapper, so delegate/Loader destruction also
+    // discards the deferred callback. Qt.callLater can otherwise retain a QML
+    // method after its context is gone during a rapid library model reset.
+    Timer {
+        id: requestTimer
+        interval: 0
+        repeat: false
+        onTriggered: root.performRequest()
     }
 
     onTrackIdChanged: scheduleRequest()

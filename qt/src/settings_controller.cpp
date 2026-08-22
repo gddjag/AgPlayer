@@ -1646,6 +1646,10 @@ QString SettingsController::defaultMusicDirectory()
 
 QString SettingsController::defaultCacheDirectory()
 {
+    if (QStandardPaths::isTestModeEnabled()) {
+        return QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+            + QStringLiteral("/AgPlayer/Cache");
+    }
     QString documents =
         QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     if (documents.isEmpty()) {

@@ -51,7 +51,7 @@ void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
     const QString cacheDir = settings.cacheDirectory();
     QVERIFY(!cacheDir.contains(QStringLiteral("D:\\Music")));
     const QString expected =
-        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
         + QStringLiteral("/AgPlayer/Cache");
     QCOMPARE(QDir::cleanPath(cacheDir), QDir::cleanPath(expected));
 }

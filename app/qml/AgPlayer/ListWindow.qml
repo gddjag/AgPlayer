@@ -10,7 +10,11 @@ Window {
     visible: false
     width: 1447
     height: 570
-    minimumWidth: 1284
+    readonly property int pageMinimumWidth: tagManagementMode ? 1284 : 956
+    // The offscreen test plugin cannot propagate a changing native size hint.
+    // Real desktop windows still expose the page-specific minimum to Windows.
+    minimumWidth: Qt.platform.pluginName === "offscreen"
+                  ? 956 : pageMinimumWidth
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: "transparent"
@@ -33,6 +37,8 @@ Window {
     property var activeImportDialog: null
     property bool importBatchActive: false
     property string exportPlaylistId: ""
+    readonly property bool tagManagementMode:
+        sideNavigation.activeNodeType === "tags"
 
     function routeNavigationNode(nodeType, nodeId, resourceFolder) {
         if (!filterModel)
@@ -567,8 +573,10 @@ Window {
                     }
 
                     Rectangle {
+                        objectName: "tagPanelDivider"
                         Layout.preferredWidth: listWorkspace.dividerWidth
                         Layout.fillHeight: true
+                        visible: listWindow.tagManagementMode
                         color: Theme.listDivider
                     }
 
@@ -578,6 +586,7 @@ Window {
                         Layout.minimumWidth: listWorkspace.rightColumnWidth
                         Layout.maximumWidth: listWorkspace.rightColumnWidth
                         Layout.fillHeight: true
+                        visible: listWindow.tagManagementMode
                         tagModel: TagModel
                         filterModel: listWindow.filterModel
                     }
