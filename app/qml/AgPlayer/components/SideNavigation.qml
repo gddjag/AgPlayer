@@ -23,6 +23,7 @@ Item {
     property string contextResourceFolder: ""
     property bool contextResourceIsRoot: false
     property string pendingResourceFolderRemoval: ""
+    property var resourceDropSubmitter: null
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -34,6 +35,13 @@ Item {
     signal importPlaylistRequested()
     signal exportPlaylistRequested(string playlistId)
     signal resourceUrlsDropped(var urls)
+
+    function submitResourceUrls(urls) {
+        if (typeof resourceDropSubmitter === "function")
+            return resourceDropSubmitter(urls) === true
+        resourceUrlsDropped(urls)
+        return true
+    }
 
     function resourceDropContainsPoint(x, y) {
         var footer = navigationList.footerItem
@@ -280,9 +288,7 @@ Item {
                     objectName: "resourceFolderDropTarget"
                     anchors.fill: parent
                     z: -1
-                    onUrlsDropped: function(urls) {
-                        root.resourceUrlsDropped(urls)
-                    }
+                    urlsSubmitter: root.submitResourceUrls
                 }
             }
         }

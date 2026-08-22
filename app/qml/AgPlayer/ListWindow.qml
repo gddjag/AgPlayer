@@ -141,7 +141,7 @@ Window {
             return false
         var seenPaths = ({})
         var audioUrls = []
-        var handled = false
+        var directoryPaths = []
         for (var index = 0; index < urls.length; ++index) {
             var classified = LibraryManagerController.classifyDropUrl(urls[index])
             var path = String(classified.path || "")
@@ -153,17 +153,20 @@ Window {
                 continue
             seenPaths[identity] = true
             if (classified.kind === LibraryManagerController.Directory) {
-                LibraryManagerController.addMonitoredFolder(path)
-                handled = true
+                directoryPaths.push(path)
             } else if (classified.kind
                        === LibraryManagerController.AudioFile) {
                 audioUrls.push(classified.url)
-                handled = true
             }
         }
-        if (audioUrls.length > 0)
-            beginImport(audioUrls)
-        return handled
+        if (audioUrls.length > 0 && !beginImport(audioUrls))
+            return false
+        for (var pathIndex = 0; pathIndex < directoryPaths.length;
+             ++pathIndex) {
+            LibraryManagerController.addMonitoredFolder(
+                        directoryPaths[pathIndex])
+        }
+        return audioUrls.length > 0 || directoryPaths.length > 0
     }
     function resourceDropContainsPoint(x, y) {
         var local = sideNavigation.mapFromItem(null, x, y)
@@ -449,6 +452,9 @@ Window {
                         selectedTagKey: filterModel ? filterModel.tagKey : ""
                         selectedResourceFolder: filterModel
                                                 ? filterModel.resourceFolder : ""
+                        resourceDropSubmitter: function(urls) {
+                            return listWindow.handleResourceDropUrls(urls)
+                        }
                         playlistModel: listWindow.playlistModel
                         onNavigationSelected: function(nodeType, nodeId,
                                                        resourceFolder) {
@@ -467,9 +473,6 @@ Window {
                             listWindow.openImportDialog(playlistId)
                         }
                         onImportPlaylistRequested: importPlaylistDialog.open()
-                        onResourceUrlsDropped: function(urls) {
-                            listWindow.handleResourceDropUrls(urls)
-                        }
                         onExportPlaylistRequested: function(playlistId) {
                             listWindow.exportPlaylistId = playlistId
                             copyPlaylistFiles.checked = false

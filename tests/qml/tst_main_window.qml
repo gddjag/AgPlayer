@@ -1390,6 +1390,83 @@ TestCase {
         mainWindow.requestActivate()
     }
 
+    function test_resource_drop_rejects_busy_audio_batch_atomically() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        filterModel.category = "all"
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var navigation = findChild(window, "referenceSideNavigation")
+        var navigationList = findChild(navigation, "libraryNavigationList")
+        verify(navigation && navigationList)
+        navigationList.positionViewAtEnd()
+        wait(0)
+        var dropTarget = findChild(navigation, "resourceFolderDropTarget")
+        verify(dropTarget)
+
+        var firstAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        var rejectedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        var mixedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        var busyFolder = nativeDropHelper.createDropDirectory()
+        verify(firstAudio && rejectedAudio && mixedAudio && busyFolder)
+        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialLibraryCount = LibraryModel.count
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+
+        verify(window.beginImport([firstAudio]))
+        verify(ImportController.busy)
+        var pureAudioAccepted = nativeDropHelper.sendUrls(
+                    dropTarget, [rejectedAudio])
+        verify(ImportController.busy)
+        var mixedAccepted = nativeDropHelper.sendUrls(
+                    dropTarget, [mixedAudio, busyFolder])
+        compare(pureAudioAccepted, false,
+                "a busy audio-only drop must remain unaccepted")
+        compare(mixedAccepted, false,
+                "a busy mixed drop must remain unaccepted")
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount,
+                "a rejected mixed batch must not add its directory")
+
+        tryCompare(importFinished, "count", 1, 5000)
+        compare(LibraryModel.count, initialLibraryCount + 1,
+                "busy drops must not queue or import audio silently")
+        var firstImportedId = ImportController.importedTrackIds[0]
+        verify(firstImportedId)
+
+        verify(nativeDropHelper.sendUrls(
+                   dropTarget, [rejectedAudio, mixedAudio, busyFolder]),
+               "the same mixed drop must work after the active batch finishes")
+        tryCompare(importFinished, "count", 2, 5000)
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount + 1)
+        compare(LibraryModel.count, initialLibraryCount + 3)
+        var laterImportedIds = ImportController.importedTrackIds
+        compare(laterImportedIds.length, 2)
+
+        var folderPath = decodeURIComponent(busyFolder.toString()
+                                           .replace(/^file:\/\/\//, ""))
+        folderPath = folderPath.replace(/\\/g, "/")
+        verify(LibraryManagerController.removeMonitoredFolder(folderPath))
+        LibraryModel.removeTrack(firstImportedId)
+        for (var index = 0; index < laterImportedIds.length; ++index)
+            LibraryModel.removeTrack(laterImportedIds[index])
+        importFinished.destroy()
+        window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
     function test_z_delete_key_uses_current_view_semantics() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
