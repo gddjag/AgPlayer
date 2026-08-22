@@ -15,6 +15,7 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: "AgPlayer · " + qsTr("音频工具")
+    readonly property bool metadataWorkbench: AudioToolsController.currentTool === 2
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -60,8 +61,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
-        border.color: Theme.border
+        color: window.metadataWorkbench ? "#06141e" : Theme.background
+        border.color: window.metadataWorkbench ? "#173040" : Theme.border
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -74,7 +75,7 @@ Window {
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
-                color: "transparent"
+                color: window.metadataWorkbench ? "#06131d" : "transparent"
 
                 RowLayout {
                     z: 1
@@ -174,6 +175,7 @@ Window {
                 Layout.preferredHeight: 55
                 window: window
                 currentTool: AudioToolsController.currentTool
+                referenceWorkbench: window.metadataWorkbench
                 onToolSelected: function(index) {
                     AudioToolsController.selectTool(index)
                 }
@@ -185,7 +187,7 @@ Window {
                 Layout.leftMargin: 2
                 Layout.rightMargin: 2
                 Layout.bottomMargin: 3
-                color: Theme.background
+                color: window.metadataWorkbench ? "#06141e" : Theme.background
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

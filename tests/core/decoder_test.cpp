@@ -27,8 +27,20 @@ int main(const int argc, char** argv)
     assert(metadata == nullptr);
     assert(ag_metadata_open(argv[1], nullptr) == AG_INVALID_ARGUMENT);
 
+    // The noexcept probe boundary must translate allocation failures into a
+    // result code instead of terminating the process.
+    agplayer::MediaMetadata failed_probe_metadata;
+    failed_probe_metadata.title = "stale";
+    agplayer::MediaMetadataProbeTestHooks probe_hooks;
+    probe_hooks.throw_allocation_failure = true;
+    assert(agplayer::probe_media_metadata(argv[1], failed_probe_metadata,
+                                          &probe_hooks)
+           == AG_INTERNAL_ERROR);
+    assert(failed_probe_metadata.title.empty());
+
     assert(ag_metadata_open(argv[1], &metadata) == AG_OK);
     assert(metadata != nullptr);
+    assert(ag_metadata_date(metadata) != nullptr);
     assert(ag_metadata_sample_rate(metadata) == 44'100);
     assert(ag_metadata_channels(metadata) == 2);
     assert(ag_metadata_bits_per_sample(metadata) == 16);
@@ -126,4 +138,41 @@ int main(const int argc, char** argv)
     assert(metadata == nullptr);
     assert(ag_metadata_open(truncated_path.string().c_str(), &metadata) == first_result);
     assert(metadata == nullptr);
+
+    // Metadata probing must recover technical fields from a short FLAC's
+    // STREAMINFO block without depending on decoder-open side effects.
+    const std::filesystem::path short_flac =
+        sine_path.parent_path() / "decoder-short-streaminfo.flac";
+    std::filesystem::remove(short_flac);
+    assert(ag_transcode(sine_path.u8string().c_str(),
+                        short_flac.u8string().c_str(), "flac", 0, 44'100, 2,
+                        nullptr, nullptr, nullptr)
+           == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(short_flac.u8string().c_str(), &metadata) == AG_OK);
+    assert(metadata != nullptr);
+    assert(ag_metadata_sample_rate(metadata) == 44'100);
+    assert(ag_metadata_channels(metadata) == 2);
+    assert(ag_metadata_duration_ms(metadata) >= 1'990);
+    ag_metadata_destroy(metadata);
+
+    // Raw ADTS has no container duration table. The bounded codec-free probe
+    // must still recover sample rate, channels and a useful duration estimate.
+    const std::filesystem::path raw_aac =
+        sine_path.parent_path() / "decoder-codec-free.aac";
+    std::filesystem::remove(raw_aac);
+    assert(ag_transcode(sine_path.u8string().c_str(), raw_aac.u8string().c_str(),
+                        "aac", 128'000, 44'100, 2,
+                        nullptr, nullptr, nullptr)
+           == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(raw_aac.u8string().c_str(), &metadata) == AG_OK);
+    assert(metadata != nullptr);
+    assert(ag_metadata_sample_rate(metadata) == 44'100);
+    assert(ag_metadata_channels(metadata) == 2);
+    assert(ag_metadata_duration_ms(metadata) > 0);
+    ag_metadata_destroy(metadata);
+
+    std::filesystem::remove(short_flac);
+    std::filesystem::remove(raw_aac);
 }

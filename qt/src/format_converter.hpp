@@ -97,6 +97,9 @@ public:
     Q_INVOKABLE void setAllVisibleChecked(bool checked);
     Q_INVOKABLE bool setMetadataEditPlan(const QVariantMap& fields,
                                          const QUrl& coverUrl);
+    Q_INVOKABLE bool setMetadataEditPlanForFiles(
+        const QVariantMap& fields, const QUrl& coverUrl,
+        const QList<QUrl>& targetUrls);
     Q_INVOKABLE QVariantMap previewSelected(const QVariantList& indices,
                                             const QString& outputFormat,
                                             int bitRate,
@@ -207,6 +210,8 @@ private:
     QVariantMap metadataFields_;
     QByteArray metadataCoverData_;
     QString metadataCoverMime_;
+    bool metadataPlanActive_ = false;
+    QSet<QString> metadataTargetPaths_;
     FormatConversionTaskModel* taskModel_ = nullptr;
     FormatConversionFilterModel* filteredTaskModel_ = nullptr;
     QVariantMap pendingPlan_;
@@ -221,6 +226,7 @@ private:
     void updateEntryProgress(int index, double value,
                              const QVector<int>& jobIndices);
     void syncTaskModel();
+    void clearMetadataEditPlan();
 
     // Generate a non-colliding output path for the given source and format.
     QString computeOutputPath(const QString& inputPath,
@@ -253,13 +259,15 @@ private:
                       const QString& outputDir,
                       bool keepMetadata,
                       bool volumeNormalize,
-                   bool extractAudio,
-                   bool overwriteExisting,
-                   const QString& bitrateMode,
-                   const QString& conflictPolicy,
-                   const QVariantMap& metadataFields,
-                   const QByteArray& metadataCoverData,
+                      bool extractAudio,
+                      bool overwriteExisting,
+                      const QString& bitrateMode,
+                      const QString& conflictPolicy,
+                      const QVariantMap& metadataFields,
+                      const QByteArray& metadataCoverData,
                       const QString& metadataCoverMime,
+                      bool metadataPlanActive,
+                      const QSet<QString>& metadataTargetPaths,
                       const QVector<int>& jobIndices,
                       bool keepCover,
                       const QString& sampleFormat,

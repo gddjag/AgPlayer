@@ -16,6 +16,7 @@ extern "C" {
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -26,6 +27,10 @@ extern "C" {
 #endif
 
 namespace agplayer {
+
+constexpr std::uintmax_t kMetadataWriteMargin = 4U * 1024U * 1024U;
+constexpr std::size_t kMaxMetadataFieldBytes = 1U * 1024U * 1024U;
+constexpr std::size_t kMaxMetadataCoverBytes = 32U * 1024U * 1024U;
 
 const std::vector<const char*>& known_metadata_aliases(const CanonicalField field)
 {
@@ -39,8 +44,10 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
         "album_artist", "albumartist", "TPE2", "aART", "WM/AlbumArtist"};
     static const std::vector<const char*> genre{
         "genre", "TCON", "©gen", "WM/Genre"};
+    static const std::vector<const char*> year{
+        "year", "TYER", "WM/Year"};
     static const std::vector<const char*> date{
-        "date", "year", "TDRC", "TYER", "©day", "WM/Year"};
+        "date", "TDRC", "©day"};
     static const std::vector<const char*> composer{
         "composer", "TCOM", "©wrt", "WM/Composer"};
     static const std::vector<const char*> bpm{
@@ -51,7 +58,7 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
     case CanonicalField::Album: return album;
     case CanonicalField::AlbumArtist: return album_artist;
     case CanonicalField::Genre: return genre;
-    case CanonicalField::Year:
+    case CanonicalField::Year: return year;
     case CanonicalField::Date: return date;
     case CanonicalField::Composer: return composer;
     case CanonicalField::Bpm: return bpm;
@@ -60,6 +67,10 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
 }
 
 namespace {
+
+int metadata_only_stream_info_probe_forbidden(AVFormatContext*,
+                                               AVDictionary**) = delete;
+#define avformat_find_stream_info metadata_only_stream_info_probe_forbidden
 
 std::filesystem::path filesystem_path_from_utf8(const std::string& utf8_path)
 {
@@ -86,6 +97,108 @@ bool atomic_replace(const std::filesystem::path& temp_path,
 #endif
 }
 
+class ExistingBackupGuard final {
+public:
+    struct FailedSourceRecovery {
+        bool prior_backup_restored = false;
+        std::string original_backup_path;
+        std::string prior_backup_path;
+    };
+
+    ExistingBackupGuard(const std::filesystem::path& backup,
+                        const std::string& nonce)
+        : backup_(backup), saved_(backup.native()
+            + std::filesystem::u8path(".preserved-" + nonce).native()),
+          recovery_(backup.native()
+            + std::filesystem::u8path(".recovery-" + nonce).native())
+    {
+        std::error_code ec;
+        had_existing_ = std::filesystem::exists(backup_, ec) && !ec;
+        if (!had_existing_) {
+            valid_ = !ec;
+            return;
+        }
+        std::filesystem::rename(backup_, saved_, ec);
+        valid_ = !ec;
+    }
+
+    ExistingBackupGuard(const ExistingBackupGuard&) = delete;
+    ExistingBackupGuard& operator=(const ExistingBackupGuard&) = delete;
+
+    ~ExistingBackupGuard()
+    {
+        if (active_) restore();
+    }
+
+    bool valid() const noexcept { return valid_; }
+
+    bool restore(const bool inject_failure = false) noexcept
+    {
+        if (!active_) return true;
+        active_ = false;
+        if (inject_failure) return false;
+        std::error_code ec;
+        if (!had_existing_) {
+            std::filesystem::remove(backup_, ec);
+            return !ec;
+        }
+        std::filesystem::remove(backup_, ec);
+        ec.clear();
+        std::filesystem::rename(saved_, backup_, ec);
+        return !ec;
+    }
+
+    std::string preserved_path() const { return saved_.u8string(); }
+
+    FailedSourceRecovery preserve_after_source_restore_failure(
+        const bool inject_prior_restore_failure = false) noexcept
+    {
+        FailedSourceRecovery result;
+        if (!active_) return result;
+        active_ = false;
+
+        // backup_ now contains the original source. Never remove or overwrite
+        // it after backup -> source recovery has failed. Move it aside first so
+        // a pre-existing .agbak can be restored independently.
+        std::error_code ec;
+        const bool has_original_backup = std::filesystem::exists(backup_, ec)
+            && !ec;
+        if (has_original_backup) {
+            std::filesystem::rename(backup_, recovery_, ec);
+            result.original_backup_path = ec
+                ? backup_.u8string() : recovery_.u8string();
+        }
+
+        if (!had_existing_) {
+            result.prior_backup_restored = true;
+            return result;
+        }
+        if (!ec && !inject_prior_restore_failure) {
+            std::filesystem::rename(saved_, backup_, ec);
+        }
+        result.prior_backup_restored = !ec && !inject_prior_restore_failure;
+        result.prior_backup_path = result.prior_backup_restored
+            ? backup_.u8string() : saved_.u8string();
+        return result;
+    }
+
+    void discard() noexcept
+    {
+        if (!active_) return;
+        active_ = false;
+        std::error_code ec;
+        std::filesystem::remove(saved_, ec);
+    }
+
+private:
+    std::filesystem::path backup_;
+    std::filesystem::path saved_;
+    std::filesystem::path recovery_;
+    bool had_existing_ = false;
+    bool valid_ = false;
+    bool active_ = true;
+};
+
 void cleanup_output(AVFormatContext*& out_ctx)
 {
     if (out_ctx != nullptr) {
@@ -95,6 +208,53 @@ void cleanup_output(AVFormatContext*& out_ctx)
         avformat_free_context(out_ctx);
         out_ctx = nullptr;
     }
+}
+
+// Metadata-only operations must never call avformat_find_stream_info(): FFmpeg
+// may open a decoder while probing. Every input context in this module is
+// therefore opened through this auditable codec-free boundary.
+int open_metadata_demuxer(AVFormatContext** context, const std::string& path,
+                          MetadataRuntimeMetrics* runtime)
+{
+    if (runtime != nullptr) {
+        ++runtime->demuxer_open_count;
+        ++runtime->codec_free_probe_count;
+    }
+    return avformat_open_input(context, path.c_str(), nullptr, nullptr);
+}
+
+bool prime_audio_headers_without_codec(AVFormatContext* context)
+{
+    const auto ready = [context] {
+        bool has_audio = false;
+        for (unsigned int index = 0; index < context->nb_streams; ++index) {
+            const AVCodecParameters* parameters = context->streams[index]->codecpar;
+            if (parameters->codec_type != AVMEDIA_TYPE_AUDIO) continue;
+            has_audio = true;
+            if (parameters->codec_id == AV_CODEC_ID_NONE
+                || parameters->sample_rate <= 0
+                || parameters->ch_layout.nb_channels <= 0) {
+                return false;
+            }
+        }
+        return has_audio;
+    };
+    if (ready()) return true;
+    AVPacket* packet = av_packet_alloc();
+    if (packet == nullptr) return false;
+    for (int count = 0; count < 64 && !ready(); ++count) {
+        const int read_result = av_read_frame(context, packet);
+        av_packet_unref(packet);
+        if (read_result < 0) break;
+    }
+    av_packet_free(&packet);
+    if (!ready()) return false;
+    const int seek_result = avformat_seek_file(
+        context, -1, (std::numeric_limits<std::int64_t>::min)(), 0,
+        (std::numeric_limits<std::int64_t>::max)(), AVSEEK_FLAG_BACKWARD);
+    if (seek_result < 0) return false;
+    avformat_flush(context);
+    return true;
 }
 
 AVCodecID cover_codec_id(const std::string& mime_type)
@@ -166,7 +326,7 @@ const char* canonical_key(const CanonicalField field)
     case CanonicalField::Album: return "album";
     case CanonicalField::AlbumArtist: return "album_artist";
     case CanonicalField::Genre: return "genre";
-    case CanonicalField::Year:
+    case CanonicalField::Year: return "year";
     case CanonicalField::Date: return "date";
     case CanonicalField::Composer: return "composer";
     case CanonicalField::Bpm: return "bpm";
@@ -224,6 +384,8 @@ std::string read_canonical_value(AVDictionary* preferred,
 }
 
 struct MetadataSnapshot {
+    using Dictionary = std::vector<std::pair<std::string, std::string>>;
+
     struct Cover {
         AVCodecID codec_id = AV_CODEC_ID_NONE;
         int width = 0;
@@ -236,7 +398,32 @@ struct MetadataSnapshot {
                 && height == other.height && data == other.data;
         }
     };
+    struct Stream {
+        AVMediaType type = AVMEDIA_TYPE_UNKNOWN;
+        AVCodecID codec_id = AV_CODEC_ID_NONE;
+        int disposition = 0;
+        bool attached_picture = false;
+        Dictionary metadata;
+    };
+    struct Chapter {
+        std::int64_t id = 0;
+        AVRational time_base{0, 1};
+        std::int64_t start = 0;
+        std::int64_t end = 0;
+        Dictionary metadata;
+
+        bool operator==(const Chapter& other) const
+        {
+            return id == other.id && time_base.num == other.time_base.num
+                && time_base.den == other.time_base.den
+                && start == other.start && end == other.end
+                && metadata == other.metadata;
+        }
+    };
     std::array<std::string, 9> fields;
+    Dictionary format_metadata;
+    std::vector<Stream> streams;
+    std::vector<Chapter> chapter_details;
     std::vector<unsigned char> cover;
     std::string cover_mime;
     std::vector<Cover> covers;
@@ -244,6 +431,22 @@ struct MetadataSnapshot {
     std::size_t chapters = 0;
     std::size_t attachments = 0;
 };
+
+MetadataSnapshot::Dictionary snapshot_dictionary(AVDictionary* dictionary)
+{
+    MetadataSnapshot::Dictionary entries;
+    const AVDictionaryEntry* entry = nullptr;
+    while ((entry = av_dict_get(dictionary, "", entry,
+                                AV_DICT_IGNORE_SUFFIX)) != nullptr) {
+        entries.emplace_back(entry->key != nullptr ? entry->key : "",
+                             entry->value != nullptr ? entry->value : "");
+    }
+    std::sort(entries.begin(), entries.end());
+    return entries;
+}
+
+std::string explicit_muxer_for_path(const std::filesystem::path& path);
+bool muxer_shares_year_date(const std::string& muxer);
 
 constexpr std::array<CanonicalField, 9> kCanonicalFields{
     CanonicalField::Title, CanonicalField::Artist, CanonicalField::Album,
@@ -266,19 +469,29 @@ std::size_t canonical_index(const CanonicalField field)
     return 0;
 }
 
-bool read_metadata_snapshot(const std::string& path, MetadataSnapshot& snapshot)
+bool read_metadata_snapshot(const std::string& path,
+                            MetadataSnapshot& snapshot,
+                            MetadataRuntimeMetrics* runtime = nullptr)
 {
     snapshot = {};
     AVFormatContext* context = nullptr;
-    if (avformat_open_input(&context, path.c_str(), nullptr, nullptr) < 0
-        || avformat_find_stream_info(context, nullptr) < 0) {
+    if (open_metadata_demuxer(&context, path, runtime) < 0) {
         avformat_close_input(&context);
         return false;
     }
     AVDictionary* audio_metadata = nullptr;
     snapshot.chapters = context->nb_chapters;
+    snapshot.format_metadata = snapshot_dictionary(context->metadata);
     for (unsigned int index = 0; index < context->nb_streams; ++index) {
         AVStream* stream = context->streams[index];
+        MetadataSnapshot::Stream stream_snapshot;
+        stream_snapshot.type = stream->codecpar->codec_type;
+        stream_snapshot.codec_id = stream->codecpar->codec_id;
+        stream_snapshot.disposition = stream->disposition;
+        stream_snapshot.attached_picture =
+            (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) != 0;
+        stream_snapshot.metadata = snapshot_dictionary(stream->metadata);
+        snapshot.streams.push_back(std::move(stream_snapshot));
         if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             ++snapshot.audio_streams;
         }
@@ -309,13 +522,26 @@ bool read_metadata_snapshot(const std::string& path, MetadataSnapshot& snapshot)
             }
         }
     }
+    snapshot.chapter_details.reserve(context->nb_chapters);
+    for (unsigned int index = 0; index < context->nb_chapters; ++index) {
+        const AVChapter* chapter = context->chapters[index];
+        snapshot.chapter_details.push_back({chapter->id, chapter->time_base,
+            chapter->start, chapter->end, snapshot_dictionary(chapter->metadata)});
+    }
     for (const CanonicalField field : kCanonicalFields) {
         snapshot.fields[canonical_index(field)] =
             read_canonical_value(audio_metadata, context->metadata, field);
     }
-    // Year and date are one physical tag and therefore share one read value.
-    snapshot.fields[canonical_index(CanonicalField::Date)] =
-        snapshot.fields[canonical_index(CanonicalField::Year)];
+    if (muxer_shares_year_date(explicit_muxer_for_path(
+            filesystem_path_from_utf8(path)))) {
+        const std::string& year =
+            snapshot.fields[canonical_index(CanonicalField::Year)];
+        const std::string& date =
+            snapshot.fields[canonical_index(CanonicalField::Date)];
+        const std::string shared = !date.empty() ? date : year;
+        snapshot.fields[canonical_index(CanonicalField::Year)] = shared;
+        snapshot.fields[canonical_index(CanonicalField::Date)] = shared;
+    }
     avformat_close_input(&context);
     return true;
 }
@@ -336,11 +562,11 @@ struct AudioPacketSignature {
 };
 
 bool audio_packet_signatures(const std::string& path,
-                             std::vector<AudioPacketSignature>& signatures)
+                             std::vector<AudioPacketSignature>& signatures,
+                             MetadataRuntimeMetrics* runtime)
 {
     AVFormatContext* context = nullptr;
-    if (avformat_open_input(&context, path.c_str(), nullptr, nullptr) < 0
-        || avformat_find_stream_info(context, nullptr) < 0) {
+    if (open_metadata_demuxer(&context, path, runtime) < 0) {
         avformat_close_input(&context);
         return false;
     }
@@ -393,12 +619,13 @@ bool audio_packet_signatures(const std::string& path,
 }
 
 bool audio_streams_equivalent(const std::string& source_path,
-                              const std::string& staged_path)
+                              const std::string& staged_path,
+                              MetadataRuntimeMetrics* runtime)
 {
     std::vector<AudioPacketSignature> source;
     std::vector<AudioPacketSignature> staged;
-    if (!audio_packet_signatures(source_path, source)
-        || !audio_packet_signatures(staged_path, staged)
+    if (!audio_packet_signatures(source_path, source, runtime)
+        || !audio_packet_signatures(staged_path, staged, runtime)
         || source.size() != staged.size()) {
         return false;
     }
@@ -451,12 +678,34 @@ bool source_is_read_only(const std::filesystem::path& path)
 #endif
 }
 
-bool has_staging_space(const std::filesystem::path& source)
+bool add_space_requirement(std::uintmax_t& total,
+                           const std::uintmax_t value) noexcept
+{
+    if (value > (std::numeric_limits<std::uintmax_t>::max)() - total) return false;
+    total += value;
+    return true;
+}
+
+const char* cover_mime_type(const AVCodecID codec_id)
+{
+    switch (codec_id) {
+    case AV_CODEC_ID_PNG: return "image/png";
+    case AV_CODEC_ID_BMP: return "image/bmp";
+    case AV_CODEC_ID_MJPEG: return "image/jpeg";
+    default: return "";
+    }
+}
+
+bool has_staging_space(const std::filesystem::path& source,
+                       const MetadataEditPlan& plan)
 {
     std::error_code ec;
     const auto size = std::filesystem::file_size(source, ec);
+    if (ec) return false;
     const auto info = std::filesystem::space(source.parent_path(), ec);
-    return !ec && info.available >= size + 4U * 1024U * 1024U;
+    if (ec) return false;
+    const auto required = metadata_staging_space_required(size, plan);
+    return required.has_value() && info.available >= *required;
 }
 
 std::string explicit_muxer_for_path(const std::filesystem::path& path)
@@ -500,7 +749,60 @@ bool muxer_supports_edit(const std::string& muxer, const FieldEdit& edit)
     return true;
 }
 
+bool muxer_shares_year_date(const std::string& muxer)
+{
+    return muxer == "wav" || muxer == "mp3" || muxer == "ipod"
+        || muxer == "mp4" || muxer == "mov";
+}
+
+const FieldEdit* plan_edit(const MetadataEditPlan& plan,
+                           const CanonicalField field)
+{
+    for (const FieldEdit& edit : plan.fields) {
+        if (edit.field == field) return &edit;
+    }
+    return nullptr;
+}
+
+bool edits_are_equivalent(const FieldEdit& first, const FieldEdit& second)
+{
+    if (first.action != second.action) return false;
+    return first.action != MetadataAction::Set
+        || first.value_utf8 == second.value_utf8;
+}
+
 } // namespace
+
+ag_result write_metadata_with_preserved_backup(
+    const std::string& utf8_path,
+    const MetadataUpdate& update,
+    std::string& error,
+    const MetadataEditPlan* verification_plan,
+    const std::atomic_bool* cancel,
+    const MetadataWriterTestHooks* test_hooks,
+    MetadataRuntimeMetrics* runtime,
+    ExistingBackupGuard* existing_backup);
+
+std::optional<std::uintmax_t> metadata_staging_space_required(
+    const std::uintmax_t source_size, const MetadataEditPlan& plan) noexcept
+{
+    std::uintmax_t required = kMetadataWriteMargin;
+    if (!add_space_requirement(required, source_size)
+        || !add_space_requirement(required, source_size)) {
+        return std::nullopt;
+    }
+    for (const FieldEdit& edit : plan.fields) {
+        if (edit.action == MetadataAction::Set && edit.value_utf8.has_value()
+            && !add_space_requirement(required, edit.value_utf8->size())) {
+            return std::nullopt;
+        }
+    }
+    if (plan.cover_action == CoverAction::Set
+        && !add_space_requirement(required, plan.cover_size)) {
+        return std::nullopt;
+    }
+    return required;
+}
 
 bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
                                  std::string& error)
@@ -511,8 +813,26 @@ bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
         error = "A replacement cover needs image data and a MIME type";
         return false;
     }
-    bool edits_year = false;
-    bool edits_date = false;
+    if (plan.cover_action == CoverAction::Set
+        && plan.cover_size > kMaxMetadataCoverBytes) {
+        error = "Replacement cover is too large";
+        return false;
+    }
+    if (plan.cover_action == CoverAction::Set) {
+        const bool known_mime = plan.cover_mime_type == "image/jpeg"
+            || plan.cover_mime_type == "image/jpg"
+            || plan.cover_mime_type == "image/png"
+            || plan.cover_mime_type == "image/bmp";
+        int width = 0;
+        int height = 0;
+        if (!known_mime || !cover_dimensions(plan.cover_mime_type,
+                                              plan.cover_data,
+                                              plan.cover_size,
+                                              width, height)) {
+            error = "Replacement cover content does not match its MIME type";
+            return false;
+        }
+    }
     bool has_edit = plan.cover_action != CoverAction::Keep;
     for (const FieldEdit& edit : plan.fields) {
         if (edit.action == MetadataAction::Keep) {
@@ -522,6 +842,11 @@ bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
         if (edit.action == MetadataAction::Set
             && (!edit.value_utf8.has_value() || edit.value_utf8->empty())) {
             error = "A Set value must not be empty; use Clear instead";
+            return false;
+        }
+        if (edit.action == MetadataAction::Set
+            && edit.value_utf8->size() > kMaxMetadataFieldBytes) {
+            error = "Metadata field is too large";
             return false;
         }
         if (edit.field == CanonicalField::Bpm
@@ -540,18 +865,85 @@ bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
                 return false;
             }
         }
-        edits_year = edits_year || edit.field == CanonicalField::Year;
-        edits_date = edits_date || edit.field == CanonicalField::Date;
-    }
-    if (edits_year && edits_date) {
-        error = "Year and date map to the same physical tag";
-        return false;
     }
     if (!has_edit) {
         error = "At least one metadata field or cover action is required";
         return false;
     }
     error.clear();
+    return true;
+}
+
+MetadataSnapshot::Dictionary unmanaged_dictionary(
+    const MetadataSnapshot::Dictionary& dictionary,
+    const MetadataEditPlan& plan)
+{
+    MetadataSnapshot::Dictionary unmanaged;
+    for (const auto& entry : dictionary) {
+        bool managed = false;
+        for (const FieldEdit& edit : plan.fields) {
+            if (edit.action != MetadataAction::Keep
+                && is_alias_key(entry.first.c_str(), edit.field)) {
+                managed = true;
+                break;
+            }
+        }
+        if (!managed) unmanaged.push_back(entry);
+    }
+    return unmanaged;
+}
+
+bool dictionary_entries_preserved(
+    const MetadataSnapshot::Dictionary& before,
+    const MetadataSnapshot::Dictionary& after,
+    const MetadataEditPlan& plan,
+    const bool exclude_managed_fields = true)
+{
+    const MetadataSnapshot::Dictionary required = exclude_managed_fields
+        ? unmanaged_dictionary(before, plan) : before;
+    const MetadataSnapshot::Dictionary actual = exclude_managed_fields
+        ? unmanaged_dictionary(after, plan) : after;
+    return std::includes(actual.begin(), actual.end(),
+                         required.begin(), required.end());
+}
+
+bool unmanaged_metadata_preserved(const MetadataSnapshot& before,
+                                  const MetadataSnapshot& after,
+                                  const MetadataEditPlan& plan)
+{
+    if (!dictionary_entries_preserved(before.format_metadata,
+                                      after.format_metadata, plan)
+        || before.chapter_details != after.chapter_details) {
+        return false;
+    }
+
+    std::vector<const MetadataSnapshot::Stream*> before_streams;
+    std::vector<const MetadataSnapshot::Stream*> after_streams;
+    const auto collect_streams = [&plan](const MetadataSnapshot& snapshot,
+                                        auto& destination) {
+        for (const MetadataSnapshot::Stream& stream : snapshot.streams) {
+            if (plan.cover_action != CoverAction::Keep
+                && stream.attached_picture) {
+                continue;
+            }
+            destination.push_back(&stream);
+        }
+    };
+    collect_streams(before, before_streams);
+    collect_streams(after, after_streams);
+    if (before_streams.size() != after_streams.size()) return false;
+    for (std::size_t index = 0; index < before_streams.size(); ++index) {
+        const MetadataSnapshot::Stream& left = *before_streams[index];
+        const MetadataSnapshot::Stream& right = *after_streams[index];
+        if (left.type != right.type || left.codec_id != right.codec_id
+            || left.disposition != right.disposition
+            || left.attached_picture != right.attached_picture
+            || !dictionary_entries_preserved(left.metadata, right.metadata,
+                                             plan,
+                                             left.type == AVMEDIA_TYPE_AUDIO)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -575,7 +967,7 @@ ag_result preflight_metadata_edit(const std::string& utf8_path,
         error = "Input file is in use and cannot be replaced";
         return AG_IO_ERROR;
     }
-    if (!has_staging_space(source)) {
+    if (!has_staging_space(source, plan)) {
         error = "Insufficient disk space for staged metadata output";
         return AG_IO_ERROR;
     }
@@ -591,23 +983,42 @@ ag_result preflight_metadata_edit(const std::string& utf8_path,
             return AG_UNSUPPORTED_FORMAT;
         }
     }
+    const FieldEdit* year_edit = plan_edit(plan, CanonicalField::Year);
+    const FieldEdit* date_edit = plan_edit(plan, CanonicalField::Date);
+    const bool changes_shared_date =
+        (year_edit != nullptr && year_edit->action != MetadataAction::Keep)
+        || (date_edit != nullptr && date_edit->action != MetadataAction::Keep);
+    if (muxer_shares_year_date(muxer_name) && changes_shared_date
+        && (year_edit == nullptr || date_edit == nullptr
+            || !edits_are_equivalent(*year_edit, *date_edit))) {
+        error = "Year and date conflict because this container stores one physical date tag";
+        return AG_UNSUPPORTED_FORMAT;
+    }
 
     AVFormatContext* input = nullptr;
-    if (avformat_open_input(&input, utf8_path.c_str(), nullptr, nullptr) < 0) {
+    if (open_metadata_demuxer(&input, utf8_path, nullptr) < 0) {
         error = "Input container cannot be opened";
         return AG_IO_ERROR;
     }
     const auto close_input = [&input] { avformat_close_input(&input); };
-    if (avformat_find_stream_info(input, nullptr) < 0) {
+    if (input->nb_programs > 0) {
         close_input();
-        error = "Input stream information cannot be read";
-        return AG_IO_ERROR;
+        error = "Input contains program structures that cannot be preserved losslessly";
+        return AG_UNSUPPORTED_FORMAT;
     }
     bool has_audio = false;
     for (unsigned int index = 0; index < input->nb_streams; ++index) {
-        if (input->streams[index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+        const AVStream* stream = input->streams[index];
+        const AVMediaType type = stream->codecpar->codec_type;
+        const bool attached_picture =
+            (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) != 0;
+        if (type == AVMEDIA_TYPE_AUDIO) {
             has_audio = true;
-            break;
+        }
+        if (type != AVMEDIA_TYPE_AUDIO && !attached_picture) {
+            close_input();
+            error = "Input contains non-audio structures that cannot be preserved losslessly";
+            return AG_UNSUPPORTED_FORMAT;
         }
     }
     if (!has_audio) {
@@ -667,9 +1078,13 @@ ag_result preflight_metadata_edit(const std::string& utf8_path,
     if (result == AG_INVALID_ARGUMENT) {
         report.error_code = MetadataErrorCode::InvalidEditPlan;
     } else if (result == AG_UNSUPPORTED_FORMAT) {
-        report.error_code = error.find("Cover art") != std::string::npos
-            ? MetadataErrorCode::UnsupportedCover
-            : MetadataErrorCode::UnsupportedContainer;
+        report.error_code = error.find("one physical date tag") != std::string::npos
+            ? MetadataErrorCode::PhysicalTagConflict
+            : error.find("Cover art") != std::string::npos
+                ? MetadataErrorCode::UnsupportedCover
+                : error.find("structures") != std::string::npos
+                    ? MetadataErrorCode::UnsupportedStructure
+                    : MetadataErrorCode::UnsupportedContainer;
     } else if (result != AG_OK) {
         if (error.find("read-only") != std::string::npos) {
             report.error_code = MetadataErrorCode::ReadOnlyFile;
@@ -695,7 +1110,7 @@ ag_result preflight_metadata_edit(const std::string& utf8_path,
         report.error_code = MetadataErrorCode::UnsupportedField;
     }
     AVFormatContext* input = nullptr;
-    if (avformat_open_input(&input, utf8_path.c_str(), nullptr, nullptr) >= 0
+    if (open_metadata_demuxer(&input, utf8_path, nullptr) >= 0
         && input != nullptr && input->iformat != nullptr) {
         report.container = input->iformat->name != nullptr
             ? input->iformat->name : "";
@@ -715,8 +1130,8 @@ std::optional<std::string>* update_slot(MetadataUpdate& update,
     case CanonicalField::Album: return &update.album;
     case CanonicalField::AlbumArtist: return &update.album_artist;
     case CanonicalField::Genre: return &update.genre;
-    case CanonicalField::Year:
-    case CanonicalField::Date: return &update.year;
+    case CanonicalField::Year: return &update.year;
+    case CanonicalField::Date: return &update.date;
     case CanonicalField::Composer: return &update.composer;
     case CanonicalField::Bpm: return &update.bpm;
     }
@@ -731,8 +1146,8 @@ const char* read_field(const ag_metadata* metadata, const CanonicalField field)
     case CanonicalField::Album: return ag_metadata_album(metadata);
     case CanonicalField::AlbumArtist: return ag_metadata_album_artist(metadata);
     case CanonicalField::Genre: return ag_metadata_genre(metadata);
-    case CanonicalField::Year:
-    case CanonicalField::Date: return ag_metadata_year(metadata);
+    case CanonicalField::Year: return ag_metadata_year(metadata);
+    case CanonicalField::Date: return ag_metadata_date(metadata);
     case CanonicalField::Composer: return ag_metadata_composer(metadata);
     case CanonicalField::Bpm: return ag_metadata_bpm_tag(metadata);
     }
@@ -838,12 +1253,28 @@ ag_result write_metadata_plan(const std::string& utf8_path,
         if (slot != nullptr) *slot = edit.action == MetadataAction::Clear
             ? std::string{} : *edit.value_utf8;
     }
+    const std::filesystem::path backup(source.native()
+        + std::filesystem::u8path(".agbak").native());
+    const std::string backup_nonce = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    ExistingBackupGuard existing_backup(backup, backup_nonce);
+    if (!existing_backup.valid()) {
+        result.message = "Failed to preserve existing backup before replacement";
+        result.error_code = MetadataErrorCode::AtomicReplaceFailed;
+        return AG_IO_ERROR;
+    }
     std::string error;
-    const ag_result write_result = write_metadata(utf8_path, update, error, &plan,
-                                                  cancel, test_hooks,
-                                                  &result.runtime);
+    const ag_result write_result = write_metadata_with_preserved_backup(
+        utf8_path, update, error, &plan, cancel, test_hooks,
+        &result.runtime, &existing_backup);
     if (write_result != AG_OK) {
+        const bool prior_backup_restored = existing_backup.restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
         result.message = error;
+        if (!prior_backup_restored) {
+            result.message += "; prior backup remains preserved at ";
+            result.message += existing_backup.preserved_path();
+        }
         result.error_code = metadata_error_code_for_write(write_result, error);
         if (write_result == AG_CANCELLED) {
             result.final_status = FileResultStatus::Cancelled;
@@ -855,26 +1286,57 @@ ag_result write_metadata_plan(const std::string& utf8_path,
         return write_result;
     }
 
-    const std::filesystem::path backup(source.native()
-        + std::filesystem::u8path(".agbak").native());
     const auto restore_original = [&]() {
+        if (test_hooks != nullptr && test_hooks->fail_source_restore) {
+            return false;
+        }
         std::error_code exists_error;
         return std::filesystem::exists(backup, exists_error) && !exists_error
             && atomic_replace(backup, source);
+    };
+    const auto recover_after_verification = [&](const char* success_message) {
+        if (restore_original()) {
+            const bool prior_backup_restored = existing_backup.restore(
+                test_hooks != nullptr && test_hooks->fail_backup_restore);
+            result.message = prior_backup_restored
+                ? success_message : "Verification failed and recovery was incomplete";
+            if (!prior_backup_restored) {
+                result.message += "; prior backup remains preserved at ";
+                result.message += existing_backup.preserved_path();
+            }
+            return prior_backup_restored;
+        }
+
+        const ExistingBackupGuard::FailedSourceRecovery recovery =
+            existing_backup.preserve_after_source_restore_failure(
+                test_hooks != nullptr && test_hooks->fail_backup_restore);
+        result.message = "Verification failed and recovery was incomplete";
+        if (!recovery.original_backup_path.empty()) {
+            result.message += "; original recovery backup remains at ";
+            result.message += recovery.original_backup_path;
+        } else {
+            result.message += "; original recovery backup path is unavailable";
+        }
+        if (!recovery.prior_backup_path.empty()) {
+            result.message += recovery.prior_backup_restored
+                ? "; prior backup restored at "
+                : "; prior backup remains preserved at ";
+            result.message += recovery.prior_backup_path;
+        }
+        return false;
     };
 
     // A replacement is only successful after reopening and reading back every
     // requested canonical field. The writer itself uses packet copy only.
     MetadataSnapshot after_snapshot;
     if (fail_at(test_hooks, MetadataFailurePoint::PostReplaceReadback)
-        || !read_metadata_snapshot(utf8_path, after_snapshot)) {
-        const bool restored = restore_original();
-        result.message = restored
-            ? "Verification failed: replacement cannot be reopened; original restored"
-            : "Verification failed and original could not be restored";
-        result.error_code = restored ? MetadataErrorCode::VerificationFailed
-                                     : MetadataErrorCode::AtomicReplaceFailed;
-        return restored ? AG_DECODE_ERROR : AG_IO_ERROR;
+        || !read_metadata_snapshot(utf8_path, after_snapshot, &result.runtime)) {
+        const bool recovered = recover_after_verification(
+            "Verification failed: replacement cannot be reopened; original restored");
+        result.error_code = recovered
+            ? MetadataErrorCode::VerificationFailed
+            : MetadataErrorCode::AtomicReplaceFailed;
+        return recovered ? AG_DECODE_ERROR : AG_IO_ERROR;
     }
     bool verified = true;
     std::size_t field_index = 0;
@@ -895,6 +1357,8 @@ ag_result write_metadata_plan(const std::string& utf8_path,
             verified = false;
         }
     }
+    verified = verified
+        && unmanaged_metadata_preserved(before_snapshot, after_snapshot, plan);
     const bool has_cover = !after_snapshot.cover.empty();
     result.cover.requested_action = plan.cover_action;
     result.cover.had_cover = had_cover;
@@ -913,16 +1377,15 @@ ag_result write_metadata_plan(const std::string& utf8_path,
             ? !has_cover : after_snapshot.covers == before_snapshot.covers;
     verified = verified && cover_verified;
     if (!verified) {
-        const bool restored = restore_original();
+        const bool recovered = recover_after_verification(
+            "Verification failed: metadata readback mismatch; original restored");
         result.used_stream_copy = true;
         result.audio_verified_unchanged = true;
         result.final_status = FileResultStatus::Failed;
-        result.error_code = restored ? MetadataErrorCode::VerificationFailed
-                                     : MetadataErrorCode::AtomicReplaceFailed;
-        result.message = restored
-            ? "Verification failed: metadata readback mismatch; original restored"
-            : "Verification failed and original could not be restored";
-        return restored ? AG_DECODE_ERROR : AG_IO_ERROR;
+        result.error_code = recovered
+            ? MetadataErrorCode::VerificationFailed
+            : MetadataErrorCode::AtomicReplaceFailed;
+        return recovered ? AG_DECODE_ERROR : AG_IO_ERROR;
     }
     result.used_stream_copy = true;
     result.audio_verified_unchanged = true;
@@ -931,6 +1394,7 @@ ag_result write_metadata_plan(const std::string& utf8_path,
     result.message = "Verified with packet stream copy";
     (void)before_size;
     (void)before_time;
+    existing_backup.discard();
     return AG_OK;
 }
 
@@ -944,16 +1408,15 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
 {
     const std::filesystem::path temp = filesystem_path_from_utf8(temp_path);
     AVFormatContext* in_ctx = nullptr;
-    if (avformat_open_input(&in_ctx, utf8_path.c_str(), nullptr, nullptr) < 0) {
+    if (open_metadata_demuxer(&in_ctx, utf8_path, runtime) < 0) {
         error = "Failed to open input file";
         return AG_IO_ERROR;
     }
-    if (avformat_find_stream_info(in_ctx, nullptr) < 0) {
+    if (!prime_audio_headers_without_codec(in_ctx)) {
         avformat_close_input(&in_ctx);
-        error = "Failed to find stream info";
-        return AG_DECODE_ERROR;
+        error = "Failed to read codec parameters without opening a decoder";
+        return AG_UNSUPPORTED_FORMAT;
     }
-
     AVFormatContext* out_ctx = nullptr;
     // Use the original path so FFmpeg guesses the output format from extension.
     const std::string muxer_name =
@@ -997,6 +1460,19 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
         av_dict_copy(&out_stream->metadata, in_stream->metadata, 0);
         if (attached_picture && in_stream->attached_pic.data != nullptr
             && in_stream->attached_pic.size > 0) {
+            if ((out_stream->codecpar->width <= 0
+                 || out_stream->codecpar->height == 0)
+                && !cover_dimensions(cover_mime_type(out_stream->codecpar->codec_id),
+                                     in_stream->attached_pic.data,
+                                     static_cast<std::size_t>(
+                                         in_stream->attached_pic.size),
+                                     out_stream->codecpar->width,
+                                     out_stream->codecpar->height)) {
+                avformat_close_input(&in_ctx);
+                cleanup_output(out_ctx);
+                error = "Failed to preserve cover dimensions without decoding";
+                return AG_UNSUPPORTED_FORMAT;
+            }
             if (av_packet_ref(&out_stream->attached_pic,
                               &in_stream->attached_pic) < 0) {
                 avformat_close_input(&in_ctx);
@@ -1084,16 +1560,110 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
     // from both format and stream dictionaries before one canonical value is
     // written, preventing duplicate/conflicting tags after remuxing.
     av_dict_copy(&out_ctx->metadata, in_ctx->metadata, 0);
-    const auto set_canonical_tag = [&out_ctx](
+    const std::string output_muxer = out_ctx->oformat != nullptr
+        && out_ctx->oformat->name != nullptr ? out_ctx->oformat->name : "";
+    if (test_hooks != nullptr && test_hooks->seed_preservation_fixture) {
+        if (output_muxer == "flac") {
+            av_dict_set(&out_ctx->metadata, "x-agplayer-private",
+                        "private-format-value", 0);
+        }
+        if (output_muxer == "mp3") {
+            av_dict_set(&out_ctx->metadata, "track", "3/12", 0);
+            av_dict_set(&out_ctx->metadata, "disc", "1/2", 0);
+            av_dict_set(&out_ctx->metadata, "comment", "Comment", 0);
+            av_dict_set(&out_ctx->metadata, "lyrics", "Lyrics", 0);
+            av_dict_set(&out_ctx->metadata, "copyright", "Copyright", 0);
+            av_dict_set(&out_ctx->metadata, "encoded_by", "AgPlayer", 0);
+        }
+        for (unsigned int index = 0; index < out_ctx->nb_streams; ++index) {
+            if (output_muxer == "ipod"
+                && out_ctx->streams[index]->codecpar->codec_type
+                    == AVMEDIA_TYPE_AUDIO) {
+                av_dict_set(&out_ctx->streams[index]->metadata,
+                            "language", "eng", 0);
+                break;
+            }
+        }
+
+        if (output_muxer == "mp3") {
+            AVChapter* chapter = static_cast<AVChapter*>(
+                av_mallocz(sizeof(*chapter)));
+            if (chapter == nullptr) {
+                avformat_close_input(&in_ctx);
+                cleanup_output(out_ctx);
+                error = "Failed to seed preservation test chapter";
+                return AG_INTERNAL_ERROR;
+            }
+            AVChapter** expanded = static_cast<AVChapter**>(av_realloc_array(
+                out_ctx->chapters, out_ctx->nb_chapters + 1U,
+                sizeof(*out_ctx->chapters)));
+            if (expanded == nullptr) {
+                av_free(chapter);
+                avformat_close_input(&in_ctx);
+                cleanup_output(out_ctx);
+                error = "Failed to seed preservation test chapter";
+                return AG_INTERNAL_ERROR;
+            }
+            out_ctx->chapters = expanded;
+            chapter->id = 42;
+            chapter->time_base = AVRational{1, 1'000};
+            chapter->start = 100;
+            chapter->end = 900;
+            av_dict_set(&chapter->metadata, "title", "Private Chapter", 0);
+            av_dict_set(&chapter->metadata, "x-agplayer-chapter-private",
+                        "private-chapter-value", 0);
+            out_ctx->chapters[out_ctx->nb_chapters++] = chapter;
+        }
+    }
+
+    if (fail_at(test_hooks,
+                MetadataFailurePoint::UnmanagedFormatMetadataDrop)) {
+        av_dict_set(&out_ctx->metadata, "x-agplayer-private", nullptr, 0);
+    }
+    if (fail_at(test_hooks,
+                MetadataFailurePoint::UnmanagedStreamMetadataDrop)) {
+        for (unsigned int index = 0; index < out_ctx->nb_streams; ++index) {
+            AVStream* stream = out_ctx->streams[index];
+            if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) != 0) {
+                av_dict_set(&stream->metadata, "title", nullptr, 0);
+                av_dict_set(&stream->metadata, "comment", nullptr, 0);
+            } else {
+                av_dict_set(&stream->metadata, "language", nullptr, 0);
+            }
+        }
+    }
+    if (fail_at(test_hooks, MetadataFailurePoint::ChapterDrop)
+        && out_ctx->nb_chapters > 0) {
+        AVChapter* chapter = out_ctx->chapters[out_ctx->nb_chapters - 1U];
+        av_dict_free(&chapter->metadata);
+        av_free(chapter);
+        --out_ctx->nb_chapters;
+    }
+    const auto set_canonical_tag = [&out_ctx, &output_muxer](
                                        const CanonicalField field,
                                        const std::optional<std::string>& value) {
         if (!value.has_value()) return;
-        clear_field_aliases(&out_ctx->metadata, field);
+        const bool shared_date = muxer_shares_year_date(output_muxer)
+            && (field == CanonicalField::Year || field == CanonicalField::Date);
+        const auto clear_dictionary = [field, shared_date](AVDictionary** dictionary) {
+            clear_field_aliases(dictionary, field);
+            if (shared_date) {
+                clear_field_aliases(dictionary, field == CanonicalField::Year
+                    ? CanonicalField::Date : CanonicalField::Year);
+            }
+        };
+        clear_dictionary(&out_ctx->metadata);
         for (unsigned int index = 0; index < out_ctx->nb_streams; ++index) {
-            clear_field_aliases(&out_ctx->streams[index]->metadata, field);
+            if (out_ctx->streams[index]->codecpar->codec_type
+                == AVMEDIA_TYPE_AUDIO) {
+                clear_dictionary(&out_ctx->streams[index]->metadata);
+            }
         }
         if (!value->empty()) {
-            av_dict_set(&out_ctx->metadata, canonical_key(field), value->c_str(), 0);
+            const CanonicalField physical_field = shared_date
+                ? CanonicalField::Date : field;
+            av_dict_set(&out_ctx->metadata, canonical_key(physical_field),
+                        value->c_str(), 0);
         }
     };
     set_canonical_tag(CanonicalField::Title, update.title);
@@ -1103,6 +1673,7 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
     set_canonical_tag(CanonicalField::Composer, update.composer);
     set_canonical_tag(CanonicalField::Bpm, update.bpm);
     set_canonical_tag(CanonicalField::Year, update.year);
+    set_canonical_tag(CanonicalField::Date, update.date);
     set_canonical_tag(CanonicalField::Genre, update.genre);
     const auto set_optional_tag = [&out_ctx](
                                       const char* key,
@@ -1261,13 +1832,15 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
     return AG_OK;
 }
 
-ag_result write_metadata(const std::string& utf8_path,
-                         const MetadataUpdate& update,
-                         std::string& error,
-                         const MetadataEditPlan* verification_plan,
-                         const std::atomic_bool* cancel,
-                         const MetadataWriterTestHooks* test_hooks,
-                         MetadataRuntimeMetrics* runtime)
+ag_result write_metadata_with_preserved_backup(
+    const std::string& utf8_path,
+    const MetadataUpdate& update,
+    std::string& error,
+    const MetadataEditPlan* verification_plan,
+    const std::atomic_bool* cancel,
+    const MetadataWriterTestHooks* test_hooks,
+    MetadataRuntimeMetrics* runtime,
+    ExistingBackupGuard* existing_backup)
 {
     if (runtime != nullptr) *runtime = {};
     const std::filesystem::path source = filesystem_path_from_utf8(utf8_path);
@@ -1291,7 +1864,7 @@ ag_result write_metadata(const std::string& utf8_path,
     };
     MetadataSnapshot source_snapshot;
     if (verification_plan != nullptr
-        && !read_metadata_snapshot(utf8_path, source_snapshot)) {
+        && !read_metadata_snapshot(utf8_path, source_snapshot, runtime)) {
         error = "Failed to read source metadata before staging";
         return AG_IO_ERROR;
     }
@@ -1313,9 +1886,9 @@ ag_result write_metadata(const std::string& utf8_path,
     AVFormatContext* verification = nullptr;
     const int open_result = fail_at(test_hooks, MetadataFailurePoint::Reprobe)
         ? AVERROR_INVALIDDATA
-        : avformat_open_input(&verification, staged_utf8.c_str(), nullptr, nullptr);
-    const int info_result = open_result < 0 ? open_result
-        : avformat_find_stream_info(verification, nullptr);
+        : open_metadata_demuxer(&verification, staged_utf8, runtime);
+    const int info_result = open_result < 0 || verification == nullptr
+        || verification->nb_streams == 0 ? AVERROR_INVALIDDATA : 0;
     avformat_close_input(&verification);
     if (open_result < 0 || info_result < 0) {
         clean_stage();
@@ -1324,7 +1897,8 @@ ag_result write_metadata(const std::string& utf8_path,
     }
     if (verification_plan != nullptr) {
         MetadataSnapshot staged_snapshot;
-        bool verified = read_metadata_snapshot(staged_utf8, staged_snapshot);
+        bool verified = read_metadata_snapshot(staged_utf8, staged_snapshot,
+                                               runtime);
         if (runtime != nullptr && verified) {
             runtime->audio_streams_after = staged_snapshot.audio_streams;
             runtime->chapters_after = staged_snapshot.chapters;
@@ -1347,7 +1921,9 @@ ag_result write_metadata(const std::string& utf8_path,
         verified = verified
             && staged_snapshot.audio_streams == source_snapshot.audio_streams
             && staged_snapshot.chapters == source_snapshot.chapters
-            && staged_snapshot.attachments == source_snapshot.attachments;
+            && staged_snapshot.attachments == source_snapshot.attachments
+            && unmanaged_metadata_preserved(source_snapshot, staged_snapshot,
+                                            *verification_plan);
         if (!verified) {
             clean_stage();
             error = "Verification failed: staged metadata differs from request";
@@ -1365,7 +1941,7 @@ ag_result write_metadata(const std::string& utf8_path,
             error = "Verification failed: staged cover differs from request";
             return AG_DECODE_ERROR;
         }
-        if (!audio_streams_equivalent(utf8_path, staged_utf8)) {
+        if (!audio_streams_equivalent(utf8_path, staged_utf8, runtime)) {
             clean_stage();
             error = "Verification failed: audio packet payload changed";
             return AG_DECODE_ERROR;
@@ -1386,22 +1962,48 @@ ag_result write_metadata(const std::string& utf8_path,
     }
     const std::filesystem::path backup = std::filesystem::path(source.native()
         + std::filesystem::u8path(".agbak").native());
+    std::optional<ExistingBackupGuard> owned_backup;
+    if (existing_backup == nullptr) {
+        owned_backup.emplace(backup, nonce);
+        existing_backup = &*owned_backup;
+        if (!existing_backup->valid()) {
+            clean_stage();
+            error = "Failed to preserve existing backup before replacement";
+            return AG_IO_ERROR;
+        }
+    }
     std::filesystem::copy_file(source, backup,
                                std::filesystem::copy_options::overwrite_existing, ec);
     if (ec || fail_at(test_hooks, MetadataFailurePoint::AtomicReplace)
         || !atomic_replace(staged, source)) {
         clean_stage();
-        if (std::filesystem::exists(source)) {
-            std::error_code backup_cleanup;
-            std::filesystem::remove(backup, backup_cleanup);
-        }
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
         error = ec ? "Failed to create backup before replacement"
                    : "Failed to atomically replace original file";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
         return AG_IO_ERROR;
     }
+    if (owned_backup.has_value()) existing_backup->discard();
     std::filesystem::remove(std::filesystem::path(staged.native()
                                 + std::filesystem::u8path(".agbak").native()), ec);
     return AG_OK;
+}
+
+ag_result write_metadata(const std::string& utf8_path,
+                         const MetadataUpdate& update,
+                         std::string& error,
+                         const MetadataEditPlan* verification_plan,
+                         const std::atomic_bool* cancel,
+                         const MetadataWriterTestHooks* test_hooks,
+                         MetadataRuntimeMetrics* runtime)
+{
+    return write_metadata_with_preserved_backup(
+        utf8_path, update, error, verification_plan, cancel, test_hooks,
+        runtime, nullptr);
 }
 
 } // namespace agplayer

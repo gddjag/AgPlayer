@@ -182,6 +182,7 @@ const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
                                        size_t* size,
                                        const char** mime_type);
 const char* ag_metadata_year(const ag_metadata* metadata);
+const char* ag_metadata_date(const ag_metadata* metadata);
 const char* ag_metadata_genre(const ag_metadata* metadata);
 const char* ag_metadata_lyrics(const ag_metadata* metadata);
 
@@ -305,6 +306,36 @@ ag_result ag_transcode_ex(const char* input_path,
 
 #define AG_TRANSCODE_REQUEST_V2_VERSION 2U
 
+typedef enum ag_metadata_edit_action {
+    AG_METADATA_EDIT_KEEP = 0,
+    AG_METADATA_EDIT_SET = 1,
+    AG_METADATA_EDIT_CLEAR = 2
+} ag_metadata_edit_action;
+
+typedef enum ag_metadata_field {
+    AG_METADATA_FIELD_TITLE = 0,
+    AG_METADATA_FIELD_ARTIST = 1,
+    AG_METADATA_FIELD_ALBUM = 2,
+    AG_METADATA_FIELD_ALBUM_ARTIST = 3,
+    AG_METADATA_FIELD_GENRE = 4,
+    AG_METADATA_FIELD_YEAR = 5,
+    AG_METADATA_FIELD_DATE = 6,
+    AG_METADATA_FIELD_COMPOSER = 7,
+    AG_METADATA_FIELD_BPM = 8
+} ag_metadata_field;
+
+typedef struct ag_metadata_field_edit {
+    ag_metadata_field field;
+    ag_metadata_edit_action action;
+    const char* value; /* Required only for AG_METADATA_EDIT_SET. */
+} ag_metadata_field_edit;
+
+typedef enum ag_metadata_cover_action {
+    AG_METADATA_COVER_KEEP = 0,
+    AG_METADATA_COVER_SET = 1,
+    AG_METADATA_COVER_CLEAR = 2
+} ag_metadata_cover_action;
+
 /* Versioned conversion request. struct_size and api_version must be set so
  * future fields can be appended without changing the older transcode ABI. */
 typedef struct ag_transcode_request_v2 {
@@ -322,6 +353,12 @@ typedef struct ag_transcode_request_v2 {
     int keep_cover;
     int bitrate_mode;
     int quality;
+    const ag_metadata_field_edit* metadata_fields;
+    size_t metadata_field_count;
+    ag_metadata_cover_action metadata_cover_action;
+    const unsigned char* metadata_cover_data;
+    size_t metadata_cover_size;
+    const char* metadata_cover_mime_type;
 } ag_transcode_request_v2;
 
 ag_result ag_transcode_v2(const char* input_path,

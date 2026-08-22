@@ -285,17 +285,15 @@ bool LibraryFilterModel::rowMatchesSearch(int sourceRow) const
     QAbstractItemModel* model = sourceModel();
     const QModelIndex idx = model->index(sourceRow, 0);
     const QString text = searchText_.toCaseFolded();
-    const QString title = model->data(idx, LibraryModel::TitleRole).toString().toCaseFolded();
-    if (title.contains(text)) {
-        return true;
-    }
-    const QString artist = model->data(idx, LibraryModel::ArtistRole).toString().toCaseFolded();
-    if (artist.contains(text)) {
-        return true;
-    }
-    const QString album = model->data(idx, LibraryModel::AlbumRole).toString().toCaseFolded();
-    if (album.contains(text)) {
-        return true;
+    constexpr LibraryModel::Role searchableRoles[]{
+        LibraryModel::TitleRole, LibraryModel::ArtistRole,
+        LibraryModel::AlbumRole, LibraryModel::AlbumArtistRole,
+        LibraryModel::GenreRole, LibraryModel::YearRole,
+        LibraryModel::DateRole, LibraryModel::ComposerRole};
+    for (const LibraryModel::Role role : searchableRoles) {
+        if (model->data(idx, role).toString().toCaseFolded().contains(text)) {
+            return true;
+        }
     }
     const QStringList tags = model->data(idx, LibraryModel::TagsRole).toStringList();
     return std::any_of(tags.cbegin(), tags.cend(), [&text](const QString& tag) {

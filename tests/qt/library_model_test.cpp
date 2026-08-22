@@ -90,6 +90,11 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     track.title = QStringLiteral("A");
     track.artist = QStringLiteral("Artist");
     track.album = QStringLiteral("Album");
+    track.albumArtist = QStringLiteral("Album Artist");
+    track.genre = QStringLiteral("City Pop");
+    track.year = QStringLiteral("2024");
+    track.date = QStringLiteral("2024-05-20");
+    track.composer = QStringLiteral("Composer");
     track.format = QStringLiteral("wav");
     track.sampleRate = 96000;
     track.bitDepth = 24;
@@ -108,6 +113,11 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(model.data(index, LibraryModel::TrackIdRole).toString(), track.trackId);
     QCOMPARE(model.data(index, LibraryModel::PathRole).toString(), track.path);
     QCOMPARE(model.data(index, LibraryModel::TitleRole).toString(), track.title);
+    QCOMPARE(model.data(index, LibraryModel::AlbumArtistRole).toString(), track.albumArtist);
+    QCOMPARE(model.data(index, LibraryModel::GenreRole).toString(), track.genre);
+    QCOMPARE(model.data(index, LibraryModel::YearRole).toString(), track.year);
+    QCOMPARE(model.data(index, LibraryModel::DateRole).toString(), track.date);
+    QCOMPARE(model.data(index, LibraryModel::ComposerRole).toString(), track.composer);
     QCOMPARE(model.data(index, LibraryModel::CoverUrlRole).toUrl(), track.coverUrl);
     QCOMPARE(model.data(index, LibraryModel::FavoriteRole).toBool(), track.favorite);
     QCOMPARE(model.data(index, LibraryModel::RatingRole).toInt(), track.rating);
@@ -119,6 +129,11 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(roles.value(LibraryModel::TitleRole), QByteArray("title"));
     QCOMPARE(roles.value(LibraryModel::ArtistRole), QByteArray("artist"));
     QCOMPARE(roles.value(LibraryModel::AlbumRole), QByteArray("album"));
+    QCOMPARE(roles.value(LibraryModel::AlbumArtistRole), QByteArray("albumArtist"));
+    QCOMPARE(roles.value(LibraryModel::GenreRole), QByteArray("genre"));
+    QCOMPARE(roles.value(LibraryModel::YearRole), QByteArray("year"));
+    QCOMPARE(roles.value(LibraryModel::DateRole), QByteArray("date"));
+    QCOMPARE(roles.value(LibraryModel::ComposerRole), QByteArray("composer"));
     QCOMPARE(roles.value(LibraryModel::FormatRole), QByteArray("format"));
     QCOMPARE(roles.value(LibraryModel::SampleRateRole), QByteArray("sampleRate"));
     QCOMPARE(roles.value(LibraryModel::BitDepthRole), QByteArray("bitDepth"));

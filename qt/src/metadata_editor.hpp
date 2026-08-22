@@ -24,6 +24,7 @@ struct MetadataEntry {
     QString album;
     QString albumArtist;
     QString year;
+    QString date;
     QString genre;
     QString track;
     QString disc;
@@ -39,6 +40,12 @@ struct MetadataEntry {
     bool hasCover = false;
     QString coverPreview;
     QString coverInfo;
+    QString coverFingerprint;
+    QString coverFileName;
+    QString coverMimeType;
+    int coverWidth = 0;
+    int coverHeight = 0;
+    qint64 coverSizeBytes = 0;
     bool hasError = false;
     QString error;
 };
@@ -88,6 +95,11 @@ public:
 
     Q_INVOKABLE void loadFiles(const QList<QUrl>& urls);
     Q_INVOKABLE QVariantMap entryAt(int index) const;
+    Q_INVOKABLE QVariantMap aggregateMetadata(const QList<int>& indices) const;
+    Q_INVOKABLE QVariantMap replacementCoverDetails() const
+    {
+        return replacementCoverDetails_;
+    }
     Q_INVOKABLE void removeFiles(const QList<int>& indices);
     Q_INVOKABLE void applyMetadata(const QVariantMap& fields,
                                    const QList<int>& indices);
@@ -141,6 +153,7 @@ private:
     QString coverPath_;
     QByteArray coverData_;
     QString coverMime_;
+    QVariantMap replacementCoverDetails_;
 
     void setBusy(bool value);
     void setProgress(double value);
@@ -150,5 +163,8 @@ private:
     void startApply(const QVariantMap& fields, const QList<int>& indices);
     void resetOperationState();
     void resetCover();
-    static QString mimeTypeForImage(const QString& path);
+    static QString mimeTypeForFormat(const QByteArray& format);
 };
+
+QVariantMap aggregate_metadata_entries(const QList<MetadataEntry>& entries,
+                                       const QList<int>& indices);

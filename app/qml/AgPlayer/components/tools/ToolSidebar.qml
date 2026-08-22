@@ -6,15 +6,16 @@ import AgPlayer
 Rectangle {
     id: navigation
     objectName: "audioToolsTopNav"
-    color: Theme.panel
-    border.color: Theme.border
+    property bool referenceWorkbench: false
+    color: referenceWorkbench ? "#071925" : Theme.panel
+    border.color: referenceWorkbench ? "#142b3a" : Theme.border
     border.width: 1
-    radius: Theme.radiusMd
+    radius: referenceWorkbench ? 0 : Theme.radiusMd
     implicitHeight: 55
 
     readonly property var toolNames: [
         qsTr("音频编辑"), qsTr("格式转换"),
-        qsTr("元数据修改"), qsTr("文件名处理")
+        qsTr("元数据编辑"), qsTr("文件名处理")
     ]
     property int currentTool: 0
     property Window window
@@ -22,23 +23,24 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.spacingLg
-        anchors.rightMargin: Theme.spacingLg
-        spacing: Theme.spacingSm
+        anchors.leftMargin: referenceWorkbench ? 20 : Theme.spacingLg
+        anchors.rightMargin: referenceWorkbench ? 20 : Theme.spacingLg
+        spacing: referenceWorkbench ? 0 : Theme.spacingSm
 
-        Item { Layout.fillWidth: true }
+        Item { Layout.fillWidth: !navigation.referenceWorkbench }
 
         Repeater {
             model: [
                 { name: qsTr("音频编辑"), icon: "equalizer-line" },
                 { name: qsTr("格式转换"), icon: "briefcase-4-line" },
-                { name: qsTr("元数据修改"), icon: "information-line" },
+                { name: qsTr("元数据编辑"), icon: "information-line" },
                 { name: qsTr("文件名处理"), icon: "file-copy-line" }
             ]
 
             Button {
+                id: navButton
                 objectName: "audioToolNavButton"
-                Layout.preferredWidth: 154
+                Layout.preferredWidth: navigation.referenceWorkbench ? 164 : 154
                 Layout.preferredHeight: 53
                 Layout.maximumHeight: 53
                 flat: true
@@ -58,7 +60,9 @@ Rectangle {
                     }
                     Text {
                         text: modelData.name
-                        color: checked ? Theme.primaryText : Theme.secondaryText
+                        color: checked && navigation.referenceWorkbench
+                               ? Theme.accent
+                               : checked ? Theme.primaryText : Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 15
                         font.weight: checked ? Font.DemiBold : Font.Normal
@@ -67,12 +71,23 @@ Rectangle {
                 }
 
                 background: Rectangle {
-                    color: checked ? Qt.rgba(Theme.accent.r,
-                                             Theme.accent.g,
-                                             Theme.accent.b, 0.14)
-                                   : (parent.hovered ? Theme.hoverSurface : "transparent")
+                    color: navigation.referenceWorkbench
+                           ? (checked ? "#0b2638"
+                              : navButton.hovered ? "#0a2130" : "transparent")
+                           : checked ? Qt.rgba(Theme.accent.r,
+                                               Theme.accent.g,
+                                               Theme.accent.b, 0.14)
+                                     : (navButton.hovered ? Theme.hoverSurface : "transparent")
                     border.width: 0
-                    radius: Theme.radiusMd
+                    radius: navigation.referenceWorkbench ? 0 : Theme.radiusMd
+                    Rectangle {
+                        visible: navigation.referenceWorkbench && navButton.checked
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 2
+                        color: Theme.accent
+                    }
                 }
 
                 onClicked: navigation.toolSelected(index)

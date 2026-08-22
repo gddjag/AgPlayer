@@ -6,9 +6,12 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QSaveFile>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -29,6 +32,62 @@ QString pathKey(const QString& path)
 QString copiedMetadata(const char* value)
 {
     return value == nullptr ? QString{} : QString::fromUtf8(value);
+}
+
+QString coverSuffix(const QString& mimeType)
+{
+    if (mimeType.compare(QStringLiteral("image/jpeg"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral(".jpg");
+    }
+    if (mimeType.compare(QStringLiteral("image/png"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral(".png");
+    }
+    if (mimeType.compare(QStringLiteral("image/webp"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral(".webp");
+    }
+    if (mimeType.compare(QStringLiteral("image/bmp"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral(".bmp");
+    }
+    return QStringLiteral(".bin");
+}
+
+QUrl cacheEmbeddedCover(const unsigned char* data,
+                        const std::size_t size,
+                        const QString& mimeType)
+{
+    if (data == nullptr || size == 0
+        || size > static_cast<std::size_t>(
+            (std::numeric_limits<qsizetype>::max)())) {
+        return {};
+    }
+    const QByteArray bytes(reinterpret_cast<const char*>(data),
+                           static_cast<qsizetype>(size));
+    const QStringList cacheRoots{
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation),
+        QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+            .filePath(QStringLiteral("AgPlayer"))};
+    QString coverDirectory;
+    for (const QString& cacheRoot : cacheRoots) {
+        if (cacheRoot.isEmpty()) continue;
+        const QString candidate = QDir(cacheRoot).filePath(QStringLiteral("covers"));
+        if (QDir().mkpath(candidate)) {
+            coverDirectory = candidate;
+            break;
+        }
+    }
+    if (coverDirectory.isEmpty()) return {};
+    const QString digest = QString::fromLatin1(
+        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    const QString coverPath = QDir(coverDirectory).filePath(
+        digest + coverSuffix(mimeType));
+    if (!QFileInfo::exists(coverPath)) {
+        QSaveFile output(coverPath);
+        if (!output.open(QIODevice::WriteOnly)
+            || output.write(bytes) != bytes.size() || !output.commit()) {
+            return {};
+        }
+    }
+    return QUrl::fromLocalFile(coverPath);
 }
 }
 
@@ -90,6 +149,16 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.artist;
     case AlbumRole:
         return track.album;
+    case AlbumArtistRole:
+        return track.albumArtist;
+    case GenreRole:
+        return track.genre;
+    case YearRole:
+        return track.year;
+    case DateRole:
+        return track.date;
+    case ComposerRole:
+        return track.composer;
     case FormatRole:
         return track.format;
     case SampleRateRole:
@@ -150,6 +219,11 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {TitleRole, "title"},
             {ArtistRole, "artist"},
             {AlbumRole, "album"},
+            {AlbumArtistRole, "albumArtist"},
+            {GenreRole, "genre"},
+            {YearRole, "year"},
+            {DateRole, "date"},
+            {ComposerRole, "composer"},
             {FormatRole, "format"},
             {SampleRateRole, "sampleRate"},
             {BitDepthRole, "bitDepth"},
@@ -570,6 +644,11 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
     track.title = copiedMetadata(ag_metadata_title(metadata));
     track.artist = copiedMetadata(ag_metadata_artist(metadata));
     track.album = copiedMetadata(ag_metadata_album(metadata));
+    track.albumArtist = copiedMetadata(ag_metadata_album_artist(metadata));
+    track.genre = copiedMetadata(ag_metadata_genre(metadata));
+    track.year = copiedMetadata(ag_metadata_year(metadata));
+    track.date = copiedMetadata(ag_metadata_date(metadata));
+    track.composer = copiedMetadata(ag_metadata_composer(metadata));
     track.format = copiedMetadata(ag_metadata_format(metadata));
     track.sampleRate = ag_metadata_sample_rate(metadata);
     track.bitDepth = ag_metadata_bits_per_sample(metadata);
@@ -580,18 +659,27 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
     const double bpm = copiedMetadata(ag_metadata_bpm_tag(metadata)).toDouble(&bpmOk);
     track.bpm = bpmOk && std::isfinite(bpm) ? bpm : 0.0;
     size_t coverSize = 0;
-    const unsigned char* cover = ag_metadata_cover(metadata, &coverSize, nullptr);
+    const char* coverMime = nullptr;
+    const unsigned char* cover = ag_metadata_cover(metadata, &coverSize, &coverMime);
     if (cover == nullptr || coverSize == 0) {
         track.coverUrl = {};
-    } else if (track.coverUrl.isValid()) {
-        QUrl refreshed = track.coverUrl;
-        refreshed.setQuery(QStringLiteral("v=%1").arg(QDateTime::currentMSecsSinceEpoch()));
-        track.coverUrl = refreshed;
+    } else {
+        const QUrl cached = cacheEmbeddedCover(
+            cover, coverSize, copiedMetadata(coverMime));
+        if (cached.isValid()) {
+            track.coverUrl = cached;
+        } else if (track.coverUrl.isValid()) {
+            QUrl refreshed = track.coverUrl;
+            refreshed.setQuery(
+                QStringLiteral("v=%1").arg(QDateTime::currentMSecsSinceEpoch()));
+            track.coverUrl = refreshed;
+        }
     }
     ag_metadata_destroy(metadata);
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed,
-                     {TitleRole, ArtistRole, AlbumRole, FormatRole,
+                     {TitleRole, ArtistRole, AlbumRole, AlbumArtistRole,
+                      GenreRole, YearRole, DateRole, ComposerRole, FormatRole,
                       SampleRateRole, BitDepthRole, BitRateRole, DurationMsRole,
                       FileSizeRole, CoverUrlRole, BpmRole});
     emit flushRequested();

@@ -17,6 +17,7 @@ extern "C" {
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -104,6 +105,291 @@ bool is_cancelled(const std::atomic_bool* cancelled) noexcept
 {
     return cancelled != nullptr
            && cancelled->load(std::memory_order_relaxed);
+}
+
+bool has_metadata_edits(const MetadataEditPlan& plan) noexcept
+{
+    return std::any_of(plan.fields.cbegin(), plan.fields.cend(),
+                       [](const FieldEdit& edit) {
+                           return edit.action != MetadataAction::Keep;
+                       })
+           || plan.cover_action != CoverAction::Keep;
+}
+
+ag_result count_attached_pictures(const std::string& input_path,
+                                  std::size_t& count,
+                                  std::string& error)
+{
+    count = 0;
+    AVFormatContext* input = nullptr;
+    if (avformat_open_input(&input, input_path.c_str(), nullptr, nullptr) < 0
+        || input == nullptr) {
+        avformat_close_input(&input);
+        error = "Failed to inspect source cover images";
+        return AG_IO_ERROR;
+    }
+    if (avformat_find_stream_info(input, nullptr) < 0) {
+        avformat_close_input(&input);
+        error = "Failed to inspect source cover images";
+        return AG_DECODE_ERROR;
+    }
+    for (unsigned int index = 0; index < input->nb_streams; ++index) {
+        const AVStream* stream = input->streams[index];
+        if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) != 0
+            && stream->attached_pic.data != nullptr
+            && stream->attached_pic.size > 0) {
+            ++count;
+        }
+    }
+    avformat_close_input(&input);
+    return AG_OK;
+}
+
+bool muxer_shares_year_date(const std::string_view muxer) noexcept
+{
+    return muxer == "wav" || muxer == "mp3" || muxer == "ipod"
+        || muxer == "mp4" || muxer == "mov"
+        || muxer.find("mov") != std::string_view::npos
+        || muxer.find("m4a") != std::string_view::npos;
+}
+
+const char* canonical_metadata_key(const CanonicalField field,
+                                   const bool shared_year_date) noexcept
+{
+    switch (field) {
+    case CanonicalField::Title: return "title";
+    case CanonicalField::Artist: return "artist";
+    case CanonicalField::Album: return "album";
+    case CanonicalField::AlbumArtist: return "album_artist";
+    case CanonicalField::Genre: return "genre";
+    case CanonicalField::Year: return shared_year_date ? "date" : "year";
+    case CanonicalField::Date: return "date";
+    case CanonicalField::Composer: return "composer";
+    case CanonicalField::Bpm: return "bpm";
+    }
+    return "";
+}
+
+AVCodecID cover_codec_id(const std::string_view mime_type) noexcept
+{
+    if (mime_type == "image/png") return AV_CODEC_ID_PNG;
+    if (mime_type == "image/bmp") return AV_CODEC_ID_BMP;
+    if (mime_type == "image/jpeg" || mime_type == "image/jpg") {
+        return AV_CODEC_ID_MJPEG;
+    }
+    return AV_CODEC_ID_NONE;
+}
+
+bool cover_dimensions(const MetadataEditPlan& plan, int& width, int& height)
+{
+    const unsigned char* data = plan.cover_data;
+    const std::size_t size = plan.cover_size;
+    if (data == nullptr || size < 10) return false;
+    const auto be32 = [data](const std::size_t offset) {
+        return (static_cast<unsigned int>(data[offset]) << 24U)
+            | (static_cast<unsigned int>(data[offset + 1]) << 16U)
+            | (static_cast<unsigned int>(data[offset + 2]) << 8U)
+            | static_cast<unsigned int>(data[offset + 3]);
+    };
+    if (plan.cover_mime_type == "image/png" && size >= 24
+        && std::memcmp(data, "\x89PNG\r\n\x1a\n", 8) == 0) {
+        width = static_cast<int>(be32(16));
+        height = static_cast<int>(be32(20));
+        return width > 0 && height > 0;
+    }
+    if ((plan.cover_mime_type == "image/jpeg"
+         || plan.cover_mime_type == "image/jpg")
+        && data[0] == 0xff && data[1] == 0xd8) {
+        for (std::size_t offset = 2; offset + 9 < size;) {
+            if (data[offset] != 0xff) {
+                ++offset;
+                continue;
+            }
+            const unsigned char marker = data[offset + 1];
+            if (marker == 0xd8 || marker == 0xd9) {
+                offset += 2;
+                continue;
+            }
+            if (offset + 4 >= size) break;
+            const std::size_t length =
+                (static_cast<std::size_t>(data[offset + 2]) << 8U)
+                | data[offset + 3];
+            if (marker >= 0xc0 && marker <= 0xc3 && offset + 8 < size) {
+                height = (static_cast<int>(data[offset + 5]) << 8)
+                    | data[offset + 6];
+                width = (static_cast<int>(data[offset + 7]) << 8)
+                    | data[offset + 8];
+                return width > 0 && height > 0;
+            }
+            if (length < 2 || offset + 2 + length > size) break;
+            offset += 2 + length;
+        }
+    }
+    if (plan.cover_mime_type == "image/bmp" && size >= 26
+        && data[0] == 'B' && data[1] == 'M') {
+        const auto le32 = [data](const std::size_t offset) {
+            return static_cast<unsigned int>(data[offset])
+                | (static_cast<unsigned int>(data[offset + 1]) << 8U)
+                | (static_cast<unsigned int>(data[offset + 2]) << 16U)
+                | (static_cast<unsigned int>(data[offset + 3]) << 24U);
+        };
+        width = static_cast<int>(le32(18));
+        height = static_cast<int>(le32(22));
+        return width > 0 && height != 0;
+    }
+    return false;
+}
+
+bool muxer_supports_field(const std::string_view muxer,
+                          const FieldEdit& edit) noexcept
+{
+    if (muxer == "wav") {
+        return edit.field == CanonicalField::Title
+            || edit.field == CanonicalField::Artist
+            || edit.field == CanonicalField::Album
+            || edit.field == CanonicalField::Genre
+            || edit.field == CanonicalField::Year
+            || edit.field == CanonicalField::Date;
+    }
+    if (muxer == "ipod" && edit.field == CanonicalField::Bpm
+        && edit.action == MetadataAction::Set) {
+        return false;
+    }
+    return muxer == "mp3" || muxer == "flac" || muxer == "ogg"
+        || muxer == "opus" || muxer == "ipod" || muxer == "mp4"
+        || muxer == "mov" || muxer == "asf";
+}
+
+void clear_metadata_aliases(AVDictionary** dictionary,
+                            const CanonicalField field)
+{
+    for (const char* alias : known_metadata_aliases(field)) {
+        av_dict_set(dictionary, alias, nullptr, 0);
+    }
+}
+
+void apply_metadata_plan(AVFormatContext* format,
+                         const MetadataEditPlan& plan)
+{
+    const std::string_view muxer = format->oformat != nullptr
+            && format->oformat->name != nullptr
+        ? format->oformat->name : "";
+    const bool shared_year_date = muxer_shares_year_date(muxer);
+    for (const FieldEdit& edit : plan.fields) {
+        if (edit.action == MetadataAction::Keep) continue;
+        clear_metadata_aliases(&format->metadata, edit.field);
+        if (shared_year_date && (edit.field == CanonicalField::Year
+                                 || edit.field == CanonicalField::Date)) {
+            clear_metadata_aliases(
+                &format->metadata,
+                edit.field == CanonicalField::Year
+                    ? CanonicalField::Date : CanonicalField::Year);
+        }
+        for (unsigned int index = 0; index < format->nb_streams; ++index) {
+            if (format->streams[index]->codecpar->codec_type
+                != AVMEDIA_TYPE_AUDIO) {
+                continue;
+            }
+            clear_metadata_aliases(&format->streams[index]->metadata,
+                                   edit.field);
+            if (shared_year_date && (edit.field == CanonicalField::Year
+                                     || edit.field == CanonicalField::Date)) {
+                clear_metadata_aliases(
+                    &format->streams[index]->metadata,
+                    edit.field == CanonicalField::Year
+                        ? CanonicalField::Date : CanonicalField::Year);
+            }
+        }
+        if (edit.action == MetadataAction::Set) {
+            av_dict_set(&format->metadata,
+                        canonical_metadata_key(edit.field, shared_year_date),
+                        edit.value_utf8->c_str(), 0);
+        }
+    }
+}
+
+const AVDictionaryEntry* find_metadata_alias(const AVDictionary* dictionary,
+                                             const CanonicalField field)
+{
+    for (const char* alias : known_metadata_aliases(field)) {
+        if (const AVDictionaryEntry* value =
+                av_dict_get(dictionary, alias, nullptr, 0);
+            value != nullptr) {
+            return value;
+        }
+    }
+    return nullptr;
+}
+
+ag_result verify_transcoded_metadata(const std::string& path,
+                                     const MetadataEditPlan& plan,
+                                     std::string& error)
+{
+    if (!has_metadata_edits(plan)) return AG_OK;
+    AVFormatContext* input = nullptr;
+    if (avformat_open_input(&input, path.c_str(), nullptr, nullptr) < 0
+        || input == nullptr || avformat_find_stream_info(input, nullptr) < 0) {
+        avformat_close_input(&input);
+        error = "Verification failed: metadata output cannot be reopened";
+        return AG_DECODE_ERROR;
+    }
+    const std::string_view muxer = input->iformat != nullptr
+            && input->iformat->name != nullptr
+        ? input->iformat->name : "";
+    const bool shared_year_date = muxer_shares_year_date(muxer);
+    const auto physical_alias = [shared_year_date](
+                                    const AVDictionary* dictionary,
+                                    const CanonicalField field) {
+        const AVDictionaryEntry* value = find_metadata_alias(dictionary, field);
+        if (value == nullptr && shared_year_date
+            && (field == CanonicalField::Year
+                || field == CanonicalField::Date)) {
+            value = find_metadata_alias(
+                dictionary, field == CanonicalField::Year
+                    ? CanonicalField::Date : CanonicalField::Year);
+        }
+        return value;
+    };
+    for (const FieldEdit& edit : plan.fields) {
+        if (edit.action == MetadataAction::Keep) continue;
+        const AVDictionaryEntry* actual = physical_alias(input->metadata,
+                                                         edit.field);
+        for (unsigned int index = 0; index < input->nb_streams; ++index) {
+            if (actual == nullptr) {
+                actual = physical_alias(input->streams[index]->metadata,
+                                        edit.field);
+            }
+        }
+        if ((edit.action == MetadataAction::Set
+             && (actual == nullptr || actual->value != *edit.value_utf8))
+            || (edit.action == MetadataAction::Clear && actual != nullptr)) {
+            avformat_close_input(&input);
+            error = "Verification failed: metadata readback mismatch";
+            return AG_DECODE_ERROR;
+        }
+    }
+
+    const AVPacket* cover = nullptr;
+    for (unsigned int index = 0; index < input->nb_streams; ++index) {
+        const AVStream* stream = input->streams[index];
+        if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) != 0
+            && stream->attached_pic.data != nullptr
+            && stream->attached_pic.size > 0) {
+            cover = &stream->attached_pic;
+            break;
+        }
+    }
+    const bool cover_matches = plan.cover_action == CoverAction::Set
+        ? cover != nullptr
+            && static_cast<std::size_t>(cover->size) == plan.cover_size
+            && std::memcmp(cover->data, plan.cover_data, plan.cover_size) == 0
+        : plan.cover_action == CoverAction::Clear ? cover == nullptr : true;
+    avformat_close_input(&input);
+    if (!cover_matches) {
+        error = "Verification failed: cover readback mismatch";
+        return AG_DECODE_ERROR;
+    }
+    return AG_OK;
 }
 
 // Pick the best sample format supported by the encoder. Falls back to FLTP
@@ -359,7 +645,41 @@ ag_result open_encoder(const std::string& output_path,
     }
     enc.stream->time_base = enc.ctx->time_base;
 
-    if (config.keep_cover) {
+    if (config.metadata_edit_plan.cover_action == CoverAction::Set) {
+        int width = 0;
+        int height = 0;
+        if (!cover_dimensions(config.metadata_edit_plan, width, height)) {
+            error = "Cover image cannot be decoded";
+            return AG_INVALID_ARGUMENT;
+        }
+        enc.cover_stream = avformat_new_stream(enc.fmt_ctx, nullptr);
+        if (enc.cover_stream == nullptr) {
+            error = "Failed to create the output cover stream";
+            return AG_INTERNAL_ERROR;
+        }
+        enc.cover_stream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+        enc.cover_stream->codecpar->codec_id = cover_codec_id(
+            config.metadata_edit_plan.cover_mime_type);
+        enc.cover_stream->codecpar->width = width;
+        enc.cover_stream->codecpar->height = height;
+        enc.cover_stream->disposition |= AV_DISPOSITION_ATTACHED_PIC;
+        enc.cover_stream->time_base = AVRational{1, 1'000};
+        if (av_new_packet(&enc.cover_stream->attached_pic,
+                          static_cast<int>(
+                              config.metadata_edit_plan.cover_size)) < 0) {
+            error = "Failed to allocate the output cover packet";
+            return AG_INTERNAL_ERROR;
+        }
+        std::memcpy(enc.cover_stream->attached_pic.data,
+                    config.metadata_edit_plan.cover_data,
+                    config.metadata_edit_plan.cover_size);
+        enc.cover_stream->attached_pic.stream_index = enc.cover_stream->index;
+        enc.cover_stream->attached_pic.flags |= AV_PKT_FLAG_KEY;
+        av_dict_set(&enc.cover_stream->metadata, "title", "Album cover", 0);
+        av_dict_set(&enc.cover_stream->metadata, "comment", "Cover (front)", 0);
+    } else if (config.keep_cover
+               && config.metadata_edit_plan.cover_action
+                      == CoverAction::Keep) {
         for (unsigned int index = 0; index < d.fmt_ctx->nb_streams; ++index) {
             const AVStream* source = d.fmt_ctx->streams[index];
             if (source->codecpar->codec_type != AVMEDIA_TYPE_VIDEO
@@ -620,13 +940,14 @@ ag_result run_transcode_pass(const std::string& input_path,
                      error);
     if (r != AG_OK) return r;
 
-    if (config.keep_metadata) {
+    if (config.keep_metadata || has_metadata_edits(config.metadata_edit_plan)) {
         av_dict_copy(&enc.fmt_ctx->metadata, dec.fmt_ctx->metadata, 0);
         av_dict_copy(
             &enc.stream->metadata,
             dec.fmt_ctx->streams[dec.stream_index]->metadata,
             0);
     }
+    apply_metadata_plan(enc.fmt_ctx, config.metadata_edit_plan);
 
     // Open output file.
     if (!(enc.fmt_ctx->oformat->flags & AVFMT_NOFILE)) {
@@ -701,9 +1022,10 @@ ag_result run_transcode_pass(const std::string& input_path,
         return AG_INTERNAL_ERROR;
     }
 
-    if (enc.cover_stream != nullptr && enc.input_cover_stream_index >= 0) {
-        AVStream* source_cover =
-            dec.fmt_ctx->streams[enc.input_cover_stream_index];
+    if (enc.cover_stream != nullptr) {
+        AVStream* source_cover = enc.input_cover_stream_index >= 0
+            ? dec.fmt_ctx->streams[enc.input_cover_stream_index]
+            : enc.cover_stream;
         AVPacket* cover = av_packet_clone(&source_cover->attached_pic);
         if (cover == nullptr || cover->size <= 0) {
             av_packet_free(&cover);
@@ -1140,6 +1462,83 @@ ag_result run_transcode_pass(const std::string& input_path,
 
 } // namespace
 
+ag_result preflight_transcode_metadata(const TranscodeConfig& config,
+                                       std::string& error)
+{
+    const MetadataEditPlan& plan = config.metadata_edit_plan;
+    if (!has_metadata_edits(plan)) {
+        error.clear();
+        return AG_OK;
+    }
+    if (!validate_metadata_edit_plan(plan, error)) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    AVFormatContext* output = nullptr;
+    const char* muxer_name = config.container_name.empty()
+        ? nullptr : config.container_name.c_str();
+    if (config.output_path.empty()
+        || avformat_alloc_output_context2(&output, nullptr, muxer_name,
+                                          config.output_path.c_str()) < 0
+        || output == nullptr || output->oformat == nullptr) {
+        avformat_free_context(output);
+        error = "Selected output muxer is unavailable";
+        return AG_UNSUPPORTED_FORMAT;
+    }
+    const std::string muxer = config.container_name.empty()
+        ? std::string(output->oformat->name != nullptr
+                          ? output->oformat->name : "")
+        : config.container_name;
+    for (const FieldEdit& edit : plan.fields) {
+        if (edit.action != MetadataAction::Keep
+            && !muxer_supports_field(muxer, edit)) {
+            avformat_free_context(output);
+            error = "Selected output muxer does not support a requested metadata field";
+            return AG_UNSUPPORTED_FORMAT;
+        }
+    }
+    const auto requested = [&plan](const CanonicalField field) {
+        return std::find_if(plan.fields.cbegin(), plan.fields.cend(),
+                            [field](const FieldEdit& edit) {
+                                return edit.field == field;
+                            });
+    };
+    const auto year = requested(CanonicalField::Year);
+    const auto date = requested(CanonicalField::Date);
+    const MetadataAction year_action = year == plan.fields.cend()
+        ? MetadataAction::Keep : year->action;
+    const MetadataAction date_action = date == plan.fields.cend()
+        ? MetadataAction::Keep : date->action;
+    if (muxer_shares_year_date(muxer)
+        && (year_action != MetadataAction::Keep
+            || date_action != MetadataAction::Keep)
+        && (year_action != date_action
+            || (year_action == MetadataAction::Set
+                && year->value_utf8 != date->value_utf8))) {
+        avformat_free_context(output);
+        error = "Year and date conflict because this muxer stores one physical date tag; Keep cannot preserve the other logical field";
+        return AG_UNSUPPORTED_FORMAT;
+    }
+    if (plan.cover_action == CoverAction::Set) {
+        int width = 0;
+        int height = 0;
+        const AVCodecID codec_id = cover_codec_id(plan.cover_mime_type);
+        const bool cover_muxer = muxer == "mp3" || muxer == "flac"
+            || muxer == "ipod" || muxer == "mp4" || muxer == "mov";
+        if (!cover_muxer || codec_id == AV_CODEC_ID_NONE
+            || !cover_dimensions(plan, width, height)
+            || avformat_query_codec(output->oformat, codec_id,
+                                    FF_COMPLIANCE_NORMAL) <= 0) {
+            avformat_free_context(output);
+            error = "Selected output muxer does not support this cover image";
+            return AG_UNSUPPORTED_FORMAT;
+        }
+    }
+    avformat_free_context(output);
+    error.clear();
+    return AG_OK;
+}
+
 ag_result transcode(const std::string& input_path,
                     const TranscodeConfig& config,
                     const std::atomic_bool* cancelled,
@@ -1159,6 +1558,9 @@ ag_result transcode(const std::string& input_path,
         error = "Input and output path must be different";
         return AG_INVALID_ARGUMENT;
     }
+    const ag_result metadata_preflight =
+        preflight_transcode_metadata(config, error);
+    if (metadata_preflight != AG_OK) return metadata_preflight;
 
     const fs::path final_output = path_from_utf8(config.output_path);
     const fs::path staged_output = make_staging_path(final_output);
@@ -1174,6 +1576,18 @@ ag_result transcode(const std::string& input_path,
     if (probe_transcode_input(input_path, source_probe, probe_error) != AG_OK) {
         error = std::move(probe_error);
         return AG_DECODE_ERROR;
+    }
+    if (staged_config.keep_cover
+        && staged_config.metadata_edit_plan.cover_action == CoverAction::Keep
+        && source_probe.has_cover) {
+        std::size_t attached_picture_count = 0;
+        const ag_result cover_probe_result = count_attached_pictures(
+            input_path, attached_picture_count, error);
+        if (cover_probe_result != AG_OK) return cover_probe_result;
+        if (attached_picture_count > 1U) {
+            error = "Cover Keep cannot preserve multiple attached pictures";
+            return AG_UNSUPPORTED_FORMAT;
+        }
     }
     if (staged_config.stage_callback) {
         staged_config.stage_callback("probing");
@@ -1237,10 +1651,19 @@ ag_result transcode(const std::string& input_path,
                                           && muxer_key != ".aac"
                                           && muxer_key != "wav"
                                           && muxer_key != ".wav";
-    verification_plan.expect_metadata = staged_config.keep_metadata
-                                        && output_supports_metadata;
-    verification_plan.expect_cover = staged_config.keep_cover
-        && source_probe.has_cover && output_supports_metadata;
+    const bool sets_metadata = std::any_of(
+        staged_config.metadata_edit_plan.fields.cbegin(),
+        staged_config.metadata_edit_plan.fields.cend(),
+        [](const FieldEdit& edit) {
+            return edit.action == MetadataAction::Set;
+        });
+    verification_plan.expect_metadata =
+        (staged_config.keep_metadata || sets_metadata)
+        && output_supports_metadata;
+    verification_plan.expect_cover =
+        staged_config.metadata_edit_plan.cover_action == CoverAction::Set
+        || (staged_config.keep_cover && source_probe.has_cover
+            && output_supports_metadata);
     TranscodeVerificationResult verification_result;
     const ag_result verify_result = verify_transcoded_output(
         staged_config.output_path, verification_plan, verification_result,
@@ -1249,6 +1672,13 @@ ag_result transcode(const std::string& input_path,
         std::error_code remove_error;
         fs::remove(staged_output, remove_error);
         return verify_result;
+    }
+    const ag_result metadata_verify_result = verify_transcoded_metadata(
+        staged_config.output_path, staged_config.metadata_edit_plan, error);
+    if (metadata_verify_result != AG_OK) {
+        std::error_code remove_error;
+        fs::remove(staged_output, remove_error);
+        return metadata_verify_result;
     }
 
     if (staged_config.stage_callback) {

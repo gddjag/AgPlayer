@@ -2,6 +2,8 @@
 
 #include <agplayer/c_api.h>
 
+#include "metadata_writer.hpp"
+
 #include <atomic>
 #include <functional>
 #include <string>
@@ -30,8 +32,14 @@ struct TranscodeConfig {
     bool keep_cover = false;
     bool variable_bit_rate = false;
     int quality = 75;
+    MetadataEditPlan metadata_edit_plan;
     std::function<void(std::string_view)> stage_callback;
 };
+
+// Validates canonical edits against the explicitly selected output muxer.
+// This does not create or open an output file and must run before encoding.
+ag_result preflight_transcode_metadata(const TranscodeConfig& config,
+                                       std::string& error);
 
 // Transcode a single audio file. progress_callback receives a fraction in
 // [0.0, 1.0] based on processed duration. cancelled (may be null) is polled

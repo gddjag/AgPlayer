@@ -15,6 +15,7 @@ extern "C" {
 #include <cerrno>
 #include <climits>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <new>
 #include <utility>
@@ -23,6 +24,180 @@ extern "C" {
 
 namespace agplayer {
 namespace {
+
+constexpr std::size_t kMaxProbeTagBytes = 4U * 1024U * 1024U;
+constexpr std::size_t kMaxProbeCoverBytes = 32U * 1024U * 1024U;
+constexpr int kMaxMetadataProbePackets = 32;
+
+bool format_uses_shared_year_date(const AVFormatContext* context) noexcept
+{
+    const char* name = context != nullptr && context->iformat != nullptr
+        ? context->iformat->name : nullptr;
+    if (name == nullptr) return false;
+    const std::string formats(name);
+    return formats.find("mp3") != std::string::npos
+        || formats.find("wav") != std::string::npos
+        || formats.find("mov") != std::string::npos
+        || formats.find("mp4") != std::string::npos
+        || formats.find("m4a") != std::string::npos;
+}
+
+int first_audio_stream(const AVFormatContext* context) noexcept
+{
+    if (context == nullptr) return -1;
+    for (unsigned int index = 0; index < context->nb_streams; ++index) {
+        if (context->streams[index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+void recover_flac_stream_info(AVCodecParameters* parameters) noexcept
+{
+    if (parameters == nullptr || parameters->codec_id != AV_CODEC_ID_FLAC
+        || parameters->extradata == nullptr || parameters->extradata_size < 34) {
+        return;
+    }
+    const unsigned char* stream_info = parameters->extradata;
+    int remaining = parameters->extradata_size;
+    if (remaining >= 42 && std::memcmp(stream_info, "fLaC", 4) == 0) {
+        stream_info += 8;
+        remaining -= 8;
+    } else if (remaining >= 38 && (stream_info[0] & 0x7fU) == 0
+               && stream_info[1] == 0 && stream_info[2] == 0
+               && stream_info[3] == 34) {
+        stream_info += 4;
+        remaining -= 4;
+    }
+    if (remaining < 34) return;
+    const int sample_rate = (static_cast<int>(stream_info[10]) << 12)
+        | (static_cast<int>(stream_info[11]) << 4)
+        | (static_cast<int>(stream_info[12]) >> 4);
+    const int channels = ((stream_info[12] >> 1) & 0x07) + 1;
+    const int bits_per_sample = ((stream_info[12] & 0x01) << 4)
+        | (stream_info[13] >> 4);
+    if (sample_rate > 0 && parameters->sample_rate <= 0) {
+        parameters->sample_rate = sample_rate;
+    }
+    if (channels > 0 && parameters->ch_layout.nb_channels <= 0) {
+        av_channel_layout_default(&parameters->ch_layout, channels);
+    }
+    if (parameters->bits_per_raw_sample <= 0) {
+        parameters->bits_per_raw_sample = bits_per_sample + 1;
+    }
+}
+
+void recover_adts_stream_info(AVCodecParameters* parameters,
+                              const AVPacket* packet) noexcept
+{
+    static constexpr int sample_rates[] = {
+        96'000, 88'200, 64'000, 48'000, 44'100, 32'000, 24'000,
+        22'050, 16'000, 12'000, 11'025, 8'000, 7'350,
+    };
+    if (parameters == nullptr || packet == nullptr || packet->data == nullptr
+        || packet->size < 7 || parameters->codec_id != AV_CODEC_ID_AAC
+        || packet->data[0] != 0xff || (packet->data[1] & 0xf6U) != 0xf0U) {
+        return;
+    }
+    const int rate_index = (packet->data[2] >> 2) & 0x0f;
+    const int channels = ((packet->data[2] & 0x01) << 2)
+        | ((packet->data[3] >> 6) & 0x03);
+    if (rate_index < static_cast<int>(std::size(sample_rates))
+        && parameters->sample_rate <= 0) {
+        parameters->sample_rate = sample_rates[rate_index];
+    }
+    if (channels > 0 && parameters->ch_layout.nb_channels <= 0) {
+        av_channel_layout_default(&parameters->ch_layout, channels);
+    }
+}
+
+int discover_audio_stream_without_codec(AVFormatContext* context,
+                                        std::int64_t& observed_duration_ms) noexcept
+{
+    observed_duration_ms = 0;
+    int audio_index = first_audio_stream(context);
+    if (audio_index >= 0) {
+        recover_flac_stream_info(context->streams[audio_index]->codecpar);
+    }
+    const auto ready = [context](const int index) noexcept {
+        if (index < 0) return false;
+        const AVCodecParameters* parameters = context->streams[index]->codecpar;
+        return parameters->codec_id != AV_CODEC_ID_NONE
+            && parameters->sample_rate > 0
+            && parameters->ch_layout.nb_channels > 0;
+    };
+    const auto duration_ready = [context](const int index) noexcept {
+        if (index >= 0) {
+            const AVStream* stream = context->streams[index];
+            if (stream->duration > 0 && stream->duration != AV_NOPTS_VALUE) {
+                return true;
+            }
+        }
+        return context->duration > 0 && context->duration != AV_NOPTS_VALUE;
+    };
+    if (ready(audio_index) && duration_ready(audio_index)) return audio_index;
+    AVPacket* packet = av_packet_alloc();
+    if (packet == nullptr) return AVERROR(ENOMEM);
+    int read_result = 0;
+    std::int64_t accumulated_duration_ms = 0;
+    std::int64_t observed_packet_bytes = 0;
+    for (int count = 0; count < kMaxMetadataProbePackets
+         && !(ready(audio_index) && duration_ready(audio_index));
+         ++count) {
+        read_result = av_read_frame(context, packet);
+        if (read_result < 0) break;
+        if (audio_index < 0) audio_index = first_audio_stream(context);
+        if (audio_index >= 0) {
+            AVStream* stream = context->streams[audio_index];
+            recover_flac_stream_info(stream->codecpar);
+            if (packet->stream_index == audio_index) {
+                recover_adts_stream_info(stream->codecpar, packet);
+                std::int64_t packet_duration_ms = packet->duration > 0
+                    ? av_rescale_q(packet->duration, stream->time_base,
+                                   AVRational{1, 1'000})
+                    : 0;
+                if (packet_duration_ms <= 0
+                    && stream->codecpar->codec_id == AV_CODEC_ID_AAC
+                    && stream->codecpar->sample_rate > 0) {
+                    packet_duration_ms = std::max<std::int64_t>(
+                        1, av_rescale(1'024, 1'000,
+                                     stream->codecpar->sample_rate));
+                }
+                accumulated_duration_ms += packet_duration_ms;
+                observed_packet_bytes += packet->size;
+                const std::int64_t timestamp = packet->pts != AV_NOPTS_VALUE
+                    ? packet->pts : packet->dts;
+                if (timestamp != AV_NOPTS_VALUE) {
+                    const std::int64_t start = stream->start_time != AV_NOPTS_VALUE
+                        ? stream->start_time : 0;
+                    observed_duration_ms = std::max(
+                        observed_duration_ms,
+                        av_rescale_q(timestamp - start + packet->duration,
+                                     stream->time_base, AVRational{1, 1'000}));
+                } else {
+                    observed_duration_ms = std::max(observed_duration_ms,
+                                                    accumulated_duration_ms);
+                }
+            }
+        }
+        av_packet_unref(packet);
+    }
+    av_packet_free(&packet);
+    if (accumulated_duration_ms > 0) {
+        observed_duration_ms = std::max(observed_duration_ms,
+                                        accumulated_duration_ms);
+        const std::int64_t file_size = context->pb != nullptr
+            ? avio_size(context->pb) : 0;
+        if (file_size > observed_packet_bytes && observed_packet_bytes > 0) {
+            observed_duration_ms = std::max(
+                observed_duration_ms,
+                av_rescale(file_size, accumulated_duration_ms,
+                           observed_packet_bytes));
+        }
+    }
+    return audio_index;
+}
 
 ag_result map_open_error(const int error) noexcept
 {
@@ -59,6 +234,41 @@ std::string read_lyrics(AVDictionary* preferred, AVDictionary* fallback)
     return "";
 }
 
+std::string read_tag_limited(AVDictionary* preferred,
+                             AVDictionary* fallback,
+                             const char* key,
+                             std::size_t& remaining,
+                             bool& limit_exceeded)
+{
+    const AVDictionaryEntry* entry = av_dict_get(preferred, key, nullptr, 0);
+    if (entry == nullptr) {
+        entry = av_dict_get(fallback, key, nullptr, 0);
+    }
+    if (entry == nullptr || entry->value == nullptr) return {};
+    std::size_t length = 0;
+    while (length <= remaining && entry->value[length] != '\0') ++length;
+    if (length > remaining) {
+        limit_exceeded = true;
+        return {};
+    }
+    remaining -= length;
+    return std::string(entry->value, length);
+}
+
+std::string read_lyrics_limited(AVDictionary* preferred,
+                                AVDictionary* fallback,
+                                std::size_t& remaining,
+                                bool& limit_exceeded)
+{
+    static constexpr const char* keys[] = {"lyrics", "LYRICS", "USLT"};
+    for (const char* key : keys) {
+        const std::string value = read_tag_limited(
+            preferred, fallback, key, remaining, limit_exceeded);
+        if (limit_exceeded || !value.empty()) return value;
+    }
+    return {};
+}
+
 const char* image_mime_type(const AVCodecID codec_id) noexcept
 {
     switch (codec_id) {
@@ -76,84 +286,113 @@ const char* image_mime_type(const AVCodecID codec_id) noexcept
 } // namespace
 
 ag_result probe_media_metadata(const std::string& utf8_path,
-                               MediaMetadata& metadata) noexcept
+                               MediaMetadata& metadata,
+                               const MediaMetadataProbeTestHooks* test_hooks) noexcept
 {
     metadata = {};
-    if (utf8_path.empty()) return AG_INVALID_ARGUMENT;
     AVFormatContext* context = nullptr;
-    const int open_result = avformat_open_input(&context, utf8_path.c_str(),
-                                                nullptr, nullptr);
-    if (open_result < 0) return map_open_error(open_result);
-    const auto close = [&context]() { avformat_close_input(&context); };
-    if (avformat_find_stream_info(context, nullptr) < 0) {
-        close();
-        return AG_UNSUPPORTED_FORMAT;
-    }
-    const int audio_index = av_find_best_stream(context, AVMEDIA_TYPE_AUDIO,
-                                                -1, -1, nullptr, 0);
-    if (audio_index < 0) {
-        close();
-        return AG_UNSUPPORTED_FORMAT;
-    }
-    const AVStream* audio_stream = context->streams[audio_index];
-    const AVCodecParameters* parameters = audio_stream->codecpar;
-    const auto read_canonical = [audio_stream, context](
-                                    const CanonicalField field) {
-        for (const char* alias : known_metadata_aliases(field)) {
-            const std::string value = read_tag(audio_stream->metadata,
-                                               context->metadata, alias);
-            if (!value.empty()) return value;
+    try {
+        if (test_hooks != nullptr && test_hooks->throw_allocation_failure) {
+            throw std::bad_alloc{};
         }
-        return std::string{};
-    };
-    metadata.title = read_canonical(CanonicalField::Title);
-    metadata.artist = read_canonical(CanonicalField::Artist);
-    metadata.album = read_canonical(CanonicalField::Album);
-    metadata.album_artist = read_canonical(CanonicalField::AlbumArtist);
-    metadata.track = read_tag(audio_stream->metadata, context->metadata, "track");
-    metadata.disc = read_tag(audio_stream->metadata, context->metadata, "disc");
-    metadata.composer = read_canonical(CanonicalField::Composer);
-    metadata.comment = read_tag(audio_stream->metadata, context->metadata, "comment");
-    metadata.bpm = read_canonical(CanonicalField::Bpm);
-    metadata.copyright = read_tag(audio_stream->metadata, context->metadata,
-                                  "copyright");
-    metadata.encoder = read_tag(audio_stream->metadata, context->metadata,
-                                "encoded_by");
-    if (metadata.encoder.empty()) {
-        metadata.encoder = read_tag(audio_stream->metadata, context->metadata,
-                                    "encoder");
-    }
-    metadata.year = read_canonical(CanonicalField::Year);
-    metadata.genre = read_canonical(CanonicalField::Genre);
-    metadata.lyrics = read_lyrics(audio_stream->metadata, context->metadata);
-    metadata.format = context->iformat != nullptr && context->iformat->name != nullptr
-        ? context->iformat->name : "";
-    metadata.sample_rate = parameters->sample_rate;
-    metadata.channels = parameters->ch_layout.nb_channels;
-    metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
-        ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
-    metadata.bit_rate = parameters->bit_rate > 0
-        ? parameters->bit_rate : context->bit_rate;
-    if (audio_stream->duration > 0 && audio_stream->duration != AV_NOPTS_VALUE) {
-        metadata.duration_ms = av_rescale_q(audio_stream->duration,
-            audio_stream->time_base, AVRational{1, 1'000});
-    } else if (context->duration > 0 && context->duration != AV_NOPTS_VALUE) {
-        metadata.duration_ms = av_rescale_q(context->duration,
-            AVRational{1, AV_TIME_BASE}, AVRational{1, 1'000});
-    }
-    for (unsigned int index = 0; index < context->nb_streams; ++index) {
-        const AVStream* stream = context->streams[index];
-        if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0
-            || stream->attached_pic.data == nullptr || stream->attached_pic.size <= 0) {
-            continue;
+        if (utf8_path.empty()) return AG_INVALID_ARGUMENT;
+        const int open_result = avformat_open_input(&context, utf8_path.c_str(),
+                                                    nullptr, nullptr);
+        if (open_result < 0) return map_open_error(open_result);
+        const auto finish = [&context](const ag_result result) noexcept {
+            avformat_close_input(&context);
+            return result;
+        };
+        std::int64_t observed_duration_ms = 0;
+        const int audio_index = discover_audio_stream_without_codec(
+            context, observed_duration_ms);
+        if (audio_index < 0) return finish(AG_UNSUPPORTED_FORMAT);
+        const AVStream* audio_stream = context->streams[audio_index];
+        const AVCodecParameters* parameters = audio_stream->codecpar;
+        std::size_t tag_budget = kMaxProbeTagBytes;
+        bool tag_limit_exceeded = false;
+        const auto read_limited = [audio_stream, context, &tag_budget,
+                                   &tag_limit_exceeded](const char* key) {
+            return read_tag_limited(audio_stream->metadata, context->metadata,
+                                    key, tag_budget, tag_limit_exceeded);
+        };
+        const auto read_canonical = [&read_limited, &tag_limit_exceeded](
+                                        const CanonicalField field) {
+            for (const char* alias : known_metadata_aliases(field)) {
+                const std::string value = read_limited(alias);
+                if (tag_limit_exceeded || !value.empty()) return value;
+            }
+            return std::string{};
+        };
+        metadata.title = read_canonical(CanonicalField::Title);
+        metadata.artist = read_canonical(CanonicalField::Artist);
+        metadata.album = read_canonical(CanonicalField::Album);
+        metadata.album_artist = read_canonical(CanonicalField::AlbumArtist);
+        metadata.track = read_limited("track");
+        metadata.disc = read_limited("disc");
+        metadata.composer = read_canonical(CanonicalField::Composer);
+        metadata.comment = read_limited("comment");
+        metadata.bpm = read_canonical(CanonicalField::Bpm);
+        metadata.copyright = read_limited("copyright");
+        metadata.encoder = read_limited("encoded_by");
+        if (metadata.encoder.empty() && !tag_limit_exceeded) {
+            metadata.encoder = read_limited("encoder");
         }
-        metadata.cover.assign(stream->attached_pic.data,
-                              stream->attached_pic.data + stream->attached_pic.size);
-        metadata.cover_mime_type = image_mime_type(stream->codecpar->codec_id);
-        break;
+        metadata.year = read_canonical(CanonicalField::Year);
+        metadata.date = read_canonical(CanonicalField::Date);
+        if (format_uses_shared_year_date(context)) {
+            const std::string shared = !metadata.date.empty()
+                ? metadata.date : metadata.year;
+            metadata.year = shared;
+            metadata.date = shared;
+        }
+        metadata.genre = read_canonical(CanonicalField::Genre);
+        metadata.lyrics = read_lyrics_limited(audio_stream->metadata,
+                                              context->metadata, tag_budget,
+                                              tag_limit_exceeded);
+        if (tag_limit_exceeded) return finish(AG_UNSUPPORTED_FORMAT);
+        metadata.format = context->iformat != nullptr
+            && context->iformat->name != nullptr ? context->iformat->name : "";
+        metadata.sample_rate = parameters->sample_rate;
+        metadata.channels = parameters->ch_layout.nb_channels;
+        metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
+            ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
+        metadata.bit_rate = parameters->bit_rate > 0
+            ? parameters->bit_rate : context->bit_rate;
+        if (audio_stream->duration > 0
+            && audio_stream->duration != AV_NOPTS_VALUE) {
+            metadata.duration_ms = av_rescale_q(audio_stream->duration,
+                audio_stream->time_base, AVRational{1, 1'000});
+        } else if (context->duration > 0
+                   && context->duration != AV_NOPTS_VALUE) {
+            metadata.duration_ms = av_rescale_q(context->duration,
+                AVRational{1, AV_TIME_BASE}, AVRational{1, 1'000});
+        } else {
+            metadata.duration_ms = observed_duration_ms;
+        }
+        for (unsigned int index = 0; index < context->nb_streams; ++index) {
+            const AVStream* stream = context->streams[index];
+            if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0
+                || stream->attached_pic.data == nullptr
+                || stream->attached_pic.size <= 0) {
+                continue;
+            }
+            if (static_cast<std::size_t>(stream->attached_pic.size)
+                > kMaxProbeCoverBytes) {
+                return finish(AG_UNSUPPORTED_FORMAT);
+            }
+            metadata.cover.assign(
+                stream->attached_pic.data,
+                stream->attached_pic.data + stream->attached_pic.size);
+            metadata.cover_mime_type = image_mime_type(stream->codecpar->codec_id);
+            break;
+        }
+        return finish(AG_OK);
+    } catch (...) {
+        avformat_close_input(&context);
+        metadata = {};
+        return AG_INTERNAL_ERROR;
     }
-    close();
-    return AG_OK;
 }
 
 class Decoder::Impl final {
@@ -464,8 +703,17 @@ private:
                                          "encoder");
         }
         metadata_.year = read_tag(audio_stream.metadata,
-                                  format_context_->metadata,
-                                  "date");
+                                   format_context_->metadata,
+                                   "year");
+        metadata_.date = read_tag(audio_stream.metadata,
+                                   format_context_->metadata,
+                                   "date");
+        if (format_uses_shared_year_date(format_context_)) {
+            const std::string shared = !metadata_.date.empty()
+                ? metadata_.date : metadata_.year;
+            metadata_.year = shared;
+            metadata_.date = shared;
+        }
         metadata_.genre = read_tag(audio_stream.metadata,
                                    format_context_->metadata,
                                    "genre");

@@ -56,8 +56,9 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s
 }
 if ($toolsNavigation -notmatch 'objectName:\s*"audioToolsTopNav"' -or
     $toolsNavigation -notmatch 'RowLayout' -or
-    $toolsNavigation -notmatch 'radius:\s*Theme\.radiusMd') {
-    throw 'The four audio tools must remain in the selected top horizontal pill navigation.'
+    $toolsNavigation -notmatch 'radius:\s*referenceWorkbench\s*\?\s*0\s*:\s*Theme\.radiusMd' -or
+    $toolsNavigation -notmatch 'visible:\s*navigation\.referenceWorkbench\s*&&\s*navButton\.checked') {
+    throw 'The four audio tools must remain in the top navigation, with the metadata reference workbench using its active underline.'
 }
 if ($settingsPage -notmatch 'designRole:\s*"settingsCategoryRail"' -or
     $settingsPage -notmatch 'designRole:\s*"settingsContentSurface"' -or
@@ -152,8 +153,8 @@ foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
     }
 }
 
-if ($metadataPage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*true[\s\S]{0,120}enabled:\s*MetadataEditor\.busy') {
-    throw 'Metadata cancel must remain visibly discoverable and only activate while a write is running.'
+if ($metadataPage -notmatch 'objectName:\s*"metadataCancelButton"[\s\S]{0,1000}if\s*\(MetadataEditor\.busy\)[\s\S]{0,100}MetadataEditor\.cancel\(\)[\s\S]{0,100}else[\s\S]{0,100}page\.resetEdits\(\)') {
+    throw 'Metadata cancel must remain visible, cancel an active write, and reset pending edits while idle.'
 }
 if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*true[\s\S]{0,120}enabled:\s*FilenameProcessor\.busy') {
     throw 'Rename cancel must remain visibly discoverable and only activate while a transaction is running.'
@@ -164,7 +165,9 @@ if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
 if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,220}Layout\.preferredWidth:\s*page\.compactLayout\s*\?\s*360\s*:\s*445') {
     throw 'The format converter needs a reference-width settings workbench.'
 }
-if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,180}Math\.max\(480, page\.width \* 0\.36\)') {
+if ($metadataPage -notmatch 'desktopMinimumWidth:\s*1206' -or
+    $metadataPage -notmatch 'inspectorRatio:\s*0\.44' -or
+    $metadataPage -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,220}page\.width \* page\.inspectorRatio - 12') {
     throw 'The metadata editor needs a complete batch-edit workbench at desktop width.'
 }
 if ($formatPage -notmatch 'enabled:\s*!converter\.busy[\s\S]{0,140}PlaybackController\.currentTrackId\.length > 0') {

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory = $true)]
     [string]$SourceRoot
 )
@@ -7,21 +7,20 @@ $ErrorActionPreference = 'Stop'
 $page = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/MetadataEditPage.qml')
 
 foreach ($control in @(
-    'metadataFilePanel', 'metadataInspectorPanel', 'metadataBottomBar',
-    'metadataStatusFilter',
-    'metadataExportCurrentListButton', 'metadataPreflightDecisionDialog',
-    'metadataPreflightButton', 'metadataExportResultsButton',
-    'metadataApplyButton', 'metadataCoverSection', 'metadataChangePreview')) {
+    'metadataToolbar', 'metadataFilePanel', 'metadataFileHeader',
+    'metadataFileList', 'metadataFileFooter', 'metadataInspectorPanel',
+    'metadataEditorHeader', 'metadataCoverSection', 'metadataChangePreview',
+    'metadataCoverSummaryLabel',
+    'metadataActionBar', 'metadataApplyButton', 'metadataCancelButton',
+    'metadataSearchField', 'metadataStatusFilter',
+    'metadataScopeBox', 'metadataProcessingModeBox',
+    'metadataThreeStateHelp', 'metadataConversionSettingsButton',
+    'metadataExportCurrentListButton',
+    'metadataExportResultsButton', 'metadataPreflightDecisionDialog',
+    'metadataErrorDialog')) {
     if ($page -notmatch ('objectName:\s*(?:index\s*===\s*0\s*\?\s*)?"' + $control + '"')) {
         throw "Missing reference metadata control: $control"
     }
-}
-
-if ($page -match 'metadataSearchField') {
-    throw 'Metadata status filters must be directly visible without a search field.'
-}
-if ($page -notmatch 'objectName:\s*"metadataStatusFilter"[\s\S]{0,480}text:\s*qsTr\("任务列表："\)') {
-    throw 'Metadata status filters must sit directly above the task table with a task-list label.'
 }
 
 foreach ($field in @('title', 'artist', 'album', 'albumArtist', 'genre',
@@ -30,30 +29,54 @@ foreach ($field in @('title', 'artist', 'album', 'albumArtist', 'genre',
         throw "Missing canonical metadata field: $field"
     }
 }
-
-foreach ($obsoleteControl in @('metadataModeButton_', 'metadataThreeStateHelp',
-                                'coverModeBox')) {
-    if ($page -match [regex]::Escape($obsoleteControl)) {
-        throw "Obsolete metadata mode control remains: $obsoleteControl"
-    }
+if ($page -notmatch 'objectName:\s*"metadataValueField_"\s*\+\s*fieldRow\.fieldKey') {
+    throw 'Metadata fields must remain directly addressable.'
 }
-foreach ($directEditPhrase in @('不改动即保留', '留空即清除', '多个值')) {
-    if ($page -notmatch [regex]::Escape($directEditPhrase)) {
-        throw "Missing direct-edit metadata semantics: $directEditPhrase"
+
+foreach ($mode in @('keep', 'set', 'clear')) {
+    if ($page -notmatch ('value:\s*"' + $mode + '"')) {
+        throw "Missing metadata three-state action: $mode"
     }
 }
 
-if ($page -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,180}Math\.max\(480, page\.width \* 0\.36\)') {
-    throw 'The metadata inspector must preserve the reference desktop width.'
+foreach ($obsoleteField in @('track', 'disc', 'comment', 'lyrics')) {
+    if ($page -match ('key:\s*"' + $obsoleteField + '"')) {
+        throw "Out-of-scope metadata field remains: $obsoleteField"
+    }
+}
+
+foreach ($obsoleteControl in @('metadataPreflightButton')) {
+    if ($page -match ([regex]::Escape($obsoleteControl))) {
+        throw "Obsolete metadata control remains visible in the reference layout: $obsoleteControl"
+    }
+}
+
+if ($page -notmatch 'readonly property real inspectorRatio:\s*0\.44') {
+    throw 'The desktop metadata inspector must use the reference 44 percent width.'
+}
+if ($page -notmatch 'readonly property real desktopMinimumWidth:\s*1206') {
+    throw 'Responsive mode must switch at the real combined panel minimum width.'
+}
+if ($page -notmatch 'MetadataEditor\.aggregateMetadata\(aggregateTargetIndices\(\)\)') {
+    throw 'Field and cover previews must aggregate the active task scope.'
+}
+if ($page -notmatch 'Layout\.preferredHeight:\s*40') {
+    throw 'The reference toolbar and primary actions require 40-pixel controls.'
 }
 if ($page -notmatch 'MetadataEditor\.applyMetadata\(payload, targets\)') {
     throw 'The apply button must invoke the metadata transaction controller.'
 }
-if ($page -notmatch 'MetadataEditor\.preflightMetadata\(payload, targets\)') {
-    throw 'The preflight button must invoke asynchronous capability checking.'
-}
 if ($page -notmatch 'MetadataEditor\.cancel\(\)') {
-    throw 'The cancel action must remain wired to the controller.'
+    throw 'The cancel action must remain wired to the controller while busy.'
+}
+if ($page -notmatch 'FormatConverter\.setMetadataEditPlanForFiles\(') {
+    throw 'Conversion mode must reuse a target-scoped metadata edit plan.'
+}
+if ($page -notmatch 'encodeURI\(localPath\)\.replace\(/#/g,\s*"%23"\)') {
+    throw 'Conversion targets must preserve legal Windows filenames containing #.'
+}
+if ($page -notmatch 'function onErrorOccurred\(message\)') {
+    throw 'Controller errors must be visible instead of silently ignored.'
 }
 
-Write-Output 'Metadata editor reference layout contract passed.'
+Write-Output 'Metadata editor pixel-reference layout contract passed.'

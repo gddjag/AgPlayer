@@ -20,6 +20,16 @@ extern "C" {
 
 namespace {
 
+constexpr unsigned char kOnePixelBmp[] = {
+    0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x36, 0x00, 0x00, 0x00, 0x28, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x18, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x13, 0x0b,
+    0x00, 0x00, 0x13, 0x0b, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xff, 0x00};
+
 void append_u32_le(std::string& bytes, const std::uint32_t value)
 {
     for (int shift = 0; shift < 32; shift += 8) {
@@ -192,6 +202,27 @@ std::pair<std::string, std::string> read_audio_stream_tags(
         language != nullptr ? language->value : ""};
     avformat_close_input(&input);
     return result;
+}
+
+std::string read_cover_stream_title(const std::filesystem::path& path)
+{
+    AVFormatContext* input = nullptr;
+    assert(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr)
+           >= 0);
+    assert(avformat_find_stream_info(input, nullptr) >= 0);
+    std::string title;
+    for (unsigned int index = 0; index < input->nb_streams; ++index) {
+        const AVStream* stream = input->streams[index];
+        if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0) {
+            continue;
+        }
+        const AVDictionaryEntry* entry =
+            av_dict_get(stream->metadata, "title", nullptr, 0);
+        title = entry != nullptr && entry->value != nullptr ? entry->value : "";
+        break;
+    }
+    avformat_close_input(&input);
+    return title;
 }
 
 } // namespace
@@ -432,6 +463,47 @@ int main(const int argc, char** argv)
         };
     transcode_stream_tags("transcoder-stream-stripped.mka", false);
     transcode_stream_tags("transcoder-stream-kept.mka", true);
+
+    // Canonical Title edits target track metadata, not the attached picture's
+    // descriptive dictionary. Cover Keep must preserve "Album cover" while
+    // the output track receives its new title.
+    const std::filesystem::path cover_source =
+        input_path.parent_path() / "transcoder-cover-title-source.mp3";
+    const std::filesystem::path cover_output =
+        input_path.parent_path() / "transcoder-cover-title-output.mp3";
+    std::filesystem::remove(cover_source);
+    std::filesystem::remove(cover_source.u8string() + ".agbak");
+    std::filesystem::remove(cover_output);
+    assert(ag_transcode(input_path.u8string().c_str(),
+                        cover_source.u8string().c_str(), "libmp3lame",
+                        192'000, 44'100, 2, nullptr, nullptr, nullptr)
+           == AG_OK);
+    assert(ag_metadata_write_extended(
+               cover_source.u8string().c_str(), nullptr, nullptr, nullptr,
+               nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+               nullptr, nullptr, nullptr, nullptr, kOnePixelBmp,
+               sizeof(kOnePixelBmp), "image/bmp")
+           == AG_OK);
+    assert(read_cover_stream_title(cover_source) == "Album cover");
+
+    agplayer::TranscodeConfig cover_config;
+    cover_config.output_path = cover_output.u8string();
+    cover_config.codec_name = "libmp3lame";
+    cover_config.keep_metadata = true;
+    cover_config.keep_cover = true;
+    cover_config.metadata_edit_plan.fields = {{
+        agplayer::CanonicalField::Title,
+        agplayer::MetadataAction::Set,
+        "Edited Track"}};
+    error.clear();
+    assert(agplayer::transcode(cover_source.u8string(), cover_config,
+                               nullptr, nullptr, error)
+           == AG_OK);
+    assert(read_cover_stream_title(cover_output) == "Album cover");
+
+    std::filesystem::remove(cover_output);
+    std::filesystem::remove(cover_source);
+    std::filesystem::remove(cover_source.u8string() + ".agbak");
 
     std::filesystem::remove(stream_tagged_input);
     std::filesystem::remove(tagged_input);

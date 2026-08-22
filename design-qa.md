@@ -35,3 +35,24 @@
 - V5: transport height capped, compact metadata panes made mutually exclusive, filename controls compressed into stable rule tabs, dense bottom summary introduced, and compact shortcut help restored.
 
 final result: passed
+
+---
+
+# Design QA — 元数据修改模块 — 2026-08-20
+
+## Source and implementation
+
+- Source: `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\元数据修改.png` (1672 × 941).
+- Implementation: `build/metadata-final/metadata-ui-actual-v5.png` (1672 × 941, Chinese, dark theme, 12 selected real audio fixtures).
+- Combined comparison input: `build/metadata-final/metadata-ui-comparison-v5.png` (reference left, implementation right, identical viewport).
+
+## Findings
+
+- The title bar, left-aligned tool navigation, toolbar, 902/8/722 pixel two-column workbench, 52 pixel file rows, cover slot, summary, and bottom action area follow the reference hierarchy and measured positions.
+- All primary controls are visible at the reference viewport; no list, field, summary, or action clipping remains.
+- Search/status filtering, scope, processing mode, and explicit Keep/Set/Clear controls are intentional additions required by the formal specification.
+- The QA audio fixtures have no embedded metadata or cover, so the captured state shows Keep and an empty cover slot. Real Set/Clear/Replace behavior is covered by focused QML and end-to-end file tests.
+- The fixture-state differences are data only: the reference contains illustrative tags/covers and 24 total rows, while the implementation capture uses 12 short legal test files without embedded tags/covers. File-backed Set/Clear/Replace states are verified separately by end-to-end readback tests.
+- No visible P0/P1/P2 overflow, overlap, inaccessible primary action, or theme contrast defect remains in the combined comparison.
+
+final result: passed

@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QBuffer>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -16,8 +17,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QStorageInfo>
 #include <QTemporaryFile>
+#include <QSet>
 #include <QTextStream>
 #include <QtConcurrent>
 
@@ -26,13 +27,55 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace {
 
+QString normalizedLocalPath(const QString& path)
+{
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath()
+                                               : canonical);
+}
+
+QString normalizedPathKey(const QString& path)
+{
+    const QString normalized = QDir::fromNativeSeparators(
+        normalizedLocalPath(path));
+#ifdef Q_OS_WIN
+    return normalized.toCaseFolded();
+#else
+    return normalized;
+#endif
+}
+
+const QStringList& aggregateFieldKeys()
+{
+    static const QStringList keys{
+        QStringLiteral("title"), QStringLiteral("artist"),
+        QStringLiteral("album"), QStringLiteral("albumArtist"),
+        QStringLiteral("genre"), QStringLiteral("year"),
+        QStringLiteral("date"), QStringLiteral("composer"),
+        QStringLiteral("bpm")};
+    return keys;
+}
+
+QString entryFieldValue(const MetadataEntry& entry, const QString& key)
+{
+    if (key == QLatin1String("title")) return entry.title;
+    if (key == QLatin1String("artist")) return entry.artist;
+    if (key == QLatin1String("album")) return entry.album;
+    if (key == QLatin1String("albumArtist")) return entry.albumArtist;
+    if (key == QLatin1String("genre")) return entry.genre;
+    if (key == QLatin1String("year")) return entry.year;
+    if (key == QLatin1String("date")) return entry.date;
+    if (key == QLatin1String("composer")) return entry.composer;
+    return entry.bpm;
+}
+
 bool validEditPayload(const QVariantMap& fields, QString& error)
 {
-    bool editsYear = false;
-    bool editsDate = false;
     bool hasEdit = fields.value(QStringLiteral("coverMode"),
                                 QStringLiteral("keep")).toString()
         != QLatin1String("keep");
@@ -56,12 +99,6 @@ bool validEditPayload(const QVariantMap& fields, QString& error)
                 return false;
             }
         }
-        editsYear = editsYear || (it.key() == QLatin1String("year") && mode != QLatin1String("keep"));
-        editsDate = editsDate || (it.key() == QLatin1String("date") && mode != QLatin1String("keep"));
-    }
-    if (editsYear && editsDate) {
-        error = QObject::tr("年份和日期映射到同一标签，请只编辑其中一项。");
-        return false;
     }
     if (!hasEdit) {
         error = QObject::tr("请至少设置、清除一个字段，或修改封面。");
@@ -193,31 +230,27 @@ void MetadataEditor::resetOperationState()
 
 void MetadataEditor::resetCover()
 {
-    if (!coverPath_.isEmpty() || !coverData_.isEmpty()) {
+    if (!coverPath_.isEmpty() || !coverData_.isEmpty()
+        || !replacementCoverDetails_.isEmpty()) {
         coverPath_.clear();
         coverData_.clear();
         coverMime_.clear();
+        replacementCoverDetails_.clear();
         emit coverImageChanged();
     }
 }
 
-QString MetadataEditor::mimeTypeForImage(const QString& path)
+QString MetadataEditor::mimeTypeForFormat(const QByteArray& format)
 {
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    if (suffix == QLatin1String("png")) {
+    const QByteArray normalized = format.toLower();
+    if (normalized == "png") {
         return QStringLiteral("image/png");
     }
-    if (suffix == QLatin1String("jpg") || suffix == QLatin1String("jpeg")) {
+    if (normalized == "jpg" || normalized == "jpeg") {
         return QStringLiteral("image/jpeg");
     }
-    if (suffix == QLatin1String("gif")) {
-        return QStringLiteral("image/gif");
-    }
-    if (suffix == QLatin1String("bmp")) {
+    if (normalized == "bmp") {
         return QStringLiteral("image/bmp");
-    }
-    if (suffix == QLatin1String("webp")) {
-        return QStringLiteral("image/webp");
     }
     return QStringLiteral("application/octet-stream");
 }
@@ -231,38 +264,56 @@ void MetadataEditor::setCoverImage(const QUrl& url)
     if (path.isEmpty()) {
         return;
     }
-    const QString mime = mimeTypeForImage(path);
-    if (mime != QLatin1String("image/png") && mime != QLatin1String("image/jpeg")
-        && mime != QLatin1String("image/bmp")) {
-        emit errorOccurred(tr("封面仅支持 PNG、JPEG 或 BMP：%1").arg(path));
-        return;
-    }
-
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        emit errorOccurred(tr("无法打开封面图片：%1").arg(path));
+        emit errorOccurred(tr("Could not open the cover image: %1").arg(path));
         return;
     }
     const QByteArray data = file.readAll();
     if (data.isEmpty()) {
-        emit errorOccurred(tr("封面图片内容为空：%1").arg(path));
+        emit errorOccurred(tr("The cover image is empty: %1").arg(path));
         return;
     }
     constexpr qsizetype maxCoverBytes = 20 * 1024 * 1024;
     if (data.size() > maxCoverBytes) {
-        emit errorOccurred(tr("封面图片不能超过 20 MB：%1").arg(path));
+        emit errorOccurred(tr("The cover image cannot exceed 20 MB: %1").arg(path));
         return;
     }
     QImageReader reader(path);
-    const QSize dimensions = reader.size();
-    if (!dimensions.isValid() || dimensions.width() > 4096 || dimensions.height() > 4096) {
-        emit errorOccurred(tr("封面尺寸必须在 4096 × 4096 以内：%1").arg(path));
+    reader.setDecideFormatFromContent(true);
+    if (!reader.canRead()) {
+        emit errorOccurred(tr("The selected file is not a readable image: %1").arg(path));
+        return;
+    }
+    const QByteArray format = reader.format().toLower();
+    const QString mime = mimeTypeForFormat(format);
+    if (mime == QLatin1String("application/octet-stream")) {
+        emit errorOccurred(tr("Cover images must contain PNG, JPEG, or BMP data: %1")
+                               .arg(path));
+        return;
+    }
+    const QImage image = reader.read();
+    if (image.isNull()) {
+        emit errorOccurred(tr("The cover image could not be decoded completely: %1")
+                               .arg(path));
+        return;
+    }
+    if (image.width() > 4096 || image.height() > 4096) {
+        emit errorOccurred(tr("The cover dimensions must not exceed 4096 x 4096: %1")
+                               .arg(path));
         return;
     }
 
     coverPath_ = path;
     coverData_ = data;
     coverMime_ = mime;
+    replacementCoverDetails_ = {
+        {QStringLiteral("fileName"), QFileInfo(path).fileName()},
+        {QStringLiteral("width"), image.width()},
+        {QStringLiteral("height"), image.height()},
+        {QStringLiteral("format"), QString::fromLatin1(format).toUpper()},
+        {QStringLiteral("mimeType"), mime},
+        {QStringLiteral("sizeBytes"), data.size()}};
     emit coverImageChanged();
 }
 
@@ -288,11 +339,6 @@ void MetadataEditor::loadFiles(const QList<QUrl>& urls)
     if (busy_.load(std::memory_order_acquire)) {
         return;
     }
-    resetCover();
-    if (!results_.isEmpty()) {
-        results_.clear();
-        emit resultsChanged();
-    }
     cancelFlag_.store(false, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
@@ -304,18 +350,44 @@ void MetadataEditor::loadFiles(const QList<QUrl>& urls)
             if (discoveryWatcher_ == discovery) {
                 discoveryWatcher_.clear();
             }
-            const QList<QUrl> expandedUrls = discovery->result();
-            discovery->deleteLater();
-            if (expandedUrls.isEmpty()) {
-                entries_.clear();
+            QList<QUrl> expandedUrls;
+            try {
+                expandedUrls = discovery->result();
+            } catch (...) {
+                discovery->deleteLater();
                 setBusy(false);
                 setProgress(1.0);
-                emit fileCountChanged();
                 emit entriesLoaded();
-                emit errorOccurred(tr("未找到支持的音频文件"));
+                emit errorOccurred(tr("Could not scan the selected audio files."));
                 return;
             }
-            startMetadataLoad(expandedUrls);
+            discovery->deleteLater();
+            QSet<QString> knownPaths;
+            for (const MetadataEntry& entry : std::as_const(entries_)) {
+                knownPaths.insert(normalizedPathKey(entry.path));
+            }
+            QList<QUrl> additions;
+            additions.reserve(expandedUrls.size());
+            for (const QUrl& url : std::as_const(expandedUrls)) {
+                const QString normalized = normalizedLocalPath(url.toLocalFile());
+                if (normalized.isEmpty()) continue;
+                const QString key = normalizedPathKey(normalized);
+                if (knownPaths.contains(key)) continue;
+                knownPaths.insert(key);
+                additions.append(QUrl::fromLocalFile(normalized));
+            }
+            if (additions.isEmpty()) {
+                setBusy(false);
+                setProgress(1.0);
+                emit entriesLoaded();
+                emit errorOccurred(tr("No new supported audio files were found."));
+                return;
+            }
+            if (!results_.isEmpty()) {
+                results_.clear();
+                emit resultsChanged();
+            }
+            startMetadataLoad(std::move(additions));
         });
     discovery->setFuture(agplayer::qt::expandAudioUrlsAsync(urls));
 }
@@ -327,10 +399,24 @@ void MetadataEditor::startMetadataLoad(QList<QUrl> expandedUrls)
     connect(watcher, &QFutureWatcher<QList<MetadataEntry>>::finished, this,
         [this, watcher]() {
             loadWatcher_.clear();
-            entries_ = watcher->result();
+            QList<MetadataEntry> additions;
+            try {
+                additions = watcher->result();
+            } catch (...) {
+                setBusy(false);
+                setProgress(1.0);
+                emit entriesLoaded();
+                emit errorOccurred(tr("Could not read metadata from the selected files."));
+                watcher->deleteLater();
+                return;
+            }
+            entries_.append(additions);
             setBusy(false);
             setProgress(1.0);
-            emit fileCountChanged();
+            if (!additions.isEmpty()) {
+                emit fileCountChanged();
+                emit entriesChanged();
+            }
             emit entriesLoaded();
             watcher->deleteLater();
         });
@@ -354,6 +440,7 @@ void MetadataEditor::startMetadataLoad(QList<QUrl> expandedUrls)
                 entry.album = QString::fromUtf8(ag_metadata_album(md));
                 entry.albumArtist = QString::fromUtf8(ag_metadata_album_artist(md));
                 entry.year = QString::fromUtf8(ag_metadata_year(md));
+                entry.date = QString::fromUtf8(ag_metadata_date(md));
                 entry.genre = QString::fromUtf8(ag_metadata_genre(md));
                 entry.track = QString::fromUtf8(ag_metadata_track(md));
                 entry.disc = QString::fromUtf8(ag_metadata_disc(md));
@@ -370,9 +457,10 @@ void MetadataEditor::startMetadataLoad(QList<QUrl> expandedUrls)
                 const unsigned char* cover = ag_metadata_cover(md, &coverSize, &coverMime);
                 entry.hasCover = cover != nullptr && coverSize > 0;
                 if (entry.hasCover) {
-                    const QImage image = QImage::fromData(
-                        reinterpret_cast<const uchar*>(cover),
-                        static_cast<int>(coverSize));
+                    const QByteArray coverBytes(
+                        reinterpret_cast<const char*>(cover),
+                        static_cast<qsizetype>(coverSize));
+                    const QImage image = QImage::fromData(coverBytes);
                     if (!image.isNull()) {
                         const QImage thumbnail = image.scaled(160, 160,
                             Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -388,6 +476,14 @@ void MetadataEditor::startMetadataLoad(QList<QUrl> expandedUrls)
                             .arg(image.width()).arg(image.height())
                             .arg(QString::fromUtf8(coverMime != nullptr ? coverMime : "image"))
                             .arg(static_cast<qlonglong>(coverSize / 1024));
+                        entry.coverFingerprint = QString::fromLatin1(
+                            QCryptographicHash::hash(coverBytes,
+                                QCryptographicHash::Sha256).toHex());
+                        entry.coverMimeType = QString::fromUtf8(
+                            coverMime != nullptr ? coverMime : "application/octet-stream");
+                        entry.coverWidth = image.width();
+                        entry.coverHeight = image.height();
+                        entry.coverSizeBytes = static_cast<qint64>(coverSize);
                     }
                 }
                 ag_metadata_destroy(md);
@@ -418,6 +514,7 @@ QVariantMap MetadataEditor::entryAt(int index) const
     map["album"] = e.album;
     map["albumArtist"] = e.albumArtist;
     map["year"] = e.year;
+    map["date"] = e.date;
     map["genre"] = e.genre;
     map["track"] = e.track;
     map["disc"] = e.disc;
@@ -433,9 +530,88 @@ QVariantMap MetadataEditor::entryAt(int index) const
     map["hasCover"] = e.hasCover;
     map["coverPreview"] = e.coverPreview;
     map["coverInfo"] = e.coverInfo;
+    map["coverFingerprint"] = e.coverFingerprint;
+    map["coverFileName"] = e.coverFileName;
+    map["coverMimeType"] = e.coverMimeType;
+    map["coverWidth"] = e.coverWidth;
+    map["coverHeight"] = e.coverHeight;
+    map["coverSizeBytes"] = e.coverSizeBytes;
     map["hasError"] = e.hasError;
     map["error"] = e.error;
     return map;
+}
+
+QVariantMap aggregate_metadata_entries(const QList<MetadataEntry>& entries,
+                                       const QList<int>& indices)
+{
+    QList<int> validIndices;
+    QSet<int> seen;
+    validIndices.reserve(indices.size());
+    for (const int index : indices) {
+        if (index < 0 || index >= entries.size() || seen.contains(index)) continue;
+        seen.insert(index);
+        validIndices.append(index);
+    }
+
+    QVariantMap aggregate;
+    for (const QString& key : aggregateFieldKeys()) {
+        QString value;
+        bool initialized = false;
+        bool multiple = false;
+        for (const int index : std::as_const(validIndices)) {
+            const QString candidate = entryFieldValue(entries.at(index), key);
+            if (!initialized) {
+                value = candidate;
+                initialized = true;
+            } else if (candidate != value) {
+                multiple = true;
+                break;
+            }
+        }
+        aggregate.insert(key, QVariantMap{
+            {QStringLiteral("value"), multiple ? QString() : value},
+            {QStringLiteral("multiple"), multiple}});
+    }
+
+    QVariantMap cover{{QStringLiteral("state"), QStringLiteral("none")}};
+    QString fingerprint;
+    bool initialized = false;
+    bool multiple = false;
+    const MetadataEntry* representative = nullptr;
+    for (const int index : std::as_const(validIndices)) {
+        const MetadataEntry& entry = entries.at(index);
+        const QString candidate = entry.hasCover
+            ? QStringLiteral("cover:") + entry.coverFingerprint
+            : QStringLiteral("none");
+        if (!initialized) {
+            fingerprint = candidate;
+            representative = &entry;
+            initialized = true;
+        } else if (candidate != fingerprint) {
+            multiple = true;
+            break;
+        }
+    }
+    if (multiple) {
+        cover.insert(QStringLiteral("state"), QStringLiteral("multiple"));
+    } else if (representative != nullptr && representative->hasCover) {
+        cover = {
+            {QStringLiteral("state"), QStringLiteral("single")},
+            {QStringLiteral("preview"), representative->coverPreview},
+            {QStringLiteral("fileName"), representative->coverFileName},
+            {QStringLiteral("width"), representative->coverWidth},
+            {QStringLiteral("height"), representative->coverHeight},
+            {QStringLiteral("mimeType"), representative->coverMimeType},
+            {QStringLiteral("sizeBytes"), representative->coverSizeBytes},
+            {QStringLiteral("info"), representative->coverInfo}};
+    }
+    aggregate.insert(QStringLiteral("cover"), cover);
+    return aggregate;
+}
+
+QVariantMap MetadataEditor::aggregateMetadata(const QList<int>& indices) const
+{
+    return aggregate_metadata_entries(entries_, indices);
 }
 
 void MetadataEditor::removeFiles(const QList<int>& indices)
@@ -521,10 +697,11 @@ void MetadataEditor::startApply(const QVariantMap& fields,
 
     const QByteArray coverData = coverData_;
     const QByteArray coverMime = coverMime_.toUtf8();
+    const QVariantMap coverDetails = replacementCoverDetails_;
     const QList<MetadataEntry> snapshot = entries_;
 
     watcher->setFuture(QtConcurrent::run(
-        [fields, targets, coverData, coverMime, coverMode, snapshot,
+        [fields, targets, coverData, coverMime, coverDetails, coverMode, snapshot,
           this]() mutable {
             MetadataApplySummary summary;
             summary.entries = snapshot;
@@ -538,7 +715,8 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                 fileResult.insert(QStringLiteral("stage"), QStringLiteral("prepare"));
                 fileResult.insert(QStringLiteral("message"), message);
                 fileResult.insert(QStringLiteral("errorCode"),
-                                  static_cast<int>(AG_INTERNAL_ERROR));
+                                  static_cast<int>(
+                                      agplayer::MetadataErrorCode::InternalError));
                 summary.results.push_back(fileResult);
             };
             agplayer::MetadataEditPlan plan;
@@ -611,11 +789,26 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                         case agplayer::CanonicalField::Album: e.album = actual; break;
                         case agplayer::CanonicalField::AlbumArtist: e.albumArtist = actual; break;
                         case agplayer::CanonicalField::Genre: e.genre = actual; break;
-                        case agplayer::CanonicalField::Year:
-                        case agplayer::CanonicalField::Date: e.year = actual; break;
+                        case agplayer::CanonicalField::Year: e.year = actual; break;
+                        case agplayer::CanonicalField::Date: e.date = actual; break;
                         case agplayer::CanonicalField::Composer: e.composer = actual; break;
                         case agplayer::CanonicalField::Bpm: e.bpm = actual; break;
                         }
+                    }
+                    ag_metadata* refreshed = nullptr;
+                    if (ag_metadata_open(e.path.toUtf8().constData(), &refreshed) == AG_OK
+                        && refreshed != nullptr) {
+                        e.title = QString::fromUtf8(ag_metadata_title(refreshed));
+                        e.artist = QString::fromUtf8(ag_metadata_artist(refreshed));
+                        e.album = QString::fromUtf8(ag_metadata_album(refreshed));
+                        e.albumArtist = QString::fromUtf8(
+                            ag_metadata_album_artist(refreshed));
+                        e.genre = QString::fromUtf8(ag_metadata_genre(refreshed));
+                        e.year = QString::fromUtf8(ag_metadata_year(refreshed));
+                        e.date = QString::fromUtf8(ag_metadata_date(refreshed));
+                        e.composer = QString::fromUtf8(ag_metadata_composer(refreshed));
+                        e.bpm = QString::fromUtf8(ag_metadata_bpm_tag(refreshed));
+                        ag_metadata_destroy(refreshed);
                     }
                     if (plan.cover_action == agplayer::CoverAction::Set) {
                         e.hasCover = true;
@@ -628,12 +821,31 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                         thumbnail.save(&thumbnailBuffer, "PNG");
                         e.coverPreview = QStringLiteral("data:image/png;base64,")
                             + QString::fromLatin1(thumbnailData.toBase64());
-                        e.coverInfo = tr("新封面 · %1 KB")
+                        e.coverFingerprint = QString::fromLatin1(
+                            QCryptographicHash::hash(coverData,
+                                QCryptographicHash::Sha256).toHex());
+                        e.coverFileName = coverDetails.value(
+                            QStringLiteral("fileName")).toString();
+                        e.coverMimeType = QString::fromUtf8(coverMime);
+                        e.coverWidth = coverDetails.value(
+                            QStringLiteral("width")).toInt();
+                        e.coverHeight = coverDetails.value(
+                            QStringLiteral("height")).toInt();
+                        e.coverSizeBytes = coverData.size();
+                        e.coverInfo = QStringLiteral("%1 × %2 · %3 · %4 KB")
+                            .arg(e.coverWidth).arg(e.coverHeight)
+                            .arg(e.coverMimeType)
                             .arg(static_cast<qlonglong>(coverData.size() / 1024));
                     } else if (plan.cover_action == agplayer::CoverAction::Clear) {
                         e.hasCover = false;
                         e.coverPreview.clear();
                         e.coverInfo.clear();
+                        e.coverFingerprint.clear();
+                        e.coverFileName.clear();
+                        e.coverMimeType.clear();
+                        e.coverWidth = 0;
+                        e.coverHeight = 0;
+                        e.coverSizeBytes = 0;
                     }
                 } else if (result == AG_CANCELLED) {
                     ++summary.cancelledCount;
@@ -789,7 +1001,26 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
     connect(watcher, &QFutureWatcher<MetadataApplySummary>::finished, this,
         [this, watcher, applyWhenSupported]() {
             operationWatcher_.clear();
-            const MetadataApplySummary summary = watcher->result();
+            MetadataApplySummary summary;
+            try {
+                summary = watcher->result();
+            } catch (...) {
+                for (const int index : std::as_const(pendingTargets_)) {
+                    if (index < 0 || index >= entries_.size()) continue;
+                    const MetadataEntry& entry = entries_.at(index);
+                    summary.results.append(QVariantMap{
+                        {QStringLiteral("path"), entry.path},
+                        {QStringLiteral("fileName"), entry.fileName},
+                        {QStringLiteral("stage"), QStringLiteral("preflight")},
+                        {QStringLiteral("success"), false},
+                        {QStringLiteral("status"), QStringLiteral("failed")},
+                        {QStringLiteral("message"),
+                         tr("Metadata preflight failed unexpectedly.")},
+                        {QStringLiteral("errorCode"), static_cast<int>(
+                             agplayer::MetadataErrorCode::InternalError)}});
+                    ++summary.unsupportedCount;
+                }
+            }
             watcher->deleteLater();
             results_ = summary.results;
             supportedCount_ = summary.supportedCount;
@@ -824,8 +1055,41 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
     watcher->setFuture(QtConcurrent::run(
         [this, fields, targets, snapshot, coverData, coverMime, coverMode]() {
             MetadataApplySummary summary;
-            const agplayer::MetadataEditPlan plan = planForPayload(
-                fields, coverData, coverMime, coverMode);
+            const auto appendInternalFailure = [&summary, &snapshot](
+                                                   int index,
+                                                   const QString& message) {
+                if (index < 0 || index >= snapshot.size()) return;
+                const MetadataEntry& entry = snapshot.at(index);
+                QVariantMap item{
+                    {QStringLiteral("path"), entry.path},
+                    {QStringLiteral("fileName"), entry.fileName},
+                    {QStringLiteral("stage"), QStringLiteral("preflight")},
+                    {QStringLiteral("success"), false},
+                    {QStringLiteral("status"), QStringLiteral("failed")},
+                    {QStringLiteral("message"), message},
+                    {QStringLiteral("preflightReason"), message},
+                    {QStringLiteral("errorCode"), static_cast<int>(
+                         agplayer::MetadataErrorCode::InternalError)}};
+                summary.results.append(item);
+                ++summary.unsupportedCount;
+            };
+            agplayer::MetadataEditPlan plan;
+            try {
+                plan = planForPayload(fields, coverData, coverMime, coverMode);
+            } catch (const std::exception& exception) {
+                const QString message = tr("Metadata preflight setup failed: %1")
+                    .arg(QString::fromUtf8(exception.what()));
+                for (const int index : targets) {
+                    appendInternalFailure(index, message);
+                }
+                return summary;
+            } catch (...) {
+                const QString message = tr("Metadata preflight setup failed.");
+                for (const int index : targets) {
+                    appendInternalFailure(index, message);
+                }
+                return summary;
+            }
             const int total = targets.size();
             for (int i = 0; i < total; ++i) {
                 QVariantMap item;
@@ -849,48 +1113,52 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
                     continue;
                 }
 
-                agplayer::MetadataPreflightReport report;
-                const ag_result preflight = agplayer::preflight_metadata_edit(
-                    entry.path.toUtf8().toStdString(), plan, report);
-                QTemporaryFile probe(QFileInfo(entry.path).dir().filePath(
-                    QStringLiteral(".agplayer-metadata-write-probe-XXXXXX.tmp")));
-                const bool writable = probe.open();
-                const QStorageInfo storage(QFileInfo(entry.path).absolutePath());
-                const bool hasSpace = storage.isValid() && storage.isReady()
-                    && storage.bytesAvailable() > entry.fileSize + 1024 * 1024;
-                const bool supported = preflight == AG_OK && writable && hasSpace
-                    && !entry.hasError;
-                item.insert(QStringLiteral("success"), supported);
-                item.insert(QStringLiteral("status"), supported
-                            ? QStringLiteral("supported")
-                            : QStringLiteral("unsupported"));
-                item.insert(QStringLiteral("container"),
-                            QString::fromStdString(report.container));
-                item.insert(QStringLiteral("errorCode"), static_cast<int>(
-                    !writable ? agplayer::MetadataErrorCode::PermissionDenied
-                    : !hasSpace ? agplayer::MetadataErrorCode::InsufficientDiskSpace
-                    : report.error_code));
-                QVariantList unsupportedFields;
-                for (const agplayer::CanonicalField field
-                     : report.unsupported_fields) {
-                    unsupportedFields.append(static_cast<int>(field));
-                }
-                item.insert(QStringLiteral("unsupportedFields"),
-                            unsupportedFields);
-                const QString reason = !writable ? tr("目标目录不可写")
-                    : !hasSpace ? tr("磁盘空间不足")
-                    : entry.hasError ? entry.error
-                    : QString::fromStdString(report.user_message);
-                item.insert(QStringLiteral("preflightReason"),
-                            supported ? QString() : reason);
-                item.insert(QStringLiteral("message"), supported
-                            ? tr("支持同容器流复制，音频不重编码") : reason);
-                summary.results.append(item);
-                if (supported) {
-                    ++summary.supportedCount;
-                    summary.supportedTargets.append(index);
-                } else {
-                    ++summary.unsupportedCount;
+                try {
+                    agplayer::MetadataPreflightReport report;
+                    const ag_result preflight = agplayer::preflight_metadata_edit(
+                        entry.path.toUtf8().toStdString(), plan, report);
+                    QTemporaryFile probe(QFileInfo(entry.path).dir().filePath(
+                        QStringLiteral(".agplayer-metadata-write-probe-XXXXXX.tmp")));
+                    const bool writable = probe.open();
+                    const bool supported = preflight == AG_OK && writable
+                        && !entry.hasError;
+                    item.insert(QStringLiteral("success"), supported);
+                    item.insert(QStringLiteral("status"), supported
+                                ? QStringLiteral("supported")
+                                : QStringLiteral("unsupported"));
+                    item.insert(QStringLiteral("container"),
+                                QString::fromStdString(report.container));
+                    item.insert(QStringLiteral("errorCode"), static_cast<int>(
+                        !writable ? agplayer::MetadataErrorCode::PermissionDenied
+                        : report.error_code));
+                    QVariantList unsupportedFields;
+                    for (const agplayer::CanonicalField field
+                         : report.unsupported_fields) {
+                        unsupportedFields.append(static_cast<int>(field));
+                    }
+                    item.insert(QStringLiteral("unsupportedFields"),
+                                unsupportedFields);
+                    const QString reason = !writable ? tr("Target directory is not writable.")
+                        : entry.hasError ? entry.error
+                        : QString::fromStdString(report.user_message);
+                    item.insert(QStringLiteral("preflightReason"),
+                                supported ? QString() : reason);
+                    item.insert(QStringLiteral("message"), supported
+                                ? tr("Supported; waiting to process without audio re-encoding.")
+                                : reason);
+                    summary.results.append(item);
+                    if (supported) {
+                        ++summary.supportedCount;
+                        summary.supportedTargets.append(index);
+                    } else {
+                        ++summary.unsupportedCount;
+                    }
+                } catch (const std::exception& exception) {
+                    appendInternalFailure(
+                        index, tr("Metadata preflight failed: %1")
+                                   .arg(QString::fromUtf8(exception.what())));
+                } catch (...) {
+                    appendInternalFailure(index, tr("Metadata preflight failed."));
                 }
                 const double fraction = static_cast<double>(i + 1) / total;
                 QMetaObject::invokeMethod(
