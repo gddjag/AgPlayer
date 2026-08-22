@@ -40,6 +40,19 @@ absent later-phase controls, rather than a geometry acceptance threshold.
 - Rejected Move/Trim gestures clear their local candidate and notify QML to redraw the real timeline without changing revision or Undo history.
 - Viewport decoding is single-flight: one active task plus one replaceable latest pending request. Invalid requests cancel the active generation and discard pending work; no PCM cache was added.
 - Capability-false `stopPlayback()` returns false without moving the persisted playhead or dirtying the project. Dead Space/test-only/actionRevision state was removed.
-- Exact lupdate extraction covers 86 current Phase 6 QML sources in zh/en/th/vi; en/th/vi contain completed locale translations without Chinese fallback.
+- Exact extraction covers 90 context-scoped Phase 6 QML sources across the
+  editor shell and `ToolSidebar` in zh/en/th/vi; en/th/vi contain completed
+  locale translations without Chinese fallback, and placeholder sets match.
+
+## Quality-final nonvisual closure
+
+- The final quality fixes only change controller gesture lifetime, checked
+  integer validation, automated tests, and development records. No QML geometry,
+  color, typography, asset, or rendering input changed, so the accepted final5
+  six-image matrix and comparison masks remain the applicable visual evidence.
+- Successful create/open/open-project/clear replacements now discard any staged
+  Move/Trim overlay at the document commit boundary. Failed opens preserve the
+  active gesture. Overflowing preview coordinates are rejected before publishing
+  a candidate, without a notification or history/revision mutation.
 
 final result: passed

@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <limits>
 
 class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
@@ -191,6 +192,137 @@ private slots:
         QCOMPARE(controller.timelineRevisionForTesting(), revision);
         QCOMPARE(controller.historyStateIdForTesting(), history);
         QCOMPARE(controller.actionEnabled(QStringLiteral("editor.undo")), undoEnabled);
+    }
+
+    void successfulDocumentReplacementClearsEventGestureAfterPreparation()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString project = temporary.filePath(QStringLiteral("replacement.agproj"));
+        AudioEditorController projectMaker(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(projectMaker.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(projectMaker.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        const auto exercise = [&](const auto& replace, const bool keepsEvent) {
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+            QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
+                                                 QStringLiteral("move"), false));
+            QVERIFY(controller.moveEvent(QStringLiteral("1"), 123));
+            QCOMPARE(controller.timelineEventViews().first().toMap()
+                         .value(QStringLiteral("timelineStart")).toLongLong(),
+                     qint64{123});
+
+            QVERIFY(replace(controller));
+            if (keepsEvent) {
+                QCOMPARE(controller.timelineEventViews().size(), 1);
+                QCOMPARE(controller.timelineEventViews().first().toMap()
+                             .value(QStringLiteral("id")).toString(),
+                         QStringLiteral("1"));
+                QCOMPARE(controller.timelineEventViews().first().toMap()
+                             .value(QStringLiteral("timelineStart")).toLongLong(),
+                         qint64{0});
+            } else {
+                QVERIFY(controller.timelineEventViews().isEmpty());
+            }
+            QVERIFY(!controller.endEventGesture());
+        };
+
+        exercise([](AudioEditorController& controller) {
+            return controller.createUntitledDocument(48'000, 2, 2'000);
+        }, true);
+        exercise([&](AudioEditorController& controller) {
+            return controller.openFile(QUrl::fromLocalFile(fixture));
+        }, true);
+        exercise([&](AudioEditorController& controller) {
+            return controller.openProject(QUrl::fromLocalFile(project));
+        }, true);
+        exercise([](AudioEditorController& controller) {
+            return controller.clearDocument();
+        }, false);
+    }
+
+    void failedDocumentOpenPreservesEventGesture()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const auto exercise = [&](const auto& openMissing) {
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+            QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
+                                                 QStringLiteral("move"), false));
+            QVERIFY(controller.moveEvent(QStringLiteral("1"), 123));
+
+            QVERIFY(!openMissing(controller));
+            QCOMPARE(controller.timelineEventViews().first().toMap()
+                         .value(QStringLiteral("timelineStart")).toLongLong(),
+                     qint64{123});
+            QVERIFY(controller.endEventGesture());
+            QCOMPARE(controller.timelineEventViews().first().toMap()
+                         .value(QStringLiteral("timelineStart")).toLongLong(),
+                     qint64{123});
+        };
+        exercise([&](AudioEditorController& controller) {
+            return controller.openFile(QUrl::fromLocalFile(
+                temporary.filePath(QStringLiteral("missing.wav"))));
+        });
+        exercise([&](AudioEditorController& controller) {
+            return controller.openProject(QUrl::fromLocalFile(
+                temporary.filePath(QStringLiteral("missing.agproj"))));
+        });
+    }
+
+    void eventGesturePreviewRejectsTimelineEndOverflowWithoutMutation()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const qint64 maximum = std::numeric_limits<qint64>::max();
+        const quint64 revision = controller.timelineRevisionForTesting();
+        const std::uint64_t history = controller.historyStateIdForTesting();
+        QSignalSpy documentChanges(&controller,
+                                   &AudioEditorController::documentChanged);
+
+        QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
+                                             QStringLiteral("move"), false));
+        documentChanges.clear();
+        QVERIFY(!controller.moveEvent(QStringLiteral("1"), maximum));
+        QVERIFY(!controller.moveEvent(QStringLiteral("1"), maximum - 999));
+        QCOMPARE(documentChanges.count(), 0);
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(), qint64{0});
+        QCOMPARE(controller.timelineRevisionForTesting(), revision);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QVERIFY(controller.moveEvent(QStringLiteral("1"), maximum - 1'000));
+        QCOMPARE(documentChanges.count(), 1);
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineEnd")).toLongLong(), maximum);
+        QCOMPARE(controller.timelineRevisionForTesting(), revision);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QVERIFY(controller.cancelEventGesture());
+
+        QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
+                                             QStringLiteral("trim"), false));
+        documentChanges.clear();
+        QVERIFY(!controller.trimEvent(QStringLiteral("1"), 0, 500, maximum));
+        QVERIFY(!controller.trimEvent(QStringLiteral("1"), 0, 500,
+                                      maximum - 499));
+        QCOMPARE(documentChanges.count(), 0);
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(), qint64{0});
+        QCOMPARE(controller.timelineRevisionForTesting(), revision);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QVERIFY(controller.trimEvent(QStringLiteral("1"), 0, 500,
+                                     maximum - 500));
+        QCOMPARE(documentChanges.count(), 1);
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineEnd")).toLongLong(), maximum);
+        QCOMPARE(controller.timelineRevisionForTesting(), revision);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QVERIFY(controller.cancelEventGesture());
     }
 
     void selectionAndViewportUseOneExactFramePixelMapping()

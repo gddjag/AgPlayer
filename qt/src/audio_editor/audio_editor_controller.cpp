@@ -670,6 +670,7 @@ bool AudioEditorController::createUntitledDocument(
         return false;
     }
     stopPlayback();
+    event_gesture_ = {};
     document_ = std::move(candidate);
     source_path_.clear();
     project_path_.clear();
@@ -730,7 +731,9 @@ bool AudioEditorController::openFile(const QUrl& source)
         setError(QString::fromStdString(analysis.message));
         return false;
     }
-    document_ = AudioDocument::fromSource(analysis.source);
+    auto candidate = AudioDocument::fromSource(analysis.source);
+    event_gesture_ = {};
+    document_ = std::move(candidate);
     source_path_ = path;
     project_path_.clear();
     project_sources_ = {project_source_record(1,
@@ -860,6 +863,7 @@ bool AudioEditorController::openProject(const QUrl& source)
 
     // Every fallible operation completed before the active document is replaced.
     stopPlayback();
+    event_gesture_ = {};
     document_ = std::move(*loaded.document);
     project_sources_ = std::move(loaded.sources);
     known_project_issues_ = to_project_issues(loaded.issues);
@@ -1093,6 +1097,11 @@ bool AudioEditorController::moveEvent(const QString& id,
             || event_gesture_.id != *eventId || timelineStart < 0) {
             return false;
         }
+        const qint64 frames = event_gesture_.sourceEnd
+            - event_gesture_.sourceStart;
+        if (timelineStart > std::numeric_limits<qint64>::max() - frames) {
+            return false;
+        }
         event_gesture_.timelineStart = timelineStart;
         event_gesture_.pending = true;
         emit documentChanged();
@@ -1164,6 +1173,10 @@ bool AudioEditorController::trimEvent(const QString& id,
         if (event_gesture_.kind != EventGestureKind::Trim
             || event_gesture_.id != *eventId || sourceStart < 0
             || sourceEnd <= sourceStart || timelineStart < 0) {
+            return false;
+        }
+        const qint64 frames = sourceEnd - sourceStart;
+        if (timelineStart > std::numeric_limits<qint64>::max() - frames) {
             return false;
         }
         event_gesture_.sourceStart = sourceStart;
@@ -1467,6 +1480,7 @@ bool AudioEditorController::clearDocument()
     allow_document_replace_ = false;
     pending_clear_document_ = false;
     stopPlayback();
+    event_gesture_ = {};
     document_ = AudioDocument{};
     source_path_.clear();
     project_path_.clear();

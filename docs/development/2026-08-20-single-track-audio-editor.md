@@ -370,9 +370,10 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   peak buckets with generation cancellation between reads; Scene Graph point
   budgeting is total across stereo channels.
 - Playhead, Move, and Trim use local drag candidates and commit once on release.
-  Split's button selects scissors mode, while `S`/`Ctrl+B` split. One page-owned
-  Space shortcut remains, real wheel events prove `1.25`/`0.8`, and shared
-  viewport APIs own ruler/scrollbar mapping.
+  Split's button selects scissors mode, while `S`/`Ctrl+B` split. The interim
+  page-owned Space shortcut was removed in the later final-review correction;
+  real wheel events prove `1.25`/`0.8`, and shared viewport APIs own
+  ruler/scrollbar mapping.
 - Final visual P2 correction makes unsupported recording and playback controls
   visibly gray/low-opacity, including the 880 Play entry. Release and Debug
   final4 matrices at 1672x941, 1280x720, and 880x560 all exited zero; comparison
@@ -392,8 +393,21 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
 - Viewport decoding is single-flight with one latest pending request; invalid
   requests cancel active work and discard pending work. Dead Space and
   `actionRevision` state are removed.
-- Exact lupdate extraction covers all 86 current Phase 6 QML sources in
+- Exact lupdate extraction covers all 90 context-scoped Phase 6 QML sources,
+  including `ToolSidebar`, in
   completed zh/en/th/vi catalogs. Focused Release/Debug matrices pass 8/8;
   both full builds pass; full CTest baselines are Release 83/84 and Debug
   80/85. Final5 six-image/comparison/mask review passes with no executable
   P0/P1/P2. Commit message: `fix(editor): close phase six final review gaps`.
+
+### Phase 6 quality-final closure (2026-08-23)
+
+- Successful create, audio open, project open, and clear now discard a staged
+  event gesture only at the successful document-replacement boundary; failed
+  audio/project opens preserve it. Move/Trim previews reject qint64 end-frame
+  overflow before publishing, without notification, revision, or history change.
+- Exact translation coverage includes `ToolSidebar`, locks the extracted total
+  at 90 context-scoped sources, and checks placeholder preservation. Release and
+  Debug focused matrices pass 8/8; both full builds pass. Full CTest remains at
+  the existing Release 83/84 and Debug 80/85 baselines. These are nonvisual
+  fixes, so the manually accepted final5 visual evidence remains current.

@@ -10,9 +10,11 @@ $phase6Qml = @(
     'app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml',
     'app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml',
     'app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml',
-    'app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml'
+    'app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml',
+    'app/qml/AgPlayer/components/tools/ToolSidebar.qml'
 )
 $expected = @{}
+$extractedSourceCount = 0
 foreach ($relativePath in $phase6Qml) {
     $path = Join-Path $SourceRoot $relativePath
     $context = [IO.Path]::GetFileNameWithoutExtension($path)
@@ -25,6 +27,10 @@ foreach ($relativePath in $phase6Qml) {
         throw "No qsTr sources extracted from $relativePath."
     }
     $expected[$context] = $sources
+    $extractedSourceCount += $sources.Count
+}
+if ($extractedSourceCount -ne 90) {
+    throw "Expected exactly 90 context-scoped Phase 6 sources, got $extractedSourceCount."
 }
 
 foreach ($locale in @('zh', 'en', 'th', 'vi')) {
@@ -49,6 +55,13 @@ foreach ($locale in @('zh', 'en', 'th', 'vi')) {
             if ($locale -ne 'zh' -and $source -match '[\p{IsCJKUnifiedIdeographs}]' -and
                 $translation -match '[\p{IsCJKUnifiedIdeographs}]') {
                 throw "$locale catalog falls back to Chinese for [$context] $source"
+            }
+            $sourcePlaceholders = @([regex]::Matches($source, '%\d+') |
+                ForEach-Object { $_.Value } | Sort-Object)
+            $translationPlaceholders = @([regex]::Matches($translation, '%\d+') |
+                ForEach-Object { $_.Value } | Sort-Object)
+            if (@(Compare-Object $sourcePlaceholders $translationPlaceholders).Count -ne 0) {
+                throw "$locale catalog changes placeholders for [$context] $source"
             }
         }
     }
