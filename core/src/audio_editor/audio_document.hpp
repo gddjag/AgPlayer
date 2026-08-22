@@ -48,6 +48,7 @@ public:
     bool copySelection();
     bool cutSelection();
     bool pasteAt(SampleFrame playhead);
+    bool duplicateEvent(EventId id, SampleFrame timelineStart);
     bool mergeEvents(EventId left, EventId right);
     bool insertSource(AudioSource source, SampleFrame timelineStart);
     bool undo();

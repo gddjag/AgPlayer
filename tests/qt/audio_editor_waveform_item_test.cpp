@@ -14,7 +14,7 @@ class AudioEditorWaveformItemTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void rendersBoundedStereoPeakGeometry()
+    void rendersBoundedStereoPeakGeometryInOneBuffer()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(4.0);
@@ -26,7 +26,9 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 4);
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 8);
+        QCOMPARE(node->childCount(), 0);
+        QCOMPARE(item.generatedPointCount(), 8);
         delete node;
     }
 
@@ -45,23 +47,47 @@ private slots:
         QCOMPARE(node, nullptr);
     }
 
-    void visibleRangeRendersOnlyRequestedPeakWindow()
+    void visiblePeaksAreBoundedToTwoPointsPerLogicalPixel()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(10.0);
+        item.setHeight(40.0);
+        QVariantList values;
+        for (int index = 0; index < 100; ++index) {
+            values.append(-0.5);
+            values.append(0.5);
+        }
+        QVariantList channels{QVariant(values)};
+        item.setChannelPeaks(channels);
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QVERIFY(item.generatedPointCount() <= 20);
+        delete node;
+    }
+
+    void blankBucketsDoNotBridgeTimelineGaps()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(100.0);
         item.setHeight(40.0);
-        QVariantList channels;
-        channels.append(QVariant(QVariantList{
-            -1.0, 1.0, -0.8, 0.8, -0.6, 0.6, -0.4, 0.4}));
-        item.setChannelPeaks(channels);
-        item.setVisibleStartRatio(0.25);
-        item.setVisibleEndRatio(0.75);
+        QVariantList values{-1.0, 1.0, QVariant{}, QVariant{}, -0.5, 0.5};
+        item.setChannelPeaks({QVariant(values)});
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 2);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
+        QCOMPARE(item.generatedPointCount(), 4);
         delete node;
+    }
+
+    void obsoleteSecondCropPropertiesAreAbsent()
+    {
+        const QMetaObject& meta = AudioEditorWaveformItem::staticMetaObject;
+        QCOMPARE(meta.indexOfProperty("renderMode"), -1);
+        QCOMPARE(meta.indexOfProperty("visibleStartRatio"), -1);
+        QCOMPARE(meta.indexOfProperty("visibleEndRatio"), -1);
     }
 
     void rejectsOddAndNonFinitePeakPairs()

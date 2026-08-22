@@ -255,6 +255,25 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
     return true;
 }
 
+bool AudioDocument::duplicateEvent(const EventId id,
+                                   const SampleFrame timelineStart)
+{
+    if (timelineStart < 0 || next_event_id_ == std::numeric_limits<EventId>::max()) {
+        return false;
+    }
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto original = std::find_if(candidate.cbegin(), candidate.cend(),
+        [id](const AudioEvent& event) { return event.id == id; });
+    if (original == candidate.cend()) return false;
+    AudioEvent clone = *original;
+    clone.id = next_event_id_;
+    clone.timelineStart = timelineStart;
+    candidate.push_back(std::move(clone));
+    if (!applyCandidate(std::move(candidate))) return false;
+    ++next_event_id_;
+    return true;
+}
+
 bool AudioDocument::sameParameters(const AudioEvent& left,
                                    const AudioEvent& right) noexcept
 {

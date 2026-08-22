@@ -306,3 +306,55 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   builds passed Release 337/337 (known Ninja recovery warning) and Debug 68/68.
   App smoke, full CTest, recording hardware and long-running source stress
   remain deliberately unverified.
+
+## Phase 6 — Precise reference timeline UI (2026-08-22)
+
+### Requirement traceability
+
+- `P6-MAP-01`: `EditorViewport::panByPixels`, anchored zoom, selection,
+  ruler, hit/event geometry, scrollbar and exact playhead share the frame/pixel
+  mapping seam. Long-file and both-clamp tests pass in Release and Debug.
+- `P6-EVENT-01`: QML receives decimal-string Event IDs and minimal event/source
+  boundaries; Move/Trim/duplicate gestures explicitly begin/end and coalesce
+  to one bounded-history item, including ID `9007199254740993`.
+- `P6-PEAK-01`: visible peaks follow EventTimeline/source intervals, preserve
+  blank gaps, reject stale async generations, and remain bounded to two points
+  per channel/logical pixel. The Scene Graph item uses one geometry buffer and
+  exposes `generatedPointCount()` for non-QML verification.
+- `P6-UI-01`: the approved 1672x941 geometry, exact navigation/toolbar order,
+  inspector A–E groups and honest later-phase disabled states are tested.
+  Obsolete Overview/transport/double-inspector QML and registrations are gone.
+- `P6-RESP-01`: 1280 retains a scrollable inspector; 880 retains scrollable
+  main content plus complete narrow Play/Pause and inspector entries. The QML
+  test opens the inspector, scrolls through E, and checks Export's mapped bounds.
+- `P6-QA-01`: Release/Debug screenshots use a real WAV at all three sizes;
+  same-size source/candidate images and visible difference masks are recorded
+  under `build/qa/phase6` and summarized in `design-qa.md`.
+
+### TDD and validation evidence
+
+- RED: missing viewport/waveform/controller seams failed before production;
+  QML then reproduced the removed `visibleEndRatio`, false empty-session dirty
+  modal, stale Export binding, and incomplete 880 first-viewport playback
+  evidence. Logs are indexed in `task-6-report.md`.
+- GREEN: final Phase 6 focused CTest is Release 5/5 and Debug 5/5. Full builds
+  passed Release 334/334 and Debug 102 steps. Release QA screenshot launch
+  loaded the real WAV and exited 0. `git diff --check` passed.
+- Full Release CTest is 82/83 with only the tracked main-player
+  `waveform_item_test` 0.020-vs-0.012 contract mismatch. Debug is 78/84; its
+  non-Phase-6 list and isolated reruns are recorded in `task-6-report.md`.
+
+### Visual acceptance and remaining boundary
+
+- P0 false discard modal, P1 stale Export action, P1 narrow playback
+  reachability, and executable P2 styling/access differences were fixed.
+  Final Release images are `release-smoke` 1672, `release-final2` 1280, and
+  `release-final3` 880; Debug equivalents are `debug-final` and `debug-final3`.
+- The final 1672 Release comparison/mask is
+  `build/qa/phase6/comparisons-final/release-editor-1672x941-*`.
+  Its numeric difference is dominated by honest real-sine data and the absence
+  of reference-only demo/later-phase values; no executable visual P0/P1/P2 remains.
+- Debug screenshot cleanup still faults in Qt6Cored (`0xc0000005`, offset
+  `0x7d97a`); the final 880 capture used Qt's existing software RHI after two
+  default-RHI `grabWindow()` stalls. No packaging, hardware recording, or
+  Phase 7+ DSP acceptance is claimed.

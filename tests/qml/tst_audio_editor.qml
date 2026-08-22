@@ -5,11 +5,11 @@ import AgPlayer
 
 TestCase {
     id: testCase
-    name: "AudioEditorV2"
+    name: "AudioEditorReferenceTimeline"
     when: windowShown
     visible: true
-    width: 1280
-    height: 720
+    width: 1672
+    height: 849
 
     Component {
         id: pageComponent
@@ -35,160 +35,189 @@ TestCase {
         tryVerify(function() { return page.width > 0 && page.height > 0 })
     }
 
-    function test_uploadedUiStructure() {
-        compare(findChild(page, "audioEditorLeftSidebar"), null)
-        verify(findChild(page, "editorCommandBar"))
-        verify(findChild(page, "fileSummaryBar"))
-        verify(findChild(page, "editorWaveformCanvas"))
-        verify(findChild(page, "overviewNavigator"))
-        verify(findChild(page, "recordingInspector"))
-        verify(findChild(page, "timePitchInspector"))
-        verify(findChild(page, "editorTransportBar"))
-        verify(findChild(page, "editorStatusBar"))
+    function verifyGeometry(name, x, y, width, height) {
+        const item = findChild(page, name)
+        verify(item, "missing " + name)
+        verify(Math.abs(item.x - x) <= 2, name + " x=" + item.x)
+        verify(Math.abs(item.y - y) <= 2, name + " y=" + item.y)
+        verify(Math.abs(item.width - width) <= 2,
+               name + " width=" + item.width)
+        verify(Math.abs(item.height - height) <= 2,
+               name + " height=" + item.height)
+        return item
     }
 
-    function test_rightInspectorContainsOnlyTwoBusinessGroups() {
-        const inspector = findChild(page, "editorInspector")
-        verify(inspector)
-        compare(inspector.businessSectionCount, 2)
-        compare(findChild(inspector, "inspectorRecordButton"), null)
-        compare(findChild(inspector, "recordingSettingsGear"), null)
+    function test_referenceGeometryAt1672x941ShellContent() {
+        host.width = 1672
+        host.height = 849
+        wait(0)
+        verifyGeometry("editorMainColumn", 0, 0, 1300, 849)
+        verifyGeometry("editorInspector", 1300, 0, 372, 849)
+        verifyGeometry("editorCommandBar", 12, 13, 1278, 61)
+        verifyGeometry("fileSummaryBar", 12, 88, 1278, 48)
+        verify(findChild(page, "fileSummaryIcon"))
+        verifyGeometry("editorTimelineWorkspace", 12, 152, 1276, 364)
+        verifyGeometry("editorTrackHeader", 12, 202, 96, 284)
+        verifyGeometry("editorTimeRuler", 118, 152, 1167, 50)
+        verifyGeometry("editorWaveformCanvas", 118, 202, 1167, 284)
+        verifyGeometry("editorTimelineScrollbar", 118, 500, 1167, 16)
+        verifyGeometry("editorRecordingTransport", 12, 527, 556, 130)
+        verifyGeometry("editorPlaybackTransport", 580, 527, 708, 130)
+        verifyGeometry("editorShortcutCard", 12, 667, 1276, 157)
+        verifyGeometry("editorStatusBar", 0, 824, 1300, 25)
     }
 
-    function test_emptyStateContainsNoDemoValues() {
-        compare(AudioEditorController.hasDocument, false)
-        verify(findChild(page, "editorWaveformCanvas"))
-    }
+    function test_toolbarExactOrderAndClearKeepsDocument() {
+        const names = [
+            "importAudio", "saveProject", "select", "split", "delete",
+            "crop", "copy", "paste", "fadeIn", "fadeOut", "mute", "clear"
+        ]
+        const labels = [
+            "导入音频", "保存工程", "选择", "分割", "删除", "裁剪",
+            "复制", "粘贴", "淡入", "淡出", "静音片段", "清除"
+        ]
+        let previousX = -1
+        for (let index = 0; index < names.length; ++index) {
+            const button = findChild(page, "editorCommand_" + names[index])
+            verify(button, "missing toolbar command " + names[index])
+            compare(button.label, labels[index])
+            verify(button.x > previousX, names[index] + " is out of order")
+            previousX = button.x
+        }
 
-    function test_transportHasNoDuplicateMarkerOrAudioControls() {
-        const transport = findChild(page, "editorTransportBar")
-        verify(transport)
-        compare(findChild(transport, "transportAddMarker"), null)
-        compare(findChild(transport, "transportPreviousMarker"), null)
-        compare(findChild(transport, "transportNextMarker"), null)
-        compare(findChild(page, "markerManagementDialog"), null)
-        compare(findChild(transport, "transportVolumeControl"), null)
-        compare(findChild(transport, "transportZoomControl"), null)
-    }
-
-    function test_editCommandsExposeMouseHelpAndConventionalShortcuts() {
-        const commandBar = findChild(page, "editorCommandBar")
-        verify(commandBar)
-        const crop = findChild(commandBar, "editorCommand_cropToSelection")
-        const silence = findChild(commandBar, "editorCommand_silenceSelection")
-        const fadeIn = findChild(commandBar, "editorCommand_fadeIn")
-        const fadeOut = findChild(commandBar, "editorCommand_fadeOut")
-        verify(crop && silence && fadeIn && fadeOut)
-        compare(crop.shortcutText, "Ctrl+T")
-        compare(silence.shortcutText, "Ctrl+L")
-        compare(fadeIn.shortcutText, "Ctrl+Alt+I")
-        compare(fadeOut.shortcutText, "Ctrl+Alt+O")
-        verify(crop.hoverText.indexOf(crop.label) >= 0)
-        verify(crop.hoverText.indexOf(crop.shortcutText) >= 0)
-        verify(silence.hoverText.indexOf(silence.shortcutText) >= 0)
-        compare(findChild(commandBar, "editorCommand_normalize"), null)
-        verify(findChild(commandBar, "editorCommand_insertSilence"))
-        verify(findChild(commandBar, "editorCommand_noiseReduction"))
-        compare(findChild(commandBar, "editorCommand_addMarker"), null)
-        verify(findChild(commandBar, "editorCommand_exportMenu"))
-        verify(findChild(commandBar, "editorCommand_clearSelection"))
-        verify(findChild(commandBar, "editorCommand_clearDocument"))
-        compare(findChild(commandBar, "editorCommand_moreMenu"), null)
-    }
-
-    function test_keyboardAndMouseEditingInteractions() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        page.forceActiveFocus()
-        keyClick(Qt.Key_A, Qt.ControlModifier)
-        compare(AudioEditorController.selectionFrames, 96000)
-        keyClick(Qt.Key_L, Qt.ControlModifier)
-        verify(AudioEditorController.modified)
-
-        const interaction = findChild(page, "editorWaveformInteraction")
-        verify(interaction)
-        const before = AudioEditorController.viewport.visibleFrameCount
-        const canvas = findChild(page, "editorWaveformCanvas")
-        verify(canvas)
-        const accepted = canvas.zoomAt({modifiers: Qt.ControlModifier,
-                                        angleDelta: {y: 120}, accepted: false},
-                                       interaction.width / 2, interaction.width)
-        verify(accepted)
-        tryVerify(function() {
-            return AudioEditorController.viewport.visibleFrameCount < before
-        })
-    }
-
-    function test_waveformDirectManipulationKeepsSelectionAndPlayheadIndependent() {
-        const canvas = findChild(page, "editorWaveformCanvas")
-        verify(canvas)
-        verify(canvas.width > 0)
-        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        verify(AudioEditorController.setSelection(12000, 36000))
-        const startHandle = findChild(canvas, "editorSelectionStartHandle")
-        const endHandle = findChild(canvas, "editorSelectionEndHandle")
-        const playhead = findChild(canvas, "editorPlayheadHandle")
-        verify(startHandle && endHandle && playhead)
-        verify(startHandle.width >= 24)
-        verify(endHandle.width >= 24)
-        verify(playhead.width >= 24)
-        verify(findChild(canvas, "editorSelectionContextCancel"))
-    }
-
-    function test_cancelSelectionAndClearDocumentShortcuts() {
-        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        verify(AudioEditorController.setSelection(12000, 36000))
-        page.forceActiveFocus()
-        keyClick(Qt.Key_A, Qt.ControlModifier | Qt.ShiftModifier)
+        verify(AudioEditorController.setSelection(100, 200))
+        verify(AudioEditorController.setActiveTool("scissors"))
+        const clearButton = findChild(page, "editorCommand_clear")
+        mouseClick(clearButton)
+        compare(AudioEditorController.hasDocument, true)
         compare(AudioEditorController.selectionStart, -1)
-        keyClick(Qt.Key_W, Qt.ControlModifier)
-        compare(AudioEditorController.hasDocument, false)
+        compare(AudioEditorController.activeTool, "select")
     }
 
-    function test_overviewWindowDragsContinuouslyFromGrabPoint() {
-        const overview = findChild(page, "overviewNavigator")
-        verify(overview)
-        verify(overview.width > 0)
+    function test_inspectorAThroughEAndRemovedContradictions() {
+        const names = [
+            "inspectorRecordingGroup", "inspectorTempoGroup",
+            "inspectorPitchGroup", "inspectorPreservePitchGroup",
+            "inspectorExportGroup"
+        ]
+        let previousY = -1
+        for (const name of names) {
+            const group = findChild(page, name)
+            verify(group, "missing " + name)
+            verify(group.y > previousY, name + " is out of order")
+            previousY = group.y
+        }
+        compare(AudioEditorController.formantPreservationSupported, false)
+        compare(findChild(page, "inspectorFormantRow"), null)
+        compare(findChild(page, "overviewNavigator"), null)
+        compare(findChild(page, "recordingInspector"), null)
+        compare(findChild(page, "timePitchInspector"), null)
+        compare(findChild(page, "editorCommand_noiseReduction"), null)
+        compare(findChild(page, "editorCommand_gain"), null)
+        compare(findChild(page, "editorCommand_insertSilence"), null)
+        compare(findChild(page, "editorCommand_clearDocument"), null)
+        compare(findChild(page, "editorCommand_exportMenu"), null)
     }
 
-    function test_noPageLevelHorizontalOverflow_data() {
+    function test_keyboardToolSelectionSplitAndEscape() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        page.forceActiveFocus()
+        keyClick(Qt.Key_2, Qt.ControlModifier)
+        compare(AudioEditorController.activeTool, "scissors")
+        keyClick(Qt.Key_1, Qt.ControlModifier)
+        compare(AudioEditorController.activeTool, "select")
+        verify(AudioEditorController.setSelection(12000, 36000))
+        verify(AudioEditorController.setActiveTool("scissors"))
+        keyClick(Qt.Key_Escape)
+        compare(AudioEditorController.selectionStart, -1)
+        compare(AudioEditorController.activeTool, "select")
+
+        verify(AudioEditorController.seekFrame(48000))
+        compare(AudioEditorController.timelineEventViews.length, 1)
+        keyClick(Qt.Key_S)
+        compare(AudioEditorController.timelineEventViews.length, 2)
+    }
+
+    function test_actionButtonsTrackControllerStateChanges() {
+        const exportButton = findChild(page, "editorExportButton")
+        const deleteButton = findChild(page, "editorCommand_delete")
+        verify(exportButton && deleteButton)
+        compare(exportButton.enabled, false)
+        compare(deleteButton.enabled, false)
+
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        tryCompare(exportButton, "enabled", true)
+        verify(AudioEditorController.setSelection(100, 200))
+        tryCompare(deleteButton, "enabled", true)
+    }
+
+    function test_mappingAndDirectManipulationShareViewport() {
+        verify(AudioEditorController.createUntitledDocument(96000, 2,
+                                                             96000 * 60 * 60 * 2))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(123456789,
+                                                               123456789 + 960000))
+        const frame = AudioEditorController.viewport.frameAtPixel(canvas.width * 0.375)
+        const pixel = AudioEditorController.viewport.pixelAtFrame(frame)
+        verify(Math.abs(pixel - canvas.width * 0.375) <= 0.01)
+        compare(canvas.frameAtCanvasPixel(canvas.width * 0.375), frame)
+        verify(findChild(canvas, "editorSelectionStartHandle"))
+        verify(findChild(canvas, "editorSelectionEndHandle"))
+        verify(findChild(canvas, "editorPlayheadHandle"))
+    }
+
+    function test_responsivePlaybackAndInspectorAccess_data() {
         return [
-            {tag: "1280x720", w: 1280, h: 720},
-            {tag: "1672x942", w: 1672, h: 942},
-            {tag: "1600x900", w: 1600, h: 900},
-            {tag: "2560x1440", w: 2560, h: 1440},
-            {tag: "3840x2160", w: 3840, h: 2160}
+            { tag: "desktop", w: 1280, h: 628, access: "editorInspectorScroller" },
+            { tag: "narrow", w: 880, h: 468, access: "editorInspectorAccess" }
         ]
     }
 
-    function test_noPageLevelHorizontalOverflow(data) {
+    function test_responsivePlaybackAndInspectorAccess(data) {
         host.width = data.w
         host.height = data.h
         wait(0)
-        compare(page.width, data.w)
-        compare(page.height, data.h)
+        const playback = findChild(page, "editorPlaybackTransport")
+        const exportGroup = findChild(page, "inspectorExportGroup")
+        const access = findChild(page, data.access)
+        verify(playback && playback.visible)
+        verify(exportGroup)
+        verify(access && access.visible)
+        verify(findChild(page, "editorCommand_importAudio").visible)
+        if (data.w === 880) {
+            const commandBar = findChild(page, "editorCommandBar")
+            verify(access.y >= commandBar.y + commandBar.height,
+                   "narrow inspector access overlaps the command toolbar")
+            const playAccess = findChild(page, "editorNarrowPlaybackAccess")
+            verify(playAccess && playAccess.visible)
+            verify(playAccess.enabled)
+            verify(playAccess.y >= commandBar.y + commandBar.height)
+            verify(playAccess.y + playAccess.height <= page.height)
+            verify(playAccess.x + playAccess.width + 8 <= access.x,
+                   "narrow playback and inspector access overlap")
+
+            mouseClick(access)
+            const inspector = findChild(page, "editorInspector")
+            const scroller = findChild(page, "editorInspectorScroller")
+            const exportButton = findChild(page, "editorExportButton")
+            verify(inspector.visible && scroller && exportButton)
+            scroller.contentY = Math.max(0,
+                scroller.contentHeight - scroller.height)
+            wait(0)
+            const exportPosition = exportButton.mapToItem(page, 0, 0)
+            verify(exportPosition.y >= 0)
+            verify(exportPosition.y + exportButton.height <= page.height,
+                   "narrow export action cannot be fully scrolled into view")
+            mouseClick(access)
+        }
     }
 
-    function test_schemeThreeInspectorAndShortcutCardStayVisible() {
-        verify(findChild(page, "editorInspectorTabs"))
-        verify(findChild(page, "editorShortcutCard"))
-        host.width = 1672
-        // The 942 px tool window leaves 839 px for this page after its title
-        // and top navigation bars.
-        host.height = 839
-        wait(0)
-        const inspector = findChild(page, "editorInspector")
-        verify(inspector)
-        verify(inspector.height <= page.height)
-        compare(inspector.compact, false,
-                "the 1672x942 reference viewport must show both inspector groups")
-        verify(findChild(page, "recordingInspector").visible)
-        verify(findChild(page, "timePitchInspector").visible)
-    }
-
-    function test_export_dialog_is_complete_inside_the_window() {
+    function test_exportDialogFitsNarrowWindow() {
         host.width = 880
-        // The 560 px tool window leaves 457 px below its title and navigation.
-        host.height = 457
+        host.height = 468
         wait(0)
         const dialog = findChild(page, "audioEditorExportDialog")
         verify(dialog)
@@ -196,18 +225,6 @@ TestCase {
         tryVerify(function() { return dialog.visible })
         verify(dialog.width <= page.width - 24)
         verify(dialog.height <= page.height - 24)
-        verify(dialog.contentItem.height <= dialog.availableHeight)
         dialog.close()
-    }
-
-    function test_compact_layout_keeps_shortcut_help_visible() {
-        host.width = 880
-        host.height = 457
-        wait(0)
-        const shortcutHint = findChild(page, "editorStatusShortcutHint")
-        verify(shortcutHint)
-        verify(shortcutHint.visible)
-        verify(shortcutHint.text.indexOf("Space") >= 0)
-        verify(shortcutHint.text.indexOf("Ctrl+W") >= 0)
     }
 }

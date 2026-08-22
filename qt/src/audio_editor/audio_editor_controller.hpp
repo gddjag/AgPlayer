@@ -22,10 +22,8 @@
 
 #include <atomic>
 #include <cstdint>
-#include <list>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 class PlaybackController;
@@ -66,6 +64,11 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(QVariantList channelPeaks READ channelPeaks NOTIFY waveformChanged)
     Q_PROPERTY(QVariantList viewportChannelPeaks READ viewportChannelPeaks
                    NOTIFY waveformChanged)
+    Q_PROPERTY(QVariantList timelineEventViews READ timelineEventViews
+                   NOTIFY documentChanged)
+    Q_PROPERTY(QString activeTool READ activeTool NOTIFY toolChanged)
+    Q_PROPERTY(bool formantPreservationSupported
+                   READ formantPreservationSupported CONSTANT)
     Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
     Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY playbackChanged)
     Q_PROPERTY(qint64 durationMs READ durationMs NOTIFY documentChanged)
@@ -132,6 +135,10 @@ public:
     [[nodiscard]] QVariantList channelPeaks() const;
     [[nodiscard]] QVariantList viewportChannelPeaks() const
     { return viewport_channel_peaks_; }
+    [[nodiscard]] QVariantList timelineEventViews() const;
+    [[nodiscard]] QString activeTool() const { return active_tool_; }
+    [[nodiscard]] constexpr bool formantPreservationSupported() const noexcept
+    { return false; }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] qint64 positionMs() const noexcept { return position_ms_; }
     [[nodiscard]] qint64 durationMs() const noexcept;
@@ -195,11 +202,22 @@ public:
                               bool variableBitRate = true, int quality = 80);
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
-    Q_INVOKABLE bool moveEvent(quint64 id, qint64 timelineStart);
-    Q_INVOKABLE bool trimEvent(quint64 id, qint64 sourceStart,
+    bool moveEvent(quint64 id, qint64 timelineStart);
+    bool trimEvent(quint64 id, qint64 sourceStart,
+                   qint64 sourceEnd, qint64 timelineStart);
+    bool splitEvent(quint64 id, qint64 frame);
+    bool mergeEvents(quint64 left, quint64 right);
+    Q_INVOKABLE bool moveEvent(const QString& id, qint64 timelineStart);
+    Q_INVOKABLE bool trimEvent(const QString& id, qint64 sourceStart,
                                qint64 sourceEnd, qint64 timelineStart);
-    Q_INVOKABLE bool splitEvent(quint64 id, qint64 frame);
-    Q_INVOKABLE bool mergeEvents(quint64 left, quint64 right);
+    Q_INVOKABLE bool splitEvent(const QString& id, qint64 frame);
+    Q_INVOKABLE bool beginEventGesture(const QString& id,
+                                       const QString& operation,
+                                       bool duplicate = false);
+    Q_INVOKABLE bool endEventGesture();
+    Q_INVOKABLE bool cancelEventGesture();
+    Q_INVOKABLE bool setActiveTool(const QString& tool);
+    Q_INVOKABLE bool clearTransientState();
     Q_INVOKABLE bool actionEnabled(const QString& id) const noexcept;
     Q_INVOKABLE bool triggerAction(const QString& id);
     Q_INVOKABLE bool playPause();
@@ -234,6 +252,7 @@ signals:
     void stateChanged();
     void documentChanged();
     void waveformChanged();
+    void toolChanged();
     void playbackChanged();
     void errorMessageChanged();
     void progressChanged();
@@ -255,10 +274,7 @@ private:
     void refreshActions();
     [[nodiscard]] QVariantList buildExportFormats() const;
     void requestViewportWaveform();
-    void clearViewportWaveformCache();
-    [[nodiscard]] QString activeWaveformCacheKey(
-        qint64 startFrame, qint64 endFrame, qint64 targetPointCount,
-        int mode) const;
+    void clearViewportWaveformState();
     [[nodiscard]] QVariantList toVariantPeaks(
         const std::vector<std::vector<float>>& channels) const;
     bool preparePlayback();
@@ -275,6 +291,8 @@ private:
     void finishTimelineMutation();
     void syncProjectSourcesAndIssues();
     [[nodiscard]] std::optional<quint64> nextProjectSourceId() const;
+    [[nodiscard]] static std::optional<agplayer::editor::EventId>
+    parseEventId(const QString& id) noexcept;
     void setViewportDocumentFrames(qint64 frames) noexcept;
     [[nodiscard]] bool projectSourcesOnline() const noexcept;
     bool requireOnlineProjectSources();
@@ -306,27 +324,9 @@ private:
     QVariantList source_channel_peaks_;
     QVariantList channel_peaks_;
     QVariantList viewport_channel_peaks_;
-    qint64 viewport_cache_version_ = 1;
-    qint64 viewport_cache_size_bytes_ = 0;
-    qint64 viewport_cache_size_limit_ = 16LL * 1024LL * 1024LL;
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
-
-    struct ViewportWaveformCacheEntry {
-        qint64 start_frame{};
-        qint64 end_frame{};
-        qint64 source_start_frame{};
-        qint64 target_frames_per_point{};
-        int mode{};
-        int sample_rate{};
-        qint64 bytes{};
-        std::vector<std::vector<float>> channels;
-        std::list<QString>::iterator lru_iterator{};
-    };
-    std::unordered_map<QString, std::shared_ptr<ViewportWaveformCacheEntry>>
-        viewport_waveform_cache_;
-    std::list<QString> viewport_waveform_lru_;
 
     EditorSessionState state_{EditorSessionState::Empty};
     bool has_document_{};
@@ -376,4 +376,17 @@ private:
     qint64 recording_insert_frame_{};
     QPointer<PlaybackController> main_playback_;
     std::atomic_uint64_t preview_generation_{0};
+
+    enum class EventGestureKind { None, Move, Trim };
+    struct EventGesture final {
+        EventGestureKind kind{EventGestureKind::None};
+        agplayer::editor::EventId id{};
+        bool duplicate{};
+        bool pending{};
+        qint64 timelineStart{};
+        qint64 sourceStart{};
+        qint64 sourceEnd{};
+    };
+    EventGesture event_gesture_;
+    QString active_tool_{QStringLiteral("select")};
 };

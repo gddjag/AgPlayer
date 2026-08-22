@@ -9,12 +9,12 @@ Window {
     visible: false
     // Reference workbench baseline. Layouts still contract below this size.
     width: 1672
-    height: 942
+    height: 941
     minimumWidth: 880
     minimumHeight: 560
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
-    title: "AgPlayer · " + qsTr("音频工具")
+    title: qsTr("AgPlayer 音频编辑")
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -73,8 +73,8 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 48
-                color: "transparent"
+                Layout.preferredHeight: 49
+                color: "#031426"
 
                 RowLayout {
                     z: 1
@@ -83,29 +83,26 @@ Window {
                     anchors.rightMargin: 8
                     spacing: 7
 
-                    Image {
-                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
-                        fillMode: Image.PreserveAspectFit
+                    Rectangle {
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        radius: 6
+                        color: "#0867ed"
+                        border.color: "#2587ff"
+                        Image {
+                            anchors.centerIn: parent
+                            width: 18
+                            height: 18
+                            source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                            fillMode: Image.PreserveAspectFit
+                        }
                     }
                     Text {
-                        text: "AgPlayer"
+                        text: qsTr("AgPlayer 音频编辑")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
                         font.pixelSize: 17
                         font.weight: Font.Medium
-                    }
-                    Text {
-                        text: "·"
-                        color: Theme.secondaryText
-                        font.pixelSize: 14
-                    }
-                    Text {
-                        text: qsTr("音频工具")
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 16
                     }
 
                     Item { Layout.fillWidth: true }
@@ -171,7 +168,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 55
+                Layout.preferredHeight: 43
                 window: window
                 currentTool: AudioToolsController.currentTool
                 onToolSelected: function(index) {
@@ -180,12 +177,10 @@ Window {
             }
 
             Rectangle {
+                objectName: "audioToolsContentStack"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.leftMargin: 2
-                Layout.rightMargin: 2
-                Layout.bottomMargin: 3
-                color: Theme.background
+                color: "#031426"
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

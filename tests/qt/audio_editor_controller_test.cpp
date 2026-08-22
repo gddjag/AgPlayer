@@ -3,10 +3,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QtTest>
+
+#include <cmath>
 
 class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
@@ -19,6 +22,23 @@ private slots:
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.cut")));
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.paste")));
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.undo")));
+    }
+
+    void viewportWidthBeforeFirstOpenDoesNotCreateDiscardPrompt()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QSignalSpy discardRequested(
+            &controller, &AudioEditorController::discardConfirmationRequested);
+
+        controller.viewport()->setViewportWidth(1'167.0);
+
+        QVERIFY(!controller.modified());
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QCOMPARE(discardRequested.count(), 0);
+        QVERIFY(controller.hasDocument());
+        QVERIFY(controller.actionEnabled(QStringLiteral("editor.export")));
     }
 
     void actionRoutingDeletesWithoutRipple()
@@ -40,6 +60,78 @@ private slots:
         QVERIFY(controller.moveEvent(1, 200));
         QCOMPARE(controller.totalFrames(), qint64{900});
         QVERIFY(controller.modified());
+    }
+
+    void qmlEventViewsKeepLargeIdsAsStringsAndGesturesCoalesce()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("large-id.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController saved(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(saved.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(saved.saveProjectAs(QUrl::fromLocalFile(project)));
+        QFile projectFile(project);
+        QVERIFY(projectFile.open(QIODevice::ReadOnly));
+        QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
+        projectFile.close();
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QCOMPARE(events.size(), 1);
+        QJsonObject event = events.first().toObject();
+        const QString largeId = QStringLiteral("9007199254740993");
+        event.insert(QStringLiteral("id"), largeId);
+        events.replace(0, event);
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(projectFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(projectFile.write(QJsonDocument(root).toJson()) > 0);
+        projectFile.close();
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(controller.openProject(QUrl::fromLocalFile(project)),
+                 qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.formantPreservationSupported(), false);
+        QVariantList views = controller.timelineEventViews();
+        QCOMPARE(views.size(), 1);
+        QCOMPARE(views.first().toMap().value(QStringLiteral("id")).toString(), largeId);
+
+        QVERIFY(controller.beginEventGesture(largeId, QStringLiteral("move"), false));
+        QVERIFY(controller.moveEvent(largeId, 100));
+        QVERIFY(controller.moveEvent(largeId, 200));
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(), qint64{0});
+        QVERIFY(controller.endEventGesture());
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(), qint64{200});
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(), qint64{0});
+        QVERIFY(!controller.undo());
+
+        QVERIFY(controller.beginEventGesture(largeId, QStringLiteral("move"), true));
+        QVERIFY(controller.moveEvent(largeId, controller.totalFrames() + 1'000));
+        QVERIFY(controller.endEventGesture());
+        QCOMPARE(controller.timelineEventViews().size(), 2);
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().size(), 1);
+    }
+
+    void selectionAndViewportUseOneExactFramePixelMapping()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(96'000, 2, 691'200'000));
+        controller.viewport()->setViewportWidth(1'167.0);
+        QVERIFY(controller.viewport()->setVisibleRange(400'000'123, 400'960'123));
+        const qint64 start = controller.viewport()->frameAtPixel(177.25);
+        const qint64 end = controller.viewport()->frameAtPixel(899.75);
+        QVERIFY(controller.setSelection(start, end));
+        QCOMPARE(controller.selectionStart(), start);
+        QCOMPARE(controller.selectionEnd(), end);
+        QVERIFY(std::abs(controller.viewport()->pixelAtFrame(start) - 177.25) <= 0.01);
+        QVERIFY(std::abs(controller.viewport()->pixelAtFrame(end) - 899.75) <= 0.01);
     }
 
     void splitAndMergeRouteThroughController()
@@ -1027,6 +1119,57 @@ private slots:
         QVERIFY(!controller.busy());
         QCOMPARE(controller.state(), EditorSessionState::Ready);
         QCOMPARE(stateChanges.count(), 0);
+    }
+
+    void visibleTimelineWaveformKeepsGapsBlankAndLatestRequestWins()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(controller.openFile(QUrl::fromLocalFile(fixture)),
+                 qPrintable(controller.errorMessage()));
+        const qint64 quarter = controller.totalFrames() / 4;
+        QVERIFY(quarter > 0);
+        QVERIFY(controller.setSelection(quarter, quarter * 2));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+
+        controller.viewport()->setViewportWidth(120.0);
+        QVERIFY(controller.viewport()->setVisibleRange(0, quarter));
+        QVERIFY(controller.viewport()->setVisibleRange(quarter, quarter * 2));
+
+        const auto allBucketsBlank = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            if (channels.isEmpty()) return false;
+            for (const QVariant& channelValue : channels) {
+                const QVariantList values = channelValue.toList();
+                if (values.isEmpty() || values.size() % 2 != 0
+                    || values.size() / 2 > 240) {
+                    return false;
+                }
+                for (const QVariant& value : values) {
+                    if (value.isValid() && !value.isNull()) return false;
+                }
+            }
+            return true;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(allBucketsBlank(), 10'000);
+
+        QVERIFY(controller.viewport()->setVisibleRange(quarter * 2,
+                                                        controller.totalFrames()));
+        const auto hasVisiblePeak = [&controller] {
+            for (const QVariant& channelValue : controller.viewportChannelPeaks()) {
+                const QVariantList values = channelValue.toList();
+                if (values.size() / 2 > 240) return false;
+                for (const QVariant& value : values) {
+                    if (value.isValid() && !value.isNull()
+                        && std::abs(value.toDouble()) > 0.001) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(hasVisiblePeak(), 10'000);
     }
 
     void obsoleteReplacementOperationsAreAbsent()

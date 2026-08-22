@@ -1,84 +1,61 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
     id: navigation
     objectName: "audioToolsTopNav"
-    color: Theme.panel
-    border.color: Theme.border
+    color: "#06182a"
+    border.color: "#23415d"
     border.width: 1
-    radius: Theme.radiusMd
-    implicitHeight: 55
+    implicitHeight: 43
 
-    readonly property var toolNames: [
-        qsTr("音频编辑"), qsTr("格式转换"),
-        qsTr("元数据修改"), qsTr("文件名处理")
-    ]
     property int currentTool: 0
     property Window window
     signal toolSelected(int index)
 
-    RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: Theme.spacingLg
-        anchors.rightMargin: Theme.spacingLg
-        spacing: Theme.spacingSm
-
-        Item { Layout.fillWidth: true }
+    Row {
+        anchors.left: parent.left
+        anchors.leftMargin: 42
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        spacing: 28
 
         Repeater {
-            model: [
-                { name: qsTr("音频编辑"), icon: "equalizer-line" },
-                { name: qsTr("格式转换"), icon: "briefcase-4-line" },
-                { name: qsTr("元数据修改"), icon: "information-line" },
-                { name: qsTr("文件名处理"), icon: "file-copy-line" }
-            ]
-
-            Button {
-                objectName: "audioToolNavButton"
-                Layout.preferredWidth: 154
-                Layout.preferredHeight: 53
-                Layout.maximumHeight: 53
+            model: [qsTr("音频编辑"), qsTr("格式转换"),
+                    qsTr("元数据修改"), qsTr("文件名处理")]
+            delegate: Button {
+                required property int index
+                required property string modelData
+                objectName: "audioToolNav_" + index
+                width: 126
+                height: 42
                 flat: true
+                text: modelData
                 checked: navigation.currentTool === index
                 focusPolicy: Qt.StrongFocus
-
-                contentItem: RowLayout {
-                    spacing: 7
-                    Item { Layout.preferredWidth: 12 }
-                    ThemedIcon {
-                        source: Theme.icon(modelData.icon)
-                        tint: checked ? Theme.cyan : Theme.iconSecondary
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                    }
-                    Text {
-                        text: modelData.name
-                        color: checked ? Theme.primaryText : Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 15
-                        font.weight: checked ? Font.DemiBold : Font.Normal
-                    }
-                    Item { Layout.fillWidth: true }
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.checked ? "#f4f8ff" : "#b6c5d5"
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 15
+                    font.weight: parent.checked ? Font.DemiBold : Font.Normal
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
-
-                background: Rectangle {
-                    color: checked ? Qt.rgba(Theme.accent.r,
-                                             Theme.accent.g,
-                                             Theme.accent.b, 0.14)
-                                   : (parent.hovered ? Theme.hoverSurface : "transparent")
-                    border.width: 0
-                    radius: Theme.radiusMd
+                background: Item {
+                    Rectangle {
+                        visible: parent.parent.checked
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 3
+                        radius: 1
+                        color: "#087cff"
+                    }
                 }
-
                 onClicked: navigation.toolSelected(index)
             }
         }
-
-        Item { Layout.fillWidth: true }
     }
 }
