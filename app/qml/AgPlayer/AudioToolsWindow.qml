@@ -74,7 +74,7 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 48
+                Layout.preferredHeight: window.metadataWorkbench ? 54 : 48
                 color: window.metadataWorkbench ? "#06131d" : "transparent"
 
                 RowLayout {
@@ -172,7 +172,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 55
+                Layout.preferredHeight: window.metadataWorkbench ? 52 : 55
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.metadataWorkbench

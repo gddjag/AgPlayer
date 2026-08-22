@@ -11,7 +11,7 @@ Rectangle {
     border.color: referenceWorkbench ? "#142b3a" : Theme.border
     border.width: 1
     radius: referenceWorkbench ? 0 : Theme.radiusMd
-    implicitHeight: 55
+    implicitHeight: referenceWorkbench ? 52 : 55
 
     readonly property var toolNames: [
         qsTr("音频编辑"), qsTr("格式转换"),
@@ -41,8 +41,8 @@ Rectangle {
                 id: navButton
                 objectName: "audioToolNavButton"
                 Layout.preferredWidth: navigation.referenceWorkbench ? 164 : 154
-                Layout.preferredHeight: 53
-                Layout.maximumHeight: 53
+                Layout.preferredHeight: navigation.referenceWorkbench ? 52 : 53
+                Layout.maximumHeight: navigation.referenceWorkbench ? 52 : 53
                 flat: true
                 checked: navigation.currentTool === index
                 focusPolicy: Qt.StrongFocus

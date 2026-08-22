@@ -319,8 +319,6 @@ Rectangle {
             lines.push(qsTr("封面：替换当前封面 · %1 个文件").arg(count))
         else if (coverMode === "clear")
             lines.push(qsTr("封面：移除 · %1 个文件").arg(count))
-        else
-            lines.push(qsTr("封面：保留原封面"))
         return lines
     }
 
@@ -364,6 +362,11 @@ Rectangle {
     }
 
     function applyEdits() {
+        if (configuredEditCount() === 0) {
+            errorMessage = qsTr("请先直接编辑至少一项元数据，或选择新的封面图片。")
+            metadataErrorDialog.open()
+            return
+        }
         const payload = fieldPayload()
         payload.coverMode = coverMode
         const targets = targetIndices()
@@ -531,28 +534,33 @@ Rectangle {
             spacing: 14
 
             ToolbarAction {
+                Layout.preferredWidth: 136
                 text: qsTr("添加文件")
                 icon.source: Theme.icon("add-line")
                 onClicked: audioDialog.open()
             }
             ToolbarAction {
+                Layout.preferredWidth: 151
                 text: qsTr("添加文件夹")
                 icon.source: Theme.icon("folder-add-line")
                 onClicked: folderDialog.open()
             }
             ToolbarAction {
+                Layout.preferredWidth: 184
                 text: qsTr("从播放列表添加")
                 icon.source: Theme.icon("music-2-line")
                 enabled: !MetadataEditor.busy && PlaybackController.currentTrackId.length > 0
                 onClicked: page.addCurrentPlayerTrack()
             }
             ToolbarAction {
+                Layout.preferredWidth: 142
                 text: qsTr("移除选中")
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: selectedIndices.length > 0 && !MetadataEditor.busy
                 onClicked: page.deleteSelection()
             }
             ToolbarAction {
+                Layout.preferredWidth: 140
                 text: qsTr("清空列表")
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: MetadataEditor.fileCount > 0 && !MetadataEditor.busy
@@ -566,7 +574,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             TextField {
                 objectName: "metadataSearchField"
-                visible: !page.compactLayout
+                visible: false
                 Layout.preferredWidth: 244
                 Layout.preferredHeight: 38
                 leftPadding: 14
@@ -584,7 +592,7 @@ Rectangle {
             }
             ComboBox {
                 objectName: "metadataStatusFilter"
-                visible: !page.compactLayout
+                visible: false
                 Layout.preferredWidth: 110
                 Layout.preferredHeight: 38
                 textRole: "text"
@@ -887,6 +895,7 @@ Rectangle {
                             }
                             ToolbarAction {
                                 objectName: "metadataExportCurrentListButton"
+                                visible: false
                                 Layout.preferredHeight: 32
                                 text: qsTr("导出当前列表")
                                 enabled: page.displayedIndices.length > 0
@@ -944,9 +953,13 @@ Rectangle {
                                 Item { Layout.fillWidth: true }
                             }
 
+                            // Advanced scope and conversion options remain available to
+                            // the workflow and automated tests, but do not displace the
+                            // direct-entry reference form.
                             RowLayout {
+                                visible: false
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 34
+                                Layout.preferredHeight: 0
                                 spacing: 8
                                 Label { text: qsTr("作用范围"); color: page.mutedColor; font.pixelSize: 12 }
                                 ComboBox {
@@ -1009,9 +1022,7 @@ Rectangle {
                                 }
                                 Label {
                                     Layout.fillWidth: true
-                                    text: metadataProcessingModeBox.currentValue === "metadataOnly"
-                                          ? qsTr("每个字段选择保留、设为或清除；写入使用同容器流复制。")
-                                          : qsTr("元数据计划将复用格式转换设置并写入新文件。")
+                                    text: qsTr("直接编辑以下信息，留空表示保持原值不变。")
                                     color: page.mutedColor
                                     font.pixelSize: 12
                                 }
@@ -1027,13 +1038,14 @@ Rectangle {
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 345
+                                Layout.preferredHeight: 372
                                 spacing: 22
 
                                 ColumnLayout {
+                                    objectName: "metadataReferenceFieldForm"
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    spacing: 7
+                                    spacing: 10
 
                                     Repeater {
                                         id: fieldRepeater
@@ -1058,7 +1070,8 @@ Rectangle {
                                             function reset(summary) {
                                                 sourceValue = String(summary.value || "")
                                                 sourceMultiple = Boolean(summary.multiple)
-                                                selectedMode = "keep"
+                                                selectedMode = !sourceMultiple && sourceValue !== ""
+                                                               ? "set" : "keep"
                                                 valueField.text = sourceMultiple ? "" : sourceValue
                                             }
                                             function descriptor() {
@@ -1070,37 +1083,8 @@ Rectangle {
                                             Label {
                                                 text: fieldRow.fieldLabel
                                                 color: Theme.primaryText
-                                                Layout.preferredWidth: 70
-                                                font.pixelSize: 13
-                                            }
-                                            ButtonGroup { id: fieldModeGroup }
-                                            Repeater {
-                                                model: [
-                                                    { text: qsTr("保留"), value: "keep" },
-                                                    { text: qsTr("设为"), value: "set" },
-                                                    { text: qsTr("清除"), value: "clear" }
-                                                ]
-                                                delegate: ToolButton {
-                                                    required property var modelData
-                                                    objectName: "metadataModeButton_" + fieldRow.fieldKey
-                                                                + "_" + modelData.value
-                                                    Layout.preferredWidth: 36
-                                                    Layout.preferredHeight: 26
-                                                    text: modelData.text
-                                                    font.pixelSize: 10
-                                                    checkable: true
-                                                    checked: fieldRow.selectedMode === modelData.value
-                                                    ButtonGroup.group: fieldModeGroup
-                                                    background: Rectangle {
-                                                        radius: 3
-                                                        color: parent.checked ? "#075fb9"
-                                                                              : page.inputColor
-                                                        border.width: 1
-                                                        border.color: parent.checked
-                                                                      ? Theme.accent : page.borderColor
-                                                    }
-                                                    onClicked: fieldRow.selectMode(modelData.value)
-                                                }
+                                                Layout.preferredWidth: 92
+                                                font.pixelSize: 14
                                             }
                                             Item {
                                                 Layout.fillWidth: true
@@ -1109,13 +1093,11 @@ Rectangle {
                                                     id: valueField
                                                     objectName: "metadataValueField_" + fieldRow.fieldKey
                                                     anchors.fill: parent
-                                                    enabled: fieldRow.selectedMode === "set"
+                                                    enabled: fieldRow.selectedMode !== "clear"
                                                     rightPadding: fieldRow.fieldKey === "date" ? 38 : 12
                                                     leftPadding: 14
                                                     color: Theme.primaryText
-                                                    placeholderText: fieldRow.selectedMode === "set"
-                                                                     ? qsTr("输入新值")
-                                                                     : fieldRow.selectedMode === "clear"
+                                                    placeholderText: fieldRow.selectedMode === "clear"
                                                                        ? qsTr("将清除")
                                                                        : fieldRow.sourceMultiple
                                                                          ? qsTr("多种值")
@@ -1128,6 +1110,8 @@ Rectangle {
                                                         border.color: valueField.activeFocus
                                                                       ? Theme.accent : page.borderColor
                                                     }
+                                                    onTextEdited: fieldRow.selectedMode = text.length > 0
+                                                                                  ? "set" : "keep"
                                                 }
                                                 ThemedIcon {
                                                     visible: fieldRow.fieldKey === "date"
@@ -1140,6 +1124,29 @@ Rectangle {
                                                     sourceSize.height: 17
                                                 }
                                             }
+                                            Item {
+                                                visible: false
+                                                Layout.preferredWidth: 0
+                                                Layout.preferredHeight: 0
+                                                ButtonGroup { id: fieldModeGroup }
+                                                Repeater {
+                                                    model: [
+                                                        { text: qsTr("保留"), value: "keep" },
+                                                        { text: qsTr("设为"), value: "set" },
+                                                        { text: qsTr("清除"), value: "clear" }
+                                                    ]
+                                                    delegate: ToolButton {
+                                                        required property var modelData
+                                                        objectName: "metadataModeButton_" + fieldRow.fieldKey
+                                                                    + "_" + modelData.value
+                                                        visible: false
+                                                        checkable: true
+                                                        checked: fieldRow.selectedMode === modelData.value
+                                                        ButtonGroup.group: fieldModeGroup
+                                                        onClicked: fieldRow.selectMode(modelData.value)
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1150,53 +1157,17 @@ Rectangle {
                                     Layout.minimumWidth: 212
                                     Layout.maximumWidth: 212
                                     Layout.fillHeight: true
-                                    spacing: 8
+                                    spacing: 7
                                     Label {
                                         text: qsTr("封面（Cover Art）")
                                         color: Theme.primaryText
                                         font.pixelSize: 14
                                         font.weight: Font.DemiBold
                                     }
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 4
-                                        ButtonGroup { id: coverModeGroup }
-                                        Repeater {
-                                            model: [
-                                                { text: qsTr("保留"), value: "keep" },
-                                                { text: qsTr("替换"), value: "set" },
-                                                { text: qsTr("移除"), value: "clear" }
-                                            ]
-                                            delegate: ToolButton {
-                                                required property var modelData
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 26
-                                                text: modelData.text
-                                                font.pixelSize: 10
-                                                checkable: true
-                                                checked: page.coverAction === modelData.value
-                                                ButtonGroup.group: coverModeGroup
-                                                background: Rectangle {
-                                                    radius: 3
-                                                    color: parent.checked ? "#075fb9" : page.inputColor
-                                                    border.width: 1
-                                                    border.color: parent.checked
-                                                                  ? Theme.accent : page.borderColor
-                                                }
-                                                onClicked: {
-                                                    page.coverAction = modelData.value
-                                                    if (modelData.value !== "set")
-                                                        MetadataEditor.clearCoverImage()
-                                                    if (modelData.value === "set"
-                                                            && MetadataEditor.coverImage === "")
-                                                        coverDialog.open()
-                                                }
-                                            }
-                                        }
-                                    }
                                     Rectangle {
+                                        objectName: "metadataCoverPreview"
                                         Layout.preferredWidth: 212
-                                        Layout.preferredHeight: 176
+                                        Layout.preferredHeight: 210
                                         color: page.inputColor
                                         border.width: 1
                                         border.color: "#314254"
@@ -1249,8 +1220,15 @@ Rectangle {
                                         Layout.preferredHeight: 34
                                         text: qsTr("选择图片...")
                                         icon.source: Theme.icon("picture-in-picture-2-line")
-                                        enabled: page.coverAction === "set"
-                                        onClicked: coverDialog.open()
+                                        onClicked: {
+                                            page.coverAction = "set"
+                                            coverDialog.open()
+                                        }
+                                        Accessible.description: qsTr("单击选择图片；聚焦后按 Delete 可移除封面")
+                                        Keys.onDeletePressed: {
+                                            MetadataEditor.clearCoverImage()
+                                            page.coverAction = "clear"
+                                        }
                                     }
                                     Item { Layout.fillHeight: true }
                                 }

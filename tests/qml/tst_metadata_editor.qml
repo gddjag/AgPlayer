@@ -52,6 +52,19 @@ TestCase {
         verify(cancel.x + cancel.width <= actionBar.width)
     }
 
+    function test_referenceInspectorUsesDirectFieldLayout() {
+        wait(0)
+        const inspector = findChild(page, "metadataInspectorPanel")
+        const form = findChild(page, "metadataReferenceFieldForm")
+        const cover = findChild(page, "metadataCoverPreview")
+        verify(inspector && form && cover)
+        const formTop = form.mapToItem(inspector, 0, 0).y
+        verify(formTop >= 72 && formTop <= 82,
+               "form starts at reference field baseline: " + formTop)
+        verify(cover.width === 212)
+        verify(cover.height === 210)
+    }
+
     function test_compactLayoutKeepsBothWorkspacesReachable() {
         const compactPage = createTemporaryObject(compactPageComponent, testCase)
         verify(compactPage)
@@ -117,7 +130,9 @@ TestCase {
         verify(findChild(page, "metadataModeButton_title_keep"))
         verify(findChild(page, "metadataModeButton_title_set"))
         verify(findChild(page, "metadataModeButton_title_clear"))
-        verify(!findChild(page, "metadataValueField_title").enabled)
+        // The reference editor exposes its value inputs directly: an empty
+        // value means "keep original" until the user types a replacement.
+        verify(findChild(page, "metadataValueField_title").enabled)
 
         page.setFieldMode("title", "set")
         page.setFieldValue("title", "New title")
