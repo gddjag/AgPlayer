@@ -191,7 +191,6 @@ Window {
                 Layout.preferredHeight: 43
                 window: window
                 currentTool: AudioToolsController.currentTool
-                referenceWorkbench: window.metadataWorkbench
                 onToolSelected: function(index) {
                     AudioToolsController.selectTool(index)
                 }
