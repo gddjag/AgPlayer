@@ -274,6 +274,7 @@ private:
     [[nodiscard]] bool syncModifiedFromHistory() noexcept;
     void finishTimelineMutation();
     void syncProjectSourcesAndIssues();
+    [[nodiscard]] std::optional<quint64> nextProjectSourceId() const;
     void setViewportDocumentFrames(qint64 frames) noexcept;
     [[nodiscard]] bool projectSourcesOnline() const noexcept;
     bool requireOnlineProjectSources();

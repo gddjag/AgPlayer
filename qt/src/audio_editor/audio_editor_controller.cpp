@@ -23,9 +23,11 @@
 #include <filesystem>
 #include <limits>
 #include <list>
+#include <optional>
 #include <unordered_set>
 
 using agplayer::editor::AudioDocument;
+using agplayer::editor::AudioEvent;
 using agplayer::editor::AudioFileAnalysis;
 using agplayer::editor::AudioFileAnalyzer;
 using agplayer::editor::AudioSource;
@@ -47,6 +49,7 @@ constexpr qint64 kViewportWaveformCacheDefaultLimit = 16LL * 1024LL * 1024LL;
 constexpr qint64 kViewportTileFrameLimit = 4'096LL;
 constexpr qint64 kViewportTileFrameLimitMode1 = 8'192LL;
 constexpr qint64 kViewportMode2PointCap = 4'096LL;
+constexpr std::size_t kMaxProjectSources = 4'096;
 
 constexpr qreal kViewportModeAThreshold = 32.0;
 constexpr qreal kViewportModeBThreshold = 1.2;
@@ -534,6 +537,21 @@ QVariantList to_variant_peaks(
 QString local_path(const QUrl& url)
 {
     return url.isLocalFile() ? url.toLocalFile() : QString{};
+}
+
+std::optional<quint64> nextAvailableSourceId(const std::vector<ProjectSourceRecord>& records)
+{
+    std::unordered_set<quint64> ids;
+    ids.reserve(records.size());
+    for (const ProjectSourceRecord& record : records) {
+        if (record.sourceId > 0 && record.sourceId < std::numeric_limits<quint64>::max()) {
+            ids.insert(record.sourceId);
+        }
+    }
+    for (quint64 candidate = 1; candidate < std::numeric_limits<quint64>::max(); ++candidate) {
+        if (ids.count(candidate) == 0) return candidate;
+    }
+    return std::nullopt;
 }
 
 ProjectSourceRecord project_source_record(const quint64 sourceId,
@@ -1682,12 +1700,32 @@ bool AudioEditorController::stopRecording()
             return;
         }
         if (insert_recording_at_cursor_) {
+            syncProjectSourcesAndIssues();
+            const auto sourceId = nextProjectSourceId();
+            if (!sourceId) {
+                setState(EditorSessionState::Error);
+                setError(tr("工程音频源数量已达上限，无法插入录音"));
+                emit recordingChanged();
+                return;
+            }
             if (!document_.insertSource(analysis.source, recording_insert_frame_)) {
                 setState(EditorSessionState::Error);
                 setError(tr("录音完成，但无法插入当前文档"));
                 emit recordingChanged();
                 return;
             }
+            const auto insertedSnapshot = document_.timelineSnapshot();
+            const auto inserted = std::find_if(insertedSnapshot.events.begin(),
+                insertedSnapshot.events.end(), [&analysis](const AudioEvent& event) {
+                    return event.source && event.source->path == analysis.source.path;
+                });
+            if (inserted == insertedSnapshot.events.end()) {
+                setState(EditorSessionState::Error);
+                setError(tr("录音完成，但无法登记当前工程源"));
+                emit recordingChanged();
+                return;
+            }
+            project_sources_.push_back(project_source_record(*sourceId, inserted->source));
             finishTimelineMutation();
         } else {
             document_ = AudioDocument::fromSource(analysis.source);
@@ -1894,8 +1932,9 @@ bool AudioEditorController::playPause()
         const qint64 start = selection->start * 1'000 / sample_rate_;
         const qint64 end = selection->end * 1'000 / sample_rate_;
         if (position_ms_ < start || position_ms_ >= end) {
-            position_ms_ = start;
-            playhead_frame_ = selection->start;
+            if (updatePersistedPlayhead(selection->start, start)) {
+                emit documentChanged();
+            }
         }
     }
     ag_playback_snapshot snapshot{};
@@ -2513,22 +2552,40 @@ void AudioEditorController::syncProjectSourcesAndIssues()
     const auto snapshot = document_.timelineSnapshot();
     std::unordered_set<const AudioSource*> referencedSources;
     std::unordered_set<quint64> referencedIds;
-    quint64 nextId = 1;
-    for (const ProjectSourceRecord& record : project_sources_) {
-        if (record.sourceId < std::numeric_limits<quint64>::max()) {
-            nextId = std::max(nextId, record.sourceId + 1);
-        }
+    for (const auto& source : document_.retainedSources()) {
+        if (source) referencedSources.insert(source.get());
     }
     for (const auto& event : snapshot.events) {
-        if (!event.source || !referencedSources.insert(event.source.get()).second) {
-            continue;
+        if (event.source) referencedSources.insert(event.source.get());
+    }
+    project_sources_.erase(std::remove_if(project_sources_.begin(), project_sources_.end(),
+        [&referencedSources](const ProjectSourceRecord& record) {
+            return !record.source || referencedSources.count(record.source.get()) == 0;
+        }), project_sources_.end());
+
+    std::unordered_set<quint64> retainedIds;
+    for (const ProjectSourceRecord& record : project_sources_) retainedIds.insert(record.sourceId);
+    QVariantList compactIssues;
+    std::unordered_set<quint64> issueIds;
+    for (const QVariant& issue : std::as_const(known_project_issues_)) {
+        const quint64 sourceId = issue.toMap().value(QStringLiteral("sourceId")).toULongLong();
+        if (retainedIds.count(sourceId) != 0 && issueIds.insert(sourceId).second) {
+            compactIssues.append(issue);
         }
+    }
+    known_project_issues_ = std::move(compactIssues);
+
+    std::unordered_set<const AudioSource*> currentSources;
+    for (const auto& event : snapshot.events) {
+        if (!event.source || !currentSources.insert(event.source.get()).second) continue;
         auto record = std::find_if(project_sources_.begin(), project_sources_.end(),
             [&event](const ProjectSourceRecord& value) {
                 return value.source.get() == event.source.get();
             });
         if (record == project_sources_.end()) {
-            project_sources_.push_back(project_source_record(nextId++, event.source));
+            const auto sourceId = nextAvailableSourceId(project_sources_);
+            if (!sourceId) continue;
+            project_sources_.push_back(project_source_record(*sourceId, event.source));
             record = std::prev(project_sources_.end());
             const QString path = QString::fromStdWString(event.source->path.wstring());
             if (!path.isEmpty() && !QFileInfo::exists(path)) {
@@ -2548,6 +2605,17 @@ void AudioEditorController::syncProjectSourcesAndIssues()
             QStringLiteral("sourceId")).toULongLong();
         if (referencedIds.count(sourceId) != 0) project_issues_.append(issue);
     }
+}
+
+std::optional<quint64> AudioEditorController::nextProjectSourceId() const
+{
+    const auto snapshot = document_.timelineSnapshot();
+    std::unordered_set<const AudioSource*> sources;
+    for (const AudioEvent& event : snapshot.events) {
+        if (event.source) sources.insert(event.source.get());
+    }
+    if (sources.size() >= kMaxProjectSources) return std::nullopt;
+    return nextAvailableSourceId(project_sources_);
 }
 
 void AudioEditorController::finishTimelineMutation()

@@ -1,5 +1,6 @@
 #include "timeline_undo_stack.hpp"
 
+#include <unordered_set>
 #include <utility>
 
 namespace agplayer::editor {
@@ -85,6 +86,22 @@ void TimelineUndoStack::clear() noexcept
     redo_.clear();
     retained_bytes_ = 0;
     endCoalescedEdit();
+}
+
+std::vector<std::shared_ptr<const AudioSource>> TimelineUndoStack::retainedSources() const
+{
+    std::vector<std::shared_ptr<const AudioSource>> result;
+    std::unordered_set<const AudioSource*> seen;
+    const auto append = [&result, &seen](const std::deque<Entry>& entries) {
+        for (const Entry& entry : entries) {
+            for (const auto& source : entry.command->referencedSources()) {
+                if (seen.insert(source.get()).second) result.push_back(source);
+            }
+        }
+    };
+    append(undo_);
+    append(redo_);
+    return result;
 }
 
 void TimelineUndoStack::clearRedo() noexcept

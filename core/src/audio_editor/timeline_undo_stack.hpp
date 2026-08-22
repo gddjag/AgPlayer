@@ -34,6 +34,7 @@ public:
     [[nodiscard]] std::size_t redoCount() const noexcept { return redo_.size(); }
     [[nodiscard]] std::size_t retainedBytes() const noexcept
     { return retained_bytes_; }
+    [[nodiscard]] std::vector<std::shared_ptr<const AudioSource>> retainedSources() const;
     [[nodiscard]] std::uint64_t stateId() const noexcept
     { return current_state_id_; }
 

@@ -40,6 +40,14 @@ constexpr qsizetype kMaxProjectEnvelopePoints = 65'536;
 constexpr auto kProjectProbeBudget = std::chrono::seconds(5);
 constexpr auto kResourceLimitMessage = "project resource limit exceeded";
 
+std::optional<quint64> nextAvailableSourceId(const std::unordered_set<quint64>& ids)
+{
+    for (quint64 candidate = 1; candidate < std::numeric_limits<quint64>::max(); ++candidate) {
+        if (ids.count(candidate) == 0) return candidate;
+    }
+    return std::nullopt;
+}
+
 QString toQString(const std::filesystem::path& path)
 {
 #ifdef Q_OS_WIN
@@ -298,19 +306,27 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
         envelopePoints += static_cast<qsizetype>(event.envelope.size());
     }
 
+    std::unordered_set<const AudioSource*> timelineSources;
+    for (const AudioEvent& event : timeline.events) {
+        if (event.source) timelineSources.insert(event.source.get());
+    }
     std::unordered_map<const AudioSource*, ProjectSourceRecord> records;
-    quint64 nextId = 1;
+    std::unordered_set<quint64> suppliedIds;
     if (request.sourceRecords != nullptr) {
-        std::unordered_set<quint64> ids;
+        std::unordered_set<quint64> recordIds;
+        std::unordered_set<const AudioSource*> recordSources;
         for (const ProjectSourceRecord& record : *request.sourceRecords) {
-            if (!record.source || record.sourceId == 0 || !ids.insert(record.sourceId).second
-                || !records.emplace(record.source.get(), record).second) {
-                return {false, QStringLiteral("invalid source records")};
-            }
             if (record.sourceId == std::numeric_limits<quint64>::max()) {
                 return {false, QStringLiteral("invalid source id")};
             }
-            nextId = std::max(nextId, record.sourceId + 1);
+            if (!record.source || record.sourceId == 0
+                || !recordIds.insert(record.sourceId).second
+                || !recordSources.insert(record.source.get()).second) {
+                return {false, QStringLiteral("invalid source records")};
+            }
+            if (timelineSources.count(record.source.get()) == 0) continue;
+            suppliedIds.insert(record.sourceId);
+            records.emplace(record.source.get(), record);
         }
     }
     std::unordered_map<const AudioSource*, quint64> sourceIds;
@@ -322,11 +338,13 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
         if (sourceIds.size() >= static_cast<std::size_t>(kMaxProjectSources)) {
             return {false, QString::fromLatin1(kResourceLimitMessage)};
         }
-        if (supplied == records.end()
-            && nextId == std::numeric_limits<quint64>::max()) {
+        const auto nextId = supplied == records.end()
+            ? nextAvailableSourceId(suppliedIds) : std::optional<quint64>{};
+        if (supplied == records.end() && !nextId) {
             return {false, QStringLiteral("invalid source id")};
         }
-        const quint64 id = supplied == records.end() ? nextId++ : supplied->second.sourceId;
+        const quint64 id = supplied == records.end() ? *nextId : supplied->second.sourceId;
+        suppliedIds.insert(id);
         sourceIds.emplace(event.source.get(), id);
         const QString rawSourcePath = toQString(event.source->path);
         if (rawSourcePath.isEmpty()) return {false, QStringLiteral("source path is required")};

@@ -645,6 +645,78 @@ private slots:
         QVERIFY(controller.modified());
     }
 
+    void selectionPlayheadJumpTracksDirtyBeforeFailedPreviewPreparation()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("selection.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.setSelection(100, 200));
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+        QVERIFY(!controller.modified());
+        QVERIFY(QFile::remove(source));
+
+        QSignalSpy documentChanges(&controller, &AudioEditorController::documentChanged);
+        QVERIFY(!controller.playPause());
+        QCOMPARE(controller.playheadFrame(), qint64{100});
+        QVERIFY(controller.modified());
+        QCOMPARE(documentChanges.count(), 1);
+    }
+
+    void unavailableProjectSourceRelinkClearsIssue()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("budget.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(maker.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(maker.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        QFile projectFile(project);
+        QVERIFY(projectFile.open(QIODevice::ReadOnly));
+        QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
+        projectFile.close();
+        const QJsonObject templateSource = root.value(QStringLiteral("sources"))
+            .toArray().first().toObject();
+        QJsonObject event = root.value(QStringLiteral("events")).toArray().first().toObject();
+        QJsonArray sources;
+        for (int index = 0; index < 4'096; ++index) {
+            QJsonObject record = templateSource;
+            record.insert(QStringLiteral("sourceId"), QString::number(index + 1));
+            sources.append(record);
+        }
+        event.insert(QStringLiteral("sourceId"), QStringLiteral("4096"));
+        root.insert(QStringLiteral("sources"), sources);
+        root.insert(QStringLiteral("events"), QJsonArray{event});
+        root.insert(QStringLiteral("markers"), QJsonArray{});
+        QVERIFY(projectFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(projectFile.write(QJsonDocument(root).toJson()) > 0);
+        projectFile.close();
+
+        AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(loaded.openProject(QUrl::fromLocalFile(project)),
+                 qPrintable(loaded.errorMessage()));
+        QCOMPARE(loaded.projectIssues().size(), 1);
+        const QVariantMap issue = loaded.projectIssues().constFirst().toMap();
+        QCOMPARE(issue.value(QStringLiteral("kind")).toString(), QStringLiteral("unavailable"));
+        QCOMPARE(issue.value(QStringLiteral("sourceId")).toULongLong(), quint64{4'096});
+
+        QVERIFY2(loaded.relinkProjectSource(quint64{4'096}, QUrl::fromLocalFile(source)),
+                 qPrintable(loaded.errorMessage()));
+        QVERIFY(loaded.projectIssues().isEmpty());
+    }
+
     void offlineGateTracksOnlySourcesReferencedByTheCurrentTimeline()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
@@ -711,6 +783,60 @@ private slots:
         QCOMPARE(controller.projectIssues().constFirst().toMap()
                      .value(QStringLiteral("sourceId")).toULongLong(), quint64{2});
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
+    }
+
+    void obsoleteProjectSourcesAreDiscardedAfterTheirUndoHistoryExpires()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString firstSource = temporary.filePath(QStringLiteral("first.wav"));
+        const QString secondSource = temporary.filePath(QStringLiteral("second.wav"));
+        const QString project = temporary.filePath(QStringLiteral("history.agproj"));
+        QVERIFY(QFile::copy(fixture, firstSource));
+        QVERIFY(QFile::copy(fixture, secondSource));
+
+        AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(maker.openFile(QUrl::fromLocalFile(firstSource)));
+        const qint64 split = maker.totalFrames() / 2;
+        QVERIFY(split > 0);
+        QVERIFY(maker.splitEvent(1, split));
+        QVERIFY(maker.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        QFile projectFile(project);
+        QVERIFY(projectFile.open(QIODevice::ReadOnly));
+        QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
+        projectFile.close();
+        QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+        QJsonObject secondRecord = sources.at(0).toObject();
+        secondRecord.insert(QStringLiteral("sourceId"), QStringLiteral("2"));
+        secondRecord.insert(QStringLiteral("pathKind"), QStringLiteral("relative"));
+        secondRecord.insert(QStringLiteral("path"), QStringLiteral("second.wav"));
+        const QFileInfo secondInfo(secondSource);
+        secondRecord.insert(QStringLiteral("fileSize"), QString::number(secondInfo.size()));
+        secondRecord.insert(QStringLiteral("lastModifiedUtcMs"),
+                            QString::number(secondInfo.lastModified().toUTC().toMSecsSinceEpoch()));
+        sources.append(secondRecord);
+        root.insert(QStringLiteral("sources"), sources);
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QJsonObject secondEvent = events.at(1).toObject();
+        secondEvent.insert(QStringLiteral("sourceId"), QStringLiteral("2"));
+        events.replace(1, secondEvent);
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(projectFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(projectFile.write(QJsonDocument(root).toJson()) > 0);
+        projectFile.close();
+        QVERIFY(QFile::remove(secondSource));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY(controller.setSelection(split, controller.totalFrames()));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        for (int index = 1; index <= 257; ++index) {
+            QVERIFY(controller.moveEvent(1, index));
+        }
+        QVERIFY(!controller.relinkProjectSource(quint64{2}, QUrl::fromLocalFile(fixture)));
     }
 
     void redoBackToSavedHistoryPointClearsDirtyState()

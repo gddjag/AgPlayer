@@ -181,6 +181,22 @@ std::size_t TimelineEditCommand::affectedEventCount() const noexcept
     return count;
 }
 
+std::vector<std::shared_ptr<const AudioSource>> TimelineEditCommand::referencedSources() const
+{
+    std::vector<std::shared_ptr<const AudioSource>> result;
+    std::unordered_set<const AudioSource*> seen;
+    const auto append = [&result, &seen](const std::vector<AudioEvent>& events) {
+        for (const AudioEvent& event : events) {
+            if (event.source && seen.insert(event.source.get()).second) {
+                result.push_back(event.source);
+            }
+        }
+    };
+    append(before_);
+    append(after_);
+    return result;
+}
+
 bool TimelineEditCommand::canCoalesceWith(
     const TimelineEditCommand& newer, const EventId eventId) const noexcept
 {

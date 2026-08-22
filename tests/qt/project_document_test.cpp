@@ -664,6 +664,35 @@ private slots:
         QCOMPARE(secondIds.value(bPath), firstIds.value(bPath));
     }
 
+    void newSourceSkipsReservedMaximumAfterValidMaximumMinusOne()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        const auto existing = project.document.timelineSnapshot().events.front().source;
+        const QString newPath = temporary.filePath(QStringLiteral("new.wav"));
+        const AudioSource added{nativePath(newPath), 44'100, 2, 100};
+        QVERIFY(project.document.insertSource(added, 20'000));
+
+        ProjectSourceRecord record;
+        record.sourceId = std::numeric_limits<quint64>::max() - 1;
+        record.source = existing;
+        ProjectSaveRequest save = request(project);
+        const std::vector<ProjectSourceRecord> records{record};
+        save.sourceRecords = &records;
+        const ProjectSaveResult result = ProjectDocument::save(project.projectPath, save);
+
+        QVERIFY2(result.ok(), qPrintable(result.message));
+        QCOMPARE(result.sources.size(), std::size_t{2});
+        const auto addedRecord = std::find_if(result.sources.begin(), result.sources.end(),
+            [&newPath](const ProjectSourceRecord& value) {
+                return value.source
+                    && QString::fromStdWString(value.source->path.wstring()) == newPath;
+            });
+        QVERIFY(addedRecord != result.sources.end());
+        QCOMPARE(addedRecord->sourceId, quint64{1});
+    }
+
 #ifdef Q_OS_WIN
     void windowsCaseVariantInsideProjectStillUsesRelativePath()
     {

@@ -275,3 +275,21 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   and Debug full builds passed (Release 337/337; Debug 43/43 incremental graph).
   Release app smoke remains intentionally delegated to the final lead gate; no
   full CTest, real UNC/slow-media, hardware or UI acceptance is claimed here.
+
+### Final independent-review P2 closure (2026-08-22)
+
+- Selection playback positioning now calls the persisted playhead update before
+  fallible preview setup, so a failed preview still updates `modified` and
+  `documentChanged` according to the established Phase 5 savepoint rule.
+- Source IDs are allocated from the lowest free valid value in
+  `1..UINT64_MAX-1`; recording reserves its ID and checks the active 4,096
+  source budget before document insertion.
+- Controller source records and offline issues keep current plus bounded
+  Undo/Redo-reachable sources. That reachability boundary preserves an Undo
+  restore's original source ID, then releases stale entries after history
+  eviction. The controller test covers `Unavailable → Relink → issue clear`.
+- RED: Release project/controller targets failed 0/2. GREEN: Release focused
+  matrix passed 7/7 in 15.96 s; Debug passed 7/7 in 20.47 s. Full Release build
+  passed 337/337 (known Ninja recovery warning), and Debug passed 76/76. App
+  smoke, full CTest, actual recording hardware, UI and slow/UNC source stress
+  remain deliberately unverified.

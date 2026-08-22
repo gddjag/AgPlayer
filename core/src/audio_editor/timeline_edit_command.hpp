@@ -28,6 +28,7 @@ public:
     [[nodiscard]] bool undo(EventTimeline& timeline) const;
     [[nodiscard]] std::size_t byteCost() const noexcept;
     [[nodiscard]] std::size_t affectedEventCount() const noexcept;
+    [[nodiscard]] std::vector<std::shared_ptr<const AudioSource>> referencedSources() const;
     [[nodiscard]] bool canCoalesceWith(const TimelineEditCommand& newer,
                                        EventId eventId) const noexcept;
     void coalesceWith(TimelineEditCommand newer);
