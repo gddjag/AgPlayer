@@ -7,8 +7,8 @@ Rectangle {
     id: root
     property var converter
     property var settingsPanel
-    color: Theme.panel
-    border.color: Theme.border
+    color: "#101a21"
+    border.color: "#203340"
     radius: 6
     clip: true
 
@@ -21,7 +21,37 @@ Rectangle {
         }
     }
 
-    readonly property var columnWidths: [54, 230, 120, 100, 115, 130, 120, 120, 210]
+    readonly property var columnWidths: [62, 260, 120, 100, 115, 130, 120, 120, 190]
+
+    component ReferenceCheckBox: CheckBox {
+        id: control
+        indicator: Rectangle {
+            objectName: control.objectName.length > 0 ? control.objectName + "Indicator" : ""
+            x: control.leftPadding
+            y: (control.height - height) / 2
+            width: 20
+            height: 20
+            radius: 3
+            color: control.checked ? "#1688ff" : (control.enabled ? "#0c1821" : "#10181e")
+            border.color: control.checked ? "#1688ff" : (control.enabled ? "#3a4a53" : "#26343c")
+            ThemedIcon {
+                objectName: control.objectName.length > 0 ? control.objectName + "Mark" : ""
+                anchors.centerIn: parent
+                visible: control.checked
+                source: Theme.icon("check-line")
+                tint: "#ffffff"
+                sourceSize.width: 14
+                sourceSize.height: 14
+            }
+        }
+        contentItem: Text {
+            text: control.text
+            leftPadding: control.indicator.width + 8
+            verticalAlignment: Text.AlignVCenter
+            color: control.enabled ? "#d7e0e6" : "#667782"
+            font.pixelSize: 13
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -33,7 +63,7 @@ Rectangle {
             Layout.preferredHeight: 44
             Layout.leftMargin: 18
             spacing: 12
-            Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Text { text: qsTr("任务列表"); color: "#eef3f6"; font.pixelSize: 15; font.weight: Font.DemiBold }
             Repeater {
                 model: [
                     { key: "All", text: qsTr("全部"), count: converter.fileCount },
@@ -50,13 +80,13 @@ Rectangle {
                              || (modelData.key === "All" && converter.filteredTaskModel.statusFilter === "")
                     onClicked: converter.filteredTaskModel.statusFilter = modelData.key
                     background: Rectangle {
-                        color: parent.checked ? Theme.selectedTrackSelection : Theme.elevated
-                        border.color: parent.checked ? Theme.accent : Theme.border
+                        color: parent.checked ? "#0c63c8" : "#0c1821"
+                        border.color: parent.checked ? "#1688ff" : "#203340"
                         radius: 5
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: Theme.primaryText
+                        color: parent.checked ? "#ffffff" : "#c9d2d8"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 13
@@ -69,15 +99,16 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            color: Theme.elevated
+            color: "#162129"
             Row {
                 anchors.fill: parent
                 Repeater {
                     model: ["", qsTr("文件名"), qsTr("原格式"), qsTr("时长"), qsTr("采样率"), qsTr("码率"), qsTr("输出格式"), qsTr("状态"), qsTr("进度")]
                     Item {
+                        objectName: "formatHeaderCell-" + index
                         width: root.columnWidths[index]
                         height: 40
-                        CheckBox {
+                        ReferenceCheckBox {
                             visible: index === 0
                             anchors.centerIn: parent
                             checked: converter.checkedCount > 0 && converter.checkedCount === converter.fileCount
@@ -87,10 +118,10 @@ Rectangle {
                         Text {
                             visible: index !== 0
                             anchors.fill: parent
-                            anchors.leftMargin: 10
+                            anchors.leftMargin: index === 1 ? 30 : 10
                             verticalAlignment: Text.AlignVCenter
                             text: modelData
-                            color: Theme.secondaryText
+                            color: "#aeb9c1"
                             font.pixelSize: 13
                         }
                     }
@@ -100,6 +131,7 @@ Rectangle {
 
         TableView {
             id: table
+            objectName: "formatTaskTableView"
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: converter.filteredTaskModel
@@ -107,34 +139,45 @@ Rectangle {
             columnWidthProvider: function(column) { return root.columnWidths[column] }
             rowHeightProvider: function() { return 44 }
             delegate: Rectangle {
+                objectName: column === 1 && row === 0 ? "formatTaskFirstFilenameCell" : ""
                 implicitWidth: root.columnWidths[column]
                 implicitHeight: 44
-                color: row % 2 ? Theme.panel : Theme.elevated
-                border.color: Theme.border
+                color: row % 2 ? "#101a21" : "#0f1820"
+                border.color: "#172a36"
                 border.width: 1
 
-                CheckBox {
+                ReferenceCheckBox {
+                    objectName: column === 0 && row === 0 ? "formatTaskFirstCheck" : ""
                     visible: column === 0
                     anchors.centerIn: parent
                     checked: model.checked
                     onClicked: converter.setTaskChecked(model.taskId, checked)
                 }
-                ThemedIcon {
+                Rectangle {
+                    objectName: column === 1 && row === 0 ? "formatTaskFirstFileIconBadge" : ""
                     visible: column === 1
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    source: Theme.icon("music-2-fill")
-                    tint: model.sourceFormat === "WAV" ? "#ff8a3d"
-                          : model.sourceFormat === "MP3" ? "#25aee4"
-                          : model.sourceFormat === "FLAC" ? "#8d63e8" : "#21bf83"
-                    sourceSize.width: 22
-                    sourceSize.height: 22
+                    width: 28
+                    height: 28
+                    radius: 6
+                    color: model.sourceFormat === "WAV" ? "#e9964a"
+                         : model.sourceFormat === "MP3" ? "#35b8e7"
+                         : model.sourceFormat === "FLAC" ? "#9c6ade" : "#35bc85"
+                    ThemedIcon {
+                        objectName: column === 1 && row === 0 ? "formatTaskFirstFileIcon" : ""
+                        anchors.centerIn: parent
+                        source: Theme.icon("file-music-fill")
+                        tint: "#ffffff"
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                    }
                 }
                 Text {
                     visible: column > 0 && column < 8
                     anchors.fill: parent
-                    anchors.leftMargin: column === 1 ? 42 : 10
+                    anchors.leftMargin: column === 1 ? 48 : 10
                     anchors.rightMargin: 6
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -148,10 +191,10 @@ Rectangle {
                         : model.status === "Done" ? qsTr("已完成")
                         : model.status === "Error" ? qsTr("失败")
                         : model.status === "Cancelled" ? qsTr("已取消") : qsTr("就绪")
-                    color: column === 7 && model.status === "Done" ? Theme.waveformGreen
-                         : column === 7 && model.status === "Error" ? Theme.waveformRed
-                         : column === 7 && model.status === "Converting" ? Theme.accent
-                         : Theme.primaryText
+                    color: column === 7 && model.status === "Done" ? "#19c37d"
+                         : column === 7 && model.status === "Error" ? "#ff4d4f"
+                         : column === 7 && model.status === "Converting" ? "#1688ff"
+                         : "#c9d2d8"
                     font.pixelSize: 13
                 }
                 ProgressBar {
@@ -163,34 +206,34 @@ Rectangle {
                     anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
                     value: model.progress
-                    background: Rectangle { implicitHeight: 8; color: Theme.border; radius: 4 }
+                    background: Rectangle { implicitHeight: 8; color: "#20303b"; radius: 4 }
                     contentItem: Item {
                         implicitHeight: 8
                         Rectangle {
                             width: rowProgress.visualPosition * parent.width
                             height: parent.height
                             radius: 4
-                            color: model.status === "Done" ? Theme.waveformGreen : Theme.accent
+                            color: model.status === "Done" ? "#19c37d" : "#1688ff"
                         }
                     }
                 }
                 Text {
                     id: percent
+                    objectName: column === 8 && row === 0 ? "formatTaskFirstProgressPercent" : ""
                     visible: column === 8
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     width: 40
                     text: Math.round(model.progress * 100) + "%"
-                    color: Theme.primaryText
+                    color: "#c9d2d8"
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }
-                MouseArea {
-                    visible: column === 1
-                    anchors.fill: parent
+                TapHandler {
+                    enabled: column === 1
                     acceptedButtons: Qt.RightButton
-                    onClicked: function(mouse) {
+                    onTapped: {
                         taskContextMenu.taskId = model.taskId
                         taskContextMenu.status = model.status
                         taskContextMenu.errorDetail = model.errorDetail
@@ -205,7 +248,7 @@ Rectangle {
             Layout.leftMargin: 18
             verticalAlignment: Text.AlignVCenter
             text: qsTr("共 %1 个任务 / 已选择 %2 个").arg(converter.fileCount).arg(converter.checkedCount)
-            color: Theme.secondaryText
+            color: "#91a0aa"
             font.pixelSize: 12
         }
     }
@@ -218,6 +261,7 @@ Rectangle {
         property string errorDetail: ""
 
         MenuItem {
+            objectName: "formatTaskRemoveMenuItem"
             text: qsTr("移除任务")
             onTriggered: root.removeTask(taskContextMenu.taskId)
         }

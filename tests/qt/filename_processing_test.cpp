@@ -2,6 +2,7 @@
 #include "filename_validator.hpp"
 #include "rename_plan.hpp"
 
+#include <QFile>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -17,6 +18,11 @@ private slots:
     void keepsHiddenFilesAndExtensionlessNamesWellDefined();
     void reportsUnsafeWindowsNames();
     void plansInternalCollisionsInImportOrder();
+    void treatsNoOpSourceAsAnOccupiedTarget();
+    void propagatesStationaryOccupancyFromSkippedSources();
+    void autoNumbersTargetsOccupiedByStationarySources();
+    void refusesToOverwriteStationaryBatchSources();
+    void refusesDuplicateOverwriteTargets();
 };
 
 void FilenameProcessingTest::transformsStemWithoutChangingExtension()
@@ -114,6 +120,133 @@ void FilenameProcessingTest::plansInternalCollisionsInImportOrder()
                                                   ConflictPolicy::AutoNumber);
     QCOMPARE(plan.items.at(0).proposedFileName, u"A_B.flac"_s);
     QCOMPARE(plan.items.at(1).proposedFileName, u"A_B_2.flac"_s);
+}
+
+void FilenameProcessingTest::treatsNoOpSourceAsAnOccupiedTarget()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString stationaryPath = directory.filePath(u"a.wav"_s);
+    const QString changingPath = directory.filePath(u"[Live]_a.wav"_s);
+    for (const QString& path : {stationaryPath, changingPath}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("audio") > 0);
+    }
+
+    const QList<RenameSource> sources{
+        {0, stationaryPath, {}, {}, 5},
+        {1, changingPath, {}, {}, 5}};
+    FilenameRuleSet rules;
+    const RenamePlan plan = RenamePlanner::build(
+        sources, rules, ConflictPolicy::StopBatch);
+
+    QCOMPARE(plan.items.at(0).action, RenameAction::NoOp);
+    QCOMPARE(plan.items.at(1).action, RenameAction::Skip);
+    QCOMPARE(plan.items.at(1).reasonCode, u"target-conflict"_s);
+    QVERIFY(!plan.executable);
+}
+
+void FilenameProcessingTest::propagatesStationaryOccupancyFromSkippedSources()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString firstPath = directory.filePath(u"a.wav"_s);
+    const QString secondPath = directory.filePath(u"x-a.wav"_s);
+    const QString externalPath = directory.filePath(u"x-x-a.wav"_s);
+    for (const QString& path : {firstPath, secondPath, externalPath}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("audio") > 0);
+    }
+
+    const QList<RenameSource> sources{
+        {0, firstPath, {}, {}, 5},
+        {1, secondPath, {}, {}, 5}};
+    FilenameRuleSet rules;
+    rules.prefix = u"x-"_s;
+    const RenamePlan plan = RenamePlanner::build(
+        sources, rules, ConflictPolicy::Skip);
+
+    QCOMPARE(plan.items.at(0).action, RenameAction::Skip);
+    QCOMPARE(plan.items.at(1).action, RenameAction::Skip);
+    QVERIFY(!plan.executable);
+}
+
+void FilenameProcessingTest::autoNumbersTargetsOccupiedByStationarySources()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString stationaryPath = directory.filePath(u"a.wav"_s);
+    const QString changingPath = directory.filePath(u"[Live]_a.wav"_s);
+    for (const QString& path : {stationaryPath, changingPath}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("audio") > 0);
+    }
+
+    FilenameRuleSet rules;
+    const RenamePlan plan = RenamePlanner::build(
+        {{0, stationaryPath, {}, {}, 5},
+         {1, changingPath, {}, {}, 5}},
+        rules, ConflictPolicy::AutoNumber);
+
+    QCOMPARE(plan.items.at(0).action, RenameAction::NoOp);
+    QCOMPARE(plan.items.at(1).action, RenameAction::Rename);
+    QCOMPARE(plan.items.at(1).proposedFileName, u"a_2.wav"_s);
+    QCOMPARE(plan.items.at(1).reasonCode, u"auto-numbered"_s);
+    QVERIFY(plan.executable);
+}
+
+void FilenameProcessingTest::refusesToOverwriteStationaryBatchSources()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString stationaryPath = directory.filePath(u"a.wav"_s);
+    const QString changingPath = directory.filePath(u"[Live]_a.wav"_s);
+    for (const QString& path : {stationaryPath, changingPath}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("audio") > 0);
+    }
+
+    FilenameRuleSet rules;
+    const RenamePlan plan = RenamePlanner::build(
+        {{0, stationaryPath, {}, {}, 5},
+         {1, changingPath, {}, {}, 5}},
+        rules, ConflictPolicy::Overwrite);
+
+    QCOMPARE(plan.items.at(0).action, RenameAction::NoOp);
+    QCOMPARE(plan.items.at(1).action, RenameAction::Skip);
+    QCOMPARE(plan.items.at(1).reasonCode, u"target-conflict"_s);
+    QVERIFY(!plan.executable);
+}
+
+void FilenameProcessingTest::refusesDuplicateOverwriteTargets()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString firstPath = directory.filePath(u"A B.flac"_s);
+    const QString secondPath = directory.filePath(u"A  B.flac"_s);
+    const QString targetPath = directory.filePath(u"A_B.flac"_s);
+    for (const QString& path : {firstPath, secondPath, targetPath}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("audio") > 0);
+    }
+
+    FilenameRuleSet rules;
+    rules.replaceSpaces = true;
+    rules.spaceReplacement = u"_"_s;
+    const RenamePlan plan = RenamePlanner::build(
+        {{0, firstPath, {}, {}, 5},
+         {1, secondPath, {}, {}, 5}},
+        rules, ConflictPolicy::Overwrite);
+
+    QCOMPARE(plan.items.at(0).action, RenameAction::Overwrite);
+    QCOMPARE(plan.items.at(1).action, RenameAction::Skip);
+    QCOMPARE(plan.items.at(1).reasonCode, u"target-conflict"_s);
+    QVERIFY(plan.executable);
 }
 
 QTEST_GUILESS_MAIN(FilenameProcessingTest)

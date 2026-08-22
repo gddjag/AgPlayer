@@ -182,4 +182,3 @@ git status --short
 ```
 
 Expected: no whitespace error; full-suite result is recorded exactly, including any unrelated pre-existing failure.
-
