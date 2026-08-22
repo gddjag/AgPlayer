@@ -3,8 +3,10 @@ import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
-    color: Theme.background
-    border.color: Theme.border
+    color: "#071a2d"
+    border.color: "#294662"
+    border.width: 1
+    radius: 6
 
     function durationText(milliseconds) {
         const value = Math.max(0, milliseconds)
@@ -22,7 +24,23 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: 14
         anchors.rightMargin: 14
-        spacing: 30
+        spacing: 18
+
+        Rectangle {
+            objectName: "fileSummaryIcon"
+            Layout.preferredWidth: 28
+            Layout.preferredHeight: 28
+            radius: 5
+            color: "#0a2138"
+            border.color: "#294662"
+            ThemedIcon {
+                anchors.centerIn: parent
+                source: Theme.icon("music-2-fill")
+                tint: "#f4f8ff"
+                sourceSize.width: 18
+                sourceSize.height: 18
+            }
+        }
 
         Text {
             Layout.maximumWidth: 250
@@ -35,21 +53,33 @@ Rectangle {
         }
         Repeater {
             model: AudioEditorController.hasDocument ? [
-                AudioEditorController.formatName || "--",
-                AudioEditorController.sampleRate + " Hz",
-                AudioEditorController.bitsPerSample > 0
-                    ? AudioEditorController.bitsPerSample + " bit" : "-- bit",
-                AudioEditorController.channels === 1 ? qsTr("单声道")
+                qsTr("时长：") + durationText(AudioEditorController.durationMs),
+                qsTr("采样率：")
+                    + (AudioEditorController.sampleRate >= 1000
+                        ? (AudioEditorController.sampleRate / 1000).toFixed(1)
+                            + " kHz"
+                        : AudioEditorController.sampleRate + " Hz"),
+                qsTr("位深度：") + (AudioEditorController.bitsPerSample > 0
+                    ? AudioEditorController.bitsPerSample + "-bit" : "--"),
+                qsTr("声道：") + (AudioEditorController.channels === 1 ? qsTr("单声道")
                     : AudioEditorController.channels === 2 ? qsTr("立体声")
-                    : AudioEditorController.channels + qsTr(" 声道"),
-                durationText(AudioEditorController.durationMs),
-                qsTr("BPM --")
+                    : AudioEditorController.channels + qsTr(" 声道")),
+                qsTr("BPM：") + (AudioEditorController.originalBpm > 0
+                    ? AudioEditorController.originalBpm.toFixed(0) : "--")
             ] : []
-            Text {
-                text: modelData
-                color: Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 12
+            RowLayout {
+                spacing: 18
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 20
+                    color: "#34506c"
+                }
+                Text {
+                    text: modelData
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 12
+                }
             }
         }
         Item { Layout.fillWidth: true }

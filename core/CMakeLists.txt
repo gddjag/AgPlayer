@@ -1,6 +1,8 @@
 add_library(agplayer_core STATIC
     src/audio_editor/audio_file_analyzer.cpp
     src/audio_editor/audio_file_analyzer.hpp
+    src/audio_editor/audio_source_probe.cpp
+    src/audio_editor/audio_source_probe.hpp
     src/audio_editor/audio_document.cpp
     src/audio_editor/audio_document.hpp
     src/audio_editor/audio_event.hpp
@@ -8,11 +10,12 @@ add_library(agplayer_core STATIC
     src/audio_editor/event_timeline.hpp
     src/audio_editor/timeline_edit_command.cpp
     src/audio_editor/timeline_edit_command.hpp
+    src/audio_editor/timeline_undo_stack.cpp
+    src/audio_editor/timeline_undo_stack.hpp
     src/audio_editor/document_renderer.cpp
     src/audio_editor/document_renderer.hpp
     src/audio_editor/document_writer.cpp
     src/audio_editor/document_writer.hpp
-    src/audio_editor/edit_command.hpp
     src/audio_editor/noise_reducer.cpp
     src/audio_editor/noise_reducer.hpp
     src/audio_editor/peak_pyramid.cpp

@@ -114,7 +114,7 @@ bool cancelled(const std::atomic_bool* value) noexcept
 } // namespace
 
 NoiseReductionResult NoiseReducer::reduce(
-    const DocumentSnapshot& snapshot, const std::optional<Selection>& range,
+    const TimelineSnapshot& snapshot, const std::optional<Selection>& range,
     const std::filesystem::path& output_path,
     const std::atomic_bool* cancel, std::function<void(float)> progress)
 {
@@ -130,6 +130,14 @@ NoiseReductionResult NoiseReducer::reduce(
         std::error_code ignored;
         std::filesystem::remove(rendered, ignored);
     };
+    constexpr std::uint64_t max_working_bytes = 512ULL * 1024ULL * 1024ULL;
+    const std::uint64_t samples = static_cast<std::uint64_t>(render.frames)
+        * static_cast<std::uint64_t>(render.channels);
+    if (render.channels == 0
+        || samples > max_working_bytes / (3ULL * sizeof(float))) {
+        cleanup();
+        return {false, "selection is too long for lightweight noise reduction", {}};
+    }
 
     agplayer::Decoder decoder;
     if (decoder.open(rendered.u8string(), static_cast<int>(render.sample_rate),
@@ -167,6 +175,11 @@ NoiseReductionResult NoiseReducer::reduce(
         std::vector<std::pair<float, std::size_t>> energies;
         energies.reserve(windows);
         for (std::size_t window_index = 0; window_index < windows; ++window_index) {
+            if (cancelled(cancel)) {
+                std::error_code ignored;
+                std::filesystem::remove(output_path, ignored);
+                return {false, "cancelled", {}};
+            }
             float energy = 0.0F;
             const std::size_t offset = window_index * hop_size;
             for (std::size_t index = 0; index < fft_size; ++index) {

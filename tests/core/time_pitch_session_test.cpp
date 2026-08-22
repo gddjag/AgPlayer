@@ -7,7 +7,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
+#include <vector>
 
 namespace {
 
@@ -55,6 +58,9 @@ int main(const int argc, char** argv)
             "speed did not update target BPM");
     require(parameters.setPitch(3, 25), "pitch rejected");
     require(parameters.pitchCents() == 325, "pitch conversion mismatch");
+    parameters.setFormantPreservation(true);
+    require(parameters.formantPreservation(),
+            "formant preservation state was not retained");
 
     const fs::path input = fs::u8path(argv[1]);
     agplayer::Decoder probe;
@@ -66,7 +72,7 @@ int main(const int argc, char** argv)
     const AudioDocument document = AudioDocument::fromSource(AudioSource{
         input, static_cast<std::uint32_t>(metadata.sample_rate),
         static_cast<std::uint32_t>(metadata.channels), input_frames});
-    const auto before = document.snapshot();
+    const auto before = document.timelineSnapshot();
 
     TimePitchSession processor;
     require(processor.setSpeedPercent(125.0), "processing speed rejected");
@@ -75,16 +81,49 @@ int main(const int argc, char** argv)
     std::error_code ignored;
     fs::remove(output, ignored);
     const TimePitchResult result = processor.process(
-        document.snapshot(), output, std::nullopt);
+        document.timelineSnapshot(), output, std::nullopt);
     if (!result.success) std::cerr << result.message << '\n';
     require(result.success, "time/pitch processing failed");
-    require(document.snapshot() == before, "preview mutated document");
+    require(document.timelineSnapshot().revision == before.revision,
+            "preview mutated document");
     const SampleFrame output_frames = decoded_frames(
         output, metadata.sample_rate, metadata.channels);
     const SampleFrame expected = static_cast<SampleFrame>(
         std::llround(static_cast<double>(input_frames) / 1.25));
     require(std::llabs(output_frames - expected) <= 2'048,
             "processed duration ratio mismatch");
+
+    TimePitchSession unprotected;
+    require(unprotected.setPitch(7, 0), "unprotected pitch rejected");
+    const fs::path unprotected_output = input.parent_path()
+        / "time-pitch-unprotected.wav";
+    fs::remove(unprotected_output, ignored);
+    const TimePitchResult unprotected_result = unprotected.process(
+        document.timelineSnapshot(), unprotected_output, std::nullopt);
+    require(unprotected_result.success, "unprotected processing failed");
+
+    TimePitchSession protected_session;
+    require(protected_session.setPitch(7, 0), "protected pitch rejected");
+    protected_session.setFormantPreservation(true);
+    const fs::path protected_output = input.parent_path()
+        / "time-pitch-protected.wav";
+    fs::remove(protected_output, ignored);
+    const TimePitchResult protected_result = protected_session.process(
+        document.timelineSnapshot(), protected_output, std::nullopt);
+    require(protected_result.success, "protected processing failed");
+
+    const auto read_bytes = [](const fs::path& path) {
+        std::ifstream stream(path, std::ios::binary);
+        return std::vector<char>(std::istreambuf_iterator<char>(stream), {});
+    };
+    const auto unprotected_bytes = read_bytes(unprotected_output);
+    const auto protected_bytes = read_bytes(protected_output);
+    require(!unprotected_bytes.empty() && !protected_bytes.empty(),
+            "formant comparison output missing");
+    require(unprotected_bytes != protected_bytes,
+            "formant preservation did not change processed audio");
     fs::remove(output, ignored);
+    fs::remove(unprotected_output, ignored);
+    fs::remove(protected_output, ignored);
     return 0;
 }

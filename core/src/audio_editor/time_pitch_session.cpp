@@ -78,21 +78,7 @@ TimePitchResult TimePitchSession::process(
     const std::atomic_bool* cancelled,
     std::function<void(float)> progress) const
 {
-    const auto legacy = singleEventDocumentSnapshot(snapshot);
-    if (!legacy) {
-        return {false, "timeline processing requires a single unmodified event", {}};
-    }
-    return process(*legacy, output, range, cancelled, std::move(progress));
-}
-
-TimePitchResult TimePitchSession::process(
-    const DocumentSnapshot& snapshot,
-    const std::filesystem::path& output,
-    const std::optional<Selection> range,
-    const std::atomic_bool* cancelled,
-    std::function<void(float)> progress) const
-{
-    if (snapshot.spans.empty() || output.empty()) {
+    if (snapshot.events.empty() || output.empty()) {
         return {false, "invalid time/pitch request", {}};
     }
     const auto rendered_path = render_path_for(output);
@@ -127,6 +113,7 @@ TimePitchResult TimePitchSession::process(
     config.pitch_cents = effective_pitch;
     config.keep_tempo = keep_tempo;
     config.tempo_ratio = keep_tempo ? speed_ratio : speed_ratio / pitch_rate;
+    config.vocal_protection = formant_preservation_;
     std::string error;
     const ag_result status = agplayer::pitch_shift(
         rendered_path.u8string(), config, cancelled,

@@ -33,6 +33,7 @@ public:
     Q_INVOKABLE bool setVisibleRange(qint64 start, qint64 end) noexcept;
     Q_INVOKABLE void moveOverviewWindow(qreal startRatio) noexcept;
     Q_INVOKABLE void zoomAt(qreal factor, qreal anchorPixel) noexcept;
+    Q_INVOKABLE void panByPixels(qreal pixelDelta) noexcept;
     Q_INVOKABLE qint64 frameAtPixel(qreal pixel) const noexcept;
     Q_INVOKABLE qreal pixelAtFrame(qint64 frame) const noexcept;
 

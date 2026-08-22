@@ -1069,8 +1069,8 @@ Rectangle {
                     }
                 }
                 Button {
-                    text: qsTr("取消")
-                    visible: true
+                    objectName: "metadataCancelButton"
+                    text: qsTr("取消"); visible: true
                     enabled: MetadataEditor.busy
                     onClicked: MetadataEditor.cancel()
                 }

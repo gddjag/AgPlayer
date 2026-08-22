@@ -25,29 +25,10 @@ public:
     QSGGeometry geometry_;
     QSGFlatColorMaterial material_;
     std::uint64_t revision_{};
-    int render_mode_{};
     qreal width_{};
     qreal height_{};
-    qreal visible_start_ratio_{};
-    qreal visible_end_ratio_{1.0};
     QColor color_;
 };
-
-std::size_t visible_mode_stride(const std::size_t visiblePairCount,
-                               const qreal width,
-                               const int renderMode)
-{
-    if (width <= 0.0 || visiblePairCount <= 1U) return 1U;
-    const std::size_t target = static_cast<std::size_t>(
-        std::max<qreal>(1.0, std::round(width)));
-    if (renderMode == 0) {
-        return std::max<std::size_t>(1U, visiblePairCount / (target * 2U));
-    }
-    if (renderMode == 1) {
-        return std::max<std::size_t>(1U, visiblePairCount / (target * 3U));
-    }
-    return 1U;
-}
 
 } // namespace
 
@@ -73,6 +54,21 @@ void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
         QVariantList normalized_channel;
         bool valid = true;
         for (qsizetype index = 0; index < values.size(); index += 2) {
+            const bool blankMinimum = !values[index].isValid()
+                || values[index].isNull();
+            const bool blankMaximum = !values[index + 1].isValid()
+                || values[index + 1].isNull();
+            if (blankMinimum || blankMaximum) {
+                if (blankMinimum != blankMaximum) {
+                    valid = false;
+                    break;
+                }
+                channel.push_back(std::numeric_limits<float>::quiet_NaN());
+                channel.push_back(std::numeric_limits<float>::quiet_NaN());
+                normalized_channel.append(QVariant{});
+                normalized_channel.append(QVariant{});
+                continue;
+            }
             const double minimum = values[index].toDouble();
             const double maximum = values[index + 1].toDouble();
             if (!std::isfinite(minimum) || !std::isfinite(maximum)
@@ -107,15 +103,6 @@ void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
     emit channelPeaksChanged();
 }
 
-void AudioEditorWaveformItem::setRenderMode(const int mode)
-{
-    const int bounded = std::clamp(mode, 0, 2);
-    if (render_mode_ == bounded) return;
-    render_mode_ = bounded;
-    update();
-    emit renderModeChanged();
-}
-
 void AudioEditorWaveformItem::setWaveformColor(const QColor& color)
 {
     if (!color.isValid() || color == waveform_color_) {
@@ -124,24 +111,6 @@ void AudioEditorWaveformItem::setWaveformColor(const QColor& color)
     waveform_color_ = color;
     update();
     emit waveformColorChanged();
-}
-
-void AudioEditorWaveformItem::setVisibleStartRatio(const qreal ratio)
-{
-    const qreal bounded = std::clamp(ratio, 0.0, 1.0);
-    if (qFuzzyCompare(visible_start_ratio_, bounded)) return;
-    visible_start_ratio_ = bounded;
-    update();
-    emit visibleRangeChanged();
-}
-
-void AudioEditorWaveformItem::setVisibleEndRatio(const qreal ratio)
-{
-    const qreal bounded = std::clamp(ratio, 0.0, 1.0);
-    if (qFuzzyCompare(visible_end_ratio_, bounded)) return;
-    visible_end_ratio_ = bounded;
-    update();
-    emit visibleRangeChanged();
 }
 
 void AudioEditorWaveformItem::geometryChange(const QRectF& newGeometry,
@@ -159,6 +128,7 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
     const auto snapshot = snapshot_;
     if (!snapshot || snapshot->channels.empty() || width() <= 0.0
         || height() <= 0.0) {
+        generated_point_count_.store(0, std::memory_order_release);
         delete oldNode;
         return nullptr;
     }
@@ -168,22 +138,43 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
             [pair_count](const auto& channel) {
                 return channel.size() / 2U == pair_count;
             })) {
+        generated_point_count_.store(0, std::memory_order_release);
         delete oldNode;
         return nullptr;
     }
-    const std::size_t first_pair = std::min(pair_count - 1U,
-        static_cast<std::size_t>(std::floor(visible_start_ratio_ * pair_count)));
-    const std::size_t end_pair = std::clamp(
-        static_cast<std::size_t>(std::ceil(visible_end_ratio_ * pair_count)),
-        first_pair + 1U, pair_count);
-    const std::size_t visible_pair_count = end_pair - first_pair;
-    const bool detailed = visible_pair_count > 1U
-        && static_cast<qreal>(visible_pair_count) <= width() * 4.0;
-    const std::size_t vertices_per_channel = detailed
-        ? (visible_pair_count - 1U) * 2U : visible_pair_count * 2U;
-    const std::size_t vertex_count = vertices_per_channel
-        * snapshot->channels.size();
+    const std::size_t maximum_buckets = std::max<std::size_t>(1U,
+        static_cast<std::size_t>(std::floor(width())));
+    std::vector<std::size_t> strides(snapshot->channels.size(), pair_count + 1U);
+    for (std::size_t channel = 0; channel < snapshot->channels.size(); ++channel) {
+        const std::size_t budget = maximum_buckets / snapshot->channels.size()
+            + (channel < maximum_buckets % snapshot->channels.size() ? 1U : 0U);
+        if (budget > 0U) {
+            strides[channel] = std::max<std::size_t>(
+                1U, (pair_count + budget - 1U) / budget);
+        }
+    }
+    std::size_t valid_bucket_count = 0;
+    for (std::size_t channel_index = 0;
+         channel_index < snapshot->channels.size(); ++channel_index) {
+        const auto& channel = snapshot->channels[channel_index];
+        const std::size_t stride = strides[channel_index];
+        if (stride > pair_count) continue;
+        for (std::size_t start = 0; start < pair_count; start += stride) {
+            const std::size_t end = std::min(pair_count, start + stride);
+            bool has_value = false;
+            for (std::size_t index = start; index < end; ++index) {
+                if (std::isfinite(channel[index * 2U])
+                    && std::isfinite(channel[index * 2U + 1U])) {
+                    has_value = true;
+                    break;
+                }
+            }
+            if (has_value) ++valid_bucket_count;
+        }
+    }
+    const std::size_t vertex_count = valid_bucket_count * 2U;
     if (vertex_count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        generated_point_count_.store(0, std::memory_order_release);
         delete oldNode;
         return nullptr;
     }
@@ -193,10 +184,7 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
     }
     if (node->revision_ != snapshot->revision
         || !qFuzzyCompare(node->width_, width())
-        || !qFuzzyCompare(node->height_, height())
-        || !qFuzzyCompare(node->visible_start_ratio_, visible_start_ratio_)
-        || !qFuzzyCompare(node->visible_end_ratio_, visible_end_ratio_)
-        || node->render_mode_ != render_mode_) {
+        || !qFuzzyCompare(node->height_, height())) {
         node->geometry_.allocate(static_cast<int>(vertex_count));
         auto* vertices = node->geometry_.vertexDataAsPoint2D();
         const qreal channel_height = height()
@@ -205,44 +193,42 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         for (std::size_t channel_index = 0;
              channel_index < snapshot->channels.size(); ++channel_index) {
             const auto& peaks = snapshot->channels[channel_index];
+            const std::size_t stride = strides[channel_index];
+            if (stride > pair_count) continue;
             const qreal center = (static_cast<qreal>(channel_index) + 0.5)
                 * channel_height;
             const qreal half_height = channel_height * 0.46;
-            if (detailed) {
-                for (std::size_t index = first_pair; index + 1U < end_pair; ++index) {
-                    const std::size_t visible_index = index - first_pair;
-                    const qreal x1 = static_cast<qreal>(visible_index) * width()
-                        / static_cast<qreal>(visible_pair_count - 1U);
-                    const qreal x2 = static_cast<qreal>(visible_index + 1U) * width()
-                        / static_cast<qreal>(visible_pair_count - 1U);
-                    const float sample1 = (peaks[index * 2U]
-                        + peaks[index * 2U + 1U]) * 0.5F;
-                    const float sample2 = (peaks[(index + 1U) * 2U]
-                        + peaks[(index + 1U) * 2U + 1U]) * 0.5F;
-                    vertices[vertex++].set(static_cast<float>(x1),
-                        static_cast<float>(center + sample1 * half_height));
-                    vertices[vertex++].set(static_cast<float>(x2),
-                        static_cast<float>(center + sample2 * half_height));
+            for (std::size_t start = 0; start < pair_count; start += stride) {
+                const std::size_t end = std::min(pair_count, start + stride);
+                float minimum = 1.0F;
+                float maximum = -1.0F;
+                bool has_value = false;
+                for (std::size_t index = start; index < end; ++index) {
+                    const float bucket_minimum = peaks[index * 2U];
+                    const float bucket_maximum = peaks[index * 2U + 1U];
+                    if (!std::isfinite(bucket_minimum)
+                        || !std::isfinite(bucket_maximum)) {
+                        continue;
+                    }
+                    minimum = std::min(minimum, bucket_minimum);
+                    maximum = std::max(maximum, bucket_maximum);
+                    has_value = true;
                 }
-            } else {
-                for (std::size_t index = first_pair; index < end_pair; ++index) {
-                    const std::size_t visible_index = index - first_pair;
-                    const qreal x = visible_pair_count == 1U ? width() * 0.5
-                        : static_cast<qreal>(visible_index) * width()
-                            / static_cast<qreal>(visible_pair_count - 1U);
-                    vertices[vertex++].set(static_cast<float>(x),
-                        static_cast<float>(center + peaks[index * 2U] * half_height));
-                    vertices[vertex++].set(static_cast<float>(x),
-                        static_cast<float>(center + peaks[index * 2U + 1U] * half_height));
-                }
+                if (!has_value) continue;
+                const qreal bucket_center = static_cast<qreal>(start + end - 1U) * 0.5;
+                const qreal x = pair_count == 1U ? width() * 0.5
+                    : bucket_center * width() / static_cast<qreal>(pair_count - 1U);
+                vertices[vertex++].set(static_cast<float>(x),
+                    static_cast<float>(center + minimum * half_height));
+                vertices[vertex++].set(static_cast<float>(x),
+                    static_cast<float>(center + maximum * half_height));
             }
         }
         node->revision_ = snapshot->revision;
         node->width_ = width();
         node->height_ = height();
-        node->visible_start_ratio_ = visible_start_ratio_;
-        node->visible_end_ratio_ = visible_end_ratio_;
-        node->render_mode_ = render_mode_;
+        generated_point_count_.store(static_cast<int>(vertex),
+                                     std::memory_order_release);
         node->markDirty(QSGNode::DirtyGeometry);
     }
     if (node->color_ != waveform_color_) {

@@ -221,6 +221,31 @@ private slots:
         QCOMPARE(timeline.event(1)->source->total_frames, source_frames);
     }
 
+    void singleEventCommandRoundTripPreservesLargeTimeline()
+    {
+        EventTimeline timeline;
+        constexpr EventId eventCount = 2'048;
+        for (EventId id = 1; id <= eventCount; ++id) {
+            const SampleFrame timelineStart = static_cast<SampleFrame>(id - 1) * 4;
+            QVERIFY(timeline.insert(event(id, timelineStart, 0, 1)));
+        }
+        const TimelineSnapshot before = timeline.snapshot();
+        const EventId editedId = eventCount / 2;
+        const SampleFrame movedStart = timeline.event(editedId)->timelineStart + 1;
+        const auto move = TimelineEditCommand::move(timeline, editedId, movedStart);
+        QVERIFY(move.has_value());
+        QVERIFY(move->execute(timeline));
+        QCOMPARE(timeline.event(editedId)->timelineStart, movedStart);
+        QCOMPARE(timeline.event(1)->timelineStart,
+                 before.events.front().timelineStart);
+        QCOMPARE(timeline.event(eventCount)->timelineStart,
+                 before.events.back().timelineStart);
+        QVERIFY(move->undo(timeline));
+        QCOMPARE(timeline.event(editedId)->timelineStart,
+                 before.events.at(static_cast<std::size_t>(editedId - 1)).timelineStart);
+        QCOMPARE(timeline.revision(), before.revision + 2);
+    }
+
     void staleCommandExecutionAndUndoPreserveTheEntireSnapshot()
     {
         EventTimeline timeline;

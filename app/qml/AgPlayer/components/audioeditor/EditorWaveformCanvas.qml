@@ -1,326 +1,562 @@
 import QtQuick
-import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
     id: canvas
-    color: Theme.editorCanvas
-    border.color: Theme.border
-    radius: Theme.radiusSm
+    color: "#04182b"
+    border.color: "#23415d"
+    border.width: 1
     clip: true
+    property double playheadCandidateFrame: -1
+    readonly property double displayedPlayheadFrame:
+        playheadCandidateFrame >= 0 ? playheadCandidateFrame
+                                    : AudioEditorController.playheadFrame
+
+    function boundedPixel(pixel) {
+        return Math.max(0, Math.min(width, pixel))
+    }
+    function frameAtCanvasPixel(pixel) {
+        return AudioEditorController.viewport.frameAtPixel(boundedPixel(pixel))
+    }
+    function pixelAtFrame(frame) {
+        return AudioEditorController.viewport.pixelAtFrame(frame)
+    }
+    function addEnvelopePointForEvent(eventId, timelineStart, timelineEnd,
+                                      canvasX, lineY, lineHeight) {
+        const offset = Math.max(0, Math.min(
+            Number(timelineEnd) - Number(timelineStart) - 1,
+            frameAtCanvasPixel(canvasX) - Number(timelineStart)))
+        const gain = Math.max(0, Math.min(2,
+            2 * (1 - lineY / lineHeight)))
+        AudioEditorController.addEnvelopePoint(
+            eventId, Math.round(offset), gain)
+    }
+
     onWidthChanged: AudioEditorController.viewport.setViewportWidth(
-        Math.max(1, width - 38))
+        Math.max(1, width))
     Component.onCompleted: AudioEditorController.viewport.setViewportWidth(
-        Math.max(1, width - 38))
+        Math.max(1, width))
 
-    function frameAt(x) {
-        const ratio = Math.max(0, Math.min(waveArea.width - 38, x))
-            / Math.max(1, waveArea.width - 38)
-        return Math.round(AudioEditorController.viewport.visibleStartFrame
-            + ratio * AudioEditorController.viewport.visibleFrameCount)
-    }
-    function xAtFrame(frame) {
-        const ratio = (frame - AudioEditorController.viewport.visibleStartFrame)
-            / Math.max(1, AudioEditorController.viewport.visibleFrameCount)
-        return 26 + (waveArea.width - 38)
-            * Math.max(0, Math.min(1, ratio))
-    }
-    function playbackFrame() {
-        const sampleRate = Math.max(
-            1,
-            AudioEditorController.sampleRate > 0
-                ? AudioEditorController.sampleRate
-                : AudioEditorController.recordingSampleRate)
-        return AudioEditorController.positionMs * sampleRate / 1000
-    }
-    function frameAtWaveX(x) {
-        return frameAt(x - 26)
-    }
-    function timeText(frame) {
-        if (AudioEditorController.sampleRate <= 0)
-            return "0:00"
-        const seconds = frame / AudioEditorController.sampleRate
-        const minutes = Math.floor(seconds / 60)
-        return minutes + ":" + String(Math.floor(seconds % 60)).padStart(2, "0")
-    }
-    function zoomAt(wheel, localX, localWidth) {
-        if ((wheel.modifiers & Qt.ControlModifier) === 0)
-            return false
-        const total = Math.max(1, AudioEditorController.totalFrames)
-        const current = Math.max(1, AudioEditorController.viewport.visibleFrameCount)
-        const factor = wheel.angleDelta.y > 0 ? 0.8 : 1.25
-        const next = Math.max(256, Math.min(total, Math.round(current * factor)))
-        const waveX = Math.max(0, Math.min(localWidth, localX))
-        const anchorFrame = AudioEditorController.viewport.visibleStartFrame
-            + waveX / Math.max(1, localWidth)
-              * AudioEditorController.viewport.visibleFrameCount
-        const anchorRatio = waveX / Math.max(1, localWidth)
-        const start = Math.max(0, Math.min(total - next,
-            Math.round(anchorFrame - next * anchorRatio)))
-        AudioEditorController.viewport.setVisibleRange(start, start + next)
-        wheel.accepted = true
-        return true
-    }
-
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
-
+    Repeater {
+        model: Math.max(1, AudioEditorController.channels)
         Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 38
-            color: Theme.editorRuler
-            border.color: Theme.border
+            required property int index
+            x: 0
+            y: (index + 0.5) * canvas.height
+               / Math.max(1, AudioEditorController.channels)
+            width: canvas.width
+            height: 1
+            color: "#42617f"
+            opacity: 0.7
+        }
+    }
 
-            Row {
+    AudioEditorWaveformItem {
+        id: waveform
+        anchors.fill: parent
+        anchors.topMargin: 12
+        anchors.bottomMargin: 12
+        channelPeaks: AudioEditorController.viewportChannelPeaks
+        waveformColor: "#2587ff"
+        visible: AudioEditorController.hasDocument
+            || AudioEditorController.recording
+    }
+
+    Rectangle {
+        id: selectionOverlay
+        visible: AudioEditorController.selectionStart >= 0
+            && AudioEditorController.selectionEnd
+                > AudioEditorController.viewport.visibleStartFrame
+            && AudioEditorController.selectionStart
+                < AudioEditorController.viewport.visibleEndFrame
+        x: Math.max(0, canvas.pixelAtFrame(
+            AudioEditorController.selectionStart))
+        width: Math.max(0, Math.min(canvas.width,
+            canvas.pixelAtFrame(AudioEditorController.selectionEnd)) - x)
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.margins: 8
+        color: "#224b7d99"
+        border.color: "#5da8ff"
+        border.width: 1
+    }
+
+    Repeater {
+        model: AudioEditorController.timelineEventViews
+        delegate: Rectangle {
+            id: eventDelegate
+            required property var modelData
+            readonly property real rawStart: canvas.pixelAtFrame(
+                Number(modelData.timelineStart))
+            readonly property real rawEnd: canvas.pixelAtFrame(
+                Number(modelData.timelineEnd))
+            x: Math.max(0, rawStart)
+            y: 8
+            width: Math.max(0, Math.min(canvas.width, rawEnd) - x)
+            height: canvas.height - 16
+            visible: width > 0 && rawEnd > 0 && rawStart < canvas.width
+            color: "transparent"
+            border.color: "#247fe0"
+            border.width: 1
+            z: 2
+
+            MouseArea {
+                id: eventMoveArea
+                objectName: "editorEventBodyInteraction"
                 anchors.fill: parent
-                anchors.leftMargin: 26
+                anchors.leftMargin: 9
+                anchors.rightMargin: 9
+                z: 5
+                cursorShape: AudioEditorController.activeTool === "scissors"
+                    ? Qt.CrossCursor : Qt.ArrowCursor
+                acceptedButtons: Qt.LeftButton
+                property real pressCanvasX: 0
+                property double pressFrame: 0
+                property double originalTimelineStart: 0
+                property bool duplicateMove: false
+                property bool movedDuringPress: false
+                property double lastEnvelopeClickMs: 0
+                property real lastEnvelopeClickX: 0
+                property real lastEnvelopeClickY: 0
+                onPressed: function(mouse) {
+                    movedDuringPress = false
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    pressCanvasX = point.x
+                    originalTimelineStart = Number(modelData.timelineStart)
+                    const frame = canvas.frameAtCanvasPixel(point.x)
+                    pressFrame = frame
+                    AudioEditorController.seekFrame(frame)
+                    if (AudioEditorController.activeTool === "scissors") {
+                        AudioEditorController.splitEvent(modelData.id, frame)
+                        mouse.accepted = true
+                        return
+                    }
+                    duplicateMove = (mouse.modifiers & Qt.ControlModifier) !== 0
+                    if (duplicateMove) {
+                        AudioEditorController.beginEventGesture(
+                            modelData.id, "move", true)
+                    }
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed
+                            || AudioEditorController.activeTool === "scissors")
+                        return
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    const frame = canvas.frameAtCanvasPixel(point.x)
+                    if (frame !== pressFrame)
+                        movedDuringPress = true
+                    if (duplicateMove) {
+                        AudioEditorController.moveEvent(
+                            modelData.id, Math.max(0, Math.round(
+                                originalTimelineStart + frame - pressFrame)))
+                    } else if (frame !== pressFrame) {
+                        AudioEditorController.setSelection(
+                            Math.min(pressFrame, frame),
+                            Math.max(pressFrame, frame))
+                    }
+                }
+                onReleased: function(mouse) {
+                    if (duplicateMove) AudioEditorController.endEventGesture()
+                    if (!duplicateMove && !movedDuringPress
+                            && AudioEditorController.activeTool !== "scissors"
+                            && mouse.y >= volumeLine.y
+                            && mouse.y <= volumeLine.y + volumeLine.height) {
+                        const now = Date.now()
+                        if (now - lastEnvelopeClickMs <= 500
+                                && Math.abs(mouse.x - lastEnvelopeClickX) <= 6
+                                && Math.abs(mouse.y - lastEnvelopeClickY) <= 6) {
+                            const point = mapToItem(canvas, mouse.x, mouse.y)
+                            canvas.addEnvelopePointForEvent(
+                                modelData.id,
+                                Number(modelData.timelineStart),
+                                Number(modelData.timelineEnd), point.x,
+                                mouse.y - volumeLine.y, volumeLine.height)
+                            lastEnvelopeClickMs = 0
+                        } else {
+                            lastEnvelopeClickMs = now
+                            lastEnvelopeClickX = mouse.x
+                            lastEnvelopeClickY = mouse.y
+                        }
+                    }
+                    duplicateMove = false
+                }
+                onCanceled: {
+                    if (duplicateMove) AudioEditorController.cancelEventGesture()
+                    duplicateMove = false
+                }
+            }
+
+            MouseArea {
+                id: leftTrim
+                objectName: "editorEventLeftTrimHandle"
+                width: 18
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                cursorShape: Qt.SizeHorCursor
+                z: 7
+                activeFocusOnTab: true
+                Accessible.name: qsTr("片段左修剪手柄")
+                Accessible.role: Accessible.Slider
+                property double originalTimelineStart: 0
+                property double originalSourceStart: 0
+                onPressed: function(mouse) {
+                    originalTimelineStart = Number(modelData.timelineStart)
+                    originalSourceStart = Number(modelData.sourceStart)
+                    AudioEditorController.beginEventGesture(modelData.id, "trim")
+                    forceActiveFocus()
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    const nextTimeline = canvas.frameAtCanvasPixel(point.x)
+                    const delta = nextTimeline - originalTimelineStart
+                    AudioEditorController.trimEvent(
+                        modelData.id,
+                        Math.max(0, Math.round(originalSourceStart + delta)),
+                        Number(modelData.sourceEnd),
+                        Math.max(0, nextTimeline))
+                }
+                onReleased: AudioEditorController.endEventGesture()
+                onCanceled: AudioEditorController.cancelEventGesture()
+                Keys.onPressed: function(event) {
+                    if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                        return
+                    const delta = event.key === Qt.Key_Left ? -1 : 1
+                    AudioEditorController.trimEvent(
+                        modelData.id,
+                        Math.max(0, Number(modelData.sourceStart) + delta),
+                        Number(modelData.sourceEnd),
+                        Math.max(0, Number(modelData.timelineStart) + delta))
+                    event.accepted = true
+                }
+            }
+
+            MouseArea {
+                id: rightTrim
+                objectName: "editorEventRightTrimHandle"
+                width: 18
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                cursorShape: Qt.SizeHorCursor
+                z: 7
+                activeFocusOnTab: true
+                Accessible.name: qsTr("片段右修剪手柄")
+                Accessible.role: Accessible.Slider
+                property double originalSourceEnd: 0
+                property double originalTimelineEnd: 0
+                onPressed: function(mouse) {
+                    originalSourceEnd = Number(modelData.sourceEnd)
+                    originalTimelineEnd = Number(modelData.timelineEnd)
+                    AudioEditorController.beginEventGesture(modelData.id, "trim")
+                    forceActiveFocus()
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    const nextEnd = canvas.frameAtCanvasPixel(point.x)
+                    AudioEditorController.trimEvent(
+                        modelData.id, Number(modelData.sourceStart),
+                        Math.max(Number(modelData.sourceStart) + 1,
+                            Math.round(originalSourceEnd
+                                + nextEnd - originalTimelineEnd)),
+                        Number(modelData.timelineStart))
+                }
+                onReleased: AudioEditorController.endEventGesture()
+                onCanceled: AudioEditorController.cancelEventGesture()
+                Keys.onPressed: function(event) {
+                    if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                        return
+                    const delta = event.key === Qt.Key_Left ? -1 : 1
+                    AudioEditorController.trimEvent(
+                        modelData.id, Number(modelData.sourceStart),
+                        Math.max(Number(modelData.sourceStart) + 1,
+                            Number(modelData.sourceEnd) + delta),
+                        Number(modelData.timelineStart))
+                    event.accepted = true
+                }
+            }
+
+            Canvas {
+                id: fadeCurve
+                objectName: "editorEventFadeOutCurve"
+                anchors.fill: parent
+                z: 4
+                visible: fadeOutHandle.displayedFadeOut > 0
+                onPaint: {
+                    const context = getContext("2d")
+                    context.clearRect(0, 0, width, height)
+                    const startX = canvas.pixelAtFrame(
+                        Number(modelData.timelineEnd)
+                            - fadeOutHandle.displayedFadeOut)
+                        - eventDelegate.x
+                    context.strokeStyle = "#e9d7cf"
+                    context.lineWidth = 1.2
+                    context.beginPath()
+                    context.moveTo(Math.max(0, startX), 10)
+                    context.bezierCurveTo(width - 28, 18,
+                        width - 8, height * 0.48, width - 2, height - 10)
+                    context.stroke()
+                }
+                Connections {
+                    target: AudioEditorController
+                    function onDocumentChanged() { fadeCurve.requestPaint() }
+                }
+            }
+
+            MouseArea {
+                id: fadeOutHandle
+                objectName: "editorEventFadeOutHandle"
+                z: 8
+                x: 0; y: 0
+                width: parent.width; height: 24
+                property double candidateFadeOut: Number(modelData.fadeOut)
+                readonly property double displayedFadeOut: pressed
+                    ? candidateFadeOut : Number(modelData.fadeOut)
+                cursorShape: Qt.SizeHorCursor
+                activeFocusOnTab: true
+                Accessible.name: qsTr("淡出控制点")
+                Accessible.role: Accessible.Slider
+                onPressed: function(mouse) {
+                    candidateFadeOut = Number(modelData.fadeOut)
+                    forceActiveFocus()
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    const eventFrames = Number(modelData.timelineEnd)
+                        - Number(modelData.timelineStart)
+                    const frames = Math.max(0, Math.min(eventFrames,
+                        Number(modelData.timelineEnd)
+                            - canvas.frameAtCanvasPixel(point.x)))
+                    candidateFadeOut = Math.round(frames)
+                    fadeCurve.requestPaint()
+                }
+                onReleased: AudioEditorController.setEventFadeOut(
+                    modelData.id, candidateFadeOut)
+                onCanceled: candidateFadeOut = Number(modelData.fadeOut)
+                Rectangle {
+                    x: Math.max(0, Math.min(parent.width - width,
+                        canvas.pixelAtFrame(Number(modelData.timelineEnd)
+                            - fadeOutHandle.displayedFadeOut) - eventDelegate.x
+                            - width / 2))
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 9; height: 9; radius: width / 2
+                    color: "#1d7fff"
+                    border.color: "#e7f1ff"; border.width: 2
+                }
+            }
+
+            Item {
+                id: volumeLine
+                objectName: "editorEventVolumeLine"
+                x: 10; width: parent.width - 20
+                y: parent.height / 2 - 12; height: 24
+                z: 4
+                Rectangle {
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 1; color: "#d8e6f2"; opacity: 0.65
+                }
                 Repeater {
-                    model: 9
-                    Item {
-                        width: Math.max(48, (canvas.width - 52) / 9)
-                        height: 38
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.bottom: parent.bottom
-                            width: 1
-                            height: 10
-                            color: Theme.border
-                        }
-                        Text {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: AudioEditorController.hasDocument
-                                  ? canvas.timeText(AudioEditorController.viewport.visibleStartFrame
-                                      + AudioEditorController.viewport.visibleFrameCount
-                                      * index / 8) : "--:--"
-                            color: Theme.secondaryText
-                            font.pixelSize: 10
-                        }
+                    model: modelData.envelope || []
+                    Rectangle {
+                        required property var modelData
+                        width: 8; height: 8; radius: 4
+                        x: canvas.pixelAtFrame(Number(eventDelegate.modelData.timelineStart)
+                            + Number(modelData.offset)) - eventDelegate.x
+                            - volumeLine.x - width / 2
+                        y: (1 - Math.max(0, Math.min(2,
+                            Number(modelData.gain))) / 2) * volumeLine.height
+                            - height / 2
+                        color: "#1d7fff"
+                        border.color: "#e7f1ff"; border.width: 1
                     }
                 }
             }
         }
+    }
 
-        Item {
-            id: waveArea
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+    Rectangle {
+        id: playheadLine
+        x: canvas.pixelAtFrame(canvas.displayedPlayheadFrame)
+        y: 0
+        width: 2
+        height: canvas.height
+        color: "#ffaf00"
+        visible: (AudioEditorController.hasDocument
+                  || AudioEditorController.recording)
+            && canvas.displayedPlayheadFrame
+                >= AudioEditorController.viewport.visibleStartFrame
+            && canvas.displayedPlayheadFrame
+                <= AudioEditorController.viewport.visibleEndFrame
+        z: 6
+    }
 
-            Repeater {
-                model: Math.max(1, AudioEditorController.channels)
-                Rectangle {
-                    x: 26
-                    y: index * waveArea.height / Math.max(1, AudioEditorController.channels)
-                    width: waveArea.width - 38
-                    height: 1
-                    color: Theme.border
-                    opacity: index > 0 ? 0.7 : 0
-                }
+    MouseArea {
+        id: backgroundInteraction
+        objectName: "editorWaveformInteraction"
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        enabled: AudioEditorController.hasDocument
+        z: 1
+        property double pressFrame: 0
+        property real lastPanX: 0
+        property bool selecting: false
+        onPressed: function(mouse) {
+            canvas.forceActiveFocus()
+            if (mouse.button === Qt.MiddleButton) {
+                lastPanX = mouse.x
+                return
             }
-
-            AudioEditorWaveformItem {
-                anchors.fill: parent
-                anchors.leftMargin: 26
-                anchors.rightMargin: 12
-                anchors.topMargin: 10
-                anchors.bottomMargin: 10
-                channelPeaks: AudioEditorController.channelPeaks
-                waveformColor: Theme.editorWaveform
-                visibleStartRatio: AudioEditorController.viewport.overviewStartRatio
-                visibleEndRatio: Math.min(1,
-                    AudioEditorController.viewport.overviewStartRatio
-                    + AudioEditorController.viewport.overviewWidthRatio)
-                visible: AudioEditorController.hasDocument || AudioEditorController.recording
+            pressFrame = canvas.frameAtCanvasPixel(mouse.x)
+            selecting = false
+            AudioEditorController.seekFrame(pressFrame)
+        }
+        onPositionChanged: function(mouse) {
+            if (!pressed) return
+            if ((pressedButtons & Qt.MiddleButton) !== 0) {
+                AudioEditorController.viewport.panByPixels(mouse.x - lastPanX)
+                lastPanX = mouse.x
+                return
             }
-
-            Rectangle {
-                id: selectionOverlay
-                visible: AudioEditorController.selectionStart >= 0
-                x: canvas.xAtFrame(AudioEditorController.selectionStart)
-                width: Math.max(0, Math.min(waveArea.width - 38,
-                       (waveArea.width - 38)
-                       * AudioEditorController.selectionFrames
-                       / Math.max(1, AudioEditorController.viewport.visibleFrameCount)))
-                anchors.top: parent.top
-                anchors.topMargin: 10
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 10
-                color: Theme.editorSelection
-                border.color: Theme.cyan
-                border.width: 1
-            }
-
-            Rectangle {
-                id: playheadLine
-                x: canvas.xAtFrame(AudioEditorController.positionMs
-                    * AudioEditorController.sampleRate / 1000)
-                visible: AudioEditorController.hasDocument || AudioEditorController.recording
-                    && AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000
-                        >= AudioEditorController.viewport.visibleStartFrame
-                    && playbackFrame()
-                        <= AudioEditorController.viewport.visibleEndFrame
-                y: 4
-                width: 1
-                height: waveArea.height - 8
-                color: Theme.waveformRed
-            }
-
-            Text {
-                visible: !AudioEditorController.hasDocument && !AudioEditorController.recording
-                anchors.centerIn: parent
-                text: qsTr("打开音频或新建录音以开始编辑")
-                color: Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 14
-            }
-
-            Repeater {
-                model: AudioEditorController.channels
-                Text {
-                    x: 8
-                    y: (index + 0.5) * waveArea.height
-                       / Math.max(1, AudioEditorController.channels) - height / 2
-                    text: index === 0 ? "L" : index === 1 ? "R" : index + 1
-                    color: Theme.secondaryText
-                    font.pixelSize: 11
-                }
-            }
-
-            MouseArea {
-                objectName: "editorWaveformInteraction"
-                anchors.fill: parent
-                anchors.leftMargin: 26
-                anchors.rightMargin: 12
-                enabled: AudioEditorController.hasDocument
-                z: 1
-                property real pressX: 0
-                onPressed: mouse => {
-                    canvas.forceActiveFocus()
-                    pressX = mouse.x
-                    AudioEditorController.seekMs(
-                        canvas.frameAt(mouse.x) * 1000
-                        / Math.max(1, AudioEditorController.sampleRate))
-                }
-                onPositionChanged: mouse => {
-                    if (!pressed) return
-                    const first = canvas.frameAt(pressX)
-                    const last = canvas.frameAt(mouse.x)
-                    if (first !== last)
-                        AudioEditorController.setSelection(
-                            Math.min(first, last), Math.max(first, last))
-                }
-                onDoubleClicked: mouse => {
-                    const frame = canvas.frameAt(mouse.x)
-                    if (frame < AudioEditorController.selectionStart
-                            || frame >= AudioEditorController.selectionEnd)
-                        AudioEditorController.clearSelection()
-                }
-                onWheel: wheel => {
-                    canvas.zoomAt(wheel, wheel.x, width)
-                }
-            }
-
-            MouseArea {
-                objectName: "editorSelectionContextCancel"
-                anchors.fill: selectionOverlay
-                z: 4
-                acceptedButtons: Qt.RightButton
-                enabled: selectionOverlay.visible
-                onClicked: AudioEditorController.clearSelection()
-                onWheel: wheel => {
-                    const point = mapToItem(waveArea, wheel.x, wheel.y)
-                    canvas.zoomAt(wheel, point.x - 26, waveArea.width - 38)
-                }
-            }
-
-            MouseArea {
-                id: playheadHandle
-                objectName: "editorPlayheadHandle"
-                z: 6
-                width: 24
-                height: waveArea.height
-                x: playheadLine.x - width / 2
-                enabled: playheadLine.visible
-                cursorShape: Qt.SizeHorCursor
-                preventStealing: true
-                onPressed: mouse => mouse.accepted = true
-                onPositionChanged: mouse => {
-                    if (!pressed) return
-                    const point = mapToItem(waveArea, mouse.x, mouse.y)
-                    const frame = canvas.frameAtWaveX(point.x)
-                    AudioEditorController.seekMs(frame * 1000
-                        / Math.max(1, AudioEditorController.sampleRate))
-                }
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.top
-                    anchors.topMargin: 2
-                    width: 10
-                    height: 10
-                    radius: 5
-                    color: Theme.waveformRed
-                }
-            }
-
-            MouseArea {
-                id: selectionStartHandle
-                objectName: "editorSelectionStartHandle"
-                z: 5
-                visible: selectionOverlay.visible
-                enabled: visible
-                width: 24
-                height: selectionOverlay.height
-                x: selectionOverlay.x - width / 2
-                y: selectionOverlay.y
-                cursorShape: Qt.SizeHorCursor
-                preventStealing: true
-                onPressed: mouse => mouse.accepted = true
-                onPositionChanged: mouse => {
-                    if (!pressed) return
-                    const point = mapToItem(waveArea, mouse.x, mouse.y)
-                    const frame = Math.min(canvas.frameAtWaveX(point.x),
-                                           AudioEditorController.selectionEnd - 1)
-                    AudioEditorController.setSelection(frame,
-                        AudioEditorController.selectionEnd)
-                }
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 3
-                    height: parent.height
-                    color: Theme.cyan
-                }
-            }
-
-            MouseArea {
-                id: selectionEndHandle
-                objectName: "editorSelectionEndHandle"
-                z: 5
-                visible: selectionOverlay.visible
-                enabled: visible
-                width: 24
-                height: selectionOverlay.height
-                x: selectionOverlay.x + selectionOverlay.width - width / 2
-                y: selectionOverlay.y
-                cursorShape: Qt.SizeHorCursor
-                preventStealing: true
-                onPressed: mouse => mouse.accepted = true
-                onPositionChanged: mouse => {
-                    if (!pressed) return
-                    const point = mapToItem(waveArea, mouse.x, mouse.y)
-                    const frame = Math.max(canvas.frameAtWaveX(point.x),
-                                           AudioEditorController.selectionStart + 1)
-                    AudioEditorController.setSelection(
-                        AudioEditorController.selectionStart, frame)
-                }
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 3
-                    height: parent.height
-                    color: Theme.cyan
-                }
+            const frame = canvas.frameAtCanvasPixel(mouse.x)
+            if (frame === pressFrame) return
+            selecting = true
+            AudioEditorController.setSelection(
+                Math.min(pressFrame, frame), Math.max(pressFrame, frame))
+        }
+        onWheel: function(wheel) {
+            if ((wheel.modifiers & Qt.ControlModifier) !== 0) {
+                AudioEditorController.viewport.zoomAt(
+                    wheel.angleDelta.y > 0 ? 1.25 : 0.8, wheel.x)
+                wheel.accepted = true
+            } else if ((wheel.modifiers & Qt.ShiftModifier) !== 0) {
+                AudioEditorController.viewport.panByPixels(
+                    wheel.angleDelta.y / 3)
+                wheel.accepted = true
             }
         }
+    }
+
+    MouseArea {
+        id: playheadHandle
+        objectName: "editorPlayheadHandle"
+        z: 8
+        width: 24
+        height: 28
+        x: playheadLine.x - width / 2
+        enabled: playheadLine.visible
+        cursorShape: Qt.SizeHorCursor
+        activeFocusOnTab: true
+        Accessible.name: qsTr("播放头")
+        Accessible.role: Accessible.Slider
+        onPressed: function(mouse) {
+            canvas.playheadCandidateFrame = AudioEditorController.playheadFrame
+            forceActiveFocus()
+            mouse.accepted = true
+        }
+        onPositionChanged: function(mouse) {
+            if (!pressed) return
+            const point = mapToItem(canvas, mouse.x, mouse.y)
+            canvas.playheadCandidateFrame = canvas.frameAtCanvasPixel(point.x)
+        }
+        onReleased: {
+            AudioEditorController.seekFrame(canvas.playheadCandidateFrame)
+            canvas.playheadCandidateFrame = -1
+        }
+        onCanceled: canvas.playheadCandidateFrame = -1
+        Keys.onPressed: function(event) {
+            if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return
+            AudioEditorController.seekFrame(Math.max(0, Math.min(
+                AudioEditorController.totalFrames,
+                AudioEditorController.playheadFrame
+                    + (event.key === Qt.Key_Left ? -1 : 1))))
+            event.accepted = true
+        }
+    }
+
+    MouseArea {
+        id: selectionStartHandle
+        objectName: "editorSelectionStartHandle"
+        z: 7
+        width: 24
+        height: selectionOverlay.height
+        x: selectionOverlay.x - width / 2
+        y: selectionOverlay.y
+        enabled: selectionOverlay.visible
+        visible: enabled
+        cursorShape: Qt.SizeHorCursor
+        activeFocusOnTab: true
+        Accessible.name: qsTr("选区起点")
+        Accessible.role: Accessible.Slider
+        onPositionChanged: function(mouse) {
+            if (!pressed) return
+            const point = mapToItem(canvas, mouse.x, mouse.y)
+            const frame = Math.min(canvas.frameAtCanvasPixel(point.x),
+                                   AudioEditorController.selectionEnd - 1)
+            AudioEditorController.setSelection(
+                frame, AudioEditorController.selectionEnd)
+        }
+        Keys.onPressed: function(event) {
+            if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return
+            AudioEditorController.setSelection(Math.max(0, Math.min(
+                AudioEditorController.selectionEnd - 1,
+                AudioEditorController.selectionStart
+                    + (event.key === Qt.Key_Left ? -1 : 1))),
+                AudioEditorController.selectionEnd)
+            event.accepted = true
+        }
+    }
+
+    MouseArea {
+        id: selectionEndHandle
+        objectName: "editorSelectionEndHandle"
+        z: 7
+        width: 24
+        height: selectionOverlay.height
+        x: selectionOverlay.x + selectionOverlay.width - width / 2
+        y: selectionOverlay.y
+        enabled: selectionOverlay.visible
+        visible: enabled
+        cursorShape: Qt.SizeHorCursor
+        activeFocusOnTab: true
+        Accessible.name: qsTr("选区终点")
+        Accessible.role: Accessible.Slider
+        onPositionChanged: function(mouse) {
+            if (!pressed) return
+            const point = mapToItem(canvas, mouse.x, mouse.y)
+            const frame = Math.max(canvas.frameAtCanvasPixel(point.x),
+                                   AudioEditorController.selectionStart + 1)
+            AudioEditorController.setSelection(
+                AudioEditorController.selectionStart, frame)
+        }
+        Keys.onPressed: function(event) {
+            if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return
+            AudioEditorController.setSelection(
+                AudioEditorController.selectionStart,
+                Math.max(AudioEditorController.selectionStart + 1, Math.min(
+                    AudioEditorController.totalFrames,
+                    AudioEditorController.selectionEnd
+                        + (event.key === Qt.Key_Left ? -1 : 1))))
+            event.accepted = true
+        }
+    }
+
+    Text {
+        anchors.centerIn: parent
+        visible: !AudioEditorController.hasDocument
+            && !AudioEditorController.recording
+        text: qsTr("导入音频后开始编辑")
+        color: "#7891aa"
+        font.family: Theme.fontPrimary
+        font.pixelSize: 14
     }
 }

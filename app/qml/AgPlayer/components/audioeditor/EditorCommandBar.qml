@@ -5,159 +5,179 @@ import AgPlayer
 
 Rectangle {
     id: bar
-    readonly property bool compact: width < 1120
-    signal exportRequested(bool selectionOnly)
-    signal gainRequested()
-    color: Theme.panel
-    border.color: Theme.border
-    radius: Theme.radiusSm
+    color: "transparent"
 
-    component CommandButton: ToolButton {
-        required property string actionId
-        property string label
-        property string iconName
-        property string helpText: label
-        property string shortcutText: ""
-        readonly property string hoverText: helpText + (shortcutText.length > 0
-            ? "  (" + shortcutText + ")" : "")
-        objectName: "editorCommand_" + actionId.substring("editor.".length)
-        enabled: {
-            const documentRevision = AudioEditorController.modified
-            return AudioEditorController.actionEnabled(actionId)
-        }
-        implicitWidth: bar.compact ? 38 : Math.max(60, contentRow.implicitWidth + 18)
-        implicitHeight: 44
-        onClicked: AudioEditorController.triggerAction(actionId)
-        Accessible.name: label
-        ToolTip.visible: hovered
-        ToolTip.text: hoverText
-        contentItem: RowLayout {
-            id: contentRow
-            spacing: 6
-            ThemedIcon {
-                source: Theme.icon(iconName)
-                tint: parent.parent.enabled ? Theme.iconPrimary : Theme.secondaryText
-                sourceSize.width: 18
-                sourceSize.height: 18
-                Layout.preferredWidth: 18
-                Layout.preferredHeight: 18
-            }
-            Text {
-                visible: !bar.compact
-                text: label
-                color: parent.parent.enabled ? Theme.primaryText : Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 13
-            }
-        }
-        background: Rectangle {
-            color: parent.hovered && parent.enabled ? Theme.hoverSurface : "transparent"
-            radius: Theme.radiusSm
-        }
+    signal importRequested()
+    signal saveProjectRequested()
+    property int actionRevision: 0
+
+    Connections {
+        target: AudioEditorController.actions
+        function onDataChanged() { bar.actionRevision += 1 }
     }
 
-    component DirectButton: ToolButton {
+    component CommandButton: Button {
         required property string commandName
-        property string label
-        property string iconName
-        property string shortcutText: ""
-        property bool commandEnabled: AudioEditorController.hasDocument
-            && !AudioEditorController.busy
-        signal invoked()
+        required property string label
+        required property string iconName
+        property bool commandEnabled: true
+        property bool selected: false
+        property bool mirrorIcon: false
+        property real referenceWidth: 0
         objectName: "editorCommand_" + commandName
         enabled: commandEnabled
-        implicitWidth: bar.compact ? 38 : Math.max(60, directRow.implicitWidth + 16)
-        implicitHeight: 44
-        onClicked: invoked()
+        Layout.fillWidth: referenceWidth <= 0
+        Layout.preferredWidth: referenceWidth
+        Layout.fillHeight: true
         Accessible.name: label
         ToolTip.visible: hovered
-        ToolTip.text: label + (shortcutText.length > 0
-            ? "  (" + shortcutText + ")" : "")
-        contentItem: RowLayout {
-            id: directRow
-            spacing: 5
+        ToolTip.text: label
+
+        contentItem: ColumnLayout {
+            spacing: 2
             ThemedIcon {
                 source: Theme.icon(iconName)
-                tint: parent.parent.enabled ? Theme.iconPrimary : Theme.secondaryText
-                Layout.preferredWidth: 18
-                Layout.preferredHeight: 18
+                tint: parent.parent.enabled ? "#f4f8ff" : "#718096"
+                sourceSize.width: 24
+                sourceSize.height: 24
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignHCenter
+                transform: Scale {
+                    origin.x: 12
+                    xScale: parent.parent.mirrorIcon ? -1 : 1
+                }
             }
             Text {
-                visible: !bar.compact
                 text: parent.parent.label
-                color: parent.parent.enabled ? Theme.primaryText : Theme.secondaryText
+                color: parent.parent.enabled ? "#f4f8ff" : "#718096"
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
+                Layout.alignment: Qt.AlignHCenter
             }
         }
         background: Rectangle {
-            color: parent.hovered && parent.enabled ? Theme.hoverSurface : "transparent"
-            radius: Theme.radiusSm
+            color: parent.selected ? "#0867ed"
+                : parent.hovered && parent.enabled ? "#123452" : "#0a2138"
+            border.color: parent.selected ? "#2587ff" : "#294662"
+            border.width: 1
+            radius: 6
         }
     }
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        spacing: 2
+        spacing: 8
 
-        CommandButton { actionId: "editor.open"; label: qsTr("打开"); shortcutText: "Ctrl+O"; iconName: "folder-open-line" }
-        CommandButton { actionId: "editor.newRecording"; label: qsTr("新建录音"); shortcutText: "Ctrl+R"; iconName: "checkbox-blank-circle-fill" }
-        CommandButton { actionId: "editor.save"; label: qsTr("保存"); shortcutText: "Ctrl+S"; iconName: "download-line" }
-        ToolSeparator {}
-        CommandButton { actionId: "editor.undo"; label: qsTr("撤销"); shortcutText: "Ctrl+Z"; iconName: "arrow-go-back-line" }
-        CommandButton { actionId: "editor.redo"; label: qsTr("重做"); shortcutText: "Ctrl+Y"; iconName: "arrow-go-forward-line" }
-        ToolSeparator {}
-        CommandButton { actionId: "editor.cropToSelection"; label: qsTr("裁剪"); shortcutText: "Ctrl+T"; iconName: "crop-line" }
-        CommandButton { actionId: "editor.silenceSelection"; label: qsTr("静音"); shortcutText: "Ctrl+L"; iconName: "volume-mute-line" }
-        CommandButton { actionId: "editor.fadeIn"; label: qsTr("淡入"); shortcutText: "Ctrl+Alt+I"; iconName: "restore-line" }
-        CommandButton { actionId: "editor.fadeOut"; label: qsTr("淡出"); shortcutText: "Ctrl+Alt+O"; iconName: "restore-line" }
-        DirectButton {
-            commandName: "noiseReduction"; label: qsTr("噪音消除"); iconName: "equalizer-line"
-            onInvoked: AudioEditorController.reduceNoise()
+        CommandButton {
+            commandName: "importAudio"
+            label: qsTr("导入音频")
+            iconName: "folder-open-line"
+            referenceWidth: 132
+            onClicked: bar.importRequested()
         }
-        DirectButton {
-            commandName: "gain"; label: qsTr("增益"); iconName: "equalizer-line"
-            onInvoked: bar.gainRequested()
+        CommandButton {
+            commandName: "saveProject"
+            label: qsTr("保存工程")
+            iconName: "save-3-line"
+            referenceWidth: 140
+            commandEnabled: AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+            onClicked: bar.saveProjectRequested()
         }
-        DirectButton {
-            commandName: "insertSilence"; label: qsTr("插入静音"); iconName: "volume-mute-line"
-            onInvoked: AudioEditorController.insertSilence(
-                AudioEditorController.positionMs * AudioEditorController.sampleRate / 1000,
-                AudioEditorController.sampleRate)
+        CommandButton {
+            commandName: "select"
+            label: qsTr("选择")
+            iconName: "cursor-line"
+            selected: AudioEditorController.activeTool === "select"
+            onClicked: AudioEditorController.setActiveTool("select")
         }
-        DirectButton {
-            commandName: "clearSelection"; label: qsTr("取消选区"); shortcutText: "Ctrl+Shift+A"; iconName: "close-line"
-            commandEnabled: AudioEditorController.selectionStart >= 0
-            onInvoked: AudioEditorController.clearSelection()
-        }
-        DirectButton {
-            commandName: "clearDocument"; label: qsTr("清空文件"); shortcutText: "Ctrl+W"; iconName: "delete-bin-line"
-            onInvoked: AudioEditorController.clearDocument()
-        }
-        Item { Layout.fillWidth: true }
-        ToolButton {
-            id: exportButton
-            objectName: "editorCommand_exportMenu"
-            text: qsTr("导出")
-            icon.source: Theme.icon("download-line")
-            icon.width: 18
-            icon.height: 18
-            display: bar.compact ? AbstractButton.IconOnly
-                                 : AbstractButton.TextBesideIcon
-            implicitWidth: bar.compact ? 38 : 84
-            enabled: AudioEditorController.hasDocument && !AudioEditorController.busy
-            onClicked: exportMenu.open()
-            Menu {
-                id: exportMenu
-                ThemedMenuItem { text: qsTr("导出整曲"); onTriggered: bar.exportRequested(false) }
-                ThemedMenuItem {
-                    text: qsTr("导出选区")
-                    enabled: AudioEditorController.selectionStart >= 0
-                    onTriggered: bar.exportRequested(true)
-                }
+        CommandButton {
+            commandName: "split"
+            label: qsTr("分割")
+            iconName: "scissors-cut-line"
+            selected: AudioEditorController.activeTool === "scissors"
+            commandEnabled: AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+            onClicked: {
+                AudioEditorController.setActiveTool("scissors")
             }
+        }
+        CommandButton {
+            commandName: "delete"
+            label: qsTr("删除")
+            iconName: "delete-bin-line"
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.deleteSelection")
+            onClicked: AudioEditorController.triggerAction(
+                "editor.deleteSelection")
+        }
+        CommandButton {
+            commandName: "crop"
+            label: qsTr("裁剪")
+            iconName: "crop-line"
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.cropToSelection")
+            onClicked: AudioEditorController.triggerAction(
+                "editor.cropToSelection")
+        }
+        CommandButton {
+            commandName: "copy"
+            label: qsTr("复制")
+            iconName: "file-copy-line"
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.copy")
+            onClicked: AudioEditorController.triggerAction("editor.copy")
+        }
+        CommandButton {
+            commandName: "paste"
+            label: qsTr("粘贴")
+            iconName: "clipboard-line"
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.paste")
+            onClicked: AudioEditorController.triggerAction("editor.paste")
+        }
+        CommandButton {
+            commandName: "fadeIn"
+            label: qsTr("淡入")
+            iconName: "bar-chart-line"
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.fadeIn")
+            onClicked: AudioEditorController.triggerAction("editor.fadeIn")
+        }
+        CommandButton {
+            commandName: "fadeOut"
+            label: qsTr("淡出")
+            iconName: "bar-chart-line"
+            mirrorIcon: true
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.fadeOut")
+            onClicked: AudioEditorController.triggerAction("editor.fadeOut")
+        }
+        CommandButton {
+            commandName: "mute"
+            label: qsTr("静音片段")
+            iconName: "volume-mute-line"
+            commandEnabled: bar.actionRevision >= 0
+                && AudioEditorController.actionEnabled("editor.silenceSelection")
+            onClicked: AudioEditorController.triggerAction(
+                "editor.silenceSelection")
+        }
+        CommandButton {
+            commandName: "noiseReduction"
+            label: qsTr("降噪")
+            iconName: "sound-module-line"
+            commandEnabled: AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+            onClicked: AudioEditorController.reduceNoise()
+        }
+        CommandButton {
+            commandName: "clear"
+            label: qsTr("清除")
+            iconName: "brush-line"
+            commandEnabled: AudioEditorController.selectionStart >= 0
+                || AudioEditorController.activeTool !== "select"
+            onClicked: AudioEditorController.clearTransientState()
         }
     }
 }

@@ -118,6 +118,28 @@ void EditorViewport::zoomAt(const qreal factor, const qreal anchorPixel) noexcep
     }
 }
 
+void EditorViewport::panByPixels(const qreal pixelDelta) noexcept
+{
+    const qint64 count = visibleFrameCount();
+    if (document_frames_ <= 0 || count <= 0 || viewport_width_ <= 0.0
+        || !std::isfinite(pixelDelta) || qFuzzyIsNull(pixelDelta)) {
+        return;
+    }
+    const long double requested = static_cast<long double>(visible_start_)
+        + static_cast<long double>(pixelDelta)
+            * static_cast<long double>(count)
+            / static_cast<long double>(viewport_width_);
+    const qint64 maximum_start = document_frames_ - count;
+    const qint64 start = requested <= 0.0L ? 0
+        : requested >= static_cast<long double>(maximum_start) ? maximum_start
+        : static_cast<qint64>(std::llround(requested));
+    if (start == visible_start_) {
+        return;
+    }
+    assignRange(start, count);
+    emit viewportChanged();
+}
+
 qint64 EditorViewport::frameAtPixel(const qreal pixel) const noexcept
 {
     if (visibleFrameCount() <= 0 || viewport_width_ <= 0.0) {
