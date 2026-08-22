@@ -53,6 +53,8 @@ agplayer::qt::FilenameRuleSet typedRules(const QVariantMap& rules)
     agplayer::qt::FilenameRuleSet typed;
     typed.prefix = rules.value(QStringLiteral("prefix")).toString();
     typed.suffix = rules.value(QStringLiteral("suffix")).toString();
+    typed.removePrefix = rules.value(QStringLiteral("removePrefix")).toString();
+    typed.removeSuffix = rules.value(QStringLiteral("removeSuffix")).toString();
     typed.replaceSpaces = rules.value(QStringLiteral("replaceSpaces"), false).toBool();
     typed.spaceReplacement = rules.value(QStringLiteral("spaceReplacement"), QStringLiteral("_")).toString();
     typed.autoNumber = rules.value(QStringLiteral("autoNumber"), false).toBool();

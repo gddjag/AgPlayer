@@ -4,6 +4,8 @@
 #include <QFileInfo>
 #include <QSet>
 
+#include <utility>
+
 namespace agplayer::qt {
 namespace {
 
@@ -60,10 +62,11 @@ RenamePlan RenamePlanner::build(const QList<RenameSource>& sources,
             item.reasonCode = QStringLiteral("no-change");
             item.reasonText = QStringLiteral("无需修改");
         } else {
-            const bool external = QFileInfo::exists(item.targetPath)
+            const bool occupiedByExternalFile = QFileInfo::exists(item.targetPath)
                 && !sourceKeys.contains(item.normalizedCollisionKey);
-            const bool internal = reserved.contains(item.normalizedCollisionKey);
-            if (external || internal) {
+            const bool reservedByEarlierTarget = reserved.contains(
+                item.normalizedCollisionKey);
+            if (occupiedByExternalFile || reservedByEarlierTarget) {
                 if (conflictPolicy == ConflictPolicy::AutoNumber) {
                     item.targetPath = collisionFreePath(item.targetPath, reserved);
                     item.proposedFileName = QFileInfo(item.targetPath).fileName();
@@ -78,7 +81,9 @@ RenamePlan RenamePlanner::build(const QList<RenameSource>& sources,
                         item.reasonCode = QStringLiteral("auto-numbered");
                         item.reasonText = QStringLiteral("冲突已自动追加序号");
                     }
-                } else if (conflictPolicy == ConflictPolicy::Overwrite && external) {
+                } else if (conflictPolicy == ConflictPolicy::Overwrite
+                           && occupiedByExternalFile
+                           && !reservedByEarlierTarget) {
                     item.action = RenameAction::Overwrite;
                     item.severity = RenameSeverity::Warning;
                     item.reasonCode = QStringLiteral("overwrite-confirmation-required");
@@ -97,6 +102,59 @@ RenamePlan RenamePlanner::build(const QList<RenameSource>& sources,
         }
         plan.items.append(std::move(item));
     }
+
+    // A source that becomes Skip still occupies its original path. Propagate
+    // that occupancy until every rename target is either free or also skipped.
+    bool occupancyChanged = false;
+    do {
+        occupancyChanged = false;
+        QSet<QString> stationarySourceKeys;
+        for (const RenamePlanItem& item : std::as_const(plan.items)) {
+            if (item.action == RenameAction::NoOp
+                || item.action == RenameAction::Skip) {
+                stationarySourceKeys.insert(
+                    FilenameValidator::collisionKey(item.sourcePath));
+            }
+        }
+        for (RenamePlanItem& item : plan.items) {
+            if (item.action != RenameAction::Rename
+                && item.action != RenameAction::Overwrite) {
+                continue;
+            }
+            if (!QFileInfo::exists(item.targetPath)
+                || !stationarySourceKeys.contains(item.normalizedCollisionKey)) {
+                continue;
+            }
+
+            reserved.remove(item.normalizedCollisionKey);
+            if (conflictPolicy == ConflictPolicy::AutoNumber) {
+                item.targetPath = collisionFreePath(item.targetPath, reserved);
+                item.proposedFileName = QFileInfo(item.targetPath).fileName();
+                item.normalizedCollisionKey = FilenameValidator::collisionKey(
+                    item.targetPath);
+                if (item.targetPath.isEmpty()) {
+                    item.action = RenameAction::Skip;
+                    item.severity = RenameSeverity::Error;
+                    item.reasonCode = QStringLiteral("unable-to-number");
+                    item.reasonText = QStringLiteral("无法生成无冲突文件名");
+                    occupancyChanged = true;
+                } else {
+                    item.severity = RenameSeverity::Warning;
+                    item.reasonCode = QStringLiteral("auto-numbered");
+                    item.reasonText = QStringLiteral("冲突已自动追加序号");
+                    reserved.insert(item.normalizedCollisionKey);
+                }
+            } else {
+                item.action = RenameAction::Skip;
+                item.severity = conflictPolicy == ConflictPolicy::StopBatch
+                    ? RenameSeverity::Error : RenameSeverity::Warning;
+                item.reasonCode = QStringLiteral("target-conflict");
+                item.reasonText = QStringLiteral("目标文件已存在或批次内重名");
+                occupancyChanged = true;
+            }
+        }
+    } while (occupancyChanged);
+
     bool hasError = false;
     bool hasExecutable = false;
     for (const RenamePlanItem& item : plan.items) {

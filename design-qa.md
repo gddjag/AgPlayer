@@ -10,6 +10,29 @@
 
 final result: passed
 
+## Filename Processing — 2026-08-20
+
+**Source visual truth**
+
+- `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\文件名处理.png`
+
+**Implementation evidence**
+
+- `D:\ai\AgPlayer\.worktrees\revised-ui\docs\qa\filename-process-final.png`
+- Combined comparison: `D:\ai\AgPlayer\.worktrees\revised-ui\docs\qa\filename-process-comparison-final.png`
+- Viewport: 1672 x 941, Chinese, dark theme, 24 real local fixture files.
+
+**Findings**
+
+- Command bar y=110/high 60; file table x=6/y=176/wide 619; rule panel x=631/y=176/high 259; preview starts y=441; summary starts y=801 and ends x=1662/high 135.
+- The rule panel matches the four reference regions: prefix, suffix, general rules and automatic numbering. Major dividers and control bounds align at the source viewport.
+- Prefix and suffix both expose add/remove modes. Blank add fields perform reverse cleanup; explicit remove fields delete exact case-insensitive leading/trailing text.
+- File table, preview, validation summary, three summary cards, and Start/Cancel action order match the source hierarchy, columns, active colors and 1672 x 941 source canvas.
+- The implementation screenshot reports 24 ready / 0 warning / 0 error because it uses real executable fixture state; the reference's 19 / 2 / 3 values are illustrative content, not hard-coded UI state.
+- Native Qt/Windows text antialiasing differs slightly from the raster reference. P3 only; the same-viewport review found no remaining actionable P0/P1/P2 mismatch.
+
+final result: passed
+
 ## Audio Editor V2 — 2026-08-13
 
 **Source visual truth**

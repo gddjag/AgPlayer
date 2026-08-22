@@ -135,8 +135,8 @@ foreach ($page in @($formatPage, $metadataPage, $filenamePage)) {
 if ($metadataPage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*true[\s\S]{0,120}enabled:\s*MetadataEditor\.busy') {
     throw 'Metadata cancel must remain visibly discoverable and only activate while a write is running.'
 }
-if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,120}visible:\s*true[\s\S]{0,120}enabled:\s*FilenameProcessor\.busy') {
-    throw 'Rename cancel must remain visibly discoverable and only activate while a transaction is running.'
+if ($filenamePage -notmatch 'text:\s*qsTr\("取消"\)[\s\S]{0,180}enabled:\s*true[\s\S]{0,220}if\s*\(FilenameProcessor\.busy\)[\s\S]{0,100}FilenameProcessor\.cancel\(\)\s*else\s*WindowController\.hideAudioTools\(\)') {
+    throw 'Rename cancel must stop an active transaction or close the idle tool, matching the approved reference UI.'
 }
 if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
     throw 'Mini-player controls must not reference an undefined expanded property.'

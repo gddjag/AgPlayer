@@ -42,6 +42,11 @@ QString ordinalText(const FilenameRuleSet& rules, int ordinal)
 
 QString removeKnownPrefix(QString stem, const FilenameRuleSet& rules)
 {
+    if (!rules.removePrefix.isEmpty()
+        && stem.startsWith(rules.removePrefix, Qt::CaseInsensitive)) {
+        stem.remove(0, rules.removePrefix.size());
+        return stem;
+    }
     if (!rules.removePrefixWhenEmpty) return stem;
     static const QRegularExpression tagAtStart(
         QStringLiteral("^\\s*(?:\\[[^\\]]+\\]|【[^】]+】|\\([^)]*\\)|（[^）]*）)\\s*[_\\- ]*"));
@@ -56,6 +61,11 @@ QString removeKnownPrefix(QString stem, const FilenameRuleSet& rules)
 
 QString removeKnownSuffix(QString stem, const FilenameRuleSet& rules)
 {
+    if (!rules.removeSuffix.isEmpty()
+        && stem.endsWith(rules.removeSuffix, Qt::CaseInsensitive)) {
+        stem.chop(rules.removeSuffix.size());
+        return stem;
+    }
     if (!rules.removeSuffixWhenEmpty) return stem;
     static const QRegularExpression tagAtEnd(
         QStringLiteral("\\s*[_\\- ]*(?:\\[[^\\]]+\\]|【[^】]+】|\\([^)]*\\)|（[^）]*）)\\s*$"));
