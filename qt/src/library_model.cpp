@@ -445,12 +445,19 @@ int LibraryModel::setTagsForTracks(const QStringList& trackIds,
 {
     const QStringList normalized = normalizeTags(tags);
     QSet<QString> requestedIds;
-    int changed = 0;
+    QList<int> requestedRows;
+    requestedRows.reserve(trackIds.size());
     for (const QString& trackId : trackIds) {
         if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
         requestedIds.insert(trackId);
         const int row = indexForTrackId(trackId);
-        if (row >= 0 && applyTagsAtRow(row, normalized)) ++changed;
+        if (row < 0) return 0;
+        requestedRows.append(row);
+    }
+
+    int changed = 0;
+    for (const int row : requestedRows) {
+        if (applyTagsAtRow(row, normalized)) ++changed;
     }
     if (changed > 0) emit flushRequested();
     return changed;

@@ -236,8 +236,7 @@ Item {
         onAccepted: {
             var values = tagTrackField.text.split(/[,，]/).map(
                         function(value) { return value.trim() })
-            for (var index = 0; index < trackMenu.targetTrackIds.length; ++index)
-                LibraryModel.setTags(trackMenu.targetTrackIds[index], values)
+            LibraryModel.setTagsForTracks(trackMenu.targetTrackIds, values)
         }
         contentItem: TextField {
             id: tagTrackField

@@ -2,6 +2,7 @@
 #include "tag_model.hpp"
 
 #include <QColor>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -19,6 +20,11 @@ private slots:
     void retainsDirtyEmptyTagMetadataAcrossImmediateLibraryReset();
     void doesNotResurrectDirtyDeletedTagOnLibraryReset();
     void rebuildsDirtyDirectoryCountsExactlyOnceOnLibraryReset();
+    void shortWriteDoesNotReplaceValidTagFile();
+    void failedFlushRetriesThenClearsObservableError();
+    void failedFlushHasBoundedRetryCount();
+    void synchronousFlushPersistsImmediateShutdownEdit();
+    void rejectsRenameCollisionWithoutMutatingRelationsOrSelection();
 };
 
 namespace {
@@ -118,9 +124,131 @@ void TagModelTest::renamesAnEmptyTagWithoutLosingItsColor()
     QVERIFY(tags.createTag(QStringLiteral("Road")));
     QVERIFY(tags.setTagColor(QStringLiteral("road"), QStringLiteral("#AABBCC")));
 
-    QCOMPARE(tags.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 0);
+    QVERIFY(tags.renameTag(QStringLiteral("road"), QStringLiteral("Driving")));
     QCOMPARE(tags.countForKey(QStringLiteral("driving")), 0);
     QCOMPARE(tags.colorForKey(QStringLiteral("driving")), QColor(QStringLiteral("#AABBCC")));
+}
+
+void TagModelTest::shortWriteDoesNotReplaceValidTagFile()
+{
+    // Catches a QSaveFile transaction committing a truncated JSON payload
+    // after the device reports a positive-but-short write.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("tags.json"));
+    TagStore valid(path);
+    QVERIFY(valid.save({{QStringLiteral("road"), QStringLiteral("Road"), 0,
+                         QColor(QStringLiteral("#AABBCC"))}}));
+
+    TagStore shortWriter(path, [](QIODevice& device, const QByteArray& payload) {
+        return device.write(payload.constData(), qMax<qsizetype>(0, payload.size() - 1));
+    });
+    QVERIFY(!shortWriter.save({{QStringLiteral("night"), QStringLiteral("Night"), 0,
+                                QColor(QStringLiteral("#112233"))}}));
+
+    const QList<TagEntry> restored = valid.load();
+    QCOMPARE(restored.size(), 1);
+    QCOMPARE(restored.constFirst().key, QStringLiteral("road"));
+    QCOMPARE(restored.constFirst().displayName, QStringLiteral("Road"));
+}
+
+void TagModelTest::failedFlushRetriesThenClearsObservableError()
+{
+    // Catches failed persistence being treated as clean, or retry success
+    // leaving a stale user-visible error behind.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    int attempts = 0;
+    LibraryModel library;
+    TagModel tags(
+        &library, dir.filePath(QStringLiteral("tags.json")), nullptr,
+        [&attempts](QIODevice& device, const QByteArray& payload) {
+            ++attempts;
+            if (attempts < 3) return device.write(payload.constData(), 1);
+            return device.write(payload);
+        });
+
+    QVERIFY(tags.createTag(QStringLiteral("Road")));
+    QTRY_VERIFY_WITH_TIMEOUT(attempts >= 1, 500);
+    QVERIFY(tags.dirty());
+    QVERIFY(!tags.persistenceError().isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(attempts, 3, 1500);
+    QTRY_VERIFY_WITH_TIMEOUT(!tags.dirty(), 500);
+    QVERIFY(tags.persistenceError().isEmpty());
+}
+
+void TagModelTest::failedFlushHasBoundedRetryCount()
+{
+    // Catches an unbounded zero-delay retry loop after a persistent failure.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    int attempts = 0;
+    LibraryModel library;
+    TagModel tags(
+        &library, dir.filePath(QStringLiteral("tags.json")), nullptr,
+        [&attempts](QIODevice&, const QByteArray&) {
+            ++attempts;
+            return qint64{0};
+        });
+
+    QVERIFY(tags.createTag(QStringLiteral("Road")));
+    QTRY_COMPARE_WITH_TIMEOUT(attempts, 4, 1500);
+    QTest::qWait(350);
+    QCOMPARE(attempts, 4);
+    QVERIFY(tags.dirty());
+    QVERIFY(!tags.persistenceError().isEmpty());
+}
+
+void TagModelTest::synchronousFlushPersistsImmediateShutdownEdit()
+{
+    // Catches an immediate quit losing an edit that has not reached the
+    // coalescing timer yet; this is the exact method used by app shutdown.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("tags.json"));
+    LibraryModel library;
+    TagModel tags(&library, path);
+    QVERIFY(tags.createTag(QStringLiteral("Road")));
+    QVERIFY(tags.dirty());
+    QVERIFY(tags.flush());
+
+    TagStore restored(path);
+    QCOMPARE(restored.load().constFirst().key, QStringLiteral("road"));
+}
+
+void TagModelTest::rejectsRenameCollisionWithoutMutatingRelationsOrSelection()
+{
+    // Catches implicit merge semantics when a directory rename targets an
+    // already existing key.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryModel library;
+    library.replaceAll({makeTrack(QStringLiteral("a"), {QStringLiteral("Rock")}),
+                        makeTrack(QStringLiteral("b"), {QStringLiteral("Jazz")})});
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    QVERIFY(tags.setTagColor(QStringLiteral("rock"), QStringLiteral("#AABBCC")));
+    QVERIFY(tags.setTagColor(QStringLiteral("jazz"), QStringLiteral("#112233")));
+    tags.setSelectedKey(QStringLiteral("rock"));
+    const QColor rockColor = tags.colorForKey(QStringLiteral("rock"));
+    const QColor jazzColor = tags.colorForKey(QStringLiteral("jazz"));
+    QSignalSpy relationChanges(&library, &LibraryModel::tagsChanged);
+    QSignalSpy flushes(&library, &LibraryModel::flushRequested);
+    QSignalSpy tagChanges(&tags, &QAbstractItemModel::dataChanged);
+
+    QVERIFY(!tags.renameTag(QStringLiteral("rock"), QStringLiteral("Jazz")));
+
+    QCOMPARE(library.recordForId(QStringLiteral("a"))->tags,
+             QStringList{QStringLiteral("Rock")});
+    QCOMPARE(library.recordForId(QStringLiteral("b"))->tags,
+             QStringList{QStringLiteral("Jazz")});
+    QCOMPARE(tags.colorForKey(QStringLiteral("rock")), rockColor);
+    QCOMPARE(tags.colorForKey(QStringLiteral("jazz")), jazzColor);
+    QCOMPARE(tags.countForKey(QStringLiteral("rock")), 1);
+    QCOMPARE(tags.countForKey(QStringLiteral("jazz")), 1);
+    QCOMPARE(tags.selectedKey(), QStringLiteral("rock"));
+    QCOMPARE(relationChanges.count(), 0);
+    QCOMPARE(flushes.count(), 0);
+    QCOMPARE(tagChanges.count(), 0);
 }
 
 void TagModelTest::retainsDirtyEmptyTagMetadataAcrossImmediateLibraryReset()

@@ -935,9 +935,14 @@ int main(int argc, char* argv[])
                 }
             };
         shutdownActions.flushLibrary =
-            [&library, &playlists, &settings, &savePlaybackState]() {
+            [&library, &playlists, &tagModel, &settings, &savePlaybackState]() {
             library.flush();
             playlists.flush();
+            if (!tagModel.flush()) {
+                qWarning().noquote()
+                    << QCoreApplication::translate(
+                           "Main", "Failed to save tag data during shutdown");
+            }
             savePlaybackState(true);
             if (settings.cleanTempOnExit()) {
                 settings.clearTempFiles();
@@ -1411,6 +1416,11 @@ int main(int argc, char* argv[])
             }
             result = app.exec();
             savePlaybackState(true);
+            if (!tagModel.flush()) {
+                qWarning().noquote()
+                    << QCoreApplication::translate(
+                           "Main", "Failed to save tag data after event loop exit");
+            }
 
             app.removeNativeEventFilter(&hotkeys);
             hotkeys.unregisterAll();

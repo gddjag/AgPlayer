@@ -22,6 +22,7 @@ private slots:
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();
     void batchesTagMutationsWithoutResetOrExtraFlush();
+    void rejectsMixedValidAndMissingBatchBeforeAnyTagMutation();
     void appendsOneTagToManyTracksWithoutReplacingExistingTags();
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
@@ -435,6 +436,42 @@ void LibraryModelTest::batchesTagMutationsWithoutResetOrExtraFlush()
     QCOMPARE(model.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 2);
     QCOMPARE(model.removeTag(QStringLiteral("DRIVING")), 2);
     QCOMPARE(model.count(), 2);
+}
+
+void LibraryModelTest::rejectsMixedValidAndMissingBatchBeforeAnyTagMutation()
+{
+    TrackRecord first;
+    first.trackId = QStringLiteral("one");
+    first.path = QStringLiteral("C:/music/one.wav");
+    first.tags = {QStringLiteral("Rock")};
+    TrackRecord second;
+    second.trackId = QStringLiteral("two");
+    second.path = QStringLiteral("C:/music/two.wav");
+    second.tags = {QStringLiteral("Night")};
+    LibraryModel model;
+    model.replaceAll({first, second});
+    QSignalSpy changes(&model, &LibraryModel::tagsChanged);
+    QSignalSpy flushes(&model, &LibraryModel::flushRequested);
+
+    QCOMPARE(model.setTagsForTracks(
+                 {QStringLiteral("one"), QStringLiteral("missing"),
+                  QStringLiteral("two"), QStringLiteral("one"), QString{}},
+                 {QStringLiteral("Road")}),
+             0);
+    QCOMPARE(model.recordForId(QStringLiteral("one"))->tags,
+             QStringList{QStringLiteral("Rock")});
+    QCOMPARE(model.recordForId(QStringLiteral("two"))->tags,
+             QStringList{QStringLiteral("Night")});
+    QCOMPARE(changes.count(), 0);
+    QCOMPARE(flushes.count(), 0);
+
+    QCOMPARE(model.setTagsForTracks(
+                 {QStringLiteral("one"), QStringLiteral("two"),
+                  QStringLiteral("one"), QString{}},
+                 {QStringLiteral("Road")}),
+             2);
+    QCOMPARE(changes.count(), 2);
+    QCOMPARE(flushes.count(), 1);
 }
 
 void LibraryModelTest::appendsOneTagToManyTracksWithoutReplacingExistingTags()

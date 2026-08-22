@@ -232,6 +232,9 @@ ListView {
         trackMenu.targetTrackIds = [trackId]
         openDetails()
     }
+    function applyTagsToTracks(trackIds, values) {
+        return LibraryModel.setTagsForTracks(trackIds, values)
+    }
     function selectedFileUrls() {
         var urls = []
         for (var index = 0; index < trackMenu.targetTrackIds.length; ++index) {
@@ -314,8 +317,7 @@ ListView {
         }
         onAccepted: {
             var values = tagField.text.split(/[,，]/).map(function(value) { return value.trim() })
-            for (var index = 0; index < trackMenu.targetTrackIds.length; ++index)
-                LibraryModel.setTags(trackMenu.targetTrackIds[index], values)
+            root.applyTagsToTracks(trackMenu.targetTrackIds, values)
         }
         contentItem: TextField { id: tagField; placeholderText: qsTr("用逗号分隔多个标签") }
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }

@@ -2426,6 +2426,31 @@ TestCase {
         list.destroy()
     }
 
+    function test_track_list_batches_multi_selection_tag_edits_once() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        verify(ids.length >= 2)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        var flushSpy = signalSpyComponent.createObject(
+                    testCase, { "target": LibraryModel,
+                                "signalName": "flushRequested" })
+        verify(flushSpy.valid)
+        flushSpy.clear()
+
+        var tag = "One Batch " + Date.now()
+        compare(list.applyTagsToTracks([ids[0], ids[1], ids[0], ""], [tag]), 2)
+        compare(flushSpy.count, 1,
+                "one multi-selection edit must request one persistence flush")
+        compare(LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[0]), 0),
+                    LibraryModel.TagsRole), [tag])
+        compare(LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[1]), 0),
+                    LibraryModel.TagsRole), [tag])
+        flushSpy.destroy()
+        list.destroy()
+    }
+
     function test_z_task5_drag_drop_can_synchronously_remove_its_source_row() {
         nativeDropHelper.ensureSortableTracks()
         var list = trackListComponent.createObject(mainWindow.contentItem, {
