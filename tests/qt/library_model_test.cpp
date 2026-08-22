@@ -22,6 +22,7 @@ private slots:
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();
     void batchesTagMutationsWithoutResetOrExtraFlush();
+    void appendsOneTagToManyTracksWithoutReplacingExistingTags();
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
@@ -434,6 +435,40 @@ void LibraryModelTest::batchesTagMutationsWithoutResetOrExtraFlush()
     QCOMPARE(model.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 2);
     QCOMPARE(model.removeTag(QStringLiteral("DRIVING")), 2);
     QCOMPARE(model.count(), 2);
+}
+
+void LibraryModelTest::appendsOneTagToManyTracksWithoutReplacingExistingTags()
+{
+    // Catches replacing existing relationships, case-sensitive duplicates,
+    // invalid-ID partial side effects, and one flush per selected row.
+    TrackRecord first;
+    first.trackId = QStringLiteral("one");
+    first.path = QStringLiteral("C:/music/one.wav");
+    first.tags = {QStringLiteral("Rock")};
+    TrackRecord second;
+    second.trackId = QStringLiteral("two");
+    second.path = QStringLiteral("C:/music/two.wav");
+    second.tags = {QStringLiteral("Night"), QStringLiteral("ROAD")};
+    LibraryModel model;
+    model.replaceAll({first, second});
+    QSignalSpy changes(&model, &LibraryModel::tagsChanged);
+    QSignalSpy flushes(&model, &LibraryModel::flushRequested);
+
+    QCOMPARE(model.addTagToTracks(
+                 {QStringLiteral("one"), QStringLiteral("two"),
+                  QStringLiteral("missing"), QStringLiteral("one")},
+                 QStringLiteral(" Road ")), 1);
+    QCOMPARE(model.data(model.index(0), LibraryModel::TagsRole).toStringList(),
+             QStringList({QStringLiteral("Rock"), QStringLiteral("Road")}));
+    QCOMPARE(model.data(model.index(1), LibraryModel::TagsRole).toStringList(),
+             QStringList({QStringLiteral("Night"), QStringLiteral("ROAD")}));
+    QCOMPARE(changes.count(), 1);
+    QCOMPARE(flushes.count(), 1);
+
+    QCOMPARE(model.addTagToTracks({QStringLiteral("one")}, QStringLiteral("road")), 0);
+    QCOMPARE(flushes.count(), 1);
+    QCOMPARE(model.addTagToTracks({QStringLiteral("one")}, QStringLiteral("   ")), 0);
+    QCOMPARE(flushes.count(), 1);
 }
 
 void LibraryModelTest::removesTrackWithoutDeletingTheFile()

@@ -37,6 +37,11 @@ ListView {
                                      ? 62 : 42
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
+    property int dragPreviewCreationCount: 0
+    property var dragTrackIds: []
+    property var activeDragProxy: null
+    property string dragPreviewTitle: ""
+    property url dragPreviewCover: ""
     readonly property bool thumbnailWindowVisible:
         !root.Window.window || root.Window.window.visible
     readonly property bool thumbnailHostVisible:
@@ -118,6 +123,24 @@ ListView {
         else if (selectedCategory === "all")
             LibraryModel.reorderTracks(ids, targetId)
     }
+    function beginTrackDrag(rowItem, proxy, coverSource) {
+        dragTrackIds = rowItem.dragTrackIds.slice()
+        dragPreviewTitle = rowItem.title || qsTr("未知歌曲")
+        dragPreviewCover = coverSource
+        activeDragProxy = proxy
+        dragPreviewCreationCount += 1
+        dragPreviewLoader.active = true
+    }
+    function endTrackDrag() {
+        dragPreviewLoader.active = false
+        activeDragProxy = null
+        dragTrackIds = []
+    }
+    function cancelTrackDrag() {
+        if (activeDragProxy && activeDragProxy.Drag.active)
+            activeDragProxy.Drag.cancel()
+        endTrackDrag()
+    }
     function removeSelectedFromCurrentView() {
         var ids = selectedTrackIds.slice()
         if (ids.length === 0) return
@@ -185,6 +208,8 @@ ListView {
             selectAllVisible(); event.accepted = true
         } else if (event.key === Qt.Key_Delete) {
             removeSelectedFromCurrentView(); event.accepted = true
+        } else if (event.key === Qt.Key_Escape && dragPreviewLoader.active) {
+            cancelTrackDrag(); event.accepted = true
         }
     }
     Shortcut { sequence: StandardKey.SelectAll; context: Qt.WindowShortcut; enabled: root.activeFocus; onActivated: root.selectAllVisible() }
@@ -264,6 +289,54 @@ ListView {
         }
     }
 
+    Loader {
+        id: dragPreviewLoader
+        active: false
+        z: 1000
+        x: root.activeDragProxy
+           ? root.activeDragProxy.mapToItem(root, 12, 12).x : 0
+        y: root.activeDragProxy
+           ? root.activeDragProxy.mapToItem(root, 12, 12).y : 0
+        sourceComponent: Component {
+            Rectangle {
+                objectName: "trackDragPreview"
+                readonly property int selectedCount: root.dragTrackIds.length
+                width: Math.min(300, previewLayout.implicitWidth + 24)
+                height: 46
+                radius: Theme.radiusSm
+                color: Theme.elevated
+                border.color: Theme.listWorkspaceBorder
+                border.width: 1
+                opacity: 0.68
+
+                RowLayout {
+                    id: previewLayout
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    spacing: 8
+                    Image {
+                        source: root.dragPreviewCover
+                        sourceSize.width: 34
+                        sourceSize.height: 34
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 34
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Text {
+                        text: root.dragTrackIds.length > 1
+                              ? qsTr("已选择 %1 首").arg(root.dragTrackIds.length)
+                              : root.dragPreviewTitle
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 230
+                    }
+                }
+            }
+        }
+    }
+
     delegate: Rectangle {
         id: rowItem
         required property int index
@@ -319,11 +392,11 @@ ListView {
             Drag.dragType: Drag.Internal
             Drag.supportedActions: Qt.MoveAction
             Drag.keys: ["application/x-agplayer-track-ids"]
-            Drag.source: rowItem
+            Drag.source: root
             Drag.hotSpot.x: 0
             Drag.hotSpot.y: 0
             Drag.mimeData: ({"application/x-agplayer-track-ids":
-                             JSON.stringify(rowItem.dragTrackIds)})
+                             JSON.stringify(root.dragTrackIds)})
         }
 
         RowLayout {
@@ -415,6 +488,7 @@ ListView {
                     anchors.fill: parent
                     spacing: 6
                     Image {
+                        id: trackCoverImage
                         objectName: "trackCover"
                         source: rowItem.coverUrl ? rowItem.coverUrl
                                                  : Theme.icon("music-2-fill")
@@ -488,15 +562,22 @@ ListView {
                         if (active) {
                             if (!root.isSelected(rowItem.trackId))
                                 root.selectOnly(rowItem.trackId, rowItem.index)
+                            root.beginTrackDrag(rowItem, rowDragProxy,
+                                                trackCoverImage.source)
                             rowDragProxy.Drag.active = true
                         } else if (rowDragProxy.Drag.active) {
                             var dropAction = rowDragProxy.Drag.drop()
-                            if (dropAction === Qt.IgnoreAction) {
-                                root.finishRowDrag(rowItem.trackId, rowItem.y,
-                                                   rowDragProxy.y, rowItem.height)
-                            }
+                            var draggedTrackId = rowItem.trackId
+                            var originY = rowItem.y
+                            var deltaY = rowDragProxy.y
+                            var draggedRowHeight = rowItem.height
                             rowDragProxy.x = 0
                             rowDragProxy.y = 0
+                            root.endTrackDrag()
+                            if (dropAction === Qt.IgnoreAction) {
+                                root.finishRowDrag(draggedTrackId, originY,
+                                                   deltaY, draggedRowHeight)
+                            }
                         }
                     }
                 }

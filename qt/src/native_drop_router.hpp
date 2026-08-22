@@ -16,6 +16,7 @@ public:
     enum class Target {
         Main,
         List,
+        ResourceFolder,
         AudioTools
     };
     Q_ENUM(Target)

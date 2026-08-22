@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -12,6 +13,9 @@ Item {
     property alias searchText: tagSearchField.text
     readonly property int gridColumnCount: 3
     readonly property int visibleTagCount: tagGrid.count
+    property string contextTagKey: ""
+    property string contextTagName: ""
+    property color contextTagColor: "transparent"
 
     signal addTagRequested(string displayName)
     signal renameTagRequested(string key, string displayName)
@@ -33,6 +37,19 @@ Item {
         var nextKey = tagModel.selectedKey === key ? "" : key
         tagModel.selectedKey = nextKey
         filterModel.tagKey = nextKey
+    }
+
+    function openTagMenu(key, displayName, tagColor) {
+        contextTagKey = key
+        contextTagName = displayName
+        contextTagColor = tagColor
+        tagMenu.popup()
+    }
+
+    function applyTagDrop(ids, displayName) {
+        if (!ids || ids.length === 0)
+            return false
+        return LibraryModel.addTagToTracks(ids, displayName) > 0
     }
 
     TagFilterModel {
@@ -67,6 +84,117 @@ Item {
         }
     }
 
+    Menu {
+        id: tagMenu
+        objectName: "tagContextMenu"
+        width: 190
+        palette.window: Theme.elevated
+        palette.text: Theme.primaryText
+        palette.highlight: Theme.activeSelection
+        palette.highlightedText: Theme.activeSelectionText
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            border.width: 1
+            radius: Theme.radiusSm
+        }
+        TagMenuItem {
+            objectName: "tagMenuRename"
+            text: qsTr("重命名")
+            onTriggered: {
+                renameTagField.text = root.contextTagName
+                renameTagDialog.open()
+                renameTagField.forceActiveFocus()
+                renameTagField.selectAll()
+            }
+        }
+        TagMenuItem {
+            objectName: "tagMenuColor"
+            text: qsTr("修改颜色")
+            onTriggered: {
+                tagColorDialog.selectedColor = root.contextTagColor
+                tagColorDialog.open()
+            }
+        }
+        MenuSeparator {}
+        TagMenuItem {
+            objectName: "tagMenuDelete"
+            text: qsTr("删除标签")
+            onTriggered: removeTagDialog.open()
+        }
+    }
+
+    Dialog {
+        id: renameTagDialog
+        objectName: "renameTagDialog"
+        title: qsTr("重命名标签")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: {
+            var nextName = renameTagField.text.trim()
+            if (!nextName)
+                return
+            var previousKey = root.contextTagKey
+            var updatesActiveFilter = root.filterModel
+                    && root.filterModel.tagKey === previousKey
+            root.tagModel.renameTag(previousKey, nextName)
+            if (updatesActiveFilter)
+                root.filterModel.tagKey = root.tagModel.selectedKey
+            root.renameTagRequested(previousKey, nextName)
+        }
+        contentItem: TextField {
+            id: renameTagField
+            objectName: "renameTagField"
+            maximumLength: 96
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+    }
+
+    ColorDialog {
+        id: tagColorDialog
+        objectName: "tagColorDialog"
+        title: qsTr("修改标签颜色")
+        onAccepted: {
+            if (root.tagModel.setTagColor(root.contextTagKey,
+                                          selectedColor.toString()))
+                root.changeTagColorRequested(root.contextTagKey, selectedColor)
+        }
+    }
+
+    Dialog {
+        id: removeTagDialog
+        objectName: "removeTagDialog"
+        title: qsTr("删除标签")
+        modal: true
+        width: 430
+        anchors.centerIn: parent
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            var removedKey = root.contextTagKey
+            root.tagModel.removeTag(removedKey)
+            if (root.filterModel && root.filterModel.tagKey === removedKey)
+                root.filterModel.tagKey = ""
+            root.removeTagRequested(removedKey)
+        }
+        contentItem: Label {
+            objectName: "removeTagWarning"
+            width: 390
+            text: qsTr("确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。")
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 14
@@ -75,6 +203,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 38
+            Layout.maximumHeight: 38
             spacing: 10
 
             TextField {
@@ -203,7 +332,36 @@ Item {
                         }
                     }
                     HoverHandler { id: tagHover }
-                    TapHandler { onTapped: root.selectTag(tagCell.key) }
+                    MouseArea {
+                        objectName: "tagPillPointerArea-" + tagCell.key
+                        anchors.fill: parent
+                        z: 2
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton) {
+                                root.openTagMenu(tagCell.key,
+                                                 tagCell.displayName,
+                                                 tagCell.color)
+                            } else {
+                                root.selectTag(tagCell.key)
+                            }
+                        }
+                    }
+                    DropArea {
+                        objectName: "tagDropTarget-" + tagCell.key
+                        anchors.fill: parent
+                        keys: ["application/x-agplayer-track-ids"]
+                        onDropped: function(drop) {
+                            var encoded = drop.getDataAsString(
+                                        "application/x-agplayer-track-ids")
+                            var ids = encoded ? JSON.parse(encoded) : []
+                            if (ids.length === 0 && drop.source
+                                    && drop.source.dragTrackIds)
+                                ids = drop.source.dragTrackIds
+                            if (root.applyTagDrop(ids, tagCell.displayName))
+                                drop.acceptProposedAction()
+                        }
+                    }
                     ToolTip.visible: tagHover.hovered && tagName.truncated
                     ToolTip.text: tagCell.displayName
                     ToolTip.delay: 350
@@ -211,5 +369,27 @@ Item {
             }
         }
 
+    }
+
+    component TagMenuItem: MenuItem {
+        id: menuItem
+        width: 185
+        implicitWidth: 185
+        implicitHeight: 34
+        contentItem: Text {
+            text: menuItem.text
+            color: menuItem.highlighted || menuItem.hovered
+                   ? Theme.activeSelectionText
+                   : menuItem.enabled ? Theme.primaryText
+                                      : Theme.secondaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            color: menuItem.highlighted || menuItem.hovered
+                   ? Theme.activeSelection : "transparent"
+            radius: Theme.radiusSm
+        }
     }
 }

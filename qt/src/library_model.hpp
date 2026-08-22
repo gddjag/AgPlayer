@@ -113,6 +113,8 @@ public:
     Q_INVOKABLE bool setTags(const QString& trackId, const QStringList& tags);
     Q_INVOKABLE int setTagsForTracks(const QStringList& trackIds,
                                      const QStringList& tags);
+    Q_INVOKABLE int addTagToTracks(const QStringList& trackIds,
+                                   const QString& tag);
     Q_INVOKABLE int renameTag(const QString& oldKey, const QString& displayName);
     Q_INVOKABLE int removeTag(const QString& key);
     Q_INVOKABLE bool moveTrack(int fromRow, int toRow);

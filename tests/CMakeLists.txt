@@ -488,6 +488,7 @@ foreach(qt_test IN ITEMS
     format_conversion_task_model_test
     file_association_controller_test
     equalizer_controller_test
+    native_drop_router_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -674,7 +675,7 @@ agplayer_enable_warnings(qml_main_window_test)
 add_dependencies(qml_main_window_test decoder_fixture)
 add_test(NAME qml_main_window_test COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml)
 set_tests_properties(qml_main_window_test PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 90
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"

@@ -5,6 +5,8 @@
 #include <QDropEvent>
 #include <QDragEnterEvent>
 #include <QMimeData>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QWindow>
 
 #include <algorithm>
@@ -21,11 +23,29 @@ class NativeDropRouterTest final : public QObject {
 
 private slots:
     void routesCanonicalLocalPathsToTheRequestedTarget();
+    void preservesTheResourceFolderTargetForApplicationDispatch();
     void receivesQtUrlDropEvents();
 #ifdef Q_OS_WIN
     void receivesARealWindowsDropFilesMessage();
 #endif
 };
+
+void NativeDropRouterTest::preservesTheResourceFolderTargetForApplicationDispatch()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    NativeDropRouter router;
+    QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
+
+    router.routeLocalPaths(NativeDropRouter::Target::ResourceFolder,
+                           {directory.path(), directory.path()});
+
+    QCOMPARE(dropped.count(), 1);
+    QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
+             NativeDropRouter::Target::ResourceFolder);
+    QCOMPARE(dropped.front().at(1).toStringList().size(), 1);
+    QVERIFY(QFileInfo(dropped.front().at(1).toStringList().front()).isDir());
+}
 
 void NativeDropRouterTest::routesCanonicalLocalPathsToTheRequestedTarget()
 {

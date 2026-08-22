@@ -25,6 +25,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QMimeData>
 #include <QPointer>
 #include <QQmlComponent>
@@ -177,6 +179,31 @@ public:
         return enter.isAccepted() && drop.isAccepted();
     }
 
+    Q_INVOKABLE bool sendTrackIds(QObject* target, const QStringList& trackIds)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QWindow* window = item == nullptr ? qobject_cast<QWindow*>(target)
+                                           : item->window();
+        if (window == nullptr || trackIds.isEmpty()) return false;
+
+        QJsonArray values;
+        for (const QString& trackId : trackIds) values.append(trackId);
+        QMimeData mime;
+        mime.setData("application/x-agplayer-track-ids",
+                     QJsonDocument(values).toJson(QJsonDocument::Compact));
+        const QPointF scenePosition = item != nullptr
+            ? item->mapToScene(QPointF(item->width() / 2.0,
+                                       item->height() / 2.0))
+            : QPointF(window->width() / 2.0, window->height() / 2.0);
+        QDragEnterEvent enter(scenePosition.toPoint(), Qt::CopyAction, &mime,
+                              Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &enter);
+        QDropEvent drop(scenePosition, Qt::CopyAction, &mime,
+                        Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &drop);
+        return enter.isAccepted() && drop.isAccepted();
+    }
+
     Q_INVOKABLE bool sendWindowsDropFiles(QObject* target,
                                           const QList<QUrl>& urls)
     {
@@ -273,6 +300,20 @@ public:
                      sourceInfo.suffix()));
         return QFile::copy(sourceInfo.absoluteFilePath(), copyPath)
             ? QUrl::fromLocalFile(copyPath) : QUrl{};
+    }
+
+    Q_INVOKABLE QUrl createDropDirectory()
+    {
+        if (!dropDirectory_.isValid()) return {};
+        const QString path = dropDirectory_.filePath(
+            QStringLiteral("resource-%1").arg(
+                QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        return QDir().mkpath(path) ? QUrl::fromLocalFile(path) : QUrl{};
+    }
+
+    Q_INVOKABLE bool pathExists(const QUrl& url) const
+    {
+        return url.isLocalFile() && QFileInfo::exists(url.toLocalFile());
     }
 
 private:

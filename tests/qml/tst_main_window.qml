@@ -17,6 +17,11 @@ TestCase {
     }
 
     Component {
+        id: signalSpyComponent
+        SignalSpy {}
+    }
+
+    Component {
         id: trackListComponent
         TrackList {
             width: 1100
@@ -97,6 +102,33 @@ TestCase {
         LibraryManagerPage {
             width: 1200
             height: 760
+        }
+    }
+
+    Component {
+        id: tagManagementPanelWindowComponent
+        Window {
+            visible: true
+            width: 400
+            height: 540
+            property alias filterModel: tagPanel.filterModel
+            TagManagementPanel {
+                id: tagPanel
+                anchors.fill: parent
+            }
+        }
+    }
+
+    Component {
+        id: resourceNavigationWindowComponent
+        Window {
+            visible: true
+            width: 260
+            height: 620
+            SideNavigation {
+                objectName: "resourceTestNavigation"
+                anchors.fill: parent
+            }
         }
     }
 
@@ -237,6 +269,15 @@ TestCase {
         for (var index = 0; index < childItems.length; ++index)
             total += countObjectsNamed(childItems[index], expectedName)
         return total
+    }
+
+    function tagRowForKey(key) {
+        for (var row = 0; row < TagModel.rowCount(); ++row) {
+            var modelIndex = TagModel.index(row, 0)
+            if (TagModel.data(modelIndex, TagModel.KeyRole) === key)
+                return row
+        }
+        return -1
     }
 
     function createIsolatedTrackModel(prefix, count) {
@@ -1107,8 +1148,15 @@ TestCase {
         mouseMove(firstArea, firstArea.width / 2 - 12,
                   firstArea.height / 2, 20, Qt.LeftButton)
         tryVerify(function() { return proxy.Drag.active }, 500)
+        compare(list.dragPreviewCreationCount, 1)
+        compare(list.dragTrackIds.length, 2)
+        var preview = findChild(list, "trackDragPreview")
+        verify(preview, "drag start must lazily create one shared preview")
+        compare(preview.opacity, 0.68)
+        compare(preview.selectedCount, 2)
         mouseMove(firstArea, targetPoint.x, targetPoint.y,
                   60, Qt.LeftButton)
+        compare(list.dragPreviewCreationCount, 1)
         tryVerify(function() { return target.containsDrag }, 500)
         mouseRelease(firstArea, targetPoint.x, targetPoint.y,
                      Qt.LeftButton)
@@ -1118,6 +1166,7 @@ TestCase {
         }, 500)
         verify(PlaylistModel.containsTrack(playlistId, ids[1]),
                "all Ctrl-selected rows must arrive in the target playlist")
+        tryVerify(function() { return !findChild(list, "trackDragPreview") }, 500)
         PlaylistModel.removePlaylist(playlistId)
         list.destroy()
         navigation.destroy()
@@ -1636,6 +1685,8 @@ TestCase {
             "width": 1400
         })
         verify(window)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
         var panel = findChild(window, "tagManagementPanel")
         verify(panel)
 
@@ -1669,6 +1720,332 @@ TestCase {
 
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task5_tag_menu_delete_preserves_other_filters() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var name = "Task5 Delete " + Date.now()
+        var key = name.toLocaleLowerCase()
+        task4TemporaryTagKeys = [key]
+        verify(panel.addTag(name))
+        panel.searchText = name
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        verify(tagGrid)
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        panel.selectTag(key)
+        filterModel.searchText = "keep-search"
+        filterModel.exactRating = 4
+        filterModel.minBpm = 88
+        filterModel.maxBpm = 144
+
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var pill = findChild(tagCell, "tagPill-" + key)
+        verify(pill)
+        var pointerArea = findChild(pill, "tagPillPointerArea-" + key)
+        verify(pointerArea)
+        var pointerGlobal = pointerArea.mapToGlobal(0, 0)
+        verify(pointerGlobal.y >= window.y
+               && pointerGlobal.y + pointerArea.height <= window.y + window.height,
+               "active tag delegate must be inside the test window; y="
+               + pointerGlobal.y + " window=" + window.y + ","
+               + window.height + " gridY=" + tagGrid.y
+               + " gridHeight=" + tagGrid.height
+               + " contentY=" + tagGrid.contentY
+               + " cellY=" + tagCell.y)
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        compare(panel.contextTagKey, key)
+        var menu = findChild(panel, "tagContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var removeAction = findChild(menu, "tagMenuDelete")
+        verify(removeAction && removeAction.enabled)
+        mouseClick(removeAction, removeAction.width / 2,
+                   removeAction.height / 2)
+        var confirm = findChild(panel, "removeTagDialog")
+        tryVerify(function() { return confirm && confirm.visible }, 500)
+        var warning = findChild(confirm, "removeTagWarning")
+        verify(warning.text.indexOf("不删除歌曲或磁盘文件") >= 0)
+        confirm.accept()
+        tryCompare(TagModel, "selectedKey", "")
+        compare(filterModel.tagKey, "")
+        compare(filterModel.searchText, "keep-search")
+        compare(filterModel.exactRating, 4)
+        compare(filterModel.minBpm, 88)
+        compare(filterModel.maxBpm, 144)
+        task4TemporaryTagKeys = []
+        window.destroy()
+    }
+
+    function test_z_task5_tag_menu_rename_color_and_cancel_are_real() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var suffix = String(Date.now())
+        var originalName = "Task5 Original " + suffix
+        var originalKey = originalName.toLocaleLowerCase()
+        var renamedName = "Task5 Renamed " + suffix
+        var renamedKey = renamedName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [originalKey, renamedKey]
+        verify(panel.addTag(originalName))
+        panel.searchText = originalName
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        verify(tagGrid)
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        panel.selectTag(originalKey)
+
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var pointerArea = findChild(
+                    tagCell, "tagPillPointerArea-" + originalKey)
+        verify(pointerArea)
+        var menu = findChild(panel, "tagContextMenu")
+        verify(menu && !menu.visible)
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var renameAction = findChild(menu, "tagMenuRename")
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        var renameDialog = findChild(panel, "renameTagDialog")
+        var renameField = findChild(renameDialog, "renameTagField")
+        tryVerify(function() { return renameDialog.visible }, 500)
+        renameField.text = renamedName
+        renameDialog.reject()
+        compare(tagRowForKey(originalKey) >= 0, true)
+        compare(tagRowForKey(renamedKey), -1)
+        compare(filterModel.tagKey, originalKey)
+
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        tryVerify(function() { return renameDialog.visible }, 500)
+        renameField.text = renamedName
+        renameDialog.accept()
+        tryVerify(function() { return tagRowForKey(renamedKey) >= 0 }, 500)
+        compare(tagRowForKey(originalKey), -1)
+        compare(TagModel.selectedKey, renamedKey)
+        compare(filterModel.tagKey, renamedKey)
+
+        panel.searchText = renamedName
+        tryCompare(panel, "visibleTagCount", 1)
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        pointerArea = findChild(tagCell,
+                                "tagPillPointerArea-" + renamedKey)
+        verify(pointerArea)
+        var renamedRow = tagRowForKey(renamedKey)
+        var beforeColor = TagModel.data(
+                    TagModel.index(renamedRow, 0), TagModel.ColorRole).toString()
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var colorAction = findChild(menu, "tagMenuColor")
+        verify(colorAction && colorAction.enabled)
+        var colorDialog = findChild(panel, "tagColorDialog")
+        verify(colorDialog)
+        menu.close()
+        colorDialog.selectedColor = "#123456"
+        colorDialog.reject()
+        compare(TagModel.data(TagModel.index(renamedRow, 0),
+                              TagModel.ColorRole).toString(), beforeColor)
+
+        colorDialog.selectedColor = "#123456"
+        colorDialog.accepted()
+        compare(TagModel.data(TagModel.index(renamedRow, 0),
+                              TagModel.ColorRole).toString(), "#123456")
+
+        window.destroy()
+    }
+
+    function test_z_task5_track_drop_appends_tag_to_every_selected_track() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        compare(ids.length, 3)
+        verify(LibraryModel.setTags(ids[0], ["Existing"]))
+        verify(LibraryModel.setTags(ids[1], ["Other"]))
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var tagName = "Task5 Drop " + Date.now()
+        var tagKey = tagName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [tagKey]
+        verify(panel.addTag(tagName))
+        panel.searchText = tagName
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var dropTarget = findChild(tagCell, "tagDropTarget-" + tagKey)
+        verify(dropTarget)
+        verify(nativeDropHelper.sendTrackIds(dropTarget, [ids[0], ids[1]]),
+               "the tag pill must accept the real track-id MIME payload")
+
+        var firstTags = LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[0]), 0),
+                    LibraryModel.TagsRole)
+        var secondTags = LibraryModel.data(
+                    LibraryModel.index(LibraryModel.indexForTrackId(ids[1]), 0),
+                    LibraryModel.TagsRole)
+        verify(firstTags.indexOf("Existing") >= 0)
+        verify(firstTags.indexOf(tagName) >= 0)
+        verify(secondTags.indexOf("Other") >= 0)
+        verify(secondTags.indexOf(tagName) >= 0)
+        window.destroy()
+    }
+
+    function test_z_task5_single_track_drag_cancel_releases_preview_without_data_change() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
+        tryCompare(list, "count", LibraryModel.count, 500)
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow)
+        var firstArea = findChild(firstRow, "trackRowDragArea")
+        var proxy = findChild(firstRow, "trackDragProxy")
+        verify(firstArea && proxy)
+        list.selectOnly(firstRow.trackId, 0)
+        list.forceActiveFocus()
+        var beforeOrder = []
+        for (var row = 0; row < list.count; ++row)
+            beforeOrder.push(list.trackIdAt(row))
+
+        mousePress(firstArea, firstArea.width / 2,
+                   firstArea.height / 2, Qt.LeftButton)
+        mouseMove(firstArea, firstArea.width / 2 + 20,
+                  firstArea.height / 2, 20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        compare(list.dragPreviewCreationCount, 1)
+        var preview = findChild(list, "trackDragPreview")
+        verify(preview)
+        compare(preview.selectedCount, 1)
+        compare(preview.opacity, 0.68)
+        keyClick(Qt.Key_Escape)
+        tryVerify(function() { return !proxy.Drag.active }, 500)
+        tryVerify(function() { return !findChild(list, "trackDragPreview") }, 500)
+        mouseRelease(firstArea, firstArea.width / 2 + 20,
+                     firstArea.height / 2, Qt.LeftButton)
+        var afterOrder = []
+        for (row = 0; row < list.count; ++row)
+            afterOrder.push(list.trackIdAt(row))
+        compare(afterOrder.join("|"), beforeOrder.join("|"))
+        compare(list.dragTrackIds.length, 0)
+        list.destroy()
+    }
+
+    function test_z_task5_resource_folder_drop_and_remove_preserve_disk_files() {
+        var folderUrl = nativeDropHelper.createDropDirectory()
+        verify(folderUrl && nativeDropHelper.pathExists(folderUrl))
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialLibraryCount = LibraryModel.count
+        var navigationWindow = resourceNavigationWindowComponent.createObject(null)
+        verify(navigationWindow)
+        navigationWindow.requestActivate()
+        tryVerify(function() { return navigationWindow.active }, 1000)
+        var navigation = findChild(navigationWindow, "resourceTestNavigation")
+        verify(navigation)
+        var navigationList = findChild(navigation, "libraryNavigationList")
+        verify(navigationList)
+        navigationList.positionViewAtEnd()
+        wait(0)
+        var dropTarget = findChild(navigation, "resourceFolderDropTarget")
+        verify(dropTarget)
+        nativeDropHelper.sendUrls(dropTarget, [folderUrl, copiedAudio])
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount + 1
+        }, 1000)
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        verify(ImportController.errors.length === 0)
+        verify(LibraryModel.count > initialLibraryCount,
+               "mixed drop must keep audio-file import routing")
+        var folderPath = decodeURIComponent(folderUrl.toString()
+                                           .replace(/^file:\/\/\//, ""))
+        folderPath = folderPath.replace(/\\/g, "/")
+        var rootNode = null
+        for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+            var index = LibraryNavigationModel.index(row, 0)
+            if (LibraryNavigationModel.data(index,
+                    LibraryNavigationModel.ResourceFolderRole)
+                    .replace(/\\/g, "/").toLowerCase()
+                    === folderPath.toLowerCase()) {
+                rootNode = findChild(navigation, "navigationNode-"
+                    + LibraryNavigationModel.data(index,
+                        LibraryNavigationModel.NodeIdRole))
+                break
+            }
+        }
+        verify(rootNode)
+        mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
+                   Qt.RightButton)
+        var menu = findChild(navigation, "resourceFolderContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        wait(500)
+        tryVerify(function() { return !LibraryManagerController.scanning }, 3000)
+        var scanFinished = signalSpyComponent.createObject(testCase, {
+            "target": LibraryManagerController,
+            "signalName": "scanFinished"
+        })
+        verify(scanFinished)
+        scanFinished.clear()
+        var rescanAction = findChild(menu, "resourceFolderMenuRescan")
+        verify(rescanAction && rescanAction.enabled)
+        mouseClick(rescanAction, rescanAction.width / 2,
+                   rescanAction.height / 2)
+        tryCompare(scanFinished, "count", 1, 3000)
+
+        mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        var removeAction = findChild(menu, "resourceFolderMenuRemove")
+        mouseClick(removeAction, removeAction.width / 2,
+                   removeAction.height / 2)
+        var confirm = findChild(navigation, "removeResourceFolderDialog")
+        tryVerify(function() { return confirm && confirm.visible }, 500)
+        var warning = findChild(confirm, "removeResourceFolderWarning")
+        verify(warning.text.indexOf("不删除电脑磁盘中的实际文件夹和音乐文件") >= 0)
+        confirm.accept()
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount
+        }, 1000)
+        verify(nativeDropHelper.pathExists(folderUrl))
+        scanFinished.destroy()
+        navigationWindow.destroy()
     }
 
     function test_z_list_waveforms_only_exist_for_visible_rows_when_enabled() {

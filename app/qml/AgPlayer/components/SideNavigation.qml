@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -19,6 +20,8 @@ Item {
     property int recentAddedCount: 0
     property int neverPlayedCount: 0
     property string contextPlaylistId: ""
+    property string contextResourceFolder: ""
+    property bool contextResourceIsRoot: false
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -29,6 +32,24 @@ Item {
     signal importRequested()
     signal importPlaylistRequested()
     signal exportPlaylistRequested(string playlistId)
+
+    function handleResourceUrls(urls) {
+        if (!urls || urls.length === 0)
+            return false
+        var audioUrls = []
+        var handled = false
+        for (var index = 0; index < urls.length; ++index) {
+            if (root.navigationModel.addResourceFolder(urls[index]))
+                handled = true
+            else
+                audioUrls.push(urls[index])
+        }
+        if (audioUrls.length > 0) {
+            ImportController.importUrls(audioUrls)
+            handled = true
+        }
+        return handled
+    }
 
     function playlistIdForNode(nodeId) {
         var prefix = "playlist:"
@@ -129,6 +150,64 @@ Item {
         }
     }
 
+    Menu {
+        id: resourceFolderMenu
+        objectName: "resourceFolderContextMenu"
+        width: 210
+        palette.window: Theme.elevated
+        palette.text: Theme.primaryText
+        palette.highlight: Theme.activeSelection
+        palette.highlightedText: Theme.activeSelectionText
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            border.width: 1
+            radius: Theme.radiusSm
+        }
+        SystemMenuItem {
+            objectName: "resourceFolderMenuRemove"
+            text: qsTr("移除文件夹引用")
+            enabled: root.contextResourceIsRoot
+            onTriggered: removeResourceFolderDialog.open()
+        }
+        SystemMenuItem {
+            objectName: "resourceFolderMenuRescan"
+            text: qsTr("重新扫描")
+            onTriggered: LibraryManagerController.rescan()
+        }
+    }
+
+    FolderDialog {
+        id: addResourceFolderDialog
+        objectName: "addResourceFolderDialog"
+        title: qsTr("添加资源文件夹")
+        onAccepted: root.navigationModel.addResourceFolder(selectedFolder)
+    }
+
+    Dialog {
+        id: removeResourceFolderDialog
+        objectName: "removeResourceFolderDialog"
+        title: qsTr("移除资源文件夹")
+        modal: true
+        width: 450
+        anchors.centerIn: parent
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: root.navigationModel.removeResourceFolder(
+                        root.contextResourceFolder)
+        contentItem: Label {
+            objectName: "removeResourceFolderWarning"
+            width: 410
+            text: qsTr("只从 AgPlayer 移除此目录引用和监控，不删除电脑磁盘中的实际文件夹和音乐文件。")
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+    }
+
     ListView {
         id: navigationList
         objectName: "libraryNavigationList"
@@ -141,6 +220,52 @@ Item {
         spacing: 2
         model: root.navigationModel
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        footer: Item {
+            width: navigationList.width
+            height: 54
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: 42
+                color: "transparent"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    Text {
+                        text: qsTr("资源文件夹")
+                        color: Theme.tagSecondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                    }
+                    ToolButton {
+                        objectName: "addResourceFolderButton"
+                        text: "+"
+                        onClicked: addResourceFolderDialog.open()
+                        background: null
+                    }
+                    ToolButton {
+                        objectName: "removeResourceFolderButton"
+                        text: "−"
+                        enabled: root.contextResourceFolder.length > 0
+                        onClicked: removeResourceFolderDialog.open()
+                        background: null
+                    }
+                }
+                FileDropArea {
+                    objectName: "resourceFolderDropTarget"
+                    anchors.fill: parent
+                    z: -1
+                    onUrlsDropped: function(urls) {
+                        root.handleResourceUrls(urls)
+                    }
+                }
+            }
+        }
 
         delegate: Rectangle {
             id: nodeRow
@@ -230,6 +355,15 @@ Item {
                         root.contextPlaylistId = root.playlistIdForNode(
                                     nodeRow.nodeId)
                         playlistMenu.popup()
+                    } else if (nodeRow.nodeType === "library") {
+                        root.contextPlaylistId = ""
+                        playlistMenu.popup()
+                    } else if (nodeRow.nodeType === "resourceRoot"
+                               || nodeRow.nodeType === "resourceFolder") {
+                        root.contextResourceFolder = nodeRow.resourceFolder
+                        root.contextResourceIsRoot =
+                                nodeRow.nodeType === "resourceRoot"
+                        resourceFolderMenu.popup()
                     }
                 }
             }

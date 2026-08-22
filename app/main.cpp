@@ -1048,7 +1048,7 @@ int main(int argc, char* argv[])
             nativeDrops.registerWindow(nativeMainWindow,
                                        NativeDropRouter::Target::Main);
             nativeDrops.registerWindow(nativeListWindow,
-                                       NativeDropRouter::Target::List);
+                                       NativeDropRouter::Target::ResourceFolder);
             nativeDrops.registerWindow(nativeAudioToolsWindow,
                                        NativeDropRouter::Target::AudioTools);
             QObject::connect(
@@ -1083,6 +1083,40 @@ int main(int argc, char* argv[])
                                 isCustom ? category : QString());
                         }
                         importer.importPaths(paths);
+                        }
+                        break;
+                    case NativeDropRouter::Target::ResourceFolder:
+                        {
+                        QStringList audioPaths;
+                        audioPaths.reserve(paths.size());
+                        for (const QString& path : paths) {
+                            const QFileInfo info(path);
+                            const QString canonical = info.canonicalFilePath();
+                            if (canonical.isEmpty()) {
+                                continue;
+                            }
+                            if (info.isDir()) {
+                                libraryManager.addMonitoredFolder(canonical);
+                            } else if (info.isFile()) {
+                                audioPaths.append(canonical);
+                            }
+                        }
+                        if (!audioPaths.isEmpty()) {
+                            const QString category = filterModel != nullptr
+                                ? filterModel->property("category").toString()
+                                : QString();
+                            const bool isCustom = category != QStringLiteral("all")
+                                && category != QStringLiteral("favorites")
+                                && category != QStringLiteral("history")
+                                && category != QStringLiteral("recentAdded")
+                                && category != QStringLiteral("neverPlayed");
+                            if (listWindow != nullptr) {
+                                listWindow->setProperty(
+                                    "importTargetPlaylistId",
+                                    isCustom ? category : QString());
+                            }
+                            importer.importPaths(audioPaths);
+                        }
                         }
                         break;
                     case NativeDropRouter::Target::AudioTools:

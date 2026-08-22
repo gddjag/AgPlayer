@@ -456,6 +456,33 @@ int LibraryModel::setTagsForTracks(const QStringList& trackIds,
     return changed;
 }
 
+int LibraryModel::addTagToTracks(const QStringList& trackIds,
+                                 const QString& tag)
+{
+    const QStringList normalizedTag = normalizeTags({tag});
+    if (normalizedTag.isEmpty()) return 0;
+
+    const QString targetKey = normalizedTag.constFirst().toCaseFolded();
+    QSet<QString> requestedIds;
+    int changed = 0;
+    for (const QString& trackId : trackIds) {
+        if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
+        requestedIds.insert(trackId);
+        const int row = indexForTrackId(trackId);
+        if (row < 0) continue;
+        QStringList next = tracks_.at(row).tags;
+        const bool alreadyPresent = std::any_of(
+            next.cbegin(), next.cend(), [&targetKey](const QString& existing) {
+                return existing.toCaseFolded() == targetKey;
+            });
+        if (alreadyPresent) continue;
+        next.append(normalizedTag.constFirst());
+        if (applyTagsAtRow(row, normalizeTags(next))) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
 int LibraryModel::renameTag(const QString& oldKey, const QString& displayName)
 {
     const QString normalizedOldKey = oldKey.trimmed().toCaseFolded();

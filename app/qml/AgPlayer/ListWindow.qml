@@ -113,6 +113,15 @@ Window {
         importTargetPlaylistId = customCategory()
         ImportController.importUrls(urls)
     }
+    function handleResourceDropUrls(urls) {
+        var audioUrls = []
+        for (var index = 0; index < urls.length; ++index) {
+            if (!LibraryNavigationModel.addResourceFolder(urls[index]))
+                audioUrls.push(urls[index])
+        }
+        if (audioUrls.length > 0)
+            beginImport(audioUrls)
+    }
     function openImportDialog() {
         importTargetPlaylistId = customCategory()
         var dialog = importDialogComponent.createObject(listWindow)
@@ -507,7 +516,7 @@ Window {
         anchors.fill: parent
         z: -5
         onUrlsDropped: function(urls) {
-            listWindow.beginImport(urls)
+            listWindow.handleResourceDropUrls(urls)
         }
     }
 
