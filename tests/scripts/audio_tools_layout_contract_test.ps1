@@ -256,7 +256,9 @@ if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
 if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,320}Layout\.preferredWidth:\s*settingsPanel\.expanded[\s\S]{0,80}\?\s*\(page\.compactLayout\s*\?\s*360\s*:\s*445\)\s*:\s*40') {
     throw 'The format converter needs a reference-width settings workbench.'
 }
-if ($metadataPage -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,180}Math\.max\(480, page\.width \* 0\.36\)') {
+if ($metadataPage -notmatch 'desktopMinimumWidth:\s*1206' -or
+    $metadataPage -notmatch 'inspectorRatio:\s*0\.44' -or
+    $metadataPage -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,220}page\.width \* page\.inspectorRatio - 12') {
     throw 'The metadata editor needs a complete batch-edit workbench at desktop width.'
 }
 if ($filenamePage -notmatch 'id:\s*numberPositionBox' -or

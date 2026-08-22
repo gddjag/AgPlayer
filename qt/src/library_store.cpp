@@ -16,6 +16,11 @@ QJsonObject toJson(const TrackRecord& track)
             {QStringLiteral("title"), track.title},
             {QStringLiteral("artist"), track.artist},
             {QStringLiteral("album"), track.album},
+            {QStringLiteral("albumArtist"), track.albumArtist},
+            {QStringLiteral("genre"), track.genre},
+            {QStringLiteral("year"), track.year},
+            {QStringLiteral("date"), track.date},
+            {QStringLiteral("composer"), track.composer},
             {QStringLiteral("format"), track.format},
             {QStringLiteral("sampleRate"), track.sampleRate},
             {QStringLiteral("bitDepth"), track.bitDepth},
@@ -51,6 +56,11 @@ TrackRecord fromJson(const QJsonObject& object)
     track.title = object.value(QStringLiteral("title")).toString();
     track.artist = object.value(QStringLiteral("artist")).toString();
     track.album = object.value(QStringLiteral("album")).toString();
+    track.albumArtist = object.value(QStringLiteral("albumArtist")).toString();
+    track.genre = object.value(QStringLiteral("genre")).toString();
+    track.year = object.value(QStringLiteral("year")).toString();
+    track.date = object.value(QStringLiteral("date")).toString();
+    track.composer = object.value(QStringLiteral("composer")).toString();
     track.format = object.value(QStringLiteral("format")).toString();
     track.sampleRate = object.value(QStringLiteral("sampleRate")).toInt();
     track.bitDepth = object.value(QStringLiteral("bitDepth")).toInt();

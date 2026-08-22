@@ -31,6 +31,11 @@ TrackRecord makeTrack(const QString& path, const QString& title)
     track.title = title;
     track.artist = QStringLiteral("Artist");
     track.album = QStringLiteral("Album");
+    track.albumArtist = QStringLiteral("Album Artist");
+    track.genre = QStringLiteral("City Pop");
+    track.year = QStringLiteral("2024");
+    track.date = QStringLiteral("2024-05-20");
+    track.composer = QStringLiteral("Composer");
     track.format = QStringLiteral("flac");
     track.sampleRate = 192000;
     track.bitDepth = 24;
@@ -114,6 +119,11 @@ void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()
     QCOMPARE(track.title, source.title);
     QCOMPARE(track.artist, source.artist);
     QCOMPARE(track.album, source.album);
+    QCOMPARE(track.albumArtist, source.albumArtist);
+    QCOMPARE(track.genre, source.genre);
+    QCOMPARE(track.year, source.year);
+    QCOMPARE(track.date, source.date);
+    QCOMPARE(track.composer, source.composer);
     QCOMPARE(track.format, source.format);
     QCOMPARE(track.sampleRate, source.sampleRate);
     QCOMPARE(track.bitDepth, source.bitDepth);

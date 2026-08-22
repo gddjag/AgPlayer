@@ -2125,465 +2125,487 @@
 <context>
     <name>MetadataEditPage</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="23"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="444"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="37"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="710"/>
         <source>标题</source>
         <translation>Title</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="24"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="445"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="38"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="711"/>
         <source>艺术家</source>
         <translation>Artist</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="25"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="446"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="39"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="712"/>
         <source>专辑</source>
         <translation>Album</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="26"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="40"/>
         <source>专辑艺术家</source>
         <translation>Album Artist</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="27"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="41"/>
         <source>流派</source>
         <translation>Genre</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="30"/>
-        <source>作曲家</source>
-        <translation>Composer</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="31"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="45"/>
         <source>BPM</source>
         <translation>BPM</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="233"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="396"/>
         <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
         <translation>Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="353"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="527"/>
         <source>添加文件夹</source>
-        <translation>Add folder</translation>
+        <translation>Add Folder</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="367"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="538"/>
         <source>移除选中</source>
-        <translation>Remove check</translation>
+        <translation>Remove Selected</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="206"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="836"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1001"/>
+        <source>每个字段选择保留、设为或清除；写入使用同容器流复制。</source>
+        <translation>Choose Keep, Set, or Clear for each field; writes use same-container stream copy.</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1002"/>
+        <source>元数据计划将复用格式转换设置并写入新文件。</source>
+        <translation>The metadata plan will reuse the format conversion settings and write to new files.</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1009"/>
+        <source>修改转换设置</source>
+        <translation>Edit Conversion Settings</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1107"/>
+        <source>将清除</source>
+        <translation>Will be cleared</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1109"/>
+        <source>多种值</source>
+        <translation>Multiple values</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1155"/>
         <source>替换</source>
         <translation>Replace</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="905"/>
-        <source>修改预览（预估）</source>
-        <translation>Modify preview (estimate)</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="994"/>
-        <source>将修改 %1 个已选文件</source>
-        <translation>Will modify %1 selected files</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="999"/>
-        <source>写入采用临时文件和原子替换，不直接覆盖源文件。</source>
-        <translation>is written using temporary files and atomic replacement, without directly overwriting the source file.</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1014"/>
-        <source>预检修改</source>
-        <translation>预检修改</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1032"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1271"/>
         <source>导出结果</source>
-        <translation>导出结果</translation>
+        <translation>Export Results</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="290"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1040"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="483"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1390"/>
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="348"/>
-        <source>添加文件</source>
-        <translation>Add Files</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="44"/>
+        <source>作曲</source>
+        <translation>Composer</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="668"/>
-        <source>批量元数据编辑</source>
-        <translation>批量元数据编辑</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="260"/>
+        <source>%1 MB</source>
+        <translation>%1 MB</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="682"/>
-        <source>作用范围</source>
-        <translation>作用范围</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="262"/>
+        <source>%1 KB</source>
+        <translation>%1 KB</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="688"/>
-        <source>当前文件</source>
-        <translation>当前文件</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="263"/>
+        <source>%1 B</source>
+        <translation>%1 B</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="689"/>
-        <source>已选文件</source>
-        <translation>已选文件</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="305"/>
+        <source>：统一为 “%1” · %2 个文件</source>
+        <translation>: Set all to “%1” · %2 files</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="690"/>
-        <source>全部文件</source>
-        <translation>全部文件</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="308"/>
+        <source>：清除 · %1 个文件</source>
+        <translation>: Clear · %1 files</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="699"/>
-        <source>处理方式</source>
-        <translation>处理方式</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="310"/>
+        <source>：保留原值</source>
+        <translation>: Keep original values</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="705"/>
-        <source>仅修改元数据（流复制）</source>
-        <translation>仅修改元数据（流复制）</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="313"/>
+        <source>封面：替换当前封面 · %1 个文件</source>
+        <translation>Cover: Replace current cover · %1 files</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="706"/>
-        <source>转换时写入新文件</source>
-        <translation>转换时写入新文件</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="315"/>
+        <source>封面：移除 · %1 个文件</source>
+        <translation>Cover: Remove · %1 files</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="729"/>
-        <source>流复制：不解码、不重编码；验证后替换原文件。</source>
-        <translation>流复制：不解码、不重编码；验证后替换原文件。</translation>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="317"/>
+        <source>封面：保留原封面</source>
+        <translation>Cover: Keep original covers</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="730"/>
-        <source>将复用格式转换器：转换完成后写入并验证元数据，源文件不覆盖。</source>
-        <translation>将复用格式转换器：转换完成后写入并验证元数据，源文件不覆盖。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="765"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="835"/>
-        <source>保留</source>
-        <translation>Keep</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="373"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="767"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="837"/>
-        <source>清空</source>
-        <translation>Clear</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="381"/>
-        <source>搜索文件名、标题、艺术家或专辑</source>
-        <translation>Search file name, title, artist or album</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="28"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="447"/>
-        <source>年份</source>
-        <translation>Year</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="29"/>
-        <source>日期</source>
-        <translation>日期</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="201"/>
-        <source>设为 “%1”</source>
-        <translation>设为 “%1”</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="202"/>
-        <source>清除</source>
-        <translation>清除</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="203"/>
-        <source>：</source>
-        <translation>：</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="206"/>
-        <source>移除</source>
-        <translation>Remove</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="207"/>
-        <source>封面：</source>
-        <translation>封面：</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="239"/>
-        <source>JSON 报告 (*.json)</source>
-        <translation>JSON 报告 (*.json)</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="239"/>
-        <source>CSV 报告 (*.csv)</source>
-        <translation>CSV 报告 (*.csv)</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="251"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="676"/>
-        <source>三态编辑说明</source>
-        <translation>三态编辑说明</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="259"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="440"/>
         <source>保留：每个文件保持原值，不写入。
 
 设为：将输入值统一写入目标文件；空值无效，请使用清除。
 
-清除：删除该字段的已知标签。批量文件值不同不会自动覆盖。</source>
-        <translation>保留：每个文件保持原值，不写入。
+清除：删除该字段的所有已知别名标签。</source>
+        <translation>Keep: Preserve each file&apos;s original value without writing.
 
-设为：将输入值统一写入目标文件；空值无效，请使用清除。
+Set: Write the entered value to every target file. Empty values are invalid; use Clear instead.
 
-清除：删除该字段的已知标签。批量文件值不同不会自动覆盖。</translation>
+Clear: Remove all known aliases for this field.</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="267"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="449"/>
+        <source>元数据修改失败</source>
+        <translation>Metadata Update Failed</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="476"/>
+        <source>%1 个文件可安全修改，%2 个文件不支持。</source>
+        <translation>%1 files can be updated safely; %2 files are unsupported.</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="522"/>
+        <source>添加文件</source>
+        <translation>Add Files</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="532"/>
+        <source>从播放列表添加</source>
+        <translation>Add from Playlist</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="544"/>
+        <source>清空列表</source>
+        <translation>Clear List</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="562"/>
+        <source>搜索文件名、标签或路径...</source>
+        <translation>Search file names, tags, or paths...</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="583"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="818"/>
+        <source>待处理</source>
+        <translation>Pending</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="603"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="650"/>
+        <source>文件列表</source>
+        <translation>File List</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="604"/>
+        <source>编辑元数据</source>
+        <translation>Edit Metadata</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="664"/>
+        <source>已选 %1</source>
+        <translation>Selected %1</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="677"/>
+        <source>总计 %1</source>
+        <translation>Total %1</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="820"/>
+        <source>已完成</source>
+        <translation>Completed</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="844"/>
+        <source>拖入音频文件，或使用上方按钮添加</source>
+        <translation>Drop audio files here, or use the buttons above</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="858"/>
+        <source>全选</source>
+        <translation>Select All</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="870"/>
+        <source>已选 %1 个文件，共 %2 个文件</source>
+        <translation>%1 selected, %2 files total</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="922"/>
+        <source>批量元数据编辑</source>
+        <translation>Batch Metadata Editor</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="928"/>
+        <source>已选 %1 个文件</source>
+        <translation>%1 files selected</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="939"/>
+        <source>作用范围</source>
+        <translation>Scope</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="948"/>
+        <source>当前文件</source>
+        <translation>Current File</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="949"/>
+        <source>已选文件</source>
+        <translation>Selected Files</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="950"/>
+        <source>全部文件</source>
+        <translation>All Files</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="961"/>
+        <source>处理方式</source>
+        <translation>Processing</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="970"/>
+        <source>仅修改元数据（流复制）</source>
+        <translation>Metadata Only (Stream Copy)</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="971"/>
+        <source>转换时写入新文件</source>
+        <translation>Write to New File During Conversion</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1067"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1154"/>
+        <source>保留</source>
+        <translation>Keep</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="42"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="713"/>
+        <source>年份</source>
+        <translation>Year</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="43"/>
+        <source>日期</source>
+        <translation>Date</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1069"/>
+        <source>清除</source>
+        <translation>Clear</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1340"/>
+        <source>：</source>
+        <translation>:</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1156"/>
+        <source>移除</source>
+        <translation>Remove</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="419"/>
+        <source>JSON 报告 (*.json)</source>
+        <translation>JSON report (*.json)</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="419"/>
+        <source>CSV 报告 (*.csv)</source>
+        <translation>CSV report (*.csv)</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="432"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="984"/>
+        <source>三态编辑说明</source>
+        <translation>Three-State Editing Help</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="466"/>
         <source>预检发现不支持项</source>
-        <translation>预检发现不支持项</translation>
+        <translation>Unsupported Items Found During Preflight</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="277"/>
-        <source>%1 个文件可安全流复制，%2 个文件不支持。源文件尚未修改。</source>
-        <translation>%1 个文件可安全流复制，%2 个文件不支持。源文件尚未修改。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="285"/>
-        <source>可只处理完全支持的文件，或返回检查逐文件原因。</source>
-        <translation>可只处理完全支持的文件，或返回检查逐文件原因。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="297"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="490"/>
         <source>跳过不支持项继续</source>
-        <translation>跳过不支持项继续</translation>
+        <translation>Skip Unsupported Items and Continue</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="306"/>
-        <source>只处理完全支持的文件</source>
-        <translation>只处理完全支持的文件</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="323"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="408"/>
         <source>图片文件 (*.png *.jpg *.jpeg *.bmp)</source>
-        <translation>图片文件 (*.png *.jpg *.jpeg *.bmp)</translation>
+        <translation>Image files (*.png *.jpg *.jpeg *.bmp)</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="358"/>
-        <source>从播放器添加</source>
-        <translation>Add from player</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="363"/>
-        <source>需要先在播放器中选择歌曲</source>
-        <translation>Need to select the song in the player first</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="393"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="581"/>
         <source>全部状态</source>
-        <translation>全部状态</translation>
+        <translation>All Statuses</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="395"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="579"/>
-        <source>支持</source>
-        <translation>支持</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="443"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="709"/>
         <source>文件名</source>
-        <translation>File name</translation>
+        <translation>File Name</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="448"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="714"/>
         <source>时长</source>
         <translation>Duration</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="449"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="715"/>
         <source>封面</source>
-        <translation>封面</translation>
+        <translation>Cover</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="450"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="716"/>
         <source>状态</source>
         <translation>Status</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="530"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="536"/>
-        <source>未知</source>
-        <translation>Unknown</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="575"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="814"/>
         <source>错误</source>
         <translation>Error</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="396"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="583"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="584"/>
         <source>已修改</source>
-        <translation>modified</translation>
+        <translation>Modified</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="397"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="583"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="585"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="822"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1344"/>
         <source>失败</source>
         <translation>Failed</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="394"/>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="584"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="582"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="823"/>
         <source>就绪</source>
         <translation>Ready</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="579"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="818"/>
         <source>不支持</source>
-        <translation>不支持</translation>
+        <translation>Unsupported</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="581"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="822"/>
         <source>已取消</source>
-        <translation>已取消</translation>
+        <translation>Cancelled</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="606"/>
-        <source>拖入音频文件，或使用上方添加命令</source>
-        <translation>Drag in the audio file, or use the add command above</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="623"/>
-        <source>已显示 %1 / %2，已选 %3</source>
-        <translation>已显示 %1 / %2，已选 %3</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="633"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="879"/>
         <source>导出当前列表</source>
-        <translation>导出当前列表</translation>
+        <translation>Export Current List</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="793"/>
-        <source>多个值</source>
-        <translation>多个值</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="794"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1110"/>
         <source>保留原值</source>
-        <translation>保留原值</translation>
+        <translation>Keep original value</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="805"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1143"/>
         <source>封面（Cover Art）</source>
-        <translation>封面（Cover Art）</translation>
+        <translation>Cover Art</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="815"/>
-        <source>保留原封面</source>
-        <translation>保留原封面</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="820"/>
-        <source>替换封面</source>
-        <translation>替换封面</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="825"/>
-        <source>移除封面</source>
-        <translation>移除封面</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="873"/>
-        <source>新封面：已选择图片</source>
-        <translation>新封面：已选择图片</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="875"/>
-        <source>当前文件无封面</source>
-        <translation>当前文件无封面</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="876"/>
-        <source>选择文件以查看当前封面</source>
-        <translation>选择文件以查看当前封面</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="883"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1238"/>
         <source>选择图片...</source>
-        <translation>选择图片...</translation>
+        <translation>Choose Image...</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="889"/>
-        <source>移除选择</source>
-        <translation>移除选择</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="912"/>
-        <source>支持 %1 · 不支持 %2 · 成功 %3 · 失败 %4 · 取消 %5</source>
-        <translation>支持 %1 · 不支持 %2 · 成功 %3 · 失败 %4 · 取消 %5</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="925"/>
-        <source>将复用格式转换设置并输出新文件；原文件不会被覆盖。</source>
-        <translation>将复用格式转换设置并输出新文件；原文件不会被覆盖。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="927"/>
-        <source>将对当前焦点文件执行预检和流复制写入。</source>
-        <translation>将对当前焦点文件执行预检和流复制写入。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="929"/>
-        <source>将对 %1 个已选文件执行预检。</source>
-        <translation>将对 %1 个已选文件执行预检。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="930"/>
-        <source>将对列表中的全部 %1 个文件执行预检。</source>
-        <translation>将对列表中的全部 %1 个文件执行预检。</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="992"/>
-        <source>将修改当前文件</source>
-        <translation>将修改当前文件</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="995"/>
-        <source>将修改全部 %1 个文件</source>
-        <translation>将修改全部 %1 个文件</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="714"/>
-        <source>每个字段独立选择：保留原值、写入新值或清空。</source>
-        <translation>Each field is independently selected: keep the original value, write a new value, or clear.</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="766"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1068"/>
         <source>设为</source>
-        <translation>is set to</translation>
+        <translation>Set</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="791"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1105"/>
         <source>输入新值</source>
         <translation>Enter a new value</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1047"/>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1213"/>
+        <source>当前封面：多种封面</source>
+        <translation>Current cover: Multiple covers</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1215"/>
+        <source>当前封面：%1</source>
+        <translation>Current cover: %1</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1216"/>
+        <source>内嵌封面</source>
+        <translation>Embedded cover</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1217"/>
+        <source>当前封面：无</source>
+        <translation>Current cover: None</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1226"/>
+        <source>%1 × %2 · %3 · %4</source>
+        <translation>%1 × %2 · %3 · %4</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1229"/>
+        <source>未知格式</source>
+        <translation>Unknown format</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1263"/>
+        <source>修改摘要（预览结果）</source>
+        <translation>Change Summary (Preview)</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1282"/>
+        <source>填写字段后将在此显示预计修改。</source>
+        <translation>Planned changes will appear here after you configure a field.</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1319"/>
+        <source>年份与日期可能映射到同一物理标签，预检将阻止冲突写入。</source>
+        <translation>Year and date may map to the same physical tag; preflight will block conflicting writes.</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1328"/>
+        <source>成功 %1 · 失败 %2 · 取消 %3</source>
+        <translation>Succeeded %1 · Failed %2 · Cancelled %3</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1342"/>
+        <source>完成</source>
+        <translation>Done</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="1372"/>
         <source>应用修改</source>
         <translation>Apply Changes</translation>
     </message>
@@ -2591,106 +2613,141 @@
 <context>
     <name>MetadataEditor</name>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="237"/>
-        <source>封面仅支持 PNG、JPEG 或 BMP：%1</source>
-        <translation>封面仅支持 PNG、JPEG 或 BMP：%1</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="277"/>
+        <source>Could not open the cover image: %1</source>
+        <translation>Could not open the cover image: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="243"/>
-        <source>无法打开封面图片：%1</source>
-        <translation>Unable to open cover image: %1</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="282"/>
+        <source>The cover image is empty: %1</source>
+        <translation>The cover image is empty: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="248"/>
-        <source>封面图片内容为空：%1</source>
-        <translation>Cover image content is empty: %1</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="287"/>
+        <source>The cover image cannot exceed 20 MB: %1</source>
+        <translation>The cover image cannot exceed 20 MB: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="253"/>
-        <source>封面图片不能超过 20 MB：%1</source>
-        <translation>封面图片不能超过 20 MB：%1</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="293"/>
+        <source>The selected file is not a readable image: %1</source>
+        <translation>The selected file is not a readable image: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="259"/>
-        <source>封面尺寸必须在 4096 × 4096 以内：%1</source>
-        <translation>封面尺寸必须在 4096 × 4096 以内：%1</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="299"/>
+        <source>Cover images must contain PNG, JPEG, or BMP data: %1</source>
+        <translation>Cover images must contain PNG, JPEG, or BMP data: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="315"/>
-        <source>未找到支持的音频文件</source>
-        <translation>No supported audio files found</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="305"/>
+        <source>The cover image could not be decoded completely: %1</source>
+        <translation>The cover image could not be decoded completely: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="396"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="310"/>
+        <source>The cover dimensions must not exceed 4096 x 4096: %1</source>
+        <translation>The cover dimensions must not exceed 4096 x 4096: %1</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="369"/>
+        <source>Could not scan the selected audio files.</source>
+        <translation>Could not scan the selected audio files.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="391"/>
+        <source>No new supported audio files were found.</source>
+        <translation>No new supported audio files were found.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="417"/>
+        <source>Could not read metadata from the selected files.</source>
+        <translation>Could not read metadata from the selected files.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="500"/>
         <source>无法读取元数据</source>
         <translation>Unable to read metadata</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="477"/>
-        <location filename="../qt/src/metadata_editor.cpp" line="769"/>
-        <source>请选择封面图片</source>
-        <translation>Please select a cover image</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="553"/>
-        <source>无法准备元数据修改：%1</source>
-        <translation>无法准备元数据修改：%1</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="562"/>
-        <source>无法准备元数据修改</source>
-        <translation>无法准备元数据修改</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="578"/>
-        <location filename="../qt/src/metadata_editor.cpp" line="844"/>
-        <source>已取消</source>
-        <translation>已取消</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="598"/>
-        <source>元数据写入异常：%1</source>
-        <translation>元数据写入异常：%1</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="602"/>
-        <source>元数据写入发生未知异常</source>
-        <translation>元数据写入发生未知异常</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="631"/>
-        <source>新封面 · %1 KB</source>
-        <translation>新封面 · %1 KB</translation>
-    </message>
-    <message>
         <location filename="../qt/src/metadata_editor.cpp" line="661"/>
-        <source>已验证元数据与音频流，已完成替换</source>
-        <translation>Metadata and audio streams verified; replacement completed</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="989"/>
+        <source>请选择封面图片</source>
+        <translation>Please select a cover image.</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="777"/>
-        <source>没有可处理的文件</source>
-        <translation>没有可处理的文件</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="739"/>
+        <source>无法准备元数据修改：%1</source>
+        <translation>Could not prepare the metadata update: %1</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="880"/>
-        <source>目标目录不可写</source>
-        <translation>目标目录不可写</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="748"/>
+        <source>无法准备元数据修改</source>
+        <translation>Could not prepare the metadata update.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="764"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="1116"/>
+        <source>已取消</source>
+        <translation>Cancelled</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="784"/>
+        <source>元数据写入异常：%1</source>
+        <translation>Metadata write failed unexpectedly: %1</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="788"/>
+        <source>元数据写入发生未知异常</source>
+        <translation>An unknown metadata write error occurred.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1026"/>
+        <source>Metadata preflight failed unexpectedly.</source>
+        <translation>Metadata preflight failed unexpectedly.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1088"/>
+        <source>Metadata preflight setup failed: %1</source>
+        <translation>Metadata preflight setup failed: %1</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1095"/>
+        <source>Metadata preflight setup failed.</source>
+        <translation>Metadata preflight setup failed.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1149"/>
+        <source>Target directory is not writable.</source>
+        <translation>Target directory is not writable.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1155"/>
+        <source>Supported; waiting to process without audio re-encoding.</source>
+        <translation>Supported; waiting to process without audio re-encoding.</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1166"/>
+        <source>Metadata preflight failed: %1</source>
+        <translation>Metadata preflight failed: %1</translation>
+    </message>
+    <message>
+        <location filename="../qt/src/metadata_editor.cpp" line="1169"/>
+        <source>Metadata preflight failed.</source>
+        <translation>Metadata preflight failed.</translation>
     </message>
     <message>
         <location filename="../qt/src/metadata_editor.cpp" line="881"/>
-        <source>磁盘空间不足</source>
-        <translation>磁盘空间不足</translation>
+        <source>已验证元数据与音频流，已完成替换</source>
+        <translation>Metadata and audio streams verified; replacement completed.</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="887"/>
-        <source>支持同容器流复制，音频不重编码</source>
-        <translation>支持同容器流复制，音频不重编码</translation>
+        <location filename="../qt/src/metadata_editor.cpp" line="997"/>
+        <source>没有可处理的文件</source>
+        <translation>There are no files to process.</translation>
     </message>
     <message>
-        <location filename="../qt/src/metadata_editor.cpp" line="921"/>
+        <location filename="../qt/src/metadata_editor.cpp" line="1197"/>
         <source>无法导出结果：%1</source>
-        <translation>无法导出结果：%1</translation>
+        <translation>Could not export results: %1</translation>
     </message>
 </context>
 <context>

@@ -30,9 +30,16 @@ struct MediaMetadata final {
     std::int64_t duration_ms = 0;
     std::vector<unsigned char> cover;
     std::string cover_mime_type;
-    std::string year;    // from AV_DICT "date"
+    std::string year;    // canonical year (for example Vorbis YEAR)
+    std::string date;    // canonical full date (for example DATE/TDRC)
     std::string genre;   // from AV_DICT "genre"
     std::string lyrics;  // from AV_DICT "lyrics" / "LYRICS" / "USLT"
+};
+
+// Deterministic failure injection for the noexcept probe boundary. Production
+// callers leave this null.
+struct MediaMetadataProbeTestHooks final {
+    bool throw_allocation_failure = false;
 };
 
 struct DecodedAudioBlock final {
@@ -44,7 +51,9 @@ struct DecodedAudioBlock final {
 
 // Reads container/stream metadata without allocating or opening a decoder.
 [[nodiscard]] ag_result probe_media_metadata(const std::string& utf8_path,
-                                             MediaMetadata& metadata) noexcept;
+                                             MediaMetadata& metadata,
+                                             const MediaMetadataProbeTestHooks*
+                                                 test_hooks = nullptr) noexcept;
 
 class Decoder final {
 public:

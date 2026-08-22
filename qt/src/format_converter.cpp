@@ -6,6 +6,7 @@
 #include "format_conversion_task_model.hpp"
 #include "transcode_capability.hpp"
 #include "metadata_writer.hpp"
+#include "transcoder.hpp"
 #include "runtime_log.hpp"
 
 #include <agplayer/c_api.h>
@@ -33,6 +34,7 @@
 #include <cmath>
 #include <filesystem>
 #include <numeric>
+#include <vector>
 
 namespace {
 
@@ -111,8 +113,8 @@ bool validate_audio_output(const QString& path)
 {
     ag_metadata* metadata = nullptr;
     const QByteArray utf8 = path.toUtf8();
-    if (ag_metadata_open(utf8.constData(), &metadata) != AG_OK
-        || metadata == nullptr) {
+    const ag_result probe_result = ag_metadata_open(utf8.constData(), &metadata);
+    if (probe_result != AG_OK || metadata == nullptr) {
         return false;
     }
     const bool valid = ag_metadata_duration_ms(metadata) > 0;
@@ -307,6 +309,11 @@ bool is_video_file(const QString& path)
         QStringLiteral("webm")
     };
     return extensions.contains(QFileInfo(path).suffix().toLower());
+}
+
+QString normalized_path_key(const QString& path)
+{
+    return QDir::cleanPath(QFileInfo(path).absoluteFilePath()).toCaseFolded();
 }
 
 } // namespace
@@ -1645,6 +1652,10 @@ void FormatConverter::setAllVisibleChecked(const bool checked)
 bool FormatConverter::setMetadataEditPlan(const QVariantMap& fields,
                                           const QUrl& coverUrl)
 {
+    if (busy_.load(std::memory_order_acquire)) {
+        emit errorOccurred(tr("转换任务运行时不能更改元数据计划"));
+        return false;
+    }
     const QString coverMode = fields.value(QStringLiteral("coverMode"),
                                            QStringLiteral("keep")).toString();
     QByteArray coverData;
@@ -1674,7 +1685,43 @@ bool FormatConverter::setMetadataEditPlan(const QVariantMap& fields,
     metadataFields_ = fields;
     metadataCoverData_ = coverData;
     metadataCoverMime_ = coverMime;
+    metadataPlanActive_ = true;
+    metadataTargetPaths_.clear();
     return true;
+}
+
+bool FormatConverter::setMetadataEditPlanForFiles(
+    const QVariantMap& fields, const QUrl& coverUrl,
+    const QList<QUrl>& targetUrls)
+{
+    if (!setMetadataEditPlan(fields, coverUrl)) {
+        return false;
+    }
+    QSet<QString> targets;
+    for (const QUrl& url : targetUrls) {
+        if (!url.isLocalFile() || url.toLocalFile().isEmpty()) {
+            clearMetadataEditPlan();
+            emit errorOccurred(tr("元数据转换计划只能绑定本地文件"));
+            return false;
+        }
+        targets.insert(normalized_path_key(url.toLocalFile()));
+    }
+    if (targets.isEmpty()) {
+        clearMetadataEditPlan();
+        emit errorOccurred(tr("元数据转换计划没有目标文件"));
+        return false;
+    }
+    metadataTargetPaths_ = std::move(targets);
+    return true;
+}
+
+void FormatConverter::clearMetadataEditPlan()
+{
+    metadataFields_.clear();
+    metadataCoverData_.clear();
+    metadataCoverMime_.clear();
+    metadataTargetPaths_.clear();
+    metadataPlanActive_ = false;
 }
 
 QString FormatConverter::entryAt(int index) const
@@ -1926,6 +1973,40 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
             QStringLiteral("Opus output requires 48 kHz. Confirm the adjustment before conversion."));
         return;
     }
+    bool metadataPlanApplies = metadataPlanActive_;
+    if (metadataPlanApplies && !metadataTargetPaths_.isEmpty()) {
+        metadataPlanApplies = false;
+        QMutexLocker lock(&mutex_);
+        for (const int index : jobIndices) {
+            if (index >= 0 && index < entries_.size()
+                && metadataTargetPaths_.contains(
+                    normalized_path_key(entries_.at(index).path))) {
+                metadataPlanApplies = true;
+                break;
+            }
+        }
+    }
+    if (metadataPlanApplies) {
+        const FormatInfo info = format_info(normalizedFormat);
+        agplayer::TranscodeConfig metadataPreflight;
+        metadataPreflight.output_path =
+            (QDir(outputDir.isEmpty() ? QStringLiteral(".") : outputDir)
+                 .filePath(QStringLiteral("agplayer-metadata-preflight.%1")
+                               .arg(QString::fromLatin1(info.extension))))
+                .toUtf8().toStdString();
+        metadataPreflight.container_name = info.muxer_name;
+        metadataPreflight.metadata_edit_plan = metadata_plan(
+            metadataFields_, metadataCoverData_, metadataCoverMime_);
+        std::string metadataError;
+        const ag_result metadataResult = agplayer::preflight_transcode_metadata(
+            metadataPreflight, metadataError);
+        if (metadataResult != AG_OK) {
+            emit errorOccurred(
+                tr("输出格式不支持当前元数据修改：%1")
+                    .arg(QString::fromStdString(metadataError)));
+            return;
+        }
+    }
     const int effectiveSampleRate = sampleRate;
     if (!outputDir.isEmpty() && !QDir().mkpath(outputDir)) {
         emit errorOccurred(tr("无法创建输出目录：%1").arg(outputDir));
@@ -1963,6 +2044,9 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
     const QVariantMap metadataFields = metadataFields_;
     const QByteArray metadataCoverData = metadataCoverData_;
     const QString metadataCoverMime = metadataCoverMime_;
+    const bool metadataPlanActive = metadataPlanApplies;
+    const QSet<QString> metadataTargetPaths = metadataTargetPaths_;
+    clearMetadataEditPlan();
     auto* watcher = new QFutureWatcher<void>(this);
     watcher_ = watcher;
     connect(watcher, &QFutureWatcher<void>::finished, this,
@@ -1985,14 +2069,16 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
         [this, outputFormat, bitRate, effectiveSampleRate, channels, outputDir,
          keepMetadata, volumeNormalize, extractAudio, overwriteExisting,
          bitrateMode, conflictPolicy, metadataFields, metadataCoverData,
-         metadataCoverMime, keepCover, sampleFormat, channelLayout,
+         metadataCoverMime, metadataPlanActive, metadataTargetPaths,
+         keepCover, sampleFormat, channelLayout,
          audioStreamIndex, preserveDirectories, plannedJobs,
          jobIndices]() {
             runTranscode(outputFormat, bitRate, effectiveSampleRate, channels,
                          outputDir, keepMetadata, volumeNormalize,
                          extractAudio, overwriteExisting, bitrateMode, conflictPolicy,
                          metadataFields, metadataCoverData, metadataCoverMime,
-                          jobIndices, keepCover, sampleFormat, channelLayout,
+                         metadataPlanActive, metadataTargetPaths,
+                         jobIndices, keepCover, sampleFormat, channelLayout,
                           audioStreamIndex, preserveDirectories, plannedJobs);
         });
     watcher->setFuture(future);
@@ -2012,6 +2098,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                                    const QVariantMap& metadataFields,
                                    const QByteArray& metadataCoverData,
                                    const QString& metadataCoverMime,
+                                   const bool metadataPlanActive,
+                                   const QSet<QString>& metadataTargetPaths,
                                    const QVector<int>& jobIndices,
                                    bool keepCover,
                                    const QString& sampleFormat,
@@ -2132,6 +2220,9 @@ void FormatConverter::runTranscode(const QString& outputFormat,
 
         const QString& inputPath = inputPaths.at(i);
         const QString& outputPath = outputPaths.at(i);
+        const bool applyMetadataPlan = metadataPlanActive
+            && (metadataTargetPaths.isEmpty()
+                || metadataTargetPaths.contains(normalized_path_key(inputPath)));
         const FrozenConversionJob* plannedJob = usesPlannedJobs
             ? &plannedJobs.at(i) : nullptr;
         const QVariantMap resolvedProfile = plannedJob != nullptr
@@ -2235,6 +2326,14 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         const QByteArray outputUtf8 = stagedPath.toUtf8();
         const QByteArray sampleFormatUtf8 = jobSampleFormat.toUtf8();
         const QByteArray channelLayoutUtf8 = resolvedLayout.toUtf8();
+        std::vector<ag_metadata_field_edit> metadataEdits;
+        metadataEdits.reserve(plan.fields.size());
+        for (const agplayer::FieldEdit& edit : plan.fields) {
+            metadataEdits.push_back({
+                static_cast<ag_metadata_field>(edit.field),
+                static_cast<ag_metadata_edit_action>(edit.action),
+                edit.value_utf8.has_value() ? edit.value_utf8->c_str() : nullptr});
+        }
 
         struct EntryProgressContext {
             FormatConverter* converter;
@@ -2260,10 +2359,26 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         request.sample_format = sampleFormatUtf8.isEmpty()
             ? nullptr : sampleFormatUtf8.constData();
         request.audio_stream_index = jobAudioStreamIndex;
-        request.keep_metadata = jobKeepMetadata ? 1 : 0;
-        request.keep_cover = jobKeepCover ? 1 : 0;
+        request.keep_metadata = (jobKeepMetadata || applyMetadataPlan) ? 1 : 0;
+        request.keep_cover =
+            (jobKeepCover
+             || (applyMetadataPlan
+                 && plan.cover_action == agplayer::CoverAction::Keep))
+            ? 1 : 0;
         request.bitrate_mode = jobBitrateMode == QStringLiteral("vbr") ? 1 : 0;
         request.quality = jobQuality;
+        request.metadata_fields = !applyMetadataPlan || metadataEdits.empty()
+            ? nullptr : metadataEdits.data();
+        request.metadata_field_count = applyMetadataPlan
+            ? metadataEdits.size() : 0;
+        request.metadata_cover_action = applyMetadataPlan
+            ? static_cast<ag_metadata_cover_action>(plan.cover_action)
+            : AG_METADATA_COVER_KEEP;
+        request.metadata_cover_data = applyMetadataPlan ? plan.cover_data : nullptr;
+        request.metadata_cover_size = applyMetadataPlan ? plan.cover_size : 0;
+        request.metadata_cover_mime_type = !applyMetadataPlan
+                || plan.cover_mime_type.empty()
+            ? nullptr : plan.cover_mime_type.c_str();
         const ag_result result = ag_transcode_v2(
             inputUtf8.constData(), &request, token, progressCallback,
             &progressContext);
@@ -2284,21 +2399,6 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                 complete(FileStatus::Error,
                          tr("转换结果无法重新打开或不包含有效音频"));
                 return;
-            }
-            if (!plan.fields.empty()
-                || plan.cover_action != agplayer::CoverAction::Keep) {
-                agplayer::MetadataFileResult metadataResult;
-                const ag_result metadataWrite = agplayer::write_metadata_plan(
-                    stagedPath.toUtf8().toStdString(), plan, metadataResult);
-                if (metadataWrite != AG_OK) {
-                    QFile::remove(stagedPath);
-                    QFile::remove(stagedPath + QStringLiteral(".agbak"));
-                    complete(FileStatus::Error,
-                             tr("转换元数据验证失败，未发布输出文件：%1")
-                                 .arg(QString::fromStdString(metadataResult.message)));
-                    return;
-                }
-                QFile::remove(stagedPath + QStringLiteral(".agbak"));
             }
             const auto commitMode = jobOverwriteExisting
                 ? format_converter_detail::OutputCommitMode::Overwrite
@@ -2337,6 +2437,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
 
 void FormatConverter::cancel()
 {
+    clearMetadataEditPlan();
     cancelFlag_.store(true, std::memory_order_release);
     QMutexLocker lock(&tokenMutex_);
     for (ag_cancel_token* token : activeTokens_) {

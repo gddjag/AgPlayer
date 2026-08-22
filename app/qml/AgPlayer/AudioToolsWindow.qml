@@ -58,8 +58,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
-        border.color: Theme.border
+        color: window.metadataWorkbench ? "#06141e" : Theme.background
+        border.color: window.metadataWorkbench ? "#173040" : Theme.border
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -191,6 +191,7 @@ Window {
                 Layout.preferredHeight: 43
                 window: window
                 currentTool: AudioToolsController.currentTool
+                referenceWorkbench: window.metadataWorkbench
                 onToolSelected: function(index) {
                     AudioToolsController.selectTool(index)
                 }

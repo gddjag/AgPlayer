@@ -90,7 +90,12 @@ void LibraryFilterModelTest::defaultFullRangeDoesNotHideTracks()
 void LibraryFilterModelTest::filtersKeywordAcrossMetadataFields()
 {
     LibraryModel source;
-    source.replaceAll(sampleTracks());
+    QList<TrackRecord> tracks = sampleTracks();
+    tracks[0].albumArtist = QStringLiteral("Compilation Curator");
+    tracks[1].genre = QStringLiteral("City Pop");
+    tracks[2].composer = QStringLiteral("Ryuichi Sakamoto");
+    tracks[3].date = QStringLiteral("2024-05-20");
+    source.replaceAll(tracks);
     LibraryFilterModel filter;
     filter.setSourceModel(&source);
 
@@ -99,6 +104,18 @@ void LibraryFilterModelTest::filtersKeywordAcrossMetadataFields()
 
     filter.setSearchText(QStringLiteral("horizon"));
     QCOMPARE(filter.count(), 2);
+
+    filter.setSearchText(QStringLiteral("curator"));
+    QCOMPARE(filter.count(), 1);
+
+    filter.setSearchText(QStringLiteral("city pop"));
+    QCOMPARE(filter.count(), 1);
+
+    filter.setSearchText(QStringLiteral("sakamoto"));
+    QCOMPARE(filter.count(), 1);
+
+    filter.setSearchText(QStringLiteral("2024-05"));
+    QCOMPARE(filter.count(), 1);
 
     filter.setSearchText(QStringLiteral("missing"));
     QCOMPARE(filter.count(), 0);

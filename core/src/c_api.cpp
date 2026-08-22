@@ -716,6 +716,11 @@ const char* ag_metadata_year(const ag_metadata* metadata)
     return metadata == nullptr ? "" : metadata->value.year.c_str();
 }
 
+const char* ag_metadata_date(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.date.c_str();
+}
+
 const char* ag_metadata_genre(const ag_metadata* metadata)
 {
     return metadata == nullptr ? "" : metadata->value.genre.c_str();
@@ -737,24 +742,33 @@ ag_result ag_metadata_write(const char* utf8_path,
                             const size_t cover_size,
                             const char* cover_mime_type)
 {
-    return ag_metadata_write_extended(utf8_path,
-                                      title,
-                                      artist,
-                                      album,
-                                      nullptr,
-                                      year,
-                                      genre,
-                                      nullptr,
-                                      nullptr,
-                                      nullptr,
-                                      nullptr,
-                                      nullptr,
-                                      nullptr,
-                                      nullptr,
-                                      lyrics,
-                                      cover_data,
-                                      cover_size,
-                                      cover_mime_type);
+    if (utf8_path == nullptr || utf8_path[0] == '\0') {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    try {
+        agplayer::MetadataUpdate update;
+        if (title != nullptr) update.title = title;
+        if (artist != nullptr) update.artist = artist;
+        if (album != nullptr) update.album = album;
+        if (year != nullptr) update.year = year;
+        if (genre != nullptr) update.genre = genre;
+        if (lyrics != nullptr) update.lyrics = lyrics;
+        if (cover_data != nullptr) {
+            update.cover_action = cover_size > 0U
+                ? agplayer::CoverAction::Set
+                : agplayer::CoverAction::Clear;
+            update.cover_data = cover_data;
+            update.cover_size = cover_size;
+            if (cover_mime_type != nullptr) {
+                update.cover_mime_type = cover_mime_type;
+            }
+        }
+        std::string error;
+        return agplayer::write_metadata(utf8_path, update, error);
+    } catch (...) {
+        return AG_INTERNAL_ERROR;
+    }
 }
 
 ag_result ag_metadata_write_extended(const char* utf8_path,
@@ -786,7 +800,7 @@ ag_result ag_metadata_write_extended(const char* utf8_path,
         if (artist != nullptr) update.artist = artist;
         if (album != nullptr) update.album = album;
         if (album_artist != nullptr) update.album_artist = album_artist;
-        if (date != nullptr) update.year = date;
+        if (date != nullptr) update.date = date;
         if (genre != nullptr) update.genre = genre;
         if (track != nullptr) update.track = track;
         if (disc != nullptr) update.disc = disc;
@@ -912,9 +926,11 @@ ag_result ag_transcode_v2(const char* input_path,
                           void* const user_data)
 {
     last_error.clear();
+    constexpr size_t base_request_size =
+        offsetof(ag_transcode_request_v2, metadata_fields);
     if (input_path == nullptr || input_path[0] == '\0'
         || request == nullptr
-        || request->struct_size < sizeof(ag_transcode_request_v2)
+        || request->struct_size < base_request_size
         || request->api_version != AG_TRANSCODE_REQUEST_V2_VERSION
         || request->output_path == nullptr
         || request->output_path[0] == '\0') {
@@ -944,6 +960,90 @@ ag_result ag_transcode_v2(const char* input_path,
         config.keep_cover = request->keep_cover != 0;
         config.variable_bit_rate = request->bitrate_mode == 1;
         config.quality = std::clamp(request->quality, 0, 100);
+
+        if (request->struct_size >= sizeof(ag_transcode_request_v2)) {
+            if (request->metadata_field_count > 9
+                || (request->metadata_field_count > 0
+                    && request->metadata_fields == nullptr)) {
+                last_error = "invalid metadata field list in v2 transcode request";
+                return AG_INVALID_ARGUMENT;
+            }
+            for (size_t index = 0; index < request->metadata_field_count;
+                 ++index) {
+                const ag_metadata_field_edit& source =
+                    request->metadata_fields[index];
+                agplayer::CanonicalField field;
+                switch (source.field) {
+                case AG_METADATA_FIELD_TITLE:
+                    field = agplayer::CanonicalField::Title; break;
+                case AG_METADATA_FIELD_ARTIST:
+                    field = agplayer::CanonicalField::Artist; break;
+                case AG_METADATA_FIELD_ALBUM:
+                    field = agplayer::CanonicalField::Album; break;
+                case AG_METADATA_FIELD_ALBUM_ARTIST:
+                    field = agplayer::CanonicalField::AlbumArtist; break;
+                case AG_METADATA_FIELD_GENRE:
+                    field = agplayer::CanonicalField::Genre; break;
+                case AG_METADATA_FIELD_YEAR:
+                    field = agplayer::CanonicalField::Year; break;
+                case AG_METADATA_FIELD_DATE:
+                    field = agplayer::CanonicalField::Date; break;
+                case AG_METADATA_FIELD_COMPOSER:
+                    field = agplayer::CanonicalField::Composer; break;
+                case AG_METADATA_FIELD_BPM:
+                    field = agplayer::CanonicalField::Bpm; break;
+                default:
+                    last_error = "invalid metadata field in v2 transcode request";
+                    return AG_INVALID_ARGUMENT;
+                }
+                agplayer::MetadataAction action;
+                switch (source.action) {
+                case AG_METADATA_EDIT_KEEP:
+                    action = agplayer::MetadataAction::Keep; break;
+                case AG_METADATA_EDIT_SET:
+                    if (source.value == nullptr) {
+                        last_error = "metadata Set action requires a value";
+                        return AG_INVALID_ARGUMENT;
+                    }
+                    action = agplayer::MetadataAction::Set; break;
+                case AG_METADATA_EDIT_CLEAR:
+                    action = agplayer::MetadataAction::Clear; break;
+                default:
+                    last_error = "invalid metadata action in v2 transcode request";
+                    return AG_INVALID_ARGUMENT;
+                }
+                config.metadata_edit_plan.fields.push_back({
+                    field, action,
+                    action == agplayer::MetadataAction::Set
+                        ? std::optional<std::string>(source.value)
+                        : std::nullopt});
+            }
+            switch (request->metadata_cover_action) {
+            case AG_METADATA_COVER_KEEP:
+                config.metadata_edit_plan.cover_action =
+                    agplayer::CoverAction::Keep;
+                break;
+            case AG_METADATA_COVER_SET:
+                config.metadata_edit_plan.cover_action =
+                    agplayer::CoverAction::Set;
+                break;
+            case AG_METADATA_COVER_CLEAR:
+                config.metadata_edit_plan.cover_action =
+                    agplayer::CoverAction::Clear;
+                break;
+            default:
+                last_error = "invalid cover action in v2 transcode request";
+                return AG_INVALID_ARGUMENT;
+            }
+            config.metadata_edit_plan.cover_data =
+                request->metadata_cover_data;
+            config.metadata_edit_plan.cover_size =
+                request->metadata_cover_size;
+            if (request->metadata_cover_mime_type != nullptr) {
+                config.metadata_edit_plan.cover_mime_type =
+                    request->metadata_cover_mime_type;
+            }
+        }
 
         const std::atomic_bool* cancelled = cancel_token == nullptr
             ? nullptr : &cancel_token->cancelled;

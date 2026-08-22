@@ -13,6 +13,7 @@
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QSemaphore>
@@ -26,7 +27,8 @@
 
 namespace {
 
-void verifyAudioFile(const QString& path, int expectedSampleRate = 0)
+void verifyAudioFile(const QString& path, int expectedSampleRate = 0,
+                     const QString& context = {})
 {
     QVERIFY2(QFileInfo::exists(path), qPrintable(path));
     ag_metadata* metadata = nullptr;
@@ -34,7 +36,11 @@ void verifyAudioFile(const QString& path, int expectedSampleRate = 0)
     QVERIFY(metadata != nullptr);
     QVERIFY(ag_metadata_duration_ms(metadata) > 0);
     if (expectedSampleRate > 0) {
-        QCOMPARE(ag_metadata_sample_rate(metadata), expectedSampleRate);
+        const int actualSampleRate = ag_metadata_sample_rate(metadata);
+        QVERIFY2(actualSampleRate == expectedSampleRate,
+                 qPrintable(QStringLiteral("%1: sample rate %2, expected %3")
+                                .arg(context, QString::number(actualSampleRate),
+                                     QString::number(expectedSampleRate))));
     }
     ag_metadata_destroy(metadata);
 }
@@ -98,7 +104,11 @@ private slots:
     void formatConverterRejectsReimportedFrozenTask();
     void formatConverterRejectsModifiedFrozenSource();
     void formatConverterWritesMetadataPlanToNewOutput();
+    void formatConverterScopesMetadataPlanToOneBatch();
+    void formatConverterRejectsUnsupportedMetadataBeforeEncoding();
     void metadataEditorWritesTags();
+    void metadataEditorAppendsDeduplicatesAndAggregatesScopeValues();
+    void metadataEditorDetectsReplacementCoverFromContent();
     void metadataEditorPreflightIsAsyncAndRequiresDecision();
     void metadataEditorAppliesUiPayloadToMixedContainerBatch();
     void filenameProcessorRenamesWithoutTouchingAudio();
@@ -1185,12 +1195,15 @@ void AudioToolsEndToEndTest::formatConverterExportsAndReopensEveryExposedFormat(
         if (completed.isEmpty()) {
             QVERIFY2(completed.wait(30000), qPrintable(key));
         }
-        QCOMPARE(converter.failedCount(), 0);
         const QVariantMap row = converter.files().first().toMap();
+        QVERIFY2(converter.failedCount() == 0,
+                 qPrintable(QStringLiteral("%1: %2")
+                                .arg(key, row.value(QStringLiteral("errorMessage"))
+                                              .toString())));
         QCOMPARE(row.value(QStringLiteral("status")).toString(),
                  QStringLiteral("Done"));
         verifyAudioFile(row.value(QStringLiteral("outputPath")).toString(),
-                        key == QStringLiteral("opus") ? 48000 : 44100);
+                        key == QStringLiteral("opus") ? 48000 : 44100, key);
     }
 }
 
@@ -1833,6 +1846,81 @@ void AudioToolsEndToEndTest::formatConverterWritesMetadataPlanToNewOutput()
     QVERIFY(QFileInfo::exists(input));
 }
 
+void AudioToolsEndToEndTest::formatConverterScopesMetadataPlanToOneBatch()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString oldInput = temp.filePath(QStringLiteral("old-queue.wav"));
+    const QString targetInput = temp.filePath(QStringLiteral("metadata-target.wav"));
+    const QString firstOutputDir = temp.filePath(QStringLiteral("first-output"));
+    const QString secondOutputDir = temp.filePath(QStringLiteral("second-output"));
+    QVERIFY(agplayer::test::writeClickTrackWav(oldInput, 120, 1));
+    QVERIFY(agplayer::test::writeClickTrackWav(targetInput, 124, 1));
+    QVERIFY(QDir().mkpath(firstOutputDir));
+    QVERIFY(QDir().mkpath(secondOutputDir));
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(oldInput)});
+    waitForConverterLoad(converter);
+
+    const QVariantMap fields{{QStringLiteral("title"),
+                              QVariantMap{{QStringLiteral("mode"),
+                                           QStringLiteral("set")},
+                                          {QStringLiteral("value"),
+                                           QStringLiteral("Scoped title")}}}};
+    QVERIFY(converter.setMetadataEditPlanForFiles(
+        fields, {}, {QUrl::fromLocalFile(targetInput)}));
+    converter.loadFiles({QUrl::fromLocalFile(targetInput)});
+    waitForConverterLoad(converter);
+
+    QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+    converter.start(QStringLiteral("flac"), 0, 44100, 2, firstOutputDir,
+                    false, false, false);
+    QVERIFY(completed.wait(30'000));
+    QCOMPARE(completed.first().first().toInt(), 2);
+
+    const auto readTitle = [](const QString& path) {
+        ag_metadata* metadata = nullptr;
+        if (ag_metadata_open(path.toUtf8().constData(), &metadata) != AG_OK
+            || metadata == nullptr) {
+            return QStringLiteral("<open failed>");
+        }
+        const QString title = QString::fromUtf8(ag_metadata_title(metadata));
+        ag_metadata_destroy(metadata);
+        return title;
+    };
+    QCOMPARE(readTitle(QDir(firstOutputDir).filePath(QStringLiteral("old-queue.flac"))),
+             QString());
+    QCOMPARE(readTitle(QDir(firstOutputDir).filePath(
+                 QStringLiteral("metadata-target.flac"))),
+             QStringLiteral("Scoped title"));
+
+    completed.clear();
+    converter.start(QStringLiteral("flac"), 0, 44100, 2, secondOutputDir,
+                    false, false, false);
+    QVERIFY(completed.wait(30'000));
+    QCOMPARE(readTitle(QDir(secondOutputDir).filePath(
+                 QStringLiteral("metadata-target.flac"))),
+             QString());
+
+    FormatConverter cancelled;
+    QVERIFY(cancelled.setMetadataEditPlanForFiles(
+        fields, {}, {QUrl::fromLocalFile(targetInput)}));
+    cancelled.cancel();
+    cancelled.loadFiles({QUrl::fromLocalFile(targetInput)});
+    waitForConverterLoad(cancelled);
+    QSignalSpy cancelledCompleted(&cancelled,
+                                  &FormatConverter::transcodeCompleted);
+    const QString cancelledOutputDir = temp.filePath(QStringLiteral("cancelled-output"));
+    QVERIFY(QDir().mkpath(cancelledOutputDir));
+    cancelled.start(QStringLiteral("flac"), 0, 44100, 2,
+                    cancelledOutputDir, false, false, false);
+    QVERIFY(cancelledCompleted.wait(30'000));
+    QCOMPARE(readTitle(QDir(cancelledOutputDir).filePath(
+                 QStringLiteral("metadata-target.flac"))),
+             QString());
+}
+
 void AudioToolsEndToEndTest::metadataEditorWritesTags()
 {
     QTemporaryDir temp;
@@ -1868,9 +1956,22 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
     };
     setField(QStringLiteral("title"), QStringLiteral("Edited title"));
     setField(QStringLiteral("artist"), QStringLiteral("Edited artist"));
+    setField(QStringLiteral("album"), QStringLiteral("Edited album"));
     setField(QStringLiteral("albumArtist"), QStringLiteral("Album artist"));
+    setField(QStringLiteral("genre"), QStringLiteral("Edited genre"));
+    // MP3 stores Year and Date in the same physical tag. Equivalent edits are
+    // valid and must be reflected through both logical fields.
+    setField(QStringLiteral("year"), QStringLiteral("2026-08-20"));
+    setField(QStringLiteral("date"), QStringLiteral("2026-08-20"));
     setField(QStringLiteral("composer"), QStringLiteral("Composer"));
     setField(QStringLiteral("bpm"), QStringLiteral("128.50"));
+
+    const QString coverPath = temp.filePath(QStringLiteral("new-cover.bmp"));
+    QImage coverImage(2, 2, QImage::Format_RGB32);
+    coverImage.fill(Qt::red);
+    QVERIFY(coverImage.save(coverPath, "BMP"));
+    editor.setCoverImage(QUrl::fromLocalFile(coverPath));
+    fields.insert(QStringLiteral("coverMode"), QStringLiteral("set"));
 
     QSignalSpy preflightCompleted(&editor, &MetadataEditor::preflightCompleted);
     editor.preflightMetadata(fields, {});
@@ -1892,10 +1993,35 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
              QStringLiteral("Edited title"));
     QCOMPARE(editor.entryAt(0).value(QStringLiteral("artist")).toString(),
              QStringLiteral("Edited artist"));
+    QCOMPARE(editor.entryAt(0).value(QStringLiteral("date")).toString(),
+             QStringLiteral("2026-08-20"));
+    QCOMPARE(editor.entryAt(0).value(QStringLiteral("year")).toString(),
+             QStringLiteral("2026-08-20"));
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::TitleRole).toString(),
              QStringLiteral("Edited title"));
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::ArtistRole).toString(),
              QStringLiteral("Edited artist"));
+    QCOMPARE(library.data(library.index(0, 0), LibraryModel::AlbumRole).toString(),
+             QStringLiteral("Edited album"));
+    QCOMPARE(library.data(library.index(0, 0),
+                          LibraryModel::AlbumArtistRole).toString(),
+             QStringLiteral("Album artist"));
+    QCOMPARE(library.data(library.index(0, 0), LibraryModel::GenreRole).toString(),
+             QStringLiteral("Edited genre"));
+    QCOMPARE(library.data(library.index(0, 0), LibraryModel::YearRole).toString(),
+             QStringLiteral("2026-08-20"));
+    QCOMPARE(library.data(library.index(0, 0), LibraryModel::DateRole).toString(),
+             QStringLiteral("2026-08-20"));
+    QCOMPARE(library.data(library.index(0, 0),
+                          LibraryModel::ComposerRole).toString(),
+             QStringLiteral("Composer"));
+    QCOMPARE(library.data(library.index(0, 0), LibraryModel::BpmRole).toDouble(),
+             128.5);
+    const QUrl refreshedCover = library.data(
+        library.index(0, 0), LibraryModel::CoverUrlRole).toUrl();
+    QVERIFY(refreshedCover.isValid());
+    QVERIFY(!refreshedCover.isEmpty());
+    QVERIFY(QFileInfo::exists(refreshedCover.toLocalFile()));
       QCOMPARE(editor.results().size(), 1);
       const QVariantMap completedResult = editor.results().first().toMap();
       QCOMPARE(completedResult.value(QStringLiteral("success")).toBool(), true);
@@ -1909,7 +2035,7 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
                qulonglong{0});
       QCOMPARE(completedResult.value(QStringLiteral("encoderOpenCount")).toULongLong(),
                qulonglong{0});
-      QCOMPARE(completedResult.value(QStringLiteral("fields")).toList().size(), 5);
+      QCOMPARE(completedResult.value(QStringLiteral("fields")).toList().size(), 9);
       QVERIFY(completedResult.value(QStringLiteral("cover")).toMap()
                   .contains(QStringLiteral("status")));
 
@@ -1919,12 +2045,20 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
              QStringLiteral("Edited title"));
     QCOMPARE(QString::fromUtf8(ag_metadata_artist(metadata)),
              QStringLiteral("Edited artist"));
+    QCOMPARE(QString::fromUtf8(ag_metadata_album(metadata)),
+             QStringLiteral("Edited album"));
     QCOMPARE(QString::fromUtf8(ag_metadata_album_artist(metadata)),
              QStringLiteral("Album artist"));
+    QCOMPARE(QString::fromUtf8(ag_metadata_genre(metadata)),
+             QStringLiteral("Edited genre"));
     QCOMPARE(QString::fromUtf8(ag_metadata_composer(metadata)),
              QStringLiteral("Composer"));
     QCOMPARE(QString::fromUtf8(ag_metadata_bpm_tag(metadata)),
              QStringLiteral("128.50"));
+    QCOMPARE(QString::fromUtf8(ag_metadata_year(metadata)),
+             QStringLiteral("2026-08-20"));
+    QCOMPARE(QString::fromUtf8(ag_metadata_date(metadata)),
+             QStringLiteral("2026-08-20"));
     ag_metadata_destroy(metadata);
 
     QVariantMap clearArtist;
@@ -1945,6 +2079,123 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
     QCOMPARE(QString::fromUtf8(ag_metadata_artist(metadata)), QString());
     ag_metadata_destroy(metadata);
 
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterRejectsUnsupportedMetadataBeforeEncoding()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("metadata-preflight.wav"));
+    const QString outputDir = temp.filePath(QStringLiteral("converted"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+    QVERIFY(QDir().mkpath(outputDir));
+
+    FormatConverter converter;
+    const QVariantMap fields{{QStringLiteral("title"),
+                              QVariantMap{{QStringLiteral("mode"),
+                                           QStringLiteral("set")},
+                                          {QStringLiteral("value"),
+                                           QStringLiteral("Unsupported")}}}};
+    QVERIFY(converter.setMetadataEditPlan(fields, {}));
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+
+    QSignalSpy errors(&converter, &FormatConverter::errorOccurred);
+    QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+    converter.start(QStringLiteral("aac"), 128000, 44100, 2, outputDir,
+                    false, false, false);
+
+    QCOMPARE(converter.busy(), false);
+    QCOMPARE(errors.count(), 1);
+    QCOMPARE(completed.count(), 0);
+    QVERIFY(!QFileInfo::exists(
+        QDir(outputDir).filePath(QStringLiteral("metadata-preflight.aac"))));
+}
+
+void AudioToolsEndToEndTest::
+    metadataEditorAppendsDeduplicatesAndAggregatesScopeValues()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString first = temp.filePath(QStringLiteral("first.wav"));
+    const QString second = temp.filePath(QStringLiteral("second.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(first, 120, 1));
+    QVERIFY(agplayer::test::writeClickTrackWav(second, 128, 1));
+
+    MetadataEditor editor;
+    QSignalSpy loaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(first)});
+    QVERIFY(loaded.wait(30'000));
+    QCOMPARE(editor.fileCount(), 1);
+
+    loaded.clear();
+    QVERIFY(QDir().mkpath(temp.filePath(QStringLiteral("alias"))));
+    const QString firstAlias = QDir(temp.path()).filePath(
+        QStringLiteral("alias/../first.mp3"));
+    editor.loadFiles({QUrl::fromLocalFile(firstAlias),
+                      QUrl::fromLocalFile(second)});
+    QVERIFY(loaded.wait(30'000));
+    QCOMPARE(editor.fileCount(), 2);
+
+    MetadataEntry firstEntry;
+    firstEntry.title = QStringLiteral("First title");
+    firstEntry.hasCover = true;
+    firstEntry.coverFingerprint = QStringLiteral("first-cover");
+    MetadataEntry secondEntry;
+    secondEntry.title = QStringLiteral("Second title");
+    secondEntry.hasCover = true;
+    secondEntry.coverFingerprint = QStringLiteral("second-cover");
+    const QList<MetadataEntry> entries{firstEntry, secondEntry};
+    const QVariantMap aggregate = aggregate_metadata_entries(entries, {0, 1});
+    const QVariantMap title = aggregate.value(QStringLiteral("title")).toMap();
+    QCOMPARE(title.value(QStringLiteral("multiple")).toBool(), true);
+    QCOMPARE(title.value(QStringLiteral("value")).toString(), QString());
+    QCOMPARE(aggregate.value(QStringLiteral("cover")).toMap()
+                 .value(QStringLiteral("state")).toString(),
+             QStringLiteral("multiple"));
+    const QVariantMap current = aggregate_metadata_entries(entries, {0});
+    QCOMPARE(current.value(QStringLiteral("title")).toMap()
+                 .value(QStringLiteral("value")).toString(),
+             QStringLiteral("First title"));
+
+    const QString emptyFolder = temp.filePath(QStringLiteral("empty"));
+    QVERIFY(QDir().mkpath(emptyFolder));
+    loaded.clear();
+    editor.loadFiles({QUrl::fromLocalFile(emptyFolder)});
+    QVERIFY(loaded.wait(30'000));
+    QCOMPARE(editor.fileCount(), 2);
+}
+
+void AudioToolsEndToEndTest::metadataEditorDetectsReplacementCoverFromContent()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString disguisedBmp = temp.filePath(QStringLiteral("cover.png"));
+    QImage image(17, 11, QImage::Format_RGB32);
+    image.fill(Qt::blue);
+    QVERIFY(image.save(disguisedBmp, "BMP"));
+
+    MetadataEditor editor;
+    editor.setCoverImage(QUrl::fromLocalFile(disguisedBmp));
+    const QVariantMap details = editor.replacementCoverDetails();
+    QCOMPARE(details.value(QStringLiteral("fileName")).toString(),
+             QStringLiteral("cover.png"));
+    QCOMPARE(details.value(QStringLiteral("width")).toInt(), 17);
+    QCOMPARE(details.value(QStringLiteral("height")).toInt(), 11);
+    QCOMPARE(details.value(QStringLiteral("mimeType")).toString(),
+             QStringLiteral("image/bmp"));
+    QVERIFY(details.value(QStringLiteral("sizeBytes")).toLongLong() > 0);
+
+    const QString invalid = temp.filePath(QStringLiteral("invalid.jpg"));
+    QFile invalidFile(invalid);
+    QVERIFY(invalidFile.open(QIODevice::WriteOnly));
+    QCOMPARE(invalidFile.write("not an image"), qint64{12});
+    invalidFile.close();
+    QSignalSpy errors(&editor, &MetadataEditor::errorOccurred);
+    editor.setCoverImage(QUrl::fromLocalFile(invalid));
+    QCOMPARE(errors.count(), 1);
+    QCOMPARE(editor.replacementCoverDetails(), details);
 }
 
 void AudioToolsEndToEndTest::metadataEditorPreflightIsAsyncAndRequiresDecision()

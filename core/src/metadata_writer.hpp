@@ -51,6 +51,7 @@ enum class FileResultStatus { Completed, Unsupported, Failed, Cancelled };
 enum class MetadataErrorCode {
     None,
     InvalidEditPlan,
+    PhysicalTagConflict,
     PermissionDenied,
     ReadOnlyFile,
     FileInUse,
@@ -59,6 +60,7 @@ enum class MetadataErrorCode {
     UnsupportedMuxer,
     UnsupportedField,
     UnsupportedCover,
+    UnsupportedStructure,
     InputOpenFailed,
     OutputCreateFailed,
     HeaderWriteFailed,
@@ -103,6 +105,12 @@ struct MetadataPreflightReport {
 
 struct MetadataRuntimeMetrics {
     std::size_t packets_copied = 0;
+    // Positive evidence for the codec-free demux path. Every metadata input
+    // context is opened through the guarded helper; stream-info probing is
+    // forbidden because FFmpeg may open a decoder while executing it.
+    std::size_t demuxer_open_count = 0;
+    std::size_t codec_free_probe_count = 0;
+    std::size_t stream_info_probe_count = 0;
     std::size_t decoder_open_count = 0;
     std::size_t encoder_open_count = 0;
     std::size_t audio_streams_before = 0;
@@ -124,12 +132,18 @@ enum class MetadataFailurePoint {
     SourceChanged,
     AtomicReplace,
     PostReplaceReadback,
+    UnmanagedFormatMetadataDrop,
+    UnmanagedStreamMetadataDrop,
+    ChapterDrop,
 };
 
 // Deterministic failure injection used by the core safety tests. Production
 // callers leave this null.
 struct MetadataWriterTestHooks {
     MetadataFailurePoint fail_at = MetadataFailurePoint::None;
+    bool seed_preservation_fixture = false;
+    bool fail_source_restore = false;
+    bool fail_backup_restore = false;
 };
 
 struct CoverResult {
@@ -155,6 +169,11 @@ struct MetadataFileResult {
 // Validates requests before a writer creates any temporary output.
 bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
                                  std::string& error);
+
+// Returns the complete staging budget (temporary output, backup, metadata and
+// safety margin), or nullopt when the calculation would overflow.
+std::optional<std::uintmax_t> metadata_staging_space_required(
+    std::uintmax_t source_size, const MetadataEditPlan& plan) noexcept;
 
 // Checks the input and matching output container without creating a file.
 ag_result preflight_metadata_edit(const std::string& utf8_path,
@@ -185,6 +204,7 @@ struct MetadataUpdate {
     std::optional<std::string> copyright;
     std::optional<std::string> encoder;
     std::optional<std::string> year;
+    std::optional<std::string> date;
     std::optional<std::string> genre;
     std::optional<std::string> lyrics;
     CoverAction cover_action = CoverAction::Keep;

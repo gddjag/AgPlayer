@@ -14,6 +14,11 @@ struct TrackRecord {
     QString title;
     QString artist;
     QString album;
+    QString albumArtist;
+    QString genre;
+    QString year;
+    QString date;
+    QString composer;
     QString format;
     int sampleRate = 0;
     int bitDepth = 0;
@@ -83,7 +88,12 @@ public:
         ReplayGainScannedRole,
         ReplayGainTrackDbRole,
         ReplayGainAlbumDbRole,
-        ReplayPeakRole
+        ReplayPeakRole,
+        AlbumArtistRole,
+        GenreRole,
+        YearRole,
+        DateRole,
+        ComposerRole
     };
     Q_ENUM(Role)
 

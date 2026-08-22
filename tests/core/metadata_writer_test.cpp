@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <array>
 #include <vector>
 
@@ -27,7 +28,9 @@ constexpr unsigned char kOnePixelImage[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0xff, 0x00};
 
-void assert_cover(const std::filesystem::path& path, const bool expected)
+void assert_cover(const std::filesystem::path& path, const bool expected,
+                  const unsigned char* expected_data = kOnePixelImage,
+                  const std::size_t expected_size = sizeof(kOnePixelImage))
 {
     ag_metadata* metadata = nullptr;
     assert(ag_metadata_open(path.u8string().c_str(), &metadata) == AG_OK);
@@ -38,8 +41,8 @@ void assert_cover(const std::filesystem::path& path, const bool expected)
         ag_metadata_cover(metadata, &cover_size, &mime_type);
     if (expected) {
         assert(cover != nullptr);
-        assert(cover_size == sizeof(kOnePixelImage));
-        assert(std::memcmp(cover, kOnePixelImage, cover_size) == 0);
+        assert(cover_size == expected_size);
+        assert(std::memcmp(cover, expected_data, cover_size) == 0);
         assert(mime_type != nullptr);
     } else {
         assert(cover == nullptr);
@@ -83,6 +86,9 @@ int main(const int argc, char** argv)
     assert(plan_result.used_stream_copy);
     assert(plan_result.audio_verified_unchanged);
     assert(plan_result.runtime.packets_copied > 0);
+    assert(plan_result.runtime.demuxer_open_count > 0);
+    assert(plan_result.runtime.codec_free_probe_count > 0);
+    assert(plan_result.runtime.stream_info_probe_count == 0);
     assert(plan_result.runtime.decoder_open_count == 0);
     assert(plan_result.runtime.encoder_open_count == 0);
     assert(plan_result.runtime.audio_streams_before
@@ -100,6 +106,101 @@ int main(const int argc, char** argv)
     assert(ag_metadata_open(plan_src.u8string().c_str(), &metadata) == AG_OK);
     assert(std::strcmp(ag_metadata_title(metadata), "Plan Title") == 0);
     assert(std::strcmp(ag_metadata_artist(metadata), "Plan Artist") == 0);
+    ag_metadata_destroy(metadata);
+
+    // WAV exposes one physical RIFF date tag. An omitted counterpart has Keep
+    // semantics, so a DATE-only or YEAR-only request must be rejected rather
+    // than silently changing the omitted canonical field.
+    agplayer::MetadataEditPlan date_plan;
+    date_plan.fields = {
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Set,
+         "2026-08-20"},
+    };
+    agplayer::MetadataPreflightReport omitted_year_report;
+    assert(agplayer::preflight_metadata_edit(plan_src.u8string(), date_plan,
+                                              omitted_year_report)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(omitted_year_report.error_code
+           == agplayer::MetadataErrorCode::PhysicalTagConflict);
+
+    agplayer::MetadataEditPlan year_plan;
+    year_plan.fields = {
+        {agplayer::CanonicalField::Year, agplayer::MetadataAction::Set, "2026"},
+    };
+    agplayer::MetadataPreflightReport omitted_date_report;
+    assert(agplayer::preflight_metadata_edit(plan_src.u8string(), year_plan,
+                                              omitted_date_report)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(omitted_date_report.error_code
+           == agplayer::MetadataErrorCode::PhysicalTagConflict);
+
+    agplayer::MetadataEditPlan conflicting_date_plan;
+    conflicting_date_plan.fields = {
+        {agplayer::CanonicalField::Year, agplayer::MetadataAction::Set, "2026"},
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Set,
+         "2026-08-20"},
+    };
+    std::string date_validation_error;
+    assert(agplayer::validate_metadata_edit_plan(conflicting_date_plan,
+                                                 date_validation_error));
+    agplayer::MetadataPreflightReport conflict_report;
+    assert(agplayer::preflight_metadata_edit(plan_src.u8string(),
+                                              conflicting_date_plan,
+                                              conflict_report)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(conflict_report.error_code
+           == agplayer::MetadataErrorCode::PhysicalTagConflict);
+
+    // A Keep request is a preservation guarantee. A shared physical date tag
+    // cannot change YEAR while preserving DATE (or the reverse), so preflight
+    // must reject both plans instead of silently changing the kept field.
+    agplayer::MetadataEditPlan keep_date_plan;
+    keep_date_plan.fields = {
+        {agplayer::CanonicalField::Year, agplayer::MetadataAction::Set, "2027"},
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Keep,
+         std::nullopt},
+    };
+    agplayer::MetadataPreflightReport keep_date_report;
+    assert(agplayer::preflight_metadata_edit(plan_src.u8string(),
+                                              keep_date_plan,
+                                              keep_date_report)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(keep_date_report.error_code
+           == agplayer::MetadataErrorCode::PhysicalTagConflict);
+
+    agplayer::MetadataEditPlan keep_year_plan;
+    keep_year_plan.fields = {
+        {agplayer::CanonicalField::Year, agplayer::MetadataAction::Keep,
+         std::nullopt},
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Set,
+         "2027-08-20"},
+    };
+    agplayer::MetadataPreflightReport keep_year_report;
+    assert(agplayer::preflight_metadata_edit(plan_src.u8string(),
+                                              keep_year_plan,
+                                              keep_year_report)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(keep_year_report.error_code
+           == agplayer::MetadataErrorCode::PhysicalTagConflict);
+
+    // Equal actions on a shared physical tag are not a conflict.
+    agplayer::MetadataEditPlan equivalent_date_plan;
+    equivalent_date_plan.fields = {
+        {agplayer::CanonicalField::Year, agplayer::MetadataAction::Set, "2026"},
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Set, "2026"},
+    };
+    agplayer::MetadataPreflightReport equivalent_report;
+    assert(agplayer::preflight_metadata_edit(plan_src.u8string(),
+                                              equivalent_date_plan,
+                                              equivalent_report) == AG_OK);
+    agplayer::MetadataFileResult equivalent_result;
+    assert(agplayer::write_metadata_plan(plan_src.u8string(),
+                                          equivalent_date_plan,
+                                          equivalent_result) == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(plan_src.u8string().c_str(), &metadata) == AG_OK);
+    assert(std::strcmp(ag_metadata_year(metadata), "2026") == 0);
+    assert(std::strcmp(ag_metadata_date(metadata), "2026") == 0);
     ag_metadata_destroy(metadata);
 
     const auto& title_aliases =
@@ -151,6 +252,14 @@ int main(const int argc, char** argv)
                != AG_OK);
         assert(failure_result.final_status
                == agplayer::FileResultStatus::Failed);
+        if (failure_result.error_code != failure.code) {
+            std::fprintf(stderr,
+                         "failure point %d returned code %d instead of %d: %s\n",
+                         static_cast<int>(failure.point),
+                         static_cast<int>(failure_result.error_code),
+                         static_cast<int>(failure.code),
+                         failure_result.message.c_str());
+        }
         assert(failure_result.error_code == failure.code);
         assert(file_bytes(failure_path) == before_failure);
         assert(!std::filesystem::exists(failure_path.u8string() + ".agbak"));
@@ -158,6 +267,159 @@ int main(const int argc, char** argv)
             assert(item.path().filename().u8string().find(".agmeta-stage-")
                    == std::string::npos);
         }
+        std::filesystem::remove(failure_path);
+    }
+
+    // A failed write must not overwrite or delete a pre-existing recovery
+    // point. This exercises both failure before replacement and readback
+    // failure after replacement/rollback.
+    for (const auto point : {agplayer::MetadataFailurePoint::AtomicReplace,
+                             agplayer::MetadataFailurePoint::PostReplaceReadback}) {
+        const std::filesystem::path failure_path = work_dir
+            / (point == agplayer::MetadataFailurePoint::AtomicReplace
+                   ? "meta-old-backup-atomic.wav"
+                   : "meta-old-backup-readback.wav");
+        std::filesystem::copy_file(fixture, failure_path,
+            std::filesystem::copy_options::overwrite_existing);
+        const std::filesystem::path old_backup = failure_path.u8string() + ".agbak";
+        const std::array<unsigned char, 8> recovery_point{
+            'o', 'l', 'd', '-', 'b', 'a', 'k', '\n'};
+        {
+            std::ofstream backup_output(old_backup, std::ios::binary);
+            backup_output.write(
+                reinterpret_cast<const char*>(recovery_point.data()),
+                static_cast<std::streamsize>(recovery_point.size()));
+        }
+        agplayer::MetadataWriterTestHooks hooks{point};
+        agplayer::MetadataFileResult failure_result;
+        assert(agplayer::write_metadata_plan(failure_path.u8string(), write_plan,
+                                             failure_result, nullptr, &hooks)
+               != AG_OK);
+        assert(file_bytes(old_backup)
+               == std::vector<unsigned char>(recovery_point.begin(),
+                                             recovery_point.end()));
+        std::filesystem::remove(old_backup);
+        std::filesystem::remove(failure_path);
+    }
+
+    // If restoring a prior .agbak fails, the result must expose the surviving
+    // recovery file instead of claiming rollback succeeded.
+    {
+        const std::filesystem::path failure_path =
+            work_dir / "meta-backup-restore-failure.wav";
+        std::filesystem::copy_file(fixture, failure_path,
+            std::filesystem::copy_options::overwrite_existing);
+        const std::filesystem::path old_backup = failure_path.u8string() + ".agbak";
+        const std::array<unsigned char, 8> recovery_point{
+            'o', 'l', 'd', '-', 'b', 'a', 'k', '\n'};
+        {
+            std::ofstream output(old_backup, std::ios::binary);
+            output.write(reinterpret_cast<const char*>(recovery_point.data()),
+                         static_cast<std::streamsize>(recovery_point.size()));
+        }
+        agplayer::MetadataWriterTestHooks hooks{
+            agplayer::MetadataFailurePoint::PostReplaceReadback};
+        hooks.fail_backup_restore = true;
+        agplayer::MetadataFileResult failure_result;
+        assert(agplayer::write_metadata_plan(failure_path.u8string(), write_plan,
+                                             failure_result, nullptr, &hooks)
+               == AG_IO_ERROR);
+        assert(failure_result.error_code
+               == agplayer::MetadataErrorCode::AtomicReplaceFailed);
+        assert(failure_result.message.find("prior backup remains preserved at")
+               != std::string::npos);
+        bool found_preserved = false;
+        for (const auto& item : std::filesystem::directory_iterator(work_dir)) {
+            if (item.path().filename().u8string().find(
+                    "meta-backup-restore-failure.wav.agbak.preserved-")
+                == 0) {
+                assert(file_bytes(item.path())
+                       == std::vector<unsigned char>(recovery_point.begin(),
+                                                     recovery_point.end()));
+                std::filesystem::remove(item.path());
+                found_preserved = true;
+            }
+        }
+        assert(found_preserved);
+        std::filesystem::remove(old_backup);
+        std::filesystem::remove(failure_path);
+    }
+
+    // If verification fails after replacement and backup -> source recovery
+    // also fails, the newly created original-file backup is the only current
+    // recovery point. Preserve it separately before restoring an older .agbak.
+    for (const int recovery_case : {0, 1, 2}) {
+        const bool has_prior_backup = recovery_case != 0;
+        const bool fail_prior_restore = recovery_case == 2;
+        const std::string filename = recovery_case == 0
+            ? "meta-only-source-restore-failure.wav"
+            : fail_prior_restore ? "meta-both-restores-failure.wav"
+                                 : "meta-source-restore-failure.wav";
+        const std::filesystem::path failure_path = work_dir / filename;
+        std::filesystem::copy_file(fixture, failure_path,
+            std::filesystem::copy_options::overwrite_existing);
+        const auto original_source = file_bytes(failure_path);
+        const std::filesystem::path old_backup = failure_path.u8string() + ".agbak";
+        const std::array<unsigned char, 8> prior_recovery{
+            'o', 'l', 'd', '-', 'b', 'a', 'k', '\n'};
+        if (has_prior_backup) {
+            std::ofstream output(old_backup, std::ios::binary);
+            output.write(reinterpret_cast<const char*>(prior_recovery.data()),
+                         static_cast<std::streamsize>(prior_recovery.size()));
+        }
+        agplayer::MetadataWriterTestHooks hooks{
+            agplayer::MetadataFailurePoint::PostReplaceReadback};
+        hooks.fail_source_restore = true;
+        hooks.fail_backup_restore = fail_prior_restore;
+        agplayer::MetadataFileResult failure_result;
+        assert(agplayer::write_metadata_plan(failure_path.u8string(), write_plan,
+                                             failure_result, nullptr, &hooks)
+               == AG_IO_ERROR);
+        assert(failure_result.error_code
+               == agplayer::MetadataErrorCode::AtomicReplaceFailed);
+        assert(failure_result.message.find(
+                   "original recovery backup remains at") != std::string::npos);
+        bool found_original_recovery = false;
+        bool found_prior_recovery = false;
+        for (const auto& item : std::filesystem::directory_iterator(work_dir)) {
+            if (item.path().filename().u8string().find(
+                    filename + ".agbak.recovery-") == 0) {
+                assert(file_bytes(item.path()) == original_source);
+                assert(failure_result.message.find(item.path().u8string())
+                       != std::string::npos);
+                std::filesystem::remove(item.path());
+                found_original_recovery = true;
+            } else if (item.path().filename().u8string().find(
+                           filename + ".agbak.preserved-") == 0) {
+                assert(file_bytes(item.path())
+                       == std::vector<unsigned char>(prior_recovery.begin(),
+                                                     prior_recovery.end()));
+                assert(failure_result.message.find(item.path().u8string())
+                       != std::string::npos);
+                std::filesystem::remove(item.path());
+                found_prior_recovery = true;
+            }
+        }
+        assert(found_original_recovery);
+        if (!has_prior_backup) {
+            assert(!std::filesystem::exists(old_backup));
+            assert(!found_prior_recovery);
+            assert(failure_result.message.find("prior backup")
+                   == std::string::npos);
+        } else if (fail_prior_restore) {
+            assert(!std::filesystem::exists(old_backup));
+            assert(found_prior_recovery);
+            assert(failure_result.message.find(
+                       "prior backup remains preserved at") != std::string::npos);
+        } else {
+            assert(file_bytes(old_backup)
+                   == std::vector<unsigned char>(prior_recovery.begin(),
+                                                 prior_recovery.end()));
+            assert(!found_prior_recovery);
+            assert(failure_result.message.find(
+                       "prior backup restored at") != std::string::npos);
+        }
+        std::filesystem::remove(old_backup);
         std::filesystem::remove(failure_path);
     }
 
@@ -240,6 +502,16 @@ int main(const int argc, char** argv)
     assert(locked_report.error_code == agplayer::MetadataErrorCode::FileInUse);
     CloseHandle(locked_handle);
     std::filesystem::remove(locked_src);
+
+    // The preflight budget covers both staged output and backup, plus tags and
+    // the safety margin, without creating a huge sparse file during the test.
+    constexpr std::uintmax_t source_size = 64U * 1024U * 1024U;
+    const auto required = agplayer::metadata_staging_space_required(
+        source_size, valid_plan);
+    assert(required.has_value());
+    assert(*required >= source_size * 2U + 4U * 1024U * 1024U);
+    assert(!agplayer::metadata_staging_space_required(
+        (std::numeric_limits<std::uintmax_t>::max)(), valid_plan).has_value());
 #endif
 
     std::atomic_bool cancelled{true};
@@ -285,12 +557,17 @@ int main(const int argc, char** argv)
     assert(ag_transcode(fixture.u8string().c_str(), mp3.u8string().c_str(),
                         "libmp3lame", 192000, 44100, 2,
                         nullptr, nullptr, nullptr) == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(mp3.u8string().c_str(), &metadata) == AG_OK);
+    assert(ag_metadata_sample_rate(metadata) == 44'100);
+    ag_metadata_destroy(metadata);
     assert(ag_metadata_write_extended(
                mp3.u8string().c_str(), nullptr, nullptr, nullptr,
                "Album Artist", "2025-08-09", nullptr, "3/12", "1/2",
                "Composer", "Comment", "128.50", "Copyright", "AgPlayer",
                "Lyrics", nullptr, 0U, nullptr) == AG_OK);
     assert(ag_metadata_open(mp3.u8string().c_str(), &metadata) == AG_OK);
+    assert(ag_metadata_sample_rate(metadata) == 44'100);
     assert(std::strcmp(ag_metadata_album_artist(metadata), "Album Artist") == 0);
     assert(std::strcmp(ag_metadata_track(metadata), "3/12") == 0);
     assert(std::strcmp(ag_metadata_disc(metadata), "1/2") == 0);
@@ -301,11 +578,146 @@ int main(const int argc, char** argv)
     assert(std::strcmp(ag_metadata_encoder(metadata), "AgPlayer") == 0);
     ag_metadata_destroy(metadata);
 
+    // Seed real unmanaged format/stream metadata plus a chapter into the MP3.
+    // A normal canonical edit must preserve all of it. Deliberately dropping
+    // each category from a staged output must fail verification and leave the
+    // original file byte-for-byte unchanged.
+    agplayer::MetadataUpdate preservation_seed;
+    preservation_seed.title = "Preservation Seed";
+    agplayer::MetadataWriterTestHooks seed_hooks;
+    seed_hooks.seed_preservation_fixture = true;
+    std::string preservation_error;
+    assert(agplayer::write_metadata(mp3.u8string(), preservation_seed,
+                                    preservation_error, nullptr, nullptr,
+                                    &seed_hooks) == AG_OK);
+
+    agplayer::MetadataEditPlan preservation_plan;
+    preservation_plan.fields = {
+        {agplayer::CanonicalField::Title, agplayer::MetadataAction::Set,
+         "Preserved Metadata"},
+    };
+    agplayer::MetadataFileResult preservation_result;
+    assert(agplayer::write_metadata_plan(mp3.u8string(), preservation_plan,
+                                          preservation_result) == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(mp3.u8string().c_str(), &metadata) == AG_OK);
+    assert(std::strcmp(ag_metadata_track(metadata), "3/12") == 0);
+    assert(std::strcmp(ag_metadata_disc(metadata), "1/2") == 0);
+    assert(std::strcmp(ag_metadata_comment(metadata), "Comment") == 0);
+    assert(std::strcmp(ag_metadata_lyrics(metadata), "Lyrics") == 0);
+    assert(std::strcmp(ag_metadata_copyright(metadata), "Copyright") == 0);
+    assert(std::strcmp(ag_metadata_encoder(metadata), "AgPlayer") == 0);
+    ag_metadata_destroy(metadata);
+
+    const auto expect_preservation_drop = [&preservation_plan](
+        const std::filesystem::path& path,
+        const agplayer::MetadataFailurePoint drop) {
+        const auto before_drop = file_bytes(path);
+        agplayer::MetadataWriterTestHooks drop_hooks{drop};
+        agplayer::MetadataFileResult drop_result;
+        const ag_result drop_write = agplayer::write_metadata_plan(
+            path.u8string(), preservation_plan, drop_result, nullptr, &drop_hooks);
+        if (drop_write != AG_DECODE_ERROR) {
+            std::fprintf(stderr, "preservation drop %d returned %d: %s\n",
+                         static_cast<int>(drop), static_cast<int>(drop_write),
+                         drop_result.message.c_str());
+        }
+        assert(drop_write == AG_DECODE_ERROR);
+        assert(drop_result.error_code
+               == agplayer::MetadataErrorCode::VerificationFailed);
+        assert(file_bytes(path) == before_drop);
+    };
+    expect_preservation_drop(mp3,
+        agplayer::MetadataFailurePoint::ChapterDrop);
+
+    const std::filesystem::path preservation_flac =
+        work_dir / "meta-preservation.flac";
+    std::filesystem::remove(preservation_flac);
+    std::filesystem::remove(preservation_flac.u8string() + ".agbak");
+    assert(ag_transcode(fixture.u8string().c_str(),
+                        preservation_flac.u8string().c_str(),
+                        "flac", 0, 44100, 2,
+                        nullptr, nullptr, nullptr) == AG_OK);
+    preservation_error.clear();
+    assert(agplayer::write_metadata(preservation_flac.u8string(),
+                                    preservation_seed, preservation_error,
+                                    nullptr, nullptr, &seed_hooks) == AG_OK);
+    agplayer::MetadataFileResult flac_preservation_result;
+    assert(agplayer::write_metadata_plan(preservation_flac.u8string(),
+                                          preservation_plan,
+                                          flac_preservation_result) == AG_OK);
+    expect_preservation_drop(preservation_flac,
+        agplayer::MetadataFailurePoint::UnmanagedFormatMetadataDrop);
+
+    const std::filesystem::path preservation_m4a =
+        work_dir / "meta-preservation.m4a";
+    std::filesystem::remove(preservation_m4a);
+    std::filesystem::remove(preservation_m4a.u8string() + ".agbak");
+    assert(ag_transcode(fixture.u8string().c_str(),
+                        preservation_m4a.u8string().c_str(),
+                        "aac", 192000, 44100, 2,
+                        nullptr, nullptr, nullptr) == AG_OK);
+    preservation_error.clear();
+    assert(agplayer::write_metadata(preservation_m4a.u8string(),
+                                    preservation_seed, preservation_error,
+                                    nullptr, nullptr, &seed_hooks) == AG_OK);
+    agplayer::MetadataFileResult m4a_preservation_result;
+    assert(agplayer::write_metadata_plan(preservation_m4a.u8string(),
+                                          preservation_plan,
+                                          m4a_preservation_result) == AG_OK);
+    expect_preservation_drop(preservation_m4a,
+        agplayer::MetadataFailurePoint::UnmanagedStreamMetadataDrop);
+
+    // Vorbis Comment containers have independent YEAR and DATE keys. Editing
+    // YEAR alone must preserve DATE byte-for-byte at the metadata level.
+    const std::filesystem::path dated_flac = work_dir / "meta-year-date.flac";
+    std::filesystem::remove(dated_flac);
+    std::filesystem::remove(dated_flac.u8string() + ".agbak");
+    assert(ag_transcode(fixture.u8string().c_str(), dated_flac.u8string().c_str(),
+                        "flac", 0, 44100, 2, nullptr, nullptr, nullptr) == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(dated_flac.u8string().c_str(), &metadata) == AG_OK);
+    assert(ag_metadata_sample_rate(metadata) == 44'100);
+    ag_metadata_destroy(metadata);
+    agplayer::MetadataFileResult distinct_date_result;
+    assert(agplayer::write_metadata_plan(dated_flac.u8string(),
+                                          conflicting_date_plan,
+                                          distinct_date_result) == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(dated_flac.u8string().c_str(), &metadata) == AG_OK);
+    assert(std::strcmp(ag_metadata_year(metadata), "2026") == 0);
+    assert(std::strcmp(ag_metadata_date(metadata), "2026-08-20") == 0);
+    ag_metadata_destroy(metadata);
+    agplayer::MetadataEditPlan year_only_plan;
+    year_only_plan.fields = {
+        {agplayer::CanonicalField::Year, agplayer::MetadataAction::Set, "2027"},
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Keep,
+         std::nullopt},
+    };
+    agplayer::MetadataFileResult year_only_result;
+    assert(agplayer::write_metadata_plan(dated_flac.u8string(), year_only_plan,
+                                          year_only_result) == AG_OK);
+    metadata = nullptr;
+    assert(ag_metadata_open(dated_flac.u8string().c_str(), &metadata) == AG_OK);
+    assert(std::strcmp(ag_metadata_year(metadata), "2027") == 0);
+    assert(std::strcmp(ag_metadata_date(metadata), "2026-08-20") == 0);
+    ag_metadata_destroy(metadata);
+
     agplayer::MetadataEditPlan cover_plan;
     cover_plan.cover_action = agplayer::CoverAction::Set;
     cover_plan.cover_data = kOnePixelImage;
     cover_plan.cover_size = sizeof(kOnePixelImage);
     cover_plan.cover_mime_type = "image/bmp";
+
+    agplayer::MetadataEditPlan mismatched_cover_plan = cover_plan;
+    mismatched_cover_plan.cover_mime_type = "image/png";
+    agplayer::MetadataPreflightReport mismatched_cover_report;
+    assert(agplayer::preflight_metadata_edit(mp3.u8string(),
+                                              mismatched_cover_plan,
+                                              mismatched_cover_report)
+           == AG_INVALID_ARGUMENT);
+    assert(mismatched_cover_report.error_code
+           == agplayer::MetadataErrorCode::InvalidEditPlan);
     agplayer::MetadataFileResult cover_write_result;
     const ag_result cover_result = agplayer::write_metadata_plan(
         mp3.u8string(), cover_plan, cover_write_result);
@@ -322,6 +734,29 @@ int main(const int argc, char** argv)
            == agplayer::FieldWriteStatus::Updated);
     assert(cover_write_result.cover.has_cover);
     assert_cover(mp3, true);
+
+    // Canonical TITLE belongs to format/audio metadata. The attached picture's
+    // title/comment describe cover semantics and must survive a TITLE edit.
+    agplayer::MetadataEditPlan cover_title_plan;
+    cover_title_plan.fields = {
+        {agplayer::CanonicalField::Title, agplayer::MetadataAction::Set,
+         "Cover Metadata Preserved"},
+    };
+    agplayer::MetadataFileResult cover_title_result;
+    assert(agplayer::write_metadata_plan(mp3.u8string(), cover_title_plan,
+                                          cover_title_result) == AG_OK);
+    assert_cover(mp3, true);
+
+    const auto before_cover_metadata_drop = file_bytes(mp3);
+    agplayer::MetadataWriterTestHooks cover_metadata_drop_hooks{
+        agplayer::MetadataFailurePoint::UnmanagedStreamMetadataDrop};
+    agplayer::MetadataFileResult cover_metadata_drop_result;
+    assert(agplayer::write_metadata_plan(
+               mp3.u8string(), cover_title_plan, cover_metadata_drop_result,
+               nullptr, &cover_metadata_drop_hooks) == AG_DECODE_ERROR);
+    assert(cover_metadata_drop_result.error_code
+           == agplayer::MetadataErrorCode::VerificationFailed);
+    assert(file_bytes(mp3) == before_cover_metadata_drop);
 
     // A tag-only update must preserve the existing attached picture.
     assert(ag_metadata_write(
@@ -363,6 +798,7 @@ int main(const int argc, char** argv)
         {agplayer::CanonicalField::Genre, agplayer::MetadataAction::Set,
          "Unicode Genre"},
         {agplayer::CanonicalField::Year, agplayer::MetadataAction::Set, "2026"},
+        {agplayer::CanonicalField::Date, agplayer::MetadataAction::Set, "2026"},
         {agplayer::CanonicalField::Composer, agplayer::MetadataAction::Set,
          "Unicode Composer"},
         {agplayer::CanonicalField::Bpm, agplayer::MetadataAction::Set, "128.5"},
@@ -380,6 +816,7 @@ int main(const int argc, char** argv)
                                 entry.codec, 192000, 44100, 2,
                                 nullptr, nullptr, nullptr) == AG_OK);
         }
+        assert_cover(path, false);
         const agplayer::MetadataEditPlan* effective_plan = &full_field_plan;
         agplayer::MetadataEditPlan supported_field_plan;
         agplayer::MetadataPreflightReport full_field_report;
@@ -440,8 +877,60 @@ int main(const int argc, char** argv)
         const ag_result matrix_cover_write = agplayer::write_metadata_plan(
             path.u8string(), matrix_cover_plan, matrix_cover_result);
         if (entry.cover_expected) {
+            if (matrix_cover_write != AG_OK) {
+                std::fprintf(stderr, "%s cover metadata write failed: %d (%s)\n",
+                             entry.extension,
+                             static_cast<int>(matrix_cover_write),
+                             matrix_cover_result.message.c_str());
+            }
             assert(matrix_cover_write == AG_OK);
             assert(matrix_cover_result.cover.has_cover);
+            assert_cover(path, true);
+
+            agplayer::MetadataEditPlan keep_cover_plan;
+            keep_cover_plan.fields = {
+                {agplayer::CanonicalField::Title,
+                 agplayer::MetadataAction::Set, "Cover Kept"},
+            };
+            agplayer::MetadataFileResult keep_cover_result;
+            assert(agplayer::write_metadata_plan(path.u8string(),
+                                                  keep_cover_plan,
+                                                  keep_cover_result) == AG_OK);
+            assert(keep_cover_result.cover.requested_action
+                   == agplayer::CoverAction::Keep);
+            assert(keep_cover_result.cover.status
+                   == agplayer::FieldWriteStatus::Kept);
+            assert_cover(path, true);
+
+            std::vector<unsigned char> replacement_cover(
+                kOnePixelImage, kOnePixelImage + sizeof(kOnePixelImage));
+            replacement_cover[54] = 0xff;
+            replacement_cover[55] = 0x00;
+            replacement_cover[56] = 0x00;
+            agplayer::MetadataEditPlan replace_cover_plan;
+            replace_cover_plan.cover_action = agplayer::CoverAction::Set;
+            replace_cover_plan.cover_data = replacement_cover.data();
+            replace_cover_plan.cover_size = replacement_cover.size();
+            replace_cover_plan.cover_mime_type = "image/bmp";
+            agplayer::MetadataFileResult replace_cover_result;
+            assert(agplayer::write_metadata_plan(path.u8string(),
+                                                  replace_cover_plan,
+                                                  replace_cover_result) == AG_OK);
+            assert(replace_cover_result.cover.status
+                   == agplayer::FieldWriteStatus::Updated);
+            assert_cover(path, true, replacement_cover.data(),
+                         replacement_cover.size());
+
+            agplayer::MetadataEditPlan clear_cover_plan;
+            clear_cover_plan.cover_action = agplayer::CoverAction::Clear;
+            agplayer::MetadataFileResult clear_cover_result;
+            assert(agplayer::write_metadata_plan(path.u8string(),
+                                                  clear_cover_plan,
+                                                  clear_cover_result) == AG_OK);
+            assert(clear_cover_result.cover.status
+                   == agplayer::FieldWriteStatus::Cleared);
+            assert(!clear_cover_result.cover.has_cover);
+            assert_cover(path, false);
         } else {
             assert(matrix_cover_write == AG_UNSUPPORTED_FORMAT);
             assert(matrix_cover_result.final_status
@@ -449,6 +938,7 @@ int main(const int argc, char** argv)
             assert(matrix_cover_result.error_code
                    == agplayer::MetadataErrorCode::UnsupportedCover);
             assert(file_bytes(path) == before_cover_attempt);
+            assert_cover(path, false);
         }
         for (const auto& item : std::filesystem::directory_iterator(work_dir)) {
             assert(item.path().filename().u8string().find(".agmeta-stage-")
@@ -457,6 +947,38 @@ int main(const int argc, char** argv)
         std::filesystem::remove(path);
         std::filesystem::remove(path.u8string() + ".agbak");
     }
+
+    // APE has no registered safe metadata-only muxer. Reject it before any
+    // staging or replacement, even when its bytes happen to be parseable as a
+    // different container.
+    const std::filesystem::path unsupported_ape =
+        work_dir / "meta-unsupported.ape";
+    std::filesystem::copy_file(
+        fixture, unsupported_ape,
+        std::filesystem::copy_options::overwrite_existing);
+    const auto unsupported_ape_before = file_bytes(unsupported_ape);
+    agplayer::MetadataPreflightReport unsupported_ape_report;
+    assert(agplayer::preflight_metadata_edit(unsupported_ape.u8string(),
+                                              write_plan,
+                                              unsupported_ape_report)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(unsupported_ape_report.error_code
+               == agplayer::MetadataErrorCode::UnsupportedContainer
+           || unsupported_ape_report.error_code
+               == agplayer::MetadataErrorCode::UnsupportedField);
+    agplayer::MetadataFileResult unsupported_ape_result;
+    assert(agplayer::write_metadata_plan(unsupported_ape.u8string(), write_plan,
+                                          unsupported_ape_result)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(unsupported_ape_result.final_status
+           == agplayer::FileResultStatus::Unsupported);
+    assert(unsupported_ape_result.error_code
+               == agplayer::MetadataErrorCode::UnsupportedContainer
+           || unsupported_ape_result.error_code
+               == agplayer::MetadataErrorCode::UnsupportedField);
+    assert(file_bytes(unsupported_ape) == unsupported_ape_before);
+    assert(!std::filesystem::exists(unsupported_ape.u8string() + ".agbak"));
+    std::filesystem::remove(unsupported_ape);
 
     // A corrupt input must fail during preflight without changing its bytes or
     // leaving a staging/backup artifact behind.
@@ -483,5 +1005,11 @@ int main(const int argc, char** argv)
     std::filesystem::remove(backup);
     std::filesystem::remove(mp3);
     std::filesystem::remove(mp3.string() + ".agbak");
+    std::filesystem::remove(dated_flac);
+    std::filesystem::remove(dated_flac.u8string() + ".agbak");
+    std::filesystem::remove(preservation_flac);
+    std::filesystem::remove(preservation_flac.u8string() + ".agbak");
+    std::filesystem::remove(preservation_m4a);
+    std::filesystem::remove(preservation_m4a.u8string() + ".agbak");
     return 0;
 }
