@@ -35,6 +35,16 @@ std::filesystem::path filesystemPath(const QString& path)
 #endif
 }
 
+QString sourceLookupKey(const QString& path)
+{
+    const QString clean = QDir::fromNativeSeparators(QDir::cleanPath(path));
+#ifdef Q_OS_WIN
+    return clean.toCaseFolded();
+#else
+    return clean;
+#endif
+}
+
 } // namespace
 
 TrackWaveformThumbnailProvider::TrackWaveformThumbnailProvider(
@@ -214,6 +224,27 @@ void TrackWaveformThumbnailProvider::refresh()
     negativeOrder_.clear();
 }
 
+void TrackWaveformThumbnailProvider::invalidateSourceCache(
+    const QString& sourcePath)
+{
+    if (sourcePath.isEmpty()) return;
+    const QString sourceKey = sourceLookupKey(sourcePath);
+    for (auto entry = cache_.begin(); entry != cache_.end();) {
+        if (sourceLookupKey(entry->sourcePath) == sourceKey) {
+            lruOrder_.erase(entry->order);
+            entry = cache_.erase(entry);
+        } else {
+            ++entry;
+        }
+    }
+    removeNegativeCooldown(sourcePath);
+    if (activeRequest_.has_value()
+        && sourceLookupKey(activeRequest_->sourcePath) == sourceKey) {
+        activeSourceInvalidated_ = true;
+    }
+    emit sourceCacheInvalidated(sourcePath);
+}
+
 QByteArray TrackWaveformThumbnailProvider::loadFromV2CacheOnly(
     const QString& cacheDirectory, const QString& sourcePath)
 {
@@ -261,6 +292,7 @@ void TrackWaveformThumbnailProvider::startNext()
         const Request cooled = pending_.takeFirst();
         if (!hasNegativeCooldown(cooled.sourcePath)) {
             activeRequest_ = cooled;
+            activeSourceInvalidated_ = false;
             break;
         }
         if (!cooled.canceled) {
@@ -298,6 +330,8 @@ void TrackWaveformThumbnailProvider::finishActive()
 {
     const LoadResult loaded = watcher_.result();
     activeWorkers_ = 0;
+    const bool sourceInvalidated = activeSourceInvalidated_;
+    activeSourceInvalidated_ = false;
     if (!activeRequest_.has_value()
         || activeRequest_->trackId != loaded.trackId) {
         activeRequest_.reset();
@@ -307,7 +341,7 @@ void TrackWaveformThumbnailProvider::finishActive()
 
     const Request current = *activeRequest_;
     activeRequest_.reset();
-    if (loaded.cacheEpoch != cacheEpoch_
+    if (sourceInvalidated || loaded.cacheEpoch != cacheEpoch_
         || loaded.sourcePath != current.sourcePath) {
         if (!current.canceled) {
             pending_.prepend(current);
@@ -368,7 +402,8 @@ void TrackWaveformThumbnailProvider::insertCache(const QString& trackId,
 QString TrackWaveformThumbnailProvider::negativeKey(
     const QString& sourcePath) const
 {
-    return QString::number(cacheEpoch_) + QChar(u'\0') + sourcePath;
+    return QString::number(cacheEpoch_) + QChar(u'\0')
+        + sourceLookupKey(sourcePath);
 }
 
 bool TrackWaveformThumbnailProvider::hasNegativeCooldown(

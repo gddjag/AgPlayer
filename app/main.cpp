@@ -658,6 +658,10 @@ int main(int argc, char* argv[])
                 trackWaveformThumbnailProvider.setCacheDirectory(
                     settings.cacheDirectory());
             });
+        QObject::connect(
+            &waveformProvider, &WaveformProvider::waveformCacheReady,
+            &trackWaveformThumbnailProvider,
+            &TrackWaveformThumbnailProvider::invalidateSourceCache);
         QObject::connect(&waveformProvider, &WaveformProvider::waveformReady,
                          &playback,
                          [&playback, &library, &settings](

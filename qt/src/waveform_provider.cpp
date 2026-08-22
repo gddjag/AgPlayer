@@ -120,12 +120,12 @@ void addTimelineMetadata(QVariantMap& layers,
     }
 }
 
-void saveWaveformCache(const QString& cachePath,
+bool saveWaveformCache(const QString& cachePath,
                        const QString& sourcePath,
                        const ag_waveform* waveform)
 {
     if (waveform == nullptr || cachePath.isEmpty() || sourcePath.isEmpty()) {
-        return;
+        return false;
     }
     agplayer::WaveformCacheData data;
     const std::size_t count = ag_waveform_count(waveform);
@@ -155,7 +155,9 @@ void saveWaveformCache(const QString& cachePath,
         RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Waveform"),
             QStringLiteral("Failed to save waveform cache for %1")
                 .arg(sourcePath));
+        return false;
     }
+    return true;
 }
 
 } // namespace
@@ -459,9 +461,11 @@ void WaveformProvider::onAnalysisFinished()
     const QString cachePath =
         cacheFilePathFor(settings_, currentPath_, job.aggregation);
     if (!cachePath.isEmpty()) {
-        saveWaveformCache(cachePath, currentPath_, job.waveform);
-        if (settings_ != nullptr) {
-            settings_->onWaveformCacheSaved();
+        if (saveWaveformCache(cachePath, currentPath_, job.waveform)) {
+            if (settings_ != nullptr) {
+                settings_->onWaveformCacheSaved();
+            }
+            emit waveformCacheReady(currentPath_);
         }
     }
 

@@ -23,15 +23,17 @@ Item {
         requestedGeneration = 0
     }
 
+    function requestEligible() {
+        return enabled && provider && trackId.length > 0
+                && sourcePath.length > 0 && parent
+                && (typeof parent.active !== "boolean" || parent.active)
+    }
+
     function performRequest() {
         requestScheduled = false
         cancelRequest()
         waveformPeaks = ""
-        if (!enabled || !provider || trackId.length === 0
-                || sourcePath.length === 0
-                || !parent
-                || (typeof parent.active === "boolean"
-                    && !parent.active))
+        if (!requestEligible())
             return
         requestedTrackId = trackId
         requestedGeneration = delegateGeneration
@@ -68,6 +70,11 @@ Item {
             if (readyTrackId === root.requestedTrackId
                     && readyGeneration === root.requestedGeneration)
                 root.waveformPeaks = peaks
+        }
+        function onSourceCacheInvalidated(invalidatedSourcePath) {
+            if (invalidatedSourcePath === root.sourcePath
+                    && root.requestEligible())
+                root.scheduleRequest()
         }
     }
 

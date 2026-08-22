@@ -153,6 +153,7 @@ TestCase {
             property string lastSourcePath: ""
             property int lastGeneration: -1
             signal thumbnailReady(string trackId, int generation, var peaks)
+            signal sourceCacheInvalidated(string sourcePath)
 
             function request(trackId, sourcePath, generation) {
                 var observed = requestObserver ? requestObserver(trackId) : null
@@ -3180,6 +3181,44 @@ TestCase {
 
         wrapper.destroy()
         tryCompare(provider, "cancelCount", 2)
+        provider.destroy()
+    }
+
+    function test_z_visible_thumbnail_retries_only_matching_cache_ready_source() {
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var wrapper = trackWaveformThumbnailComponent.createObject(
+                    mainWindow.contentItem, {
+                        "provider": provider,
+                        "trackId": "cache-transition-track",
+                        "sourcePath": "cache-transition.wav",
+                        "delegateGeneration": 31
+                    })
+        verify(provider && wrapper)
+        tryCompare(provider, "requestCount", 1)
+        provider.thumbnailReady("cache-transition-track", 31, "")
+        compare(wrapper.waveformPeaks, "")
+
+        provider.sourceCacheInvalidated("different.wav")
+        wait(20)
+        compare(provider.requestCount, 1,
+                "an unrelated cache write must not refresh this wrapper")
+
+        provider.sourceCacheInvalidated("cache-transition.wav")
+        tryCompare(provider, "requestCount", 2)
+        var readyPeaks = Array(129).join("x")
+        compare(readyPeaks.length, 128)
+        provider.thumbnailReady("cache-transition-track", 31, readyPeaks)
+        compare(wrapper.waveformPeaks.length, 128)
+
+        wrapper.enabled = false
+        wait(0)
+        var hiddenRequestCount = provider.requestCount
+        provider.sourceCacheInvalidated("cache-transition.wav")
+        wait(20)
+        compare(provider.requestCount, hiddenRequestCount,
+                "a hidden wrapper must remain request-free")
+
+        wrapper.destroy()
         provider.destroy()
     }
 

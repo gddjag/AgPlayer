@@ -18,6 +18,7 @@ class SettingsControllerTest final : public QObject {
 private slots:
     void initTestCase();
     void defaultCacheDirectoryUsesStandardPaths();
+    void emptyTestCacheLocationFallsBackBeforeAppending();
     void defaultOutputDirectoryUsesStandardPaths();
     void transcodeDefaultsAreSplitAndPersisted();
     void migratesCombinedTranscodePreset();
@@ -54,6 +55,22 @@ void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
         QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
         + QStringLiteral("/AgPlayer/Cache");
     QCOMPARE(QDir::cleanPath(cacheDir), QDir::cleanPath(expected));
+}
+
+void SettingsControllerTest::emptyTestCacheLocationFallsBackBeforeAppending()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString tempBase = directory.filePath(QStringLiteral("temp-base"));
+    const QString appDataBase =
+        directory.filePath(QStringLiteral("appdata-base"));
+
+    QCOMPARE(SettingsController::resolveTestCacheDirectory(
+                 QString{}, tempBase, appDataBase),
+             QDir(tempBase).filePath(QStringLiteral("AgPlayer/Cache")));
+    QCOMPARE(SettingsController::resolveTestCacheDirectory(
+                 QString{}, QString{}, appDataBase),
+             QDir(appDataBase).filePath(QStringLiteral("AgPlayer/Cache")));
 }
 
 void SettingsControllerTest::defaultOutputDirectoryUsesStandardPaths()

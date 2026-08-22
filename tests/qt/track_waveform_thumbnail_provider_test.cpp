@@ -34,6 +34,7 @@ private slots:
     void repeatedCorruptCacheUsesCooldown();
     void negativeCooldownRetainsAtMost256Sources();
     void cacheDirectoryEpochInvalidatesNegativeCooldown();
+    void sourceInvalidationRefreshesOnlyMatchingMiss();
     void newerSourceForActiveTrackPublishesOnlyLatestFixture();
     void cacheDirectoryChangeSuppressesActiveOldFixture();
     void prefersAverageThenFallsBackToRmsAndLegacy();
@@ -550,6 +551,77 @@ void TrackWaveformThumbnailProviderTest::cacheDirectoryEpochInvalidatesNegativeC
                  .value(QStringLiteral("cacheReadAttempts"))
                  .toULongLong(),
              oldAttempts + 1U);
+}
+
+void TrackWaveformThumbnailProviderTest::sourceInvalidationRefreshesOnlyMatchingMiss()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString missedSource =
+        createSource(directory, QStringLiteral("new-main-cache.wav"));
+    const QString retainedSource =
+        createSource(directory, QStringLiteral("retained-cache.wav"));
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    QVERIFY(saveCache(cacheDirectory, retainedSource, {0.25F}));
+
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy readySpy(&provider,
+                        &TrackWaveformThumbnailProvider::thumbnailReady);
+    QSignalSpy invalidatedSpy(
+        &provider, &TrackWaveformThumbnailProvider::sourceCacheInvalidated);
+
+    provider.request(QStringLiteral("retained"), retainedSource, 1U);
+    const QList<QVariant> retained = waitForResult(readySpy);
+    QCOMPARE(retained.at(2).toByteArray().size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+    provider.request(QStringLiteral("missed"), missedSource, 2U);
+    const QList<QVariant> missed = waitForResult(readySpy);
+    QVERIFY(missed.at(2).toByteArray().isEmpty());
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             1);
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("negativeCacheEntries")).toInt(),
+             1);
+    const qulonglong attemptsBeforeInvalidation = provider.diagnostics()
+        .value(QStringLiteral("cacheReadAttempts")).toULongLong();
+
+    QVERIFY(saveCache(cacheDirectory, missedSource, {0.75F}));
+    provider.invalidateSourceCache(missedSource);
+    QCOMPARE(invalidatedSpy.count(), 1);
+    QCOMPARE(invalidatedSpy.takeFirst().at(0).toString(), missedSource);
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             1);
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("negativeCacheEntries")).toInt(),
+             0);
+
+    provider.request(QStringLiteral("missed"), missedSource, 3U);
+    const QList<QVariant> refreshed = waitForResult(readySpy);
+    QCOMPARE(refreshed.at(2).toByteArray().size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("cacheReadAttempts")).toULongLong(),
+             attemptsBeforeInvalidation + 1U);
+
+    const qulonglong attemptsBeforeRetained = provider.diagnostics()
+        .value(QStringLiteral("cacheReadAttempts")).toULongLong();
+    provider.request(QStringLiteral("retained"), retainedSource, 4U);
+    const QList<QVariant> stillRetained = waitForResult(readySpy);
+    QCOMPARE(stillRetained.at(2).toByteArray().size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("cacheReadAttempts")).toULongLong(),
+             attemptsBeforeRetained);
+
+    provider.invalidateSourceCache(missedSource);
+    QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
+             1);
+    provider.request(QStringLiteral("retained"), retainedSource, 5U);
+    QCOMPARE(waitForResult(readySpy).at(2).toByteArray().size(),
+             TrackWaveformThumbnailProvider::kPeakCount);
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("cacheReadAttempts")).toULongLong(),
+             attemptsBeforeRetained);
 }
 
 void TrackWaveformThumbnailProviderTest::repeatedCorruptCacheUsesCooldown()
