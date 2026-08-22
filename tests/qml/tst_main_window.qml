@@ -1396,7 +1396,9 @@ TestCase {
             return PlaylistModel.containsTrack(playlistB, importedId)
         }, 500)
         verify(!PlaylistModel.containsTrack(playlistA, importedId))
-        compare(filterModel.category, playlistA)
+        compare(filterModel.category, playlistB,
+                "importing into a playlist must enter that playlist")
+        window.enterCategory(playlistA, "playlist")
         importDialog.destroy()
         window.activeImportDialog = null
         window.importTargetPlaylistId = ""
@@ -1571,6 +1573,106 @@ TestCase {
             LibraryModel.removeTrack(laterImportedIds[index])
         importFinished.destroy()
         window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
+    function test_list_drop_rejects_unsupported_files_clearly() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window)
+        var unsupported = nativeDropHelper.createNonAudioDropFile()
+        verify(unsupported)
+        compare(window.handleListDropUrls([unsupported]), false,
+                "an unsupported drop must not report apparent success")
+        verify(!ImportController.busy)
+        window.destroy()
+    }
+
+    function test_playlist_and_resource_navigation_states_are_exclusive() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        var playlistId = PlaylistModel.createPlaylist(
+                    "Transition target " + Date.now())
+        verify(playlistId)
+
+        filterModel.tagKey = "stale-tag"
+        TagModel.selectedKey = "stale-tag"
+        filterModel.resourceFolder = "C:/stale/resource"
+        window.enterCategory(playlistId, "playlist")
+        compare(filterModel.category, playlistId)
+        compare(filterModel.tagKey, "")
+        compare(TagModel.selectedKey, "")
+        compare(filterModel.resourceFolder, "")
+
+        var rootUrl = nativeDropHelper.createDropDirectory()
+        var rootPath = LibraryManagerController.classifyDropUrl(rootUrl).path
+        verify(rootPath)
+        window.enterResource("resourceRoot", rootPath)
+        compare(filterModel.category, "all")
+        compare(filterModel.tagKey, "")
+        compare(filterModel.resourceFolder, rootPath)
+
+        window.handleResourceFolderRemoved(rootPath)
+        compare(filterModel.category, "all")
+        compare(filterModel.resourceFolder, "")
+        var navigation = findChild(window, "referenceSideNavigation")
+        compare(navigation.activeNodeType, "library")
+
+        PlaylistModel.removePlaylist(playlistId)
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
+    function test_create_and_import_playlist_clear_old_tag_resource_filters() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        filterModel.category = "all"
+        filterModel.tagKey = "stale-tag"
+        TagModel.selectedKey = "stale-tag"
+        filterModel.resourceFolder = "C:/stale/resource"
+
+        var createDialog = findChild(window, "createPlaylistDialog")
+        var createField = findChild(createDialog, "createPlaylistField")
+        createDialog.open()
+        createField.text = "Created transition " + Date.now()
+        createDialog.accept()
+        var createdId = filterModel.category
+        verify(createdId !== "all")
+        compare(filterModel.tagKey, "")
+        compare(TagModel.selectedKey, "")
+        compare(filterModel.resourceFolder, "")
+
+        filterModel.resourceFolder = "C:/another/stale/resource"
+        filterModel.tagKey = "stale-again"
+        var importId = PlaylistModel.createPlaylist(
+                    "Import transition " + Date.now())
+        verify(window.openImportDialog(importId))
+        compare(filterModel.category, importId)
+        compare(filterModel.tagKey, "")
+        compare(filterModel.resourceFolder, "")
+        window.activeImportDialog.reject()
+        window.activeImportDialog.destroy()
+        window.activeImportDialog = null
+
+        PlaylistModel.removePlaylist(createdId)
+        PlaylistModel.removePlaylist(importId)
         window.destroy()
         wait(0)
         mainWindow.requestActivate()

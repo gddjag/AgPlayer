@@ -292,7 +292,7 @@ ListView {
         id: relocateDialog
         title: qsTr("重新定位文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Audio (*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+        nameFilters: [LibraryManagerController.audioFileNameFilter]
         onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId, selectedFile)
     }
     Dialog {

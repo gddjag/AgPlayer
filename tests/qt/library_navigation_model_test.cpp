@@ -5,6 +5,7 @@
 #include "tag_model.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSet>
@@ -17,8 +18,33 @@ class LibraryNavigationModelTest final : public QObject {
 
 private slots:
     void expandsOnlyTheRequestedFolderRange();
+    void expandsThreeLevelsIndependentlyFromIndexedTopology();
+    void addsAndRemovesTrackOnlyFolderTopology();
     void updatesOnlyAffectedDirectoryCountsForTenThousandTracks();
 };
+
+namespace {
+
+QString cleanIdentity(const QString& path)
+{
+    return QDir::fromNativeSeparators(
+        QDir::cleanPath(QFileInfo(path).canonicalFilePath().isEmpty()
+                            ? QFileInfo(path).absoluteFilePath()
+                            : QFileInfo(path).canonicalFilePath()));
+}
+
+int rowForNode(const LibraryNavigationModel& model, const QString& nodeId)
+{
+    for (int row = 0; row < model.rowCount(); ++row) {
+        if (model.data(model.index(row, 0),
+                       LibraryNavigationModel::NodeIdRole).toString() == nodeId) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+} // namespace
 
 void LibraryNavigationModelTest::expandsOnlyTheRequestedFolderRange()
 {
@@ -59,6 +85,102 @@ void LibraryNavigationModelTest::expandsOnlyTheRequestedFolderRange()
     QCOMPARE(navigation.rowCount(), before);
 }
 
+void LibraryNavigationModelTest::expandsThreeLevelsIndependentlyFromIndexedTopology()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString root = dir.filePath(QStringLiteral("music"));
+    const QString genre = QDir(root).filePath(QStringLiteral("genre"));
+    const QString artist = QDir(genre).filePath(QStringLiteral("artist"));
+    const QString album = QDir(artist).filePath(QStringLiteral("album"));
+    QVERIFY(QDir().mkpath(album));
+    const QString audioPath = QDir(album).filePath(QStringLiteral("song.flac"));
+    QFile audio(audioPath);
+    QVERIFY(audio.open(QIODevice::WriteOnly));
+    audio.close();
+
+    TrackRecord track;
+    track.trackId = QStringLiteral("deep");
+    track.path = audioPath;
+    LibraryModel library;
+    library.replaceAll({track});
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    LibraryManagerController manager;
+    manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
+    QVERIFY(manager.addMonitoredFolder(root));
+    LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
+
+    const QString rootId = QStringLiteral("root:") + cleanIdentity(root);
+    const QString genreId = QStringLiteral("folder:") + cleanIdentity(genre);
+    const QString artistId = QStringLiteral("folder:") + cleanIdentity(artist);
+    const QString albumId = QStringLiteral("folder:") + cleanIdentity(album);
+    QVERIFY(navigation.setExpanded(rootId, true));
+    QVERIFY(rowForNode(navigation, genreId) >= 0);
+    QVERIFY(navigation.setExpanded(genreId, true));
+    QVERIFY(rowForNode(navigation, artistId) >= 0);
+    QVERIFY(navigation.setExpanded(artistId, true));
+    const int albumRow = rowForNode(navigation, albumId);
+    QVERIFY(albumRow >= 0);
+    QCOMPARE(navigation.data(navigation.index(albumRow),
+                             LibraryNavigationModel::DepthRole).toInt(), 3);
+    QCOMPARE(navigation.data(navigation.index(albumRow),
+                             LibraryNavigationModel::CountRole).toInt(), 1);
+
+    QVERIFY(navigation.setExpanded(artistId, false));
+    QCOMPARE(rowForNode(navigation, albumId), -1);
+    QVERIFY(rowForNode(navigation, genreId) >= 0);
+    QVERIFY(navigation.setExpanded(artistId, true));
+    QVERIFY(rowForNode(navigation, albumId) >= 0);
+    QVERIFY(navigation.setExpanded(rootId, false));
+    QVERIFY(navigation.setExpanded(rootId, true));
+    QVERIFY(rowForNode(navigation, albumId) >= 0);
+}
+
+void LibraryNavigationModelTest::addsAndRemovesTrackOnlyFolderTopology()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString root = dir.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(root));
+    LibraryModel library;
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    LibraryManagerController manager;
+    manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
+    QVERIFY(manager.addMonitoredFolder(root));
+    LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
+    const QString rootId = QStringLiteral("root:") + cleanIdentity(root);
+
+    TrackRecord track;
+    track.trackId = QStringLiteral("new-folder-track");
+    const QString branch = QDir(root).filePath(QStringLiteral("new/deep"));
+    track.path = QDir(branch).filePath(QStringLiteral("missing.mp3"));
+    QVERIFY(library.append(track));
+    QVERIFY(navigation.setExpanded(rootId, true));
+    const QString newId = QStringLiteral("folder:")
+        + QDir::fromNativeSeparators(QDir::cleanPath(
+            QDir(root).filePath(QStringLiteral("new"))));
+    const QString deepId = QStringLiteral("folder:")
+        + QDir::fromNativeSeparators(QDir::cleanPath(branch));
+    const int newRow = rowForNode(navigation, newId);
+    QVERIFY(newRow >= 0);
+    QCOMPARE(navigation.data(navigation.index(newRow),
+                             LibraryNavigationModel::CountRole).toInt(), 1);
+    QVERIFY(navigation.setExpanded(newId, true));
+    const int deepRow = rowForNode(navigation, deepId);
+    QVERIFY(deepRow >= 0);
+    QCOMPARE(navigation.data(navigation.index(deepRow),
+                             LibraryNavigationModel::CountRole).toInt(), 1);
+
+    QVERIFY(library.removeTrack(track.trackId));
+    QCOMPARE(rowForNode(navigation, newId), -1);
+    const int rootRow = rowForNode(navigation, rootId);
+    QVERIFY(rootRow >= 0);
+    QCOMPARE(navigation.data(navigation.index(rootRow),
+                             LibraryNavigationModel::CountRole).toInt(), 0);
+}
+
 void LibraryNavigationModelTest::updatesOnlyAffectedDirectoryCountsForTenThousandTracks()
 {
     // Catches every source change recomputing every visible folder count by
@@ -86,7 +208,11 @@ void LibraryNavigationModelTest::updatesOnlyAffectedDirectoryCountsForTenThousan
     LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
     const QString rootId = QStringLiteral("root:")
         + QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(root).absoluteFilePath()));
+    QElapsedTimer expansionTimer;
+    expansionTimer.start();
     QVERIFY(navigation.setExpanded(rootId, true));
+    QVERIFY2(expansionTimer.elapsed() < 50,
+             "expansion must use the indexed snapshot, not rescan 10K tracks");
     const QString albumId = QStringLiteral("folder:")
         + QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(album).absoluteFilePath()));
     QVERIFY(tags.createTag(QStringLiteral("Road")));
@@ -157,11 +283,15 @@ void LibraryNavigationModelTest::updatesOnlyAffectedDirectoryCountsForTenThousan
     moved.close();
     changed.clear();
     QVERIFY(library.updateTrackPath(QStringLiteral("track-0"), movedPath));
-    QCOMPARE(changedNodes(), QSet<QString>({albumId}));
+    const QString movedId = QStringLiteral("folder:")
+        + QDir::fromNativeSeparators(QDir::cleanPath(
+            QFileInfo(movedFolder).absoluteFilePath()));
+    QCOMPARE(changedNodes(), QSet<QString>({albumId, movedId}));
     QCOMPARE(countFor(rootId), 10'000);
     QCOMPARE(countFor(albumId), 9'999);
+    QCOMPARE(countFor(movedId), 1);
     QCOMPARE(reset.count(), 0);
-    QCOMPARE(insertedRows.count(), 0);
+    QCOMPARE(insertedRows.count(), 1);
     QCOMPARE(removedRows.count(), 0);
     QCOMPARE(aboutToRemoveRows.count(), 0);
 }

@@ -35,6 +35,7 @@ Item {
     signal importPlaylistRequested()
     signal exportPlaylistRequested(string playlistId)
     signal resourceUrlsDropped(var urls)
+    signal resourceFolderRemoved(string folder)
 
     function submitResourceUrls(urls) {
         if (typeof resourceDropSubmitter === "function")
@@ -216,8 +217,9 @@ Item {
         onAccepted: {
             var folder = root.pendingResourceFolderRemoval
             root.pendingResourceFolderRemoval = ""
-            if (folder.length > 0)
-                root.navigationModel.removeResourceFolder(folder)
+            if (folder.length > 0
+                    && root.navigationModel.removeResourceFolder(folder))
+                root.resourceFolderRemoved(folder)
         }
         onRejected: root.pendingResourceFolderRemoval = ""
         contentItem: Label {
@@ -303,6 +305,7 @@ Item {
             required property int count
             required property bool expanded
             required property string resourceFolder
+            required property bool hasChildren
 
             readonly property bool selected: root.nodeIsSelected(
                                                  nodeType, nodeId,
@@ -324,7 +327,9 @@ Item {
 
                 ToolButton {
                     objectName: "navigationExpandButton"
-                    visible: nodeRow.nodeType === "resourceRoot"
+                    visible: (nodeRow.nodeType === "resourceRoot"
+                              || nodeRow.nodeType === "resourceFolder")
+                             && nodeRow.hasChildren
                     Layout.preferredWidth: visible ? 20 : 0
                     Layout.preferredHeight: 28
                     icon.source: Theme.icon(nodeRow.expanded
@@ -338,7 +343,9 @@ Item {
                                    nodeRow.nodeId, !nodeRow.expanded)
                 }
                 Item {
-                    visible: nodeRow.nodeType !== "resourceRoot"
+                    visible: !((nodeRow.nodeType === "resourceRoot"
+                                || nodeRow.nodeType === "resourceFolder")
+                               && nodeRow.hasChildren)
                     Layout.preferredWidth: visible ? 20 : 0
                     Layout.preferredHeight: 1
                 }

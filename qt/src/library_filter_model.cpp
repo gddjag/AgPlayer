@@ -1,11 +1,9 @@
 #include "library_filter_model.hpp"
 #include "playlist_model.hpp"
+#include "resource_path.hpp"
 
 #include <QAbstractItemModel>
 #include <QDateTime>
-#include <QDir>
-#include <QFileInfo>
-
 #include <algorithm>
 
 LibraryFilterModel::LibraryFilterModel(QObject* parent)
@@ -135,11 +133,7 @@ QString LibraryFilterModel::resourceFolder() const noexcept
 
 void LibraryFilterModel::setResourceFolder(const QString& folder)
 {
-    QString normalized;
-    if (!folder.trimmed().isEmpty()) {
-        normalized = QDir::fromNativeSeparators(
-            QDir::cleanPath(QFileInfo(folder).absoluteFilePath()));
-    }
+    const QString normalized = agplayer::qt::resourcePathIdentity(folder);
     if (resourceFolder_ == normalized) return;
     resourceFolder_ = normalized;
     emit resourceFolderChanged();
@@ -385,7 +379,8 @@ bool LibraryFilterModel::rowMatchesResourceFolder(const int sourceRow) const
 {
     if (resourceFolder_.isEmpty()) return true;
     const QModelIndex sourceIndex = sourceIndexForRow(sourceRow);
-    const QString path = QDir::fromNativeSeparators(QDir::cleanPath(
-        sourceModel()->data(sourceIndex, LibraryModel::PathRole).toString()));
-    return path.startsWith(resourceFolder_ + QLatin1Char('/'), Qt::CaseInsensitive);
+    const QString path = sourceModel()
+                             ->data(sourceIndex, LibraryModel::PathRole)
+                             .toString();
+    return agplayer::qt::resourcePathIsWithin(path, resourceFolder_);
 }

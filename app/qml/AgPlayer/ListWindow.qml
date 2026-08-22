@@ -40,27 +40,50 @@ Window {
     readonly property bool tagManagementMode:
         sideNavigation.activeNodeType === "tags"
 
-    function routeNavigationNode(nodeType, nodeId, resourceFolder) {
+    function enterNavigationState(nodeType, category, tagKey,
+                                  resourceFolder) {
         if (!filterModel)
-            return
-        if (nodeType === "library" || nodeType === "favorites"
-                || nodeType === "playlist") {
-            filterModel.tagKey = ""
-            TagModel.selectedKey = ""
-            filterModel.resourceFolder = ""
-            filterModel.category = nodeType === "library" ? "all"
-                                 : nodeType === "favorites" ? "favorites"
-                                 : nodeId.substring("playlist:".length)
-        } else if (nodeType === "tags") {
-            filterModel.resourceFolder = ""
-            filterModel.category = "all"
-        } else if (nodeType === "resourceRoot"
-                   || nodeType === "resourceFolder") {
-            filterModel.tagKey = ""
-            TagModel.selectedKey = ""
-            filterModel.category = "all"
-            filterModel.resourceFolder = resourceFolder
-        }
+            return false
+        filterModel.category = category || "all"
+        filterModel.tagKey = tagKey || ""
+        TagModel.selectedKey = tagKey || ""
+        filterModel.resourceFolder = resourceFolder || ""
+        sideNavigation.activeNodeType = nodeType || "library"
+        return true
+    }
+    function enterCategory(category, nodeType) {
+        var target = category || "all"
+        var type = nodeType || (target === "all" ? "library"
+                                : target === "favorites" ? "favorites"
+                                : "playlist")
+        return enterNavigationState(type, target, "", "")
+    }
+    function enterResource(nodeType, resourceFolder) {
+        return enterNavigationState(nodeType, "all", "", resourceFolder)
+    }
+    function handleResourceFolderRemoved(folder) {
+        if (!filterModel || !filterModel.resourceFolder)
+            return false
+        if (!LibraryManagerController.pathIsWithin(
+                    filterModel.resourceFolder, folder))
+            return false
+        return enterCategory("all", "library")
+    }
+    function routeNavigationNode(nodeType, nodeId, resourceFolder) {
+        if (nodeType === "library")
+            return enterCategory("all", "library")
+        if (nodeType === "favorites")
+            return enterCategory("favorites", "favorites")
+        if (nodeType === "playlist")
+            return enterCategory(nodeId.substring("playlist:".length),
+                                 "playlist")
+        if (nodeType === "tags")
+            return enterNavigationState("tags", "all",
+                                        filterModel ? filterModel.tagKey : "",
+                                        "")
+        if (nodeType === "resourceRoot" || nodeType === "resourceFolder")
+            return enterResource(nodeType, resourceFolder)
+        return false
     }
 
     onClosing: function(close) {
@@ -140,7 +163,14 @@ Window {
     function handleListDropUrls(urls) {
         if (!urls || urls.length === 0)
             return false
-        return beginImport(urls)
+        var accepted = []
+        for (var index = 0; index < urls.length; ++index) {
+            var classified = LibraryManagerController.classifyDropUrl(urls[index])
+            if (classified.kind === LibraryManagerController.Directory
+                    || classified.kind === LibraryManagerController.AudioFile)
+                accepted.push(classified.url)
+        }
+        return accepted.length > 0 && beginImport(accepted)
     }
     function handleResourceDropUrls(urls) {
         if (!urls || urls.length === 0)
@@ -183,6 +213,8 @@ Window {
             return false
         importTargetPlaylistId = arguments.length > 0
                 ? (playlistId || "") : customCategory()
+        if (importTargetPlaylistId)
+            enterCategory(importTargetPlaylistId, "playlist")
         var dialog = importDialogComponent.createObject(listWindow)
         activeImportDialog = dialog
         if (!dialog) {
@@ -216,9 +248,7 @@ Window {
             id: dialog
             objectName: "importAudioDialog"
             fileMode: FileDialog.OpenFiles
-            nameFilters: [
-                "Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"
-            ]
+            nameFilters: [LibraryManagerController.audioFileNameFilter]
             onAccepted: {
                 var started = listWindow.importSelectedUrls(selectedFiles)
                 if (!started && !listWindow.importBatchActive)
@@ -249,7 +279,7 @@ Window {
             var paths = playlistModel.pathsFromPlaylist(selectedFile.toString())
             var playlistId = playlistModel.importPlaylist(selectedFile.toString())
             if (playlistId) {
-                if (filterModel) filterModel.category = playlistId
+                listWindow.enterCategory(playlistId, "playlist")
                 ImportController.importPaths(paths)
             }
         }
@@ -305,7 +335,7 @@ Window {
         }
         onAccepted: {
             var id = playlistModel.createPlaylist(createPlaylistField.text)
-            if (id && filterModel) filterModel.category = id
+            if (id) listWindow.enterCategory(id, "playlist")
         }
         contentItem: TextField {
             id: createPlaylistField
@@ -350,7 +380,7 @@ Window {
         onAccepted: {
             if (playlistModel.removePlaylist(playlistId) && filterModel
                     && filterModel.category === playlistId)
-                filterModel.category = "all"
+                listWindow.enterCategory("all", "library")
         }
         contentItem: Label {
             width: 380
@@ -477,6 +507,9 @@ Window {
                         }
                         onImportRequested: function(playlistId) {
                             listWindow.openImportDialog(playlistId)
+                        }
+                        onResourceFolderRemoved: function(folder) {
+                            listWindow.handleResourceFolderRemoved(folder)
                         }
                         onImportPlaylistRequested: importPlaylistDialog.open()
                         onExportPlaylistRequested: function(playlistId) {

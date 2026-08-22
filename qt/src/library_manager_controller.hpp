@@ -20,6 +20,9 @@ class LibraryManagerController : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(LibraryModel* libraryModel READ libraryModel WRITE setLibraryModel NOTIFY libraryModelChanged)
     Q_PROPERTY(QStringList monitoredFolders READ monitoredFolders NOTIFY monitoredFoldersChanged)
+    Q_PROPERTY(QStringList resourceDirectories READ resourceDirectories
+                   NOTIFY resourceTopologyChanged)
+    Q_PROPERTY(QString audioFileNameFilter READ audioFileNameFilter CONSTANT)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(int totalCount READ totalCount NOTIFY summaryChanged)
@@ -74,9 +77,13 @@ public:
     LibraryModel* libraryModel() const noexcept;
     void setLibraryModel(LibraryModel* model);
     QStringList monitoredFolders() const;
+    QStringList resourceDirectories() const;
+    QString audioFileNameFilter() const;
     Q_INVOKABLE bool addMonitoredFolder(const QString& folder);
     Q_INVOKABLE bool addMonitoredFolderUrl(const QUrl& folder);
     Q_INVOKABLE QVariantMap classifyDropUrl(const QUrl& url) const;
+    Q_INVOKABLE bool pathIsWithin(const QString& candidate,
+                                  const QString& root) const;
     Q_INVOKABLE bool removeMonitoredFolder(const QString& folder);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void cancelScan();
@@ -129,6 +136,7 @@ signals:
     void libraryModelChanged();
     void monitoredFoldersChanged();
     void resourceRootsChanged();
+    void resourceTopologyChanged();
     void scanningChanged();
     void progressChanged();
     void summaryChanged();
@@ -171,6 +179,7 @@ private:
     int untaggedCount_ = 0;
     int damagedCount_ = 0;
     QStringList monitoredRoots_;
+    QStringList resourceDirectories_;
     QString storagePath_;
     QString libraryDataPath_;
     QString lastBackupPath_;

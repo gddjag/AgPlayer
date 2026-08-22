@@ -14,6 +14,7 @@
 #include <QUrl>
 
 #include "cache_janitor.hpp"
+#include "audio_file_discovery.hpp"
 #include "runtime_log.hpp"
 #include "file_association_controller.hpp"
 
@@ -60,6 +61,7 @@ SettingsController::SettingsController(QObject* parent)
       settings_(this),
       fileAssociationController_(std::make_unique<FileAssociationController>(this))
 {
+    fileAssociations_ = agplayer::qt::supportedAudioExtensions();
     retireLegacySmartPlaylists();
     load();
     applyAutoStartWithWindows();
@@ -1549,9 +1551,7 @@ void SettingsController::restoreDefaults()
     closeBehavior_ = 0;
     language_ = QStringLiteral("zh");
     setAsDefaultPlayer_ = false;
-    fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
-        QStringLiteral("ogg")};
+    fileAssociations_ = agplayer::qt::supportedAudioExtensions();
     outputDevice_.clear();
     exclusiveMode_ = false;
     matchTrackSampleRate_ = true;

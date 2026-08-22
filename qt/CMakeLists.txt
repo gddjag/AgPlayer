@@ -75,6 +75,8 @@ add_library(agplayer_qt STATIC
     src/playback_state_store.hpp
     src/replay_gain_scanner.cpp
     src/replay_gain_scanner.hpp
+    src/resource_path.cpp
+    src/resource_path.hpp
     src/playlist_model.cpp
     src/playlist_model.hpp
     src/qml_registration.cpp

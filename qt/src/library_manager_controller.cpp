@@ -1,6 +1,8 @@
 ﻿#include "library_manager_controller.hpp"
+#include "audio_file_discovery.hpp"
 #include "import_controller.hpp"
 #include "library_store.hpp"
+#include "resource_path.hpp"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -18,56 +20,34 @@
 #include <algorithm>
 #include <utility>
 
-#ifdef Q_OS_WIN
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
 namespace {
-const QSet<QString>& supportedAudioSuffixes()
+
+QString resourceLookupKey(const QString& path)
 {
-    static const QSet<QString> suffixes{
-        QStringLiteral("mp3"), QStringLiteral("wav"), QStringLiteral("flac"),
-        QStringLiteral("aac"), QStringLiteral("m4a"), QStringLiteral("ogg"),
-        QStringLiteral("opus"), QStringLiteral("wma")};
-    return suffixes;
+    const QString identity = QDir::fromNativeSeparators(QDir::cleanPath(path));
+    return agplayer::qt::resourcePathCaseSensitivity() == Qt::CaseInsensitive
+        ? identity.toCaseFolded() : identity;
 }
 
-QString canonicalDropPath(const QFileInfo& info)
+QStringList normalizedResourcePaths(const QStringList& paths)
 {
-    QString path = info.canonicalFilePath();
-#ifdef Q_OS_WIN
-    const std::wstring nativePath = QDir::toNativeSeparators(
-        info.absoluteFilePath()).toStdWString();
-    const HANDLE handle = CreateFileW(
-        nativePath.c_str(), 0,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
-    if (handle != INVALID_HANDLE_VALUE) {
-        const DWORD length = GetFinalPathNameByHandleW(
-            handle, nullptr, 0, FILE_NAME_NORMALIZED);
-        if (length > 0) {
-            std::wstring buffer(static_cast<std::size_t>(length), L'\0');
-            const DWORD written = GetFinalPathNameByHandleW(
-                handle, buffer.data(), length, FILE_NAME_NORMALIZED);
-            if (written > 0 && written < length) {
-                QString resolved = QString::fromWCharArray(
-                    buffer.data(), static_cast<qsizetype>(written));
-                if (resolved.startsWith(QStringLiteral("\\\\?\\UNC\\"))) {
-                    resolved = QStringLiteral("\\\\") + resolved.sliced(8);
-                } else if (resolved.startsWith(QStringLiteral("\\\\?\\"))) {
-                    resolved = resolved.sliced(4);
-                }
-                path = resolved;
-            }
-        }
-        CloseHandle(handle);
+    QStringList result;
+    QSet<QString> seen;
+    for (const QString& path : paths) {
+        const QString identity = agplayer::qt::resourcePathIdentity(path);
+        const QString key = resourceLookupKey(identity);
+        if (identity.isEmpty() || seen.contains(key)) continue;
+        seen.insert(key);
+        result.append(identity);
     }
-#endif
-    return path.isEmpty() ? QString{} : QDir::cleanPath(
-        QDir::fromNativeSeparators(path));
+    std::sort(result.begin(), result.end(), [](const QString& left,
+                                               const QString& right) {
+        return left.compare(right, agplayer::qt::resourcePathCaseSensitivity()) < 0;
+    });
+    return result;
 }
-}
+
+} // namespace
 
 LibraryManagerController::LibraryManagerController(QObject* parent)
     : QAbstractListModel(parent)
@@ -184,6 +164,21 @@ void LibraryManagerController::setLibraryModel(LibraryModel* model)
 QStringList LibraryManagerController::monitoredFolders() const
 {
     return monitoredRoots_;
+}
+
+QStringList LibraryManagerController::resourceDirectories() const
+{
+    return resourceDirectories_;
+}
+
+QString LibraryManagerController::audioFileNameFilter() const
+{
+    QStringList patterns;
+    const QStringList extensions = agplayer::qt::supportedAudioExtensions();
+    patterns.reserve(extensions.size());
+    for (const QString& extension : extensions)
+        patterns.append(QStringLiteral("*.%1").arg(extension));
+    return tr("Audio files (%1)").arg(patterns.join(QLatin1Char(' ')));
 }
 
 QString LibraryManagerController::libraryDataPath() const
@@ -316,14 +311,20 @@ bool LibraryManagerController::importLibraryBackup(const QUrl& source)
 
 bool LibraryManagerController::addMonitoredFolder(const QString& folder)
 {
-    const QString path = QDir::cleanPath(QFileInfo(folder).absoluteFilePath());
-    if (!QFileInfo(path).isDir() || monitoredRoots_.contains(path,
-            Qt::CaseInsensitive)) return false;
+    const QString path = agplayer::qt::resourcePathIdentity(folder);
+    if (!QFileInfo(folder).isDir()
+        || std::any_of(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
+                       [&path](const QString& candidate) {
+            return agplayer::qt::resourcePathsEqual(candidate, path);
+        })) return false;
     monitoredRoots_.append(path);
+    resourceDirectories_ = normalizedResourcePaths(
+        resourceDirectories_ + QStringList{path});
     rebuildDirectoryWatches();
     saveMonitoredFolders();
     emit monitoredFoldersChanged();
     emit resourceRootsChanged();
+    emit resourceTopologyChanged();
     scheduleRescan();
     return true;
 }
@@ -339,13 +340,14 @@ QVariantMap LibraryManagerController::classifyDropUrl(const QUrl& url) const
     QString canonicalPath;
     if (url.isLocalFile()) {
         const QFileInfo info(url.toLocalFile());
-        canonicalPath = canonicalDropPath(info);
+        canonicalPath = info.exists()
+            ? agplayer::qt::resourcePathIdentity(info.absoluteFilePath())
+            : QString{};
         if (!canonicalPath.isEmpty()) {
             if (info.isDir()) {
                 kind = DropPathKind::Directory;
             } else if (info.isFile()) {
-                kind = supportedAudioSuffixes().contains(
-                    info.suffix().toCaseFolded())
+                kind = agplayer::qt::isSupportedAudioFile(info)
                     ? DropPathKind::AudioFile : DropPathKind::OtherFile;
             }
         }
@@ -358,21 +360,39 @@ QVariantMap LibraryManagerController::classifyDropUrl(const QUrl& url) const
     };
 }
 
+bool LibraryManagerController::pathIsWithin(const QString& candidate,
+                                            const QString& root) const
+{
+    return agplayer::qt::resourcePathIsWithin(candidate, root);
+}
+
 bool LibraryManagerController::removeMonitoredFolder(const QString& folder)
 {
-    const QString path = QDir::cleanPath(QFileInfo(folder).absoluteFilePath());
+    const QString path = agplayer::qt::resourcePathIdentity(folder);
     const auto root = std::find_if(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
                                    [&path](const QString& candidate) {
-                                       return candidate.compare(path, Qt::CaseInsensitive) == 0;
+                                       return agplayer::qt::resourcePathsEqual(
+                                           candidate, path);
                                    });
     const int index = root == monitoredRoots_.cend()
         ? -1 : static_cast<int>(std::distance(monitoredRoots_.cbegin(), root));
     if (index < 0) return false;
     monitoredRoots_.removeAt(index);
+    QStringList retainedDirectories;
+    for (const QString& directory : std::as_const(resourceDirectories_)) {
+        const bool belongsToRemainingRoot = std::any_of(
+            monitoredRoots_.cbegin(), monitoredRoots_.cend(),
+            [&directory](const QString& candidate) {
+                return agplayer::qt::resourcePathIsWithin(directory, candidate);
+            });
+        if (belongsToRemainingRoot) retainedDirectories.append(directory);
+    }
+    resourceDirectories_ = std::move(retainedDirectories);
     rebuildDirectoryWatches();
     saveMonitoredFolders();
     emit monitoredFoldersChanged();
     emit resourceRootsChanged();
+    emit resourceTopologyChanged();
     return true;
 }
 
@@ -415,8 +435,13 @@ void LibraryManagerController::rescan()
         }
         if (library_ != nullptr) library_->applyMaintenanceResults(scanRows);
         duplicateGroups_ = result.value(QStringLiteral("groups")).toList();
-        applyDirectoryWatches(
-            result.value(QStringLiteral("directories")).toStringList());
+        const QStringList directories = normalizedResourcePaths(
+            result.value(QStringLiteral("directories")).toStringList()
+            + monitoredRoots_);
+        const bool topologyChanged = directories != resourceDirectories_;
+        resourceDirectories_ = directories;
+        applyDirectoryWatches(resourceDirectories_);
+        if (topologyChanged) emit resourceTopologyChanged();
         missingCount_ = result.value(QStringLiteral("missing")).toInt();
         duplicateCount_ = result.value(QStringLiteral("duplicates")).toInt();
         uncoveredCount_ = result.value(QStringLiteral("uncovered")).toInt();
@@ -610,8 +635,7 @@ void LibraryManagerController::rescan()
                 const QFileInfo info(path);
                 if (info.isDir())
                     discoveredDirectories.append(path);
-                else if (supportedAudioSuffixes().contains(
-                             info.suffix().toCaseFolded()))
+                else if (agplayer::qt::isSupportedAudioFile(info))
                     discovered.append(path);
             }
             ++scannedRoots;
@@ -889,17 +913,25 @@ void LibraryManagerController::loadMonitoredFolders()
             const QJsonArray folders =
                 document.object().value(QStringLiteral("folders")).toArray();
             for (const QJsonValue& value : folders) {
-                const QString path = value.toString();
-                if (QFileInfo(path).isDir()
-                    && !monitoredRoots_.contains(path, Qt::CaseInsensitive)) {
+                const QString requestedPath = value.toString();
+                const QString path = agplayer::qt::resourcePathIdentity(
+                    requestedPath);
+                if (QFileInfo(requestedPath).isDir()
+                    && std::none_of(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
+                                    [&path](const QString& candidate) {
+                        return agplayer::qt::resourcePathsEqual(candidate, path);
+                    })) {
                     monitoredRoots_.append(path);
                 }
             }
         }
     }
+    const QStringList nextDirectories = normalizedResourcePaths(monitoredRoots_);
+    resourceDirectories_ = nextDirectories;
     rebuildDirectoryWatches();
     emit monitoredFoldersChanged();
     emit resourceRootsChanged();
+    emit resourceTopologyChanged();
 }
 
 void LibraryManagerController::saveMonitoredFolders() const
@@ -921,8 +953,7 @@ QStringList LibraryManagerController::discoverAudioFiles() const
         QDirIterator iterator(root, QDir::Files, QDirIterator::Subdirectories);
         while (iterator.hasNext()) {
             const QString path = iterator.next();
-            if (supportedAudioSuffixes().contains(
-                    QFileInfo(path).suffix().toCaseFolded()))
+            if (agplayer::qt::isSupportedAudioFile(QFileInfo(path)))
                 paths.append(path);
         }
     }

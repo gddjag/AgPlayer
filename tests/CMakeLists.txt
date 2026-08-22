@@ -465,6 +465,7 @@ foreach(qt_test IN ITEMS
     playlist_model_test
     library_manager_controller_test
     library_navigation_model_test
+    resource_path_test
     library_file_operations_test
     import_controller_test
     library_filter_model_test
