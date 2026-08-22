@@ -293,3 +293,16 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   passed 337/337 (known Ninja recovery warning), and Debug passed 76/76. App
   smoke, full CTest, actual recording hardware, UI and slow/UNC source stress
   remain deliberately unverified.
+
+### Clipboard reachability P2 closure (2026-08-22)
+
+- Source-record/issue compaction now includes source pointers held by the
+  document clipboard as well as current timeline and bounded Undo/Redo deltas.
+  This is required because Paste can reintroduce an otherwise expired source.
+- A real IdentityMismatch source was Cut, its Cut command evicted by 257 edits,
+  then pasted. RED observed no issue and an enabled export action; GREEN
+  retains source ID 2, restores `identityMismatch`, and keeps export disabled.
+- Final focused matrix: Release 7/7 in 15.80 s; Debug 7/7 in 20.52 s. Full
+  builds passed Release 337/337 (known Ninja recovery warning) and Debug 68/68.
+  App smoke, full CTest, recording hardware and long-running source stress
+  remain deliberately unverified.

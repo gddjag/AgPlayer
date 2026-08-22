@@ -839,6 +839,77 @@ private slots:
         QVERIFY(!controller.relinkProjectSource(quint64{2}, QUrl::fromLocalFile(fixture)));
     }
 
+    void clipboardKeepsOfflineSourceIdentityAfterCutHistoryExpires()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString firstSource = temporary.filePath(QStringLiteral("first.wav"));
+        const QString secondSource = temporary.filePath(QStringLiteral("second.wav"));
+        const QString project = temporary.filePath(QStringLiteral("clipboard-history.agproj"));
+        QVERIFY(QFile::copy(fixture, firstSource));
+        QVERIFY(QFile::copy(fixture, secondSource));
+
+        AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(maker.openFile(QUrl::fromLocalFile(firstSource)));
+        const qint64 split = maker.totalFrames() / 2;
+        QVERIFY(split > 0);
+        QVERIFY(maker.splitEvent(1, split));
+        QVERIFY(maker.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        QFile projectFile(project);
+        QVERIFY(projectFile.open(QIODevice::ReadOnly));
+        QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
+        projectFile.close();
+        QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+        QJsonObject secondRecord = sources.at(0).toObject();
+        secondRecord.insert(QStringLiteral("sourceId"), QStringLiteral("2"));
+        secondRecord.insert(QStringLiteral("pathKind"), QStringLiteral("relative"));
+        secondRecord.insert(QStringLiteral("path"), QStringLiteral("second.wav"));
+        const QFileInfo secondInfo(secondSource);
+        secondRecord.insert(QStringLiteral("fileSize"), QString::number(secondInfo.size()));
+        secondRecord.insert(QStringLiteral("lastModifiedUtcMs"),
+                            QString::number(secondInfo.lastModified().toUTC().toMSecsSinceEpoch()));
+        sources.append(secondRecord);
+        root.insert(QStringLiteral("sources"), sources);
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QJsonObject secondEvent = events.at(1).toObject();
+        secondEvent.insert(QStringLiteral("sourceId"), QStringLiteral("2"));
+        events.replace(1, secondEvent);
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(projectFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(projectFile.write(QJsonDocument(root).toJson()) > 0);
+        projectFile.close();
+
+        QFile changed(secondSource);
+        QVERIFY(changed.open(QIODevice::Append));
+        QVERIFY(changed.write("identity mismatch") > 0);
+        changed.close();
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openProject(QUrl::fromLocalFile(project)));
+        QCOMPARE(controller.projectIssues().size(), 1);
+        QCOMPARE(controller.projectIssues().constFirst().toMap()
+                     .value(QStringLiteral("kind")).toString(),
+                 QStringLiteral("identityMismatch"));
+        QVERIFY(controller.setSelection(split, controller.totalFrames()));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.cut")));
+        QVERIFY(controller.projectIssues().isEmpty());
+        for (int index = 1; index <= 257; ++index) {
+            QVERIFY(controller.moveEvent(1, index));
+        }
+        QVERIFY(controller.seekFrame(controller.totalFrames()));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.paste")));
+        QCOMPARE(controller.projectIssues().size(), 1);
+        QCOMPARE(controller.projectIssues().constFirst().toMap()
+                     .value(QStringLiteral("sourceId")).toULongLong(), quint64{2});
+        QCOMPARE(controller.projectIssues().constFirst().toMap()
+                     .value(QStringLiteral("kind")).toString(),
+                 QStringLiteral("identityMismatch"));
+        QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
+    }
+
     void redoBackToSavedHistoryPointClearsDirtyState()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));

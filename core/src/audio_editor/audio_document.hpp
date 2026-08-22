@@ -61,8 +61,7 @@ public:
     [[nodiscard]] std::uint64_t historyStateId() const noexcept
     { return history_.stateId(); }
     [[nodiscard]] bool hasClipboard() const noexcept { return !clipboard_.empty(); }
-    [[nodiscard]] std::vector<std::shared_ptr<const AudioSource>> retainedSources() const
-    { return history_.retainedSources(); }
+    [[nodiscard]] std::vector<std::shared_ptr<const AudioSource>> retainedSources() const;
     [[nodiscard]] SampleFrame totalFrames() const noexcept;
     [[nodiscard]] const std::vector<Marker>& markers() const noexcept
     {

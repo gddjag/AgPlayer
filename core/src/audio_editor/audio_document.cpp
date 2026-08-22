@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 
 namespace agplayer::editor {
@@ -28,6 +29,19 @@ AudioDocument AudioDocument::fromSource(AudioSource source)
     }
     document.next_event_id_ = 2;
     return document;
+}
+
+std::vector<std::shared_ptr<const AudioSource>> AudioDocument::retainedSources() const
+{
+    std::vector<std::shared_ptr<const AudioSource>> result = history_.retainedSources();
+    std::unordered_set<const AudioSource*> seen;
+    for (const auto& source : result) seen.insert(source.get());
+    for (const AudioEvent& event : clipboard_) {
+        if (event.source && seen.insert(event.source.get()).second) {
+            result.push_back(event.source);
+        }
+    }
+    return result;
 }
 
 AudioDocument AudioDocument::fromEvents(std::vector<AudioEvent> events)
