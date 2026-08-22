@@ -5,7 +5,10 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QPointF>
 #include <QStringList>
+
+#include <functional>
 
 class QWindow;
 
@@ -25,6 +28,8 @@ public:
     ~NativeDropRouter() override;
 
     void registerWindow(QWindow* window, Target target);
+    void registerHitTarget(QWindow* window, Target target,
+                           std::function<bool(const QPointF&)> hitTest);
     void unregisterWindow(QWindow* window);
     void routeLocalPaths(Target target, const QStringList& paths);
 
@@ -36,7 +41,12 @@ signals:
     void pathsDropped(NativeDropRouter::Target target, const QStringList& paths);
 
 private:
+    struct HitTarget {
+        Target target = Target::List;
+        std::function<bool(const QPointF&)> hitTest;
+    };
     QHash<quintptr, Target> targets_;
+    QHash<quintptr, HitTarget> hitTargets_;
 };
 
 Q_DECLARE_METATYPE(NativeDropRouter::Target)

@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <atomic>
 #include <memory>
@@ -55,6 +56,9 @@ class LibraryManagerController : public QAbstractListModel {
     Q_PROPERTY(int pageCount READ pageCount NOTIFY filterChanged)
 
 public:
+    enum class DropPathKind { Invalid, Directory, AudioFile, OtherFile };
+    Q_ENUM(DropPathKind)
+
     enum Role { TrackIdRole = Qt::UserRole + 1, PathRole, TitleRole, ArtistRole,
                 AlbumRole, FormatRole, StatusRole, ContentHashRole,
                 DuplicateGroupRole, CoverRole, FavoriteRole, RatingRole,
@@ -72,6 +76,7 @@ public:
     QStringList monitoredFolders() const;
     Q_INVOKABLE bool addMonitoredFolder(const QString& folder);
     Q_INVOKABLE bool addMonitoredFolderUrl(const QUrl& folder);
+    Q_INVOKABLE QVariantMap classifyDropUrl(const QUrl& url) const;
     Q_INVOKABLE bool removeMonitoredFolder(const QString& folder);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void cancelScan();

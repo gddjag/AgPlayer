@@ -40,6 +40,11 @@ ListView {
     property int dragPreviewCreationCount: 0
     property var dragTrackIds: []
     property var activeDragProxy: null
+    property bool dragSessionActive: false
+    property bool dragDropInProgress: false
+    property string draggedTrackId: ""
+    property real dragOriginY: 0
+    property real draggedRowHeight: 0
     property string dragPreviewTitle: ""
     property url dragPreviewCover: ""
     readonly property bool thumbnailWindowVisible:
@@ -54,7 +59,12 @@ ListView {
     // is never left off-screen merely because no new playback signal arrived.
     Component.onCompleted: Qt.callLater(root.ensureCurrentTrackVisible)
     onCountChanged: if (count > 0) Qt.callLater(root.ensureCurrentTrackVisible)
-    onVisibleChanged: if (visible) Qt.callLater(root.ensureCurrentTrackVisible)
+    onVisibleChanged: {
+        if (visible)
+            Qt.callLater(root.ensureCurrentTrackVisible)
+        else
+            root.cancelTrackDrag()
+    }
 
     readonly property bool customPlaylistSelected:
         selectedCategory !== "all" && selectedCategory !== "favorites"
@@ -123,23 +133,61 @@ ListView {
         else if (selectedCategory === "all")
             LibraryModel.reorderTracks(ids, targetId)
     }
-    function beginTrackDrag(rowItem, proxy, coverSource) {
-        dragTrackIds = rowItem.dragTrackIds.slice()
-        dragPreviewTitle = rowItem.title || qsTr("未知歌曲")
+    function beginTrackDrag(trackId, ids, title, coverSource, proxy,
+                            originY, rowHeight) {
+        if (dragSessionActive)
+            cancelTrackDrag()
+        proxy.x = 0
+        proxy.y = 0
+        dragTrackIds = ids.slice()
+        dragPreviewTitle = title || qsTr("未知歌曲")
         dragPreviewCover = coverSource
+        draggedTrackId = trackId
+        dragOriginY = originY
+        draggedRowHeight = rowHeight
         activeDragProxy = proxy
-        dragPreviewCreationCount += 1
+        dragSessionActive = true
         dragPreviewLoader.active = true
     }
-    function endTrackDrag() {
+    function clearTrackDragSession() {
+        if (!dragSessionActive && !dragPreviewLoader.active
+                && !activeDragProxy && dragTrackIds.length === 0)
+            return
+        dragSessionActive = false
         dragPreviewLoader.active = false
         activeDragProxy = null
         dragTrackIds = []
+        draggedTrackId = ""
+        dragOriginY = 0
+        draggedRowHeight = 0
     }
     function cancelTrackDrag() {
-        if (activeDragProxy && activeDragProxy.Drag.active)
-            activeDragProxy.Drag.cancel()
-        endTrackDrag()
+        var proxy = activeDragProxy
+        clearTrackDragSession()
+        if (proxy && proxy.Drag.active)
+            proxy.Drag.cancel()
+    }
+    function cancelTrackDragForProxy(proxy) {
+        if (activeDragProxy !== proxy)
+            return
+        if (dragDropInProgress)
+            clearTrackDragSession()
+        else
+            cancelTrackDrag()
+    }
+    function completeTrackDrag(proxy) {
+        if (!dragSessionActive || activeDragProxy !== proxy)
+            return
+        var trackId = draggedTrackId
+        var originY = dragOriginY
+        var deltaY = proxy.y
+        var rowHeight = draggedRowHeight
+        dragDropInProgress = true
+        var dropAction = proxy.Drag.drop()
+        dragDropInProgress = false
+        clearTrackDragSession()
+        if (dropAction === Qt.IgnoreAction)
+            finishRowDrag(trackId, originY, deltaY, rowHeight)
     }
     function removeSelectedFromCurrentView() {
         var ids = selectedTrackIds.slice()
@@ -208,11 +256,22 @@ ListView {
             selectAllVisible(); event.accepted = true
         } else if (event.key === Qt.Key_Delete) {
             removeSelectedFromCurrentView(); event.accepted = true
-        } else if (event.key === Qt.Key_Escape && dragPreviewLoader.active) {
-            cancelTrackDrag(); event.accepted = true
         }
     }
     Shortcut { sequence: StandardKey.SelectAll; context: Qt.WindowShortcut; enabled: root.activeFocus; onActivated: root.selectAllVisible() }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: root.dragSessionActive
+        onActivated: root.cancelTrackDrag()
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() {
+            if (root.Window.window && !root.Window.window.active)
+                root.cancelTrackDrag()
+        }
+    }
 
     FolderDialog {
         id: moveFolderDialog
@@ -292,6 +351,7 @@ ListView {
     Loader {
         id: dragPreviewLoader
         active: false
+        onLoaded: root.dragPreviewCreationCount += 1
         z: 1000
         x: root.activeDragProxy
            ? root.activeDragProxy.mapToItem(root, 12, 12).x : 0
@@ -375,6 +435,7 @@ ListView {
 
         Component.onCompleted: waveformGeneration = ++root.nextWaveformGeneration
         ListView.onPooled: {
+            root.cancelTrackDragForProxy(rowDragProxy)
             pooled = true
             waveformGeneration = ++root.nextWaveformGeneration
         }
@@ -397,6 +458,7 @@ ListView {
             Drag.hotSpot.y: 0
             Drag.mimeData: ({"application/x-agplayer-track-ids":
                              JSON.stringify(root.dragTrackIds)})
+            Component.onDestruction: root.cancelTrackDragForProxy(rowDragProxy)
         }
 
         RowLayout {
@@ -562,22 +624,17 @@ ListView {
                         if (active) {
                             if (!root.isSelected(rowItem.trackId))
                                 root.selectOnly(rowItem.trackId, rowItem.index)
-                            root.beginTrackDrag(rowItem, rowDragProxy,
-                                                trackCoverImage.source)
+                            root.beginTrackDrag(
+                                        rowItem.trackId,
+                                        rowItem.dragTrackIds,
+                                        rowItem.title,
+                                        trackCoverImage.source,
+                                        rowDragProxy,
+                                        rowItem.y,
+                                        rowItem.height)
                             rowDragProxy.Drag.active = true
                         } else if (rowDragProxy.Drag.active) {
-                            var dropAction = rowDragProxy.Drag.drop()
-                            var draggedTrackId = rowItem.trackId
-                            var originY = rowItem.y
-                            var deltaY = rowDragProxy.y
-                            var draggedRowHeight = rowItem.height
-                            rowDragProxy.x = 0
-                            rowDragProxy.y = 0
-                            root.endTrackDrag()
-                            if (dropAction === Qt.IgnoreAction) {
-                                root.finishRowDrag(draggedTrackId, originY,
-                                                   deltaY, draggedRowHeight)
-                            }
+                            root.completeTrackDrag(rowDragProxy)
                         }
                     }
                 }

@@ -464,12 +464,18 @@ int LibraryModel::addTagToTracks(const QStringList& trackIds,
 
     const QString targetKey = normalizedTag.constFirst().toCaseFolded();
     QSet<QString> requestedIds;
-    int changed = 0;
+    QList<int> requestedRows;
+    requestedRows.reserve(trackIds.size());
     for (const QString& trackId : trackIds) {
         if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
         requestedIds.insert(trackId);
         const int row = indexForTrackId(trackId);
-        if (row < 0) continue;
+        if (row < 0) return 0;
+        requestedRows.append(row);
+    }
+
+    int changed = 0;
+    for (const int row : requestedRows) {
         QStringList next = tracks_.at(row).tags;
         const bool alreadyPresent = std::any_of(
             next.cbegin(), next.cend(), [&targetKey](const QString& existing) {

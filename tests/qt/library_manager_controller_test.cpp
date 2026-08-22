@@ -6,11 +6,13 @@
 #include <QFile>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
 
 #include <algorithm>
+#include <filesystem>
 
 class LibraryManagerControllerTest final : public QObject {
     Q_OBJECT
@@ -18,6 +20,7 @@ class LibraryManagerControllerTest final : public QObject {
 private slots:
     void marksMissingFilesAndFindsLayeredDuplicates();
     void monitorsUniqueFolders();
+    void classifiesCanonicalDropPaths();
     void removesPersistedRootWithoutDeletingFiles();
     void persistsRootsAndImportsNewAudioRecursively();
     void exposesNonDestructiveLibrarySummary();
@@ -100,6 +103,70 @@ void LibraryManagerControllerTest::monitorsUniqueFolders()
     QCOMPARE(manager.monitoredFolders().size(), 1);
     QVERIFY(manager.removeMonitoredFolder(dir.path()));
     QCOMPARE(manager.monitoredFolders().size(), 0);
+}
+
+void LibraryManagerControllerTest::classifiesCanonicalDropPaths()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString musicRoot = directory.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(musicRoot));
+    const QString audioPath = writeFile(
+        QDir(musicRoot).filePath(QStringLiteral("song.mp3")), "audio");
+    const QString textPath = writeFile(
+        QDir(musicRoot).filePath(QStringLiteral("notes.txt")), "notes");
+    QVERIFY(!audioPath.isEmpty() && !textPath.isEmpty());
+
+    const QString aliasPath = directory.filePath(QStringLiteral("music-alias"));
+#ifdef Q_OS_WIN
+    QCOMPARE(QProcess::execute(
+                 QStringLiteral("cmd.exe"),
+                 {QStringLiteral("/d"), QStringLiteral("/c"),
+                  QStringLiteral("mklink"), QStringLiteral("/J"),
+                  QDir::toNativeSeparators(aliasPath),
+                  QDir::toNativeSeparators(musicRoot)}), 0);
+#else
+    std::error_code linkError;
+    std::filesystem::create_directory_symlink(
+        std::filesystem::path(musicRoot.toStdWString()),
+        std::filesystem::path(aliasPath.toStdWString()), linkError);
+    QVERIFY2(!linkError, linkError.message().c_str());
+#endif
+
+    LibraryManagerController manager;
+    const QVariantMap folder = manager.classifyDropUrl(
+        QUrl::fromLocalFile(musicRoot));
+    QCOMPARE(folder.value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Directory);
+    QCOMPARE(folder.value(QStringLiteral("path")).toString(),
+             QFileInfo(musicRoot).canonicalFilePath());
+
+    const QVariantMap alias = manager.classifyDropUrl(
+        QUrl::fromLocalFile(aliasPath));
+    QCOMPARE(alias.value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Directory);
+    QCOMPARE(alias.value(QStringLiteral("path")),
+             folder.value(QStringLiteral("path")));
+
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(audioPath))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::AudioFile);
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(textPath))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::OtherFile);
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(
+                 directory.filePath(QStringLiteral("missing.mp3"))))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Invalid);
+    QCOMPARE(manager.classifyDropUrl(QUrl(QStringLiteral("https://example.test/song.mp3")))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Invalid);
 }
 
 void LibraryManagerControllerTest::removesPersistedRootWithoutDeletingFiles()

@@ -52,6 +52,29 @@ Item {
         return LibraryModel.addTagToTracks(ids, displayName) > 0
     }
 
+    function tagKeyForDisplayName(displayName) {
+        if (!tagModel)
+            return ""
+        var expected = displayName.trim()
+        for (var row = 0; row < tagModel.rowCount(); ++row) {
+            var modelIndex = tagModel.index(row, 0)
+            if (tagModel.data(modelIndex, TagModel.DisplayNameRole)
+                    === expected)
+                return tagModel.data(modelIndex, TagModel.KeyRole)
+        }
+        return ""
+    }
+
+    function hasTagKey(key) {
+        if (!tagModel)
+            return false
+        for (var row = 0; row < tagModel.rowCount(); ++row) {
+            if (tagModel.data(tagModel.index(row, 0), TagModel.KeyRole) === key)
+                return true
+        }
+        return false
+    }
+
     TagFilterModel {
         id: filteredTags
         objectName: "tagFilterProxy"
@@ -139,9 +162,14 @@ Item {
             var updatesActiveFilter = root.filterModel
                     && root.filterModel.tagKey === previousKey
             root.tagModel.renameTag(previousKey, nextName)
-            if (updatesActiveFilter)
-                root.filterModel.tagKey = root.tagModel.selectedKey
-            root.renameTagRequested(previousKey, nextName)
+            var nextKey = root.tagKeyForDisplayName(nextName)
+            if (nextKey.length > 0) {
+                if (updatesActiveFilter)
+                    root.filterModel.tagKey = nextKey
+                if (nextKey !== previousKey
+                        || nextName !== root.contextTagName)
+                    root.renameTagRequested(previousKey, nextName)
+            }
         }
         contentItem: TextField {
             id: renameTagField
@@ -176,10 +204,14 @@ Item {
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
             var removedKey = root.contextTagKey
-            root.tagModel.removeTag(removedKey)
-            if (root.filterModel && root.filterModel.tagKey === removedKey)
-                root.filterModel.tagKey = ""
-            root.removeTagRequested(removedKey)
+            var existed = root.hasTagKey(removedKey)
+            if (existed)
+                root.tagModel.removeTag(removedKey)
+            if (existed && !root.hasTagKey(removedKey)) {
+                if (root.filterModel && root.filterModel.tagKey === removedKey)
+                    root.filterModel.tagKey = ""
+                root.removeTagRequested(removedKey)
+            }
         }
         contentItem: Label {
             objectName: "removeTagWarning"

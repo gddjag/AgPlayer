@@ -18,6 +18,57 @@
 #include <algorithm>
 #include <utility>
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
+namespace {
+const QSet<QString>& supportedAudioSuffixes()
+{
+    static const QSet<QString> suffixes{
+        QStringLiteral("mp3"), QStringLiteral("wav"), QStringLiteral("flac"),
+        QStringLiteral("aac"), QStringLiteral("m4a"), QStringLiteral("ogg"),
+        QStringLiteral("opus"), QStringLiteral("wma")};
+    return suffixes;
+}
+
+QString canonicalDropPath(const QFileInfo& info)
+{
+    QString path = info.canonicalFilePath();
+#ifdef Q_OS_WIN
+    const std::wstring nativePath = QDir::toNativeSeparators(
+        info.absoluteFilePath()).toStdWString();
+    const HANDLE handle = CreateFileW(
+        nativePath.c_str(), 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle != INVALID_HANDLE_VALUE) {
+        const DWORD length = GetFinalPathNameByHandleW(
+            handle, nullptr, 0, FILE_NAME_NORMALIZED);
+        if (length > 0) {
+            std::wstring buffer(static_cast<std::size_t>(length), L'\0');
+            const DWORD written = GetFinalPathNameByHandleW(
+                handle, buffer.data(), length, FILE_NAME_NORMALIZED);
+            if (written > 0 && written < length) {
+                QString resolved = QString::fromWCharArray(
+                    buffer.data(), static_cast<qsizetype>(written));
+                if (resolved.startsWith(QStringLiteral("\\\\?\\UNC\\"))) {
+                    resolved = QStringLiteral("\\\\") + resolved.sliced(8);
+                } else if (resolved.startsWith(QStringLiteral("\\\\?\\"))) {
+                    resolved = resolved.sliced(4);
+                }
+                path = resolved;
+            }
+        }
+        CloseHandle(handle);
+    }
+#endif
+    return path.isEmpty() ? QString{} : QDir::cleanPath(
+        QDir::fromNativeSeparators(path));
+}
+}
+
 LibraryManagerController::LibraryManagerController(QObject* parent)
     : QAbstractListModel(parent)
 {
@@ -282,6 +333,31 @@ bool LibraryManagerController::addMonitoredFolderUrl(const QUrl& folder)
     return folder.isLocalFile() && addMonitoredFolder(folder.toLocalFile());
 }
 
+QVariantMap LibraryManagerController::classifyDropUrl(const QUrl& url) const
+{
+    DropPathKind kind = DropPathKind::Invalid;
+    QString canonicalPath;
+    if (url.isLocalFile()) {
+        const QFileInfo info(url.toLocalFile());
+        canonicalPath = canonicalDropPath(info);
+        if (!canonicalPath.isEmpty()) {
+            if (info.isDir()) {
+                kind = DropPathKind::Directory;
+            } else if (info.isFile()) {
+                kind = supportedAudioSuffixes().contains(
+                    info.suffix().toCaseFolded())
+                    ? DropPathKind::AudioFile : DropPathKind::OtherFile;
+            }
+        }
+    }
+    return {
+        {QStringLiteral("kind"), QVariant::fromValue(kind)},
+        {QStringLiteral("path"), canonicalPath},
+        {QStringLiteral("url"), canonicalPath.isEmpty()
+            ? QUrl{} : QUrl::fromLocalFile(canonicalPath)},
+    };
+}
+
 bool LibraryManagerController::removeMonitoredFolder(const QString& folder)
 {
     const QString path = QDir::cleanPath(QFileInfo(folder).absoluteFilePath());
@@ -520,10 +596,6 @@ void LibraryManagerController::rescan()
             value = row;
         }
 
-        static const QSet<QString> supported{
-            QStringLiteral("mp3"), QStringLiteral("wav"), QStringLiteral("flac"),
-            QStringLiteral("aac"), QStringLiteral("m4a"), QStringLiteral("ogg"),
-            QStringLiteral("opus"), QStringLiteral("wma")};
         QStringList discovered;
         QStringList discoveredDirectories;
         int scannedRoots = 0;
@@ -538,7 +610,8 @@ void LibraryManagerController::rescan()
                 const QFileInfo info(path);
                 if (info.isDir())
                     discoveredDirectories.append(path);
-                else if (supported.contains(info.suffix().toCaseFolded()))
+                else if (supportedAudioSuffixes().contains(
+                             info.suffix().toCaseFolded()))
                     discovered.append(path);
             }
             ++scannedRoots;
@@ -843,16 +916,13 @@ void LibraryManagerController::saveMonitoredFolders() const
 
 QStringList LibraryManagerController::discoverAudioFiles() const
 {
-    static const QSet<QString> supported{
-        QStringLiteral("mp3"), QStringLiteral("wav"), QStringLiteral("flac"),
-        QStringLiteral("aac"), QStringLiteral("m4a"), QStringLiteral("ogg"),
-        QStringLiteral("opus"), QStringLiteral("wma")};
     QStringList paths;
     for (const QString& root : monitoredRoots_) {
         QDirIterator iterator(root, QDir::Files, QDirIterator::Subdirectories);
         while (iterator.hasNext()) {
             const QString path = iterator.next();
-            if (supported.contains(QFileInfo(path).suffix().toCaseFolded()))
+            if (supportedAudioSuffixes().contains(
+                    QFileInfo(path).suffix().toCaseFolded()))
                 paths.append(path);
         }
     }

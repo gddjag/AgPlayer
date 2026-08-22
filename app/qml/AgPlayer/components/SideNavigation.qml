@@ -22,6 +22,7 @@ Item {
     property string contextPlaylistId: ""
     property string contextResourceFolder: ""
     property bool contextResourceIsRoot: false
+    property string pendingResourceFolderRemoval: ""
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -29,26 +30,28 @@ Item {
     signal createPlaylistRequested()
     signal renamePlaylistRequested(string playlistId)
     signal removePlaylistRequested(string playlistId)
-    signal importRequested()
+    signal importRequested(string playlistId)
     signal importPlaylistRequested()
     signal exportPlaylistRequested(string playlistId)
+    signal resourceUrlsDropped(var urls)
 
-    function handleResourceUrls(urls) {
-        if (!urls || urls.length === 0)
+    function resourceDropContainsPoint(x, y) {
+        var footer = navigationList.footerItem
+        if (!footer)
             return false
-        var audioUrls = []
-        var handled = false
-        for (var index = 0; index < urls.length; ++index) {
-            if (root.navigationModel.addResourceFolder(urls[index]))
-                handled = true
-            else
-                audioUrls.push(urls[index])
-        }
-        if (audioUrls.length > 0) {
-            ImportController.importUrls(audioUrls)
-            handled = true
-        }
-        return handled
+        var barHeight = 42
+        var topLeft = footer.mapToItem(root, 0,
+                                       (footer.height - barHeight) / 2)
+        return x >= topLeft.x && y >= topLeft.y
+                && x < topLeft.x + footer.width
+                && y < topLeft.y + barHeight
+    }
+
+    function confirmResourceFolderRemoval(folder) {
+        if (!folder || folder.length === 0)
+            return
+        pendingResourceFolderRemoval = folder
+        removeResourceFolderDialog.open()
     }
 
     function playlistIdForNode(nodeId) {
@@ -98,7 +101,8 @@ Item {
             activeNodeType = "tags"
     }
     onSelectedResourceFolderChanged: {
-        if (selectedResourceFolder.length > 0)
+        if (selectedResourceFolder.length > 0
+                && activeNodeType !== "resourceRoot")
             activeNodeType = "resourceFolder"
     }
     onSelectedCategoryChanged: {
@@ -125,8 +129,16 @@ Item {
             border.width: 1
             radius: Theme.radiusSm
         }
-        SystemMenuItem { text: qsTr("新建歌单"); onTriggered: root.createPlaylistRequested() }
-        SystemMenuItem { text: qsTr("导入音乐"); onTriggered: root.importRequested() }
+        SystemMenuItem {
+            objectName: "playlistMenuCreate"
+            text: qsTr("新建歌单")
+            onTriggered: root.createPlaylistRequested()
+        }
+        SystemMenuItem {
+            objectName: "playlistMenuImport"
+            text: qsTr("导入音乐")
+            onTriggered: root.importRequested(root.contextPlaylistId)
+        }
         MenuSeparator {}
         SystemMenuItem { text: qsTr("导入歌单"); onTriggered: root.importPlaylistRequested() }
         SystemMenuItem {
@@ -168,11 +180,12 @@ Item {
             objectName: "resourceFolderMenuRemove"
             text: qsTr("移除文件夹引用")
             enabled: root.contextResourceIsRoot
-            onTriggered: removeResourceFolderDialog.open()
+            onTriggered: root.confirmResourceFolderRemoval(
+                             root.contextResourceFolder)
         }
         SystemMenuItem {
             objectName: "resourceFolderMenuRescan"
-            text: qsTr("重新扫描")
+            text: qsTr("重新扫描全部资源文件夹")
             onTriggered: LibraryManagerController.rescan()
         }
     }
@@ -192,8 +205,13 @@ Item {
         width: 450
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: root.navigationModel.removeResourceFolder(
-                        root.contextResourceFolder)
+        onAccepted: {
+            var folder = root.pendingResourceFolderRemoval
+            root.pendingResourceFolderRemoval = ""
+            if (folder.length > 0)
+                root.navigationModel.removeResourceFolder(folder)
+        }
+        onRejected: root.pendingResourceFolderRemoval = ""
         contentItem: Label {
             objectName: "removeResourceFolderWarning"
             width: 410
@@ -251,8 +269,10 @@ Item {
                     ToolButton {
                         objectName: "removeResourceFolderButton"
                         text: "−"
-                        enabled: root.contextResourceFolder.length > 0
-                        onClicked: removeResourceFolderDialog.open()
+                        enabled: root.activeNodeType === "resourceRoot"
+                                 && root.selectedResourceFolder.length > 0
+                        onClicked: root.confirmResourceFolderRemoval(
+                                       root.selectedResourceFolder)
                         background: null
                     }
                 }
@@ -261,7 +281,7 @@ Item {
                     anchors.fill: parent
                     z: -1
                     onUrlsDropped: function(urls) {
-                        root.handleResourceUrls(urls)
+                        root.resourceUrlsDropped(urls)
                     }
                 }
             }

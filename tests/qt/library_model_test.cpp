@@ -457,11 +457,20 @@ void LibraryModelTest::appendsOneTagToManyTracksWithoutReplacingExistingTags()
     QCOMPARE(model.addTagToTracks(
                  {QStringLiteral("one"), QStringLiteral("two"),
                   QStringLiteral("missing"), QStringLiteral("one")},
+                 QStringLiteral(" Road ")), 0);
+    QCOMPARE(model.data(model.index(0), LibraryModel::TagsRole).toStringList(),
+             QStringList({QStringLiteral("Rock")}));
+    QCOMPARE(model.data(model.index(1), LibraryModel::TagsRole).toStringList(),
+             QStringList({QStringLiteral("Night"), QStringLiteral("ROAD")}));
+    QCOMPARE(changes.count(), 0);
+    QCOMPARE(flushes.count(), 0);
+
+    QCOMPARE(model.addTagToTracks(
+                 {QStringLiteral("one"), QStringLiteral("two"),
+                  QStringLiteral("one"), QString()},
                  QStringLiteral(" Road ")), 1);
     QCOMPARE(model.data(model.index(0), LibraryModel::TagsRole).toStringList(),
              QStringList({QStringLiteral("Rock"), QStringLiteral("Road")}));
-    QCOMPARE(model.data(model.index(1), LibraryModel::TagsRole).toStringList(),
-             QStringList({QStringLiteral("Night"), QStringLiteral("ROAD")}));
     QCOMPARE(changes.count(), 1);
     QCOMPARE(flushes.count(), 1);
 

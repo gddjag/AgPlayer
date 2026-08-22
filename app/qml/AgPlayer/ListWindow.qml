@@ -30,6 +30,7 @@ Window {
     property var filterModel: null
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
+    property var activeImportDialog: null
     property string exportPlaylistId: ""
 
     function routeNavigationNode(nodeType, nodeId, resourceFolder) {
@@ -113,18 +114,53 @@ Window {
         importTargetPlaylistId = customCategory()
         ImportController.importUrls(urls)
     }
+    function importSelectedUrls(urls) {
+        ImportController.importUrls(urls)
+    }
+    function handleListDropUrls(urls) {
+        if (!urls || urls.length === 0)
+            return false
+        beginImport(urls)
+        return true
+    }
     function handleResourceDropUrls(urls) {
+        if (!urls || urls.length === 0)
+            return false
+        var seenPaths = ({})
         var audioUrls = []
+        var handled = false
         for (var index = 0; index < urls.length; ++index) {
-            if (!LibraryNavigationModel.addResourceFolder(urls[index]))
-                audioUrls.push(urls[index])
+            var classified = LibraryManagerController.classifyDropUrl(urls[index])
+            var path = String(classified.path || "")
+            if (!path)
+                continue
+            var identity = Qt.platform.os === "windows"
+                         ? path.toLocaleLowerCase() : path
+            if (seenPaths[identity])
+                continue
+            seenPaths[identity] = true
+            if (classified.kind === LibraryManagerController.Directory) {
+                LibraryManagerController.addMonitoredFolder(path)
+                handled = true
+            } else if (classified.kind
+                       === LibraryManagerController.AudioFile) {
+                audioUrls.push(classified.url)
+                handled = true
+            }
         }
         if (audioUrls.length > 0)
             beginImport(audioUrls)
+        return handled
     }
-    function openImportDialog() {
-        importTargetPlaylistId = customCategory()
+    function resourceDropContainsPoint(x, y) {
+        var local = sideNavigation.mapFromItem(null, x, y)
+        return sideNavigation.resourceDropContainsPoint(local.x, local.y)
+    }
+    function openImportDialog(playlistId) {
+        importTargetPlaylistId = arguments.length > 0
+                ? (playlistId || "") : customCategory()
         var dialog = importDialogComponent.createObject(listWindow)
+        activeImportDialog = dialog
         if (dialog) dialog.open()
     }
     function openRenameDialog(playlistId) {
@@ -148,11 +184,21 @@ Window {
     Component {
         id: importDialogComponent
         FileDialog {
+            objectName: "importAudioDialog"
             fileMode: FileDialog.OpenFiles
             nameFilters: [
                 "Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"
             ]
-            onAccepted: listWindow.beginImport(selectedFiles)
+            onAccepted: {
+                listWindow.importSelectedUrls(selectedFiles)
+                listWindow.activeImportDialog = null
+                Qt.callLater(destroy)
+            }
+            onRejected: {
+                listWindow.importTargetPlaylistId = ""
+                listWindow.activeImportDialog = null
+                Qt.callLater(destroy)
+            }
         }
     }
 
@@ -212,6 +258,7 @@ Window {
 
     Dialog {
         id: createPlaylistDialog
+        objectName: "createPlaylistDialog"
         title: qsTr("新建歌单")
         modal: true
         anchors.centerIn: parent
@@ -226,6 +273,7 @@ Window {
         }
         contentItem: TextField {
             id: createPlaylistField
+            objectName: "createPlaylistField"
             placeholderText: qsTr("歌单名称")
         }
         background: Rectangle {
@@ -236,6 +284,7 @@ Window {
     }
     Dialog {
         id: renamePlaylistDialog
+        objectName: "renamePlaylistDialog"
         property string playlistId
         title: qsTr("重命名歌单")
         modal: true
@@ -243,7 +292,10 @@ Window {
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: playlistModel.renamePlaylist(
                         playlistId, renamePlaylistField.text)
-        contentItem: TextField { id: renamePlaylistField }
+        contentItem: TextField {
+            id: renamePlaylistField
+            objectName: "renamePlaylistField"
+        }
         background: Rectangle {
             color: Theme.elevated
             border.color: Theme.border
@@ -252,6 +304,7 @@ Window {
     }
     Dialog {
         id: removePlaylistDialog
+        objectName: "removePlaylistDialog"
         property string playlistId
         title: qsTr("删除歌单")
         modal: true
@@ -259,7 +312,8 @@ Window {
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
-            if (playlistModel.removePlaylist(playlistId) && filterModel)
+            if (playlistModel.removePlaylist(playlistId) && filterModel
+                    && filterModel.category === playlistId)
                 filterModel.category = "all"
         }
         contentItem: Label {
@@ -382,8 +436,13 @@ Window {
                             removePlaylistDialog.playlistId = playlistId
                             removePlaylistDialog.open()
                         }
-                        onImportRequested: listWindow.openImportDialog()
+                        onImportRequested: function(playlistId) {
+                            listWindow.openImportDialog(playlistId)
+                        }
                         onImportPlaylistRequested: importPlaylistDialog.open()
+                        onResourceUrlsDropped: function(urls) {
+                            listWindow.handleResourceDropUrls(urls)
+                        }
                         onExportPlaylistRequested: function(playlistId) {
                             listWindow.exportPlaylistId = playlistId
                             copyPlaylistFiles.checked = false
@@ -516,7 +575,7 @@ Window {
         anchors.fill: parent
         z: -5
         onUrlsDropped: function(urls) {
-            listWindow.handleResourceDropUrls(urls)
+            listWindow.handleListDropUrls(urls)
         }
     }
 

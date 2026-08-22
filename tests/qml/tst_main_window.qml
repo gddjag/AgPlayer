@@ -198,6 +198,47 @@ TestCase {
     }
 
     Component {
+        id: destructiveTrackDropTargetComponent
+        Rectangle {
+            width: 180
+            height: 140
+            property int dropCount: 0
+            DropArea {
+                id: destructiveDropArea
+                objectName: "destructiveTrackDropArea"
+                anchors.fill: parent
+                keys: ["application/x-agplayer-track-ids"]
+                onDropped: function(drop) {
+                    var encoded = drop.getDataAsString(
+                                "application/x-agplayer-track-ids")
+                    var ids = encoded ? JSON.parse(encoded) : []
+                    if (ids.length === 0 && drop.source
+                            && drop.source.dragTrackIds)
+                        ids = drop.source.dragTrackIds
+                    if (ids.length > 0)
+                        LibraryModel.removeTrack(ids[0])
+                    destructiveDropArea.parent.dropCount += 1
+                    drop.acceptProposedAction()
+                }
+            }
+        }
+    }
+
+    Component {
+        id: trackListWindowComponent
+        Window {
+            visible: true
+            width: 900
+            height: 360
+            property alias list: hostedTrackList
+            TrackList {
+                id: hostedTrackList
+                anchors.fill: parent
+            }
+        }
+    }
+
+    Component {
         id: stackedTrackListHostComponent
         StackLayout {
             width: 800
@@ -948,6 +989,8 @@ TestCase {
         compare(Math.round(artist.width), 130)
         verify(album.overflowing && artist.overflowing)
         compare(album.textOffset, 0)
+        mouseMove(list, 2, list.height - 2)
+        wait(10)
         mouseMove(album, album.width / 2, album.height / 2)
         // This animation starts with a deliberate hover pause.  The parent
         // ApplicationWindow may have lost activation to a prior tool/settings
@@ -1174,34 +1217,99 @@ TestCase {
     }
 
     function test_playlist_context_actions_use_real_mouse_and_keep_playlist_id() {
-        var playlistId = PlaylistModel.createPlaylist(
-                    "QML context target " + Date.now())
-        verify(playlistId.length > 0)
-        var navigation = sideNavigationComponent.createObject(mainWindow.contentItem)
-        verify(navigation)
-        var category = findChild(navigation, "playlistCategory-" + playlistId)
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window && filterModel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var navigation = findChild(window, "referenceSideNavigation")
+        var libraryNode = findChild(navigation, "navigationNode-library:all")
+        verify(navigation && libraryNode)
+
+        function createPlaylistThroughMenu(name) {
+            mouseClick(libraryNode, libraryNode.width / 2,
+                       libraryNode.height / 2, Qt.RightButton)
+            var contextMenu = findChild(navigation, "playlistContextMenu")
+            tryVerify(function() { return contextMenu.visible }, 500)
+            var createAction = findChild(contextMenu, "playlistMenuCreate")
+            mouseClick(createAction, createAction.width / 2,
+                       createAction.height / 2)
+            var dialog = findChild(window, "createPlaylistDialog")
+            tryVerify(function() { return dialog.visible }, 500)
+            var field = findChild(dialog, "createPlaylistField")
+            field.text = name
+            dialog.accept()
+            var createdId = PlaylistModel.idAt(PlaylistModel.count - 1)
+            compare(PlaylistModel.nameForId(createdId), name)
+            return createdId
+        }
+
+        var playlistA = createPlaylistThroughMenu("Context A " + Date.now())
+        libraryNode = findChild(navigation, "navigationNode-library:all")
+        var playlistB = createPlaylistThroughMenu("Context B " + Date.now())
+        verify(playlistA.length > 0 && playlistB.length > 0
+               && playlistA !== playlistB)
+        filterModel.category = playlistA
+
+        var category = findChild(navigation, "playlistCategory-" + playlistB)
         verify(category, "custom playlist needs a stable context target")
         mouseClick(category, category.width / 2, category.height / 2,
                    Qt.RightButton)
         var menu = findChild(navigation, "playlistContextMenu")
         tryVerify(function() { return menu && menu.visible }, 500)
+        var importAction = findChild(menu, "playlistMenuImport")
+        verify(importAction && importAction.enabled)
+        mouseClick(importAction, importAction.width / 2,
+                   importAction.height / 2)
+        compare(window.importTargetPlaylistId, playlistB,
+                "the right-click target must be fixed before opening the dialog")
+        var importDialog = null
+        tryVerify(function() {
+            importDialog = window.activeImportDialog
+            return importDialog !== null
+        }, 500)
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+        window.importSelectedUrls([copiedAudio])
+        tryCompare(importFinished, "count", 1, 5000)
+        verify(ImportController.importedTrackIds.length > 0)
+        var importedId = ImportController.importedTrackIds[0]
+        tryVerify(function() {
+            return PlaylistModel.containsTrack(playlistB, importedId)
+        }, 500)
+        verify(!PlaylistModel.containsTrack(playlistA, importedId))
+        compare(filterModel.category, playlistA)
+        importDialog.destroy()
+        window.activeImportDialog = null
+        window.importTargetPlaylistId = ""
+        wait(0)
+
+        category = findChild(navigation, "playlistCategory-" + playlistB)
+        mouseClick(category, category.width / 2, category.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
         var renameAction = findChild(menu, "playlistMenuRename")
         verify(renameAction && renameAction.enabled)
         mouseClick(renameAction, renameAction.width / 2,
                    renameAction.height / 2)
-        tryCompare(navigation, "renameRequestCount", 1)
-        compare(navigation.lastRequestedPlaylistId, playlistId)
+        var renameDialog = findChild(window, "renamePlaylistDialog")
+        tryVerify(function() { return renameDialog.visible }, 500)
+        var renameField = findChild(renameDialog, "renamePlaylistField")
+        renameField.text = "Renamed B " + Date.now()
+        var renamed = renameField.text
+        renameDialog.accept()
+        compare(PlaylistModel.nameForId(playlistB), renamed)
 
-        mouseClick(category, category.width / 2, category.height / 2,
-                   Qt.RightButton)
-        tryVerify(function() { return menu.visible }, 500)
-        var exportAction = findChild(menu, "playlistMenuExport")
-        verify(exportAction && exportAction.enabled)
-        mouseClick(exportAction, exportAction.width / 2,
-                   exportAction.height / 2)
-        tryCompare(navigation, "exportRequestCount", 1)
-        compare(navigation.lastRequestedPlaylistId, playlistId)
-
+        category = findChild(navigation, "playlistCategory-" + playlistB)
         mouseClick(category, category.width / 2, category.height / 2,
                    Qt.RightButton)
         tryVerify(function() { return menu.visible }, 500)
@@ -1209,11 +1317,21 @@ TestCase {
         verify(deleteAction && deleteAction.enabled)
         mouseClick(deleteAction, deleteAction.width / 2,
                    deleteAction.height / 2)
-        tryCompare(navigation, "deleteRequestCount", 1)
-        compare(navigation.lastRequestedPlaylistId, playlistId)
-
-        PlaylistModel.removePlaylist(playlistId)
-        navigation.destroy()
+        var removeDialog = findChild(window, "removePlaylistDialog")
+        tryVerify(function() { return removeDialog.visible }, 500)
+        removeDialog.accept()
+        tryVerify(function() {
+            return PlaylistModel.nameForId(playlistB).length === 0
+        }, 500)
+        compare(filterModel.category, playlistA,
+                "deleting a non-active playlist must retain the active one")
+        PlaylistModel.removePlaylist(playlistA)
+        LibraryModel.removeTrack(importedId)
+        importFinished.destroy()
+        window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
     }
 
     function test_z_delete_key_uses_current_view_semantics() {
@@ -1689,7 +1807,6 @@ TestCase {
         tryVerify(function() { return window.active }, 1000)
         var panel = findChild(window, "tagManagementPanel")
         verify(panel)
-
         var suffix = String(Date.now())
         var alphaName = "Task4 Alpha " + suffix
         var betaName = "Task4 Beta " + suffix
@@ -1729,6 +1846,11 @@ TestCase {
         verify(window)
         var panel = findChild(window, "tagManagementPanel")
         verify(panel)
+        var removeRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "removeTagRequested"
+        })
+        verify(removeRequested)
         window.requestActivate()
         tryVerify(function() { return window.active }, 1000)
         var name = "Task5 Delete " + Date.now()
@@ -1776,6 +1898,8 @@ TestCase {
         var warning = findChild(confirm, "removeTagWarning")
         verify(warning.text.indexOf("不删除歌曲或磁盘文件") >= 0)
         confirm.accept()
+        compare(removeRequested.count, 1,
+                "the mutation signal must follow a successful removal")
         tryCompare(TagModel, "selectedKey", "")
         compare(filterModel.tagKey, "")
         compare(filterModel.searchText, "keep-search")
@@ -1783,6 +1907,7 @@ TestCase {
         compare(filterModel.minBpm, 88)
         compare(filterModel.maxBpm, 144)
         task4TemporaryTagKeys = []
+        removeRequested.destroy()
         window.destroy()
     }
 
@@ -1793,6 +1918,15 @@ TestCase {
         verify(window)
         var panel = findChild(window, "tagManagementPanel")
         verify(panel)
+        var renameRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "renameTagRequested"
+        })
+        var colorRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "changeTagColorRequested"
+        })
+        verify(renameRequested && colorRequested)
         window.requestActivate()
         tryVerify(function() { return window.active }, 1000)
 
@@ -1832,6 +1966,8 @@ TestCase {
         compare(tagRowForKey(originalKey) >= 0, true)
         compare(tagRowForKey(renamedKey), -1)
         compare(filterModel.tagKey, originalKey)
+        compare(renameRequested.count, 0,
+                "cancel must not emit a rename mutation signal")
 
         mouseClick(pointerArea, pointerArea.width / 2,
                    pointerArea.height / 2, Qt.RightButton)
@@ -1845,6 +1981,7 @@ TestCase {
         compare(tagRowForKey(originalKey), -1)
         compare(TagModel.selectedKey, renamedKey)
         compare(filterModel.tagKey, renamedKey)
+        compare(renameRequested.count, 1)
 
         panel.searchText = renamedName
         tryCompare(panel, "visibleTagCount", 1)
@@ -1865,17 +2002,29 @@ TestCase {
         verify(colorAction && colorAction.enabled)
         var colorDialog = findChild(panel, "tagColorDialog")
         verify(colorDialog)
-        menu.close()
+        ignoreWarning("qrc:/qt-project.org/imports/QtQuick/Dialogs/quickimpl/qml/ColorDialog.qml:12:1: QML ColorDialog: Binding loop detected for property \"implicitWidth\"")
+        mouseClick(colorAction, colorAction.width / 2,
+                   colorAction.height / 2)
         colorDialog.selectedColor = "#123456"
         colorDialog.reject()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), beforeColor)
+        compare(colorRequested.count, 0,
+                "cancel must not emit a color mutation signal")
 
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
+        mouseClick(colorAction, colorAction.width / 2,
+                   colorAction.height / 2)
         colorDialog.selectedColor = "#123456"
-        colorDialog.accepted()
+        colorDialog.accept()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), "#123456")
+        compare(colorRequested.count, 1)
 
+        renameRequested.destroy()
+        colorRequested.destroy()
         window.destroy()
     }
 
@@ -1952,6 +2101,12 @@ TestCase {
         verify(preview)
         compare(preview.selectedCount, 1)
         compare(preview.opacity, 0.68)
+        var focusStealer = Qt.createQmlObject(
+                    'import QtQuick; TextInput { width: 10; height: 10 }',
+                    mainWindow.contentItem)
+        focusStealer.forceActiveFocus()
+        verify(focusStealer.activeFocus,
+               "Escape cleanup must not depend on TrackList focus")
         keyClick(Qt.Key_Escape)
         tryVerify(function() { return !proxy.Drag.active }, 500)
         tryVerify(function() { return !findChild(list, "trackDragPreview") }, 500)
@@ -1962,36 +2117,191 @@ TestCase {
             afterOrder.push(list.trackIdAt(row))
         compare(afterOrder.join("|"), beforeOrder.join("|"))
         compare(list.dragTrackIds.length, 0)
+        focusStealer.destroy()
         list.destroy()
     }
 
+    function test_z_task5_drag_drop_can_synchronously_remove_its_source_row() {
+        nativeDropHelper.ensureSortableTracks()
+        var list = trackListComponent.createObject(mainWindow.contentItem, {
+            "x": 0,
+            "y": 0,
+            "width": 700,
+            "height": 300
+        })
+        var target = destructiveTrackDropTargetComponent.createObject(
+                    mainWindow.contentItem, { "x": 740, "y": 80 })
+        verify(list && target)
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        verify(firstRow)
+        var draggedId = firstRow.trackId
+        var area = findChild(firstRow, "trackRowDragArea")
+        var proxy = findChild(firstRow, "trackDragProxy")
+        var dropArea = findChild(target, "destructiveTrackDropArea")
+        verify(area && proxy && dropArea)
+        var targetPoint = dropArea.mapToItem(area, dropArea.width / 2,
+                                             dropArea.height / 2)
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        mouseMove(area, targetPoint.x, targetPoint.y, 60, Qt.LeftButton)
+        tryVerify(function() { return dropArea.containsDrag }, 500)
+        mouseRelease(area, targetPoint.x, targetPoint.y, Qt.LeftButton)
+        tryCompare(target, "dropCount", 1, 500)
+        compare(LibraryModel.indexForTrackId(draggedId), -1)
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+        compare(list.dragTrackIds.length, 0)
+        tryVerify(function() {
+            return !findChild(list, "trackDragPreview")
+        }, 500)
+        target.destroy()
+        list.destroy()
+    }
+
+    function test_z_task5_drag_session_cleans_on_delegate_pool_and_focus_loss() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var model = createIsolatedTrackModel("drag-pool-", 30)
+        var host = trackListHostComponent.createObject(mainWindow.contentItem)
+        var list = trackListComponent.createObject(host, {
+            "width": host.width,
+            "height": 160,
+            "trackModel": model
+        })
+        verify(model && host && list)
+        mainWindow.requestActivate()
+        list.positionViewAtBeginning()
+        wait(30)
+        var firstRow = list.itemAtIndex(0)
+        var proxy = findChild(firstRow, "trackDragProxy")
+        verify(firstRow && proxy)
+        list.beginTrackDrag(firstRow.trackId, firstRow.dragTrackIds,
+                            firstRow.title, "", proxy,
+                            firstRow.y, firstRow.height)
+        proxy.Drag.active = true
+        verify(list.dragSessionActive && proxy.Drag.active)
+        proxy.Drag.active = false
+        verify(list.dragSessionActive,
+               "the pooled callback must clean a stale root-owned session")
+        list.currentIndex = -1
+        list.positionViewAtEnd()
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+        compare(list.dragTrackIds.length, 0)
+        tryVerify(function() {
+            return !findChild(list, "trackDragPreview")
+        }, 500)
+        list.destroy()
+        host.destroy()
+        model.destroy()
+
+        nativeDropHelper.ensureSortableTracks()
+        var dragWindow = trackListWindowComponent.createObject(null)
+        verify(dragWindow)
+        dragWindow.requestActivate()
+        tryVerify(function() { return dragWindow.active }, 1000)
+        var windowList = dragWindow.list
+        windowList.positionViewAtBeginning()
+        var windowRow = null
+        tryVerify(function() {
+            windowRow = windowList.itemAtIndex(0)
+            return windowRow !== null
+        }, 500)
+        var windowArea = findChild(windowRow, "trackRowDragArea")
+        var windowProxy = findChild(windowRow, "trackDragProxy")
+        verify(windowArea && windowProxy)
+        mousePress(windowArea, windowArea.width / 2,
+                   windowArea.height / 2, Qt.LeftButton)
+        mouseMove(windowArea, windowArea.width / 2 + 20,
+                  windowArea.height / 2, 20, Qt.LeftButton)
+        tryVerify(function() { return windowProxy.Drag.active }, 500)
+        mainWindow.requestActivate()
+        tryVerify(function() { return !dragWindow.active }, 1000)
+        tryVerify(function() { return !windowList.dragSessionActive }, 500)
+        compare(windowList.dragTrackIds.length, 0)
+        mouseRelease(windowArea, windowArea.width / 2 + 20,
+                     windowArea.height / 2, Qt.LeftButton)
+        dragWindow.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
     function test_z_task5_resource_folder_drop_and_remove_preserve_disk_files() {
-        var folderUrl = nativeDropHelper.createDropDirectory()
-        verify(folderUrl && nativeDropHelper.pathExists(folderUrl))
-        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
-        verify(copiedAudio)
-        var initialFolderCount = LibraryManagerController.monitoredFolders.length
-        var initialLibraryCount = LibraryModel.count
-        var navigationWindow = resourceNavigationWindowComponent.createObject(null)
-        verify(navigationWindow)
-        navigationWindow.requestActivate()
-        tryVerify(function() { return navigationWindow.active }, 1000)
-        var navigation = findChild(navigationWindow, "resourceTestNavigation")
-        verify(navigation)
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        verify(nativeDropHelper.registerListDropWindow(window),
+               "the production NativeDropRouter must be attached as Target::List")
+
+        var navigation = findChild(window, "referenceSideNavigation")
         var navigationList = findChild(navigation, "libraryNavigationList")
-        verify(navigationList)
+        var centerTarget = findChild(window, "sharedTrackList")
+        var tagTarget = findChild(window, "tagManagementPanel")
+        verify(navigation && navigationList && centerTarget && tagTarget)
         navigationList.positionViewAtEnd()
         wait(0)
         var dropTarget = findChild(navigation, "resourceFolderDropTarget")
         verify(dropTarget)
-        nativeDropHelper.sendUrls(dropTarget, [folderUrl, copiedAudio])
+
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var ignoredFile = nativeDropHelper.createNonAudioDropFile()
+        var invalidUrl = nativeDropHelper.missingDropUrl()
+        verify(ignoredFile && invalidUrl)
+        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialLibraryCount = LibraryModel.count
+
+        var centralFolder = nativeDropHelper.createDropDirectory()
+        verify(nativeDropHelper.sendUrls(centerTarget, [centralFolder]))
+        tryVerify(function() { return !ImportController.busy }, 3000)
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount,
+                "a central directory drop must not become a monitored root")
+        ImportController.clearErrors()
+
+        var tagFolder = nativeDropHelper.createDropDirectory()
+        verify(nativeDropHelper.sendUrls(tagTarget, [tagFolder]))
+        tryVerify(function() { return !ImportController.busy }, 3000)
+        compare(LibraryManagerController.monitoredFolders.length,
+                initialFolderCount,
+                "a tag-column directory drop must not become a monitored root")
+        ImportController.clearErrors()
+
+        var folderUrl = nativeDropHelper.createDropDirectory()
+        verify(folderUrl && nativeDropHelper.pathExists(folderUrl))
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        var rootsChanged = signalSpyComponent.createObject(testCase, {
+            "target": LibraryManagerController,
+            "signalName": "monitoredFoldersChanged"
+        })
+        verify(importFinished && rootsChanged)
+        nativeDropHelper.sendUrls(dropTarget,
+                                  [folderUrl, folderUrl,
+                                   copiedAudio, copiedAudio,
+                                   ignoredFile, invalidUrl])
         tryVerify(function() {
             return LibraryManagerController.monitoredFolders.length
                     === initialFolderCount + 1
         }, 1000)
         tryVerify(function() { return !ImportController.busy }, 5000)
+        compare(rootsChanged.count, 1,
+                "duplicate directory URLs must add one monitored root")
+        compare(importFinished.count, 1,
+                "a mixed resource drop must issue one audio import batch")
         verify(ImportController.errors.length === 0)
-        verify(LibraryModel.count > initialLibraryCount,
+        compare(LibraryModel.count, initialLibraryCount + 1,
                "mixed drop must keep audio-file import routing")
         var folderPath = decodeURIComponent(folderUrl.toString()
                                            .replace(/^file:\/\/\//, ""))
@@ -2010,10 +2320,82 @@ TestCase {
             }
         }
         verify(rootNode)
+
+        var secondFolderUrl = nativeDropHelper.createDropDirectory()
+        verify(secondFolderUrl && nativeDropHelper.pathExists(secondFolderUrl))
+        nativeDropHelper.sendUrls(dropTarget, [secondFolderUrl])
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount + 2
+        }, 1000)
+        var secondFolderPath = decodeURIComponent(secondFolderUrl.toString()
+                .replace(/^file:\/\/\//, "")).replace(/\\/g, "/")
+        rootNode = null
+        var secondRootNode = null
+        for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+            index = LibraryNavigationModel.index(row, 0)
+            var candidatePath = LibraryNavigationModel.data(index,
+                    LibraryNavigationModel.ResourceFolderRole)
+                    .replace(/\\/g, "/").toLowerCase()
+            var candidateNode = findChild(navigation, "navigationNode-"
+                    + LibraryNavigationModel.data(index,
+                        LibraryNavigationModel.NodeIdRole))
+            if (candidatePath === folderPath.toLowerCase())
+                rootNode = candidateNode
+            else if (candidatePath === secondFolderPath.toLowerCase())
+                secondRootNode = candidateNode
+        }
+        verify(rootNode)
+        verify(secondRootNode)
+
         mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
                    Qt.RightButton)
         var menu = findChild(navigation, "resourceFolderContextMenu")
         tryVerify(function() { return menu && menu.visible }, 500)
+        var rescanAction = findChild(menu, "resourceFolderMenuRescan")
+        compare(rescanAction.text, "重新扫描全部资源文件夹")
+        menu.close()
+
+        mouseClick(secondRootNode, secondRootNode.width / 2,
+                   secondRootNode.height / 2, Qt.LeftButton)
+        var removeButton = findChild(navigation, "removeResourceFolderButton")
+        tryVerify(function() { return removeButton.enabled }, 500)
+        mouseClick(removeButton, removeButton.width / 2,
+                   removeButton.height / 2)
+        var confirm = findChild(navigation, "removeResourceFolderDialog")
+        tryVerify(function() { return confirm && confirm.visible }, 500)
+        compare(navigation.pendingResourceFolderRemoval.replace(/\\/g, "/")
+                .toLowerCase(), secondFolderPath.toLowerCase())
+        navigation.selectedResourceFolder = folderPath
+        navigation.activeNodeType = "resourceRoot"
+        confirm.accept()
+        tryVerify(function() {
+            return LibraryManagerController.monitoredFolders.length
+                    === initialFolderCount + 1
+        }, 1000)
+        verify(nativeDropHelper.pathExists(secondFolderUrl))
+        verify(LibraryManagerController.monitoredFolders.some(function(path) {
+            return path.replace(/\\/g, "/").toLowerCase()
+                    === folderPath.toLowerCase()
+        }), "stale right-click context must not remove the selected root")
+
+        rootNode = null
+        for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+            index = LibraryNavigationModel.index(row, 0)
+            if (LibraryNavigationModel.data(index,
+                    LibraryNavigationModel.ResourceFolderRole)
+                    .replace(/\\/g, "/").toLowerCase()
+                    === folderPath.toLowerCase()) {
+                rootNode = findChild(navigation, "navigationNode-"
+                    + LibraryNavigationModel.data(index,
+                        LibraryNavigationModel.NodeIdRole))
+                break
+            }
+        }
+        verify(rootNode)
+        mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
+                   Qt.RightButton)
+        tryVerify(function() { return menu.visible }, 500)
         wait(500)
         tryVerify(function() { return !LibraryManagerController.scanning }, 3000)
         var scanFinished = signalSpyComponent.createObject(testCase, {
@@ -2022,7 +2404,6 @@ TestCase {
         })
         verify(scanFinished)
         scanFinished.clear()
-        var rescanAction = findChild(menu, "resourceFolderMenuRescan")
         verify(rescanAction && rescanAction.enabled)
         mouseClick(rescanAction, rescanAction.width / 2,
                    rescanAction.height / 2)
@@ -2034,7 +2415,6 @@ TestCase {
         var removeAction = findChild(menu, "resourceFolderMenuRemove")
         mouseClick(removeAction, removeAction.width / 2,
                    removeAction.height / 2)
-        var confirm = findChild(navigation, "removeResourceFolderDialog")
         tryVerify(function() { return confirm && confirm.visible }, 500)
         var warning = findChild(confirm, "removeResourceFolderWarning")
         verify(warning.text.indexOf("不删除电脑磁盘中的实际文件夹和音乐文件") >= 0)
@@ -2045,7 +2425,9 @@ TestCase {
         }, 1000)
         verify(nativeDropHelper.pathExists(folderUrl))
         scanFinished.destroy()
-        navigationWindow.destroy()
+        importFinished.destroy()
+        rootsChanged.destroy()
+        window.destroy()
     }
 
     function test_z_list_waveforms_only_exist_for_visible_rows_when_enabled() {

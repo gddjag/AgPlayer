@@ -195,13 +195,51 @@ public:
             ? item->mapToScene(QPointF(item->width() / 2.0,
                                        item->height() / 2.0))
             : QPointF(window->width() / 2.0, window->height() / 2.0);
-        QDragEnterEvent enter(scenePosition.toPoint(), Qt::CopyAction, &mime,
+        QDragEnterEvent enter(scenePosition.toPoint(), Qt::MoveAction, &mime,
                               Qt::LeftButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &enter);
-        QDropEvent drop(scenePosition, Qt::CopyAction, &mime,
+        QDropEvent drop(scenePosition, Qt::MoveAction, &mime,
                         Qt::LeftButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &drop);
         return enter.isAccepted() && drop.isAccepted();
+    }
+
+    Q_INVOKABLE bool registerListDropWindow(QObject* target)
+    {
+        auto* window = qobject_cast<QWindow*>(target);
+        if (window == nullptr) return false;
+        listDrops_ = std::make_unique<NativeDropRouter>();
+        listDrops_->registerWindow(window, NativeDropRouter::Target::List);
+        const QPointer<QObject> guardedWindow = window;
+        listDrops_->registerHitTarget(
+            window, NativeDropRouter::Target::ResourceFolder,
+            [guardedWindow](const QPointF& position) {
+                if (guardedWindow == nullptr) return false;
+                QVariant hit;
+                return QMetaObject::invokeMethod(
+                           guardedWindow, "resourceDropContainsPoint",
+                           Q_RETURN_ARG(QVariant, hit),
+                           Q_ARG(QVariant, position.x()),
+                           Q_ARG(QVariant, position.y()))
+                    && hit.toBool();
+            });
+        connect(listDrops_.get(), &NativeDropRouter::pathsDropped, window,
+                [guardedWindow](const NativeDropRouter::Target dropTarget,
+                                const QStringList& paths) {
+            if (guardedWindow == nullptr) return;
+            QList<QUrl> urls;
+            urls.reserve(paths.size());
+            for (const QString& path : paths) {
+                urls.append(QUrl::fromLocalFile(path));
+            }
+            const char* method = dropTarget
+                    == NativeDropRouter::Target::ResourceFolder
+                ? "handleResourceDropUrls" : "handleListDropUrls";
+            QMetaObject::invokeMethod(
+                guardedWindow, method,
+                Q_ARG(QVariant, QVariant::fromValue(urls)));
+        });
+        return true;
     }
 
     Q_INVOKABLE bool sendWindowsDropFiles(QObject* target,
@@ -311,6 +349,26 @@ public:
         return QDir().mkpath(path) ? QUrl::fromLocalFile(path) : QUrl{};
     }
 
+    Q_INVOKABLE QUrl createNonAudioDropFile()
+    {
+        if (!dropDirectory_.isValid()) return {};
+        const QString path = dropDirectory_.filePath(
+            QStringLiteral("ignored-%1.txt").arg(
+                QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write("not audio") > 0
+            ? QUrl::fromLocalFile(path) : QUrl{};
+    }
+
+    Q_INVOKABLE QUrl missingDropUrl() const
+    {
+        return dropDirectory_.isValid()
+            ? QUrl::fromLocalFile(dropDirectory_.filePath(
+                QStringLiteral("missing-%1.mp3").arg(
+                    QUuid::createUuid().toString(QUuid::WithoutBraces))))
+            : QUrl{};
+    }
+
     Q_INVOKABLE bool pathExists(const QUrl& url) const
     {
         return url.isLocalFile() && QFileInfo::exists(url.toLocalFile());
@@ -319,6 +377,7 @@ public:
 private:
     QPointer<LibraryModel> library_;
     QTemporaryDir dropDirectory_;
+    std::unique_ptr<NativeDropRouter> listDrops_;
 };
 
 class QmlMainWindowSetup final : public QObject {

@@ -1048,7 +1048,20 @@ int main(int argc, char* argv[])
             nativeDrops.registerWindow(nativeMainWindow,
                                        NativeDropRouter::Target::Main);
             nativeDrops.registerWindow(nativeListWindow,
-                                       NativeDropRouter::Target::ResourceFolder);
+                                       NativeDropRouter::Target::List);
+            const QPointer<QObject> listDropTarget = listWindow;
+            nativeDrops.registerHitTarget(
+                nativeListWindow, NativeDropRouter::Target::ResourceFolder,
+                [listDropTarget](const QPointF& position) {
+                    if (listDropTarget == nullptr) return false;
+                    QVariant hit;
+                    return QMetaObject::invokeMethod(
+                               listDropTarget, "resourceDropContainsPoint",
+                               Q_RETURN_ARG(QVariant, hit),
+                               Q_ARG(QVariant, position.x()),
+                               Q_ARG(QVariant, position.y()))
+                        && hit.toBool();
+                });
             nativeDrops.registerWindow(nativeAudioToolsWindow,
                                        NativeDropRouter::Target::AudioTools);
             QObject::connect(
@@ -1069,53 +1082,19 @@ int main(int argc, char* argv[])
                         break;
                     case NativeDropRouter::Target::List:
                         {
-                        const QString category = filterModel != nullptr
-                            ? filterModel->property("category").toString()
-                            : QString();
-                        const bool isCustom = category != QStringLiteral("all")
-                            && category != QStringLiteral("favorites")
-                            && category != QStringLiteral("history")
-                            && category != QStringLiteral("recentAdded")
-                            && category != QStringLiteral("neverPlayed");
-                        if (listWindow != nullptr) {
-                            listWindow->setProperty(
-                                "importTargetPlaylistId",
-                                isCustom ? category : QString());
-                        }
-                        importer.importPaths(paths);
+                        const bool invoked = listWindow != nullptr
+                            && QMetaObject::invokeMethod(
+                                listWindow, "handleListDropUrls",
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        if (!invoked) importer.importPaths(paths);
                         }
                         break;
                     case NativeDropRouter::Target::ResourceFolder:
                         {
-                        QStringList audioPaths;
-                        audioPaths.reserve(paths.size());
-                        for (const QString& path : paths) {
-                            const QFileInfo info(path);
-                            const QString canonical = info.canonicalFilePath();
-                            if (canonical.isEmpty()) {
-                                continue;
-                            }
-                            if (info.isDir()) {
-                                libraryManager.addMonitoredFolder(canonical);
-                            } else if (info.isFile()) {
-                                audioPaths.append(canonical);
-                            }
-                        }
-                        if (!audioPaths.isEmpty()) {
-                            const QString category = filterModel != nullptr
-                                ? filterModel->property("category").toString()
-                                : QString();
-                            const bool isCustom = category != QStringLiteral("all")
-                                && category != QStringLiteral("favorites")
-                                && category != QStringLiteral("history")
-                                && category != QStringLiteral("recentAdded")
-                                && category != QStringLiteral("neverPlayed");
-                            if (listWindow != nullptr) {
-                                listWindow->setProperty(
-                                    "importTargetPlaylistId",
-                                    isCustom ? category : QString());
-                            }
-                            importer.importPaths(audioPaths);
+                        if (listWindow != nullptr) {
+                            QMetaObject::invokeMethod(
+                                listWindow, "handleResourceDropUrls",
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
                         }
                         }
                         break;

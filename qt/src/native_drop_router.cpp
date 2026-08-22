@@ -50,7 +50,17 @@ void NativeDropRouter::registerWindow(QWindow* window, Target target)
 #endif
     connect(window, &QObject::destroyed, this, [this, handle] {
         targets_.remove(handle);
+        hitTargets_.remove(handle);
     });
+}
+
+void NativeDropRouter::registerHitTarget(
+    QWindow* window, const Target target,
+    std::function<bool(const QPointF&)> hitTest)
+{
+    if (window == nullptr || !hitTest) return;
+    hitTargets_.insert(static_cast<quintptr>(window->winId()),
+                       HitTarget{target, std::move(hitTest)});
 }
 
 void NativeDropRouter::unregisterWindow(QWindow* window)
@@ -60,6 +70,7 @@ void NativeDropRouter::unregisterWindow(QWindow* window)
     }
     const quintptr handle = static_cast<quintptr>(window->winId());
     targets_.remove(handle);
+    hitTargets_.remove(handle);
     window->removeEventFilter(this);
 #ifdef Q_OS_WIN
     DragAcceptFiles(reinterpret_cast<HWND>(handle), FALSE);
@@ -77,9 +88,22 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
         return QObject::eventFilter(watched, event);
     }
 
+    const auto containsLocalDirectory = [](const QMimeData* mime) {
+        if (mime == nullptr || !mime->hasUrls()) return false;
+        const QList<QUrl> urls = mime->urls();
+        return std::any_of(
+            urls.cbegin(), urls.cend(), [](const QUrl& url) {
+                return url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir();
+            });
+    };
+
     if (event->type() == QEvent::DragEnter) {
         auto* drag = static_cast<QDragEnterEvent*>(event);
         if (drag->mimeData() != nullptr && drag->mimeData()->hasUrls()) {
+            if (*target == Target::List
+                && containsLocalDirectory(drag->mimeData())) {
+                return QObject::eventFilter(watched, event);
+            }
             drag->acceptProposedAction();
             return true;
         }
@@ -88,6 +112,10 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
         auto* drop = static_cast<QDropEvent*>(event);
         if (drop->mimeData() == nullptr || !drop->mimeData()->hasUrls()) {
             return true;
+        }
+        if (*target == Target::List
+            && containsLocalDirectory(drop->mimeData())) {
+            return QObject::eventFilter(watched, event);
         }
         QStringList paths;
         const QList<QUrl> urls = drop->mimeData()->urls();
@@ -145,6 +173,15 @@ bool NativeDropRouter::nativeEventFilter(const QByteArray& eventType,
     }
 
     const HDROP drop = reinterpret_cast<HDROP>(nativeMessage->wParam);
+    Target resolvedTarget = *target;
+    POINT clientPoint{};
+    if (DragQueryPoint(drop, &clientPoint)) {
+        const auto hitTarget = hitTargets_.constFind(handle);
+        if (hitTarget != hitTargets_.cend()
+            && hitTarget->hitTest(QPointF(clientPoint.x, clientPoint.y))) {
+            resolvedTarget = hitTarget->target;
+        }
+    }
     const UINT count = DragQueryFileW(drop, 0xFFFFFFFFU, nullptr, 0);
     QStringList paths;
     paths.reserve(static_cast<qsizetype>(count));
@@ -156,7 +193,7 @@ bool NativeDropRouter::nativeEventFilter(const QByteArray& eventType,
                                              static_cast<qsizetype>(length)));
     }
     DragFinish(drop);
-    routeLocalPaths(*target, paths);
+    routeLocalPaths(resolvedTarget, paths);
     return true;
 #else
     Q_UNUSED(message)
