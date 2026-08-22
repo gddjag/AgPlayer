@@ -6,9 +6,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <atomic>
 #include <cmath>
 
 class AudioEditorControllerTest final : public QObject {
@@ -37,6 +39,8 @@ private slots:
             "projectExportSettings");
         QVERIFY(propertyIndex >= 0);
         QVERIFY(!controller.metaObject()->property(propertyIndex).isWritable());
+        QCOMPARE(controller.projectExportSettingsMap()
+                     .value(QStringLiteral("bitDepth")).toInt(), 24);
 
         QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.newRecording")));
@@ -142,6 +146,51 @@ private slots:
         QCOMPARE(controller.timelineEventViews().size(), 2);
         QVERIFY(controller.undo());
         QCOMPARE(controller.timelineEventViews().size(), 1);
+    }
+
+    void rejectedEventGesturesPublishRollbackWithoutChangingHistory()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(controller.splitEvent(1, 500));
+
+        const quint64 revision = controller.timelineRevisionForTesting();
+        const std::uint64_t history = controller.historyStateIdForTesting();
+        const bool undoEnabled = controller.actionEnabled(QStringLiteral("editor.undo"));
+        QSignalSpy documentChanges(&controller,
+                                   &AudioEditorController::documentChanged);
+
+        QVERIFY(controller.beginEventGesture(QStringLiteral("2"),
+                                             QStringLiteral("move"), false));
+        QVERIFY(controller.moveEvent(QStringLiteral("2"), 100));
+        QCOMPARE(controller.timelineEventViews().at(1).toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(),
+                 qint64{100});
+        documentChanges.clear();
+        QVERIFY(!controller.endEventGesture());
+        QCOMPARE(documentChanges.count(), 1);
+        QCOMPARE(controller.timelineEventViews().at(1).toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(),
+                 qint64{500});
+        QCOMPARE(controller.timelineRevisionForTesting(), revision);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QCOMPARE(controller.actionEnabled(QStringLiteral("editor.undo")), undoEnabled);
+
+        QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
+                                             QStringLiteral("trim"), false));
+        QVERIFY(controller.trimEvent(QStringLiteral("1"), 0, 2'000, 0));
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("sourceEnd")).toLongLong(),
+                 qint64{2'000});
+        documentChanges.clear();
+        QVERIFY(!controller.endEventGesture());
+        QCOMPARE(documentChanges.count(), 1);
+        QCOMPARE(controller.timelineEventViews().first().toMap()
+                     .value(QStringLiteral("sourceEnd")).toLongLong(),
+                 qint64{500});
+        QCOMPARE(controller.timelineRevisionForTesting(), revision);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QCOMPARE(controller.actionEnabled(QStringLiteral("editor.undo")), undoEnabled);
     }
 
     void selectionAndViewportUseOneExactFramePixelMapping()
@@ -760,6 +809,10 @@ private slots:
         QCOMPARE(controller.playheadFrame(), qint64{123});
         QVERIFY(!controller.modified());
         QCOMPARE(playbackChanges.count(), 0);
+        QVERIFY(!controller.stopPlayback());
+        QCOMPARE(controller.playheadFrame(), qint64{123});
+        QVERIFY(!controller.modified());
+        QCOMPARE(playbackChanges.count(), 0);
     }
 
     void selectionDoesNotMovePlayheadWhenPlaybackCapabilityIsFalse()
@@ -1063,6 +1116,7 @@ private slots:
         ProjectExportSettings expected;
         expected.codecName = QStringLiteral("flac");
         expected.sampleRate = 48'000;
+        expected.bitDepth = 16;
         expected.channels = 1;
         expected.bitRate = 192'000;
         expected.keepMetadata = false;
@@ -1080,6 +1134,7 @@ private slots:
         const ProjectExportSettings restored = loaded.projectExportSettings();
         QCOMPARE(restored.codecName, expected.codecName);
         QCOMPARE(restored.sampleRate, expected.sampleRate);
+        QCOMPARE(restored.bitDepth, expected.bitDepth);
         QCOMPARE(restored.channels, expected.channels);
         QCOMPARE(restored.bitRate, expected.bitRate);
         QCOMPARE(restored.keepMetadata, expected.keepMetadata);
@@ -1091,6 +1146,7 @@ private slots:
         QVERIFY(!loaded.exportTo(QUrl::fromLocalFile(exported)));
         QCOMPARE(loaded.projectExportSettings().codecName, expected.codecName);
         QCOMPARE(loaded.projectExportSettings().sampleRate, expected.sampleRate);
+        QCOMPARE(loaded.projectExportSettings().bitDepth, expected.bitDepth);
         QCOMPARE(loaded.projectExportSettings().channels, expected.channels);
         QCOMPARE(loaded.projectExportSettings().bitRate, expected.bitRate);
         QCOMPARE(loaded.projectExportSettings().keepMetadata,
@@ -1195,6 +1251,99 @@ private slots:
             return false;
         };
         QTRY_VERIFY_WITH_TIMEOUT(hasVisiblePeak(), 10'000);
+    }
+
+    void viewportDecodeIsSingleFlightAndPublishesOnlyLatestPendingRequest()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int active{0};
+        std::atomic_int maximum{0};
+        std::atomic_int starts{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        const qint64 quarter = controller.totalFrames() / 4;
+        QVERIFY(controller.setSelection(quarter, quarter * 2));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        controller.setViewportWaveformTaskObserverForTesting(
+            [&](const bool starting) {
+                if (!starting) {
+                    --active;
+                    return;
+                }
+                const int now = ++active;
+                int observed = maximum.load();
+                while (now > observed
+                       && !maximum.compare_exchange_weak(observed, now)) {}
+                if (++starts == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                }
+            });
+
+        controller.viewport()->setViewportWidth(120.0);
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(controller.viewport()->setVisibleRange(quarter, quarter * 2));
+        QVERIFY(controller.viewport()->setVisibleRange(quarter * 2,
+                                                        controller.totalFrames()));
+        QTest::qWait(100);
+        QCOMPARE(starts.load(), 1);
+        QCOMPARE(maximum.load(), 1);
+        releaseFirst.release();
+
+        QTRY_COMPARE_WITH_TIMEOUT(starts.load(), 2, 10'000);
+        QTRY_COMPARE_WITH_TIMEOUT(active.load(), 0, 10'000);
+        QCOMPARE(maximum.load(), 1);
+        const auto hasVisiblePeak = [&controller] {
+            for (const QVariant& channelValue : controller.viewportChannelPeaks()) {
+                for (const QVariant& value : channelValue.toList()) {
+                    if (value.isValid() && !value.isNull()
+                        && std::abs(value.toDouble()) > 0.001) return true;
+                }
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(hasVisiblePeak(), 10'000);
+    }
+
+    void invalidViewportRequestCancelsActiveAndDropsPendingDecode()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int active{0};
+        std::atomic_int starts{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        controller.setViewportWaveformTaskObserverForTesting(
+            [&](const bool starting) {
+                if (!starting) {
+                    --active;
+                    return;
+                }
+                ++active;
+                if (++starts == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                }
+            });
+
+        controller.viewport()->setViewportWidth(120.0);
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(controller.viewport()->setVisibleRange(
+            controller.totalFrames() / 4, controller.totalFrames() / 2));
+        const quint64 pendingGeneration = controller.viewportWaveformGeneration();
+        controller.viewport()->setViewportWidth(0.0);
+        QVERIFY(controller.viewportWaveformGeneration() > pendingGeneration);
+        QVERIFY(controller.viewportChannelPeaks().isEmpty());
+        releaseFirst.release();
+
+        QTRY_COMPARE_WITH_TIMEOUT(active.load(), 0, 10'000);
+        QCOMPARE(starts.load(), 1);
+        QVERIFY(controller.viewportChannelPeaks().isEmpty());
     }
 
     void obsoleteReplacementOperationsAreAbsent()

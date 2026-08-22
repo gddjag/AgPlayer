@@ -149,7 +149,7 @@
         <translation>Opus 音频 (*.opus)</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="48"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="816"/>
         <source>导出音频</source>
         <translation>ส่งออกเสียง</translation>
     </message>
@@ -175,27 +175,27 @@
         <translation>ส่วนที่เลือกปัจจุบัน</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="81"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="762"/>
         <source>输出格式</source>
         <translation>รูปแบบเอาต์พุต</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="89"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="769"/>
         <source>采样率</source>
-        <translation>อัตราสุ่มตัวอย่าง</translation>
+        <translation>อัตราตัวอย่าง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="97"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="785"/>
         <source>声道</source>
-        <translation>ช่องสัญญาณ</translation>
+        <translation>ช่อง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="105"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="213"/>
         <source>单声道</source>
         <translation>โมโน</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="106"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="213"/>
         <source>立体声</source>
         <translation>สเตอริโอ</translation>
     </message>
@@ -280,9 +280,9 @@
         <translation>ได้รับ</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="260"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="132"/>
         <source>舍弃未保存更改？</source>
-        <translation>舍弃未保存更改？</translation>
+        <translation>ละทิ้งการเปลี่ยนแปลงที่ยังไม่ได้บันทึกหรือไม่?</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="266"/>
@@ -298,6 +298,219 @@
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="346"/>
         <source>取消</source>
         <translation>ยกเลิก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="118"/>
+        <source>音频或工程 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma *.agproj)</source>
+        <translation>ไฟล์เสียงหรือโปรเจกต์ (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma *.agproj)</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="127"/>
+        <source>AgPlayer 工程 (*.agproj)</source>
+        <translation>โปรเจกต์ AgPlayer (*.agproj)</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="138"/>
+        <source>当前工程包含未保存更改。</source>
+        <translation>โปรเจกต์ปัจจุบันมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="337"/>
+        <source>录音控制</source>
+        <translation>การควบคุมการบันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="357"/>
+        <source>开始录音</source>
+        <translation>เริ่มบันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="374"/>
+        <source>暂停或继续录音</source>
+        <translation>หยุดชั่วคราวหรือบันทึกต่อ</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="399"/>
+        <source>Phase 9 前不可用</source>
+        <translation>ใช้งานไม่ได้ก่อน Phase 9</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="402"/>
+        <source>录音已暂停</source>
+        <translation>หยุดบันทึกชั่วคราวแล้ว</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="402"/>
+        <source>正在录音</source>
+        <translation>กำลังบันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="403"/>
+        <source>准备录音</source>
+        <translation>พร้อมบันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="410"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="508"/>
+        <source>停止</source>
+        <translation>หยุด</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="430"/>
+        <source>播放控制</source>
+        <translation>การควบคุมการเล่น</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="445"/>
+        <source>跳到开头</source>
+        <translation>ไปยังจุดเริ่มต้น</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="459"/>
+        <source>后退五秒</source>
+        <translation>ย้อนกลับห้าวินาที</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="477"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="842"/>
+        <source>暂停</source>
+        <translation>หยุดชั่วคราว</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="477"/>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="842"/>
+        <source>播放</source>
+        <translation>เล่น</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="494"/>
+        <source>前进五秒</source>
+        <translation>ไปข้างหน้าห้าวินาที</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="532"/>
+        <source>快捷键与鼠标操作</source>
+        <translation>แป้นพิมพ์ลัดและการใช้เมาส์</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="541"/>
+        <source>播放：Phase 12 接入       S 或 Ctrl+B = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source>
+        <translation>การเล่น: รองรับใน Phase 12       S หรือ Ctrl+B = แยกที่หัวอ่าน       Delete = ลบคลิป       Ctrl+C / X / V = คัดลอก / ตัด / วาง       Ctrl+Z / Y = เลิกทำ / ทำซ้ำ</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="549"/>
+        <source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪</source>
+        <translation>Ctrl+ลาก = ทำสำเนาอย่างรวดเร็ว       Ctrl+ล้อเมาส์ = ซูมไทม์ไลน์       Shift+ล้อเมาส์ = เลื่อนแนวนอน       ลากขอบคลิป = ตัดแต่ง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="607"/>
+        <source>A. 录音</source>
+        <translation>A. การบันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="611"/>
+        <source>输入设备</source>
+        <translation>อุปกรณ์อินพุต</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="619"/>
+        <source>输入电平</source>
+        <translation>ระดับสัญญาณเข้า</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="627"/>
+        <source>监听</source>
+        <translation>ตรวจฟัง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="632"/>
+        <source>录音格式</source>
+        <translation>รูปแบบการบันทึก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="639"/>
+        <source> 声道</source>
+        <translation> ช่อง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="658"/>
+        <source>B. 速度 / BPM</source>
+        <translation>B. ความเร็ว / BPM</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="662"/>
+        <source>BPM  </source>
+        <translation>BPM  </translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="667"/>
+        <source>自动检测BPM</source>
+        <translation>ตรวจหา BPM อัตโนมัติ</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="674"/>
+        <source>速度</source>
+        <translation>ความเร็ว</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="683"/>
+        <source>重置</source>
+        <translation>รีเซ็ต</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="700"/>
+        <source>C. 升调降调</source>
+        <translation>C. ปรับระดับเสียง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="703"/>
+        <source>半音</source>
+        <translation>ครึ่งเสียง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="729"/>
+        <source>D. 保持音调</source>
+        <translation>D. รักษาระดับเสียง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="732"/>
+        <source>变速时保持音调</source>
+        <translation>รักษาระดับเสียงเมื่อเปลี่ยนความเร็ว</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="743"/>
+        <source>人声保真 / Formant 保护</source>
+        <translation>ความสมจริงของเสียงร้อง / การปกป้องฟอร์แมนต์</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="759"/>
+        <source>E. 导出设置</source>
+        <translation>E. การตั้งค่าการส่งออก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="777"/>
+        <source>位深</source>
+        <translation>ความลึกบิต</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="793"/>
+        <source>比特率</source>
+        <translation>อัตราบิต</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="802"/>
+        <source>输出目录</source>
+        <translation>โฟลเดอร์เอาต์พุต</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="861"/>
+        <source>收起设置</source>
+        <translation>ยุบการตั้งค่า</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="861"/>
+        <source>编辑设置</source>
+        <translation>แก้ไขการตั้งค่า</translation>
     </message>
 </context>
 <context>
@@ -351,12 +564,38 @@
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="45"/>
         <source>舍弃未保存更改？</source>
-        <translation>舍弃未保存更改？</translation>
+        <translation>ละทิ้งการเปลี่ยนแปลงที่ยังไม่ได้บันทึกหรือไม่?</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="50"/>
         <source>当前音频尚未保存。关闭窗口将舍弃这些更改。</source>
-        <translation>当前音频尚未保存。关闭窗口将舍弃这些更改。</translation>
+        <translation>เสียงปัจจุบันยังไม่ได้บันทึก การปิดหน้าต่างจะละทิ้งการเปลี่ยนแปลงเหล่านี้</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="110"/>
+        <source>最小化</source>
+        <translation>ย่อหน้าต่าง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="123"/>
+        <source>还原</source>
+        <translation>คืนค่า</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="123"/>
+        <source>最大化</source>
+        <translation>ขยายเต็มจอ</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="134"/>
+        <source>关闭</source>
+        <translation>ปิด</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="17"/>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="95"/>
+        <source>AgPlayer 音频编辑</source>
+        <translation>ตัวแก้ไขเสียง AgPlayer</translation>
     </message>
 </context>
 <context>
@@ -400,22 +639,22 @@
         <translation>ตัด</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="69"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="121"/>
         <source>复制</source>
         <translation>คัดลอก</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="70"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="129"/>
         <source>粘贴</source>
         <translation>วาง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="71"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="103"/>
         <source>删除</source>
         <translation>ลบ</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="73"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="112"/>
         <source>裁剪</source>
         <translation>ครอบตัด</translation>
     </message>
@@ -425,14 +664,14 @@
         <translation>ปิดเสียง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="75"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="137"/>
         <source>淡入</source>
-        <translation>淡入</translation>
+        <translation>เฟดเข้า</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="76"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="145"/>
         <source>淡出</source>
-        <translation>淡出</translation>
+        <translation>เฟดออก</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="77"/>
@@ -444,38 +683,73 @@
         <source>导出</source>
         <translation>ส่งออก</translation>
     </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="71"/>
+        <source>导入音频</source>
+        <translation>นำเข้าเสียง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="77"/>
+        <source>保存工程</source>
+        <translation>บันทึกโปรเจกต์</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="85"/>
+        <source>选择</source>
+        <translation>เลือก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="92"/>
+        <source>分割</source>
+        <translation>แยก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="153"/>
+        <source>静音片段</source>
+        <translation>ปิดเสียงคลิป</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="162"/>
+        <source>清除</source>
+        <translation>ล้าง</translation>
+    </message>
 </context>
 <context>
     <name>EditorStatusBar</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="16"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18"/>
         <source>就绪</source>
         <translation>พร้อม</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="16"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18"/>
         <source>未打开音频</source>
-        <translation>未打开音频</translation>
+        <translation>ยังไม่ได้เปิดไฟล์เสียง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="24"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="27"/>
+        <source>播放：Phase 12 接入 · R：Phase 9 接入 · Ctrl+Shift+A 取消选区 · Ctrl+W 清空</source>
+        <translation>การเล่น: รองรับใน Phase 12 · R: รองรับใน Phase 9 · Ctrl+Shift+A ล้างช่วงที่เลือก · Ctrl+W ล้าง</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="29"/>
         <source>选区范围：%1 - %2（%3 帧）</source>
-        <translation>选区范围：%1 - %2（%3 帧）</translation>
+        <translation>ช่วงที่เลือก: %1 - %2 (%3 เฟรม)</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="28"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="33"/>
         <source>选区范围：--</source>
-        <translation>选区范围：--</translation>
+        <translation>ช่วงที่เลือก: --</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="37"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="44"/>
         <source> 声道</source>
-        <translation> 声道</translation>
+        <translation> ช่อง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="38"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="45"/>
         <source>采样率 --   位深 --   声道 --   时长 --</source>
-        <translation>采样率 --   位深 --   声道 --   时长 --</translation>
+        <translation>อัตราตัวอย่าง --   ความลึกบิต --   ช่อง --   ระยะเวลา --</translation>
     </message>
 </context>
 <context>
@@ -484,6 +758,36 @@
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="173"/>
         <source>打开音频或新建录音以开始编辑</source>
         <translation>打开音频或新建录音以开始编辑</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="147"/>
+        <source>片段左修剪手柄</source>
+        <translation>ที่จับตัดแต่งด้านซ้ายของคลิป</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="194"/>
+        <source>片段右修剪手柄</source>
+        <translation>ที่จับตัดแต่งด้านขวาของคลิป</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="305"/>
+        <source>播放头</source>
+        <translation>หัวอ่าน</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="345"/>
+        <source>选区起点</source>
+        <translation>จุดเริ่มต้นช่วงที่เลือก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="379"/>
+        <source>选区终点</source>
+        <translation>จุดสิ้นสุดช่วงที่เลือก</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="406"/>
+        <source>导入音频后开始编辑</source>
+        <translation>นำเข้าเสียงเพื่อเริ่มแก้ไข</translation>
     </message>
 </context>
 <context>
@@ -761,27 +1065,27 @@
 <context>
     <name>FileSummaryBar</name>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="30"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="48"/>
         <source>未打开音频</source>
-        <translation>未打开音频</translation>
+        <translation>ยังไม่ได้เปิดไฟล์เสียง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="42"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="60"/>
         <source>单声道</source>
         <translation>โมโน</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="43"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="61"/>
         <source>立体声</source>
         <translation>สเตอริโอ</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="44"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="62"/>
         <source> 声道</source>
-        <translation> 声道</translation>
+        <translation> ช่อง</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="46"/>
+        <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="64"/>
         <source>BPM --</source>
         <translation>BPM --</translation>
     </message>

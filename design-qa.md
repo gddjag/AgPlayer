@@ -1,60 +1,45 @@
-# Design QA — Phase 6 final-review correction — 2026-08-22
+# Design QA — Phase 6 final rereview — 2026-08-23
 
 ## Source visual truth
 
 - Approved reference: `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频编辑.png` (`1672x941`).
-- Candidate content is the real two-second `sine-440hz.wav` fixture. Reference-only filename, device, signal level, BPM, selection, Formant, playback, recording, and export results are not fabricated.
+- Candidate content is the real two-second `sine-440hz.wav` fixture. Reference-only filename, device, signal level, BPM, selection, Formant, playback, recording, and export results are intentionally not fabricated.
 
 ## Final Release and Debug matrix
 
-- Release: `build/qa/phase6/release-review-final4/tools-zh-theme0-tool0-{1672x941,1280x720,880x560}.png`
-- Debug: `build/qa/phase6/debug-review-final4/tools-zh-theme0-tool0-{1672x941,1280x720,880x560}.png`
-- Release source/candidate and visible mask: `build/qa/phase6/comparisons-review-final4/release-editor-1672x941-final4-{comparison,difference-mask}.png`
-- Debug source/candidate and visible mask: `build/qa/phase6/comparisons-review-final4/debug-editor-1672x941-final4-{comparison,difference-mask}.png`
+- Release: `build/qa/phase6/release-review-final5/tools-zh-theme0-tool0-{1672x941,1280x720,880x560}.png`
+- Debug: `build/qa/phase6/debug-review-final5/tools-zh-theme0-tool0-{1672x941,1280x720,880x560}.png`
+- Release source/candidate and mask: `build/qa/phase6/comparisons-review-final5/release-editor-1672x941-final5-{comparison,difference-mask}.png`
+- Debug source/candidate and mask: `build/qa/phase6/comparisons-review-final5/debug-editor-1672x941-final5-{comparison,difference-mask}.png`
 
-Both six-image matrix runs loaded the real WAV and exited zero. All artifacts
-have the requested logical dimensions and contain no modal. The threshold-12
-Release mask reports 579,876 changed pixels (`0.368561`) and mean maximum-channel
-difference `34.297`; Debug reports 579,877 (`0.368562`) and `34.297`. The large
-content mask is expected from the honest two-second sine waveform and the
-required omission/disabled treatment of future capabilities, not a geometry
-acceptance threshold.
+Both matrix runs loaded the real WAV, wrote all three exact logical sizes, and
+exited zero. The threshold-12 Release and Debug masks each report 580,106
+changed pixels (`0.368707`) and mean maximum-channel difference `34.318`. The
+large mask is expected from honest real-sine data plus required disabled or
+absent later-phase controls, rather than a geometry acceptance threshold.
 
 ## Manual P0/P1/P2 review
 
-- P0: none. The exact title, underlined tab order, command order, A–E inspector,
-  waveform, two transport cards, shortcut card, and status bar are present and
-  unobstructed at the reference size.
-- P1: none. At 1280 the inspector is independently scrollable. At 880 the
-  complete disabled Play entry and active `编辑设置` entry remain in the first
-  viewport; opening settings and scrolling to the end places the disabled E
-  group Export action fully inside the page. These mapped bounds are exercised
-  by QML, not inferred from `visible` alone.
-- P2: none. Recording, BPM, speed, pitch, preserve-pitch, playback, and export
-  remain visible but capability-gated. The recording indicator is muted gray,
-  the playback icon/ring and companion controls use explicit disabled opacity,
-  and the 880 Play entry uses the same disabled treatment. Accessible names,
-  roles, and disabled `enabled` state are QML-tested.
-- The source/candidate hierarchy and existing icon assets are retained. No
-  emoji, handcrafted SVG, new raster asset, fake device/data, or later-phase
-  interaction was introduced.
+- P0: none. The exact title, tab/command order, A–E inspector, waveform,
+  transport cards, shortcut card, and status bar remain unobstructed at
+  1672x941 in both configurations.
+- P1: none. At 1280 the inspector remains scrollable. At 880 the complete
+  first-viewport Play entry and `编辑设置` entry remain reachable; Play is
+  visibly disabled because Phase 12 has not supplied a backend, while the
+  settings entry reaches the E group.
+- P2: none. Unsupported record/play controls are gray and low-opacity rather
+  than visually active. E shows persisted `24-bit` and an empty output
+  directory as `--`, never as the project path. The dead Space binding and
+  active-playback hint are absent; the visible copy says `播放：Phase 12 接入`.
+- Release and Debug candidates are visually equivalent. No modal, fake device,
+  fake data, new asset, or later-phase interaction appears in any capture.
 
-## Closed iteration findings
+## Closed final-rereview findings
 
-- Removed the old DocumentRenderer preview/BPM/export paths and the
-  editor-owned second player; all five future backend capabilities are
-  explicitly false in Phase 6.
-- E reads persisted project export settings without writable QML shadow state;
-  unsupported values show `--` and the action stays disabled.
-- Replaced whole-visible-range PCM retention with cancelable streaming peak
-  buckets bounded by channels times viewport width; total Scene Graph points
-  are bounded across channels to `2 * logical width`.
-- Playhead, Move, and Trim preview locally and commit once on release. Split's
-  toolbar action only selects scissors mode; `S`/`Ctrl+B` perform the split.
-- Removed the duplicate shell Space shortcut. Actual wheel events now apply
-  `1.25` zoom-in and `0.8` zoom-out, while ruler and scrollbar use the shared
-  frame/pixel viewport seam.
-- The final visual correction replaces the misleading bright recording red and
-  playback green with visibly disabled gray-blue controls in all six captures.
+- Persisted project export settings now validate and round-trip bit depth, with schema-compatible default 24 and exact E-group binding.
+- Rejected Move/Trim gestures clear their local candidate and notify QML to redraw the real timeline without changing revision or Undo history.
+- Viewport decoding is single-flight: one active task plus one replaceable latest pending request. Invalid requests cancel the active generation and discard pending work; no PCM cache was added.
+- Capability-false `stopPlayback()` returns false without moving the persisted playhead or dirtying the project. Dead Space/test-only/actionRevision state was removed.
+- Exact lupdate extraction covers 86 current Phase 6 QML sources in zh/en/th/vi; en/th/vi contain completed locale translations without Chinese fallback.
 
 final result: passed

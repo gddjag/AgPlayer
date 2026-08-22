@@ -382,3 +382,18 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   Full CTest remains Release 82/83 and Debug 79/84 with the exact unrelated
   baseline failures recorded in `task-6-report.md`. `design-qa.md` is passed
   only after manual review of the final4 source/candidate images and masks.
+
+### Phase 6 final rereview closure (2026-08-23)
+
+- Persisted E settings now include validated/schema-compatible bit depth with
+  default 24 and honest empty output-directory semantics. Rejected Move/Trim
+  candidates notify QML rollback without revision/history changes, while
+  capability-false Stop preserves the persisted playhead and dirty state.
+- Viewport decoding is single-flight with one latest pending request; invalid
+  requests cancel active work and discard pending work. Dead Space and
+  `actionRevision` state are removed.
+- Exact lupdate extraction covers all 86 current Phase 6 QML sources in
+  completed zh/en/th/vi catalogs. Focused Release/Debug matrices pass 8/8;
+  both full builds pass; full CTest baselines are Release 83/84 and Debug
+  80/85. Final5 six-image/comparison/mask review passes with no executable
+  P0/P1/P2. Commit message: `fix(editor): close phase six final review gaps`.

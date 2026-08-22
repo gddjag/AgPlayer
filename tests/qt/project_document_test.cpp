@@ -132,6 +132,7 @@ class ProjectDocumentTest final : public QObject {
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("flac");
         settings.sampleRate = 96'000;
+        settings.bitDepth = 24;
         settings.channels = 2;
         settings.bitRate = 512'000;
         settings.keepMetadata = false;
@@ -188,6 +189,8 @@ private slots:
 
         const QJsonObject root = QJsonDocument::fromJson(json).object();
         QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 1);
+        QCOMPARE(root.value(QStringLiteral("exportSettings")).toObject()
+                     .value(QStringLiteral("bitDepth")).toInt(), 24);
         const QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
         QCOMPARE(sources.size(), 1);
         QCOMPARE(sources[0].toObject().value(QStringLiteral("pathKind")).toString(),
@@ -203,6 +206,7 @@ private slots:
         QCOMPARE(loaded.visibleEndFrame, SampleFrame{8'000});
         QCOMPARE(loaded.exportSettings.codecName, project.exportSettings.codecName);
         QCOMPARE(loaded.exportSettings.sampleRate, project.exportSettings.sampleRate);
+        QCOMPARE(loaded.exportSettings.bitDepth, project.exportSettings.bitDepth);
         QCOMPARE(loaded.exportSettings.channels, project.exportSettings.channels);
         QCOMPARE(loaded.exportSettings.bitRate, project.exportSettings.bitRate);
         QCOMPARE(loaded.exportSettings.keepMetadata,
@@ -224,6 +228,23 @@ private slots:
                  QFileInfo(project.sourcePath).absoluteFilePath());
         QCOMPARE(loaded.document->markers(), project.document.markers());
         QCOMPARE(loaded.document->selection(), project.document.selection());
+    }
+
+    void olderSchemaOneProjectWithoutBitDepthUsesCompatibleDefault()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        QJsonObject root = readObject(project.projectPath);
+        QJsonObject settings = root.value(QStringLiteral("exportSettings")).toObject();
+        settings.remove(QStringLiteral("bitDepth"));
+        root.insert(QStringLiteral("exportSettings"), settings);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QCOMPARE(loaded.exportSettings.bitDepth, 24);
     }
 
     void rejectsSchemaMalformedDuplicateInvalidOverlapAndTraversal()
@@ -568,6 +589,11 @@ private slots:
         invalid.sampleRate = 384'001;
         rejects(invalid);
         invalid = project.exportSettings;
+        invalid.bitDepth = 7;
+        rejects(invalid);
+        invalid.bitDepth = 33;
+        rejects(invalid);
+        invalid = project.exportSettings;
         invalid.channels = -1;
         rejects(invalid);
         invalid.channels = 3;
@@ -604,6 +630,8 @@ private slots:
 
         rejects("sampleRate", 7'999);
         rejects("sampleRate", 384'001);
+        rejects("bitDepth", 7);
+        rejects("bitDepth", 33);
         rejects("channels", -1);
         rejects("channels", 3);
         rejects("bitRate", QStringLiteral("-1"));

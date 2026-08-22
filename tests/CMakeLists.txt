@@ -1019,6 +1019,14 @@ if (WIN32)
     )
     set_tests_properties(audio_tools_layout_contract_test PROPERTIES TIMEOUT 10)
 
+    add_test(
+        NAME phase6_translation_coverage_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/phase6_translation_coverage_test.ps1
+                -SourceRoot ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(phase6_translation_coverage_test PROPERTIES TIMEOUT 10)
+
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_test(
             NAME debug_runtime_deployment_test

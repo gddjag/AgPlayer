@@ -21,8 +21,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 enum class EditorSessionState {
@@ -183,6 +185,13 @@ public:
     [[nodiscard]] bool busy() const noexcept;
     [[nodiscard]] quint64 viewportWaveformGeneration() const noexcept
     { return viewport_waveform_generation_; }
+    [[nodiscard]] quint64 timelineRevisionForTesting() const noexcept
+    { return document_.timelineSnapshot().revision; }
+    [[nodiscard]] std::uint64_t historyStateIdForTesting() const noexcept
+    { return document_.historyStateId(); }
+    void setViewportWaveformTaskObserverForTesting(
+        std::function<void(bool)> observer)
+    { viewport_waveform_task_observer_ = std::move(observer); }
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
@@ -280,8 +289,15 @@ signals:
 
 private:
     struct RecordingFinalizeResult;
+    using ViewportWaveformPeaks = std::vector<std::vector<float>>;
+    struct ViewportWaveformJob final {
+        quint64 generation{};
+        std::shared_ptr<std::atomic_bool> cancelToken;
+        std::function<ViewportWaveformPeaks()> work;
+    };
     void refreshActions();
     void requestViewportWaveform();
+    void startViewportWaveformJob(ViewportWaveformJob job);
     void clearViewportWaveformState();
     void setState(EditorSessionState value);
     void setError(QString message);
@@ -324,6 +340,8 @@ private:
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
+    std::optional<ViewportWaveformJob> pending_viewport_waveform_job_;
+    std::function<void(bool)> viewport_waveform_task_observer_;
 
     EditorSessionState state_{EditorSessionState::Empty};
     bool has_document_{};

@@ -76,14 +76,16 @@ TestCase {
         verifyGeometry("editorStatusBar", 0, 824, 1300, 25)
     }
 
-    function test_composedToolsShellHasOnePageOwnedSpaceShortcut() {
+    function test_composedToolsShellHasNoDeadSpaceShortcut() {
         const shell = createTemporaryObject(shellComponent, testCase)
         verify(shell)
         tryVerify(function() { return shell.visible })
         const shellPage = findChild(shell, "audioEditorPage")
         verify(shellPage)
-        compare(shellPage.playbackShortcutEnabled, false)
+        compare(findChild(shell, "editorSpaceShortcut"), null)
         compare(findChild(shell, "audioToolsSpaceShortcut"), null)
+        compare(findChild(shellPage, "editorShortcutText").text.indexOf(
+                    "播放：Phase 12 接入"), 0)
     }
 
     function test_toolbarExactOrderAndClearKeepsDocument() {
@@ -308,6 +310,8 @@ TestCase {
             verify(field, "missing read-only export field " + name)
             verify(field.text.length > 0)
         }
+        compare(findChild(page, "editorExportBitDepth").text, "24-bit")
+        compare(findChild(page, "editorExportDirectory").text, "--")
         compare(findChild(page, "audioEditorExportDialog"), null)
         compare(findChild(page, "editorExportButton").enabled, false)
     }

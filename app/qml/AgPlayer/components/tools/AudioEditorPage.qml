@@ -18,11 +18,8 @@ Rectangle {
     readonly property real responsiveContentHeight: narrowLayout ? 720
         : Math.max(height, 660)
     property bool inspectorExpanded: false
-    property int actionRevision: 0
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
-    readonly property bool playbackShortcutEnabled:
-        editorSpaceShortcut.enabled
 
     function textInputHasFocus() {
         const active = page.Window.window ? page.Window.window.activeFocusItem : null
@@ -46,14 +43,6 @@ Rectangle {
             + (includeMillis ? "." + String(millis).padStart(3, "0") : "")
     }
 
-    Shortcut {
-        id: editorSpaceShortcut
-        objectName: "editorSpaceShortcut"
-        sequence: "Space"
-        context: Qt.WindowShortcut
-        enabled: page.visible && AudioEditorController.playbackSupported
-            && !page.textInputHasFocus()
-    }
     Shortcut {
         sequence: "Ctrl+1"
         context: Qt.WindowShortcut
@@ -154,11 +143,6 @@ Rectangle {
         function onSaveProjectAsRequested() { saveProjectDialog.open() }
         function onDiscardConfirmationRequested() { discardDialog.open() }
     }
-    Connections {
-        target: AudioEditorController.actions
-        function onDataChanged() { page.actionRevision += 1 }
-    }
-
     Flickable {
         id: mainColumn
         objectName: "editorMainColumn"
@@ -552,8 +536,9 @@ Rectangle {
                 }
                 Rectangle { x: 16; y: 48; width: parent.width - 32; height: 1; color: "#34506c" }
                 Text {
+                    objectName: "editorShortcutText"
                     x: 22; y: 62; width: parent.width - 44
-                    text: qsTr("空格 = 播放 / 暂停       S 或 Ctrl+B = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做")
+                    text: qsTr("播放：Phase 12 接入       S 或 Ctrl+B = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做")
                     color: "#c4d2df"
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
@@ -793,7 +778,8 @@ Rectangle {
                             Label {
                                 objectName: "editorExportBitDepth"
                                 Layout.fillWidth: true
-                                text: "--"
+                                text: page.persistedExportSettings.bitDepth >= 8
+                                    ? page.persistedExportSettings.bitDepth + "-bit" : "--"
                                 color: "#f4f8ff"
                             }
                             Label { text: qsTr("声道"); color: "#c4d2df" }
@@ -817,8 +803,7 @@ Rectangle {
                             Label {
                                 objectName: "editorExportDirectory"
                                 Layout.fillWidth: true
-                                text: page.persistedExportSettings.outputDirectory
-                                    || AudioEditorController.projectPath || "--"
+                                text: page.persistedExportSettings.outputDirectory || "--"
                                 elide: Text.ElideMiddle
                                 color: "#f4f8ff"
                             }
@@ -831,7 +816,6 @@ Rectangle {
                             text: qsTr("导出音频")
                             icon.source: Theme.icon("download-line")
                             enabled: AudioEditorController.exportSupported
-                                && page.actionRevision >= 0
                                 && AudioEditorController.actionEnabled("editor.export")
                             Accessible.name: text
                             Accessible.role: Accessible.Button

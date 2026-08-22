@@ -13,6 +13,7 @@ namespace agplayer::editor {
 struct ProjectExportSettings final {
     QString codecName;
     int sampleRate{};
+    int bitDepth{24};
     int channels{};
     qint64 bitRate{};
     bool keepMetadata{true};

@@ -48,9 +48,9 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
 }
-if (($audioEditor | Select-String -AllMatches 'sequence:\s*"Space"').Matches.Count -ne 1 -or
+if ($audioEditor -match 'sequence:\s*"Space"' -or
     $toolsWindow -match 'sequence:\s*"Space"') {
-    throw 'The composed tools shell must expose exactly one editor-owned Space shortcut.'
+    throw 'The composed tools shell must not expose a dead Space shortcut.'
 }
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'

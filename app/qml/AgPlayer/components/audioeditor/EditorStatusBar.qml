@@ -24,7 +24,7 @@ Rectangle {
         Text {
             objectName: "editorStatusShortcutHint"
             text: showShortcutHint
-                ? qsTr("Space 播放/暂停 · R 录音 · Ctrl+Shift+A 取消选区 · Ctrl+W 清空")
+                ? qsTr("播放：Phase 12 接入 · R：Phase 9 接入 · Ctrl+Shift+A 取消选区 · Ctrl+W 清空")
                 : AudioEditorController.selectionStart >= 0
                 ? qsTr("选区范围：%1 - %2（%3 帧）")
                     .arg(AudioEditorController.selectionStart)

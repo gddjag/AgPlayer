@@ -371,6 +371,7 @@ bool same_project_export_settings(const ProjectExportSettings& left,
 {
     return left.codecName == right.codecName
         && left.sampleRate == right.sampleRate
+        && left.bitDepth == right.bitDepth
         && left.channels == right.channels
         && left.bitRate == right.bitRate
         && left.keepMetadata == right.keepMetadata
@@ -443,6 +444,7 @@ AudioEditorController::AudioEditorController(
 AudioEditorController::~AudioEditorController()
 {
     cancelOperation();
+    pending_viewport_waveform_job_.reset();
     if (viewport_waveform_cancel_token_) {
         viewport_waveform_cancel_token_->store(true,
                                                std::memory_order_release);
@@ -560,6 +562,7 @@ QVariantMap AudioEditorController::projectExportSettingsMap() const
 {
     return {{QStringLiteral("codecName"), project_export_settings_.codecName},
             {QStringLiteral("sampleRate"), project_export_settings_.sampleRate},
+            {QStringLiteral("bitDepth"), project_export_settings_.bitDepth},
             {QStringLiteral("channels"), project_export_settings_.channels},
             {QStringLiteral("bitRate"), project_export_settings_.bitRate},
             {QStringLiteral("keepMetadata"), project_export_settings_.keepMetadata},
@@ -593,6 +596,7 @@ void AudioEditorController::setProjectExportSettingsMap(
     ProjectExportSettings value;
     value.codecName = settings.value(QStringLiteral("codecName")).toString();
     value.sampleRate = settings.value(QStringLiteral("sampleRate")).toInt();
+    value.bitDepth = settings.value(QStringLiteral("bitDepth"), 24).toInt();
     value.channels = settings.value(QStringLiteral("channels")).toInt();
     value.bitRate = settings.value(QStringLiteral("bitRate")).toLongLong();
     value.keepMetadata = settings.value(
@@ -957,7 +961,7 @@ bool AudioEditorController::exportWithSettings(
     const bool defaultArguments = codecName.isEmpty() && sampleRate == 0
         && channels == 0 && bitRate == 0 && keepMetadata
         && variableBitRate && quality == 80;
-    ProjectExportSettings effective{codecName, sampleRate, channels, bitRate,
+    ProjectExportSettings effective{codecName, sampleRate, 24, channels, bitRate,
                                     keepMetadata, variableBitRate, quality,
                                     QFileInfo(path).absolutePath()};
     if (usePersistedDefaults && defaultArguments) {
@@ -1233,7 +1237,10 @@ bool AudioEditorController::endEventGesture()
                                       gesture.sourceEnd,
                                       gesture.timelineStart);
     }
-    if (!changed) return false;
+    if (!changed) {
+        emit documentChanged();
+        return false;
+    }
     finishTimelineMutation();
     return true;
 }
@@ -1669,6 +1676,7 @@ bool AudioEditorController::playPause()
 
 bool AudioEditorController::stopPlayback()
 {
+    if (!playbackSupported()) return false;
     const bool wasActive = playing_ || position_ms_ != 0;
     playing_ = false;
     const bool modifiedChanged = updatePersistedPlayhead(0, 0);
@@ -1720,6 +1728,7 @@ void AudioEditorController::setLoopEnabled(const bool enabled)
 void AudioEditorController::clearViewportWaveformState()
 {
     ++viewport_waveform_generation_;
+    pending_viewport_waveform_job_.reset();
     if (viewport_waveform_cancel_token_) {
         viewport_waveform_cancel_token_->store(true,
                                                std::memory_order_release);
@@ -1733,13 +1742,6 @@ void AudioEditorController::requestViewportWaveform()
     if (viewport_waveform_cancel_token_) {
         viewport_waveform_cancel_token_->store(true,
                                                std::memory_order_release);
-        viewport_waveform_cancel_token_.reset();
-    }
-    if (viewport_waveform_watcher_) {
-        viewport_waveform_watcher_->disconnect(this);
-        viewport_waveform_watcher_->cancel();
-        viewport_waveform_watcher_->deleteLater();
-        viewport_waveform_watcher_ = nullptr;
     }
     const qint64 recordedFrames = recording()
         ? static_cast<qint64>(recording_session_.framesCaptured())
@@ -1763,6 +1765,7 @@ void AudioEditorController::requestViewportWaveform()
     if ((!has_document_ && !recording())
         || clampedTotal <= 0 || channels_ <= 0 || visibleFrames <= 0
         || targetPoints <= 0) {
+        pending_viewport_waveform_job_.reset();
         viewport_channel_peaks_.clear();
         emit waveformChanged();
         return;
@@ -1775,27 +1778,9 @@ void AudioEditorController::requestViewportWaveform()
         ? recording_insert_frame_ : 0;
     const qreal recordingPeak = static_cast<qreal>(recording_session_.peak());
     const auto cancelToken = std::make_shared<std::atomic_bool>(false);
-    viewport_waveform_cancel_token_ = cancelToken;
-
-    auto* watcher = new QFutureWatcher<std::vector<std::vector<float>>>(this);
-    viewport_waveform_watcher_ = watcher;
-    connect(watcher,
-            &QFutureWatcher<std::vector<std::vector<float>>>::finished,
-            this,
-            [this, watcher, generation, cancelToken] {
-        if (viewport_waveform_watcher_ == watcher) {
-            viewport_waveform_watcher_ = nullptr;
-        }
-        if (cancelToken->load(std::memory_order_acquire)
-            || generation != viewport_waveform_generation_) {
-            watcher->deleteLater();
-            return;
-        }
-        viewport_channel_peaks_ = build_variant_peaks(watcher->result());
-        emit waveformChanged();
-        watcher->deleteLater();
-    });
-    watcher->setFuture(QtConcurrent::run(
+    ViewportWaveformJob job{
+        generation,
+        cancelToken,
         [snapshot, primaryPath = source_path_, primaryPeaks,
          startFrame, endFrame, targetPoints, channels = channels_,
          recordingActive, recordedFrames, recordingStartFrame,
@@ -1827,9 +1812,49 @@ void AudioEditorController::requestViewportWaveform()
                 }
             }
             return peaks;
-        }));
-    return;
+        }};
+    if (viewport_waveform_watcher_) {
+        pending_viewport_waveform_job_ = std::move(job);
+        return;
+    }
+    startViewportWaveformJob(std::move(job));
+}
 
+void AudioEditorController::startViewportWaveformJob(ViewportWaveformJob job)
+{
+    const quint64 generation = job.generation;
+    const auto cancelToken = job.cancelToken;
+    const auto observer = viewport_waveform_task_observer_;
+    viewport_waveform_cancel_token_ = cancelToken;
+    auto* watcher = new QFutureWatcher<ViewportWaveformPeaks>(this);
+    viewport_waveform_watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<ViewportWaveformPeaks>::finished,
+            this, [this, watcher, generation, cancelToken] {
+        if (viewport_waveform_watcher_ == watcher) {
+            viewport_waveform_watcher_ = nullptr;
+            viewport_waveform_cancel_token_.reset();
+        }
+        if (!cancelToken->load(std::memory_order_acquire)
+            && generation == viewport_waveform_generation_) {
+            viewport_channel_peaks_ = build_variant_peaks(watcher->result());
+            emit waveformChanged();
+        }
+        watcher->deleteLater();
+        if (!viewport_waveform_watcher_ && pending_viewport_waveform_job_) {
+            ViewportWaveformJob next = std::move(*pending_viewport_waveform_job_);
+            pending_viewport_waveform_job_.reset();
+            if (next.generation == viewport_waveform_generation_) {
+                startViewportWaveformJob(std::move(next));
+            }
+        }
+    });
+    watcher->setFuture(QtConcurrent::run(
+        [work = std::move(job.work), observer]() mutable {
+            if (observer) observer(true);
+            ViewportWaveformPeaks result = work();
+            if (observer) observer(false);
+            return result;
+        }));
 }
 
 void AudioEditorController::refreshActions()

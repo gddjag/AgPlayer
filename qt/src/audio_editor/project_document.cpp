@@ -25,7 +25,8 @@ bool isValidProjectExportSettings(const ProjectExportSettings& settings) noexcep
 {
     const bool validSampleRate = settings.sampleRate == 0
         || (settings.sampleRate >= 8'000 && settings.sampleRate <= 384'000);
-    return validSampleRate && settings.channels >= 0 && settings.channels <= 2
+    return validSampleRate && settings.bitDepth >= 8 && settings.bitDepth <= 32
+        && settings.channels >= 0 && settings.channels <= 2
         && settings.bitRate >= 0 && settings.bitRate <= 1'536'000
         && settings.quality >= 0 && settings.quality <= 100;
 }
@@ -221,6 +222,7 @@ QJsonObject exportJson(const ProjectExportSettings& settings)
 {
     return {{QStringLiteral("codecName"), settings.codecName},
             {QStringLiteral("sampleRate"), settings.sampleRate},
+            {QStringLiteral("bitDepth"), settings.bitDepth},
             {QStringLiteral("channels"), settings.channels},
             {QStringLiteral("bitRate"), integerJson(settings.bitRate)},
             {QStringLiteral("keepMetadata"), settings.keepMetadata},
@@ -234,9 +236,11 @@ bool parseExport(const QJsonValue& value, ProjectExportSettings& output)
     if (!value.isObject()) return false;
     const QJsonObject object = value.toObject();
     ProjectExportSettings parsed;
-    qint64 rate{}, channels{}, bitRate{}, quality{};
+    qint64 rate{}, bitDepth{parsed.bitDepth}, channels{}, bitRate{}, quality{};
+    const QJsonValue bitDepthValue = object.value(QStringLiteral("bitDepth"));
     if (!stringValue(object, "codecName", parsed.codecName)
         || !integer(object.value(QStringLiteral("sampleRate")), rate)
+        || (!bitDepthValue.isUndefined() && !integer(bitDepthValue, bitDepth))
         || !integer(object.value(QStringLiteral("channels")), channels)
         || !integer(object.value(QStringLiteral("bitRate")), bitRate)
         || !boolValue(object, "keepMetadata", parsed.keepMetadata)
@@ -244,10 +248,13 @@ bool parseExport(const QJsonValue& value, ProjectExportSettings& output)
         || !integer(object.value(QStringLiteral("quality")), quality)
         || !stringValue(object, "outputDirectory", parsed.outputDirectory)
         || rate < 0 || rate > std::numeric_limits<int>::max()
+        || bitDepth < std::numeric_limits<int>::min()
+        || bitDepth > std::numeric_limits<int>::max()
         || channels < 0 || channels > std::numeric_limits<int>::max()
         || quality < std::numeric_limits<int>::min()
         || quality > std::numeric_limits<int>::max()) return false;
     parsed.sampleRate = static_cast<int>(rate);
+    parsed.bitDepth = static_cast<int>(bitDepth);
     parsed.channels = static_cast<int>(channels);
     parsed.bitRate = bitRate;
     parsed.quality = static_cast<int>(quality);
