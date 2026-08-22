@@ -31,6 +31,7 @@ Window {
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
     property var activeImportDialog: null
+    property bool importBatchActive: false
     property string exportPlaylistId: ""
 
     function routeNavigationNode(nodeType, nodeId, resourceFolder) {
@@ -90,6 +91,8 @@ Window {
     Connections {
         target: ImportController
         function onFinished() {
+            if (!listWindow.importBatchActive)
+                return
             if (listWindow.importTargetPlaylistId
                     && ImportController.importedTrackIds.length > 0) {
                 listWindow.playlistModel.addTracks(
@@ -97,6 +100,7 @@ Window {
                     ImportController.importedTrackIds)
             }
             listWindow.importTargetPlaylistId = ""
+            listWindow.importBatchActive = false
         }
     }
 
@@ -111,17 +115,26 @@ Window {
                 && playlistModel.trackIdsForPlaylist(playlistId).length === 0
     }
     function beginImport(urls) {
+        if (!urls || urls.length === 0 || importBatchActive
+                || ImportController.busy || activeImportDialog)
+            return false
         importTargetPlaylistId = customCategory()
+        importBatchActive = true
         ImportController.importUrls(urls)
+        return true
     }
     function importSelectedUrls(urls) {
+        if (!urls || urls.length === 0 || importBatchActive
+                || ImportController.busy)
+            return false
+        importBatchActive = true
         ImportController.importUrls(urls)
+        return true
     }
     function handleListDropUrls(urls) {
         if (!urls || urls.length === 0)
             return false
-        beginImport(urls)
-        return true
+        return beginImport(urls)
     }
     function handleResourceDropUrls(urls) {
         if (!urls || urls.length === 0)
@@ -157,11 +170,18 @@ Window {
         return sideNavigation.resourceDropContainsPoint(local.x, local.y)
     }
     function openImportDialog(playlistId) {
+        if (importBatchActive || ImportController.busy || activeImportDialog)
+            return false
         importTargetPlaylistId = arguments.length > 0
                 ? (playlistId || "") : customCategory()
         var dialog = importDialogComponent.createObject(listWindow)
         activeImportDialog = dialog
-        if (dialog) dialog.open()
+        if (!dialog) {
+            importTargetPlaylistId = ""
+            return false
+        }
+        dialog.open()
+        return true
     }
     function openRenameDialog(playlistId) {
         renamePlaylistDialog.playlistId = playlistId
@@ -184,19 +204,26 @@ Window {
     Component {
         id: importDialogComponent
         FileDialog {
+            id: dialog
             objectName: "importAudioDialog"
             fileMode: FileDialog.OpenFiles
             nameFilters: [
                 "Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"
             ]
             onAccepted: {
-                listWindow.importSelectedUrls(selectedFiles)
-                listWindow.activeImportDialog = null
+                var started = listWindow.importSelectedUrls(selectedFiles)
+                if (!started && !listWindow.importBatchActive)
+                    listWindow.importTargetPlaylistId = ""
+                if (listWindow.activeImportDialog === dialog)
+                    listWindow.activeImportDialog = null
                 Qt.callLater(destroy)
             }
             onRejected: {
-                listWindow.importTargetPlaylistId = ""
-                listWindow.activeImportDialog = null
+                if (listWindow.activeImportDialog === dialog) {
+                    if (!listWindow.importBatchActive)
+                        listWindow.importTargetPlaylistId = ""
+                    listWindow.activeImportDialog = null
+                }
                 Qt.callLater(destroy)
             }
         }

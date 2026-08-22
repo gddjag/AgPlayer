@@ -75,6 +75,17 @@ Item {
         return false
     }
 
+    function displayNameForTagKey(key) {
+        if (!tagModel)
+            return ""
+        for (var row = 0; row < tagModel.rowCount(); ++row) {
+            var modelIndex = tagModel.index(row, 0)
+            if (tagModel.data(modelIndex, TagModel.KeyRole) === key)
+                return tagModel.data(modelIndex, TagModel.DisplayNameRole)
+        }
+        return ""
+    }
+
     TagFilterModel {
         id: filteredTags
         objectName: "tagFilterProxy"
@@ -159,17 +170,23 @@ Item {
             if (!nextName)
                 return
             var previousKey = root.contextTagKey
+            if (!root.hasTagKey(previousKey))
+                return
+            var previousName = root.displayNameForTagKey(previousKey)
             var updatesActiveFilter = root.filterModel
                     && root.filterModel.tagKey === previousKey
             root.tagModel.renameTag(previousKey, nextName)
             var nextKey = root.tagKeyForDisplayName(nextName)
-            if (nextKey.length > 0) {
-                if (updatesActiveFilter)
-                    root.filterModel.tagKey = nextKey
-                if (nextKey !== previousKey
-                        || nextName !== root.contextTagName)
-                    root.renameTagRequested(previousKey, nextName)
-            }
+            var renamed = nextKey.length > 0
+                    && root.displayNameForTagKey(nextKey) === nextName
+                    && (nextKey !== previousKey
+                        ? !root.hasTagKey(previousKey)
+                        : previousName !== nextName)
+            if (!renamed)
+                return
+            if (updatesActiveFilter)
+                root.filterModel.tagKey = nextKey
+            root.renameTagRequested(previousKey, nextName)
         }
         contentItem: TextField {
             id: renameTagField

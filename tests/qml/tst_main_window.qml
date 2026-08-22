@@ -1334,6 +1334,62 @@ TestCase {
         mainWindow.requestActivate()
     }
 
+    function test_playlist_async_import_keeps_its_original_target() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window && filterModel)
+        var playlistA = PlaylistModel.createPlaylist(
+                    "Async target A " + Date.now())
+        var playlistB = PlaylistModel.createPlaylist(
+                    "Async target B " + Date.now())
+        verify(playlistA.length > 0 && playlistB.length > 0
+               && playlistA !== playlistB)
+        var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copiedAudio)
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+
+        window.openImportDialog(playlistB)
+        var firstDialog = window.activeImportDialog
+        verify(firstDialog)
+        compare(window.importTargetPlaylistId, playlistB)
+        window.importSelectedUrls([copiedAudio])
+        verify(ImportController.busy,
+               "the first batch must still be asynchronous during overlap")
+
+        window.openImportDialog(playlistA)
+        var possibleSecondDialog = window.activeImportDialog
+        if (possibleSecondDialog !== firstDialog)
+            possibleSecondDialog.reject()
+
+        tryCompare(importFinished, "count", 1, 5000)
+        verify(ImportController.importedTrackIds.length > 0)
+        var importedId = ImportController.importedTrackIds[0]
+        tryVerify(function() {
+            return PlaylistModel.containsTrack(playlistB, importedId)
+        }, 500)
+        verify(!PlaylistModel.containsTrack(playlistA, importedId),
+               "a later dialog must not steal the first batch")
+
+        firstDialog.destroy()
+        window.activeImportDialog = null
+        PlaylistModel.removePlaylist(playlistA)
+        PlaylistModel.removePlaylist(playlistB)
+        LibraryModel.removeTrack(importedId)
+        importFinished.destroy()
+        window.close()
+        window.destroy()
+        wait(0)
+        mainWindow.requestActivate()
+    }
+
     function test_z_delete_key_uses_current_view_semantics() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
@@ -2025,6 +2081,68 @@ TestCase {
 
         renameRequested.destroy()
         colorRequested.destroy()
+        window.destroy()
+    }
+
+    function test_z_task5_failed_tag_rename_keeps_filter_and_emits_no_signal() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(
+                    null, { "filterModel": filterModel })
+        verify(window && filterModel)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        var renameRequested = signalSpyComponent.createObject(testCase, {
+            "target": panel,
+            "signalName": "renameTagRequested"
+        })
+        verify(renameRequested)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var suffix = String(Date.now())
+        var originalName = "Task5 Vanishing " + suffix
+        var originalKey = originalName.toLocaleLowerCase()
+        var collisionName = "Task5 Existing " + suffix
+        var collisionKey = collisionName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [originalKey, collisionKey]
+        verify(panel.addTag(originalName))
+        verify(panel.addTag(collisionName))
+        panel.searchText = originalName
+        tryCompare(panel, "visibleTagCount", 1)
+        var tagGrid = findChild(panel, "tagGrid")
+        tagGrid.positionViewAtBeginning()
+        wait(30)
+        panel.selectTag(originalKey)
+        compare(filterModel.tagKey, originalKey)
+
+        var tagCell = tagGrid.itemAtIndex(0)
+        verify(tagCell)
+        var pointerArea = findChild(
+                    tagCell, "tagPillPointerArea-" + originalKey)
+        verify(pointerArea)
+        mouseClick(pointerArea, pointerArea.width / 2,
+                   pointerArea.height / 2, Qt.RightButton)
+        var menu = findChild(panel, "tagContextMenu")
+        tryVerify(function() { return menu && menu.visible }, 500)
+        var renameAction = findChild(menu, "tagMenuRename")
+        mouseClick(renameAction, renameAction.width / 2,
+                   renameAction.height / 2)
+        var renameDialog = findChild(panel, "renameTagDialog")
+        var renameField = findChild(renameDialog, "renameTagField")
+        tryVerify(function() { return renameDialog.visible }, 500)
+
+        TagModel.removeTag(originalKey)
+        compare(tagRowForKey(originalKey), -1)
+        compare(tagRowForKey(collisionKey) >= 0, true)
+        renameField.text = collisionName
+        renameDialog.accept()
+
+        compare(filterModel.tagKey, originalKey,
+                "a failed rename must not migrate the active filter")
+        compare(renameRequested.count, 0,
+                "a failed rename must not emit a mutation signal")
+        compare(tagRowForKey(collisionKey) >= 0, true)
+        renameRequested.destroy()
         window.destroy()
     }
 
