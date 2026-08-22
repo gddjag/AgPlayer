@@ -255,3 +255,23 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   FFmpeg callback 中断。
 - 最终门禁修复集的回退点为 `a0086f8`；若回退本次提交，会同时移除资源预算、共享 probe
   deadline、Move/Trim 热路径、persisted-state dirty、modified clear gate 与引用源 issue 同步。
+
+### Final gate closure — save symmetry and offline continuity (2026-08-22)
+
+- `ProjectDocument::save()` now enforces the same 4,096 Sources/Events/Markers,
+  65,536 aggregate Envelope points and 16 MiB final JSON limits as load before
+  atomic output. A rejected save leaves the prior project intact and does not
+  cause controller clean-state transition.
+- Project probe timeouts and a consumed shared five-second budget now yield
+  `Unavailable` source issues without aborting transactional project open;
+  subsequent existing sources are not probed beyond budget and remain eligible
+  for relink. QML issue kind is `unavailable`.
+- Polling playback and stopping playback share the persisted-playhead update
+  path used by frame seek, preserving the Phase 5 persisted-dirty contract.
+  Load, save and relink reject the reserved `UINT64_MAX` source ID.
+- Strict RED evidence covered resource-overrun saves, project budget exhaustion,
+  reserved-ID load/save/relink and playback dirty tracking. GREEN evidence:
+  final Release focused Phase 5 matrix 7/7 (9.34 s) and Debug 7/7 (12.35 s). Release
+  and Debug full builds passed (Release 337/337; Debug 43/43 incremental graph).
+  Release app smoke remains intentionally delegated to the final lead gate; no
+  full CTest, real UNC/slow-media, hardware or UI acceptance is claimed here.

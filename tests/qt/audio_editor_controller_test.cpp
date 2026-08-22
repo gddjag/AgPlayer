@@ -620,6 +620,31 @@ private slots:
         QVERIFY(!controller.modified());
     }
 
+    void playbackProgressAndStopUsePersistedPlayheadDirtyTracking()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("playhead.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.seekFrame(123));
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+        QVERIFY(!controller.modified());
+
+        QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.playheadFrame() != 123, 5'000);
+        QVERIFY(controller.modified());
+
+        QVERIFY(controller.stopPlayback());
+        QCOMPARE(controller.playheadFrame(), qint64{0});
+        QVERIFY(controller.modified());
+    }
+
     void offlineGateTracksOnlySourcesReferencedByTheCurrentTimeline()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));

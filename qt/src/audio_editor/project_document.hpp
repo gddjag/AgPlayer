@@ -31,7 +31,7 @@ struct ProjectSourceRecord final {
     qint64 lastModifiedUtcMs{-1};
 };
 
-enum class ProjectSourceIssueKind { Missing, IdentityMismatch };
+enum class ProjectSourceIssueKind { Missing, IdentityMismatch, Unavailable };
 
 struct ProjectSourceIssue final {
     ProjectSourceIssueKind kind{ProjectSourceIssueKind::Missing};

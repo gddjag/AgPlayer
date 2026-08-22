@@ -15,6 +15,7 @@
 #endif
 
 #include <filesystem>
+#include <limits>
 #include <memory>
 
 using namespace agplayer::editor;
@@ -794,6 +795,158 @@ private slots:
 
         QVERIFY(!loaded.ok());
         QCOMPARE(loaded.message, QStringLiteral("project resource limit exceeded"));
+    }
+
+    void saveRejectsResourceLimitsWithoutReplacingThePreviousProject()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        const ProjectSaveRequest baseline = request(project);
+        QVERIFY(ProjectDocument::save(project.projectPath, baseline).ok());
+        const QByteArray previous = readBytes(project.projectPath);
+
+        const auto source = project.document.timelineSnapshot().events.front().source;
+        const auto saveRejected = [&](std::vector<AudioEvent> events,
+                                      std::vector<Marker> markers,
+                                      const QString& row) {
+            AudioDocument document = AudioDocument::fromEvents(std::move(events));
+            for (const Marker& marker : markers) QVERIFY(document.addMarker(marker));
+            ProjectSaveRequest oversized = baseline;
+            oversized.document = &document;
+            oversized.playheadFrame = 0;
+            oversized.visibleStartFrame = 0;
+            oversized.visibleEndFrame = document.totalFrames();
+            const ProjectSaveResult saved = ProjectDocument::save(project.projectPath, oversized);
+            QVERIFY2(!saved.ok(), qPrintable(row + QStringLiteral(": ") + saved.message));
+            QCOMPARE(saved.message, QStringLiteral("project resource limit exceeded"));
+            QCOMPARE(readBytes(project.projectPath), previous);
+        };
+
+        std::vector<AudioEvent> tooManySources;
+        tooManySources.reserve(4'097);
+        for (quint64 index = 0; index < 4'097; ++index) {
+            auto distinctSource = std::make_shared<const AudioSource>(*source);
+            tooManySources.push_back({index + 1, std::move(distinctSource), 0, 1,
+                                      static_cast<SampleFrame>(index)});
+        }
+        saveRejected(std::move(tooManySources), {}, QStringLiteral("sources"));
+
+        std::vector<AudioEvent> tooManyEvents;
+        tooManyEvents.reserve(4'097);
+        for (quint64 index = 0; index < 4'097; ++index) {
+            tooManyEvents.push_back({index + 1, source, 0, 1,
+                                     static_cast<SampleFrame>(index)});
+        }
+        saveRejected(std::move(tooManyEvents), {}, QStringLiteral("events"));
+
+        std::vector<Marker> tooManyMarkers;
+        tooManyMarkers.reserve(4'097);
+        for (int index = 0; index < 4'097; ++index) {
+            tooManyMarkers.push_back({"marker", 0});
+        }
+        saveRejected({AudioEvent{1, source, 0, 1, 0}}, std::move(tooManyMarkers),
+                     QStringLiteral("markers"));
+
+        std::vector<AudioEvent> tooManyEnvelopePoints;
+        tooManyEnvelopePoints.reserve(1'025);
+        for (quint64 index = 0; index < 1'025; ++index) {
+            AudioEvent event{index + 1, source, 0, 64,
+                             static_cast<SampleFrame>(index * 64)};
+            for (SampleFrame offset = 0; offset < 64; ++offset) {
+                event.envelope.push_back({offset, 1.0F});
+            }
+            tooManyEnvelopePoints.push_back(std::move(event));
+        }
+        saveRejected(std::move(tooManyEnvelopePoints), {}, QStringLiteral("envelope"));
+
+        std::vector<Marker> oversizedJson;
+        oversizedJson.push_back({std::string(16 * 1024 * 1024, 'x'), 0});
+        saveRejected({AudioEvent{1, source, 0, 1, 0}}, std::move(oversizedJson),
+                     QStringLiteral("json"));
+    }
+
+    void loadSaveAndRelinkRejectTheReservedMaximumSourceId()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        const ProjectSaveRequest baseline = request(project);
+        QVERIFY(ProjectDocument::save(project.projectPath, baseline).ok());
+
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QCOMPARE(sources.size(), 1);
+        QJsonObject source = sources.first().toObject();
+        source.insert(QStringLiteral("sourceId"),
+                      QString::number(std::numeric_limits<quint64>::max()));
+        sources.replace(0, source);
+        for (qsizetype index = 0; index < events.size(); ++index) {
+            QJsonObject event = events.at(index).toObject();
+            event.insert(QStringLiteral("sourceId"),
+                         QString::number(std::numeric_limits<quint64>::max()));
+            events.replace(index, event);
+        }
+        root.insert(QStringLiteral("sources"), sources);
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY(!loaded.ok());
+
+        ProjectSourceRecord reserved;
+        reserved.sourceId = std::numeric_limits<quint64>::max();
+        reserved.source = project.document.timelineSnapshot().events.front().source;
+        const std::vector<ProjectSourceRecord> reservedRecords{reserved};
+        ProjectSaveRequest reservedSave = baseline;
+        reservedSave.sourceRecords = &reservedRecords;
+        const ProjectSaveResult saved = ProjectDocument::save(
+            temporary.filePath(QStringLiteral("reserved-save.agproj")), reservedSave);
+        QVERIFY(!saved.ok());
+        QCOMPARE(saved.message, QStringLiteral("invalid source id"));
+
+        std::vector<ProjectSourceRecord> reservedSources{reserved};
+        const ProjectRelinkResult relinked = ProjectDocument::relink(
+            project.document, reservedSources,
+            std::numeric_limits<quint64>::max(), project.sourcePath);
+        QVERIFY(!relinked.ok());
+        QCOMPARE(relinked.message, QStringLiteral("invalid source id"));
+    }
+
+    void projectProbeBudgetExhaustionOpensOfflineForRelink()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+
+        QJsonObject root = readObject(project.projectPath);
+        const QJsonObject templateSource = root.value(QStringLiteral("sources"))
+            .toArray().first().toObject();
+        QJsonObject referencedEvent = root.value(QStringLiteral("events"))
+            .toArray().first().toObject();
+        QJsonArray sources;
+        for (int index = 0; index < 4'096; ++index) {
+            QJsonObject source = templateSource;
+            source.insert(QStringLiteral("sourceId"), QString::number(index + 1));
+            sources.append(source);
+        }
+        referencedEvent.insert(QStringLiteral("sourceId"), QStringLiteral("4096"));
+        root.insert(QStringLiteral("sources"), sources);
+        root.insert(QStringLiteral("events"), QJsonArray{referencedEvent});
+        root.insert(QStringLiteral("markers"), QJsonArray{});
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QVERIFY(!loaded.issues.empty());
+        QCOMPARE(loaded.issues.back().kind, ProjectSourceIssueKind::Unavailable);
+        QCOMPARE(loaded.issues.back().sourceId, quint64{4'096});
+        QCOMPARE(loaded.issues.back().message,
+                 QStringLiteral("project source probe budget exceeded"));
+        QVERIFY(loaded.document != nullptr);
     }
 
 };

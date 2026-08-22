@@ -570,10 +570,11 @@ QVariantList to_project_issues(const std::vector<ProjectSourceIssue>& issues)
     QVariantList result;
     result.reserve(static_cast<qsizetype>(issues.size()));
     for (const ProjectSourceIssue& issue : issues) {
-        result.append(QVariantMap{{QStringLiteral("kind"),
-                                   issue.kind == ProjectSourceIssueKind::Missing
-                                       ? QStringLiteral("missing")
-                                       : QStringLiteral("identityMismatch")},
+        const QString kind = issue.kind == ProjectSourceIssueKind::Missing
+            ? QStringLiteral("missing")
+            : issue.kind == ProjectSourceIssueKind::IdentityMismatch
+                ? QStringLiteral("identityMismatch") : QStringLiteral("unavailable");
+        result.append(QVariantMap{{QStringLiteral("kind"), kind},
                                   {QStringLiteral("sourceId"), issue.sourceId},
                                   {QStringLiteral("path"), issue.path},
                                   {QStringLiteral("message"), issue.message}});
@@ -872,6 +873,15 @@ void AudioEditorController::markProjectDirty() noexcept
 {
     forced_project_dirty_ = true;
     modified_ = true;
+}
+
+bool AudioEditorController::updatePersistedPlayhead(const qint64 frame,
+                                                     const qint64 positionMs) noexcept
+{
+    playhead_frame_ = frame;
+    position_ms_ = positionMs;
+    playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
+    return syncModifiedFromHistory();
 }
 
 bool AudioEditorController::syncModifiedFromHistory() noexcept
@@ -1944,21 +1954,20 @@ bool AudioEditorController::stopPlayback()
     ag_player_stop(player_);
     playback_timer_.stop();
     playing_ = false;
-    position_ms_ = 0;
-    playhead_frame_ = 0;
+    const bool modifiedChanged = updatePersistedPlayhead(0, 0);
     if (has_document_ && state_ == EditorSessionState::Playing) {
         setState(EditorSessionState::Ready);
     }
     if (wasActive) emit playbackChanged();
+    if (modifiedChanged) emit documentChanged();
     return true;
 }
 
 bool AudioEditorController::seekMs(const qint64 value)
 {
     if (!has_document_ || value < 0 || value > durationMs()) return false;
-    position_ms_ = value;
-    playhead_frame_ = sample_rate_ > 0 ? value * sample_rate_ / 1'000 : 0;
-    playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
+    const qint64 playhead = sample_rate_ > 0 ? value * sample_rate_ / 1'000 : 0;
+    const bool modifiedChanged = updatePersistedPlayhead(playhead, value);
     if (player_) {
         const qint64 preview_position = time_pitch_preview_active_
             ? static_cast<qint64>(std::llround(
@@ -1967,7 +1976,6 @@ bool AudioEditorController::seekMs(const qint64 value)
             : value;
         ag_player_seek(player_, preview_position);
     }
-    const bool modifiedChanged = syncModifiedFromHistory();
     refreshActions();
     emit playbackChanged();
     if (modifiedChanged) emit documentChanged();
@@ -1977,9 +1985,8 @@ bool AudioEditorController::seekMs(const qint64 value)
 bool AudioEditorController::seekFrame(const qint64 frame)
 {
     if (!has_document_ || frame < 0 || frame > document_.totalFrames()) return false;
-    playhead_frame_ = frame;
-    playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
-    position_ms_ = sample_rate_ > 0 ? frame * 1'000 / sample_rate_ : 0;
+    const qint64 positionMs = sample_rate_ > 0 ? frame * 1'000 / sample_rate_ : 0;
+    const bool modifiedChanged = updatePersistedPlayhead(frame, positionMs);
     if (player_) {
         const qint64 previewPosition = time_pitch_preview_active_
             ? static_cast<qint64>(std::llround(static_cast<double>(position_ms_) * 100.0
@@ -1987,7 +1994,6 @@ bool AudioEditorController::seekFrame(const qint64 frame)
             : position_ms_;
         ag_player_seek(player_, previewPosition);
     }
-    const bool modifiedChanged = syncModifiedFromHistory();
     refreshActions();
     emit playbackChanged();
     if (modifiedChanged) emit documentChanged();
@@ -2015,12 +2021,13 @@ void AudioEditorController::pollPlayback()
     if (!player_) return;
     ag_playback_snapshot snapshot{};
     if (ag_player_snapshot(player_, &snapshot) != AG_OK) return;
-    position_ms_ = time_pitch_preview_active_
+    const qint64 positionMs = time_pitch_preview_active_
         ? static_cast<qint64>(std::llround(
             static_cast<double>(snapshot.position_ms)
             * time_pitch_.speedPercent() / 100.0))
         : snapshot.position_ms;
-    playhead_frame_ = sample_rate_ > 0 ? position_ms_ * sample_rate_ / 1'000 : 0;
+    const qint64 playhead = sample_rate_ > 0 ? positionMs * sample_rate_ / 1'000 : 0;
+    bool modifiedChanged = updatePersistedPlayhead(playhead, positionMs);
     const auto selection = document_.selection();
     if (selection && sample_rate_ > 0) {
         const qint64 start = selection->start * 1'000 / sample_rate_;
@@ -2033,8 +2040,8 @@ void AudioEditorController::pollPlayback()
                         / time_pitch_.speedPercent()))
                     : start;
                 ag_player_seek(player_, previewStart);
-                position_ms_ = start;
-                playhead_frame_ = selection->start;
+                modifiedChanged = updatePersistedPlayhead(selection->start, start)
+                    || modifiedChanged;
             }
         }
     }
@@ -2044,6 +2051,7 @@ void AudioEditorController::pollPlayback()
         setState(EditorSessionState::Ready);
     }
     emit playbackChanged();
+    if (modifiedChanged) emit documentChanged();
 }
 
 QVariantList AudioEditorController::toVariantPeaks(

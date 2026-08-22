@@ -148,6 +148,12 @@ bool positiveId(const QJsonValue& value, quint64& output)
     return true;
 }
 
+bool validSourceId(const QJsonValue& value, quint64& output)
+{
+    return positiveId(value, output)
+        && output != std::numeric_limits<quint64>::max();
+}
+
 QJsonValue integerJson(const qint64 value)
 {
     return QString::number(value);
@@ -277,6 +283,20 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     const QString projectPath = absolutePath(path);
     const QString projectDir = QFileInfo(projectPath).dir().absolutePath();
     const TimelineSnapshot timeline = request.document->timelineSnapshot();
+    if (timeline.events.size() > static_cast<std::size_t>(kMaxProjectEvents)
+        || request.document->markers().size()
+            > static_cast<std::size_t>(kMaxProjectMarkers)) {
+        return {false, QString::fromLatin1(kResourceLimitMessage)};
+    }
+    qsizetype envelopePoints = 0;
+    for (const AudioEvent& event : timeline.events) {
+        if (event.envelope.size() > static_cast<std::size_t>(kMaxEnvelopePoints)
+            || envelopePoints > kMaxProjectEnvelopePoints
+                - static_cast<qsizetype>(event.envelope.size())) {
+            return {false, QString::fromLatin1(kResourceLimitMessage)};
+        }
+        envelopePoints += static_cast<qsizetype>(event.envelope.size());
+    }
 
     std::unordered_map<const AudioSource*, ProjectSourceRecord> records;
     quint64 nextId = 1;
@@ -299,6 +319,13 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     for (const AudioEvent& event : timeline.events) {
         if (!event.source || sourceIds.count(event.source.get()) != 0) continue;
         const auto supplied = records.find(event.source.get());
+        if (sourceIds.size() >= static_cast<std::size_t>(kMaxProjectSources)) {
+            return {false, QString::fromLatin1(kResourceLimitMessage)};
+        }
+        if (supplied == records.end()
+            && nextId == std::numeric_limits<quint64>::max()) {
+            return {false, QStringLiteral("invalid source id")};
+        }
         const quint64 id = supplied == records.end() ? nextId++ : supplied->second.sourceId;
         sourceIds.emplace(event.source.get(), id);
         const QString rawSourcePath = toQString(event.source->path);
@@ -364,9 +391,13 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
                            {QStringLiteral("visibleStartFrame"), integerJson(request.visibleStartFrame)},
                            {QStringLiteral("visibleEndFrame"), integerJson(request.visibleEndFrame)},
                            {QStringLiteral("exportSettings"), exportJson(request.exportSettings)}};
+    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (payload.size() > kMaxProjectJsonBytes) {
+        return {false, QString::fromLatin1(kResourceLimitMessage)};
+    }
     QSaveFile output(projectPath);
     if (!output.open(QIODevice::WriteOnly)
-        || output.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
+        || output.write(payload) != payload.size()
         || !output.commit()) return {false, QStringLiteral("could not save project")};
     return {true, {}, std::move(savedRecords)};
 }
@@ -401,11 +432,12 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
         + kProjectProbeBudget;
     std::unordered_map<quint64, std::shared_ptr<const AudioSource>> sourceMap;
     std::unordered_set<quint64> sourceIds;
+    bool probeBudgetExhausted = false;
     for (const QJsonValue& value : root.value(QStringLiteral("sources")).toArray()) {
         if (!value.isObject()) { result.message = QStringLiteral("invalid source"); return result; }
         const QJsonObject object = value.toObject();
         quint64 id{}; qint64 rate{}, channels{}, frames{}, fileSize{}, modified{}; QString kind, stored;
-        if (!positiveId(object.value(QStringLiteral("sourceId")), id) || !sourceIds.insert(id).second
+        if (!validSourceId(object.value(QStringLiteral("sourceId")), id) || !sourceIds.insert(id).second
             || !stringValue(object, "pathKind", kind) || !stringValue(object, "path", stored)
             || !integer(object.value(QStringLiteral("sampleRate")), rate) || !integer(object.value(QStringLiteral("channels")), channels)
             || !integer(object.value(QStringLiteral("totalFrames")), frames) || !integer(object.value(QStringLiteral("fileSize")), fileSize)
@@ -427,6 +459,12 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
         if (!actual.exists()) {
             result.issues.push_back({ProjectSourceIssueKind::Missing, id,
                                      resolved, QStringLiteral("source file is missing")});
+        } else if (probeBudgetExhausted
+                   || std::chrono::steady_clock::now() >= probeDeadline) {
+            probeBudgetExhausted = true;
+            result.issues.push_back({ProjectSourceIssueKind::Unavailable, id,
+                                     resolved,
+                                     QStringLiteral("project source probe budget exceeded")});
         } else {
             const bool statMismatch = (fileSize >= 0 && actual.size() != fileSize)
                 || (modified >= 0
@@ -434,8 +472,11 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
             const AudioSourceProbeResult probe = AudioSourceProbe::probe(
                 toPath(resolved), probeDeadline);
             if (probe.timed_out) {
-                result.message = QStringLiteral("project source probe budget exceeded");
-                return result;
+                probeBudgetExhausted = true;
+                result.issues.push_back({ProjectSourceIssueKind::Unavailable, id,
+                                         resolved,
+                                         QStringLiteral("project source probe budget exceeded")});
+                continue;
             }
             const AudioSource expected{toPath(resolved), static_cast<std::uint32_t>(rate),
                                        static_cast<std::uint32_t>(channels), frames};
@@ -452,7 +493,7 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
         if (!value.isObject()) { result.message = QStringLiteral("invalid event"); return result; }
         const QJsonObject object = value.toObject(); AudioEvent event; quint64 sourceId{}; qint64 start{}, end{}, timeline{}, fadeIn{}, fadeOut{}, pitch{};
         if (!positiveId(object.value(QStringLiteral("id")), event.id) || !eventIds.insert(event.id).second
-            || !positiveId(object.value(QStringLiteral("sourceId")), sourceId) || sourceMap.find(sourceId) == sourceMap.end()
+            || !validSourceId(object.value(QStringLiteral("sourceId")), sourceId) || sourceMap.find(sourceId) == sourceMap.end()
             || !integer(object.value(QStringLiteral("sourceStart")), start) || !integer(object.value(QStringLiteral("sourceEnd")), end)
             || !integer(object.value(QStringLiteral("timelineStart")), timeline) || !finiteFloat(object.value(QStringLiteral("gain")), event.gain)
             || !integer(object.value(QStringLiteral("fadeIn")), fadeIn) || !integer(object.value(QStringLiteral("fadeOut")), fadeOut)
@@ -497,6 +538,9 @@ ProjectLoadResult ProjectDocument::load(const QString& path)
 
 ProjectRelinkResult ProjectDocument::relink(AudioDocument& document, std::vector<ProjectSourceRecord>& sources, const quint64 sourceId, const QString& replacementPath)
 {
+    if (sourceId == 0 || sourceId == std::numeric_limits<quint64>::max()) {
+        return {false, QStringLiteral("invalid source id")};
+    }
     const auto record = std::find_if(sources.begin(), sources.end(), [sourceId](const ProjectSourceRecord& source) { return source.sourceId == sourceId; });
     if (record == sources.end() || !record->source || replacementPath.isEmpty()) return {false, QStringLiteral("unknown project source")};
     const QString path = absolutePath(replacementPath); const QFileInfo file(path);

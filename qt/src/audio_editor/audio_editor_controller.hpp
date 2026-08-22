@@ -269,6 +269,8 @@ private:
     void setProgress(double value);
     void markProjectClean() noexcept;
     void markProjectDirty() noexcept;
+    [[nodiscard]] bool updatePersistedPlayhead(qint64 frame,
+                                                qint64 positionMs) noexcept;
     [[nodiscard]] bool syncModifiedFromHistory() noexcept;
     void finishTimelineMutation();
     void syncProjectSourcesAndIssues();
