@@ -21,6 +21,7 @@ Window {
             unsavedCloseDialog.open()
             return
         }
+        AudioEditorController.deactivate()
         WindowController.hideAudioTools()
     }
     onClosing: function(close) {
@@ -45,7 +46,10 @@ Window {
         title: qsTr("舍弃未保存更改？")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: WindowController.hideAudioTools()
+        onAccepted: {
+            AudioEditorController.deactivate()
+            WindowController.hideAudioTools()
+        }
         Label {
             text: qsTr("当前音频尚未保存。关闭窗口将舍弃这些更改。")
             color: Theme.primaryText
@@ -73,9 +77,9 @@ Window {
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: 14
+                    anchors.leftMargin: 16
                     anchors.rightMargin: 8
-                    spacing: 7
+                    spacing: 10
 
                     Rectangle {
                         Layout.preferredWidth: 28
@@ -95,7 +99,7 @@ Window {
                         text: qsTr("AgPlayer 音频编辑")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
-                        font.pixelSize: 17
+                        font.pixelSize: 18
                         font.weight: Font.Medium
                     }
 
@@ -103,17 +107,21 @@ Window {
 
                     ToolButton {
                         objectName: "audioToolsMinimizeButton"
-                        Layout.preferredWidth: 32
+                        Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.iconPrimary
                         Accessible.name: qsTr("最小化")
                         Accessible.role: Accessible.Button
                         onClicked: window.showMinimized()
+                        background: Rectangle {
+                            color: parent.hovered ? "#10283d" : "transparent"
+                            radius: 3
+                        }
                     }
                     ToolButton {
                         objectName: "audioToolsMaximizeButton"
-                        Layout.preferredWidth: 32
+                        Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon(window.visibility === Window.Maximized
                                                 ? "fullscreen-exit-fill"
@@ -124,16 +132,24 @@ Window {
                         Accessible.role: Accessible.Button
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
+                        background: Rectangle {
+                            color: parent.hovered ? "#10283d" : "transparent"
+                            radius: 3
+                        }
                     }
                     ToolButton {
                         objectName: "audioToolsCloseButton"
-                        Layout.preferredWidth: 32
+                        Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.iconPrimary
                         Accessible.name: qsTr("关闭")
                         Accessible.role: Accessible.Button
                         onClicked: window.requestHide()
+                        background: Rectangle {
+                            color: parent.hovered ? "#c42b35" : "transparent"
+                            radius: 3
+                        }
                     }
                 }
 
@@ -145,7 +161,7 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.rightMargin: 104
+                    anchors.rightMargin: 182
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {

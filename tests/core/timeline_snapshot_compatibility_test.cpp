@@ -50,6 +50,30 @@ int main(const int argc, char** argv)
     require(TimePitchSession{}.process(timeline.snapshot(), pitched).success,
             "single event time pitch failed");
 
+    const auto requireAccepted = [&](const TimelineSnapshot& snapshot,
+                                     const char* name) {
+        const std::string prefix = std::string("timeline-accepted-") + name;
+        const fs::path acceptedRender = base / (prefix + "-render.wav");
+        const fs::path acceptedWrite = base / (prefix + "-write.wav");
+        const fs::path acceptedPitch = base / (prefix + "-pitch.wav");
+        for (const auto& path : {acceptedRender, acceptedWrite, acceptedPitch}) {
+            fs::remove(path, ignored);
+        }
+        require(renderer.renderFloatWav(snapshot, std::nullopt, acceptedRender).success
+                    && fs::exists(acceptedRender),
+                "renderer rejected supported timeline");
+        WriteRequest acceptedWriteRequest{snapshot, acceptedWrite, "pcm_s24le"};
+        require(DocumentWriter{}.write(acceptedWriteRequest).ok()
+                    && fs::exists(acceptedWrite),
+                "writer rejected supported timeline");
+        require(TimePitchSession{}.process(snapshot, acceptedPitch).success
+                    && fs::exists(acceptedPitch),
+                "time pitch rejected supported timeline");
+        for (const auto& path : {acceptedRender, acceptedWrite, acceptedPitch}) {
+            fs::remove(path, ignored);
+        }
+    };
+
     const auto requireRejected = [&](TimelineSnapshot snapshot,
                                      const char* name) {
         const fs::path rejected = base / (std::string("timeline-rejected-") + name + ".wav");
@@ -68,21 +92,25 @@ int main(const int argc, char** argv)
     require(multi.insert(AudioEvent{2, source, 0, half, 0})
             && multi.insert(AudioEvent{3, source, half, source->total_frames, half}),
             "multi timeline setup failed");
-    requireRejected(multi.snapshot(), "multi");
+    requireAccepted(multi.snapshot(), "multi");
 
     TimelineSnapshot gap = timeline.snapshot();
     gap.events.front().timelineStart = 1;
     gap.totalFrames = source->total_frames + 1;
-    requireRejected(std::move(gap), "gap");
-    for (const auto& invalid : {
+    requireAccepted(gap, "gap");
+    for (const auto& supported : {
              [&] { auto value = timeline.snapshot(); value.events.front().fadeIn = 1; return value; }(),
+             [&] { auto value = timeline.snapshot(); value.events.front().envelope = {{0, 0.5F}}; return value; }(),
+         }) {
+        requireAccepted(supported, "parameter");
+    }
+    for (const auto& rejected : {
              [&] { auto value = timeline.snapshot(); value.events.front().speedRatio = 1.25; return value; }(),
              [&] { auto value = timeline.snapshot(); value.events.front().pitchSemitone = 1; return value; }(),
-             [&] { auto value = timeline.snapshot(); value.events.front().envelope = {{0, 0.5F}}; return value; }(),
              [&] { auto value = timeline.snapshot(); value.events.front().sourceEnd += 1; return value; }(),
              [&] { auto value = timeline.snapshot(); value.events.front().timelineStart = std::numeric_limits<SampleFrame>::max(); return value; }(),
          }) {
-        requireRejected(invalid, "parameter");
+        requireRejected(rejected, "parameter");
     }
 
     for (const auto& path : {rendered, written, pitched}) fs::remove(path, ignored);

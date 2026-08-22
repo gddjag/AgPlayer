@@ -16,10 +16,10 @@ Rectangle {
 
     Row {
         anchors.left: parent.left
-        anchors.leftMargin: 42
+        anchors.leftMargin: 49
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        spacing: 28
+        spacing: 31
 
         Repeater {
             model: [qsTr("音频编辑"), qsTr("格式转换"),
@@ -38,7 +38,7 @@ Rectangle {
                     text: parent.text
                     color: parent.checked ? "#f4f8ff" : "#b6c5d5"
                     font.family: Theme.fontPrimary
-                    font.pixelSize: 15
+                    font.pixelSize: 16
                     font.weight: parent.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter

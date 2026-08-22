@@ -6,12 +6,16 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-right-s-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/bar-chart-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/brush-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/clipboard-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/cursor-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
@@ -30,6 +34,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/merge-cells-horizontal.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mic-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
@@ -45,6 +50,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/save-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/search-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
@@ -56,6 +62,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/sound-module-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/time-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg

@@ -45,11 +45,19 @@ public:
                    SampleFrame timelineStart);
     bool splitEventAt(EventId id, SampleFrame frame);
     bool deleteSelection();
+    bool cropToSelection();
+    bool silenceSelection();
+    bool fadeIn();
+    bool fadeOut();
+    bool setEventFadeOut(EventId id, SampleFrame frames);
+    bool addEnvelopePoint(EventId id, SampleFrame offset, float gain);
     bool copySelection();
     bool cutSelection();
     bool pasteAt(SampleFrame playhead);
     bool duplicateEvent(EventId id, SampleFrame timelineStart);
     bool mergeEvents(EventId left, EventId right);
+    bool replaceSelectionWithSource(AudioSource source);
+    bool insertSourceAtCursor(AudioSource source, SampleFrame cursor);
     bool insertSource(AudioSource source, SampleFrame timelineStart);
     bool undo();
     bool redo();
@@ -82,6 +90,8 @@ private:
                                            SampleFrame frame, EventId& nextId);
     [[nodiscard]] static bool sameParameters(const AudioEvent& left,
                                              const AudioEvent& right) noexcept;
+    [[nodiscard]] bool splitSelectionBoundaries(
+        std::vector<AudioEvent>& events, EventId& nextId) const;
     [[nodiscard]] std::vector<AudioEvent> selectedEvents() const;
     [[nodiscard]] bool applyCandidate(std::vector<AudioEvent> candidate);
     void normalizeEditorState() noexcept;

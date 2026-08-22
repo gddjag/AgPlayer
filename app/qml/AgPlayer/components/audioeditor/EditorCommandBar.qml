@@ -5,10 +5,7 @@ import AgPlayer
 
 Rectangle {
     id: bar
-    color: "#071a2d"
-    border.color: "#23415d"
-    border.width: 1
-    radius: 7
+    color: "transparent"
 
     signal importRequested()
     signal saveProjectRequested()
@@ -25,9 +22,12 @@ Rectangle {
         required property string iconName
         property bool commandEnabled: true
         property bool selected: false
+        property bool mirrorIcon: false
+        property real referenceWidth: 0
         objectName: "editorCommand_" + commandName
         enabled: commandEnabled
-        Layout.fillWidth: true
+        Layout.fillWidth: referenceWidth <= 0
+        Layout.preferredWidth: referenceWidth
         Layout.fillHeight: true
         Accessible.name: label
         ToolTip.visible: hovered
@@ -38,11 +38,15 @@ Rectangle {
             ThemedIcon {
                 source: Theme.icon(iconName)
                 tint: parent.parent.enabled ? "#f4f8ff" : "#718096"
-                sourceSize.width: 22
-                sourceSize.height: 22
-                Layout.preferredWidth: 22
-                Layout.preferredHeight: 22
+                sourceSize.width: 24
+                sourceSize.height: 24
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignHCenter
+                transform: Scale {
+                    origin.x: 12
+                    xScale: parent.parent.mirrorIcon ? -1 : 1
+                }
             }
             Text {
                 text: parent.parent.label
@@ -63,19 +67,20 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.margins: 5
-        spacing: 7
+        spacing: 8
 
         CommandButton {
             commandName: "importAudio"
             label: qsTr("导入音频")
             iconName: "folder-open-line"
+            referenceWidth: 132
             onClicked: bar.importRequested()
         }
         CommandButton {
             commandName: "saveProject"
             label: qsTr("保存工程")
-            iconName: "download-line"
+            iconName: "save-3-line"
+            referenceWidth: 140
             commandEnabled: AudioEditorController.hasDocument
                 && !AudioEditorController.busy
             onClicked: bar.saveProjectRequested()
@@ -83,7 +88,7 @@ Rectangle {
         CommandButton {
             commandName: "select"
             label: qsTr("选择")
-            iconName: "arrow-right-s-line"
+            iconName: "cursor-line"
             selected: AudioEditorController.activeTool === "select"
             onClicked: AudioEditorController.setActiveTool("select")
         }
@@ -127,7 +132,7 @@ Rectangle {
         CommandButton {
             commandName: "paste"
             label: qsTr("粘贴")
-            iconName: "file-copy-line"
+            iconName: "clipboard-line"
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.paste")
             onClicked: AudioEditorController.triggerAction("editor.paste")
@@ -135,7 +140,7 @@ Rectangle {
         CommandButton {
             commandName: "fadeIn"
             label: qsTr("淡入")
-            iconName: "equalizer-line"
+            iconName: "bar-chart-line"
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.fadeIn")
             onClicked: AudioEditorController.triggerAction("editor.fadeIn")
@@ -143,7 +148,8 @@ Rectangle {
         CommandButton {
             commandName: "fadeOut"
             label: qsTr("淡出")
-            iconName: "equalizer-line"
+            iconName: "bar-chart-line"
+            mirrorIcon: true
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.fadeOut")
             onClicked: AudioEditorController.triggerAction("editor.fadeOut")
@@ -158,9 +164,17 @@ Rectangle {
                 "editor.silenceSelection")
         }
         CommandButton {
+            commandName: "noiseReduction"
+            label: qsTr("降噪")
+            iconName: "sound-module-line"
+            commandEnabled: AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+            onClicked: AudioEditorController.reduceNoise()
+        }
+        CommandButton {
             commandName: "clear"
             label: qsTr("清除")
-            iconName: "close-line"
+            iconName: "brush-line"
             commandEnabled: AudioEditorController.selectionStart >= 0
                 || AudioEditorController.activeTool !== "select"
             onClicked: AudioEditorController.clearTransientState()

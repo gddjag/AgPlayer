@@ -17,7 +17,7 @@
 - Keep tools ordered `音频编辑 / 格式转换 / 元数据修改 / 文件名处理`.
 - Use signed 64-bit sample frames in the domain; deletion preserves gaps; events share immutable sources and never own PCM; undo never stores a full timeline snapshot.
 - No second audio engine, Canvas waveform, heavyweight dependency, placeholder values, fake meter, or whole-song preview render.
-- Formant stays absent unless independently proven. Remove editor noise-reduction/replacement-source UI/code after callers migrate.
+- Match the supplied 1672x941 reference completely: all 13 toolbar commands and every A-E inspector control remain present and produce real results. Formant and noise reduction require tested processing paths; neither may be hidden, stubbed, or permanently disabled.
 - Append each phase’s requirement IDs, changed files, RED/GREEN outputs, build config, run evidence, failures, unverified items and rollback commit to `docs/development/2026-08-20-single-track-audio-editor.md`.
 
 ## Baseline
@@ -136,7 +136,7 @@ Use `QSaveFile`, schema versioning and explicit offline-source reporting. Run `t
 
 **Files:** modify `editor_viewport.*`, waveform item, controller, `AudioToolsWindow.qml`, `AudioEditorPage.qml`, `ToolSidebar.qml`, audioeditor QML, tests and layout contract; delete `OverviewNavigator.qml` after replacement.
 
-**RED:** sample-precise selection and edge adjustment; Ctrl+wheel anchored zoom; Shift+wheel/middle-drag pan; visible peak points bounded by pixel width; gaps blank; one mapping drives ticks/hit/selection/playhead; geometry matches 1672×941; tools ordered; Formant/noise reduction absent.
+**RED:** sample-precise selection and edge adjustment; Ctrl+wheel anchored zoom; Shift+wheel/middle-drag pan; visible peak points bounded by pixel width; gaps blank; one mapping drives ticks/hit/selection/playhead; geometry matches 1672×941; all 13 tools ordered; Formant and noise reduction present with real handlers.
 
 ```cpp
 EXPECT_EQ(controller.selectionFrames(), selection.end - selection.start);
@@ -229,7 +229,7 @@ EXPECT_EQ(after.speedRatio, before.speedRatio);
 EXPECT_FALSE(controller.commitPitch(id, 13));
 ```
 
-GREEN stores semitone metadata and updates the live adapter only; delete source replacement behavior; keep Formant hidden. Commit `feat(editor): add independent pitch shift`.
+GREEN stores semitone metadata and updates the live adapter only; Formant stays independently controllable and is validated through the shared processing path. Commit `feat(editor): add independent pitch shift`.
 
 ## Task 12 — Phase 12 — Tempo Preserve Pitch and Shared Player Preview
 
@@ -278,7 +278,7 @@ GREEN renders lazily through Phase 13 into `QStandardPaths::AppDataLocation/Audi
 
 **Files:** add performance test/measurement script; update QA build paths and 1672×941; remove dead files/build entries; complete `design-qa.md` and development evidence.
 
-**RED contracts:** closed/idle editor has no background work; deactivation stops BPM/recording/editor ownership; real-time read allocation/filesystem counts zero; two-hour seek/render bounded; export does not block null-backend playback; no new runtime dependency; obsolete tokens absent: `AudioSpan`, `DocumentSnapshot`, `preparePlayback`, editor-owned `ag_player`, beat snap, `OverviewNavigator`, `NoiseReducer`, production Formant/vocal-protection, Canvas waveform and placeholders.
+**RED contracts:** closed/idle editor has no background work; deactivation stops BPM/recording/editor ownership; real-time read allocation/filesystem counts zero; two-hour seek/render bounded; export does not block null-backend playback; no new runtime dependency; obsolete tokens absent: `AudioSpan`, `DocumentSnapshot`, `preparePlayback`, editor-owned `ag_player`, beat snap, `OverviewNavigator`, Canvas waveform and placeholders. Noise reduction and Formant remain only through their tested shared processing stages.
 
 ```powershell
 cmake --build --preset windows-msvc-release --parallel 4

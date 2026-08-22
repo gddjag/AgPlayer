@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <limits>
@@ -44,15 +45,78 @@ bool writeHeader(std::ostream& stream, const std::uint32_t sampleRate,
     return stream.good();
 }
 
-const AudioEvent* compatibleEvent(const TimelineSnapshot& snapshot) noexcept
+bool isCancelled(const std::atomic_bool* cancelled) noexcept
 {
-    if (snapshot.events.size() != 1) return nullptr;
-    const AudioEvent& event = snapshot.events.front();
-    if (!isValid(event) || event.timelineStart != 0
-        || snapshot.totalFrames != audibleFrames(event) || event.fadeIn != 0
-        || event.fadeOut != 0 || event.speedRatio != 1.0
-        || event.pitchSemitone != 0 || !event.envelope.empty()) return nullptr;
-    return &event;
+    return cancelled != nullptr
+        && cancelled->load(std::memory_order_relaxed);
+}
+
+bool frameToSeekMilliseconds(const SampleFrame frame,
+                             const std::uint32_t sampleRate,
+                             std::int64_t& result) noexcept
+{
+    if (frame < 0 || sampleRate == 0) return false;
+    const SampleFrame seconds = frame / sampleRate;
+    const SampleFrame remainder = frame % sampleRate;
+    if (seconds > std::numeric_limits<std::int64_t>::max() / 1'000) {
+        return false;
+    }
+    result = seconds * 1'000
+        + remainder * 1'000 / static_cast<SampleFrame>(sampleRate);
+    return true;
+}
+
+bool seekMillisecondsToFrame(const std::int64_t milliseconds,
+                             const std::uint32_t sampleRate,
+                             SampleFrame& result) noexcept
+{
+    if (milliseconds < 0 || sampleRate == 0) return false;
+    const std::int64_t seconds = milliseconds / 1'000;
+    const std::int64_t remainder = milliseconds % 1'000;
+    if (seconds > std::numeric_limits<SampleFrame>::max() / sampleRate) {
+        return false;
+    }
+    const SampleFrame base = seconds * static_cast<SampleFrame>(sampleRate);
+    const SampleFrame tail = (remainder * static_cast<SampleFrame>(sampleRate)
+                              + 999) / 1'000;
+    if (base > std::numeric_limits<SampleFrame>::max() - tail) return false;
+    result = base + tail;
+    return true;
+}
+
+float envelopeGain(const AudioEvent& event, const SampleFrame offset) noexcept
+{
+    if (event.envelope.empty()) return 1.0F;
+    EnvelopePoint previous{0, 1.0F};
+    for (const EnvelopePoint& point : event.envelope) {
+        if (offset <= point.offset) {
+            if (point.offset == previous.offset) return point.gain;
+            const double fraction = static_cast<double>(offset - previous.offset)
+                / static_cast<double>(point.offset - previous.offset);
+            return static_cast<float>(previous.gain
+                + (point.gain - previous.gain) * fraction);
+        }
+        previous = point;
+    }
+    return previous.gain;
+}
+
+float fadeGain(const AudioEvent& event, const SampleFrame offset) noexcept
+{
+    const SampleFrame frames = audibleFrames(event);
+    double result = 1.0;
+    if (event.fadeIn > 0 && offset < event.fadeIn) {
+        result *= event.fadeIn == 1 ? 0.0
+            : static_cast<double>(offset)
+                / static_cast<double>(event.fadeIn - 1);
+    }
+    const SampleFrame fadeOutStart = frames - event.fadeOut;
+    if (event.fadeOut > 0 && offset >= fadeOutStart) {
+        result *= event.fadeOut == 1 ? 0.0
+            : static_cast<double>(frames - 1 - offset)
+                / static_cast<double>(event.fadeOut - 1);
+    }
+    return static_cast<float>(result);
 }
 
 } // namespace
@@ -62,25 +126,44 @@ RenderResult DocumentRenderer::renderFloatWav(
     const std::filesystem::path& outputPath, const std::atomic_bool* cancelled,
     std::function<void(float)> progress) const
 {
-    const AudioEvent* const event = compatibleEvent(snapshot);
-    if (!event) return {false, 0, 0, 0,
-                         "timeline render requires a single unmodified event"};
-    if (outputPath.empty() || (range && (!range->valid()
-        || range->end > snapshot.totalFrames))) {
+    if (outputPath.empty() || snapshot.events.empty() || snapshot.totalFrames <= 0
+        || (range && (!range->valid() || range->end > snapshot.totalFrames))) {
         return {false, 0, 0, 0, "invalid render request"};
     }
-    const AudioSource& source = *event->source;
+    if (isCancelled(cancelled)) return {false, 0, 0, 0, "cancelled"};
+    if (!isValid(snapshot.events.front())) {
+        return {false, 0, 0, 0, "invalid or unsupported timeline event"};
+    }
+    const AudioSource& source = *snapshot.events.front().source;
     if (source.sample_rate == 0 || source.channels == 0 || source.channels > 8) {
         return {false, 0, 0, 0, "document has no valid audio format"};
     }
-    const SampleFrame localStart = range ? range->start : 0;
+    SampleFrame previousEnd = 0;
+    for (const AudioEvent& event : snapshot.events) {
+        if (!isValid(event) || event.source->sample_rate != source.sample_rate
+            || event.source->channels != source.channels
+            || event.speedRatio != 1.0 || event.pitchSemitone != 0
+            || event.timelineStart < previousEnd
+            || audibleFrames(event) > snapshot.totalFrames - event.timelineStart) {
+            return {false, 0, 0, 0, "invalid or unsupported timeline event"};
+        }
+        previousEnd = event.timelineStart + audibleFrames(event);
+    }
+    const SampleFrame renderStart = range ? range->start : 0;
+    const SampleFrame renderEnd = range ? range->end : snapshot.totalFrames;
     const SampleFrame frameCount = range ? range->end - range->start
-                                         : audibleFrames(*event);
-    const std::uint64_t bytes = static_cast<std::uint64_t>(frameCount)
-        * source.channels * sizeof(float);
-    if (frameCount <= 0 || bytes > std::numeric_limits<std::uint32_t>::max()) {
+                                         : snapshot.totalFrames;
+    const std::uint64_t bytesPerFrame = static_cast<std::uint64_t>(source.channels)
+        * sizeof(float);
+    if (frameCount <= 0
+        || static_cast<std::uint64_t>(frameCount)
+            > std::numeric_limits<std::uint32_t>::max() / bytesPerFrame
+        || source.sample_rate > std::numeric_limits<std::uint32_t>::max()
+            / source.channels / sizeof(float)) {
         return {false, 0, 0, 0, "WAV render exceeds 4 GiB"};
     }
+    const std::uint64_t bytes = static_cast<std::uint64_t>(frameCount)
+        * bytesPerFrame;
     std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
     if (!output || !writeHeader(output, source.sample_rate,
                                 static_cast<std::uint16_t>(source.channels),
@@ -91,55 +174,112 @@ RenderResult DocumentRenderer::renderFloatWav(
         output.close(); std::error_code ignored; std::filesystem::remove(outputPath, ignored);
         return RenderResult{false, rendered, source.sample_rate, source.channels, message};
     };
-    SampleFrame rendered{};
-    if (event->mute) {
-        std::vector<float> silence(4096U * source.channels, 0.0F);
-        while (rendered < frameCount) {
-            const auto count = static_cast<std::size_t>(std::min<SampleFrame>(
-                frameCount - rendered, 4096));
+    constexpr SampleFrame kBlockFrames = 4'096;
+    SampleFrame rendered = 0;
+    std::vector<float> silence(static_cast<std::size_t>(kBlockFrames)
+                               * source.channels, 0.0F);
+    const auto reportProgress = [&] {
+        if (progress) {
+            progress(static_cast<float>(rendered)
+                     / static_cast<float>(frameCount));
+        }
+    };
+    const auto writeSilence = [&](SampleFrame frames) -> bool {
+        while (frames > 0) {
+            if (isCancelled(cancelled)) return false;
+            const auto count = static_cast<std::size_t>(
+                std::min(frames, kBlockFrames));
             output.write(reinterpret_cast<const char*>(silence.data()),
-                         static_cast<std::streamsize>(count * source.channels * sizeof(float)));
+                         static_cast<std::streamsize>(count * bytesPerFrame));
+            if (!output) return false;
             rendered += static_cast<SampleFrame>(count);
+            frames -= static_cast<SampleFrame>(count);
+            reportProgress();
         }
-    } else {
+        return true;
+    };
+    const auto writeEvent = [&](const AudioEvent& event,
+                                const SampleFrame timelineStart,
+                                const SampleFrame timelineEnd) -> bool {
+        const SampleFrame frames = timelineEnd - timelineStart;
+        if (event.mute) return writeSilence(frames);
         agplayer::Decoder decoder;
-        if (decoder.open(source.path.u8string(), static_cast<int>(source.sample_rate),
+        if (decoder.open(event.source->path.u8string(),
+                         static_cast<int>(source.sample_rate),
                          static_cast<int>(source.channels)) != AG_OK) {
-            return fail("cannot open source", rendered);
+            return false;
         }
-        const SampleFrame sourceStart = event->sourceStart + localStart;
-        const std::int64_t seekMs = sourceStart * 1'000 / source.sample_rate;
-        if (decoder.seek(seekMs) != AG_OK) return fail("cannot seek source", rendered);
-        const SampleFrame decoderStart = (seekMs * source.sample_rate + 999) / 1'000;
+        const SampleFrame eventOffset = timelineStart - event.timelineStart;
+        const SampleFrame sourceStart = event.sourceStart + eventOffset;
+        std::int64_t seekMs = 0;
+        SampleFrame decoderStart = 0;
+        if (!frameToSeekMilliseconds(sourceStart, source.sample_rate, seekMs)
+            || !seekMillisecondsToFrame(seekMs, source.sample_rate, decoderStart)
+            || decoderStart > sourceStart || decoder.seek(seekMs) != AG_OK) {
+            return false;
+        }
         SampleFrame discard = sourceStart - decoderStart;
+        SampleFrame eventRendered = 0;
         agplayer::DecodedAudioBlock block;
-        while (rendered < frameCount) {
-            if (cancelled && cancelled->load(std::memory_order_relaxed)) {
-                return fail("cancelled", rendered);
-            }
-            if (decoder.read(block) != AG_OK || block.end_of_stream) {
-                return fail("source ended early", rendered);
+        while (eventRendered < frames) {
+            if (isCancelled(cancelled) || decoder.read(block) != AG_OK) return false;
+            if (block.frames == 0) {
+                if (block.end_of_stream) return false;
+                continue;
             }
             const auto begin = static_cast<std::size_t>(std::min<SampleFrame>(
                 discard, static_cast<SampleFrame>(block.frames)));
             discard -= static_cast<SampleFrame>(begin);
             const auto available = static_cast<SampleFrame>(block.frames - begin);
             const auto take = static_cast<std::size_t>(std::min(
-                frameCount - rendered, available));
+                frames - eventRendered, available));
             if (take == 0) continue;
             float* samples = block.samples.data() + begin * source.channels;
-            if (event->gain != 1.0F) {
-                for (std::size_t index = 0; index < take * source.channels; ++index) {
-                    samples[index] *= event->gain;
+            for (std::size_t frame = 0; frame < take; ++frame) {
+                const SampleFrame localOffset = eventOffset + eventRendered
+                    + static_cast<SampleFrame>(frame);
+                const float gain = event.gain * fadeGain(event, localOffset)
+                    * envelopeGain(event, localOffset);
+                if (gain != 1.0F) {
+                    for (std::uint32_t channel = 0; channel < source.channels;
+                         ++channel) {
+                        samples[frame * source.channels + channel] *= gain;
+                    }
                 }
             }
             output.write(reinterpret_cast<const char*>(samples),
-                         static_cast<std::streamsize>(take * source.channels * sizeof(float)));
-            if (!output) return fail("render write failed", rendered);
+                         static_cast<std::streamsize>(take * bytesPerFrame));
+            if (!output) return false;
+            eventRendered += static_cast<SampleFrame>(take);
             rendered += static_cast<SampleFrame>(take);
-            if (progress) progress(static_cast<float>(rendered)
-                                   / static_cast<float>(frameCount));
+            reportProgress();
         }
+        return true;
+    };
+
+    SampleFrame cursor = renderStart;
+    for (const AudioEvent& event : snapshot.events) {
+        const SampleFrame eventEnd = event.timelineStart + audibleFrames(event);
+        if (eventEnd <= renderStart) continue;
+        if (event.timelineStart >= renderEnd) break;
+        const SampleFrame eventStart = std::max(event.timelineStart, renderStart);
+        if (cursor < eventStart && !writeSilence(eventStart - cursor)) {
+            return fail(isCancelled(cancelled) ? "cancelled" : "render write failed",
+                        rendered);
+        }
+        const SampleFrame intersectionStart = std::max(cursor, eventStart);
+        const SampleFrame intersectionEnd = std::min(eventEnd, renderEnd);
+        if (intersectionStart < intersectionEnd
+            && !writeEvent(event, intersectionStart, intersectionEnd)) {
+            return fail(isCancelled(cancelled) ? "cancelled"
+                                               : "cannot render source event",
+                        rendered);
+        }
+        cursor = intersectionEnd;
+    }
+    if (cursor < renderEnd && !writeSilence(renderEnd - cursor)) {
+        return fail(isCancelled(cancelled) ? "cancelled" : "render write failed",
+                    rendered);
     }
     if (!output) return fail("render write failed", rendered);
     if (progress) progress(1.0F);

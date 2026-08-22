@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import AgPlayer
 
 Rectangle {
@@ -21,6 +20,16 @@ Rectangle {
     }
     function pixelAtFrame(frame) {
         return AudioEditorController.viewport.pixelAtFrame(frame)
+    }
+    function addEnvelopePointForEvent(eventId, timelineStart, timelineEnd,
+                                      canvasX, lineY, lineHeight) {
+        const offset = Math.max(0, Math.min(
+            Number(timelineEnd) - Number(timelineStart) - 1,
+            frameAtCanvasPixel(canvasX) - Number(timelineStart)))
+        const gain = Math.max(0, Math.min(2,
+            2 * (1 - lineY / lineHeight)))
+        AudioEditorController.addEnvelopePoint(
+            eventId, Math.round(offset), gain)
     }
 
     onWidthChanged: AudioEditorController.viewport.setViewportWidth(
@@ -93,45 +102,88 @@ Rectangle {
 
             MouseArea {
                 id: eventMoveArea
+                objectName: "editorEventBodyInteraction"
                 anchors.fill: parent
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
+                z: 5
                 cursorShape: AudioEditorController.activeTool === "scissors"
-                    ? Qt.CrossCursor : Qt.SizeHorCursor
+                    ? Qt.CrossCursor : Qt.ArrowCursor
                 acceptedButtons: Qt.LeftButton
                 property real pressCanvasX: 0
+                property double pressFrame: 0
                 property double originalTimelineStart: 0
+                property bool duplicateMove: false
+                property bool movedDuringPress: false
+                property double lastEnvelopeClickMs: 0
+                property real lastEnvelopeClickX: 0
+                property real lastEnvelopeClickY: 0
                 onPressed: function(mouse) {
+                    movedDuringPress = false
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     pressCanvasX = point.x
                     originalTimelineStart = Number(modelData.timelineStart)
                     const frame = canvas.frameAtCanvasPixel(point.x)
+                    pressFrame = frame
                     AudioEditorController.seekFrame(frame)
                     if (AudioEditorController.activeTool === "scissors") {
                         AudioEditorController.splitEvent(modelData.id, frame)
                         mouse.accepted = true
                         return
                     }
-                    AudioEditorController.beginEventGesture(
-                        modelData.id, "move",
-                        (mouse.modifiers & Qt.ControlModifier) !== 0)
+                    duplicateMove = (mouse.modifiers & Qt.ControlModifier) !== 0
+                    if (duplicateMove) {
+                        AudioEditorController.beginEventGesture(
+                            modelData.id, "move", true)
+                    }
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed
                             || AudioEditorController.activeTool === "scissors")
                         return
                     const point = mapToItem(canvas, mouse.x, mouse.y)
-                    const delta = canvas.frameAtCanvasPixel(point.x)
-                        - canvas.frameAtCanvasPixel(pressCanvasX)
-                    AudioEditorController.moveEvent(
-                        modelData.id,
-                        Math.max(0, Math.round(originalTimelineStart + delta)))
+                    const frame = canvas.frameAtCanvasPixel(point.x)
+                    if (frame !== pressFrame)
+                        movedDuringPress = true
+                    if (duplicateMove) {
+                        AudioEditorController.moveEvent(
+                            modelData.id, Math.max(0, Math.round(
+                                originalTimelineStart + frame - pressFrame)))
+                    } else if (frame !== pressFrame) {
+                        AudioEditorController.setSelection(
+                            Math.min(pressFrame, frame),
+                            Math.max(pressFrame, frame))
+                    }
                 }
-                onReleased: {
-                    if (AudioEditorController.activeTool !== "scissors")
-                        AudioEditorController.endEventGesture()
+                onReleased: function(mouse) {
+                    if (duplicateMove) AudioEditorController.endEventGesture()
+                    if (!duplicateMove && !movedDuringPress
+                            && AudioEditorController.activeTool !== "scissors"
+                            && mouse.y >= volumeLine.y
+                            && mouse.y <= volumeLine.y + volumeLine.height) {
+                        const now = Date.now()
+                        if (now - lastEnvelopeClickMs <= 500
+                                && Math.abs(mouse.x - lastEnvelopeClickX) <= 6
+                                && Math.abs(mouse.y - lastEnvelopeClickY) <= 6) {
+                            const point = mapToItem(canvas, mouse.x, mouse.y)
+                            canvas.addEnvelopePointForEvent(
+                                modelData.id,
+                                Number(modelData.timelineStart),
+                                Number(modelData.timelineEnd), point.x,
+                                mouse.y - volumeLine.y, volumeLine.height)
+                            lastEnvelopeClickMs = 0
+                        } else {
+                            lastEnvelopeClickMs = now
+                            lastEnvelopeClickX = mouse.x
+                            lastEnvelopeClickY = mouse.y
+                        }
+                    }
+                    duplicateMove = false
                 }
-                onCanceled: AudioEditorController.cancelEventGesture()
+                onCanceled: {
+                    if (duplicateMove) AudioEditorController.cancelEventGesture()
+                    duplicateMove = false
+                }
             }
 
             MouseArea {
@@ -142,7 +194,7 @@ Rectangle {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 cursorShape: Qt.SizeHorCursor
-                z: 3
+                z: 7
                 activeFocusOnTab: true
                 Accessible.name: qsTr("片段左修剪手柄")
                 Accessible.role: Accessible.Slider
@@ -189,7 +241,7 @@ Rectangle {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 cursorShape: Qt.SizeHorCursor
-                z: 3
+                z: 7
                 activeFocusOnTab: true
                 Accessible.name: qsTr("片段右修剪手柄")
                 Accessible.role: Accessible.Slider
@@ -225,6 +277,105 @@ Rectangle {
                             Number(modelData.sourceEnd) + delta),
                         Number(modelData.timelineStart))
                     event.accepted = true
+                }
+            }
+
+            Canvas {
+                id: fadeCurve
+                objectName: "editorEventFadeOutCurve"
+                anchors.fill: parent
+                z: 4
+                visible: fadeOutHandle.displayedFadeOut > 0
+                onPaint: {
+                    const context = getContext("2d")
+                    context.clearRect(0, 0, width, height)
+                    const startX = canvas.pixelAtFrame(
+                        Number(modelData.timelineEnd)
+                            - fadeOutHandle.displayedFadeOut)
+                        - eventDelegate.x
+                    context.strokeStyle = "#e9d7cf"
+                    context.lineWidth = 1.2
+                    context.beginPath()
+                    context.moveTo(Math.max(0, startX), 10)
+                    context.bezierCurveTo(width - 28, 18,
+                        width - 8, height * 0.48, width - 2, height - 10)
+                    context.stroke()
+                }
+                Connections {
+                    target: AudioEditorController
+                    function onDocumentChanged() { fadeCurve.requestPaint() }
+                }
+            }
+
+            MouseArea {
+                id: fadeOutHandle
+                objectName: "editorEventFadeOutHandle"
+                z: 8
+                x: 0; y: 0
+                width: parent.width; height: 24
+                property double candidateFadeOut: Number(modelData.fadeOut)
+                readonly property double displayedFadeOut: pressed
+                    ? candidateFadeOut : Number(modelData.fadeOut)
+                cursorShape: Qt.SizeHorCursor
+                activeFocusOnTab: true
+                Accessible.name: qsTr("淡出控制点")
+                Accessible.role: Accessible.Slider
+                onPressed: function(mouse) {
+                    candidateFadeOut = Number(modelData.fadeOut)
+                    forceActiveFocus()
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    const eventFrames = Number(modelData.timelineEnd)
+                        - Number(modelData.timelineStart)
+                    const frames = Math.max(0, Math.min(eventFrames,
+                        Number(modelData.timelineEnd)
+                            - canvas.frameAtCanvasPixel(point.x)))
+                    candidateFadeOut = Math.round(frames)
+                    fadeCurve.requestPaint()
+                }
+                onReleased: AudioEditorController.setEventFadeOut(
+                    modelData.id, candidateFadeOut)
+                onCanceled: candidateFadeOut = Number(modelData.fadeOut)
+                Rectangle {
+                    x: Math.max(0, Math.min(parent.width - width,
+                        canvas.pixelAtFrame(Number(modelData.timelineEnd)
+                            - fadeOutHandle.displayedFadeOut) - eventDelegate.x
+                            - width / 2))
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 9; height: 9; radius: width / 2
+                    color: "#1d7fff"
+                    border.color: "#e7f1ff"; border.width: 2
+                }
+            }
+
+            Item {
+                id: volumeLine
+                objectName: "editorEventVolumeLine"
+                x: 10; width: parent.width - 20
+                y: parent.height / 2 - 12; height: 24
+                z: 4
+                Rectangle {
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 1; color: "#d8e6f2"; opacity: 0.65
+                }
+                Repeater {
+                    model: modelData.envelope || []
+                    Rectangle {
+                        required property var modelData
+                        width: 8; height: 8; radius: 4
+                        x: canvas.pixelAtFrame(Number(eventDelegate.modelData.timelineStart)
+                            + Number(modelData.offset)) - eventDelegate.x
+                            - volumeLine.x - width / 2
+                        y: (1 - Math.max(0, Math.min(2,
+                            Number(modelData.gain))) / 2) * volumeLine.height
+                            - height / 2
+                        color: "#1d7fff"
+                        border.color: "#e7f1ff"; border.width: 1
+                    }
                 }
             }
         }
@@ -297,7 +448,7 @@ Rectangle {
         objectName: "editorPlayheadHandle"
         z: 8
         width: 24
-        height: canvas.height
+        height: 28
         x: playheadLine.x - width / 2
         enabled: playheadLine.visible
         cursorShape: Qt.SizeHorCursor

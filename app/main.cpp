@@ -236,6 +236,10 @@ int main(int argc, char* argv[])
     bool qaOpenEqualizer = false;
     QString qaLibraryPath;
     QString qaImportFolder;
+    qint64 qaEditorSelectionStartMs = -1;
+    qint64 qaEditorSelectionEndMs = -1;
+    qint64 qaEditorPlayheadMs = -1;
+    bool qaEditorReferenceState = false;
     QString initialFilePath;
     QString instanceKeySuffix;
     {
@@ -297,6 +301,23 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-import-folder")
                        && i + 1 < cliArgs.size()) {
                 qaImportFolder = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-editor-selection-ms")
+                       && i + 2 < cliArgs.size()) {
+                bool startOk = false;
+                bool endOk = false;
+                const qint64 start = cliArgs.at(++i).toLongLong(&startOk);
+                const qint64 end = cliArgs.at(++i).toLongLong(&endOk);
+                if (startOk && endOk && start >= 0 && end > start) {
+                    qaEditorSelectionStartMs = start;
+                    qaEditorSelectionEndMs = end;
+                }
+            } else if (arg == QStringLiteral("--qa-editor-playhead-ms")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const qint64 value = cliArgs.at(++i).toLongLong(&ok);
+                if (ok && value >= 0) qaEditorPlayheadMs = value;
+            } else if (arg == QStringLiteral("--qa-editor-reference-state")) {
+                qaEditorReferenceState = true;
             } else if (arg == QStringLiteral("--qa-instance-key")
                        && i + 1 < cliArgs.size()) {
                 instanceKeySuffix = cliArgs.at(++i);
@@ -1223,6 +1244,22 @@ int main(int argc, char* argv[])
                 }
                 if (qaTool == 0 && !qaImportFolder.isEmpty()) {
                     audioEditor.openFile(QUrl::fromLocalFile(qaImportFolder));
+                    const qint64 rate = qMax<qint64>(1, audioEditor.sampleRate());
+                    if (qaEditorReferenceState) {
+                        audioEditor.setOriginalBpm(128.0);
+                        audioEditor.setPitch(2, 0);
+                        audioEditor.setKeepPitch(true);
+                        audioEditor.setFormantPreservation(true);
+                    }
+                    if (qaEditorSelectionStartMs >= 0
+                        && qaEditorSelectionEndMs > qaEditorSelectionStartMs) {
+                        audioEditor.setSelection(
+                            qaEditorSelectionStartMs * rate / 1'000,
+                            qaEditorSelectionEndMs * rate / 1'000);
+                    }
+                    if (qaEditorPlayheadMs >= 0) {
+                        audioEditor.seekFrame(qaEditorPlayheadMs * rate / 1'000);
+                    }
                 } else if (qaTool == 1 && !qaImportFolder.isEmpty()) {
                     formatConverter.loadFiles(
                         {QUrl::fromLocalFile(qaImportFolder)});

@@ -91,6 +91,22 @@ set_tests_properties(audio_document_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
 
+add_executable(document_renderer_test
+    core/document_renderer_test.cpp
+)
+set_target_properties(document_renderer_test PROPERTIES AUTOMOC ON)
+target_include_directories(document_renderer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(document_renderer_test PRIVATE agplayer_core Qt6::Test)
+agplayer_enable_warnings(document_renderer_test)
+add_test(NAME document_renderer_test COMMAND document_renderer_test)
+set_tests_properties(document_renderer_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(audio_source_probe_test
     core/audio_source_probe_test.cpp
 )
@@ -220,6 +236,24 @@ add_test(NAME time_pitch_session_test
     COMMAND time_pitch_session_test "${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(time_pitch_session_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(noise_reducer_test
+    core/noise_reducer_test.cpp
+)
+add_dependencies(noise_reducer_test decoder_fixture)
+target_include_directories(noise_reducer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(noise_reducer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(noise_reducer_test)
+add_test(NAME noise_reducer_test
+    COMMAND noise_reducer_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(noise_reducer_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"

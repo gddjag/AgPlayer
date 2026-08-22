@@ -113,6 +113,7 @@ TimePitchResult TimePitchSession::process(
     config.pitch_cents = effective_pitch;
     config.keep_tempo = keep_tempo;
     config.tempo_ratio = keep_tempo ? speed_ratio : speed_ratio / pitch_rate;
+    config.vocal_protection = formant_preservation_;
     std::string error;
     const ag_result status = agplayer::pitch_shift(
         rendered_path.u8string(), config, cancelled,

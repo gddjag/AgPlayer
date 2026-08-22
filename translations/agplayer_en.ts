@@ -113,6 +113,13 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>选择音频导出目录</source><translation>Choose audio export folder</translation></message>
+    <message><source>空格 = 播放 / 暂停       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>Space = Play / Pause       S = Split at playhead       Delete = Delete clip       Ctrl+C / X / V = Copy / Cut / Paste       Ctrl+Z / Y = Undo / Redo</translation></message>
+    <message><source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪       拖拽右上角 = 调整淡出       双击音量线 = 添加控制点</source><translation>Ctrl+drag = Duplicate clip       Ctrl+wheel = Zoom timeline       Shift+wheel = Scroll horizontally       Drag clip edge = Trim       Drag top-right = Adjust fade-out       Double-click volume line = Add control point</translation></message>
+    <message><source>未检测到输入设备</source><translation>No input device detected</translation></message>
+    <message><source>BPM</source><translation>BPM</translation></message>
+    <message><source>人声保真 / Formant保护</source><translation>Vocal fidelity / Formant protection</translation></message>
+    <message><source>浏览</source><translation>Browse</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="16"/>
         <source>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</source>
@@ -512,6 +519,9 @@
         <source>编辑设置</source>
         <translation>Edit settings</translation>
     </message>
+    <message><source>继续录音</source><translation>Resume recording</translation></message><message><source>跳到末尾</source><translation>Jump to end</translation></message><message><source>选择录音设备</source><translation>Choose recording device</translation></message><message><source>暂停录音</source><translation>Pause recording</translation></message>
+    <message><source>展开导出设置</source><translation>Expand export settings</translation></message><message><source>展开录音设置</source><translation>Expand recording settings</translation></message><message><source>展开升降调设置</source><translation>Expand pitch settings</translation></message><message><source>展开速度设置</source><translation>Expand speed settings</translation></message><message><source>展开音调保护设置</source><translation>Expand pitch preservation settings</translation></message>
+    <message><source>折叠导出设置</source><translation>Collapse export settings</translation></message><message><source>折叠录音设置</source><translation>Collapse recording settings</translation></message><message><source>折叠升降调设置</source><translation>Collapse pitch settings</translation></message><message><source>折叠速度设置</source><translation>Collapse speed settings</translation></message><message><source>折叠音调保护设置</source><translation>Collapse pitch preservation settings</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -608,6 +618,7 @@
 </context>
 <context>
     <name>EditorCommandBar</name>
+    <message><source>降噪</source><translation>Noise reduction</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="61"/>
         <source>打开</source>
@@ -716,6 +727,7 @@
 </context>
 <context>
     <name>EditorStatusBar</name>
+    <message><source>空格：播放 / 暂停 · S：在播放头处分割 · Delete：删除片段</source><translation>Space: Play / Pause · S: Split at playhead · Delete: Delete clip</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18"/>
         <source>就绪</source>
@@ -754,6 +766,7 @@
 </context>
 <context>
     <name>EditorWaveformCanvas</name>
+    <message><source>淡出控制点</source><translation>Fade-out control point</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="173"/>
         <source>打开音频或新建录音以开始编辑</source>
@@ -1064,6 +1077,11 @@
 </context>
 <context>
     <name>FileSummaryBar</name>
+    <message><source>时长：</source><translation>Duration:</translation></message>
+    <message><source>采样率：</source><translation>Sample rate:</translation></message>
+    <message><source>位深度：</source><translation>Bit depth:</translation></message>
+    <message><source>声道：</source><translation>Channels:</translation></message>
+    <message><source>BPM：</source><translation>BPM:</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="48"/>
         <source>未打开音频</source>

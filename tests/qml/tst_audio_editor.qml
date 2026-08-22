@@ -76,26 +76,35 @@ TestCase {
         verifyGeometry("editorStatusBar", 0, 824, 1300, 25)
     }
 
-    function test_composedToolsShellHasNoDeadSpaceShortcut() {
+    function test_timeRulerHasReferenceMinorTicks() {
+        const tick = findChild(page, "editorRulerMinorTick")
+        verify(tick, "timeline ruler must expose dense minor ticks")
+        verify(tick.visible)
+        verify(tick.height >= 4 && tick.height <= 7)
+    }
+
+    function test_composedToolsShellHasOneRealSpaceShortcut() {
         const shell = createTemporaryObject(shellComponent, testCase)
         verify(shell)
         tryVerify(function() { return shell.visible })
         const shellPage = findChild(shell, "audioEditorPage")
         verify(shellPage)
-        compare(findChild(shell, "editorSpaceShortcut"), null)
+        verify(findChild(shell, "editorSpaceShortcut"))
         compare(findChild(shell, "audioToolsSpaceShortcut"), null)
-        compare(findChild(shellPage, "editorShortcutText").text.indexOf(
-                    "播放：Phase 12 接入"), 0)
+        const shortcutText = findChild(shellPage, "editorShortcutText").text
+        verify(shortcutText.indexOf("空格 = 播放 / 暂停") >= 0)
+        compare(shortcutText.indexOf("Phase"), -1)
     }
 
     function test_toolbarExactOrderAndClearKeepsDocument() {
         const names = [
             "importAudio", "saveProject", "select", "split", "delete",
-            "crop", "copy", "paste", "fadeIn", "fadeOut", "mute", "clear"
+            "crop", "copy", "paste", "fadeIn", "fadeOut", "mute",
+            "noiseReduction", "clear"
         ]
         const labels = [
             "导入音频", "保存工程", "选择", "分割", "删除", "裁剪",
-            "复制", "粘贴", "淡入", "淡出", "静音片段", "清除"
+            "复制", "粘贴", "淡入", "淡出", "静音片段", "降噪", "清除"
         ]
         let previousX = -1
         for (let index = 0; index < names.length; ++index) {
@@ -116,7 +125,7 @@ TestCase {
         compare(AudioEditorController.activeTool, "select")
     }
 
-    function test_inspectorAThroughEAndRemovedContradictions() {
+    function test_inspectorAThroughEMatchesReferenceControls() {
         const names = [
             "inspectorRecordingGroup", "inspectorTempoGroup",
             "inspectorPitchGroup", "inspectorPreservePitchGroup",
@@ -129,21 +138,60 @@ TestCase {
             verify(group.y > previousY, name + " is out of order")
             previousY = group.y
         }
-        compare(AudioEditorController.formantPreservationSupported, false)
-        compare(AudioEditorController.recordingSupported, false)
-        compare(AudioEditorController.bpmDetectionSupported, false)
-        compare(AudioEditorController.timePitchSupported, false)
-        compare(AudioEditorController.playbackSupported, false)
-        compare(AudioEditorController.exportSupported, false)
-        compare(findChild(page, "inspectorFormantRow"), null)
+        for (const name of [
+                 "inspectorRecordingDevice", "inspectorInputMeter",
+                 "inspectorMonitorSwitch", "inspectorRecordingFormat",
+                 "inspectorBpmInput", "inspectorDetectBpmButton",
+                 "inspectorSpeedSlider", "inspectorSpeedValue",
+                 "inspectorSpeedResetButton", "inspectorPitchMinus",
+                 "inspectorPitchSlider", "inspectorPitchPlus",
+                 "inspectorPitchValue", "inspectorPreservePitchSwitch",
+                 "inspectorFormantRow", "inspectorFormantSwitch",
+                 "editorExportCodec", "editorExportSampleRate",
+                 "editorExportBitDepth", "editorExportChannels",
+                 "editorExportBitRate", "editorExportDirectory",
+                 "editorExportBrowseButton", "editorExportButton"]) {
+            const control = findChild(page, name)
+            verify(control, "missing reference inspector control " + name)
+            verify(control.visible, name + " must be visible")
+        }
         compare(findChild(page, "overviewNavigator"), null)
         compare(findChild(page, "recordingInspector"), null)
         compare(findChild(page, "timePitchInspector"), null)
-        compare(findChild(page, "editorCommand_noiseReduction"), null)
+        verify(findChild(page, "editorCommand_noiseReduction"))
         compare(findChild(page, "editorCommand_gain"), null)
         compare(findChild(page, "editorCommand_insertSilence"), null)
         compare(findChild(page, "editorCommand_clearDocument"), null)
         compare(findChild(page, "editorCommand_exportMenu"), null)
+    }
+
+    function test_inspectorReferenceGeometryAndCollapsibleHeaders() {
+        const names = ["inspectorRecordingGroup", "inspectorTempoGroup",
+                       "inspectorPitchGroup", "inspectorPreservePitchGroup",
+                       "inspectorExportGroup"]
+        const arrows = ["inspectorRecordingCollapse", "inspectorTempoCollapse",
+                        "inspectorPitchCollapse", "inspectorPreservePitchCollapse",
+                        "inspectorExportCollapse"]
+        const heights = [186, 129, 107, 104, 276]
+        const positions = [0, 192, 327, 440, 550]
+        for (let index = 0; index < names.length; ++index) {
+            const group = findChild(page, names[index])
+            const arrow = findChild(page, arrows[index])
+            verify(group && arrow)
+            verify(Math.abs(group.y - positions[index]) <= 2,
+                   names[index] + " y=" + group.y)
+            verify(Math.abs(group.height - heights[index]) <= 2,
+                   names[index] + " height=" + group.height)
+            verify(arrow.Accessible.name.length > 0)
+        }
+
+        const tempo = findChild(page, names[1])
+        const pitch = findChild(page, names[2])
+        mouseClick(findChild(page, arrows[1]))
+        compare(tempo.height, 38)
+        tryCompare(pitch, "y", tempo.y + 44)
+        mouseClick(findChild(page, arrows[1]))
+        compare(tempo.height, heights[1])
     }
 
     function test_keyboardToolSelectionSplitAndEscape() {
@@ -165,32 +213,79 @@ TestCase {
         compare(AudioEditorController.timelineEventViews.length, 2)
     }
 
-    function test_futureBackendActionsStayDisabledWhileTimelineActionsTrackState() {
+    function test_backendActionsTrackCapabilitiesWhileTimelineActionsTrackState() {
         const exportButton = findChild(page, "editorExportButton")
         const deleteButton = findChild(page, "editorCommand_delete")
         verify(exportButton && deleteButton)
-        compare(exportButton.enabled, false)
+        compare(exportButton.enabled,
+                AudioEditorController.exportSupported
+                && AudioEditorController.actionEnabled("editor.export"))
         compare(deleteButton.enabled, false)
 
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        compare(exportButton.enabled, false)
+        compare(exportButton.enabled,
+                AudioEditorController.exportSupported
+                && AudioEditorController.actionEnabled("editor.export"))
         verify(AudioEditorController.setSelection(100, 200))
         tryCompare(deleteButton, "enabled", true)
     }
 
-    function test_futureTransportControlsLookAndReadDisabled() {
+    function test_transportControlsKeepReferenceAppearanceWhenUnavailable() {
         const microphone = findChild(page, "recordingMicrophoneButton")
         const recording = findChild(page, "recordingToggleButton")
         const play = findChild(page, "editorPrimaryPlayButton")
         const narrowPlay = findChild(page, "editorNarrowPlaybackAccess")
         for (const control of [microphone, recording, play, narrowPlay]) {
             verify(control)
-            compare(control.enabled, false)
-            verify(control.opacity <= 0.55,
-                   control.objectName + " does not look disabled")
+            verify(control.opacity >= 0.9,
+                   control.objectName + " lost the reference appearance")
             verify(control.Accessible.name.length > 0)
             compare(control.Accessible.role, Accessible.Button)
         }
+    }
+
+    function test_referenceTransportShortcutAndStatusCopy() {
+        const recordingState = findChild(page, "recordingStateText")
+        const recordingTime = findChild(page, "recordingTimeText")
+        const playBackground = findChild(page, "editorPrimaryPlayBackground")
+        const shortcutFirst = findChild(page, "editorShortcutText")
+        const shortcutSecond = findChild(page, "editorShortcutTextSecondRow")
+        verify(recordingState && recordingTime && playBackground
+               && shortcutFirst && shortcutSecond)
+        compare(recordingState.text, "准备录音")
+        compare(recordingTime.text, "00:00:00")
+        verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
+        verify(shortcutSecond.text.indexOf("拖拽右上角 = 调整淡出") >= 0)
+        verify(shortcutSecond.text.indexOf("双击音量线 = 添加控制点") >= 0)
+        compare(shortcutFirst.text.indexOf("Phase"), -1)
+        compare(shortcutSecond.text.indexOf("Phase"), -1)
+        compare(findChild(page, "editorStatusBar").visible, false)
+    }
+
+    function test_recordingButtonsMatchReferenceRolesFromIdle() {
+        const microphone = findChild(page, "recordingMicrophoneButton")
+        const record = findChild(page, "recordingToggleButton")
+        const device = findChild(page, "inspectorRecordingDevice")
+        verify(microphone && record && device)
+        compare(microphone.Accessible.name, "选择录音设备")
+        compare(record.Accessible.name, "开始录音")
+        compare(record.enabled,
+                AudioEditorController.recordingSupported
+                && !AudioEditorController.busy)
+        mouseClick(microphone)
+        verify(device.activeFocus,
+               "microphone button must prepare the recording device selector")
+    }
+
+    function test_fourthPlaybackButtonJumpsToDocumentEnd() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
+        verify(AudioEditorController.seekMs(100))
+        const toEnd = findChild(page, "editorPlaybackForwardButton")
+        verify(toEnd)
+        compare(toEnd.Accessible.name, "跳到末尾")
+        mouseClick(toEnd)
+        compare(AudioEditorController.positionMs,
+                AudioEditorController.durationMs)
     }
 
     function test_splitToolbarOnlySelectsScissorsMode() {
@@ -204,6 +299,72 @@ TestCase {
 
         compare(AudioEditorController.activeTool, "scissors")
         compare(AudioEditorController.timelineEventViews.length, 1)
+    }
+
+    function test_selectToolDragOnEventCreatesSampleExactSelection() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        const body = findChild(canvas, "editorEventBodyInteraction")
+        verify(body, "event body must expose the selection interaction seam")
+        const fromX = Math.round(body.width * 0.25)
+        const toX = Math.round(body.width * 0.75)
+        const fromPoint = body.mapToItem(canvas, fromX, body.height / 2)
+        const toPoint = body.mapToItem(canvas, toX, body.height / 2)
+        const expectedStart = canvas.frameAtCanvasPixel(fromPoint.x)
+        const expectedEnd = canvas.frameAtCanvasPixel(toPoint.x)
+        const originalStart = AudioEditorController.timelineEventViews[0].timelineStart
+
+        mouseDrag(body, fromX, body.height / 2,
+                  toX - fromX, 0, Qt.LeftButton, Qt.NoModifier, 30)
+
+        compare(AudioEditorController.selectionStart, expectedStart)
+        compare(AudioEditorController.selectionEnd, expectedEnd)
+        compare(AudioEditorController.timelineEventViews[0].timelineStart,
+                originalStart)
+    }
+
+    function test_fadeHandleAndVolumeLinePersistSampleExactEdits() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 480000))
+        wait(0)
+        const fade = findChild(canvas, "editorEventFadeOutHandle")
+        const volumeLine = findChild(canvas, "editorEventVolumeLine")
+        const body = findChild(canvas, "editorEventBodyInteraction")
+        verify(fade && volumeLine && body)
+        tryVerify(function() { return fade.visible && fade.width > 0 })
+
+        const dragDelta = -Math.round(canvas.width * 0.2)
+        const dragStartX = fade.width - 8
+        const dragStartPoint = fade.mapToItem(canvas,
+            dragStartX, fade.height / 2)
+        const targetPoint = Qt.point(
+            dragStartPoint.x + dragDelta, dragStartPoint.y)
+        const eventEnd = Number(AudioEditorController.timelineEventViews[0].timelineEnd)
+        const expectedFade = eventEnd - canvas.frameAtCanvasPixel(targetPoint.x)
+        mouseDrag(canvas, dragStartPoint.x, dragStartPoint.y,
+                  dragDelta, 0, Qt.LeftButton, Qt.NoModifier, 30)
+        compare(Number(AudioEditorController.timelineEventViews[0].fadeOut),
+                expectedFade)
+
+        const clickX = Math.round(volumeLine.width * 0.45)
+        const clickY = Math.round(volumeLine.height * 0.25)
+        const envelopePoint = volumeLine.mapToItem(canvas, clickX, clickY)
+        const expectedOffset = canvas.frameAtCanvasPixel(envelopePoint.x)
+            - Number(AudioEditorController.timelineEventViews[0].timelineStart)
+        canvas.addEnvelopePointForEvent(
+            AudioEditorController.timelineEventViews[0].id,
+            Number(AudioEditorController.timelineEventViews[0].timelineStart),
+            Number(AudioEditorController.timelineEventViews[0].timelineEnd),
+            envelopePoint.x, clickY, volumeLine.height)
+        compare(AudioEditorController.timelineEventViews[0].envelope.length, 1)
+        compare(Number(AudioEditorController.timelineEventViews[0]
+            .envelope[0].offset), expectedOffset)
     }
 
     function test_playheadDragCommitsOneSeekOnRelease() {

@@ -48,9 +48,9 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
 }
-if ($audioEditor -match 'sequence:\s*"Space"' -or
-    $toolsWindow -match 'sequence:\s*"Space"') {
-    throw 'The composed tools shell must not expose a dead Space shortcut.'
+if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
+    $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
+    throw 'The composed tools shell is missing its real Space playback shortcut.'
 }
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
@@ -64,7 +64,7 @@ if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'
 }
-if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*42' -or
+if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*49' -or
     $toolsNavigation -notmatch 'height:\s*3' -or
     $toolsNavigation -match 'radius:\s*Theme\.radiusMd' -or
     $toolsNavigation -match 'ThemedIcon') {
@@ -86,7 +86,7 @@ foreach ($label in $navOrder) {
 
 $commandOrder = @(
     'importAudio', 'saveProject', 'select', 'split', 'delete', 'crop',
-    'copy', 'paste', 'fadeIn', 'fadeOut', 'mute', 'clear')
+    'copy', 'paste', 'fadeIn', 'fadeOut', 'mute', 'noiseReduction', 'clear')
 $previous = -1
 foreach ($command in $commandOrder) {
     $position = $commandBar.IndexOf(('commandName: "' + $command + '"'))
@@ -105,7 +105,7 @@ if ($commandBar -notmatch 'clearTransientState\(\)' -or
     throw 'Clear must only clear selection and transient tool state.'
 }
 foreach ($obsolete in @(
-    'noiseReduction', 'insertSilence', 'clearDocument', 'exportMenu',
+    'insertSilence', 'clearDocument', 'exportMenu',
     'gainRequested', 'addMarker')) {
     if ($commandBar -match $obsolete) {
         throw "The Phase 6 toolbar still contains obsolete UI: $obsolete"
@@ -119,8 +119,19 @@ foreach ($group in @(
         throw "The Phase 6 inspector is missing $group."
     }
 }
-if ($audioEditor -notmatch 'active:\s*AudioEditorController\.formantPreservationSupported') {
-    throw 'The Formant row must be conditionally instantiated from the real capability.'
+foreach ($control in @(
+    'inspectorRecordingDevice', 'inspectorInputMeter', 'inspectorMonitorSwitch',
+    'inspectorRecordingFormat', 'inspectorBpmInput', 'inspectorDetectBpmButton',
+    'inspectorSpeedSlider', 'inspectorSpeedValue', 'inspectorSpeedResetButton',
+    'inspectorPitchMinus', 'inspectorPitchSlider', 'inspectorPitchPlus',
+    'inspectorPitchValue', 'inspectorPreservePitchSwitch',
+    'inspectorFormantRow', 'inspectorFormantSwitch', 'editorExportBrowseButton')) {
+    if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The reference inspector is missing $control."
+    }
+}
+if ($audioEditor -match 'active:\s*AudioEditorController\.formantPreservationSupported') {
+    throw 'The reference Formant row must remain visible.'
 }
 foreach ($obsolete in @(
     'overviewNavigator', 'recordingInspector', 'timePitchInspector',
@@ -177,25 +188,28 @@ foreach ($capability in @('recordingSupported', 'bpmDetectionSupported',
         throw "The Phase 6 future backend is missing an explicit capability gate: $capability"
     }
 }
-if ($controllerHeader -match 'Q_PROPERTY\(QVariantMap\s+projectExportSettings[^\)]*WRITE' -or
-    $audioEditor -match 'AudioEditorController\.projectExportSettings\s*=') {
-    throw 'Persisted project export settings must be read-only from QML.'
-}
 foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
     'editorExportBitDepth', 'editorExportChannels', 'editorExportBitRate',
     'editorExportDirectory')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $field + '"')) {
-        throw "The read-only E group is missing $field."
+        throw "The editable E group is missing $field."
     }
 }
-if ($audioEditor -match 'audioEditorExportDialog|AudioEditorController\.(exportTo|detectBpm|setSpeedPercent|setPitch|startRecording)\(') {
-    throw 'The Phase 6 QML still invokes a future recording/BPM/time-pitch/export backend.'
+$shortcutPlay = [regex]::Escape((ConvertFrom-Utf8Base64 '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGc'))
+$shortcutFade = [regex]::Escape((ConvertFrom-Utf8Base64 '5ouW5ou95Y+z5LiK6KeSID0g6LCD5pW05reh5Ye6'))
+$shortcutEnvelope = [regex]::Escape((ConvertFrom-Utf8Base64 '5Y+M5Ye76Z+z6YeP57q/ID0g5re75Yqg5o6n5Yi254K5'))
+$recordingReady = [regex]::Escape((ConvertFrom-Utf8Base64 '5YeG5aSH5b2V6Z+z'))
+if (($audioEditor + "`n" + $commandBar) -match 'Phase\s*[0-9]' -or
+    $audioEditor -notmatch $shortcutPlay -or
+    $audioEditor -notmatch $shortcutFade -or
+    $audioEditor -notmatch $shortcutEnvelope -or
+    $audioEditor -notmatch ('qsTr\("' + $recordingReady + '"\)')) {
+    throw 'The editor still contains phased placeholder copy or is missing reference instructions.'
 }
-if ($controllerSource -match 'DocumentRenderer|ag_player_|preparePlayback\(' -or
-    $controllerHeader -match 'ag_player\*|preparePlayback\(') {
-    throw 'The Phase 6 controller still owns the obsolete render-then-play second player path.'
+if ($audioEditor -notmatch 'objectName:\s*"recordingTimeText"[\s\S]{0,220}00:00:00' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,160}visible:\s*false') {
+    throw 'Recording time or the visually absent reference status bar does not match the source image.'
 }
-
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',
     'recordingMicrophoneButton', 'recordingToggleButton',
