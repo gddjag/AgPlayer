@@ -240,8 +240,8 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     QCOMPARE(item.spectrumBarWidth(), 5.0);
     QCOMPARE(item.spectrumBarGap(), 2.0);
     QCOMPARE(item.spectrumMaxHeight(), 96.0);
-    QCOMPARE(item.spectrumAttackSeconds(), 0.012);
-    QCOMPARE(item.spectrumDecaySeconds(), 0.075);
+    QCOMPARE(item.spectrumAttackSeconds(), 0.02);
+    QCOMPARE(item.spectrumDecaySeconds(), 0.10);
     QCOMPARE(item.spectrumPeakFallSeconds(), 0.75);
 
     item.setWidth(600);

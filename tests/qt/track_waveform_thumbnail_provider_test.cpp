@@ -23,6 +23,7 @@ private slots:
     void quantizesContinuousTimeBucketsToExactly128Bytes();
     void ignoresNonFiniteSamplesAndClampsFiniteAmplitude();
     void mapsPersistentUtf8TrackIdsToExactPalette();
+    void diagnosticsProveCacheOnlyExecution();
     void readsExistingV2CacheWithoutChangingIt();
     void returnsEmptyForMissCorruptionMismatchAndEmptyMix();
     void coalescesSameTrackAndPublishesOnlyLatestGeneration();
@@ -243,6 +244,28 @@ void TrackWaveformThumbnailProviderTest::readsExistingV2CacheWithoutChangingIt()
                  .value(QStringLiteral("maxActiveWorkers"))
                  .toInt(),
              1);
+}
+
+void TrackWaveformThumbnailProviderTest::diagnosticsProveCacheOnlyExecution()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TrackWaveformThumbnailProvider provider(
+        directory.filePath(QStringLiteral("cache")));
+
+    const QVariantMap initial = provider.diagnostics();
+    QVERIFY(initial.contains(QStringLiteral("analysisCalls")));
+    QCOMPARE(initial.value(QStringLiteral("analysisCalls")).toULongLong(), 0U);
+
+    QSignalSpy ready(&provider,
+                     &TrackWaveformThumbnailProvider::thumbnailReady);
+    provider.request(QStringLiteral("cache-miss"),
+                     directory.filePath(QStringLiteral("missing.wav")), 1U);
+    QVERIFY(ready.wait(5'000));
+    QCOMPARE(provider.diagnostics()
+                 .value(QStringLiteral("analysisCalls"))
+                 .toULongLong(),
+             0U);
 }
 
 void TrackWaveformThumbnailProviderTest::returnsEmptyForMissCorruptionMismatchAndEmptyMix()

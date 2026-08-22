@@ -59,7 +59,7 @@ Assert-Matches $trackList 'listWaveformThumbnailEnabled\s*\?\s*62\s*:\s*42' `
     'Track rows must switch directly between 62 px and 42 px'
 Assert-Matches $trackList '(?s)trackHeaderIndex.*trackHeaderTitle.*trackHeaderFavorite.*trackHeaderArtist.*trackHeaderAlbum.*trackHeaderRating.*trackHeaderBpm.*trackHeaderDuration' `
     'Track header order must match the reference table'
-Assert-Matches $trackList '(?s)active:\s*SettingsController\.listWaveformThumbnailEnabled\s*&&\s*root\.thumbnailHostVisible\s*&&\s*rowItem\.inViewport' `
+Assert-Matches $trackList '(?s)active:\s*SettingsController\.listWaveformThumbnailEnabled\s*&&\s*root\s*&&\s*root\.thumbnailHostVisible\s*&&\s*rowItem\.inViewport' `
     'Waveform wrapper Loader must require enabled and effective host visibility'
 Assert-Matches $trackList '(?s)ListView\.onPooled:\s*\{.*pooled\s*=\s*true.*ListView\.onReused:\s*\{.*waveformGeneration.*pooled\s*=\s*false' `
     'Pooled delegates must deactivate and reused delegates must get a new generation'

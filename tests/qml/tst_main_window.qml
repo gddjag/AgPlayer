@@ -2649,6 +2649,8 @@ TestCase {
             return TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
                     > readsBefore
         }, 3000)
+        compare(TrackWaveformThumbnailProvider.diagnostics().analysisCalls, 0,
+                "visible list thumbnails must remain cache-only")
 
         wait(100)
         var settledReads = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
@@ -2664,6 +2666,95 @@ TestCase {
         verify(!findChild(list, "trackWaveformThumbnail"))
         list.destroy()
         SettingsController.listWaveformThumbnailMode = previousMode
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task6_large_models_keep_thumbnail_requests_visible_bounded() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = true
+
+        function verifyBound(rowCount) {
+            var provider = fakeThumbnailProviderComponent.createObject(testCase)
+            var model = createIsolatedTrackModel("task6-" + rowCount + "-",
+                                                 rowCount)
+            var host = trackListHostComponent.createObject(mainWindow.contentItem)
+            var list = trackListComponent.createObject(host, {
+                "width": host.width,
+                "height": host.height,
+                "trackModel": model,
+                "thumbnailProvider": provider
+            })
+            verify(provider && model && host && list)
+            tryCompare(list, "count", rowCount, 5000)
+            tryVerify(function() {
+                return list.thumbnailItemCount > 0
+                        && provider.requestCount > 0
+            }, 3000)
+
+            var requestBoundPerViewport = 32
+            verify(list.thumbnailItemCount <= requestBoundPerViewport)
+            verify(provider.requestCount <= requestBoundPerViewport,
+                   rowCount + " rows must not request non-visible thumbnails")
+
+            var beforeMiddle = provider.requestCount
+            list.positionViewAtIndex(Math.floor(rowCount / 2), ListView.Beginning)
+            tryVerify(function() {
+                return provider.requestCount > beforeMiddle
+            }, 3000)
+            verify(provider.requestCount - beforeMiddle
+                   <= requestBoundPerViewport,
+                   rowCount + "-row middle scroll exceeded one viewport")
+            verify(list.thumbnailItemCount <= requestBoundPerViewport)
+
+            var beforeEnd = provider.requestCount
+            list.positionViewAtEnd()
+            tryVerify(function() { return provider.requestCount > beforeEnd },
+                      3000)
+            verify(provider.requestCount - beforeEnd
+                   <= requestBoundPerViewport,
+                   rowCount + "-row end scroll exceeded one viewport")
+            verify(list.thumbnailItemCount <= requestBoundPerViewport)
+            verify(provider.requestCount <= requestBoundPerViewport * 3,
+                   "three viewports must stay independent of logical row count")
+
+            host.destroy()
+            model.destroy()
+            provider.destroy()
+        }
+
+        verifyBound(1000)
+        verifyBound(10000)
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task6_filter_switching_reuses_one_shared_track_list() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var filter = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filter)
+        var workspace = findChild(window, "listWorkspace")
+        var shared = findChild(workspace, "sharedTrackList")
+        verify(workspace && shared)
+
+        filter.category = "favorites"
+        wait(0)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        filter.category = "all"
+        filter.tagKey = "task6-nonexistent-tag"
+        wait(0)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        filter.tagKey = ""
+        filter.resourceFolder = "C:/task6/nonexistent-folder"
+        wait(0)
+        compare(findChild(workspace, "sharedTrackList"), shared)
+        compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
+
+        window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 

@@ -585,23 +585,25 @@ ListView {
                             anchors.bottomMargin: 8
                             height: 9
                             active: SettingsController.listWaveformThumbnailEnabled
-                                    && root.thumbnailHostVisible
+                                    && root && root.thumbnailHostVisible
                                     && rowItem.inViewport
                             property bool counted: false
                             onLoaded: {
                                 if (!counted) {
                                     counted = true
-                                    root.thumbnailItemCount += 1
+                                    if (root)
+                                        root.thumbnailItemCount += 1
                                 }
                             }
                             onItemChanged: {
                                 if (!item && counted) {
                                     counted = false
-                                    root.thumbnailItemCount -= 1
+                                    if (root)
+                                        root.thumbnailItemCount -= 1
                                 }
                             }
                             Component.onDestruction: {
-                                if (counted)
+                                if (counted && root)
                                     root.thumbnailItemCount -= 1
                             }
                             sourceComponent: Component {

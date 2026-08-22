@@ -135,6 +135,8 @@ void TrackWaveformThumbnailStressTest::keepsTenThousandLogicalRowsBoundedToVisib
     QVERIFY(completed.value(QStringLiteral("cacheEntries")).toInt() <= 256);
     QCOMPARE(completed.value(QStringLiteral("cacheEntries")).toInt(), 256);
     QCOMPARE(completed.value(QStringLiteral("inFlightTracks")).toInt(), 0);
+    QCOMPARE(completed.value(QStringLiteral("analysisCalls")).toULongLong(),
+             0U);
 
     QCOMPARE(QDir(cacheDirectory).entryList(QDir::Files), filesBefore);
     QVERIFY(cacheFile.open(QIODevice::ReadOnly));
