@@ -8,6 +8,10 @@ Rectangle {
     border.color: "#23415d"
     border.width: 1
     clip: true
+    property double playheadCandidateFrame: -1
+    readonly property double displayedPlayheadFrame:
+        playheadCandidateFrame >= 0 ? playheadCandidateFrame
+                                    : AudioEditorController.playheadFrame
 
     function boundedPixel(pixel) {
         return Math.max(0, Math.min(width, pixel))
@@ -132,18 +136,23 @@ Rectangle {
 
             MouseArea {
                 id: leftTrim
+                objectName: "editorEventLeftTrimHandle"
                 width: 18
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 cursorShape: Qt.SizeHorCursor
                 z: 3
+                activeFocusOnTab: true
+                Accessible.name: qsTr("片段左修剪手柄")
+                Accessible.role: Accessible.Slider
                 property double originalTimelineStart: 0
                 property double originalSourceStart: 0
                 onPressed: function(mouse) {
                     originalTimelineStart = Number(modelData.timelineStart)
                     originalSourceStart = Number(modelData.sourceStart)
                     AudioEditorController.beginEventGesture(modelData.id, "trim")
+                    forceActiveFocus()
                     mouse.accepted = true
                 }
                 onPositionChanged: function(mouse) {
@@ -159,22 +168,38 @@ Rectangle {
                 }
                 onReleased: AudioEditorController.endEventGesture()
                 onCanceled: AudioEditorController.cancelEventGesture()
+                Keys.onPressed: function(event) {
+                    if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                        return
+                    const delta = event.key === Qt.Key_Left ? -1 : 1
+                    AudioEditorController.trimEvent(
+                        modelData.id,
+                        Math.max(0, Number(modelData.sourceStart) + delta),
+                        Number(modelData.sourceEnd),
+                        Math.max(0, Number(modelData.timelineStart) + delta))
+                    event.accepted = true
+                }
             }
 
             MouseArea {
                 id: rightTrim
+                objectName: "editorEventRightTrimHandle"
                 width: 18
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 cursorShape: Qt.SizeHorCursor
                 z: 3
+                activeFocusOnTab: true
+                Accessible.name: qsTr("片段右修剪手柄")
+                Accessible.role: Accessible.Slider
                 property double originalSourceEnd: 0
                 property double originalTimelineEnd: 0
                 onPressed: function(mouse) {
                     originalSourceEnd = Number(modelData.sourceEnd)
                     originalTimelineEnd = Number(modelData.timelineEnd)
                     AudioEditorController.beginEventGesture(modelData.id, "trim")
+                    forceActiveFocus()
                     mouse.accepted = true
                 }
                 onPositionChanged: function(mouse) {
@@ -190,22 +215,33 @@ Rectangle {
                 }
                 onReleased: AudioEditorController.endEventGesture()
                 onCanceled: AudioEditorController.cancelEventGesture()
+                Keys.onPressed: function(event) {
+                    if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                        return
+                    const delta = event.key === Qt.Key_Left ? -1 : 1
+                    AudioEditorController.trimEvent(
+                        modelData.id, Number(modelData.sourceStart),
+                        Math.max(Number(modelData.sourceStart) + 1,
+                            Number(modelData.sourceEnd) + delta),
+                        Number(modelData.timelineStart))
+                    event.accepted = true
+                }
             }
         }
     }
 
     Rectangle {
         id: playheadLine
-        x: canvas.pixelAtFrame(AudioEditorController.playheadFrame)
+        x: canvas.pixelAtFrame(canvas.displayedPlayheadFrame)
         y: 0
         width: 2
         height: canvas.height
         color: "#ffaf00"
         visible: (AudioEditorController.hasDocument
                   || AudioEditorController.recording)
-            && AudioEditorController.playheadFrame
+            && canvas.displayedPlayheadFrame
                 >= AudioEditorController.viewport.visibleStartFrame
-            && AudioEditorController.playheadFrame
+            && canvas.displayedPlayheadFrame
                 <= AudioEditorController.viewport.visibleEndFrame
         z: 6
     }
@@ -246,7 +282,7 @@ Rectangle {
         onWheel: function(wheel) {
             if ((wheel.modifiers & Qt.ControlModifier) !== 0) {
                 AudioEditorController.viewport.zoomAt(
-                    wheel.angleDelta.y > 0 ? 0.8 : 1.25, wheel.x)
+                    wheel.angleDelta.y > 0 ? 1.25 : 0.8, wheel.x)
                 wheel.accepted = true
             } else if ((wheel.modifiers & Qt.ShiftModifier) !== 0) {
                 AudioEditorController.viewport.panByPixels(
@@ -265,10 +301,32 @@ Rectangle {
         x: playheadLine.x - width / 2
         enabled: playheadLine.visible
         cursorShape: Qt.SizeHorCursor
+        activeFocusOnTab: true
+        Accessible.name: qsTr("播放头")
+        Accessible.role: Accessible.Slider
+        onPressed: function(mouse) {
+            canvas.playheadCandidateFrame = AudioEditorController.playheadFrame
+            forceActiveFocus()
+            mouse.accepted = true
+        }
         onPositionChanged: function(mouse) {
             if (!pressed) return
             const point = mapToItem(canvas, mouse.x, mouse.y)
-            AudioEditorController.seekFrame(canvas.frameAtCanvasPixel(point.x))
+            canvas.playheadCandidateFrame = canvas.frameAtCanvasPixel(point.x)
+        }
+        onReleased: {
+            AudioEditorController.seekFrame(canvas.playheadCandidateFrame)
+            canvas.playheadCandidateFrame = -1
+        }
+        onCanceled: canvas.playheadCandidateFrame = -1
+        Keys.onPressed: function(event) {
+            if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return
+            AudioEditorController.seekFrame(Math.max(0, Math.min(
+                AudioEditorController.totalFrames,
+                AudioEditorController.playheadFrame
+                    + (event.key === Qt.Key_Left ? -1 : 1))))
+            event.accepted = true
         }
     }
 
@@ -283,6 +341,9 @@ Rectangle {
         enabled: selectionOverlay.visible
         visible: enabled
         cursorShape: Qt.SizeHorCursor
+        activeFocusOnTab: true
+        Accessible.name: qsTr("选区起点")
+        Accessible.role: Accessible.Slider
         onPositionChanged: function(mouse) {
             if (!pressed) return
             const point = mapToItem(canvas, mouse.x, mouse.y)
@@ -290,6 +351,16 @@ Rectangle {
                                    AudioEditorController.selectionEnd - 1)
             AudioEditorController.setSelection(
                 frame, AudioEditorController.selectionEnd)
+        }
+        Keys.onPressed: function(event) {
+            if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return
+            AudioEditorController.setSelection(Math.max(0, Math.min(
+                AudioEditorController.selectionEnd - 1,
+                AudioEditorController.selectionStart
+                    + (event.key === Qt.Key_Left ? -1 : 1))),
+                AudioEditorController.selectionEnd)
+            event.accepted = true
         }
     }
 
@@ -304,6 +375,9 @@ Rectangle {
         enabled: selectionOverlay.visible
         visible: enabled
         cursorShape: Qt.SizeHorCursor
+        activeFocusOnTab: true
+        Accessible.name: qsTr("选区终点")
+        Accessible.role: Accessible.Slider
         onPositionChanged: function(mouse) {
             if (!pressed) return
             const point = mapToItem(canvas, mouse.x, mouse.y)
@@ -311,6 +385,17 @@ Rectangle {
                                    AudioEditorController.selectionStart + 1)
             AudioEditorController.setSelection(
                 AudioEditorController.selectionStart, frame)
+        }
+        Keys.onPressed: function(event) {
+            if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return
+            AudioEditorController.setSelection(
+                AudioEditorController.selectionStart,
+                Math.max(AudioEditorController.selectionStart + 1, Math.min(
+                    AudioEditorController.totalFrames,
+                    AudioEditorController.selectionEnd
+                        + (event.key === Qt.Key_Left ? -1 : 1))))
+            event.accepted = true
         }
     }
 

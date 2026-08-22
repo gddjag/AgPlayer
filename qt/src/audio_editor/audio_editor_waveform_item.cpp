@@ -144,10 +144,21 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
     }
     const std::size_t maximum_buckets = std::max<std::size_t>(1U,
         static_cast<std::size_t>(std::floor(width())));
-    const std::size_t stride = std::max<std::size_t>(1U,
-        (pair_count + maximum_buckets - 1U) / maximum_buckets);
+    std::vector<std::size_t> strides(snapshot->channels.size(), pair_count + 1U);
+    for (std::size_t channel = 0; channel < snapshot->channels.size(); ++channel) {
+        const std::size_t budget = maximum_buckets / snapshot->channels.size()
+            + (channel < maximum_buckets % snapshot->channels.size() ? 1U : 0U);
+        if (budget > 0U) {
+            strides[channel] = std::max<std::size_t>(
+                1U, (pair_count + budget - 1U) / budget);
+        }
+    }
     std::size_t valid_bucket_count = 0;
-    for (const auto& channel : snapshot->channels) {
+    for (std::size_t channel_index = 0;
+         channel_index < snapshot->channels.size(); ++channel_index) {
+        const auto& channel = snapshot->channels[channel_index];
+        const std::size_t stride = strides[channel_index];
+        if (stride > pair_count) continue;
         for (std::size_t start = 0; start < pair_count; start += stride) {
             const std::size_t end = std::min(pair_count, start + stride);
             bool has_value = false;
@@ -182,6 +193,8 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         for (std::size_t channel_index = 0;
              channel_index < snapshot->channels.size(); ++channel_index) {
             const auto& peaks = snapshot->channels[channel_index];
+            const std::size_t stride = strides[channel_index];
+            if (stride > pair_count) continue;
             const qreal center = (static_cast<qreal>(channel_index) + 0.5)
                 * channel_height;
             const qreal half_height = channel_height * 0.46;

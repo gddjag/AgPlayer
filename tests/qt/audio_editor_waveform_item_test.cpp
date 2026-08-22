@@ -66,6 +66,42 @@ private slots:
         delete node;
     }
 
+    void highDensityStereoUsesOneTotalTwoPointsPerPixelBudget()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(10.0);
+        item.setHeight(80.0);
+        QVariantList dense;
+        for (int index = 0; index < 1'000; ++index) {
+            dense.append(-0.75);
+            dense.append(0.75);
+        }
+        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QVERIFY(item.generatedPointCount() <= 20);
+        delete node;
+    }
+
+    void stereoBudgetSkipsChannelsThatDoNotOwnALogicalPixel()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(1.0);
+        item.setHeight(80.0);
+        QVariantList dense;
+        for (int index = 0; index < 100; ++index) {
+            dense.append(-0.75);
+            dense.append(0.75);
+        }
+        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QVERIFY(item.generatedPointCount() <= 2);
+        delete node;
+    }
+
     void blankBucketsDoNotBridgeTimelineGaps()
     {
         TestableAudioEditorWaveformItem item;

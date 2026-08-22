@@ -22,12 +22,21 @@ TestCase {
         }
     }
 
+    Component {
+        id: shellComponent
+        AudioToolsWindow { visible: true }
+    }
+
     property var host
     property var page
 
     function init() {
-        if (AudioEditorController.hasDocument && !AudioEditorController.busy)
-            AudioEditorController.clearDocument()
+        if (AudioEditorController.hasDocument && !AudioEditorController.busy) {
+            if (!AudioEditorController.clearDocument())
+                verify(AudioEditorController.confirmDiscardAndOpen(),
+                       "modified document could not be explicitly discarded")
+            compare(AudioEditorController.hasDocument, false)
+        }
         host = createTemporaryObject(pageComponent, testCase)
         verify(host)
         page = host.editorPage
@@ -65,6 +74,16 @@ TestCase {
         verifyGeometry("editorPlaybackTransport", 580, 527, 708, 130)
         verifyGeometry("editorShortcutCard", 12, 667, 1276, 157)
         verifyGeometry("editorStatusBar", 0, 824, 1300, 25)
+    }
+
+    function test_composedToolsShellHasOnePageOwnedSpaceShortcut() {
+        const shell = createTemporaryObject(shellComponent, testCase)
+        verify(shell)
+        tryVerify(function() { return shell.visible })
+        const shellPage = findChild(shell, "audioEditorPage")
+        verify(shellPage)
+        compare(shellPage.playbackShortcutEnabled, false)
+        compare(findChild(shell, "audioToolsSpaceShortcut"), null)
     }
 
     function test_toolbarExactOrderAndClearKeepsDocument() {
@@ -109,6 +128,11 @@ TestCase {
             previousY = group.y
         }
         compare(AudioEditorController.formantPreservationSupported, false)
+        compare(AudioEditorController.recordingSupported, false)
+        compare(AudioEditorController.bpmDetectionSupported, false)
+        compare(AudioEditorController.timePitchSupported, false)
+        compare(AudioEditorController.playbackSupported, false)
+        compare(AudioEditorController.exportSupported, false)
         compare(findChild(page, "inspectorFormantRow"), null)
         compare(findChild(page, "overviewNavigator"), null)
         compare(findChild(page, "recordingInspector"), null)
@@ -139,7 +163,7 @@ TestCase {
         compare(AudioEditorController.timelineEventViews.length, 2)
     }
 
-    function test_actionButtonsTrackControllerStateChanges() {
+    function test_futureBackendActionsStayDisabledWhileTimelineActionsTrackState() {
         const exportButton = findChild(page, "editorExportButton")
         const deleteButton = findChild(page, "editorCommand_delete")
         verify(exportButton && deleteButton)
@@ -147,9 +171,70 @@ TestCase {
         compare(deleteButton.enabled, false)
 
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        tryCompare(exportButton, "enabled", true)
+        compare(exportButton.enabled, false)
         verify(AudioEditorController.setSelection(100, 200))
         tryCompare(deleteButton, "enabled", true)
+    }
+
+    function test_futureTransportControlsLookAndReadDisabled() {
+        const microphone = findChild(page, "recordingMicrophoneButton")
+        const recording = findChild(page, "recordingToggleButton")
+        const play = findChild(page, "editorPrimaryPlayButton")
+        const narrowPlay = findChild(page, "editorNarrowPlaybackAccess")
+        for (const control of [microphone, recording, play, narrowPlay]) {
+            verify(control)
+            compare(control.enabled, false)
+            verify(control.opacity <= 0.55,
+                   control.objectName + " does not look disabled")
+            verify(control.Accessible.name.length > 0)
+            compare(control.Accessible.role, Accessible.Button)
+        }
+    }
+
+    function test_splitToolbarOnlySelectsScissorsMode() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.seekFrame(48000))
+        const splitButton = findChild(page, "editorCommand_split")
+        verify(splitButton)
+        compare(AudioEditorController.timelineEventViews.length, 1)
+
+        mouseClick(splitButton)
+
+        compare(AudioEditorController.activeTool, "scissors")
+        compare(AudioEditorController.timelineEventViews.length, 1)
+    }
+
+    function test_playheadDragCommitsOneSeekOnRelease() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const handle = findChild(page, "editorPlayheadHandle")
+        verify(handle)
+        verify(AudioEditorController.seekFrame(24000))
+        compare(AudioEditorController.playheadFrame, 24000)
+
+        mousePress(handle, handle.width / 2, handle.height / 2,
+                   Qt.LeftButton)
+        mouseMove(handle, handle.width - 1, handle.height / 2, 0)
+        compare(AudioEditorController.playheadFrame, 24000)
+        mouseRelease(handle, handle.width - 1, handle.height / 2,
+                     Qt.LeftButton)
+        verify(AudioEditorController.playheadFrame > 24000)
+    }
+
+    function test_realWheelEventUsesContractZoomFactors() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const interaction = findChild(page, "editorWaveformInteraction")
+        verify(interaction)
+        AudioEditorController.viewport.setViewportWidth(interaction.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 48000))
+        const before = AudioEditorController.viewport.visibleFrameCount
+
+        mouseWheel(interaction, interaction.width / 2, interaction.height / 2,
+                   0, 120, Qt.NoButton, Qt.ControlModifier)
+        compare(AudioEditorController.viewport.visibleFrameCount,
+                Math.round(before / 1.25))
+        mouseWheel(interaction, interaction.width / 2, interaction.height / 2,
+                   0, -120, Qt.NoButton, Qt.ControlModifier)
+        verify(Math.abs(AudioEditorController.viewport.visibleFrameCount - before) <= 1)
     }
 
     function test_mappingAndDirectManipulationShareViewport() {
@@ -193,7 +278,7 @@ TestCase {
                    "narrow inspector access overlaps the command toolbar")
             const playAccess = findChild(page, "editorNarrowPlaybackAccess")
             verify(playAccess && playAccess.visible)
-            verify(playAccess.enabled)
+            compare(playAccess.enabled, false)
             verify(playAccess.y >= commandBar.y + commandBar.height)
             verify(playAccess.y + playAccess.height <= page.height)
             verify(playAccess.x + playAccess.width + 8 <= access.x,
@@ -215,16 +300,15 @@ TestCase {
         }
     }
 
-    function test_exportDialogFitsNarrowWindow() {
-        host.width = 880
-        host.height = 468
-        wait(0)
-        const dialog = findChild(page, "audioEditorExportDialog")
-        verify(dialog)
-        dialog.open()
-        tryVerify(function() { return dialog.visible })
-        verify(dialog.width <= page.width - 24)
-        verify(dialog.height <= page.height - 24)
-        dialog.close()
+    function test_exportGroupShowsPersistedReadOnlyFields() {
+        for (const name of ["editorExportCodec", "editorExportSampleRate",
+                            "editorExportBitDepth", "editorExportChannels",
+                            "editorExportBitRate", "editorExportDirectory"]) {
+            const field = findChild(page, name)
+            verify(field, "missing read-only export field " + name)
+            verify(field.text.length > 0)
+        }
+        compare(findChild(page, "audioEditorExportDialog"), null)
+        compare(findChild(page, "editorExportButton").enabled, false)
     }
 }

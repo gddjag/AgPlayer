@@ -16,6 +16,10 @@ $toolsWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 $toolsNavigation = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/CMakeLists.txt')
+$controllerHeader = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $SourceRoot 'qt/src/audio_editor/audio_editor_controller.hpp')
+$controllerSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $SourceRoot 'qt/src/audio_editor/audio_editor_controller.cpp')
 $qaMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'scripts/qa-audio-tools-matrix.ps1')
 $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
@@ -43,6 +47,10 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or
 }
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
+}
+if (($audioEditor | Select-String -AllMatches 'sequence:\s*"Space"').Matches.Count -ne 1 -or
+    $toolsWindow -match 'sequence:\s*"Space"') {
+    throw 'The composed tools shell must expose exactly one editor-owned Space shortcut.'
 }
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
@@ -139,6 +147,12 @@ foreach ($mappingCall in @(
         throw "Waveform direct manipulation is missing shared mapping: $mappingCall"
     }
 }
+if ($audioEditor -notmatch 'frameAtPixel\(\s*index\s*\*\s*ruler\.width\s*/\s*8\)' -or
+    $audioEditor -notmatch 'pixelAtFrame\(0\)' -or
+    $audioEditor -notmatch 'onMoved:\s*AudioEditorController\.viewport\.panByPixels' -or
+    $audioEditor -match 'visibleStartFrame\s*\+\s*AudioEditorController\.viewport\.visibleFrameCount') {
+    throw 'Ruler and scrollbar must use the shared viewport mapper without QML frame arithmetic.'
+}
 if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'visibleStartRatio|visibleEndRatio|renderMode' -or
     $waveformCanvas -match 'positionMs\s*\*\s*AudioEditorController\.sampleRate') {
@@ -153,6 +167,58 @@ foreach ($responsiveHook in @('referenceLayout', 'narrowLayout',
     'editorInspectorScroller', 'editorInspectorAccess')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."
+    }
+}
+
+foreach ($capability in @('recordingSupported', 'bpmDetectionSupported',
+    'timePitchSupported', 'playbackSupported', 'exportSupported')) {
+    if ($controllerHeader -notmatch ('Q_PROPERTY\(bool\s+' + $capability) -or
+        $audioEditor -notmatch ('AudioEditorController\.' + $capability)) {
+        throw "The Phase 6 future backend is missing an explicit capability gate: $capability"
+    }
+}
+if ($controllerHeader -match 'Q_PROPERTY\(QVariantMap\s+projectExportSettings[^\)]*WRITE' -or
+    $audioEditor -match 'AudioEditorController\.projectExportSettings\s*=') {
+    throw 'Persisted project export settings must be read-only from QML.'
+}
+foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
+    'editorExportBitDepth', 'editorExportChannels', 'editorExportBitRate',
+    'editorExportDirectory')) {
+    if ($audioEditor -notmatch ('objectName:\s*"' + $field + '"')) {
+        throw "The read-only E group is missing $field."
+    }
+}
+if ($audioEditor -match 'audioEditorExportDialog|AudioEditorController\.(exportTo|detectBpm|setSpeedPercent|setPitch|startRecording)\(') {
+    throw 'The Phase 6 QML still invokes a future recording/BPM/time-pitch/export backend.'
+}
+if ($controllerSource -match 'DocumentRenderer|ag_player_|preparePlayback\(' -or
+    $controllerHeader -match 'ag_player\*|preparePlayback\(') {
+    throw 'The Phase 6 controller still owns the obsolete render-then-play second player path.'
+}
+
+foreach ($accessibleObject in @('audioToolsMinimizeButton',
+    'audioToolsMaximizeButton', 'audioToolsCloseButton',
+    'recordingMicrophoneButton', 'recordingToggleButton',
+    'editorPrimaryPlayButton', 'editorPlayheadHandle',
+    'editorSelectionStartHandle', 'editorSelectionEndHandle',
+    'editorEventLeftTrimHandle', 'editorEventRightTrimHandle')) {
+    $surface = $toolsWindow + "`n" + $audioEditor + "`n" + $waveformCanvas
+    if ($surface -notmatch ('objectName:\s*"' + $accessibleObject + '"')) {
+        throw "Accessible control is missing a stable object name: $accessibleObject"
+    }
+}
+if (($toolsWindow + "`n" + $audioEditor + "`n" + $waveformCanvas) -notmatch 'Accessible\.role' -or
+    ($toolsWindow + "`n" + $audioEditor + "`n" + $waveformCanvas) -notmatch 'Accessible\.name') {
+    throw 'Icon-only editor/window controls must publish accessible names and roles.'
+}
+
+foreach ($translation in Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'translations') -Filter 'agplayer_*.ts') {
+    $translationText = Get-Content -Raw -Encoding UTF8 -LiteralPath $translation.FullName
+    foreach ($obsoleteContext in @('EditorTransportBar', 'OverviewNavigator',
+        'RecordingInspectorSection', 'TimePitchInspectorSection')) {
+        if ($translationText -match ('<name>' + $obsoleteContext + '</name>')) {
+            throw "Obsolete translation context remains in $($translation.Name): $obsoleteContext"
+        }
     }
 }
 

@@ -14,7 +14,6 @@
 #include <QObject>
 #include <QFutureWatcher>
 #include <QPointer>
-#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -25,8 +24,6 @@
 #include <memory>
 #include <optional>
 #include <vector>
-
-class PlaybackController;
 
 enum class EditorSessionState {
     Empty,
@@ -69,6 +66,11 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(QString activeTool READ activeTool NOTIFY toolChanged)
     Q_PROPERTY(bool formantPreservationSupported
                    READ formantPreservationSupported CONSTANT)
+    Q_PROPERTY(bool recordingSupported READ recordingSupported CONSTANT)
+    Q_PROPERTY(bool bpmDetectionSupported READ bpmDetectionSupported CONSTANT)
+    Q_PROPERTY(bool timePitchSupported READ timePitchSupported CONSTANT)
+    Q_PROPERTY(bool playbackSupported READ playbackSupported CONSTANT)
+    Q_PROPERTY(bool exportSupported READ exportSupported CONSTANT)
     Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
     Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY playbackChanged)
     Q_PROPERTY(qint64 durationMs READ durationMs NOTIFY documentChanged)
@@ -80,7 +82,7 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
     Q_PROPERTY(QVariantList projectIssues READ projectIssues NOTIFY projectChanged)
     Q_PROPERTY(QVariantMap projectExportSettings READ projectExportSettingsMap
-                   WRITE setProjectExportSettingsMap NOTIFY projectChanged)
+                   NOTIFY projectChanged)
     Q_PROPERTY(qint64 playheadFrame READ playheadFrame NOTIFY playbackChanged)
     Q_PROPERTY(double originalBpm READ originalBpm NOTIFY timePitchChanged)
     Q_PROPERTY(double targetBpm READ targetBpm NOTIFY timePitchChanged)
@@ -90,7 +92,6 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(bool timePitchPreviewActive READ timePitchPreviewActive
                    NOTIFY timePitchChanged)
     Q_PROPERTY(QVariantList recordingDevices READ recordingDevices NOTIFY recordingDevicesChanged)
-    Q_PROPERTY(QVariantList exportFormats READ exportFormats CONSTANT)
     Q_PROPERTY(QString recordingDeviceId READ recordingDeviceId
                    NOTIFY recordingPreferencesChanged)
     Q_PROPERTY(int recordingSampleRate READ recordingSampleRate
@@ -139,6 +140,16 @@ public:
     [[nodiscard]] QString activeTool() const { return active_tool_; }
     [[nodiscard]] constexpr bool formantPreservationSupported() const noexcept
     { return false; }
+    [[nodiscard]] constexpr bool recordingSupported() const noexcept
+    { return false; }
+    [[nodiscard]] constexpr bool bpmDetectionSupported() const noexcept
+    { return false; }
+    [[nodiscard]] constexpr bool timePitchSupported() const noexcept
+    { return false; }
+    [[nodiscard]] constexpr bool playbackSupported() const noexcept
+    { return false; }
+    [[nodiscard]] constexpr bool exportSupported() const noexcept
+    { return false; }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] qint64 positionMs() const noexcept { return position_ms_; }
     [[nodiscard]] qint64 durationMs() const noexcept;
@@ -160,7 +171,6 @@ public:
     [[nodiscard]] bool timePitchPreviewActive() const noexcept
     { return time_pitch_preview_active_; }
     [[nodiscard]] QVariantList recordingDevices() const { return recording_devices_; }
-    [[nodiscard]] QVariantList exportFormats() const { return export_formats_; }
     [[nodiscard]] QString recordingDeviceId() const { return recording_device_id_; }
     [[nodiscard]] int recordingSampleRate() const noexcept { return recording_sample_rate_; }
     [[nodiscard]] int recordingChannels() const noexcept { return recording_channels_; }
@@ -171,12 +181,12 @@ public:
     [[nodiscard]] double inputLevel() const noexcept;
     [[nodiscard]] qint64 recordingFrames() const noexcept;
     [[nodiscard]] bool busy() const noexcept;
+    [[nodiscard]] quint64 viewportWaveformGeneration() const noexcept
+    { return viewport_waveform_generation_; }
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
     }
-    void setMainPlaybackController(PlaybackController* playback) noexcept;
-
     Q_INVOKABLE bool createUntitledDocument(
         quint32 sampleRate, quint32 channels, qint64 frames);
     Q_INVOKABLE bool createRecordingDocument(quint32 sampleRate, quint32 channels);
@@ -270,16 +280,9 @@ signals:
 
 private:
     struct RecordingFinalizeResult;
-    struct PreviewRenderResult;
     void refreshActions();
-    [[nodiscard]] QVariantList buildExportFormats() const;
     void requestViewportWaveform();
     void clearViewportWaveformState();
-    [[nodiscard]] QVariantList toVariantPeaks(
-        const std::vector<std::vector<float>>& channels) const;
-    bool preparePlayback();
-    void startPreparedPlayback();
-    void pollPlayback();
     void setState(EditorSessionState value);
     void setError(QString message);
     void setProgress(double value);
@@ -306,13 +309,8 @@ private:
     EditorActionModel actions_;
     EditorViewport viewport_;
     agplayer::editor::AudioDocument document_;
-    ag_audio_backend backend_{AG_AUDIO_BACKEND_DEFAULT};
-    ag_player* player_{};
-    QTimer playback_timer_;
-    QTemporaryDir preview_directory_;
     QString source_path_;
     QString project_path_;
-    QString playback_path_;
     QUrl pending_open_url_;
     bool pending_open_is_project_{};
     bool pending_clear_document_{};
@@ -321,7 +319,6 @@ private:
     int channels_{};
     int bits_per_sample_{};
     qint64 bit_rate_{};
-    QVariantList source_channel_peaks_;
     QVariantList channel_peaks_;
     QVariantList viewport_channel_peaks_;
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
@@ -349,10 +346,8 @@ private:
     QFutureWatcher<bool>* recording_start_watcher_{};
     QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
-    QFutureWatcher<PreviewRenderResult>* preview_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
-    QVariantList export_formats_;
     QString recording_device_id_;
     QString recording_directory_;
     int recording_sample_rate_{48'000};
@@ -374,8 +369,6 @@ private:
     qint64 saved_visible_end_frame_{};
     agplayer::editor::ProjectExportSettings saved_export_settings_;
     qint64 recording_insert_frame_{};
-    QPointer<PlaybackController> main_playback_;
-    std::atomic_uint64_t preview_generation_{0};
 
     enum class EventGestureKind { None, Move, Trim };
     struct EventGesture final {

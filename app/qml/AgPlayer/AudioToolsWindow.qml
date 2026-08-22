@@ -38,12 +38,6 @@ Window {
     palette.highlightedText: Theme.accentText
     palette.mid: Theme.border
 
-    Shortcut {
-        sequence: "Space"
-        context: Qt.ApplicationShortcut
-        onActivated: AudioEditorController.playPause()
-    }
-
     Dialog {
         id: unsavedCloseDialog
         parent: window.contentItem
@@ -108,27 +102,37 @@ Window {
                     Item { Layout.fillWidth: true }
 
                     ToolButton {
+                        objectName: "audioToolsMinimizeButton"
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.iconPrimary
+                        Accessible.name: qsTr("最小化")
+                        Accessible.role: Accessible.Button
                         onClicked: window.showMinimized()
                     }
                     ToolButton {
+                        objectName: "audioToolsMaximizeButton"
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon(window.visibility === Window.Maximized
                                                 ? "fullscreen-exit-fill"
                                                 : "checkbox-blank-line")
                         icon.color: Theme.iconPrimary
+                        Accessible.name: window.visibility === Window.Maximized
+                            ? qsTr("还原") : qsTr("最大化")
+                        Accessible.role: Accessible.Button
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
                     }
                     ToolButton {
+                        objectName: "audioToolsCloseButton"
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.iconPrimary
+                        Accessible.name: qsTr("关闭")
+                        Accessible.role: Accessible.Button
                         onClicked: window.requestHide()
                     }
                 }

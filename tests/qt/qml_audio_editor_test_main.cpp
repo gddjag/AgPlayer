@@ -1,5 +1,6 @@
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/audio_editor_waveform_item.hpp"
+#include "audio_tools_controller.hpp"
 
 #include <QCoreApplication>
 #include <QQuickStyle>
@@ -24,6 +25,11 @@ public slots:
             "AgPlayer", 1, 0, "AudioEditorController",
             [](QQmlEngine*, QJSEngine*) -> QObject* {
                 return new AudioEditorController();
+            });
+        qmlRegisterSingletonType<AudioToolsController>(
+            "AgPlayer", 1, 0, "AudioToolsController",
+            [](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new AudioToolsController();
             });
         qmlRegisterType<AudioEditorWaveformItem>(
             "AgPlayer", 1, 0, "AudioEditorWaveformItem");

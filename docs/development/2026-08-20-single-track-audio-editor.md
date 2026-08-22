@@ -358,3 +358,27 @@ ctest --test-dir build/debug -R "^(project_document_test|audio_source_probe_test
   `0x7d97a`); the final 880 capture used Qt's existing software RHI after two
   default-RHI `grabWindow()` stalls. No packaging, hardware recording, or
   Phase 7+ DSP acceptance is claimed.
+
+### Phase 6 final-review correction (2026-08-22)
+
+- Phase 6 now exposes explicit false capabilities for recording, BPM,
+  speed/pitch, playback, and export. The page keeps those reference controls
+  visible but disabled and reads E from persisted project export settings;
+  no device, preview, BPM, export, or writable QML shadow state is fabricated.
+- The editor-owned player and old DocumentRenderer preview/BPM/export path were
+  removed. Visible source slices stream decoder blocks directly into bounded
+  peak buckets with generation cancellation between reads; Scene Graph point
+  budgeting is total across stereo channels.
+- Playhead, Move, and Trim use local drag candidates and commit once on release.
+  Split's button selects scissors mode, while `S`/`Ctrl+B` split. One page-owned
+  Space shortcut remains, real wheel events prove `1.25`/`0.8`, and shared
+  viewport APIs own ruler/scrollbar mapping.
+- Final visual P2 correction makes unsupported recording and playback controls
+  visibly gray/low-opacity, including the 880 Play entry. Release and Debug
+  final4 matrices at 1672x941, 1280x720, and 880x560 all exited zero; comparison
+  and masks are under `build/qa/phase6/comparisons-review-final4`.
+- Final focused matrices passed 5/5 in Release (12.25 s) and Debug (16.33 s).
+  Full builds passed (Release recovered graph 334/334, Debug incremental 4/4).
+  Full CTest remains Release 82/83 and Debug 79/84 with the exact unrelated
+  baseline failures recorded in `task-6-report.md`. `design-qa.md` is passed
+  only after manual review of the final4 source/candidate images and masks.

@@ -96,7 +96,6 @@ Rectangle {
                 && !AudioEditorController.busy
             onClicked: {
                 AudioEditorController.setActiveTool("scissors")
-                AudioEditorController.triggerAction("editor.split")
             }
         }
         CommandButton {
