@@ -28,7 +28,10 @@ Item {
         cancelRequest()
         waveformPeaks = ""
         if (!enabled || !provider || trackId.length === 0
-                || sourcePath.length === 0)
+                || sourcePath.length === 0
+                || !parent
+                || (typeof parent.active === "boolean"
+                    && !parent.active))
             return
         requestedTrackId = trackId
         requestedGeneration = delegateGeneration

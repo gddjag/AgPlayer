@@ -146,6 +146,8 @@ TestCase {
             property int requestCount: 0
             property int cancelCount: 0
             property var requests: []
+            property var requestEvidence: []
+            property var requestObserver: null
             property var cancellations: []
             property string lastTrackId: ""
             property string lastSourcePath: ""
@@ -153,12 +155,30 @@ TestCase {
             signal thumbnailReady(string trackId, int generation, var peaks)
 
             function request(trackId, sourcePath, generation) {
+                var observed = requestObserver ? requestObserver(trackId) : null
                 requestCount += 1
                 var nextRequests = requests.slice()
                 nextRequests.push({ "trackId": trackId,
                                     "sourcePath": sourcePath,
                                     "generation": generation })
                 requests = nextRequests
+                if (observed) {
+                    var nextEvidence = requestEvidence.slice()
+                    nextEvidence.push({
+                        "trackId": trackId,
+                        "hasDelegate": observed.hasDelegate === true,
+                        "hasLoader": observed.hasLoader === true,
+                        "loaderEnabled": observed.loaderEnabled === true,
+                        "loaderHasItem": observed.loaderHasItem === true,
+                        "loaderItemTrackId": observed.loaderItemTrackId || "",
+                        "loaderActive": observed.loaderActive === true,
+                        "rowTop": observed.rowTop,
+                        "rowBottom": observed.rowBottom,
+                        "viewportTop": observed.viewportTop,
+                        "viewportBottom": observed.viewportBottom
+                    })
+                    requestEvidence = nextEvidence
+                }
                 lastTrackId = trackId
                 lastSourcePath = sourcePath
                 lastGeneration = generation
@@ -310,6 +330,51 @@ TestCase {
         for (var index = 0; index < childItems.length; ++index)
             total += countObjectsNamed(childItems[index], expectedName)
         return total
+    }
+
+    function trackRowForId(parentObject, trackId) {
+        if (!parentObject)
+            return null
+        if ((parentObject.objectName === "trackRow"
+                || parentObject.objectName === "currentTrackRow")
+                && parentObject.trackId === trackId)
+            return parentObject
+        var childItems = parentObject.children || []
+        for (var index = 0; index < childItems.length; ++index) {
+            var match = trackRowForId(childItems[index], trackId)
+            if (match)
+                return match
+        }
+        return null
+    }
+
+    function verifyNewThumbnailRequestsAreVisible(provider, firstRequest,
+                                                   phase) {
+        verify(provider.requests.length > firstRequest,
+               phase + " must issue at least one thumbnail request")
+        compare(provider.requestEvidence.length, provider.requests.length,
+                phase + " must record geometry for every request")
+        for (var index = firstRequest;
+             index < provider.requestEvidence.length; ++index) {
+            var evidence = provider.requestEvidence[index]
+            compare(evidence.trackId, provider.requests[index].trackId)
+            verify(evidence.hasDelegate,
+                   phase + " requested a track without an active delegate: "
+                   + evidence.trackId)
+            verify(evidence.loaderActive,
+                   phase + " requested a track without an active waveform Loader: "
+                   + evidence.trackId + " hasLoader=" + evidence.hasLoader
+                   + " enabled=" + evidence.loaderEnabled
+                   + " hasItem=" + evidence.loaderHasItem
+                   + " itemTrackId=" + evidence.loaderItemTrackId)
+            verify(evidence.rowBottom > evidence.viewportTop
+                   && evidence.rowTop < evidence.viewportBottom,
+                   phase + " requested an offscreen row: " + evidence.trackId
+                   + " row=[" + evidence.rowTop + ","
+                   + evidence.rowBottom + ") viewport=["
+                   + evidence.viewportTop + ","
+                   + evidence.viewportBottom + ")")
+        }
     }
 
     function tagRowForKey(key) {
@@ -2649,9 +2714,6 @@ TestCase {
             return TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
                     > readsBefore
         }, 3000)
-        compare(TrackWaveformThumbnailProvider.diagnostics().analysisCalls, 0,
-                "visible list thumbnails must remain cache-only")
-
         wait(100)
         var settledReads = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
         SettingsController.listWaveformThumbnailMode = "Mono"
@@ -2678,7 +2740,32 @@ TestCase {
             var model = createIsolatedTrackModel("task6-" + rowCount + "-",
                                                  rowCount)
             var host = trackListHostComponent.createObject(mainWindow.contentItem)
-            var list = trackListComponent.createObject(host, {
+            var list = null
+            provider.requestObserver = function(trackId) {
+                var row = list
+                        ? trackRowForId(list.contentItem, trackId) : null
+                var thumbnail = row
+                        ? findChild(row, "trackWaveformThumbnail") : null
+                var loader = thumbnail ? thumbnail.parent : null
+                return {
+                    "hasDelegate": !!row,
+                    "hasLoader": !!loader,
+                    "loaderEnabled": !!(loader && loader.active),
+                    "loaderHasItem": !!(loader && loader.item),
+                    "loaderItemTrackId": loader && loader.item
+                            ? loader.item.trackId : "",
+                    "loaderActive": !!(loader && loader.active && loader.item
+                                         && loader.item.trackId === trackId),
+                    "rowTop": row ? row.y : Number.NaN,
+                    "rowBottom": row ? row.y + row.height : Number.NaN,
+                    "viewportTop": list ? list.contentY
+                            + (list.headerItem ? list.headerItem.height : 0)
+                                         : Number.NaN,
+                    "viewportBottom": list
+                            ? list.contentY + list.height : Number.NaN
+                }
+            }
+            list = trackListComponent.createObject(host, {
                 "width": host.width,
                 "height": host.height,
                 "trackModel": model,
@@ -2690,8 +2777,12 @@ TestCase {
                 return list.thumbnailItemCount > 0
                         && provider.requestCount > 0
             }, 3000)
+            wait(25)
 
             var requestBoundPerViewport = 32
+            verifyNewThumbnailRequestsAreVisible(
+                        provider, 0,
+                        rowCount + "-row initial viewport")
             verify(list.thumbnailItemCount <= requestBoundPerViewport)
             verify(provider.requestCount <= requestBoundPerViewport,
                    rowCount + " rows must not request non-visible thumbnails")
@@ -2701,6 +2792,10 @@ TestCase {
             tryVerify(function() {
                 return provider.requestCount > beforeMiddle
             }, 3000)
+            wait(25)
+            verifyNewThumbnailRequestsAreVisible(
+                        provider, beforeMiddle,
+                        rowCount + "-row middle viewport")
             verify(provider.requestCount - beforeMiddle
                    <= requestBoundPerViewport,
                    rowCount + "-row middle scroll exceeded one viewport")
@@ -2710,6 +2805,10 @@ TestCase {
             list.positionViewAtEnd()
             tryVerify(function() { return provider.requestCount > beforeEnd },
                       3000)
+            wait(25)
+            verifyNewThumbnailRequestsAreVisible(
+                        provider, beforeEnd,
+                        rowCount + "-row end viewport")
             verify(provider.requestCount - beforeEnd
                    <= requestBoundPerViewport,
                    rowCount + "-row end scroll exceeded one viewport")

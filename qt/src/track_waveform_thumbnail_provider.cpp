@@ -192,7 +192,6 @@ QVariantMap TrackWaveformThumbnailProvider::diagnostics() const
         {QStringLiteral("maxQueuedJobs"), kMaxQueuedJobs},
         {QStringLiteral("negativeCacheEntries"), negativeCache_.size()},
         {QStringLiteral("cacheReadAttempts"), cacheReadAttempts_},
-        {QStringLiteral("analysisCalls"), 0U},
     };
 }
 
