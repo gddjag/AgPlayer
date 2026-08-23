@@ -30,6 +30,42 @@
 namespace agplayer::editor {
 namespace {
 
+void store_max(std::atomic<float>& target, const float value) noexcept
+{
+    float current = target.load(std::memory_order_relaxed);
+    while (current < value
+           && !target.compare_exchange_weak(
+               current, value, std::memory_order_release,
+               std::memory_order_relaxed)) {
+    }
+}
+
+const char* backend_error_category(const ma_result result) noexcept
+{
+    switch (result) {
+    case MA_ACCESS_DENIED:
+        return "permission";
+    case MA_FORMAT_NOT_SUPPORTED:
+    case MA_DEVICE_TYPE_NOT_SUPPORTED:
+    case MA_SHARE_MODE_NOT_SUPPORTED:
+    case MA_INVALID_DEVICE_CONFIG:
+        return "format";
+    case MA_NO_DEVICE:
+        return "no-device";
+    case MA_NO_BACKEND:
+    case MA_BACKEND_NOT_ENABLED:
+    case MA_FAILED_TO_INIT_BACKEND:
+    case MA_FAILED_TO_OPEN_BACKEND_DEVICE:
+    case MA_DEVICE_NOT_INITIALIZED:
+        return "initialization";
+    case MA_FAILED_TO_START_BACKEND_DEVICE:
+    case MA_DEVICE_NOT_STARTED:
+        return "start";
+    default:
+        return "backend";
+    }
+}
+
 std::string device_token(const ma_device_id& id)
 {
 #ifdef _WIN32
@@ -134,8 +170,33 @@ bool read_journal(const std::filesystem::path& journal,
 
 } // namespace
 
+std::string recordingBackendErrorMessage(
+    const std::string_view operation, const int resultCode)
+{
+    const auto result = static_cast<ma_result>(resultCode);
+    std::string message(operation);
+    message += " [category=";
+    message += backend_error_category(result);
+    message += "; miniaudio=";
+    message += std::to_string(resultCode);
+    message += ": ";
+    message += ma_result_description(result);
+    message += ']';
+    return message;
+}
+
 class RecordingSession::Impl final {
 public:
+    static constexpr std::size_t live_envelope_capacity = 2'048;
+
+    struct LiveEnvelopeSlot final {
+        std::atomic<std::uint64_t> sequence{0};
+        std::atomic<SampleFrame> start_frame{0};
+        std::atomic<SampleFrame> end_frame{0};
+        std::array<std::atomic<float>, 2> minima{};
+        std::array<std::atomic<float>, 2> maxima{};
+    };
+
     void clear_last_error()
     {
         const std::lock_guard<std::mutex> lock(last_error_mutex);
@@ -211,8 +272,20 @@ public:
             return false;
         }
         peak_value.store(0.0F);
-        peak_write_index.store(0, std::memory_order_release);
-        for (auto& peak_sample : recent_peaks) peak_sample.store(0.0F);
+        interval_peak.store(0.0F);
+        envelope_write_index.store(0, std::memory_order_release);
+        envelope_read_index.store(0, std::memory_order_release);
+        for (auto& envelope : live_envelopes) {
+            envelope.sequence.store(0, std::memory_order_relaxed);
+            envelope.start_frame.store(0, std::memory_order_relaxed);
+            envelope.end_frame.store(0, std::memory_order_relaxed);
+            for (auto& peakSample : envelope.minima) {
+                peakSample.store(0.0F, std::memory_order_relaxed);
+            }
+            for (auto& peakSample : envelope.maxima) {
+                peakSample.store(0.0F, std::memory_order_relaxed);
+            }
+        }
         captured.store(0);
         written.store(0);
         dropped.store(0);
@@ -226,8 +299,11 @@ public:
     {
         if (!start_common(value)) return false;
         ma_backend backend = ma_backend_wasapi;
-        if (ma_context_init(&backend, 1, nullptr, &context) != MA_SUCCESS) {
-            set_last_error("WASAPI context initialization failed");
+        const ma_result context_result = ma_context_init(
+            &backend, 1, nullptr, &context);
+        if (context_result != MA_SUCCESS) {
+            set_last_error(recordingBackendErrorMessage(
+                "WASAPI context initialization failed", context_result));
             abort_start();
             return false;
         }
@@ -237,9 +313,12 @@ public:
         if (!value.device_id.empty()) {
             ma_device_info* capture = nullptr;
             ma_uint32 capture_count = 0;
-            if (ma_context_get_devices(&context, nullptr, nullptr,
-                                       &capture, &capture_count) != MA_SUCCESS) {
-                set_last_error("WASAPI capture device enumeration failed");
+            const ma_result enumeration_result = ma_context_get_devices(
+                &context, nullptr, nullptr, &capture, &capture_count);
+            if (enumeration_result != MA_SUCCESS) {
+                set_last_error(recordingBackendErrorMessage(
+                    "WASAPI capture device enumeration failed",
+                    enumeration_result));
                 abort_start();
                 return false;
             }
@@ -271,14 +350,19 @@ public:
         device_config.dataCallback = data_callback;
         device_config.notificationCallback = notification_callback;
         device_config.pUserData = this;
-        if (ma_device_init(&context, &device_config, &device) != MA_SUCCESS) {
-            set_last_error("WASAPI capture initialization failed; check microphone permissions and format");
+        const ma_result initialization_result = ma_device_init(
+            &context, &device_config, &device);
+        if (initialization_result != MA_SUCCESS) {
+            set_last_error(recordingBackendErrorMessage(
+                "WASAPI capture initialization failed", initialization_result));
             abort_start();
             return false;
         }
         device_ready = true;
-        if (ma_device_start(&device) != MA_SUCCESS) {
-            set_last_error("WASAPI capture start failed; check microphone access");
+        const ma_result start_result = ma_device_start(&device);
+        if (start_result != MA_SUCCESS) {
+            set_last_error(recordingBackendErrorMessage(
+                "WASAPI capture start failed", start_result));
             abort_start();
             return false;
         }
@@ -293,19 +377,44 @@ public:
             || ring == nullptr) {
             return 0;
         }
-        float local_peak = 0.0F;
-        const std::size_t samples = frames * config.channels;
-        for (std::size_t index = 0; index < samples; ++index) {
-            local_peak = (std::max)(local_peak, std::abs(input[index]));
-        }
-        peak_value.store((std::max)(peak_value.load(std::memory_order_relaxed),
-                                    local_peak), std::memory_order_release);
-        const std::uint64_t peak_index = peak_write_index.fetch_add(
-            1, std::memory_order_acq_rel);
-        recent_peaks[peak_index % recent_peaks.size()].store(
-            local_peak, std::memory_order_release);
         const std::size_t accepted = ring->write(input, frames);
-        captured.fetch_add(static_cast<SampleFrame>(accepted));
+        if (accepted > 0) {
+            std::array<float, 2> minima{1.0F, 1.0F};
+            std::array<float, 2> maxima{-1.0F, -1.0F};
+            float local_peak = 0.0F;
+            for (std::size_t frame = 0; frame < accepted; ++frame) {
+                for (std::size_t channel = 0; channel < config.channels;
+                     ++channel) {
+                    const float sample = std::clamp(
+                        input[frame * config.channels + channel], -1.0F, 1.0F);
+                    minima[channel] = (std::min)(minima[channel], sample);
+                    maxima[channel] = (std::max)(maxima[channel], sample);
+                    local_peak = (std::max)(local_peak, std::abs(sample));
+                }
+            }
+            store_max(peak_value, local_peak);
+            store_max(interval_peak, local_peak);
+            const SampleFrame start = captured.fetch_add(
+                static_cast<SampleFrame>(accepted), std::memory_order_acq_rel);
+            const std::uint64_t envelope_index = envelope_write_index.load(
+                std::memory_order_relaxed);
+            auto& slot = live_envelopes[
+                envelope_index % live_envelopes.size()];
+            slot.sequence.store(0, std::memory_order_release);
+            slot.start_frame.store(start, std::memory_order_relaxed);
+            slot.end_frame.store(start + static_cast<SampleFrame>(accepted),
+                                 std::memory_order_relaxed);
+            for (std::size_t channel = 0; channel < config.channels; ++channel) {
+                slot.minima[channel].store(minima[channel],
+                                           std::memory_order_relaxed);
+                slot.maxima[channel].store(maxima[channel],
+                                           std::memory_order_relaxed);
+            }
+            slot.sequence.store(envelope_index + 1,
+                                std::memory_order_release);
+            envelope_write_index.store(envelope_index + 1,
+                                       std::memory_order_release);
+        }
         dropped.fetch_add(frames - accepted);
         return accepted;
     }
@@ -466,12 +575,14 @@ public:
     std::atomic<RecordingState> state{RecordingState::Idle};
     std::atomic<bool> writer_exit{false};
     std::atomic<float> peak_value{0.0F};
+    std::atomic<float> interval_peak{0.0F};
     std::atomic<SampleFrame> captured{0};
     std::atomic<SampleFrame> written{0};
     std::atomic<std::uint64_t> dropped{0};
     std::atomic<bool> rerouted{false};
-    std::array<std::atomic<float>, 2'048> recent_peaks{};
-    std::atomic<std::uint64_t> peak_write_index{0};
+    std::array<LiveEnvelopeSlot, live_envelope_capacity> live_envelopes{};
+    std::atomic<std::uint64_t> envelope_write_index{0};
+    std::atomic<std::uint64_t> envelope_read_index{0};
     ma_context context{};
     ma_device device{};
     bool context_ready{};
@@ -597,20 +708,83 @@ float RecordingSession::peak() const noexcept { return impl_->peak_value.load();
 SampleFrame RecordingSession::framesCaptured() const noexcept { return impl_->captured.load(); }
 std::uint64_t RecordingSession::droppedFrames() const noexcept { return impl_->dropped.load(); }
 
+RecordingLiveSnapshot RecordingSession::takeLiveSnapshot(
+    const std::size_t maximum)
+{
+    RecordingLiveSnapshot snapshot;
+    snapshot.frames_captured = impl_->captured.load(std::memory_order_acquire);
+    snapshot.interval_peak = impl_->interval_peak.exchange(
+        0.0F, std::memory_order_acq_rel);
+    const std::uint64_t end = impl_->envelope_write_index.load(
+        std::memory_order_acquire);
+    std::uint64_t start = impl_->envelope_read_index.load(
+        std::memory_order_relaxed);
+    if (start > end) start = end;
+    const std::uint64_t capacity = impl_->live_envelopes.size();
+    if (end - start > capacity) start = end - capacity;
+    if (maximum > 0 && end - start > maximum) start = end - maximum;
+    if (maximum == 0) start = end;
+    snapshot.envelopes.reserve(static_cast<std::size_t>(end - start));
+    for (std::uint64_t index = start; index < end; ++index) {
+        const auto& slot = impl_->live_envelopes[
+            index % impl_->live_envelopes.size()];
+        const std::uint64_t expectedSequence = index + 1;
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        RecordingEnvelopePoint point;
+        point.start_frame = slot.start_frame.load(std::memory_order_relaxed);
+        point.end_frame = slot.end_frame.load(std::memory_order_relaxed);
+        point.channels = impl_->config.channels;
+        for (std::size_t channel = 0; channel < impl_->config.channels;
+             ++channel) {
+            point.channel_minima[channel] = slot.minima[channel].load(
+                std::memory_order_relaxed);
+            point.channel_maxima[channel] = slot.maxima[channel].load(
+                std::memory_order_relaxed);
+        }
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        snapshot.envelopes.push_back(std::move(point));
+    }
+    impl_->envelope_read_index.store(end, std::memory_order_release);
+    return snapshot;
+}
+
 std::vector<float> RecordingSession::recentPeaks(const std::size_t maximum) const
 {
     if (maximum == 0) return {};
-    const std::uint64_t end = impl_->peak_write_index.load(
+    const std::uint64_t end = impl_->envelope_write_index.load(
         std::memory_order_acquire);
-    const std::size_t count = (std::min)({maximum, impl_->recent_peaks.size(),
+    const std::size_t count = (std::min)({maximum, impl_->live_envelopes.size(),
         static_cast<std::size_t>((std::min<std::uint64_t>)(
-            end, impl_->recent_peaks.size()))});
+            end, impl_->live_envelopes.size()))});
     std::vector<float> result;
     result.reserve(count);
     for (std::size_t offset = count; offset > 0; --offset) {
-        result.push_back(impl_->recent_peaks[
-            (end - offset) % impl_->recent_peaks.size()].load(
-                std::memory_order_acquire));
+        const std::uint64_t index = end - offset;
+        const auto& slot = impl_->live_envelopes[
+            index % impl_->live_envelopes.size()];
+        const std::uint64_t expectedSequence = index + 1;
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        float peak = 0.0F;
+        for (std::size_t channel = 0; channel < impl_->config.channels;
+             ++channel) {
+            peak = (std::max)({peak,
+                std::abs(slot.minima[channel].load(std::memory_order_relaxed)),
+                std::abs(slot.maxima[channel].load(std::memory_order_relaxed))});
+        }
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        result.push_back(peak);
     }
     return result;
 }

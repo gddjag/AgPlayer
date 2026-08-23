@@ -21,6 +21,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -130,6 +131,10 @@ public:
     explicit AudioEditorController(
         ag_audio_backend backend = AG_AUDIO_BACKEND_DEFAULT,
         QObject* parent = nullptr);
+    AudioEditorController(
+        ag_audio_backend backend,
+        std::unique_ptr<agplayer::editor::RecordingCapture> recordingCapture,
+        QObject* parent = nullptr);
     ~AudioEditorController() override;
 
     [[nodiscard]] EditorActionModel* actions() noexcept { return &actions_; }
@@ -138,7 +143,13 @@ public:
     [[nodiscard]] bool hasDocument() const noexcept { return has_document_; }
     [[nodiscard]] bool modified() const noexcept { return modified_; }
     [[nodiscard]] qint64 totalFrames() const noexcept
-    { return recording() ? recordingFrames() : document_.totalFrames(); }
+    {
+        if (!recording()) return document_.totalFrames();
+        return insert_recording_at_cursor_ && has_document_
+            ? (std::max)(document_.totalFrames(),
+                         recording_insert_frame_ + recordingFrames())
+            : recordingFrames();
+    }
     [[nodiscard]] qint64 selectionStart() const noexcept;
     [[nodiscard]] qint64 selectionEnd() const noexcept;
     [[nodiscard]] qint64 selectionFrames() const noexcept;
@@ -358,6 +369,7 @@ private:
     bool preparePlayback();
     void startPreparedPlayback();
     void pollPlayback();
+    void pollRecording();
     void setState(EditorSessionState value);
     void setError(QString message);
     void setProgress(double value);
@@ -430,7 +442,7 @@ private:
     QVariantList project_issues_;
     QVariantList known_project_issues_;
     agplayer::editor::TimePitchSession time_pitch_;
-    agplayer::editor::RecordingSession recording_session_;
+    std::unique_ptr<agplayer::editor::RecordingCapture> recording_capture_;
     QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
     QFutureWatcher<bool>* recording_start_watcher_{};
@@ -449,6 +461,9 @@ private:
     bool recording_monitor_{};
     QTimer recording_timer_;
     QVariantList live_recording_peaks_;
+    std::vector<agplayer::editor::RecordingEnvelopePoint>
+        live_recording_envelopes_;
+    double input_level_{};
     bool insert_recording_at_cursor_{};
     QString recording_final_path_;
     bool time_pitch_preview_active_{};

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import QtTest
 import AgPlayer
+import AgPlayer.Test
 
 TestCase {
     id: testCase
@@ -42,6 +43,13 @@ TestCase {
         page = host.editorPage
         verify(page)
         tryVerify(function() { return page.width > 0 && page.height > 0 })
+    }
+
+    function cleanup() {
+        if (AudioEditorController.recording)
+            AudioEditorController.cancelRecording()
+        host = null
+        page = null
     }
 
     function verifyGeometry(name, x, y, width, height) {
@@ -478,6 +486,49 @@ TestCase {
         mouseRelease(handle, handle.width - 1, handle.height / 2,
                      Qt.LeftButton)
         verify(AudioEditorController.playheadFrame > 24000)
+    }
+
+    function test_activeRecordingShowsTimelineWaveformAndFallingMeter() {
+        const waveform = findChild(page, "editorWaveformGeometry")
+        const playheadCapsule = findChild(page, "editorPlayheadTimeCapsule")
+        const recordingTime = findChild(page, "recordingTimeText")
+        const meter = findChild(page, "inspectorInputMeter")
+        const activeMeterSegment = findChild(
+            page, "inspectorInputMeterSegment1")
+        verify(waveform && playheadCapsule && recordingTime && meter
+               && activeMeterSegment)
+        const output = RecordingTestDriver.nextOutputUrl()
+        verify(output.toString().length > 0)
+        verify(AudioEditorController.startRecording(
+            output, "", 16000, 2, false, false))
+        tryVerify(function() { return AudioEditorController.recording }, 5000)
+
+        verify(RecordingTestDriver.feedActive(16000))
+        tryCompare(AudioEditorController, "playheadFrame", 16000, 1000)
+        tryCompare(recordingTime, "text", "00:00:01", 1000)
+        tryVerify(function() { return playheadCapsule.visible }, 1000)
+        tryVerify(function() {
+            return playheadCapsule.text !== "00:00.000"
+        }, 1000)
+        tryVerify(function() {
+            return waveform.visible && waveform.channelPeaks.length === 2
+        }, 2000)
+        tryVerify(function() { return meter.level > 0.79 }, 1000)
+        tryVerify(function() { return activeMeterSegment.opacity > 0.9 }, 1000)
+
+        verify(RecordingTestDriver.feedQuiet(16000))
+        tryCompare(AudioEditorController, "playheadFrame", 32000, 1000)
+        tryVerify(function() { return meter.level < 0.01 }, 1000)
+        tryVerify(function() { return activeMeterSegment.opacity < 0.2 }, 1000)
+        verify(AudioEditorController.stopRecording())
+        tryVerify(function() {
+            return !AudioEditorController.recording
+                && AudioEditorController.hasDocument
+        }, 5000)
+        compare(AudioEditorController.playheadFrame, 0)
+        compare(AudioEditorController.positionMs, 0)
+        compare(AudioEditorController.recordingFrames, 0)
+        compare(waveform.visible, true)
     }
 
     function test_realWheelEventUsesContractZoomFactors() {

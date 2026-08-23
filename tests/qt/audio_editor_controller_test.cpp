@@ -1,4 +1,5 @@
 #include "audio_editor/audio_editor_controller.hpp"
+#include "manual_recording_capture.hpp"
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "../core/bpm_fixture.hpp"
 #include "decoder.hpp"
@@ -346,6 +347,76 @@ private slots:
         QVERIFY(controller.undo());
         QCOMPARE(controller.timelineEventViews().front().toMap()
                      .value(QStringLiteral("fadeOut")).toLongLong(), qint64{0});
+    }
+
+    void activeRecordingPublishesLiveTimelineAndFinalPlayableDocument()
+    {
+        auto capture = std::make_unique<ManualRecordingCapture>();
+        ManualRecordingCapture* const driver = capture.get();
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        controller.viewport()->setViewportWidth(320.0);
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(QStringLiteral("active.wav"));
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Recording, 5'000);
+
+        std::vector<float> active(16'000U * 2U);
+        for (std::size_t frame = 0; frame < 16'000U; ++frame) {
+            active[frame * 2U] = frame % 2U == 0U ? -0.8F : 0.3F;
+            active[frame * 2U + 1U] = frame % 2U == 0U ? -0.2F : 0.6F;
+        }
+        QCOMPARE(driver->feed(active, 16'000), 16'000U);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingFrames(), 16'000, 1'000);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.playheadFrame(), 16'000, 1'000);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.positionMs(), 1'000, 1'000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() > 0.79, 1'000);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().size() == 2, 2'000);
+
+        std::vector<float> quiet(16'000U * 2U, 0.0F);
+        QCOMPARE(driver->feed(quiet, 16'000), 16'000U);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.playheadFrame(), 32'000, 1'000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() < 0.01, 1'000);
+        QTRY_VERIFY_WITH_TIMEOUT([&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            if (channels.size() != 2) return false;
+            const QVariantList left = channels.front().toList();
+            bool sawSignal = false;
+            bool sawQuiet = false;
+            for (qsizetype index = 0; index + 1 < left.size(); index += 2) {
+                const double minimum = left[index].toDouble();
+                const double maximum = left[index + 1].toDouble();
+                sawSignal = sawSignal || minimum < -0.79 || maximum > 0.29;
+                sawQuiet = sawQuiet || (std::abs(minimum) < 0.001
+                                        && std::abs(maximum) < 0.001);
+            }
+            return sawSignal && sawQuiet;
+        }(), 2'000);
+
+        QVERIFY(controller.stopRecording());
+        QCOMPARE(controller.state(), EditorSessionState::Finalizing);
+        QVERIFY(controller.recording());
+        QVERIFY(!controller.cancelRecording());
+        QCOMPARE(controller.totalFrames(), 32'000);
+        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Ready, 5'000);
+        QVERIFY(controller.hasDocument());
+        QCOMPARE(controller.totalFrames(), 32'000);
+        QCOMPARE(controller.sampleRate(), 16'000);
+        QCOMPARE(controller.channels(), 2);
+        QCOMPARE(controller.playheadFrame(), 0);
+        QCOMPARE(controller.positionMs(), 0);
+        QCOMPARE(controller.inputLevel(), 0.0);
+        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+        QVERIFY(QFileInfo::exists(output));
+        QVERIFY(controller.playPause());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.playing(), 5'000);
+        QVERIFY(controller.stopPlayback());
     }
 
     void fadeInGestureCommitsOneObservableUndoStep()

@@ -810,6 +810,8 @@ Rectangle {
                             Label { text: qsTr("输入电平"); color: "#c4d2df" }
                             Rectangle {
                                 objectName: "inspectorInputMeter"
+                                readonly property real level:
+                                    AudioEditorController.inputLevel
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 18
                                 color: "transparent"
@@ -821,11 +823,13 @@ Rectangle {
                                         model: 14
                                         Rectangle {
                                             required property int index
+                                            objectName:
+                                                "inspectorInputMeterSegment" + index
                                             width: 8; height: 13; radius: 1
                                             color: index < 9 ? "#16e969"
                                                 : index < 12 ? "#ffca28" : "#d9364f"
                                             opacity: index / 14
-                                                <= AudioEditorController.inputLevel
+                                                <= parent.parent.level
                                                 ? 1.0 : 0.18
                                         }
                                     }
@@ -833,9 +837,9 @@ Rectangle {
                                 Label {
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: AudioEditorController.inputLevel > 0
+                                    text: parent.level > 0
                                         ? (20 * Math.log(
-                                            AudioEditorController.inputLevel)
+                                            parent.level)
                                             / Math.LN10).toFixed(1) + " dB"
                                         : "−∞ dB"
                                     color: "#dbe7f2"; font.pixelSize: 11

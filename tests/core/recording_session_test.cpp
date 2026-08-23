@@ -35,6 +35,15 @@ int main()
     std::error_code ignored;
     fs::remove(output, ignored);
 
+    const std::string no_device_diagnostic = recordingBackendErrorMessage(
+        "WASAPI capture initialization failed", -204);
+    require(no_device_diagnostic.find("category=no-device")
+                != std::string::npos
+            && no_device_diagnostic.find("miniaudio=-204")
+                != std::string::npos
+            && no_device_diagnostic.find("device") != std::string::npos,
+            "miniaudio failure diagnostic lost category, code, or description");
+
     RecordingSession invalid_config_session;
     RecordingConfig invalid_config;
     invalid_config.sample_rate = 1;
@@ -64,24 +73,49 @@ int main()
     config.channels = 2;
     RecordingSession session;
     require(session.startManual(config), "manual recording start failed");
-    std::vector<float> block(480U * 2U, 0.25F);
+    std::vector<float> block(480U * 2U);
+    for (std::size_t frame = 0; frame < 480U; ++frame) {
+        block[frame * 2U] = frame % 2U == 0U ? -0.75F : 0.25F;
+        block[frame * 2U + 1U] = frame % 2U == 0U ? -0.125F : 0.5F;
+    }
     require(session.pushCapturedFrames(block.data(), 480) == 480,
             "captured frames not accepted");
+    const RecordingLiveSnapshot active = session.takeLiveSnapshot(32);
+    require(active.frames_captured == 480,
+            "live snapshot frame count mismatch");
+    require(active.interval_peak > 0.74F && active.interval_peak < 0.76F,
+            "live interval level did not publish the active signal");
+    require(active.envelopes.size() == 1
+            && active.envelopes.front().channels == 2,
+            "live snapshot did not preserve capture channels");
+    require(active.envelopes.front().channel_minima[0] < -0.74F
+            && active.envelopes.front().channel_maxima[0] > 0.24F
+            && active.envelopes.front().channel_minima[1] < -0.12F
+            && active.envelopes.front().channel_maxima[1] > 0.49F,
+            "live snapshot lost per-channel waveform extrema");
     require(session.pause(), "recording pause failed");
     require(session.pushCapturedFrames(block.data(), 480) == 0,
             "paused recording accepted frames");
     require(session.resume(), "recording resume failed");
+    std::fill(block.begin(), block.end(), 0.0F);
     require(session.pushCapturedFrames(block.data(), 480) == 480,
             "resumed recording rejected frames");
-    const auto live_peaks = session.recentPeaks(32);
-    require(!live_peaks.empty() && live_peaks.size() <= 32,
-            "live recording peak snapshot was not published");
-    require(live_peaks.back() > 0.0F,
-            "live recording peak snapshot lost the captured signal");
+    const RecordingLiveSnapshot quiet = session.takeLiveSnapshot(32);
+    require(quiet.frames_captured == 960 && quiet.envelopes.size() == 1,
+            "quiet live snapshot did not advance recording state");
+    require(quiet.interval_peak == 0.0F,
+            "live input level retained the historical session maximum");
+    require(quiet.envelopes.front().channel_minima[0] == 0.0F
+            && quiet.envelopes.front().channel_maxima[0] == 0.0F
+            && quiet.envelopes.front().channel_minima[1] == 0.0F
+            && quiet.envelopes.front().channel_maxima[1] == 0.0F,
+            "quiet live snapshot did not publish a falling waveform");
+    require(session.peak() > 0.74F && session.peak() < 0.76F,
+            "session peak hold was not retained separately");
     const RecordingResult result = session.stop();
     require(result.success, "recording stop failed");
     require(result.frames == 960, "recorded frame count mismatch");
-    require(result.peak > 0.24F && result.peak < 0.26F,
+    require(result.peak > 0.74F && result.peak < 0.76F,
             "input peak mismatch");
 
     agplayer::Decoder decoder;

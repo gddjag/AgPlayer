@@ -20,6 +20,7 @@
 #include <array>
 #include <cmath>
 #include <filesystem>
+#include <iterator>
 #include <limits>
 #include <list>
 #include <optional>
@@ -103,35 +104,110 @@ qint64 clamped_int64_to_qint64(const std::size_t value)
         ? std::numeric_limits<qint64>::max() : static_cast<qint64>(value);
 }
 
-std::vector<std::vector<float>> buildRecordingPlaceholderPeaks(
-    const qreal recPeak, const int channels, const qint64 targetPoints,
+std::vector<std::vector<float>> buildRecordingLivePeaks(
+    const std::vector<agplayer::editor::RecordingEnvelopePoint>& envelopes,
+    const int channels, const qint64 targetPoints,
     const qint64 startFrame, const qint64 endFrame, const qint64 recStartFrame,
     const qint64 recordedFrames)
 {
     if (targetPoints <= 0 || channels <= 0 || recordedFrames <= 0
-        || startFrame >= endFrame) {
+        || startFrame >= endFrame || envelopes.empty()) {
         return {};
     }
-    const qint64 recEndFrame = recStartFrame + recordedFrames;
     const float blank = std::numeric_limits<float>::quiet_NaN();
     std::vector<std::vector<float>> peaks(
         static_cast<std::size_t>(std::max<qint64>(1, channels)),
         std::vector<float>(static_cast<std::size_t>(targetPoints * 2LL), blank));
-    const float amplitude = std::clamp(static_cast<float>(recPeak), 0.0F, 1.0F);
     const qint64 visibleFrameWindow = std::max<qint64>(1, endFrame - startFrame);
-    for (qint64 index = 0; index < targetPoints; ++index) {
-        const qint64 pointStart =
-            startFrame + index * visibleFrameWindow / targetPoints;
-        const qint64 pointEnd =
-            startFrame + (index + 1) * visibleFrameWindow / targetPoints;
-        if (pointStart < recEndFrame && pointEnd > recStartFrame) {
-            for (auto& channel : peaks) {
-                channel[static_cast<std::size_t>(index * 2)] = -amplitude;
-                channel[static_cast<std::size_t>(index * 2 + 1)] = amplitude;
+    for (const auto& envelope : envelopes) {
+        const qint64 envelopeStart = recStartFrame + envelope.start_frame;
+        const qint64 envelopeEnd = recStartFrame
+            + std::min<qint64>(envelope.end_frame, recordedFrames);
+        const qint64 clippedStart = std::max(startFrame, envelopeStart);
+        const qint64 clippedEnd = std::min(endFrame, envelopeEnd);
+        if (clippedStart >= clippedEnd) continue;
+        const qint64 firstPoint = std::clamp<qint64>(
+            static_cast<qint64>(std::floor(
+                static_cast<long double>(clippedStart - startFrame)
+                * targetPoints / visibleFrameWindow)), 0, targetPoints - 1);
+        const qint64 lastPoint = std::clamp<qint64>(
+            static_cast<qint64>(std::ceil(
+                static_cast<long double>(clippedEnd - startFrame)
+                * targetPoints / visibleFrameWindow)), firstPoint + 1,
+            targetPoints);
+        const std::size_t availableChannels = (std::min<std::size_t>)(
+            envelope.channels, envelope.channel_minima.size());
+        for (qint64 point = firstPoint; point < lastPoint; ++point) {
+            const std::size_t outputIndex = static_cast<std::size_t>(point * 2);
+            for (std::size_t channel = 0;
+                 channel < peaks.size() && channel < availableChannels;
+                 ++channel) {
+                const float minimum = envelope.channel_minima[channel];
+                const float maximum = envelope.channel_maxima[channel];
+                if (!std::isfinite(minimum) || !std::isfinite(maximum)) continue;
+                if (!std::isfinite(peaks[channel][outputIndex])) {
+                    peaks[channel][outputIndex] = minimum;
+                    peaks[channel][outputIndex + 1U] = maximum;
+                } else {
+                    peaks[channel][outputIndex] = (std::min)(
+                        peaks[channel][outputIndex], minimum);
+                    peaks[channel][outputIndex + 1U] = (std::max)(
+                        peaks[channel][outputIndex + 1U], maximum);
+                }
             }
         }
     }
     return peaks;
+}
+
+void compactRecordingEnvelopes(
+    std::vector<agplayer::editor::RecordingEnvelopePoint>& envelopes,
+    const std::size_t maximum)
+{
+    while (maximum > 0 && envelopes.size() > maximum) {
+        std::vector<agplayer::editor::RecordingEnvelopePoint> compacted;
+        compacted.reserve((envelopes.size() + 1U) / 2U);
+        for (std::size_t index = 0; index < envelopes.size(); index += 2U) {
+            auto merged = std::move(envelopes[index]);
+            if (index + 1U < envelopes.size()) {
+                const auto& next = envelopes[index + 1U];
+                merged.end_frame = next.end_frame;
+                const std::size_t channelCount = (std::min<std::size_t>)(
+                    merged.channels, next.channels);
+                merged.channels = static_cast<std::uint32_t>(channelCount);
+                for (std::size_t channel = 0; channel < channelCount; ++channel) {
+                    merged.channel_minima[channel] = (std::min)(
+                        merged.channel_minima[channel], next.channel_minima[channel]);
+                    merged.channel_maxima[channel] = (std::max)(
+                        merged.channel_maxima[channel], next.channel_maxima[channel]);
+                }
+            }
+            compacted.push_back(std::move(merged));
+        }
+        envelopes = std::move(compacted);
+    }
+}
+
+std::vector<std::vector<float>> recordingEnvelopeChannels(
+    const std::vector<agplayer::editor::RecordingEnvelopePoint>& envelopes,
+    const int channels)
+{
+    std::vector<std::vector<float>> result(
+        static_cast<std::size_t>(std::max(0, channels)));
+    for (auto& channel : result) channel.reserve(envelopes.size() * 2U);
+    for (const auto& envelope : envelopes) {
+        const std::size_t availableChannels = (std::min<std::size_t>)(
+            envelope.channels, envelope.channel_minima.size());
+        for (std::size_t channel = 0; channel < result.size(); ++channel) {
+            const float minimum = channel < availableChannels
+                ? envelope.channel_minima[channel] : 0.0F;
+            const float maximum = channel < availableChannels
+                ? envelope.channel_maxima[channel] : 0.0F;
+            result[channel].push_back(minimum);
+            result[channel].push_back(maximum);
+        }
+    }
+    return result;
 }
 
 qint64 scaledBucket(const qint64 frame, const qint64 totalFrames,
@@ -447,8 +523,21 @@ struct AudioEditorController::SelectionDragRenderResult final {
 
 AudioEditorController::AudioEditorController(
     const ag_audio_backend backend, QObject* parent)
-    : QObject(parent), actions_(this), viewport_(this)
+    : AudioEditorController(
+          backend, std::make_unique<agplayer::editor::RecordingSession>(), parent)
 {
+}
+
+AudioEditorController::AudioEditorController(
+    const ag_audio_backend backend,
+    std::unique_ptr<agplayer::editor::RecordingCapture> recordingCapture,
+    QObject* parent)
+    : QObject(parent), actions_(this), viewport_(this),
+      recording_capture_(std::move(recordingCapture))
+{
+    if (!recording_capture_) {
+        recording_capture_ = std::make_unique<agplayer::editor::RecordingSession>();
+    }
     ag_player_config config{};
     config.backend = backend;
     if (ag_player_create_with_config(&config, &player_) != AG_OK) {
@@ -468,26 +557,8 @@ AudioEditorController::AudioEditorController(
         if (syncModifiedFromHistory()) emit documentChanged();
     });
     recording_timer_.setInterval(33);
-    connect(&recording_timer_, &QTimer::timeout, this, [this] {
-        QVariantList points;
-        const std::vector<float> peaks = recording_session_.recentPeaks(640);
-        points.reserve(static_cast<qsizetype>(peaks.size() * 2));
-        for (const float peak : peaks) {
-            points.append(-peak);
-            points.append(peak);
-        }
-        live_recording_peaks_.clear();
-        for (int channel = 0; channel < (std::max)(1, recording_channels_);
-             ++channel) {
-            live_recording_peaks_.append(QVariant::fromValue(points));
-        }
-        position_ms_ = recording_sample_rate_ > 0
-            ? recordingFrames() * 1'000 / recording_sample_rate_ : 0;
-        setViewportDocumentFrames((std::max<qint64>)(1, recordingFrames()));
-        emit waveformChanged();
-        emit playbackChanged();
-        emit recordingChanged();
-    });
+    connect(&recording_timer_, &QTimer::timeout,
+            this, &AudioEditorController::pollRecording);
     QSettings settings;
     settings.beginGroup(QStringLiteral("audioEditor"));
     recording_directory_ = settings.value(
@@ -507,6 +578,45 @@ AudioEditorController::AudioEditorController(
     }
     refreshRecordingDevices();
     refreshActions();
+}
+
+void AudioEditorController::pollRecording()
+{
+    if (!recording_capture_ || !recording()) return;
+    agplayer::editor::RecordingLiveSnapshot snapshot =
+        recording_capture_->takeLiveSnapshot(2'048);
+    input_level_ = std::clamp(static_cast<double>(snapshot.interval_peak),
+                              0.0, 1.0);
+    live_recording_envelopes_.insert(
+        live_recording_envelopes_.end(),
+        std::make_move_iterator(snapshot.envelopes.begin()),
+        std::make_move_iterator(snapshot.envelopes.end()));
+    compactRecordingEnvelopes(live_recording_envelopes_, 8'192);
+    live_recording_peaks_ = build_variant_peaks(recordingEnvelopeChannels(
+        live_recording_envelopes_, recording_channels_));
+    const qint64 capturedFrames = static_cast<qint64>(
+        snapshot.frames_captured);
+    playhead_frame_ = (insert_recording_at_cursor_ && has_document_
+        ? recording_insert_frame_ : 0) + capturedFrames;
+    position_ms_ = recording_sample_rate_ > 0
+        ? playhead_frame_ * 1'000 / recording_sample_rate_ : 0;
+    const bool followRecordingOverview = !has_document_
+        && viewport_.visibleStartFrame() == 0
+        && (viewport_.documentFrames() == 0
+            || viewport_.visibleEndFrame() == viewport_.documentFrames());
+    const qint64 currentTotalFrames = (std::max<qint64>)(1, totalFrames());
+    setViewportDocumentFrames(currentTotalFrames);
+    if (followRecordingOverview
+        && (viewport_.visibleStartFrame() != 0
+            || viewport_.visibleEndFrame() != currentTotalFrames)) {
+        suppress_persisted_state_tracking_ = true;
+        (void)viewport_.setVisibleRange(0, currentTotalFrames);
+        suppress_persisted_state_tracking_ = false;
+    }
+    requestViewportWaveform();
+    emit waveformChanged();
+    emit playbackChanged();
+    emit recordingChanged();
 }
 
 AudioEditorController::~AudioEditorController()
@@ -534,7 +644,7 @@ AudioEditorController::~AudioEditorController()
     if (selection_drag_watcher_) {
         selection_drag_watcher_->future().waitForFinished();
     }
-    if (recording()) (void)recording_session_.stop();
+    if (recording()) (void)recording_capture_->stop();
     if (player_) {
         (void)ag_player_stop(player_);
         ag_player_destroy(player_);
@@ -543,8 +653,13 @@ AudioEditorController::~AudioEditorController()
 
 bool AudioEditorController::recording() const noexcept
 {
+    if (state_ == EditorSessionState::Recording
+        || state_ == EditorSessionState::RecordingPaused
+        || state_ == EditorSessionState::Finalizing) {
+        return true;
+    }
     using agplayer::editor::RecordingState;
-    const auto value = recording_session_.state();
+    const auto value = recording_capture_->state();
     return value == RecordingState::Recording
         || value == RecordingState::Paused
         || value == RecordingState::Finalizing;
@@ -552,18 +667,18 @@ bool AudioEditorController::recording() const noexcept
 
 bool AudioEditorController::recordingPaused() const noexcept
 {
-    return recording_session_.state()
+    return recording_capture_->state()
         == agplayer::editor::RecordingState::Paused;
 }
 
 double AudioEditorController::inputLevel() const noexcept
 {
-    return std::clamp(static_cast<double>(recording_session_.peak()), 0.0, 1.0);
+    return input_level_;
 }
 
 qint64 AudioEditorController::recordingFrames() const noexcept
 {
-    return recording_session_.framesCaptured();
+    return recording() ? recording_capture_->framesCaptured() : 0;
 }
 
 QVariantList AudioEditorController::channelPeaks() const
@@ -2040,10 +2155,13 @@ bool AudioEditorController::startRecordingInternal(
         watcher->deleteLater();
         if (!started) {
             recording_final_path_.clear();
+            live_recording_peaks_.clear();
+            live_recording_envelopes_.clear();
+            input_level_ = 0.0;
             setState(has_document_ ? EditorSessionState::Ready
                                    : EditorSessionState::Empty);
             const QString detail = QString::fromStdString(
-                recording_session_.lastError());
+                recording_capture_->lastError());
             setError(detail.isEmpty()
                 ? tr("无法启动录音设备，请检查设备与权限")
                 : tr("无法启动录音：%1").arg(detail));
@@ -2064,12 +2182,21 @@ bool AudioEditorController::startRecordingInternal(
         settings.setValue(QStringLiteral("recordingMonitor"), recording_monitor_);
         settings.endGroup();
         emit recordingPreferencesChanged();
+        live_recording_peaks_.clear();
+        live_recording_envelopes_.clear();
+        input_level_ = 0.0;
+        playhead_frame_ = insert_recording_at_cursor_ && has_document_
+            ? recording_insert_frame_ : 0;
+        position_ms_ = recording_sample_rate_ > 0
+            ? playhead_frame_ * 1'000 / recording_sample_rate_ : 0;
         recording_timer_.start();
         setState(EditorSessionState::Recording);
+        requestViewportWaveform();
+        emit playbackChanged();
         emit recordingChanged();
     });
     watcher->setFuture(QtConcurrent::run([this, config] {
-        return recording_session_.start(config);
+        return recording_capture_->start(config);
     }));
     return true;
 }
@@ -2155,7 +2282,7 @@ bool AudioEditorController::clearDocument()
 
 bool AudioEditorController::pauseRecording()
 {
-    if (!recording_session_.pause()) return false;
+    if (!recording_capture_->pause()) return false;
     setState(EditorSessionState::RecordingPaused);
     emit recordingChanged();
     return true;
@@ -2163,7 +2290,7 @@ bool AudioEditorController::pauseRecording()
 
 bool AudioEditorController::resumeRecording()
 {
-    if (!recording_session_.resume()) return false;
+    if (!recording_capture_->resume()) return false;
     setState(EditorSessionState::Recording);
     emit recordingChanged();
     return true;
@@ -2172,8 +2299,9 @@ bool AudioEditorController::resumeRecording()
 bool AudioEditorController::stopRecording()
 {
     if (!recording() || recording_stop_watcher_) return false;
-    setState(EditorSessionState::Finalizing);
     recording_timer_.stop();
+    pollRecording();
+    setState(EditorSessionState::Finalizing);
     const QString finalPath = std::exchange(recording_final_path_, {});
     auto* watcher = new QFutureWatcher<RecordingFinalizeResult>(this);
     recording_stop_watcher_ = watcher;
@@ -2185,10 +2313,12 @@ bool AudioEditorController::stopRecording()
         const auto& result = outcome.recording;
         const auto& analysis = outcome.analysis;
         if (!result.success || !analysis.success) {
+            input_level_ = 0.0;
             setState(EditorSessionState::Error);
             setError(QString::fromStdString(result.success
                 ? analysis.message : result.message));
             emit recordingChanged();
+            emit playbackChanged();
             return;
         }
         if (insert_recording_at_cursor_) {
@@ -2240,15 +2370,25 @@ bool AudioEditorController::stopRecording()
             setViewportDocumentFrames(document_.totalFrames());
             markProjectClean();
         }
+        live_recording_peaks_.clear();
+        live_recording_envelopes_.clear();
+        input_level_ = 0.0;
+        playhead_frame_ = insert_recording_at_cursor_
+            ? recording_insert_frame_ : 0;
+        position_ms_ = sample_rate_ > 0
+            ? playhead_frame_ * 1'000 / sample_rate_ : 0;
+        setViewportDocumentFrames(document_.totalFrames());
         setState(EditorSessionState::Ready);
         refreshActions();
+        requestViewportWaveform();
         emit waveformChanged();
+        emit playbackChanged();
         emit documentChanged();
         emit recordingChanged();
     });
     watcher->setFuture(QtConcurrent::run([this, finalPath] {
         RecordingFinalizeResult outcome;
-        outcome.recording = recording_session_.stop();
+        outcome.recording = recording_capture_->stop();
         if (outcome.recording.success && !finalPath.isEmpty()) {
             const std::filesystem::path source = outcome.recording.path;
             const std::filesystem::path target(finalPath.toStdWString());
@@ -2278,14 +2418,23 @@ bool AudioEditorController::stopRecording()
 
 bool AudioEditorController::cancelRecording()
 {
-    if (!recording()) return false;
+    if (!recording() || recording_start_watcher_ || recording_stop_watcher_) {
+        return false;
+    }
     recording_timer_.stop();
-    const bool cancelled = recording_session_.cancel();
+    const bool cancelled = recording_capture_->cancel();
     recording_final_path_.clear();
-    position_ms_ = 0;
-    clearViewportWaveformState();
+    live_recording_peaks_.clear();
+    live_recording_envelopes_.clear();
+    input_level_ = 0.0;
+    playhead_frame_ = insert_recording_at_cursor_ && has_document_
+        ? recording_insert_frame_ : 0;
+    position_ms_ = sample_rate_ > 0
+        ? playhead_frame_ * 1'000 / sample_rate_ : 0;
+    setViewportDocumentFrames(has_document_ ? document_.totalFrames() : 0);
     setState(has_document_ ? EditorSessionState::Ready
                            : EditorSessionState::Empty);
+    requestViewportWaveform();
     if (cancelled) setError(tr("录音已取消"));
     emit recordingChanged();
     emit playbackChanged();
@@ -2689,7 +2838,7 @@ void AudioEditorController::requestViewportWaveform()
                                                std::memory_order_release);
     }
     const qint64 recordedFrames = recording()
-        ? static_cast<qint64>(recording_session_.framesCaptured())
+        ? static_cast<qint64>(recording_capture_->framesCaptured())
         : 0;
     const qint64 totalFrames = effectiveDocumentFramesForViewport(
         has_document_, document_.totalFrames(), recording(), recording_insert_frame_,
@@ -2707,8 +2856,11 @@ void AudioEditorController::requestViewportWaveform()
     const qint64 visibleFrames = std::max<qint64>(0, endFrame - startFrame);
     const qint64 targetPoints = visibleFrames <= 0 || viewportWidth <= 0.0
         ? 0 : viewportTargetPoints(visibleFrames, viewportWidth);
+    const bool recordingActive = recording();
+    const int effectiveChannels = recordingActive
+        ? recording_channels_ : channels_;
     if ((!has_document_ && !recording())
-        || clampedTotal <= 0 || channels_ <= 0 || visibleFrames <= 0
+        || clampedTotal <= 0 || effectiveChannels <= 0 || visibleFrames <= 0
         || targetPoints <= 0) {
         pending_viewport_waveform_job_.reset();
         viewport_channel_peaks_.clear();
@@ -2716,27 +2868,36 @@ void AudioEditorController::requestViewportWaveform()
         return;
     }
 
+    if (recordingActive && !has_document_) {
+        pending_viewport_waveform_job_.reset();
+        viewport_channel_peaks_ = build_variant_peaks(
+            buildRecordingLivePeaks(
+                live_recording_envelopes_, effectiveChannels, targetPoints,
+                startFrame, endFrame, 0, recordedFrames));
+        emit waveformChanged();
+        return;
+    }
+
     const auto snapshot = document_.timelineSnapshot();
     const auto primaryPeaks = peaksAsChannels(channel_peaks_);
-    const bool recordingActive = recording();
     const qint64 recordingStartFrame = insert_recording_at_cursor_ && has_document_
         ? recording_insert_frame_ : 0;
-    const qreal recordingPeak = static_cast<qreal>(recording_session_.peak());
+    const auto recordingEnvelopes = live_recording_envelopes_;
     const auto cancelToken = std::make_shared<std::atomic_bool>(false);
     ViewportWaveformJob job{
         generation,
         cancelToken,
         [snapshot, primaryPath = source_path_, primaryPeaks,
-         startFrame, endFrame, targetPoints, channels = channels_,
+         startFrame, endFrame, targetPoints, channels = effectiveChannels,
          recordingActive, recordedFrames, recordingStartFrame,
-         recordingPeak, cancelToken]() mutable {
+         recordingEnvelopes, cancelToken]() mutable {
             auto peaks = composeVisibleTimelinePeaks(
                 snapshot, primaryPath, primaryPeaks, startFrame, endFrame,
                 targetPoints, channels, cancelToken);
             if (cancelToken->load(std::memory_order_acquire)) return peaks;
             if (recordingActive && recordedFrames > 0) {
-                auto recordingPeaks = buildRecordingPlaceholderPeaks(
-                    recordingPeak, channels, targetPoints, startFrame,
+                auto recordingPeaks = buildRecordingLivePeaks(
+                    recordingEnvelopes, channels, targetPoints, startFrame,
                     endFrame, recordingStartFrame, recordedFrames);
                 if (peaks.empty()) peaks = recordingPeaks;
                 const std::size_t channelCount = std::min(
