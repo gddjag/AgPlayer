@@ -106,7 +106,8 @@ private slots:
         QCOMPARE(controller.state(), EditorSessionState::Processing);
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Empty,
                                   10'000);
-        QVERIFY(!controller.errorMessage().isEmpty());
+        QVERIFY(controller.errorMessage().contains(QStringLiteral("WASAPI")));
+        QVERIFY(controller.errorMessage().contains(QStringLiteral("device")));
         QVERIFY(!QFileInfo::exists(output));
     }
 
@@ -347,6 +348,28 @@ private slots:
                      .value(QStringLiteral("fadeOut")).toLongLong(), qint64{0});
     }
 
+    void fadeInGestureCommitsOneObservableUndoStep()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        const auto historyBefore = controller.historyStateIdForTesting();
+
+        QVERIFY(controller.beginEventGesture(
+            id, QStringLiteral("fadeIn"), false));
+        QVERIFY(controller.setEventFadeIn(id, 120));
+        QVERIFY(controller.setEventFadeIn(id, 240));
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("fadeIn")).toLongLong(), qint64{240});
+        QVERIFY(controller.endEventGesture());
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("fadeIn")).toLongLong(), qint64{0});
+    }
+
     void successfulDocumentReplacementClearsEventGestureAfterPreparation()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
@@ -491,6 +514,75 @@ private slots:
         QCOMPARE(controller.selectionEnd(), end);
         QVERIFY(std::abs(controller.viewport()->pixelAtFrame(start) - 177.25) <= 0.01);
         QVERIFY(std::abs(controller.viewport()->pixelAtFrame(end) - 899.75) <= 0.01);
+    }
+
+    void selectionDragRendersARealTemporaryWavAndInvalidatesItOnChange()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("drag-source.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 2));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.setSelection(4'000, 12'000));
+        QSignalSpy dragChanged(
+            &controller, &AudioEditorController::selectionDragChanged);
+
+        QVERIFY(controller.prepareSelectionDrag());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.selectionDragReady(), 10'000);
+        QVERIFY(dragChanged.count() > 0);
+        const QUrl dragUrl = controller.selectionDragFile();
+        QVERIFY(dragUrl.isLocalFile());
+        QVERIFY(QFileInfo::exists(dragUrl.toLocalFile()));
+        QFile rendered(dragUrl.toLocalFile());
+        QVERIFY(rendered.open(QIODevice::ReadOnly));
+        QCOMPARE(rendered.read(4), QByteArray("RIFF", 4));
+        rendered.close();
+        const DecodedProbe probe = decodeProbe(dragUrl.toLocalFile());
+        QCOMPARE(probe.frames, qint64{8'000});
+        QCOMPARE(probe.metadata.sample_rate, 16'000);
+
+        QVERIFY(controller.setSelection(6'000, 10'000));
+        QVERIFY(!controller.selectionDragReady());
+        QVERIFY(controller.selectionDragFile().isEmpty());
+    }
+
+    void creatingASelectionEnablesLoopAndClearingItDisablesLoop()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
+        QVERIFY(!controller.loopEnabled());
+
+        QVERIFY(controller.setSelection(12'000, 36'000));
+        QVERIFY(controller.loopEnabled());
+
+        QVERIFY(controller.clearSelection());
+        QVERIFY(!controller.loopEnabled());
+    }
+
+    void playbackAndRecordingAnnounceExclusivePreviewBeforeStarting()
+    {
+        AudioEditorController playback(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(playback.createUntitledDocument(48'000, 2, 4'800));
+        QVERIFY(playback.setSelection(1'000, 2'000));
+        QVERIFY(playback.seekFrame(3'000));
+        QSignalSpy playbackStarting(
+            &playback, &AudioEditorController::exclusivePreviewStarting);
+        QVERIFY(playback.playPause());
+        QCOMPARE(playbackStarting.count(), 1);
+        QCOMPARE(playback.playheadFrame(), qint64{1'000});
+        QVERIFY(playback.loopEnabled());
+        playback.cancelOperation();
+
+        AudioEditorController recording(AG_AUDIO_BACKEND_NULL);
+        QSignalSpy recordingStarting(
+            &recording, &AudioEditorController::exclusivePreviewStarting);
+        QVERIFY(recording.startRecordingToTemporaryFile(
+            QStringLiteral("capture:device-does-not-exist"), 48'000, 2,
+            false, false));
+        QCOMPARE(recordingStarting.count(), 1);
+        QTRY_VERIFY_WITH_TIMEOUT(!recording.recording(), 5'000);
     }
 
     void invalidViewportRequestsCancelOlderWorkAndAdvanceGeneration()

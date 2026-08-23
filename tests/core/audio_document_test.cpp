@@ -336,6 +336,33 @@ private slots:
         QVERIFY(!value.canUndo());
     }
 
+    void setEventFadeInUsesOneUndoStepAndRejectsInvalidLength()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent event{1, source, 0, 1'000, 0};
+        event.fadeOut = 750;
+        auto value = AudioDocument::fromEvents({event});
+        const auto beforeState = value.historyStateId();
+
+        QVERIFY(value.setEventFadeIn(1, 250));
+        QCOMPARE(value.timelineSnapshot().events.front().fadeIn,
+                 SampleFrame{250});
+        QCOMPARE(value.historyStateId(), beforeState + 1);
+
+        const auto changed = value.timelineSnapshot();
+        const auto changedState = value.historyStateId();
+        QVERIFY(!value.setEventFadeIn(1, 251));
+        QVERIFY(!value.setEventFadeIn(99, 1));
+        QCOMPARE(value.timelineSnapshot().revision, changed.revision);
+        QCOMPARE(value.historyStateId(), changedState);
+
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().fadeIn,
+                 SampleFrame{0});
+        QVERIFY(!value.canUndo());
+    }
+
     void setEventFadeOutUsesOneUndoStepAndRejectsInvalidLength()
     {
         const auto source = std::make_shared<const AudioSource>(AudioSource{

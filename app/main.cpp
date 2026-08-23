@@ -746,6 +746,9 @@ int main(int argc, char* argv[])
 
         AudioToolsController audioTools;
         AudioEditorController audioEditor;
+        QObject::connect(&audioEditor,
+                         &AudioEditorController::exclusivePreviewStarting,
+                         &playback, &PlaybackController::stop);
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(qaTool);
         }

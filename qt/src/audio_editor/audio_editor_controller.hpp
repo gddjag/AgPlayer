@@ -55,6 +55,10 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(qint64 selectionStart READ selectionStart NOTIFY documentChanged)
     Q_PROPERTY(qint64 selectionEnd READ selectionEnd NOTIFY documentChanged)
     Q_PROPERTY(qint64 selectionFrames READ selectionFrames NOTIFY documentChanged)
+    Q_PROPERTY(QUrl selectionDragFile READ selectionDragFile
+                   NOTIFY selectionDragChanged)
+    Q_PROPERTY(bool selectionDragReady READ selectionDragReady
+                   NOTIFY selectionDragChanged)
     Q_PROPERTY(QString filePath READ filePath NOTIFY documentChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY documentChanged)
     Q_PROPERTY(QString formatName READ formatName NOTIFY documentChanged)
@@ -138,6 +142,9 @@ public:
     [[nodiscard]] qint64 selectionStart() const noexcept;
     [[nodiscard]] qint64 selectionEnd() const noexcept;
     [[nodiscard]] qint64 selectionFrames() const noexcept;
+    [[nodiscard]] QUrl selectionDragFile() const { return selection_drag_file_; }
+    [[nodiscard]] bool selectionDragReady() const noexcept
+    { return selection_drag_ready_; }
     [[nodiscard]] QString filePath() const { return source_path_; }
     [[nodiscard]] QString fileName() const;
     [[nodiscard]] QString formatName() const { return format_name_; }
@@ -241,6 +248,8 @@ public:
     Q_INVOKABLE bool exportToConfiguredDirectory();
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
+    Q_INVOKABLE bool prepareSelectionDrag();
+    Q_INVOKABLE bool startSelectionFileDrag(QObject* source);
     bool moveEvent(quint64 id, qint64 timelineStart);
     bool trimEvent(quint64 id, qint64 sourceStart,
                    qint64 sourceEnd, qint64 timelineStart);
@@ -250,6 +259,7 @@ public:
     Q_INVOKABLE bool trimEvent(const QString& id, qint64 sourceStart,
                                qint64 sourceEnd, qint64 timelineStart);
     Q_INVOKABLE bool splitEvent(const QString& id, qint64 frame);
+    Q_INVOKABLE bool setEventFadeIn(const QString& id, qint64 frames);
     Q_INVOKABLE bool setEventFadeOut(const QString& id, qint64 frames);
     Q_INVOKABLE bool addEnvelopePoint(const QString& id, qint64 offset,
                                       double gain);
@@ -310,16 +320,19 @@ signals:
     void recordingDevicesChanged();
     void recordingPreferencesChanged();
     void recordingChanged();
+    void selectionDragChanged();
     void openRequested();
     void saveAsRequested();
     void saveProjectAsRequested();
     void exportRequested();
     void newRecordingRequested();
     void discardConfirmationRequested();
+    void exclusivePreviewStarting();
 
 private:
     struct RecordingFinalizeResult;
     struct PreviewRenderResult;
+    struct SelectionDragRenderResult;
     struct PendingRecordingRequest final {
         QUrl target;
         QString finalPath;
@@ -354,6 +367,7 @@ private:
                                                 qint64 positionMs) noexcept;
     [[nodiscard]] bool syncModifiedFromHistory() noexcept;
     void finishTimelineMutation();
+    void invalidateSelectionDrag();
     void syncProjectSourcesAndIssues();
     [[nodiscard]] std::optional<quint64> nextProjectSourceId() const;
     [[nodiscard]] static std::optional<agplayer::editor::EventId>
@@ -425,6 +439,7 @@ private:
     QFutureWatcher<agplayer::editor::NoiseReductionResult>*
         noise_reduction_watcher_{};
     QFutureWatcher<PreviewRenderResult>* preview_watcher_{};
+    QFutureWatcher<SelectionDragRenderResult>* selection_drag_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
     QString recording_device_id_;
@@ -450,7 +465,7 @@ private:
     agplayer::editor::ProjectExportSettings saved_export_settings_;
     qint64 recording_insert_frame_{};
 
-    enum class EventGestureKind { None, Move, Trim, FadeOut };
+    enum class EventGestureKind { None, Move, Trim, FadeIn, FadeOut };
     struct EventGesture final {
         EventGestureKind kind{EventGestureKind::None};
         agplayer::editor::EventId id{};
@@ -459,9 +474,14 @@ private:
         qint64 timelineStart{};
         qint64 sourceStart{};
         qint64 sourceEnd{};
+        qint64 fadeIn{};
         qint64 fadeOut{};
     };
     EventGesture event_gesture_;
     QString active_tool_{QStringLiteral("select")};
     std::atomic_uint64_t preview_generation_{0};
+    QUrl selection_drag_file_;
+    bool selection_drag_ready_{};
+    std::atomic_uint64_t selection_drag_generation_{0};
+    std::shared_ptr<std::atomic_bool> selection_drag_cancel_token_;
 };

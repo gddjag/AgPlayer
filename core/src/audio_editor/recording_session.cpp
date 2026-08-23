@@ -17,6 +17,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <thread>
 
 #ifdef _WIN32
@@ -135,6 +136,24 @@ bool read_journal(const std::filesystem::path& journal,
 
 class RecordingSession::Impl final {
 public:
+    void clear_last_error()
+    {
+        const std::lock_guard<std::mutex> lock(last_error_mutex);
+        last_error.clear();
+    }
+
+    void set_last_error(std::string message)
+    {
+        const std::lock_guard<std::mutex> lock(last_error_mutex);
+        last_error = std::move(message);
+    }
+
+    [[nodiscard]] std::string last_error_copy() const
+    {
+        const std::lock_guard<std::mutex> lock(last_error_mutex);
+        return last_error;
+    }
+
     ~Impl()
     {
         if (state.load() != RecordingState::Idle) {
@@ -144,15 +163,27 @@ public:
 
     bool start_common(const RecordingConfig& value)
     {
-        if (state.load() != RecordingState::Idle || value.output_path.empty()
-            || value.sample_rate < 8'000 || value.sample_rate > 192'000
+        clear_last_error();
+        if (state.load() != RecordingState::Idle) {
+            set_last_error("recording session is already active");
+            return false;
+        }
+        if (value.output_path.empty()) {
+            set_last_error("recording output path is empty");
+            return false;
+        }
+        if (value.sample_rate < 8'000 || value.sample_rate > 192'000
             || value.channels == 0 || value.channels > 2) {
+            set_last_error("unsupported recording format");
             return false;
         }
         config = value;
         std::error_code error;
         std::filesystem::create_directories(config.output_path.parent_path(), error);
-        if (error) return false;
+        if (error) {
+            set_last_error("cannot create recording output directory");
+            return false;
+        }
         (void)RecordingSession::recoverIncomplete(
             config.output_path.parent_path());
         staged_path = config.output_path;
@@ -160,7 +191,10 @@ public:
         journal_path = config.output_path;
         journal_path += ".agplayer-recording.journal";
         stream.open(staged_path, std::ios::binary | std::ios::trunc);
-        if (!stream) return false;
+        if (!stream) {
+            set_last_error("cannot create recording staging file");
+            return false;
+        }
         write_header(0);
         {
             std::ofstream journal(journal_path, std::ios::trunc);
@@ -172,6 +206,7 @@ public:
             ring = std::make_unique<agplayer::PcmRingBuffer>(
                 config.sample_rate * 2U, config.channels);
         } catch (...) {
+            set_last_error("cannot allocate recording buffer");
             cleanup_files();
             return false;
         }
@@ -192,6 +227,7 @@ public:
         if (!start_common(value)) return false;
         ma_backend backend = ma_backend_wasapi;
         if (ma_context_init(&backend, 1, nullptr, &context) != MA_SUCCESS) {
+            set_last_error("WASAPI context initialization failed");
             abort_start();
             return false;
         }
@@ -203,6 +239,7 @@ public:
             ma_uint32 capture_count = 0;
             if (ma_context_get_devices(&context, nullptr, nullptr,
                                        &capture, &capture_count) != MA_SUCCESS) {
+                set_last_error("WASAPI capture device enumeration failed");
                 abort_start();
                 return false;
             }
@@ -214,6 +251,7 @@ public:
                 }
             }
             if (chosen_ptr == nullptr) {
+                set_last_error("WASAPI capture device was not found");
                 abort_start();
                 return false;
             }
@@ -234,11 +272,13 @@ public:
         device_config.notificationCallback = notification_callback;
         device_config.pUserData = this;
         if (ma_device_init(&context, &device_config, &device) != MA_SUCCESS) {
+            set_last_error("WASAPI capture initialization failed; check microphone permissions and format");
             abort_start();
             return false;
         }
         device_ready = true;
         if (ma_device_start(&device) != MA_SUCCESS) {
+            set_last_error("WASAPI capture start failed; check microphone access");
             abort_start();
             return false;
         }
@@ -437,6 +477,8 @@ public:
     bool context_ready{};
     bool device_ready{};
     bool device_started{};
+    mutable std::mutex last_error_mutex;
+    std::string last_error;
 };
 
 RecordingSession::RecordingSession() : impl_(std::make_unique<Impl>()) {}
@@ -462,6 +504,10 @@ std::vector<RecordingDevice> RecordingSession::inputDevices()
         }
     }
     ma_context_uninit(&context);
+    std::stable_sort(result.begin(), result.end(),
+        [](const RecordingDevice& left, const RecordingDevice& right) {
+            return left.is_default && !right.is_default;
+        });
     return result;
 }
 
@@ -567,6 +613,11 @@ std::vector<float> RecordingSession::recentPeaks(const std::size_t maximum) cons
                 std::memory_order_acquire));
     }
     return result;
+}
+
+std::string RecordingSession::lastError() const
+{
+    return impl_->last_error_copy();
 }
 
 } // namespace agplayer::editor

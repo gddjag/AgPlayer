@@ -49,6 +49,7 @@ public:
     bool silenceSelection();
     bool fadeIn();
     bool fadeOut();
+    bool setEventFadeIn(EventId id, SampleFrame frames);
     bool setEventFadeOut(EventId id, SampleFrame frames);
     bool addEnvelopePoint(EventId id, SampleFrame offset, float gain);
     bool copySelection();

@@ -96,7 +96,29 @@ TestCase {
         compare(shortcutText.indexOf("Phase"), -1)
     }
 
-    function test_toolbarExactOrderAndClearKeepsDocument() {
+    function test_spaceShortcutYieldsToTextInputAndModalDialog() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const shortcut = findChild(page, "editorSpaceShortcut")
+        const bpmInput = findChild(page, "inspectorBpmInput")
+        verify(shortcut && bpmInput)
+        verify(shortcut.enabled)
+
+        bpmInput.forceActiveFocus()
+        tryVerify(function() { return bpmInput.activeFocus })
+        compare(shortcut.enabled, false)
+        page.forceActiveFocus()
+        tryVerify(function() { return !bpmInput.activeFocus })
+
+        verify(AudioEditorController.setSelection(100, 200))
+        verify(!AudioEditorController.clearDocument())
+        const discard = findChild(page, "editorDiscardDialog")
+        verify(discard)
+        tryVerify(function() { return discard.visible })
+        compare(shortcut.enabled, false)
+        discard.reject()
+    }
+
+    function test_toolbarExactOrderAndClearRemovesDocument() {
         const names = [
             "importAudio", "saveProject", "select", "split", "delete",
             "crop", "copy", "paste", "fadeIn", "fadeOut", "mute",
@@ -111,6 +133,9 @@ TestCase {
             const button = findChild(page, "editorCommand_" + names[index])
             verify(button, "missing toolbar command " + names[index])
             compare(button.label, labels[index])
+            verify(button.shortcutText !== undefined
+                && button.shortcutText.length > 0,
+                "missing shortcut hint for " + names[index])
             verify(button.x > previousX, names[index] + " is out of order")
             previousX = button.x
         }
@@ -121,6 +146,9 @@ TestCase {
         const clearButton = findChild(page, "editorCommand_clear")
         mouseClick(clearButton)
         compare(AudioEditorController.hasDocument, true)
+        verify(AudioEditorController.confirmDiscardAndOpen(),
+               "clear must route through the existing unsaved-change confirmation")
+        compare(AudioEditorController.hasDocument, false)
         compare(AudioEditorController.selectionStart, -1)
         compare(AudioEditorController.activeTool, "select")
     }
@@ -326,6 +354,49 @@ TestCase {
                 originalStart)
     }
 
+    function test_selectionTimelineAffordancesAndRightClickCancelAreInteractive() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setSelection(12000, 36000))
+        verify(AudioEditorController.seekFrame(24000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        wait(0)
+
+        const leftEdge = findChild(canvas, "editorSelectionStartHandle")
+        const rightEdge = findChild(canvas, "editorSelectionEndHandle")
+        const eventLeft = findChild(canvas, "editorEventLeftTrimHandle")
+        const eventRight = findChild(canvas, "editorEventRightTrimHandle")
+        for (const handle of [leftEdge, rightEdge, eventLeft, eventRight]) {
+            verify(handle, "missing timeline edge handle")
+            verify(handle.width >= 24, handle.objectName + " must expose 24px hit width")
+        }
+
+        const playheadCapsule = findChild(canvas, "editorPlayheadTimeCapsule")
+        const selectionCapsule = findChild(canvas, "editorSelectionTimeCapsule")
+        const durationCapsule = findChild(canvas, "editorSelectionDurationCapsule")
+        const dragCapsule = findChild(canvas, "editorSelectionDragCapsule")
+        const dragInteraction = findChild(
+            canvas, "editorSelectionFileDragInteraction")
+        for (const capsule of [playheadCapsule, selectionCapsule,
+                               durationCapsule, dragCapsule]) {
+            verify(capsule, "missing timeline capsule")
+            verify(capsule.visible, capsule.objectName + " must be visible")
+        }
+        verify(playheadCapsule.text.length > 0)
+        verify(selectionCapsule.text.indexOf("–") >= 0)
+        verify(durationCapsule.text.length > 0)
+        verify(dragInteraction, "selection WAV capsule must be interactive")
+
+        const overlay = findChild(canvas, "editorSelectionOverlay")
+        verify(overlay)
+        mouseClick(overlay, overlay.width / 2, overlay.height / 2,
+                   Qt.RightButton)
+        compare(AudioEditorController.selectionStart, -1)
+        compare(AudioEditorController.loopEnabled, false)
+    }
+
     function test_fadeHandleAndVolumeLinePersistSampleExactEdits() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         const canvas = findChild(page, "editorWaveformCanvas")
@@ -333,24 +404,50 @@ TestCase {
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 480000))
         wait(0)
-        const fade = findChild(canvas, "editorEventFadeOutHandle")
-        const volumeLine = findChild(canvas, "editorEventVolumeLine")
-        const body = findChild(canvas, "editorEventBodyInteraction")
-        verify(fade && volumeLine && body)
+        const fadeIn = findChild(canvas, "editorEventFadeInHandle")
+        let fade = findChild(canvas, "editorEventFadeOutHandle")
+        let volumeLine = findChild(canvas, "editorEventVolumeLine")
+        let body = findChild(canvas, "editorEventBodyInteraction")
+        verify(fadeIn && fade && volumeLine && body)
+        tryVerify(function() { return fadeIn.visible && fadeIn.width > 0 })
         tryVerify(function() { return fade.visible && fade.width > 0 })
 
+        const fadeInDelta = Math.round(canvas.width * 0.12)
+        const fadeInStartX = Math.round(fadeIn.width * 0.2)
+        const fadeInStart = fadeIn.mapToItem(canvas, fadeInStartX,
+                                             fadeIn.height / 2)
+        const fadeInTarget = Qt.point(fadeInStart.x + fadeInDelta,
+                                      fadeInStart.y)
+        const eventStart = Number(AudioEditorController.timelineEventViews[0].timelineStart)
+        const expectedFadeIn = canvas.frameAtCanvasPixel(Math.round(fadeInTarget.x))
+            - eventStart
+        mousePress(canvas, fadeInStart.x, fadeInStart.y, Qt.LeftButton)
+        mouseMove(canvas, fadeInTarget.x, fadeInTarget.y, 30)
+        mouseRelease(canvas, fadeInTarget.x, fadeInTarget.y, Qt.LeftButton)
+        const framePerPixel = Math.ceil(
+            AudioEditorController.viewport.visibleFrameCount / canvas.width)
+        verify(Math.abs(Number(AudioEditorController.timelineEventViews[0].fadeIn)
+            - expectedFadeIn) <= framePerPixel)
+        wait(0)
+        fade = findChild(canvas, "editorEventFadeOutHandle")
+        volumeLine = findChild(canvas, "editorEventVolumeLine")
+        body = findChild(canvas, "editorEventBodyInteraction")
+        verify(fade && volumeLine && body)
+
         const dragDelta = -Math.round(canvas.width * 0.2)
-        const dragStartX = fade.width - 8
+        const dragStartX = Math.round(fade.width * 0.8)
         const dragStartPoint = fade.mapToItem(canvas,
             dragStartX, fade.height / 2)
         const targetPoint = Qt.point(
             dragStartPoint.x + dragDelta, dragStartPoint.y)
         const eventEnd = Number(AudioEditorController.timelineEventViews[0].timelineEnd)
-        const expectedFade = eventEnd - canvas.frameAtCanvasPixel(targetPoint.x)
-        mouseDrag(canvas, dragStartPoint.x, dragStartPoint.y,
-                  dragDelta, 0, Qt.LeftButton, Qt.NoModifier, 30)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeOut),
-                expectedFade)
+        const expectedFade = eventEnd
+            - canvas.frameAtCanvasPixel(Math.round(targetPoint.x))
+        mousePress(canvas, dragStartPoint.x, dragStartPoint.y, Qt.LeftButton)
+        mouseMove(canvas, targetPoint.x, targetPoint.y, 30)
+        mouseRelease(canvas, targetPoint.x, targetPoint.y, Qt.LeftButton)
+        verify(Math.abs(Number(AudioEditorController.timelineEventViews[0].fadeOut)
+            - expectedFade) <= framePerPixel)
 
         const clickX = Math.round(volumeLine.width * 0.45)
         const clickY = Math.round(volumeLine.height * 0.25)

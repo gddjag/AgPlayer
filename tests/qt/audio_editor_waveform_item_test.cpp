@@ -66,7 +66,7 @@ private slots:
         delete node;
     }
 
-    void highDensityStereoUsesOneTotalTwoPointsPerPixelBudget()
+    void highDensityStereoGivesEveryChannelItsFullLogicalPixelBudget()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(10.0);
@@ -80,11 +80,11 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QVERIFY(item.generatedPointCount() <= 20);
+        QCOMPARE(item.generatedPointCount(), 40);
         delete node;
     }
 
-    void stereoBudgetSkipsChannelsThatDoNotOwnALogicalPixel()
+    void onePixelStereoStillRepresentsEveryChannel()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(1.0);
@@ -98,7 +98,30 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QVERIFY(item.generatedPointCount() <= 2);
+        QCOMPARE(item.generatedPointCount(), 4);
+        delete node;
+    }
+
+    void sampleModeConnectsEveryConsecutiveSampleAtHighZoom()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(100.0);
+        item.setHeight(40.0);
+        item.setSampleMode(true);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -1.0, -1.0, 0.0, 0.0, 1.0, 1.0})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->drawingMode(),
+                 unsigned{QSGGeometry::DrawLines});
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        QCOMPARE(vertices[0].x, 0.0F);
+        QCOMPARE(vertices[1].x, 50.0F);
+        QCOMPARE(vertices[2].x, 50.0F);
+        QCOMPARE(vertices[3].x, 100.0F);
         delete node;
     }
 

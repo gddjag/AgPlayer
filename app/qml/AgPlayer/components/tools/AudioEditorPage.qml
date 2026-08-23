@@ -18,6 +18,9 @@ Rectangle {
     readonly property real responsiveContentHeight: narrowLayout ? 720
         : Math.max(height, 660)
     property bool inspectorExpanded: false
+    readonly property bool modalInputActive: openDialog.visible
+        || saveProjectDialog.visible || exportDirectoryDialog.visible
+        || discardDialog.visible
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
 
@@ -25,6 +28,10 @@ Rectangle {
         const active = page.Window.window ? page.Window.window.activeFocusItem : null
         return active && (active.inputMethodComposing !== undefined
             || active.selectedText !== undefined)
+    }
+    function editorShortcutAvailable() {
+        return page.visible && !page.textInputHasFocus()
+            && !page.modalInputActive
     }
     function splitAtPlayhead() {
         AudioEditorController.triggerAction("editor.split")
@@ -62,7 +69,7 @@ Rectangle {
         objectName: "editorSpaceShortcut"
         sequence: "Space"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
             && AudioEditorController.playbackSupported
             && AudioEditorController.hasDocument
         onActivated: AudioEditorController.playPause()
@@ -70,62 +77,116 @@ Rectangle {
     Shortcut {
         sequence: "Ctrl+1"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.setActiveTool("select")
     }
     Shortcut {
         sequence: "Ctrl+2"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.setActiveTool("scissors")
     }
     Shortcut {
         sequence: "S"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: page.splitAtPlayhead()
     }
     Shortcut {
         sequence: "Ctrl+B"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: page.splitAtPlayhead()
     }
     Shortcut {
         sequence: "Delete"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.deleteSelection")
     }
     Shortcut {
         sequence: "Ctrl+C"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.copy")
     }
     Shortcut {
         sequence: "Ctrl+X"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.cut")
     }
     Shortcut {
         sequence: "Ctrl+V"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.paste")
     }
     Shortcut {
         sequence: "Ctrl+Z"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.undo")
     }
     Shortcut {
         sequence: "Ctrl+Y"
         context: Qt.WindowShortcut
-        enabled: page.visible && !page.textInputHasFocus()
+        enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.redo")
+    }
+
+    Shortcut {
+        sequence: "Ctrl+O"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+        onActivated: openDialog.open()
+    }
+    Shortcut {
+        sequence: "Ctrl+S"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.hasDocument
+        onActivated: AudioEditorController.save()
+    }
+    Shortcut {
+        sequence: "Shift+C"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+        onActivated: AudioEditorController.triggerAction("editor.cropToSelection")
+    }
+    Shortcut {
+        sequence: "I"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+        onActivated: AudioEditorController.triggerAction("editor.fadeIn")
+    }
+    Shortcut {
+        sequence: "O"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+        onActivated: AudioEditorController.triggerAction("editor.fadeOut")
+    }
+    Shortcut {
+        sequence: "M"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+        onActivated: AudioEditorController.triggerAction("editor.silenceSelection")
+    }
+    Shortcut {
+        sequence: "Ctrl+N"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.hasDocument
+            && !AudioEditorController.busy
+        onActivated: AudioEditorController.reduceNoise()
+    }
+    Shortcut {
+        sequence: "Ctrl+Backspace"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.hasDocument
+            && !AudioEditorController.busy
+        onActivated: AudioEditorController.clearDocument()
     }
 
     Keys.onPressed: function(event) {
@@ -159,6 +220,7 @@ Rectangle {
     }
     Dialog {
         id: discardDialog
+        objectName: "editorDiscardDialog"
         title: qsTr("舍弃未保存更改？")
         modal: true
         anchors.centerIn: parent
@@ -465,7 +527,9 @@ Rectangle {
                             if (!AudioEditorController.recording) {
                                 AudioEditorController.startRecordingToTemporaryFile(
                                     recordingDeviceCombo.currentValue || "",
-                                    44100, 2, recordingMonitorSwitch.checked, false)
+                                    AudioEditorController.recordingSampleRate,
+                                    AudioEditorController.recordingChannels,
+                                    recordingMonitorSwitch.checked, false)
                             } else if (AudioEditorController.recordingPaused) {
                                 AudioEditorController.resumeRecording()
                             } else {
@@ -788,7 +852,9 @@ Rectangle {
                             Label { text: qsTr("录音格式"); color: "#c4d2df" }
                             ComboBox {
                                 objectName: "inspectorRecordingFormat"
-                                model: ["WAV (24-bit, 44.1 kHz)"]
+                                model: [qsTr("WAV (24-bit, %1 kHz)").arg(
+                                    (AudioEditorController.recordingSampleRate
+                                        / 1000).toFixed(1))]
                                 Layout.fillWidth: true
                                 enabled: AudioEditorController.recordingSupported
                                     && !AudioEditorController.recording

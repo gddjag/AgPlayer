@@ -35,6 +35,14 @@ int main()
     std::error_code ignored;
     fs::remove(output, ignored);
 
+    RecordingSession invalid_config_session;
+    RecordingConfig invalid_config;
+    invalid_config.sample_rate = 1;
+    require(!invalid_config_session.startManual(invalid_config),
+            "invalid recording config was accepted");
+    require(!invalid_config_session.lastError().empty(),
+            "invalid recording config did not expose an error");
+
     const fs::path rejected_output = fs::temp_directory_path()
         / "agplayer-recording-invalid-device.wav";
     fs::remove(rejected_output, ignored);
@@ -44,6 +52,9 @@ int main()
     RecordingSession rejected;
     require(!rejected.start(rejected_config),
             "invalid capture device was accepted");
+    require(rejected.lastError().find("WASAPI") != std::string::npos
+            && rejected.lastError().find("device") != std::string::npos,
+            "invalid capture device did not expose a specific WASAPI error");
     require(!fs::exists(rejected_output),
             "failed recording start created an output file");
 

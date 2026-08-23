@@ -7,6 +7,8 @@
 #include <QFileInfo>
 #include <QDateTime>
 #include <QDir>
+#include <QDrag>
+#include <QMimeData>
 #include <QPointer>
 #include <QSettings>
 #include <QStandardPaths>
@@ -434,6 +436,15 @@ struct AudioEditorController::PreviewRenderResult final {
     QString error;
 };
 
+struct AudioEditorController::SelectionDragRenderResult final {
+    bool success{};
+    std::uint64_t generation{};
+    qint64 selectionStart{};
+    qint64 selectionEnd{};
+    QString path;
+    QString error;
+};
+
 AudioEditorController::AudioEditorController(
     const ag_audio_backend backend, QObject* parent)
     : QObject(parent), actions_(this), viewport_(this)
@@ -501,6 +512,7 @@ AudioEditorController::AudioEditorController(
 AudioEditorController::~AudioEditorController()
 {
     cancelOperation();
+    invalidateSelectionDrag();
     pending_viewport_waveform_job_.reset();
     if (viewport_waveform_cancel_token_) {
         viewport_waveform_cancel_token_->store(true,
@@ -519,6 +531,9 @@ AudioEditorController::~AudioEditorController()
         noise_reduction_watcher_->future().waitForFinished();
     }
     if (preview_watcher_) preview_watcher_->future().waitForFinished();
+    if (selection_drag_watcher_) {
+        selection_drag_watcher_->future().waitForFinished();
+    }
     if (recording()) (void)recording_session_.stop();
     if (player_) {
         (void)ag_player_stop(player_);
@@ -573,6 +588,9 @@ QVariantList AudioEditorController::timelineEventViews() const
             }
             if (event_gesture_.kind == EventGestureKind::FadeOut) {
                 visible.fadeOut = event_gesture_.fadeOut;
+            }
+            if (event_gesture_.kind == EventGestureKind::FadeIn) {
+                visible.fadeIn = event_gesture_.fadeIn;
             }
         }
         QVariantList envelope;
@@ -1243,6 +1261,8 @@ bool AudioEditorController::setSelection(
     if (!has_document_ || !document_.setSelection({startFrame, endFrame})) {
         return false;
     }
+    invalidateSelectionDrag();
+    setLoopEnabled(true);
     (void)syncModifiedFromHistory();
     refreshActions();
     emit documentChanged();
@@ -1255,6 +1275,8 @@ bool AudioEditorController::clearSelection()
     if (!document_.clearSelection()) {
         return false;
     }
+    invalidateSelectionDrag();
+    setLoopEnabled(false);
     (void)syncModifiedFromHistory();
     refreshActions();
     emit documentChanged();
@@ -1531,6 +1553,7 @@ bool AudioEditorController::beginEventGesture(const QString& id,
     const EventGestureKind kind = operation == QStringLiteral("move")
         ? EventGestureKind::Move
         : operation == QStringLiteral("trim") ? EventGestureKind::Trim
+        : operation == QStringLiteral("fadeIn") ? EventGestureKind::FadeIn
         : operation == QStringLiteral("fadeOut") ? EventGestureKind::FadeOut
                                                : EventGestureKind::None;
     if (kind == EventGestureKind::None
@@ -1539,7 +1562,7 @@ bool AudioEditorController::beginEventGesture(const QString& id,
     }
     event_gesture_ = EventGesture{kind, *eventId, duplicate, false,
         event->timelineStart, event->sourceStart, event->sourceEnd,
-        event->fadeOut};
+        event->fadeIn, event->fadeOut};
     return true;
 }
 
@@ -1562,6 +1585,8 @@ bool AudioEditorController::endEventGesture()
         changed = document_.trimEvent(gesture.id, gesture.sourceStart,
                                       gesture.sourceEnd,
                                       gesture.timelineStart);
+    } else if (gesture.kind == EventGestureKind::FadeIn) {
+        changed = document_.setEventFadeIn(gesture.id, gesture.fadeIn);
     } else if (gesture.kind == EventGestureKind::FadeOut) {
         changed = document_.setEventFadeOut(gesture.id, gesture.fadeOut);
     }
@@ -1578,6 +1603,124 @@ bool AudioEditorController::cancelEventGesture()
     if (event_gesture_.kind == EventGestureKind::None) return false;
     event_gesture_ = {};
     emit documentChanged();
+    return true;
+}
+
+bool AudioEditorController::setEventFadeIn(const QString& id,
+                                           const qint64 frames)
+{
+    if (!has_document_ || busy()) return false;
+    const auto eventId = parseEventId(id);
+    if (!eventId) return false;
+    if (event_gesture_.kind != EventGestureKind::None) {
+        if (event_gesture_.kind != EventGestureKind::FadeIn
+            || event_gesture_.id != *eventId || frames < 0) {
+            return false;
+        }
+        const auto snapshot = document_.timelineSnapshot();
+        const auto event = std::find_if(snapshot.events.cbegin(), snapshot.events.cend(),
+            [eventId](const AudioEvent& value) { return value.id == *eventId; });
+        if (event == snapshot.events.cend()
+            || frames + event->fadeOut > agplayer::editor::audibleFrames(*event)) {
+            return false;
+        }
+        event_gesture_.fadeIn = frames;
+        event_gesture_.pending = true;
+        emit documentChanged();
+        return true;
+    }
+    if (!document_.setEventFadeIn(*eventId, frames)) return false;
+    finishTimelineMutation();
+    return true;
+}
+
+void AudioEditorController::invalidateSelectionDrag()
+{
+    selection_drag_generation_.fetch_add(1, std::memory_order_acq_rel);
+    if (selection_drag_cancel_token_) {
+        selection_drag_cancel_token_->store(true, std::memory_order_release);
+        selection_drag_cancel_token_.reset();
+    }
+    const bool changed = selection_drag_ready_ || !selection_drag_file_.isEmpty();
+    selection_drag_ready_ = false;
+    selection_drag_file_.clear();
+    if (changed) emit selectionDragChanged();
+}
+
+bool AudioEditorController::prepareSelectionDrag()
+{
+    const auto selection = document_.selection();
+    if (!has_document_ || busy() || !selection || selection_drag_watcher_
+        || !preview_directory_.isValid()) {
+        return false;
+    }
+    if (selection_drag_ready_ && selection_drag_file_.isLocalFile()
+        && QFileInfo::exists(selection_drag_file_.toLocalFile())) {
+        return true;
+    }
+
+    invalidateSelectionDrag();
+    const std::uint64_t generation = selection_drag_generation_.fetch_add(
+        1, std::memory_order_acq_rel) + 1;
+    const auto snapshot = document_.timelineSnapshot();
+    const QString path = preview_directory_.filePath(QStringLiteral(
+        "selection-drag-%1.wav").arg(generation));
+    auto cancelToken = std::make_shared<std::atomic_bool>(false);
+    selection_drag_cancel_token_ = cancelToken;
+    auto* watcher = new QFutureWatcher<SelectionDragRenderResult>(this);
+    selection_drag_watcher_ = watcher;
+    connect(watcher, &QFutureWatcher<SelectionDragRenderResult>::finished,
+            this, [this, watcher] {
+        selection_drag_watcher_ = nullptr;
+        const SelectionDragRenderResult result = watcher->result();
+        watcher->deleteLater();
+        const auto current = document_.selection();
+        if (result.generation != selection_drag_generation_.load(
+                std::memory_order_acquire)
+            || !current || current->start != result.selectionStart
+            || current->end != result.selectionEnd) {
+            return;
+        }
+        selection_drag_cancel_token_.reset();
+        if (!result.success) {
+            setError(tr("无法准备拖出片段：%1").arg(result.error));
+            emit selectionDragChanged();
+            return;
+        }
+        selection_drag_file_ = QUrl::fromLocalFile(result.path);
+        selection_drag_ready_ = true;
+        setError({});
+        emit selectionDragChanged();
+    });
+    watcher->setFuture(QtConcurrent::run(
+        [snapshot, selection, path, generation, cancelToken] {
+        SelectionDragRenderResult result;
+        result.generation = generation;
+        result.selectionStart = selection->start;
+        result.selectionEnd = selection->end;
+        result.path = path;
+        const auto rendered = DocumentRenderer{}.renderFloatWav(
+            snapshot, selection, std::filesystem::path(path.toStdWString()),
+            cancelToken.get());
+        result.success = rendered.success;
+        result.error = QString::fromStdString(rendered.message);
+        return result;
+    }));
+    return true;
+}
+
+bool AudioEditorController::startSelectionFileDrag(QObject* source)
+{
+    if (!source || !selection_drag_ready_
+        || !selection_drag_file_.isLocalFile()
+        || !QFileInfo::exists(selection_drag_file_.toLocalFile())) {
+        return false;
+    }
+    QDrag drag(source);
+    auto* mime = new QMimeData;
+    mime->setUrls({selection_drag_file_});
+    drag.setMimeData(mime);
+    (void)drag.exec(Qt::CopyAction);
     return true;
 }
 
@@ -1873,6 +2016,7 @@ bool AudioEditorController::startRecordingInternal(
         recording_directory_ = outputDir.absolutePath();
     }
     if (recording() || recording_start_watcher_ || recording_stop_watcher_) return false;
+    emit exclusivePreviewStarting();
     stopPlayback();
     agplayer::editor::RecordingConfig config;
     config.output_path = std::filesystem::path(path.toStdWString());
@@ -1898,7 +2042,11 @@ bool AudioEditorController::startRecordingInternal(
             recording_final_path_.clear();
             setState(has_document_ ? EditorSessionState::Ready
                                    : EditorSessionState::Empty);
-            setError(tr("无法启动录音设备，请检查设备与权限"));
+            const QString detail = QString::fromStdString(
+                recording_session_.lastError());
+            setError(detail.isEmpty()
+                ? tr("无法启动录音设备，请检查设备与权限")
+                : tr("无法启动录音：%1").arg(detail));
             emit recordingChanged();
             return;
         }
@@ -1971,7 +2119,12 @@ bool AudioEditorController::clearDocument()
     allow_document_replace_ = false;
     pending_clear_document_ = false;
     stopPlayback();
+    invalidateSelectionDrag();
     event_gesture_ = {};
+    if (active_tool_ != QStringLiteral("select")) {
+        active_tool_ = QStringLiteral("select");
+        emit toolChanged();
+    }
     document_ = AudioDocument{};
     source_path_.clear();
     playback_path_.clear();
@@ -2212,6 +2365,7 @@ bool AudioEditorController::playPause()
         emit playbackChanged();
         return true;
     }
+    emit exclusivePreviewStarting();
     const auto selection = document_.selection();
     if (selection && sample_rate_ > 0) {
         const qint64 start = selection->start * 1'000 / sample_rate_;
@@ -2773,6 +2927,7 @@ void AudioEditorController::finishTimelineMutation()
 {
     const qint64 requestedPlayhead = playhead_frame_;
     stopPlayback();
+    invalidateSelectionDrag();
     playback_path_.clear();
     syncProjectSourcesAndIssues();
     syncPrimarySourceSummary();
