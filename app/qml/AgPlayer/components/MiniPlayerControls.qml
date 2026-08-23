@@ -156,6 +156,7 @@ Rectangle {
                     text: root.currentTrackMetadata()
                     color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 9
                     elide: Text.ElideRight
+                    Layout.alignment: Qt.AlignBaseline
                     Layout.minimumWidth: 40
                     Layout.preferredWidth: Math.min(implicitWidth,
                                                     Math.max(40, parent.width
@@ -166,21 +167,31 @@ Rectangle {
                 RowLayout {
                     id: miniRating
                     objectName: "miniRating"; spacing: 1
+                    baselineOffset: 10
+                    Layout.alignment: Qt.AlignBaseline
                     Repeater {
                         model: 5
                         delegate: ThemedIcon {
                             required property int index
+                            objectName: "miniRatingStar-" + index
                             source: index < root.currentTrackRating() ? Theme.icon("star-fill") : Theme.icon("star-line")
                             tint: index < root.currentTrackRating() ? Theme.ratingColor(index) : Theme.iconSecondary
                             sourceSize.width: 10; sourceSize.height: 10
-                            Layout.preferredWidth: 11; Layout.preferredHeight: 14
+                            Layout.preferredWidth: sourceSize.width
+                            Layout.preferredHeight: sourceSize.height
+                            Layout.alignment: Qt.AlignBaseline
+                            baselineOffset: sourceSize.height
                         }
                     }
                 }
                 ToolButton {
                     id: favoriteButton
                     objectName: "miniFavoriteButton"
-                    Layout.preferredWidth: 20; Layout.preferredHeight: 18
+                    Layout.preferredWidth: icon.width
+                    Layout.preferredHeight: icon.height
+                    Layout.alignment: Qt.AlignBaseline
+                    baselineOffset: icon.height
+                    padding: 0
                     icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                     icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
                     icon.width: 13; icon.height: 13; enabled: root.currentRow() >= 0

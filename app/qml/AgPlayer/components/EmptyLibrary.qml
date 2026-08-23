@@ -11,8 +11,11 @@ Rectangle {
     signal importRequested()
 
     ColumnLayout {
+        id: emptyContent
+        objectName: "emptyLibraryContent"
         anchors.centerIn: parent
-        spacing: Theme.spacingLg
+        width: Math.min(520, Math.max(0, root.width - 24))
+        spacing: root.width <= 360 ? Theme.spacingSm : Theme.spacingLg
         visible: !importStatus.active
 
         Image {
@@ -44,11 +47,14 @@ Rectangle {
                   : qsTr("Drag audio files into the window or click below to import")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            font.pixelSize: root.width <= 360 ? 8 : 13
+            font.letterSpacing: root.width <= 360 ? -1.5 : 0
+            minimumPixelSize: 7
+            fontSizeMode: Text.HorizontalFit
             Layout.alignment: Qt.AlignHCenter
+            Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            Layout.maximumWidth: 360
+            wrapMode: Text.NoWrap
         }
 
         Button {

@@ -69,7 +69,7 @@ TrackWaveformThumbnailProvider::~TrackWaveformThumbnailProvider()
 QByteArray TrackWaveformThumbnailProvider::quantizeMixPeaks(
     const std::vector<float>& mix)
 {
-    QByteArray result(kPeakCount, '\0');
+    QByteArray result(kPeakDataSize, static_cast<char>(128));
     if (mix.empty()) {
         return result;
     }
@@ -91,7 +91,8 @@ QByteArray TrackWaveformThumbnailProvider::quantizeMixPeaks(
                 maximum = std::max(maximum, std::abs(sample));
             }
         }
-        result[bucket] = static_cast<char>(quantizeAmplitude(maximum));
+        result[bucket * 2] = static_cast<char>(quantizeSigned(-maximum));
+        result[bucket * 2 + 1] = static_cast<char>(quantizeSigned(maximum));
     }
     return result;
 }
@@ -275,11 +276,12 @@ QByteArray TrackWaveformThumbnailProvider::loadFromV2CacheOnly(
     return {};
 }
 
-unsigned char TrackWaveformThumbnailProvider::quantizeAmplitude(
+unsigned char TrackWaveformThumbnailProvider::quantizeSigned(
     const float amplitude)
 {
-    const float clamped = std::clamp(amplitude, 0.0F, 1.0F);
-    return static_cast<unsigned char>(std::lround(clamped * 255.0F));
+    const float clamped = std::clamp(amplitude, -1.0F, 1.0F);
+    return static_cast<unsigned char>(
+        std::lround((clamped + 1.0F) * 127.5F));
 }
 
 void TrackWaveformThumbnailProvider::startNext()

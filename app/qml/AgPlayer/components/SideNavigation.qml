@@ -297,6 +297,7 @@ Item {
             readonly property bool selected: root.nodeIsSelected(
                                                  nodeType, nodeId,
                                                  resourceFolder)
+            property real dropLoadPulse: 0
             width: navigationList.width
             height: nodeType === "resourceSection" ? 54 : 38
             radius: nodeType === "resourceSection" ? 0 : Theme.radiusSm
@@ -459,10 +460,48 @@ Item {
                     }
                 }
             }
+            Rectangle {
+                objectName: nodeRow.nodeType === "playlist"
+                            ? "playlistDropFeedback-"
+                              + root.playlistIdForNode(nodeRow.nodeId) : ""
+                anchors.fill: parent
+                radius: nodeRow.radius
+                visible: playlistDropTarget.containsDrag
+                         || nodeRow.dropLoadPulse > 0
+                color: playlistDropTarget.containsDrag
+                       ? Theme.listSelectedSurface : "transparent"
+                border.color: Theme.accent
+                border.width: 1
+                opacity: playlistDropTarget.containsDrag
+                         ? 1 : nodeRow.dropLoadPulse
+                scale: 1 - nodeRow.dropLoadPulse * 0.04
+                z: 3
+            }
+            SequentialAnimation {
+                id: playlistLoadAnimation
+                NumberAnimation {
+                    target: nodeRow
+                    property: "dropLoadPulse"
+                    from: 0
+                    to: 1
+                    duration: 90
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: nodeRow
+                    property: "dropLoadPulse"
+                    from: 1
+                    to: 0
+                    duration: 150
+                    easing.type: Easing.InCubic
+                }
+            }
             DropArea {
+                id: playlistDropTarget
                 objectName: nodeRow.nodeType === "playlist"
                             ? "playlistDropTarget-"
                               + root.playlistIdForNode(nodeRow.nodeId) : ""
+                property int acceptedAnimationCount: 0
                 anchors.fill: parent
                 enabled: nodeRow.nodeType === "playlist"
                 keys: ["application/x-agplayer-track-ids"]
@@ -486,6 +525,8 @@ Item {
                         } else {
                             root.playlistModel.addTracks(targetId, ids)
                         }
+                        acceptedAnimationCount += 1
+                        playlistLoadAnimation.restart()
                         drop.acceptProposedAction()
                     }
                 }

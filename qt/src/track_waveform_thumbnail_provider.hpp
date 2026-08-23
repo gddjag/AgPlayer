@@ -19,7 +19,8 @@ class TrackWaveformThumbnailProvider final : public QObject {
     Q_OBJECT
 
 public:
-    static constexpr int kPeakCount = 128;
+    static constexpr int kPeakCount = 2048;
+    static constexpr int kPeakDataSize = kPeakCount * 2;
     static constexpr int kMaxCacheEntries = 256;
     static constexpr int kMaxQueuedJobs = 256;
 
@@ -81,7 +82,7 @@ private:
 
     [[nodiscard]] static QByteArray loadFromV2CacheOnly(
         const QString& cacheDirectory, const QString& sourcePath);
-    [[nodiscard]] static unsigned char quantizeAmplitude(float amplitude);
+    [[nodiscard]] static unsigned char quantizeSigned(float amplitude);
     void startNext();
     void finishActive();
     void touchLru(const QString& trackId);

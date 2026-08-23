@@ -342,6 +342,7 @@ Item {
                 required property int trackCount
                 required property color color
                 required property bool selected
+                property real dropLoadPulse: 0
                 width: tagGrid.cellWidth
                 height: tagGrid.cellHeight
 
@@ -354,8 +355,10 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     height: 24
                     radius: 12
-                    color: tagCell.selected ? Theme.listSelectedSurface
-                                            : "transparent"
+                    color: tagDropTarget.containsDrag
+                           ? Theme.listSelectedSurface
+                           : tagCell.selected ? Theme.listSelectedSurface
+                                              : "transparent"
                     border.color: tagCell.color
                     border.width: 1
 
@@ -397,7 +400,9 @@ Item {
                         }
                     }
                     DropArea {
+                        id: tagDropTarget
                         objectName: "tagDropTarget-" + tagCell.key
+                        property int acceptedAnimationCount: 0
                         anchors.fill: parent
                         keys: ["application/x-agplayer-track-ids"]
                         onDropped: function(drop) {
@@ -407,13 +412,49 @@ Item {
                             if (ids.length === 0 && drop.source
                                     && drop.source.dragTrackIds)
                                 ids = drop.source.dragTrackIds
-                            if (root.applyTagDrop(ids, tagCell.displayName))
+                            if (root.applyTagDrop(ids, tagCell.displayName)) {
+                                acceptedAnimationCount += 1
+                                tagLoadAnimation.restart()
                                 drop.acceptProposedAction()
+                            }
                         }
+                    }
+                    Rectangle {
+                        objectName: "tagDropFeedback-" + tagCell.key
+                        anchors.fill: parent
+                        radius: parent.radius
+                        visible: tagDropTarget.containsDrag
+                                 || tagCell.dropLoadPulse > 0
+                        color: "transparent"
+                        border.color: tagCell.color
+                        border.width: 2
+                        opacity: tagDropTarget.containsDrag
+                                 ? 1 : tagCell.dropLoadPulse
+                        scale: 1 - tagCell.dropLoadPulse * 0.06
+                        z: 1
                     }
                     ToolTip.visible: tagHover.hovered && tagName.truncated
                     ToolTip.text: tagCell.displayName
                     ToolTip.delay: 350
+                }
+                SequentialAnimation {
+                    id: tagLoadAnimation
+                    NumberAnimation {
+                        target: tagCell
+                        property: "dropLoadPulse"
+                        from: 0
+                        to: 1
+                        duration: 90
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        target: tagCell
+                        property: "dropLoadPulse"
+                        from: 1
+                        to: 0
+                        duration: 150
+                        easing.type: Easing.InCubic
+                    }
                 }
             }
         }

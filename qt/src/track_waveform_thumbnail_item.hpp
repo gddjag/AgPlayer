@@ -13,7 +13,8 @@ class TrackWaveformThumbnailItem : public QQuickItem {
                    NOTIFY waveformColorChanged)
 
 public:
-    static constexpr int kPeakCount = 128;
+    static constexpr int kPeakCount = 2048;
+    static constexpr int kPeakDataSize = kPeakCount * 2;
 
     explicit TrackWaveformThumbnailItem(QQuickItem* parent = nullptr);
 

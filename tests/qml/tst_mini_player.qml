@@ -199,6 +199,8 @@ TestCase {
         var rating = findChild(miniPlayer, "miniRating")
         var favorite = findChild(miniPlayer, "miniFavoriteButton")
         verify(metadataRow && title && metadata && rating && favorite)
+        var firstStar = findChild(rating, "miniRatingStar-0")
+        verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
                "rating and favorite must follow artist/album instead of the title")
         verify(rating.x >= metadata.x + metadata.width,
@@ -208,6 +210,15 @@ TestCase {
         verify(metadata.text.indexOf("无标签") < 0,
                "empty tags must be omitted instead of showing placeholder text")
         compare(rating.spacing, 1)
+        compare(firstStar.width, firstStar.sourceSize.width)
+        compare(firstStar.height, firstStar.sourceSize.height)
+        compare(favorite.width, favorite.icon.width)
+        compare(favorite.height, favorite.icon.height)
+        compare(Math.round(firstStar.mapToItem(metadataRow, 0,
+                                               firstStar.baselineOffset).y),
+                Math.round(favorite.mapToItem(metadataRow, 0,
+                                              favorite.baselineOffset).y),
+                "stars and favorite must share one visual baseline")
         compare(favorite.icon.width, 13)
         compare(favorite.icon.height, 13)
         compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)

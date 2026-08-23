@@ -407,17 +407,20 @@ ListView {
 
     Loader {
         id: dragPreviewLoader
+        parent: Overlay.overlay
         active: false
         onLoaded: root.dragPreviewCreationCount += 1
         z: 1000
         x: root.activeDragProxy
-           ? root.activeDragProxy.mapToItem(root, 12, 12).x : 0
+           ? root.activeDragProxy.mapToItem(parent, 12, 12).x : 0
         y: root.activeDragProxy
-           ? root.activeDragProxy.mapToItem(root, 12, 12).y : 0
+           ? root.activeDragProxy.mapToItem(parent, 12, 12).y : 0
         sourceComponent: Component {
             Rectangle {
                 objectName: "trackDragPreview"
                 readonly property int selectedCount: root.dragTrackIds.length
+                readonly property bool windowOverlayHosted:
+                    dragPreviewLoader.parent === Overlay.overlay
                 width: Math.min(300, previewLayout.implicitWidth + 24)
                 height: 46
                 radius: Theme.radiusSm

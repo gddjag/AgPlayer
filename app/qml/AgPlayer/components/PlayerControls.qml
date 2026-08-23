@@ -203,16 +203,21 @@ Rectangle {
             ToolTip.visible: hovered
             background: null
         }
+    }
 
-        Item {
-            id: volumeControl
-            objectName: "mainVolumeControl"
-            property alias expandedForQa: root.volumeExpanded
-            Layout.preferredWidth: root.emptyMode
-                                   ? 44 : 44 + volumeSlider.width
-                                          + volumePercent.width
-            Layout.preferredHeight: 44
-            clip: false
+    Item {
+        id: volumeControl
+        objectName: "mainVolumeControl"
+        property alias expandedForQa: root.volumeExpanded
+        anchors.left: centerControls.right
+        anchors.leftMargin: 12
+        anchors.verticalCenter: centerControls.verticalCenter
+        width: root.emptyMode ? 44 : 44 + volumeSlider.width
+                                  + volumePercent.width
+                                  + (volumePercent.width > 0 ? 6 : 0)
+        height: 44
+        z: 10
+        clip: false
 
             HoverHandler {
                 id: volumeHover
@@ -341,7 +346,6 @@ Rectangle {
                 }
             }
         }
-    }
 
     ToolButton {
         objectName: "miniPlayerButton"

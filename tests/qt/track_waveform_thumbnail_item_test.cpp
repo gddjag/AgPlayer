@@ -18,7 +18,9 @@ class TrackWaveformThumbnailItemTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void createsOneGeometryNodeFor128Bytes();
+    void usesEveryCanvasPixelForContinuousEnvelope();
+    void downsamplingPreservesMinimumAndMaximumEnvelope();
+    void switchesToAntialiasedSampledPolylineAboveCachedDensity();
     void reusesGeometryWhenOnlyColorChanges();
     void rebuildsOnlyForPeaksOrSize();
     void clearsOldNodeForInvalidContentOrSize();
@@ -27,10 +29,21 @@ private slots:
 
 namespace {
 
-QByteArray fullPeaks(const unsigned char value)
+constexpr int kExpectedThumbnailBuckets = 2048;
+constexpr int kExpectedThumbnailBytes = kExpectedThumbnailBuckets * 2;
+
+QByteArray fullEnvelope(const unsigned char extent)
 {
-    return QByteArray(TrackWaveformThumbnailItem::kPeakCount,
-                      static_cast<char>(value));
+    QByteArray result(kExpectedThumbnailBytes, '\0');
+    const unsigned char lower = extent >= 128U
+        ? 0U : static_cast<unsigned char>(128U - extent);
+    const unsigned char upper = extent >= 128U
+        ? 255U : static_cast<unsigned char>(128U + extent);
+    for (int bucket = 0; bucket < kExpectedThumbnailBuckets; ++bucket) {
+        result[bucket * 2] = static_cast<char>(lower);
+        result[bucket * 2 + 1] = static_cast<char>(upper);
+    }
+    return result;
 }
 
 QSGGeometryNode* geometryNode(QSGNode* node)
@@ -40,28 +53,70 @@ QSGGeometryNode* geometryNode(QSGNode* node)
 
 } // namespace
 
-void TrackWaveformThumbnailItemTest::createsOneGeometryNodeFor128Bytes()
+void TrackWaveformThumbnailItemTest::usesEveryCanvasPixelForContinuousEnvelope()
 {
-    // Catches accidental per-peak child nodes or a vertex count other than
-    // two endpoints for each of the fixed 128 amplitude bytes.
+    // Catches returning to a fixed-width 128-line thumbnail which becomes
+    // visibly sparse when the title column grows.
     TestableTrackWaveformThumbnailItem item;
-    item.setWidth(128.0);
+    item.setWidth(320.0);
     item.setHeight(10.0);
-    item.setPeaks(fullPeaks(255U));
+    item.setPeaks(fullEnvelope(128U));
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     QCOMPARE(node->childCount(), 0);
-    QCOMPARE(geometryNode(node)->geometry()->vertexCount(), 256);
+    QCOMPARE(geometryNode(node)->geometry()->vertexCount(), 640);
     QCOMPARE(geometryNode(node)->geometry()->drawingMode(),
-             QSGGeometry::DrawLines);
+             QSGGeometry::DrawTriangleStrip);
 
     const auto* vertices =
         geometryNode(node)->geometry()->vertexDataAsPoint2D();
     QCOMPARE(vertices[0].x, 0.0F);
     QCOMPARE(vertices[0].y, 0.0F);
     QCOMPARE(vertices[1].y, 10.0F);
-    QCOMPARE(vertices[254].x, 128.0F);
+    QCOMPARE(vertices[638].x, 320.0F);
+    delete node;
+}
+
+void TrackWaveformThumbnailItemTest::downsamplingPreservesMinimumAndMaximumEnvelope()
+{
+    // Catches point sampling that loses a narrow transient between two
+    // destination pixels.
+    QByteArray peaks = fullEnvelope(0U);
+    peaks[500 * 2] = static_cast<char>(0U);
+    peaks[500 * 2 + 1] = static_cast<char>(255U);
+
+    TestableTrackWaveformThumbnailItem item;
+    item.setWidth(2.0);
+    item.setHeight(10.0);
+    item.setPeaks(peaks);
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* vertices =
+        geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    QCOMPARE(vertices[0].y, 0.0F);
+    QCOMPARE(vertices[1].y, 10.0F);
+    QCOMPARE(vertices[2].y, 10.0F * 128.0F / 255.0F);
+    QCOMPARE(vertices[3].y, 10.0F * 128.0F / 255.0F);
+    delete node;
+}
+
+void TrackWaveformThumbnailItemTest::switchesToAntialiasedSampledPolylineAboveCachedDensity()
+{
+    // Catches stretching the low-zoom envelope into wide aliased columns
+    // instead of sampling a smooth outline at every physical canvas pixel.
+    TestableTrackWaveformThumbnailItem item;
+    item.setWidth(4096.0);
+    item.setHeight(10.0);
+    item.setPeaks(fullEnvelope(64U));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    QCOMPARE(geometryNode(node)->geometry()->drawingMode(),
+             QSGGeometry::DrawLineStrip);
+    QCOMPARE(geometryNode(node)->geometry()->vertexCount(), 8193);
+    QVERIFY(item.antialiasing());
     delete node;
 }
 
@@ -71,7 +126,7 @@ void TrackWaveformThumbnailItemTest::reusesGeometryWhenOnlyColorChanges()
     TestableTrackWaveformThumbnailItem item;
     item.setWidth(128.0);
     item.setHeight(10.0);
-    item.setPeaks(fullPeaks(128U));
+    item.setPeaks(fullEnvelope(64U));
     item.setWaveformColor(QColor(QStringLiteral("#112233")));
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
@@ -99,7 +154,7 @@ void TrackWaveformThumbnailItemTest::rebuildsOnlyForPeaksOrSize()
     TestableTrackWaveformThumbnailItem item;
     item.setWidth(128.0);
     item.setHeight(10.0);
-    const QByteArray initial = fullPeaks(64U);
+    const QByteArray initial = fullEnvelope(32U);
     item.setPeaks(initial);
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
@@ -111,17 +166,19 @@ void TrackWaveformThumbnailItemTest::rebuildsOnlyForPeaksOrSize()
     node = item.updatePaintNode(node, nullptr);
     QCOMPARE(vertices[0].y, -123.0F);
 
-    item.setPeaks(fullPeaks(192U));
+    item.setPeaks(fullEnvelope(96U));
     node = item.updatePaintNode(node, nullptr);
     QVERIFY(vertices[0].y >= 0.0F);
 
     item.setWidth(256.0);
     node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(vertices[254].x, 256.0F);
+    vertices = geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    QCOMPARE(vertices[510].x, 256.0F);
 
     item.setHeight(20.0);
     node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(vertices[0].y, 10.0F - 10.0F * 192.0F / 255.0F);
+    vertices = geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    QCOMPARE(vertices[0].y, 20.0F * 32.0F / 255.0F);
     delete node;
 }
 
@@ -130,12 +187,13 @@ void TrackWaveformThumbnailItemTest::clearsOldNodeForInvalidContentOrSize()
     // Catches stale geometry surviving after delegate reuse supplies empty or
     // malformed peaks, or after the item is collapsed to a boundary size.
     const QList<QByteArray> invalidPeaks{
-        QByteArray{}, QByteArray(127, '\1'), QByteArray(129, '\1')};
+        QByteArray{}, QByteArray(kExpectedThumbnailBytes - 1, '\1'),
+        QByteArray(kExpectedThumbnailBytes + 1, '\1')};
     for (const QByteArray& invalid : invalidPeaks) {
         TestableTrackWaveformThumbnailItem item;
         item.setWidth(128.0);
         item.setHeight(10.0);
-        item.setPeaks(fullPeaks(255U));
+        item.setPeaks(fullEnvelope(128U));
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         item.setPeaks(invalid);
@@ -143,7 +201,7 @@ void TrackWaveformThumbnailItemTest::clearsOldNodeForInvalidContentOrSize()
     }
 
     TestableTrackWaveformThumbnailItem item;
-    item.setPeaks(fullPeaks(255U));
+    item.setPeaks(fullEnvelope(128U));
     item.setWidth(0.0);
     item.setHeight(10.0);
     QCOMPARE(item.updatePaintNode(nullptr, nullptr), nullptr);

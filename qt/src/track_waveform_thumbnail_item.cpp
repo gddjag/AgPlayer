@@ -3,6 +3,10 @@
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
+#include <QQuickWindow>
+
+#include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -10,9 +14,9 @@ class TrackWaveformThumbnailNode final : public QSGGeometryNode {
 public:
     TrackWaveformThumbnailNode()
         : geometry(QSGGeometry::defaultAttributes_Point2D(),
-                   TrackWaveformThumbnailItem::kPeakCount * 2)
+                   0)
     {
-        geometry.setDrawingMode(QSGGeometry::DrawLines);
+        geometry.setDrawingMode(QSGGeometry::DrawTriangleStrip);
         geometry.setLineWidth(1.0F);
         geometry.setVertexDataPattern(QSGGeometry::DynamicPattern);
         setGeometry(&geometry);
@@ -31,6 +35,7 @@ TrackWaveformThumbnailItem::TrackWaveformThumbnailItem(QQuickItem* parent)
     : QQuickItem(parent)
 {
     setFlag(ItemHasContents, true);
+    setAntialiasing(true);
 }
 
 QByteArray TrackWaveformThumbnailItem::peaks() const
@@ -75,7 +80,8 @@ void TrackWaveformThumbnailItem::geometryChange(const QRectF& newGeometry,
 QSGNode* TrackWaveformThumbnailItem::updatePaintNode(
     QSGNode* oldNode, UpdatePaintNodeData*)
 {
-    if (peaks_.size() != kPeakCount || width() <= 0.0 || height() <= 0.0) {
+    if (peaks_.size() != kPeakDataSize
+        || width() <= 0.0 || height() <= 0.0) {
         delete oldNode;
         return nullptr;
     }
@@ -113,17 +119,76 @@ void TrackWaveformThumbnailItem::markColorDirty()
 
 void TrackWaveformThumbnailItem::rebuildGeometry(QSGGeometry* geometry)
 {
-    auto* vertices = geometry->vertexDataAsPoint2D();
-    const qreal center = height() * 0.5;
-    const qreal halfHeight = center;
-    for (int index = 0; index < kPeakCount; ++index) {
-        const qreal x = static_cast<qreal>(index) * width()
-            / static_cast<qreal>(kPeakCount - 1);
-        const auto value = static_cast<unsigned char>(peaks_.at(index));
-        const qreal extent = halfHeight * static_cast<qreal>(value) / 255.0;
-        vertices[index * 2].set(static_cast<float>(x),
-                                static_cast<float>(center - extent));
-        vertices[index * 2 + 1].set(static_cast<float>(x),
-                                    static_cast<float>(center + extent));
+    const qreal deviceScale = window()
+        ? std::max<qreal>(1.0, window()->effectiveDevicePixelRatio()) : 1.0;
+    const int pixelColumns = std::clamp(
+        static_cast<int>(std::ceil(width() * deviceScale)), 2, 16384);
+    const bool sampledPolyline = pixelColumns > kPeakCount;
+    const int vertexCount = sampledPolyline
+        ? pixelColumns * 2 + 1 : pixelColumns * 2;
+    if (geometry->vertexCount() != vertexCount) {
+        geometry->allocate(vertexCount);
     }
+    geometry->setDrawingMode(sampledPolyline
+        ? QSGGeometry::DrawLineStrip : QSGGeometry::DrawTriangleStrip);
+
+    auto* vertices = geometry->vertexDataAsPoint2D();
+    const auto byteAt = [this](const int bucket, const int endpoint) {
+        return static_cast<unsigned char>(
+            peaks_.at(bucket * 2 + endpoint));
+    };
+    const auto xForColumn = [this, pixelColumns](const int column) {
+        return static_cast<qreal>(column) * width()
+            / static_cast<qreal>(pixelColumns - 1);
+    };
+    const auto yForByte = [this](const qreal value) {
+        return height() * value / 255.0;
+    };
+
+    if (!sampledPolyline) {
+        for (int column = 0; column < pixelColumns; ++column) {
+            const int first = kPeakCount * column / pixelColumns;
+            const int last = std::max(
+                first + 1,
+                (kPeakCount * (column + 1) + pixelColumns - 1)
+                    / pixelColumns);
+            unsigned char minimum = 255U;
+            unsigned char maximum = 0U;
+            for (int bucket = first; bucket < std::min(last, kPeakCount);
+                 ++bucket) {
+                minimum = std::min(minimum, byteAt(bucket, 0));
+                maximum = std::max(maximum, byteAt(bucket, 1));
+            }
+            const float x = static_cast<float>(xForColumn(column));
+            vertices[column * 2].set(
+                x, static_cast<float>(yForByte(minimum)));
+            vertices[column * 2 + 1].set(
+                x, static_cast<float>(yForByte(maximum)));
+        }
+        return;
+    }
+
+    const auto interpolatedEndpoint = [this, &byteAt, pixelColumns](
+                                           const int column,
+                                           const int endpoint) {
+        const qreal position = static_cast<qreal>(column)
+            * static_cast<qreal>(kPeakCount - 1)
+            / static_cast<qreal>(pixelColumns - 1);
+        const int first = static_cast<int>(std::floor(position));
+        const int second = std::min(first + 1, kPeakCount - 1);
+        const qreal fraction = position - static_cast<qreal>(first);
+        return static_cast<qreal>(byteAt(first, endpoint))
+            + (static_cast<qreal>(byteAt(second, endpoint))
+               - static_cast<qreal>(byteAt(first, endpoint))) * fraction;
+    };
+    for (int column = 0; column < pixelColumns; ++column) {
+        vertices[column].set(
+            static_cast<float>(xForColumn(column)),
+            static_cast<float>(yForByte(interpolatedEndpoint(column, 0))));
+        const int reverse = pixelColumns - 1 - column;
+        vertices[pixelColumns + column].set(
+            static_cast<float>(xForColumn(reverse)),
+            static_cast<float>(yForByte(interpolatedEndpoint(reverse, 1))));
+    }
+    vertices[vertexCount - 1] = vertices[0];
 }

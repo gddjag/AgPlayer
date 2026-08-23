@@ -629,11 +629,22 @@ TestCase {
 
     function test_empty_playlist_shows_centered_import_action_and_formats() {
         var empty = emptyLibraryComponent.createObject(mainWindow.contentItem, {
-            "playlistMode": true
+            "playlistMode": true,
+            "width": 320
         })
         verify(empty)
+        var formats = findChild(empty, "emptyLibraryFormats")
         compare(findChild(empty, "emptyLibraryTitle").text, "Import music")
-        verify(findChild(empty, "emptyLibraryFormats").text.indexOf("MP3") >= 0)
+        verify(formats.text.indexOf("MP3") >= 0)
+        compare(formats.wrapMode, Text.NoWrap)
+        compare(formats.lineCount, 1,
+                "the supported-format explanation must never wrap")
+        verify(formats.paintedWidth <= empty.width - 24,
+               "the single format line must tighten to fit the minimum width; "
+               + "painted=" + formats.paintedWidth + ", width=" + formats.width
+               + ", font=" + formats.font.pixelSize)
+        verify(formats.font.pixelSize < 13,
+               "the minimum-width state must tighten typography before wrapping")
         compare(findChild(empty, "emptyImportButton").text, "Import music")
         empty.destroy()
     }
@@ -1268,10 +1279,16 @@ TestCase {
         verify(preview, "drag start must lazily create one shared preview")
         compare(preview.opacity, 0.68)
         compare(preview.selectedCount, 2)
+        verify(preview.windowOverlayHosted,
+               "the drag preview must live in the window overlay, outside ListView clipping")
         mouseMove(firstArea, targetPoint.x, targetPoint.y,
                   60, Qt.LeftButton)
         compare(list.dragPreviewCreationCount, 1)
         tryVerify(function() { return target.containsDrag }, 500)
+        var feedback = findChild(navigation,
+                                 "playlistDropFeedback-" + playlistId)
+        verify(feedback && feedback.visible,
+               "a playlist must show a clear accepting hover state")
         mouseRelease(firstArea, targetPoint.x, targetPoint.y,
                      Qt.LeftButton)
 
@@ -1280,6 +1297,8 @@ TestCase {
         }, 500)
         verify(PlaylistModel.containsTrack(playlistId, ids[1]),
                "all Ctrl-selected rows must arrive in the target playlist")
+        compare(target.acceptedAnimationCount, 1,
+                "a successful playlist drop must play one lightweight load pulse")
         tryVerify(function() { return !findChild(list, "trackDragPreview") }, 500)
         PlaylistModel.removePlaylist(playlistId)
         list.destroy()
@@ -1925,6 +1944,35 @@ TestCase {
         PlaybackController.setVolume(previousVolume)
     }
 
+    function test_player_core_controls_do_not_shift_when_volume_expands() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        var controls = findChild(mainWindow, "playerControls")
+        var core = findChild(mainWindow, "centerPlaybackControls")
+        var play = findChild(mainWindow, "playPauseButton")
+        var volume = findChild(mainWindow, "mainVolumeControl")
+        verify(controls && core && play && volume)
+
+        volume.expandedForQa = false
+        wait(260)
+        var widthBefore = core.width
+        var playCenterBefore = play.mapToItem(controls,
+                                              play.width / 2,
+                                              play.height / 2).x
+        volume.expandedForQa = true
+        wait(220)
+        compare(core.width, widthBefore,
+                "the right-side volume flyout must not enter core layout width")
+        compare(Math.round(play.mapToItem(controls,
+                                          play.width / 2,
+                                          play.height / 2).x),
+                Math.round(playCenterBefore),
+                "expanding volume must not move the core transport controls")
+        verify(volume.x >= core.x + core.width,
+               "the volume control must float to the right of the centered core")
+        volume.expandedForQa = false
+    }
+
     function test_main_volume_flyout_stays_open_for_two_seconds_after_leave() {
         var control = findChild(mainWindow, "mainVolumeControl")
         var closeTimer = findChild(mainWindow, "mainVolumeCloseTimer")
@@ -2546,6 +2594,8 @@ TestCase {
         verify(dropTarget)
         verify(nativeDropHelper.sendTrackIds(dropTarget, [ids[0], ids[1]]),
                "the tag pill must accept the real track-id MIME payload")
+        compare(dropTarget.acceptedAnimationCount, 1,
+                "a successful tag drop must play one lightweight load pulse")
 
         var firstTags = LibraryModel.data(
                     LibraryModel.index(LibraryModel.indexForTrackId(ids[0]), 0),
