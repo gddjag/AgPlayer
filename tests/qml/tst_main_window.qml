@@ -2929,12 +2929,73 @@ TestCase {
         }, 500, "a visible non-first-screen row must start the root drag")
         compare(list.draggedTrackId, "drag-scroll-20",
                 "the drag must start from the visible row under the pointer")
+        var proxyViewport = proxy.mapToItem(list, 0, 0)
+        compare(Math.round(proxyViewport.x), Math.round(viewportPoint.x),
+                "the Overlay proxy origin must use the HandlerPoint viewport x")
+        compare(Math.round(proxyViewport.y), Math.round(viewportPoint.y),
+                "the Overlay proxy origin must use the HandlerPoint viewport y")
 
         list.cancelTrackDrag()
         mouseRelease(host, host.width / 2, host.height / 2, Qt.LeftButton)
         list.destroy()
         host.destroy()
         model.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task5_scrolled_visible_rows_reorder_locally() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        nativeDropHelper.ensureSortableTracks()
+        nativeDropHelper.ensureLongTitleTrack()
+
+        var host = trackListHostComponent.createObject(mainWindow.contentItem, {
+            "height": 130
+        })
+        var list = trackListComponent.createObject(host, {
+            "width": host.width,
+            "height": host.height
+        })
+        verify(host && list)
+        tryVerify(function() { return list.count >= 4 }, 500)
+        list.positionViewAtEnd()
+        tryVerify(function() { return list.contentY > 0 }, 500,
+                  "the local reorder must exercise a scrolled viewport")
+        var fromIndex = list.count - 1
+        var targetIndex = fromIndex - 1
+        var fromRow = list.itemAtIndex(fromIndex)
+        var targetRow = list.itemAtIndex(targetIndex)
+        verify(fromRow && targetRow)
+        var draggedId = fromRow.trackId
+        var targetId = targetRow.trackId
+        var area = findChild(fromRow, "trackRowDragArea")
+        verify(area)
+        var targetPoint = targetRow.mapToItem(
+                    area, targetRow.width / 2, targetRow.height / 2)
+        var targetViewport = targetRow.mapToItem(
+                    list, targetRow.width / 2, targetRow.height / 2)
+        verify(list.isLocalTrackReorderPoint(targetViewport),
+               "the release row center must be a valid local reorder point")
+
+        var proxy = findChild(list, "trackDragProxy")
+        verify(proxy)
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        tryVerify(function() {
+            return list.dragSessionActive && proxy.Drag.active
+        }, 500)
+        mouseMove(area, targetPoint.x, targetPoint.y, 60, Qt.LeftButton)
+        mouseRelease(area, targetPoint.x, targetPoint.y, Qt.LeftButton)
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+
+        tryVerify(function() {
+            return LibraryModel.indexForTrackId(draggedId) === targetIndex
+                    && LibraryModel.indexForTrackId(targetId) === fromIndex
+        }, 500, "a valid local release must reorder within a scrolled list")
+        LibraryModel.reorderTracks([targetId], draggedId)
+        list.destroy()
+        host.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 

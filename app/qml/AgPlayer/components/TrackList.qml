@@ -518,46 +518,63 @@ ListView {
                          JSON.stringify(root.dragTrackIds)})
     }
 
-    DragHandler {
-        id: windowTrackDragHandler
-        parent: root
-        target: windowDragProxy
-        acceptedButtons: Qt.LeftButton
-        grabPermissions: PointerHandler.CanTakeOverFromAnything
-                         | PointerHandler.ApprovesTakeOverByAnything
-        property bool ownsTrackSession: false
-        property real activeTranslationY: 0
-        onTranslationChanged: {
-            if (active)
-                activeTranslationY = translation.y
-        }
-        onActiveChanged: {
-            if (active) {
-                activeTranslationY = 0
-                var viewportPress = root.contentItem.mapToItem(
-                            root, centroid.pressPosition.x,
-                            centroid.pressPosition.y)
-                var row = root.dragRowAtViewportPoint(viewportPress)
-                if (!row)
-                    return
-                if (!root.isSelected(row.trackId))
-                    root.selectOnly(row.trackId, row.index)
-                var pointerOrigin = root.mapToItem(
-                            windowDragProxy.parent,
-                            viewportPress.x, viewportPress.y)
-                windowDragProxy.x = pointerOrigin.x
-                windowDragProxy.y = pointerOrigin.y
-                root.beginTrackDrag(row.trackId, row.dragTrackIds,
-                                    row.title, row.dragCoverSource,
-                                    windowDragProxy, row.y, row.height)
-                windowDragProxy.Drag.active = true
-                ownsTrackSession = true
-            } else if (ownsTrackSession) {
-                ownsTrackSession = false
-                var viewportRelease = root.contentItem.mapToItem(
-                            root, centroid.position.x, centroid.position.y)
-                root.completeTrackDrag(windowDragProxy, activeTranslationY,
-                                       viewportRelease)
+    Item {
+        id: windowTrackDragHost
+        parent: root.parent
+        x: root.x
+        y: root.y
+        z: root.z + 1
+        width: root.width
+        height: root.height
+        visible: root.visible
+
+        DragHandler {
+            id: windowTrackDragHandler
+            target: null
+            acceptedButtons: Qt.LeftButton
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+                             | PointerHandler.ApprovesTakeOverByAnything
+            property bool ownsTrackSession: false
+            property real activeTranslationY: 0
+            property point activeViewportPosition: Qt.point(0, 0)
+            onTranslationChanged: {
+                if (active) {
+                    activeTranslationY = translation.y
+                    activeViewportPosition = centroid.position
+                    var overlayPosition = windowTrackDragHost.mapToItem(
+                                windowDragProxy.parent,
+                                activeViewportPosition.x,
+                                activeViewportPosition.y)
+                    windowDragProxy.x = overlayPosition.x
+                    windowDragProxy.y = overlayPosition.y
+                }
+            }
+            onActiveChanged: {
+                if (active) {
+                    activeTranslationY = 0
+                    var viewportPress = centroid.pressPosition
+                    activeViewportPosition = viewportPress
+                    var row = root.dragRowAtViewportPoint(viewportPress)
+                    if (!row)
+                        return
+                    if (!root.isSelected(row.trackId))
+                        root.selectOnly(row.trackId, row.index)
+                    var pointerOrigin = windowTrackDragHost.mapToItem(
+                                windowDragProxy.parent,
+                                viewportPress.x, viewportPress.y)
+                    windowDragProxy.x = pointerOrigin.x
+                    windowDragProxy.y = pointerOrigin.y
+                    root.beginTrackDrag(row.trackId, row.dragTrackIds,
+                                        row.title, row.dragCoverSource,
+                                        windowDragProxy, row.y, row.height)
+                    windowDragProxy.Drag.active = true
+                    ownsTrackSession = true
+                } else if (ownsTrackSession) {
+                    ownsTrackSession = false
+                    root.completeTrackDrag(windowDragProxy,
+                                           activeTranslationY,
+                                           activeViewportPosition)
+                }
             }
         }
     }
