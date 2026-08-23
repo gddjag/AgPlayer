@@ -26,6 +26,7 @@ private slots:
     void preservesTheResourceFolderTargetForApplicationDispatch();
     void receivesQtUrlDropEvents();
     void leavesQtDirectoryDropsForQmlHitTesting();
+    void rejectsQtAudioDropsOverResourceHitTarget();
 #ifdef Q_OS_WIN
     void receivesARealWindowsDropFilesMessage();
 #endif
@@ -115,6 +116,33 @@ void NativeDropRouterTest::leavesQtDirectoryDropsForQmlHitTesting()
                     Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &drop);
 
+    QCOMPARE(dropped.count(), 0);
+}
+
+void NativeDropRouterTest::rejectsQtAudioDropsOverResourceHitTarget()
+{
+    NativeDropRouter router;
+    QWindow window;
+    window.resize(320, 180);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    router.registerWindow(&window, NativeDropRouter::Target::List);
+    router.registerHitTarget(
+        &window, NativeDropRouter::Target::ResourceFolder,
+        [](const QPointF& position) { return position.x() < 100.0; });
+
+    QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
+    QMimeData mime;
+    mime.setUrls({QUrl::fromLocalFile(QStringLiteral("C:/音乐/资源区音频.flac"))});
+    QDragEnterEvent enter(QPoint(40, 40), Qt::CopyAction, &mime,
+                          Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &enter);
+    QVERIFY(!enter.isAccepted());
+    QDropEvent drop(QPointF(40, 40), Qt::CopyAction, &mime,
+                    Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &drop);
+
+    QVERIFY(!drop.isAccepted());
     QCOMPARE(dropped.count(), 0);
 }
 

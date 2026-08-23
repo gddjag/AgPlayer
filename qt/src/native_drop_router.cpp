@@ -96,10 +96,28 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
                 return url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir();
             });
     };
+    const auto resolvedTargetAt = [this, window, target](
+                                      const QPointF& position) {
+        Target resolvedTarget = *target;
+        const auto hitTarget = hitTargets_.constFind(
+            static_cast<quintptr>(window->winId()));
+        if (hitTarget != hitTargets_.cend()
+            && hitTarget->hitTest(position)) {
+            resolvedTarget = hitTarget->target;
+        }
+        return resolvedTarget;
+    };
 
     if (event->type() == QEvent::DragEnter) {
         auto* drag = static_cast<QDragEnterEvent*>(event);
         if (drag->mimeData() != nullptr && drag->mimeData()->hasUrls()) {
+            const Target resolvedTarget = resolvedTargetAt(drag->position());
+            if (*target == Target::List
+                && resolvedTarget == Target::ResourceFolder
+                && !containsLocalDirectory(drag->mimeData())) {
+                drag->setAccepted(false);
+                return true;
+            }
             if (*target == Target::List
                 && containsLocalDirectory(drag->mimeData())) {
                 return QObject::eventFilter(watched, event);
@@ -111,6 +129,13 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::Drop) {
         auto* drop = static_cast<QDropEvent*>(event);
         if (drop->mimeData() == nullptr || !drop->mimeData()->hasUrls()) {
+            return true;
+        }
+        const Target resolvedTarget = resolvedTargetAt(drop->position());
+        if (*target == Target::List
+            && resolvedTarget == Target::ResourceFolder
+            && !containsLocalDirectory(drop->mimeData())) {
+            drop->setAccepted(false);
             return true;
         }
         if (*target == Target::List
