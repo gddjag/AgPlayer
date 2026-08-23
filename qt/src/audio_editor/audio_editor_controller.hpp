@@ -34,6 +34,7 @@ enum class EditorSessionState {
     Empty,
     Ready,
     Playing,
+    RecordingStarting,
     Recording,
     RecordingPaused,
     Finalizing,
@@ -370,6 +371,7 @@ private:
     void startPreparedPlayback();
     void pollPlayback();
     void pollRecording();
+    bool requestRecordingStartCancellation();
     void setState(EditorSessionState value);
     void setError(QString message);
     void setProgress(double value);
@@ -447,6 +449,9 @@ private:
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
     QFutureWatcher<bool>* recording_start_watcher_{};
     QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
+    std::shared_ptr<std::atomic_bool> recording_start_cancel_token_;
+    std::uint64_t recording_start_generation_{};
+    bool recording_start_cancel_pending_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
     QFutureWatcher<agplayer::editor::NoiseReductionResult>*
         noise_reduction_watcher_{};

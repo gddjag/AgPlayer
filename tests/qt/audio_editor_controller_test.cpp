@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -104,7 +105,7 @@ private slots:
             QUrl::fromLocalFile(output),
             QStringLiteral("capture:device-does-not-exist"),
             48'000, 2, false, false));
-        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QCOMPARE(controller.state(), EditorSessionState::RecordingStarting);
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Empty,
                                   10'000);
         QVERIFY(controller.errorMessage().contains(QStringLiteral("WASAPI")));
@@ -417,6 +418,131 @@ private slots:
         QVERIFY(controller.playPause());
         QTRY_VERIFY_WITH_TIMEOUT(controller.playing(), 5'000);
         QVERIFY(controller.stopPlayback());
+    }
+
+    void delayedRecordingStopCancelsBeforeCaptureBecomesReady()
+    {
+        auto gate = std::make_shared<ManualRecordingStartGate>();
+        auto capture = std::make_unique<ManualRecordingCapture>(gate);
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(QStringLiteral("delayed.wav"));
+
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
+        QVERIFY(gate->waitForStartAttempt(std::chrono::seconds(2)));
+        const EditorSessionState startingState = controller.state();
+        const bool startingIsRecording = controller.recording();
+        const qint64 startingFrames = controller.recordingFrames();
+        const bool startingAllowsOpen = controller.actionEnabled(
+            QStringLiteral("editor.open"));
+        const bool stopAccepted = controller.stopRecording();
+        gate->release();
+
+        QCOMPARE(startingState, EditorSessionState::RecordingStarting);
+        QVERIFY(startingIsRecording);
+        QCOMPARE(startingFrames, 0);
+        QVERIFY(!startingAllowsOpen);
+        QVERIFY(stopAccepted);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Empty, 5'000);
+        QVERIFY(!controller.recording());
+        QVERIFY(!QFileInfo::exists(output));
+    }
+
+    void delayedRecordingDeactivateNeverStartsCaptureAfterTheWindowHides()
+    {
+        auto gate = std::make_shared<ManualRecordingStartGate>();
+        auto capture = std::make_unique<ManualRecordingCapture>(gate);
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(
+            QStringLiteral("delayed-deactivate.wav"));
+
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
+        QVERIFY(gate->waitForStartAttempt(std::chrono::seconds(2)));
+        QCOMPARE(controller.state(), EditorSessionState::RecordingStarting);
+        controller.deactivate();
+        gate->release();
+
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Empty, 5'000);
+        QTest::qWait(100);
+        QVERIFY(!controller.recording());
+        QVERIFY(!QFileInfo::exists(output));
+    }
+
+    void destructionWaitsForDelayedRecordingStartThenCancelsIt()
+    {
+        auto gate = std::make_shared<ManualRecordingStartGate>();
+        auto capture = std::make_unique<ManualRecordingCapture>(gate);
+        auto controller = std::make_unique<AudioEditorController>(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(
+            QStringLiteral("delayed-destruction.wav"));
+
+        QVERIFY(controller->startRecording(
+            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
+        QVERIFY(gate->waitForStartAttempt(std::chrono::seconds(2)));
+        std::thread releaseStart([gate] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            gate->release();
+        });
+        controller.reset();
+        releaseStart.join();
+
+        QVERIFY(!QFileInfo::exists(output));
+        QVERIFY(!QFileInfo::exists(output
+            + QStringLiteral(".agplayer-recording.tmp")));
+        QVERIFY(!QFileInfo::exists(output
+            + QStringLiteral(".agplayer-recording.journal")));
+    }
+
+    void liveRecordingSampleModePreservesAdjacentPcmShape()
+    {
+        auto capture = std::make_unique<ManualRecordingCapture>();
+        ManualRecordingCapture* const driver = capture.get();
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        controller.viewport()->setViewportWidth(8.0);
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(
+            QStringLiteral("live-samples.wav"));
+
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(output), {}, 16'000, 1, false, false));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Recording, 5'000);
+        const std::vector<float> samples{
+            -0.9F, -0.5F, -0.1F, 0.2F, 0.7F, -0.3F, 0.4F, 0.8F,
+            -0.7F, 0.6F, -0.2F, 0.1F, 0.5F, -0.4F, 0.3F, 0.0F};
+        QCOMPARE(driver->feed(samples, samples.size()), samples.size());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingFrames(), 16, 1'000);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            controller.viewport()->documentFrames(), 16, 1'000);
+        QVERIFY(controller.viewport()->setVisibleRange(4, 12));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().size() == 1, 1'000);
+
+        const QVariantList channel =
+            controller.viewportChannelPeaks().front().toList();
+        QCOMPARE(channel.size(), 16);
+        for (qsizetype point = 0; point < 8; ++point) {
+            const double expected = samples[static_cast<std::size_t>(point + 4)];
+            QVERIFY(std::abs(channel[point * 2].toDouble() - expected)
+                    < 0.000001);
+            QVERIFY(std::abs(channel[point * 2 + 1].toDouble() - expected)
+                    < 0.000001);
+        }
+        QVERIFY(controller.cancelRecording());
     }
 
     void fadeInGestureCommitsOneObservableUndoStep()

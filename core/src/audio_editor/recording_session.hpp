@@ -28,7 +28,7 @@ struct RecordingConfig final {
     bool monitor{};
 };
 
-enum class RecordingState { Idle, Recording, Paused, Finalizing, Error };
+enum class RecordingState { Idle, Starting, Recording, Paused, Finalizing, Error };
 
 struct RecordingResult final {
     bool success{};
@@ -52,6 +52,13 @@ struct RecordingLiveSnapshot final {
     std::vector<RecordingEnvelopePoint> envelopes;
 };
 
+struct RecordingPcmSnapshot final {
+    SampleFrame start_frame{};
+    SampleFrame frames{};
+    std::uint32_t channels{};
+    std::vector<float> interleaved_samples;
+};
+
 class RecordingCapture {
 public:
     virtual ~RecordingCapture() = default;
@@ -64,6 +71,9 @@ public:
     [[nodiscard]] virtual SampleFrame framesCaptured() const noexcept = 0;
     [[nodiscard]] virtual RecordingLiveSnapshot takeLiveSnapshot(
         std::size_t maximum) = 0;
+    [[nodiscard]] virtual RecordingPcmSnapshot takePcmSnapshot(
+        SampleFrame startFrame, SampleFrame endFrame,
+        std::size_t maximumFrames) const = 0;
     [[nodiscard]] virtual std::string lastError() const = 0;
 };
 
@@ -92,6 +102,9 @@ public:
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] RecordingLiveSnapshot takeLiveSnapshot(
         std::size_t maximum) override;
+    [[nodiscard]] RecordingPcmSnapshot takePcmSnapshot(
+        SampleFrame startFrame, SampleFrame endFrame,
+        std::size_t maximumFrames) const override;
     [[nodiscard]] std::vector<float> recentPeaks(std::size_t maximum) const;
     [[nodiscard]] std::string lastError() const override;
 

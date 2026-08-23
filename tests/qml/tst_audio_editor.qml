@@ -501,7 +501,10 @@ TestCase {
         verify(output.toString().length > 0)
         verify(AudioEditorController.startRecording(
             output, "", 16000, 2, false, false))
-        tryVerify(function() { return AudioEditorController.recording }, 5000)
+        tryVerify(function() {
+            return AudioEditorController.recording
+                && !AudioEditorController.busy
+        }, 5000)
 
         verify(RecordingTestDriver.feedActive(16000))
         tryCompare(AudioEditorController, "playheadFrame", 16000, 1000)

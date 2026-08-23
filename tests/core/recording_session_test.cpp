@@ -173,6 +173,44 @@ int main()
             && !fs::exists(fs::path(cancelled.u8string()
                 + ".agplayer-recording.journal")),
             "cancelled recording left recovery artifacts");
+
+    const fs::path pcm_window_output = fs::temp_directory_path()
+        / "agplayer-recording-pcm-window-test.wav";
+    fs::remove(pcm_window_output, ignored);
+    RecordingConfig pcm_window_config = config;
+    pcm_window_config.output_path = pcm_window_output;
+    pcm_window_config.channels = 1;
+    RecordingSession pcm_window_session;
+    require(pcm_window_session.startManual(pcm_window_config),
+            "PCM window recording start failed");
+    constexpr std::size_t pushed_frames = 70'000;
+    constexpr std::size_t expected_capacity = 65'536;
+    std::vector<float> pcm_window_input(pushed_frames);
+    for (std::size_t frame = 0; frame < pcm_window_input.size(); ++frame) {
+        pcm_window_input[frame] = static_cast<float>(
+            static_cast<int>(frame % 101U) - 50) / 50.0F;
+    }
+    require(pcm_window_session.pushCapturedFrames(
+                pcm_window_input.data(), pcm_window_input.size())
+            == pcm_window_input.size(),
+            "long recording did not accept the deterministic PCM window");
+    const RecordingPcmSnapshot pcm_window =
+        pcm_window_session.takePcmSnapshot(0, pushed_frames, pushed_frames);
+    require(pcm_window.channels == 1
+            && pcm_window.frames == expected_capacity
+            && pcm_window.start_frame == pushed_frames - expected_capacity
+            && pcm_window.interleaved_samples.size() == expected_capacity,
+            "live PCM snapshot was not bounded to its fixed ring capacity");
+    require(std::abs(pcm_window.interleaved_samples.front()
+                     - pcm_window_input[pushed_frames - expected_capacity])
+                < 0.000001F
+            && std::abs(pcm_window.interleaved_samples.back()
+                        - pcm_window_input.back()) < 0.000001F,
+            "bounded live PCM snapshot lost the retained sample shape");
+    require(pcm_window_session.cancel(),
+            "PCM window recording cancel failed");
+    require(!fs::exists(pcm_window_output),
+            "PCM window test committed a cancelled recording");
     fs::remove(output, ignored);
     fs::remove(recovered, ignored);
     return 0;
