@@ -158,13 +158,27 @@ ListView {
         dragPreviewLoader.active = true
     }
     function dragRowAtViewportPoint(point) {
-        var rowIndex = root.indexAt(point.x, point.y)
+        var contentPoint = root.mapToItem(root.contentItem,
+                                          point.x, point.y)
+        var rowIndex = root.indexAt(contentPoint.x, contentPoint.y)
         var row = rowIndex >= 0 ? root.itemAtIndex(rowIndex) : null
         if (!row || !row.dragAreaItem)
             return null
-        var local = root.mapToItem(row.dragAreaItem, point.x, point.y)
+        var local = root.contentItem.mapToItem(row.dragAreaItem,
+                                               contentPoint.x,
+                                               contentPoint.y)
         return local.x >= 0 && local.x <= row.dragAreaItem.width
                 ? row : null
+    }
+    function isLocalTrackReorderPoint(point) {
+        if (!point || !isFinite(point.x) || !isFinite(point.y)
+                || point.x < 0 || point.x > root.width
+                || point.y < (root.headerItem ? root.headerItem.height : 0)
+                || point.y > root.height)
+            return false
+        var contentPoint = root.mapToItem(root.contentItem,
+                                          point.x, point.y)
+        return root.indexAt(contentPoint.x, contentPoint.y) >= 0
     }
     function clearTrackDragSession() {
         if (!dragSessionActive && !dragPreviewLoader.active
@@ -184,7 +198,7 @@ ListView {
         if (proxy && proxy.Drag.active)
             proxy.Drag.cancel()
     }
-    function completeTrackDrag(proxy, rowDeltaY) {
+    function completeTrackDrag(proxy, rowDeltaY, releasePoint) {
         if (!dragSessionActive || activeDragProxy !== proxy)
             return
         var trackId = draggedTrackId
@@ -193,10 +207,11 @@ ListView {
         if (!isFinite(deltaY))
             deltaY = 0
         var rowHeight = draggedRowHeight
+        var canReorderLocally = isLocalTrackReorderPoint(releasePoint)
         var dropAction = proxy.Drag.drop()
         lastTrackDragDropAction = dropAction
         clearTrackDragSession()
-        if (dropAction === Qt.IgnoreAction)
+        if (dropAction === Qt.IgnoreAction && canReorderLocally)
             finishRowDrag(trackId, originY, deltaY, rowHeight)
     }
     function removeSelectedFromCurrentView() {
@@ -519,15 +534,17 @@ ListView {
         onActiveChanged: {
             if (active) {
                 activeTranslationY = 0
-                var row = root.dragRowAtViewportPoint(centroid.pressPosition)
+                var viewportPress = root.contentItem.mapToItem(
+                            root, centroid.pressPosition.x,
+                            centroid.pressPosition.y)
+                var row = root.dragRowAtViewportPoint(viewportPress)
                 if (!row)
                     return
                 if (!root.isSelected(row.trackId))
                     root.selectOnly(row.trackId, row.index)
                 var pointerOrigin = root.mapToItem(
                             windowDragProxy.parent,
-                            centroid.pressPosition.x,
-                            centroid.pressPosition.y)
+                            viewportPress.x, viewportPress.y)
                 windowDragProxy.x = pointerOrigin.x
                 windowDragProxy.y = pointerOrigin.y
                 root.beginTrackDrag(row.trackId, row.dragTrackIds,
@@ -537,7 +554,10 @@ ListView {
                 ownsTrackSession = true
             } else if (ownsTrackSession) {
                 ownsTrackSession = false
-                root.completeTrackDrag(windowDragProxy, activeTranslationY)
+                var viewportRelease = root.contentItem.mapToItem(
+                            root, centroid.position.x, centroid.position.y)
+                root.completeTrackDrag(windowDragProxy, activeTranslationY,
+                                       viewportRelease)
             }
         }
     }

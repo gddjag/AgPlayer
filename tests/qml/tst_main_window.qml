@@ -2740,6 +2740,16 @@ TestCase {
         var area = findChild(row, "trackRowDragArea")
         var proxy = findChild(list, "trackDragProxy")
         verify(row && area && proxy)
+        var beforeOrder = []
+        for (var beforeIndex = 0; beforeIndex < list.count; ++beforeIndex)
+            beforeOrder.push(list.trackIdAt(beforeIndex))
+        var desiredDropY = list.mapToItem(
+                    mainWindow.contentItem, 0,
+                    (list.headerItem ? list.headerItem.height : 0)
+                    + list.rowHeight * 2.5).y
+        var currentDropY = target.mapToItem(
+                    mainWindow.contentItem, 0, target.height / 2).y
+        navigation.y += desiredDropY - currentDropY
         var point = target.mapToItem(area, target.width / 2,
                                      target.height / 2)
         mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
@@ -2754,6 +2764,11 @@ TestCase {
                 "a no-op target must leave the drag action unaccepted")
         compare(target.acceptedAnimationCount, 0,
                 "no-op drops must not play success feedback")
+        compare(list.count, beforeOrder.length)
+        for (var afterIndex = 0; afterIndex < list.count; ++afterIndex) {
+            compare(list.trackIdAt(afterIndex), beforeOrder[afterIndex],
+                    "a rejected external drop must not fall back to list reordering")
+        }
         list.destroy()
         navigation.destroy()
         PlaylistModel.removePlaylist(playlistId)
@@ -2874,6 +2889,53 @@ TestCase {
         }, 500)
         target.destroy()
         list.destroy()
+    }
+
+    function test_z_task5_scrolled_visible_row_starts_window_drag() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        var model = createIsolatedTrackModel("drag-scroll-", 30)
+        var host = trackListHostComponent.createObject(mainWindow.contentItem)
+        var list = trackListComponent.createObject(host, {
+            "width": host.width,
+            "height": 160,
+            "trackModel": model
+        })
+        verify(model && host && list)
+        mainWindow.requestActivate()
+        tryCompare(list, "count", 30, 500)
+        wait(30)
+        list.positionViewAtIndex(20, ListView.Beginning)
+        tryVerify(function() {
+            return list.contentY > list.rowHeight * 10
+        }, 500, "the list must actually be scrolled before starting the drag")
+        var visibleRow = list.itemAtIndex(20)
+        var area = findChild(visibleRow, "trackRowDragArea")
+        var proxy = findChild(list, "trackDragProxy")
+        verify(visibleRow && area && proxy)
+        var viewportPoint = area.mapToItem(
+                    list, area.width / 2, area.height / 2)
+        var rowAtViewportPoint = list.dragRowAtViewportPoint(viewportPoint)
+        verify(rowAtViewportPoint,
+               "viewport point=" + viewportPoint.x + "," + viewportPoint.y
+               + " contentY=" + list.contentY + " rowY=" + visibleRow.y)
+        compare(rowAtViewportPoint.trackId, "drag-scroll-20")
+
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        tryVerify(function() {
+            return list.dragSessionActive && proxy.Drag.active
+        }, 500, "a visible non-first-screen row must start the root drag")
+        compare(list.draggedTrackId, "drag-scroll-20",
+                "the drag must start from the visible row under the pointer")
+
+        list.cancelTrackDrag()
+        mouseRelease(host, host.width / 2, host.height / 2, Qt.LeftButton)
+        list.destroy()
+        host.destroy()
+        model.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
     function test_z_task5_drag_session_survives_delegate_pool_and_cleans_on_focus_loss() {
