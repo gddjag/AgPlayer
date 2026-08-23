@@ -332,7 +332,7 @@ Item {
             cacheBuffer: 0
             model: filteredTags
             cellWidth: width / 3
-            cellHeight: 38
+            cellHeight: 32
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
             delegate: Item {
@@ -352,8 +352,8 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 28
-                    radius: 14
+                    height: 24
+                    radius: 12
                     color: tagCell.selected ? Theme.listSelectedSurface
                                             : "transparent"
                     border.color: tagCell.color
@@ -361,15 +361,15 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 9
-                        spacing: 5
+                        anchors.leftMargin: 7
+                        anchors.rightMargin: 6
+                        spacing: 4
                         Text {
                             id: tagName
                             text: tagCell.displayName
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 12
+                            font.pixelSize: 11
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
@@ -377,7 +377,7 @@ Item {
                             text: tagCell.trackCount
                             color: Theme.tagSecondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                         }
                     }
                     HoverHandler { id: tagHover }

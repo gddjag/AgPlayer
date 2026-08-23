@@ -88,5 +88,6 @@ private:
     QSet<QString> rootFolderKeys_;
     QSet<QString> snapshotFolderKeys_;
     QSet<QString> expandedFolderKeys_;
+    bool libraryExpanded_ = true;
     int pendingFavoriteRemoval_ = 0;
 };

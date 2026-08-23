@@ -8,13 +8,19 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    width: 1447
-    height: 570
-    readonly property int pageMinimumWidth: tagManagementMode ? 1284 : 956
-    // The offscreen test plugin cannot propagate a changing native size hint.
-    // Real desktop windows still expose the page-specific minimum to Windows.
-    minimumWidth: Qt.platform.pluginName === "offscreen"
-                  ? 956 : pageMinimumWidth
+    readonly property int titleBarHeight: 38
+    readonly property int trackHeaderHeight: 56
+    readonly property int defaultVisibleTrackCount: 10
+    readonly property int filterBarHeight: 54
+    readonly property int defaultTrackRowHeight:
+        SettingsController.listWaveformThumbnailEnabled ? 62 : 42
+    readonly property int defaultListHeight:
+        titleBarHeight + trackHeaderHeight
+        + defaultVisibleTrackCount * defaultTrackRowHeight + filterBarHeight
+    width: 960
+    height: defaultListHeight
+    readonly property int pageMinimumWidth: 956
+    minimumWidth: pageMinimumWidth
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: "transparent"
@@ -410,7 +416,7 @@ Window {
             Item {
                 id: titleBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 38
+                Layout.preferredHeight: listWindow.titleBarHeight
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 14
@@ -457,23 +463,17 @@ Window {
                 objectName: "listWorkspace"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
-                Layout.bottomMargin: 8
-                readonly property int leftColumnWidth: 256
-                readonly property int rightColumnWidth: 328
-                readonly property int centerMinimumWidth: 680
+                readonly property int leftColumnWidth: 208
+                readonly property int rightColumnWidth: 248
                 readonly property int dividerWidth: 1
                 readonly property real centerWidth: centerColumn.width
                 color: Theme.listWorkspaceSurface
-                border.color: Theme.listWorkspaceBorder
-                border.width: 1
-                radius: Theme.radiusMd
+                border.width: 0
+                radius: 0
                 clip: true
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 1
                     spacing: 0
 
                     SideNavigation {
@@ -529,7 +529,6 @@ Window {
                         id: centerColumn
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        Layout.minimumWidth: listWorkspace.centerMinimumWidth
                         spacing: 0
 
                         StackLayout {
@@ -588,7 +587,7 @@ Window {
                             id: searchFilter
                             objectName: "librarySearchFilter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 66
+                            Layout.preferredHeight: listWindow.filterBarHeight
                             visible: !filterModel || filterModel.category !== "library"
                             searchText: filterModel ? filterModel.searchText : ""
                             exactRating: filterModel ? filterModel.exactRating : 0
@@ -646,8 +645,8 @@ Window {
         objectName: "listFileDropFallback"
         anchors.fill: parent
         z: -5
-        onUrlsDropped: function(urls) {
-            listWindow.handleListDropUrls(urls)
+        urlsSubmitter: function(urls) {
+            return listWindow.handleListDropUrls(urls)
         }
     }
 

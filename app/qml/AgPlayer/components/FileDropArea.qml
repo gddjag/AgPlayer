@@ -27,5 +27,7 @@ DropArea {
     onDropped: function(drop) {
         if (root.submitUrls(drop.urls))
             drop.acceptProposedAction()
+        else
+            drop.accepted = false
     }
 }

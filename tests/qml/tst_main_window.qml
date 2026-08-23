@@ -845,29 +845,58 @@ TestCase {
     }
 
     function test_list_window_default_height_keeps_ten_songs_visible() {
-        var listWindow = createTemporaryObject(defaultListWindowComponent,
-                                               testCase)
-        verify(listWindow)
-        compare(listWindow.height, 570)
-        listWindow.destroy()
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        nativeDropHelper.ensureSortableTracks()
+        var filterModel = findChild(mainWindow, "filterModel")
+        filterModel.category = "all"
+        filterModel.tagKey = ""
+        filterModel.resourceFolder = ""
+        for (var enabled of [false, true]) {
+            SettingsController.listWaveformThumbnailEnabled = enabled
+            var listWindow = createTemporaryObject(defaultListWindowComponent,
+                                                   testCase,
+                                                   { "filterModel": filterModel })
+            verify(listWindow)
+            var trackList = findChild(listWindow, "sharedTrackList")
+            var filter = findChild(listWindow, "librarySearchFilter")
+            verify(trackList && filter)
+            var expectedRowHeight = enabled ? 62 : 42
+            var expectedHeight = 38 + 56 + 10 * expectedRowHeight + 54
+            compare(listWindow.height, expectedHeight)
+            compare(filter.height, 54)
+            tryCompare(trackList, "height", 56 + 10 * expectedRowHeight)
+            listWindow.destroy()
+        }
+
+        SettingsController.listWaveformThumbnailEnabled = false
+        var adjustable = createTemporaryObject(defaultListWindowComponent,
+                                               testCase,
+                                               { "filterModel": filterModel })
+        verify(adjustable)
+        adjustable.height = 677
+        wait(0)
+        compare(adjustable.height, 677)
+        SettingsController.listWaveformThumbnailEnabled = true
+        wait(0)
+        compare(adjustable.height, 677,
+                "changing thumbnail mode must not undo a user resize")
+        adjustable.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
-    function test_sidebar_replaces_library_manager_with_recent_filters() {
+    function test_sidebar_exposes_required_top_level_nodes_and_linear_icons() {
         var side = sideNavigationComponent.createObject(mainWindow.contentItem)
         verify(side)
-        var history = findChild(side, "historyCategoryButton")
-        var recent = findChild(side, "recentAddedCategoryButton")
-        var never = findChild(side, "neverPlayedCategoryButton")
-        verify(history && recent && never)
-        verify(!findChild(side, "libraryManagerCategoryButton"))
-        verify(recent.y > history.y)
-        verify(never.y > recent.y)
-        compare(recent.count, LibraryModel.recentAddedCount)
-        compare(never.count, LibraryModel.neverPlayedCount)
-        mouseClick(recent)
-        compare(side.lastSelectedCategory, "recentAdded")
-        mouseClick(never)
-        compare(side.lastSelectedCategory, "neverPlayed")
+        verify(findChild(side, "navigationNode-library:all"))
+        verify(findChild(side, "navigationNode-favorites:favorites"))
+        verify(findChild(side, "navigationNode-tags:manage"))
+        verify(!findChild(side, "historyCategoryButton"))
+        verify(!findChild(side, "recentAddedCategoryButton"))
+        verify(!findChild(side, "neverPlayedCategoryButton"))
+        compare(side.iconForNode("library"), "music-2-line")
+        compare(side.iconForNode("playlist"), "list-unordered")
+        compare(side.iconForNode("tags"), "price-tag-3-line")
+        compare(side.iconForNode("resourceFolder"), "folder-open-line")
         side.destroy()
     }
 
@@ -2156,18 +2185,19 @@ TestCase {
 
         var workspace = findChild(window, "listWorkspace")
         verify(workspace, "ListWindow must expose one continuous workspace")
-        compare(workspace.leftColumnWidth, 256)
-        compare(workspace.rightColumnWidth, 328)
+        compare(workspace.leftColumnWidth, 208)
+        compare(workspace.rightColumnWidth, 248)
         compare(workspace.dividerWidth, 1)
-        verify(workspace.centerWidth >= 680)
+        compare(workspace.border.width, 0)
+        tryVerify(function() { return workspace.centerWidth > 0 })
         compare(countObjectsNamed(workspace, "sharedTrackList"), 1)
 
         var navigation = findChild(workspace, "referenceSideNavigation")
         verify(navigation)
+        var widthBeforeTags = window.width
         navigation.activateNode("tags", "tags:manage", "")
-        tryCompare(window, "pageMinimumWidth", 1284)
-        window.width = window.pageMinimumWidth
-        tryVerify(function() { return workspace.centerWidth >= 680 })
+        tryCompare(window, "pageMinimumWidth", 956)
+        compare(window.width, widthBeforeTags)
         compare(findChild(navigation, "libraryNavigationList").model,
                 LibraryNavigationModel)
 
@@ -2183,10 +2213,12 @@ TestCase {
 
         var tagPanel = findChild(workspace, "tagManagementPanel")
         verify(tagPanel)
+        tryCompare(tagPanel, "width", 248)
         compare(tagPanel.gridColumnCount, 3)
         var tagGrid = findChild(tagPanel, "tagGrid")
         verify(tagGrid)
         compare(tagGrid.cellWidth, tagGrid.width / 3)
+        verify(tagGrid.cellHeight <= 32)
 
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
@@ -2808,6 +2840,25 @@ TestCase {
         }
         verify(rootNode)
 
+        var resourceSection = findChild(navigation, "resourceFolderSection")
+        verify(resourceSection)
+        verify(resourceSection.y < rootNode.y,
+               "the resource heading must precede its directory roots")
+        var rootPoint = rootNode.mapToItem(navigation,
+                                          rootNode.width / 2,
+                                          rootNode.height / 2)
+        verify(navigation.resourceDropContainsPoint(rootPoint.x, rootPoint.y),
+               "the whole resource tree must accept external folder drops")
+        var libraryNode = findChild(navigation,
+                                    "navigationNode-library:all")
+        verify(libraryNode)
+        var libraryPoint = libraryNode.mapToItem(navigation,
+                                                 libraryNode.width / 2,
+                                                 libraryNode.height / 2)
+        verify(!navigation.resourceDropContainsPoint(libraryPoint.x,
+                                                     libraryPoint.y),
+               "library and playlist rows are not disk resource targets")
+
         var secondFolderUrl = nativeDropHelper.createDropDirectory()
         verify(secondFolderUrl && nativeDropHelper.pathExists(secondFolderUrl))
         nativeDropHelper.sendUrls(dropTarget, [secondFolderUrl])
@@ -3107,21 +3158,22 @@ TestCase {
         var panel = findChild(workspace, "tagManagementPanel")
         var divider = findChild(workspace, "tagPanelDivider")
         verify(workspace && navigation && shared && panel && divider)
+        tryVerify(function() { return shared.width > 0 })
         shared.selectedTrackIds = ["task7-retained-selection"]
         var playbackTrackId = PlaybackController.currentTrackId
 
         compare(panel.visible, false,
                 "the normal library page must not reserve a tag column")
         compare(divider.visible, false)
-        verify(window.pageMinimumWidth < 1284,
-               "the two-column page must remain usable at the player width")
-        tryVerify(function() { return shared.width > 1000 })
+        compare(window.pageMinimumWidth, 956)
         var libraryWidth = shared.width
         var libraryCenterWidth = workspace.centerWidth
 
+        var widthBeforeTags = window.width
         navigation.activateNode("tags", "tags:manage", "")
         tryVerify(function() { return panel.visible && divider.visible })
-        compare(window.pageMinimumWidth, 1284)
+        compare(window.pageMinimumWidth, 956)
+        compare(window.width, widthBeforeTags)
         tryVerify(function() {
             return libraryWidth >= shared.width + workspace.rightColumnWidth
         }, 1000)

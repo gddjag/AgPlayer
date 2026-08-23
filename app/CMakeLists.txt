@@ -48,6 +48,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg

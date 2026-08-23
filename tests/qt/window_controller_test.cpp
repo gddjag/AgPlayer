@@ -21,6 +21,7 @@ private slots:
     void initTestCase();
     void init();
     void defaultListSizeMatchesReference();
+    void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesNativePixelSize();
     void switchingWindowsDoesNotRecreatePlayback();
     void updatesExistingWindowObjectsAndFlags();
@@ -42,7 +43,7 @@ private slots:
     void dockedListFollowsMainWindow();
     void firstAttachedListAlignsWithMainWindow();
     void dockedGroupDoesNotClampMainMoveAtScreenEdge();
-    void horizontalDockPreservesSizesAndKeepsWindowsAdjacent();
+    void dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent();
 #ifdef Q_OS_WIN
     void dockedWindowsKeepNativeSizeAcrossScreens();
 #endif
@@ -76,8 +77,49 @@ void WindowControllerTest::init()
 void WindowControllerTest::defaultListSizeMatchesReference()
 {
     WindowController windows;
-    QCOMPARE(windows.listWindowWidth(), 1104);
-    QCOMPARE(windows.listWindowHeight(), 570);
+    QCOMPARE(windows.listWindowWidth(), 960);
+    QCOMPARE(windows.listWindowHeight(), 568);
+}
+
+void WindowControllerTest::legacyListWidthsMigrateWithoutOverwritingIndependentSize()
+{
+    // Catches broad migrations that overwrite a genuinely independent window,
+    // as well as missing migrations for exact historical defaults/tag widths.
+    const QList<int> legacyWidths{1104, 1228, 1284, 1447};
+    for (const int legacyWidth : legacyWidths) {
+        QSettings settings;
+        settings.clear();
+        settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
+        settings.setValue(QStringLiteral("windows/listDockEdge"),
+                          QStringLiteral("none"));
+        settings.setValue(QStringLiteral("windows/listGeometry"),
+                          QRect(20, 30, legacyWidth, 568));
+        settings.sync();
+        QWindow listWindow;
+        listWindow.setGeometry(20, 30, 960, 568);
+        WindowController windows;
+        windows.setListWindow(&listWindow);
+        const int boundedAlignedWidth = qMin(
+            960, listWindow.screen()->availableGeometry().width());
+        QCOMPARE(listWindow.width(), boundedAlignedWidth);
+        QCOMPARE(listWindow.height(), 568);
+        QCOMPARE(QSettings().value(QStringLiteral("windows/listGeometryVersion"))
+                     .toInt(),
+                 1);
+    }
+
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
+    settings.setValue(QStringLiteral("windows/listDockEdge"),
+                      QStringLiteral("none"));
+    settings.setValue(QStringLiteral("windows/listGeometry"),
+                      QRect(20, 30, 733, 611));
+    settings.sync();
+    QWindow independentList;
+    WindowController windows;
+    windows.setListWindow(&independentList);
+    QCOMPARE(independentList.size(), QSize(733, 611));
 }
 
 void WindowControllerTest::dpiChangePreservesNativePixelSize()
@@ -531,7 +573,7 @@ void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
     QCOMPARE(listWindow.y(), mainWindow.y());
 }
 
-void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
+void WindowControllerTest::dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent()
 {
     QWindow mainWindow;
     mainWindow.setFlags(Qt::FramelessWindowHint);
@@ -540,9 +582,8 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
     QWindow listWindow;
     listWindow.setFlags(Qt::FramelessWindowHint);
     listWindow.setMinimumSize(QSize(300, 180));
-    listWindow.setGeometry(0, 0, 450, 220);
+    listWindow.setGeometry(0, 0, 370, 220);
     const QSize mainSize = mainWindow.size();
-    const QSize listSize = listWindow.size();
 
     WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
@@ -552,7 +593,12 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
     QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
     QCOMPARE(listWindow.y(), mainWindow.y());
     QCOMPARE(mainWindow.size(), mainSize);
-    QCOMPARE(listWindow.size(), listSize);
+    QCOMPARE(listWindow.size(), QSize(mainWindow.width(), 220));
+
+    listWindow.resize(610, 220);
+    QCoreApplication::processEvents();
+    windows.finishListWindowInteraction();
+    QCOMPARE(listWindow.width(), mainWindow.width());
     // A docked player/list pair can straddle a monitor seam.  Keeping both
     // windows at the user-selected size is more important than squeezing the
     // group back into one screen while it is being moved.
@@ -597,6 +643,7 @@ void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
                                initialMain.bottom - initialMain.top);
     const QSize listNativeSize(initialList.right - initialList.left,
                                initialList.bottom - initialList.top);
+    QCOMPARE(listNativeSize.width(), mainNativeSize.width());
 
     mainWindow.setPosition(screens.at(1)->availableGeometry().topLeft()
                            + QPoint(80, 80));

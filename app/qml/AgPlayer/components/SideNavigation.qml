@@ -45,15 +45,30 @@ Item {
     }
 
     function resourceDropContainsPoint(x, y) {
-        var footer = navigationList.footerItem
-        if (!footer)
+        if (!resourceDropTarget.visible)
             return false
-        var barHeight = 42
-        var topLeft = footer.mapToItem(root, 0,
-                                       (footer.height - barHeight) / 2)
+        var topLeft = resourceDropTarget.mapToItem(root, 0, 0)
         return x >= topLeft.x && y >= topLeft.y
-                && x < topLeft.x + footer.width
-                && y < topLeft.y + barHeight
+                && x < topLeft.x + resourceDropTarget.width
+                && y < topLeft.y + resourceDropTarget.height
+    }
+
+    function resourceSectionTop() {
+        var listTop = navigationList.mapToItem(root, 0, 0).y
+        var listBottom = listTop + navigationList.height
+        var sectionContentY = 0
+        for (var row = 0; row < navigationList.count; ++row) {
+            var modelIndex = navigationModel.index(row, 0)
+            var type = navigationModel.data(
+                        modelIndex, LibraryNavigationModel.NodeTypeRole)
+            if (type === "resourceSection") {
+                var position = navigationList.contentItem.mapToItem(
+                            root, 0, sectionContentY)
+                return Math.max(listTop, Math.min(listBottom, position.y))
+            }
+            sectionContentY += 38 + navigationList.spacing
+        }
+        return listBottom
     }
 
     function confirmResourceFolderRemoval(folder) {
@@ -90,11 +105,11 @@ Item {
         if (nodeType === "history") return "time-line"
         if (nodeType === "recentAdded") return "add-line"
         if (nodeType === "neverPlayed") return "time-line"
-        if (nodeType === "playlist") return "playlist-2-fill"
+        if (nodeType === "playlist") return "list-unordered"
         if (nodeType === "resourceRoot" || nodeType === "resourceFolder")
             return "folder-open-line"
-        if (nodeType === "tags") return "list-unordered"
-        return "music-2-fill"
+        if (nodeType === "tags") return "price-tag-3-line"
+        return "music-2-line"
     }
 
     function nodeIsSelected(nodeType, nodeId, resourceFolder) {
@@ -266,52 +281,6 @@ Item {
         spacing: 2
         model: root.navigationModel
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-        footer: Item {
-            width: navigationList.width
-            height: 54
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                height: 42
-                color: "transparent"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    Text {
-                        text: qsTr("资源文件夹")
-                        color: Theme.tagSecondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 12
-                        Layout.fillWidth: true
-                    }
-                    ToolButton {
-                        objectName: "addResourceFolderButton"
-                        text: "+"
-                        onClicked: addResourceFolderDialog.open()
-                        background: null
-                    }
-                    ToolButton {
-                        objectName: "removeResourceFolderButton"
-                        text: "−"
-                        enabled: root.activeNodeType === "resourceRoot"
-                                 && root.selectedResourceFolder.length > 0
-                        onClicked: root.confirmResourceFolderRemoval(
-                                       root.selectedResourceFolder)
-                        background: null
-                    }
-                }
-                FileDropArea {
-                    objectName: "resourceFolderDropTarget"
-                    anchors.fill: parent
-                    z: -1
-                    urlsSubmitter: root.submitResourceUrls
-                }
-            }
-        }
 
         delegate: Rectangle {
             id: nodeRow
@@ -329,26 +298,92 @@ Item {
                                                  nodeType, nodeId,
                                                  resourceFolder)
             width: navigationList.width
-            height: 38
-            radius: Theme.radiusSm
-            color: selected ? Theme.listSelectedSurface
-                            : nodeHover.hovered ? Theme.hoverSurface : "transparent"
-            objectName: nodeType === "playlist"
+            height: nodeType === "resourceSection" ? 54 : 38
+            radius: nodeType === "resourceSection" ? 0 : Theme.radiusSm
+            color: nodeType === "resourceSection" ? "transparent"
+                   : selected ? Theme.listSelectedSurface
+                   : nodeHover.hovered ? Theme.hoverSurface : "transparent"
+            objectName: nodeType === "resourceSection"
+                        ? "resourceFolderSection"
+                        : nodeType === "playlist"
                         ? "playlistCategory-" + root.playlistIdForNode(nodeId)
                         : nodeType === "history" ? "historyCategoryButton"
                         : nodeType === "recentAdded" ? "recentAddedCategoryButton"
                         : nodeType === "neverPlayed" ? "neverPlayedCategoryButton"
                         : "navigationNode-" + nodeId
 
+            Item {
+                anchors.fill: parent
+                visible: nodeRow.nodeType === "resourceSection"
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    height: 1
+                    color: Theme.listDivider
+                }
+                RowLayout {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 42
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 4
+                    spacing: 4
+                    Text {
+                        text: qsTr("资源文件夹")
+                        color: Theme.tagSecondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                    }
+                    ToolButton {
+                        objectName: nodeRow.nodeType === "resourceSection"
+                                    ? "addResourceFolderButton" : ""
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        icon.source: Theme.icon("add-line")
+                        icon.color: Theme.iconSecondary
+                        icon.width: 16
+                        icon.height: 16
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("添加资源文件夹")
+                        onClicked: addResourceFolderDialog.open()
+                        background: null
+                    }
+                    ToolButton {
+                        objectName: nodeRow.nodeType === "resourceSection"
+                                    ? "removeResourceFolderButton" : ""
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        icon.source: Theme.icon("subtract-line")
+                        icon.color: enabled ? Theme.iconSecondary
+                                            : Theme.secondaryText
+                        icon.width: 16
+                        icon.height: 16
+                        enabled: root.activeNodeType === "resourceRoot"
+                                 && root.selectedResourceFolder.length > 0
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("移除资源文件夹")
+                        onClicked: root.confirmResourceFolderRemoval(
+                                       root.selectedResourceFolder)
+                        background: null
+                    }
+                }
+            }
+
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8 + nodeRow.depth * 18
                 anchors.rightMargin: 8
                 spacing: 7
+                visible: nodeRow.nodeType !== "resourceSection"
 
                 ToolButton {
                     objectName: "navigationExpandButton"
-                    visible: (nodeRow.nodeType === "resourceRoot"
+                    visible: (nodeRow.nodeType === "library"
+                              || nodeRow.nodeType === "resourceRoot"
                               || nodeRow.nodeType === "resourceFolder")
                              && nodeRow.hasChildren
                     Layout.preferredWidth: visible ? 20 : 0
@@ -364,7 +399,8 @@ Item {
                                    nodeRow.nodeId, !nodeRow.expanded)
                 }
                 Item {
-                    visible: !((nodeRow.nodeType === "resourceRoot"
+                    visible: !((nodeRow.nodeType === "library"
+                                || nodeRow.nodeType === "resourceRoot"
                                 || nodeRow.nodeType === "resourceFolder")
                                && nodeRow.hasChildren)
                     Layout.preferredWidth: visible ? 20 : 0
@@ -399,11 +435,13 @@ Item {
             HoverHandler { id: nodeHover }
             TapHandler {
                 acceptedButtons: Qt.LeftButton
+                enabled: nodeRow.nodeType !== "resourceSection"
                 onTapped: root.activateNode(nodeRow.nodeType, nodeRow.nodeId,
                                             nodeRow.resourceFolder)
             }
             TapHandler {
                 acceptedButtons: Qt.RightButton
+                enabled: nodeRow.nodeType !== "resourceSection"
                 onTapped: {
                     if (nodeRow.nodeType === "playlist") {
                         root.contextPlaylistId = root.playlistIdForNode(
@@ -453,6 +491,22 @@ Item {
                 }
             }
         }
+    }
+
+    FileDropArea {
+        id: resourceDropTarget
+        objectName: "resourceFolderDropTarget"
+        anchors.left: navigationList.left
+        anchors.right: navigationList.right
+        y: {
+            navigationList.contentY
+            navigationList.count
+            return root.resourceSectionTop()
+        }
+        height: Math.max(0, navigationList.y + navigationList.height - y)
+        visible: height > 0
+        z: -1
+        urlsSubmitter: root.submitResourceUrls
     }
 
     component SystemMenuItem: MenuItem {

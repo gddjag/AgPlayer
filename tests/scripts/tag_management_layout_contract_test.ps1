@@ -32,19 +32,23 @@ if ($trackListCount -ne 1) {
     throw "ListWindow must contain exactly one shared TrackList; found $trackListCount"
 }
 
-Assert-Matches $window 'readonly property int leftColumnWidth:\s*256' `
-    'Left workspace column must remain 256 px'
-Assert-Matches $window 'readonly property int rightColumnWidth:\s*328' `
-    'Right tag column must remain 328 px'
-Assert-Matches $window 'readonly property int centerMinimumWidth:\s*680' `
-    'Center table column must retain a 680 px minimum'
+Assert-Matches $window 'readonly property int leftColumnWidth:\s*208' `
+    'Left workspace column must be 208 px'
+Assert-Matches $window 'readonly property int rightColumnWidth:\s*248' `
+    'Right tag column must be 248 px'
 Assert-Matches $window 'readonly property int dividerWidth:\s*1' `
     'Workspace dividers must remain 1 px'
+Assert-Matches $window '(?s)objectName:\s*"librarySearchFilter".*Layout\.preferredHeight:\s*listWindow\.filterBarHeight' `
+    'Search/filter bar must be 54 px'
 
 Assert-Matches $tagPanel 'readonly property int gridColumnCount:\s*3' `
     'Tag panel must expose a fixed three-column contract'
 Assert-Matches $tagPanel 'cellWidth:\s*width\s*/\s*3' `
     'Tag GridView must compute cellWidth from width / 3'
+Assert-Matches $tagPanel 'cellHeight:\s*32' `
+    'Tag capsule grid must use compact 32 px rows'
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*height:\s*24.*radius:\s*12' `
+    'Tag capsules must use compact 24 px linear pills'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag search must use the incremental C++ proxy model'
 if ($tagPanel -match '\bcolumns\s*:') {

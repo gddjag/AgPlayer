@@ -41,12 +41,6 @@ LibraryNavigationModel::LibraryNavigationModel(
                 });
         connect(library_, &QAbstractItemModel::modelReset, this,
                 [this] { rebuildBaseRows(); });
-        connect(library_, &LibraryModel::historyCountChanged, this,
-                [this] { rebuildBaseRows(); });
-        connect(library_, &LibraryModel::recentAddedCountChanged, this,
-                [this] { rebuildBaseRows(); });
-        connect(library_, &LibraryModel::neverPlayedCountChanged, this,
-                [this] { rebuildBaseRows(); });
     }
     if (playlists_ != nullptr) {
         connect(playlists_, &QAbstractItemModel::rowsInserted, this,
@@ -112,9 +106,54 @@ bool LibraryNavigationModel::setExpanded(const QString& nodeId,
     const int row = rowForNodeId(nodeId);
     if (row < 0) return false;
     const Node parent = nodes_.at(row);
-    if ((parent.nodeType != QStringLiteral("resourceRoot")
-         && parent.nodeType != QStringLiteral("resourceFolder"))
-        || parent.expanded == expanded || !parent.hasChildren) {
+    if (parent.expanded == expanded || !parent.hasChildren) {
+        return false;
+    }
+
+    if (parent.nodeType == QStringLiteral("library")) {
+        if (expanded) {
+            QList<Node> playlists;
+            if (playlists_ != nullptr) {
+                for (int sourceRow = 0; sourceRow < playlists_->rowCount(); ++sourceRow) {
+                    const QModelIndex sourceIndex = playlists_->index(sourceRow, 0);
+                    const QString id = playlists_->data(
+                        sourceIndex, PlaylistModel::PlaylistIdRole).toString();
+                    playlists.append({
+                        navigationNodeId(QStringLiteral("playlist"), id),
+                        QStringLiteral("playlist"), 1,
+                        playlists_->data(sourceIndex,
+                                         PlaylistModel::NameRole).toString(),
+                        playlists_->data(sourceIndex,
+                                         PlaylistModel::TrackCountRole).toInt(),
+                        false, {}});
+                }
+            }
+            if (!playlists.isEmpty()) {
+                beginInsertRows({}, row + 1, row + playlists.size());
+                for (int offset = 0; offset < playlists.size(); ++offset)
+                    nodes_.insert(row + 1 + offset, playlists.at(offset));
+                endInsertRows();
+            }
+        } else {
+            int last = row;
+            while (last + 1 < nodes_.size()
+                   && nodes_.at(last + 1).depth > parent.depth) {
+                ++last;
+            }
+            if (last > row) {
+                beginRemoveRows({}, row + 1, last);
+                while (last > row) nodes_.removeAt(last--);
+                endRemoveRows();
+            }
+        }
+        libraryExpanded_ = expanded;
+        nodes_[row].expanded = expanded;
+        emit dataChanged(index(row, 0), index(row, 0), {ExpandedRole});
+        return true;
+    }
+
+    if (parent.nodeType != QStringLiteral("resourceRoot")
+        && parent.nodeType != QStringLiteral("resourceFolder")) {
         return false;
     }
 
@@ -199,41 +238,34 @@ void LibraryNavigationModel::rebuildBaseRows()
     QList<Node> rows;
     const int libraryCount = library_ == nullptr ? 0 : library_->count();
     const int favoriteCount = library_ == nullptr ? 0 : library_->favoriteCount();
+    const bool hasPlaylists = playlists_ != nullptr && playlists_->rowCount() > 0;
     rows.append({navigationNodeId(QStringLiteral("library"), QStringLiteral("all")),
                  QStringLiteral("library"), 0, tr("我的音乐库"), libraryCount,
-                 false, {}});
-    rows.append({navigationNodeId(QStringLiteral("favorites"),
-                                  QStringLiteral("favorites")),
-                 QStringLiteral("favorites"), 0, tr("收藏"), favoriteCount,
-                 false, {}});
-    rows.append({navigationNodeId(QStringLiteral("history"),
-                                  QStringLiteral("history")),
-                 QStringLiteral("history"), 0, tr("播放历史"),
-                 library_ == nullptr ? 0 : library_->historyCount(), false, {}});
-    rows.append({navigationNodeId(QStringLiteral("recentAdded"),
-                                  QStringLiteral("recentAdded")),
-                 QStringLiteral("recentAdded"), 0, tr("最近添加"),
-                 library_ == nullptr ? 0 : library_->recentAddedCount(), false, {}});
-    rows.append({navigationNodeId(QStringLiteral("neverPlayed"),
-                                  QStringLiteral("neverPlayed")),
-                 QStringLiteral("neverPlayed"), 0, tr("从未播放"),
-                 library_ == nullptr ? 0 : library_->neverPlayedCount(), false, {}});
-    rows.append({navigationNodeId(QStringLiteral("tags"), QStringLiteral("manage")),
-                 QStringLiteral("tags"), 0, tr("标签管理"),
-                 tags_ == nullptr ? 0 : tags_->count(), false, {}});
-    if (playlists_ != nullptr) {
+                 libraryExpanded_ && hasPlaylists, {}, hasPlaylists});
+    if (libraryExpanded_ && playlists_ != nullptr) {
         for (int row = 0; row < playlists_->rowCount(); ++row) {
             const QModelIndex sourceIndex = playlists_->index(row, 0);
             const QString id = playlists_->data(
                 sourceIndex, PlaylistModel::PlaylistIdRole).toString();
             rows.append({navigationNodeId(QStringLiteral("playlist"), id),
-                         QStringLiteral("playlist"), 0,
+                         QStringLiteral("playlist"), 1,
                          playlists_->data(sourceIndex,
                                           PlaylistModel::NameRole).toString(),
                          playlists_->data(sourceIndex,
                              PlaylistModel::TrackCountRole).toInt(), false, {}});
         }
     }
+    rows.append({navigationNodeId(QStringLiteral("favorites"),
+                                  QStringLiteral("favorites")),
+                 QStringLiteral("favorites"), 0, tr("我的收藏"), favoriteCount,
+                 false, {}});
+    rows.append({navigationNodeId(QStringLiteral("tags"), QStringLiteral("manage")),
+                 QStringLiteral("tags"), 0, tr("标签管理"),
+                 tags_ == nullptr ? 0 : tags_->count(), false, {}});
+    rows.append({navigationNodeId(QStringLiteral("section"),
+                                  QStringLiteral("resources")),
+                 QStringLiteral("resourceSection"), 0, tr("资源文件夹"), 0,
+                 false, {}});
     if (manager_ != nullptr) {
         for (const QString& requestedRoot : manager_->monitoredFolders()) {
             const QString root = normalizedFolder(requestedRoot);

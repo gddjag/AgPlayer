@@ -17,6 +17,7 @@ class LibraryNavigationModelTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void buildsRequiredLibraryAndTopLevelHierarchy();
     void expandsOnlyTheRequestedFolderRange();
     void expandsThreeLevelsIndependentlyFromIndexedTopology();
     void addsAndRemovesTrackOnlyFolderTopology();
@@ -45,6 +46,69 @@ int rowForNode(const LibraryNavigationModel& model, const QString& nodeId)
 }
 
 } // namespace
+
+void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
+{
+    // Catches custom playlists returning to the top level, legacy history
+    // filters becoming visible again, or the library node losing expansion.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryModel library;
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    LibraryManagerController manager;
+    manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
+    const QString firstPlaylist = playlists.createPlaylist(QStringLiteral("晨间"));
+    const QString secondPlaylist = playlists.createPlaylist(QStringLiteral("夜间"));
+    QVERIFY(!firstPlaylist.isEmpty());
+    QVERIFY(!secondPlaylist.isEmpty());
+
+    LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
+    const QString libraryId = QStringLiteral("library:all");
+    const QString firstId = QStringLiteral("playlist:") + firstPlaylist;
+    const QString secondId = QStringLiteral("playlist:") + secondPlaylist;
+    const int libraryRow = rowForNode(navigation, libraryId);
+    QVERIFY(libraryRow >= 0);
+    QCOMPARE(navigation.data(navigation.index(libraryRow, 0),
+                             LibraryNavigationModel::DepthRole).toInt(), 0);
+    QVERIFY(navigation.data(navigation.index(libraryRow, 0),
+                            LibraryNavigationModel::HasChildrenRole).toBool());
+    QVERIFY(navigation.data(navigation.index(libraryRow, 0),
+                            LibraryNavigationModel::ExpandedRole).toBool());
+    for (const QString& playlistId : {firstId, secondId}) {
+        const int row = rowForNode(navigation, playlistId);
+        QVERIFY(row >= 0);
+        QCOMPARE(navigation.data(navigation.index(row, 0),
+                                 LibraryNavigationModel::DepthRole).toInt(), 1);
+    }
+
+    QStringList topLevelTypes;
+    for (int row = 0; row < navigation.rowCount(); ++row) {
+        const QModelIndex index = navigation.index(row, 0);
+        const QString type = navigation.data(
+            index, LibraryNavigationModel::NodeTypeRole).toString();
+        QVERIFY(type != QStringLiteral("history"));
+        QVERIFY(type != QStringLiteral("recentAdded"));
+        QVERIFY(type != QStringLiteral("neverPlayed"));
+        if (navigation.data(index, LibraryNavigationModel::DepthRole).toInt() == 0
+            && type != QStringLiteral("resourceSection")) {
+            topLevelTypes.append(type);
+        }
+    }
+    QCOMPARE(topLevelTypes,
+             QStringList({QStringLiteral("library"),
+                          QStringLiteral("favorites"),
+                          QStringLiteral("tags")}));
+
+    QVERIFY(navigation.setExpanded(libraryId, false));
+    QCOMPARE(rowForNode(navigation, firstId), -1);
+    QCOMPARE(rowForNode(navigation, secondId), -1);
+    QVERIFY(rowForNode(navigation, QStringLiteral("favorites:favorites")) >= 0);
+    QVERIFY(rowForNode(navigation, QStringLiteral("tags:manage")) >= 0);
+    QVERIFY(navigation.setExpanded(libraryId, true));
+    QVERIFY(rowForNode(navigation, firstId) >= 0);
+    QVERIFY(rowForNode(navigation, secondId) >= 0);
+}
 
 void LibraryNavigationModelTest::expandsOnlyTheRequestedFolderRange()
 {
