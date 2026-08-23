@@ -58,6 +58,15 @@ public:
     bool start(const agplayer::editor::RecordingConfig& config) override
     {
         if (start_gate_) start_gate_->waitForRelease();
+        if (!startup_samples_.empty()) {
+            if (config.channels == 0
+                || startup_samples_.size() % config.channels != 0) {
+                return false;
+            }
+            return session_.startManual(
+                config, startup_samples_.data(),
+                startup_samples_.size() / config.channels);
+        }
         return session_.startManual(config);
     }
 
@@ -99,7 +108,13 @@ public:
         return session_.pushCapturedFrames(interleaved.data(), frames);
     }
 
+    void setStartupSamples(std::vector<float> samples)
+    {
+        startup_samples_ = std::move(samples);
+    }
+
 private:
     std::shared_ptr<ManualRecordingStartGate> start_gate_;
+    std::vector<float> startup_samples_;
     agplayer::editor::RecordingSession session_;
 };

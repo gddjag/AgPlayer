@@ -420,6 +420,55 @@ private slots:
         QVERIFY(controller.stopPlayback());
     }
 
+    void startupCallbackBlockBeforeStartReturnsIsRetainedInFinalDocument()
+    {
+        auto capture = std::make_unique<ManualRecordingCapture>();
+        ManualRecordingCapture* const driver = capture.get();
+        constexpr std::size_t startupFrames = 32;
+        std::vector<float> startupSamples(startupFrames * 2U);
+        for (std::size_t frame = 0; frame < startupFrames; ++frame) {
+            startupSamples[frame * 2U] = static_cast<float>(frame) / 40.0F;
+            startupSamples[frame * 2U + 1U] =
+                -static_cast<float>(frame) / 40.0F;
+        }
+        driver->setStartupSamples(startupSamples);
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString output = temporary.filePath(
+            QStringLiteral("startup-block.wav"));
+
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Recording, 5'000);
+        QCOMPARE(controller.recordingFrames(),
+                 static_cast<qint64>(startupFrames));
+        const auto pcm = driver->takePcmSnapshot(
+            0, static_cast<agplayer::editor::SampleFrame>(startupFrames),
+            startupFrames);
+        QCOMPARE(pcm.frames,
+                 static_cast<agplayer::editor::SampleFrame>(startupFrames));
+        QCOMPARE(pcm.interleaved_samples.size(), startupSamples.size());
+        for (std::size_t index = 0; index < startupSamples.size(); ++index) {
+            QVERIFY(std::abs(pcm.interleaved_samples[index]
+                             - startupSamples[index]) < 0.000001F);
+        }
+
+        QVERIFY(controller.stopRecording());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Ready, 5'000);
+        QVERIFY(controller.hasDocument());
+        QCOMPARE(controller.totalFrames(),
+                 static_cast<qint64>(startupFrames));
+        QCOMPARE(controller.timelineEventViews().size(), 1);
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("timelineEnd")).toLongLong(),
+                 static_cast<qint64>(startupFrames));
+        QVERIFY(QFileInfo::exists(output));
+    }
+
     void delayedRecordingStopCancelsBeforeCaptureBecomesReady()
     {
         auto gate = std::make_shared<ManualRecordingStartGate>();

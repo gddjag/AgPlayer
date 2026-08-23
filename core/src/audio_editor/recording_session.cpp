@@ -261,6 +261,7 @@ public:
             set_last_error("recording session is already active");
             return false;
         }
+        callback_accepting.store(false, std::memory_order_release);
         const auto fail_start = [this](std::string message) {
             set_last_error(std::move(message));
             state.store(RecordingState::Idle, std::memory_order_release);
@@ -337,6 +338,7 @@ public:
             state.store(RecordingState::Idle, std::memory_order_release);
             return false;
         }
+        callback_accepting.store(true, std::memory_order_release);
         return true;
     }
 
@@ -418,8 +420,11 @@ public:
 
     std::size_t push(const float* input, const std::size_t frames) noexcept
     {
+        const RecordingState current = state.load(std::memory_order_acquire);
         if (input == nullptr || frames == 0
-            || state.load(std::memory_order_acquire) != RecordingState::Recording
+            || !callback_accepting.load(std::memory_order_acquire)
+            || (current != RecordingState::Starting
+                && current != RecordingState::Recording)
             || ring == nullptr) {
             return 0;
         }
@@ -494,6 +499,7 @@ public:
         if (current == RecordingState::Starting) {
             return {false, "recording is still starting", {}, 0, 0.0F};
         }
+        callback_accepting.store(false, std::memory_order_release);
         state.store(RecordingState::Finalizing);
         if (device_started) ma_device_stop(&device);
         device_started = false;
@@ -537,6 +543,7 @@ public:
             || current == RecordingState::Starting) {
             return false;
         }
+        callback_accepting.store(false, std::memory_order_release);
         state.store(RecordingState::Finalizing);
         if (device_started) ma_device_stop(&device);
         device_started = false;
@@ -625,6 +632,7 @@ public:
 
     void abort_start()
     {
+        callback_accepting.store(false, std::memory_order_release);
         if (device_started) ma_device_stop(&device);
         device_started = false;
         if (device_ready) ma_device_uninit(&device);
@@ -646,6 +654,7 @@ public:
     std::unique_ptr<agplayer::PcmRingBuffer> ring;
     std::thread writer;
     std::atomic<RecordingState> state{RecordingState::Idle};
+    std::atomic<bool> callback_accepting{false};
     std::atomic<bool> writer_exit{false};
     std::atomic<float> peak_value{0.0F};
     std::atomic<float> interval_peak{0.0F};
@@ -752,7 +761,17 @@ bool RecordingSession::start(const RecordingConfig& config)
 
 bool RecordingSession::startManual(const RecordingConfig& config)
 {
+    return startManual(config, nullptr, 0);
+}
+
+bool RecordingSession::startManual(
+    const RecordingConfig& config, const float* startupInterleaved,
+    const std::size_t startupFrames)
+{
     if (!impl_->start_common(config)) return false;
+    if (startupInterleaved != nullptr && startupFrames > 0) {
+        (void)impl_->push(startupInterleaved, startupFrames);
+    }
     impl_->state.store(RecordingState::Recording, std::memory_order_release);
     return true;
 }

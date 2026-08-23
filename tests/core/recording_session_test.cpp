@@ -66,6 +66,10 @@ int main()
             "invalid capture device did not expose a specific WASAPI error");
     require(!fs::exists(rejected_output),
             "failed recording start created an output file");
+    const float rejected_sample = 0.5F;
+    require(rejected.pushCapturedFrames(&rejected_sample, 1) == 0
+            && rejected.framesCaptured() == 0,
+            "failed recording start left callback acceptance enabled");
 
     RecordingConfig config;
     config.output_path = output;
@@ -167,6 +171,8 @@ int main()
     require(cancelled_session.pushCapturedFrames(block.data(), 480) == 480,
             "cancel recording did not accept frames");
     require(cancelled_session.cancel(), "recording cancel failed");
+    require(cancelled_session.pushCapturedFrames(block.data(), 480) == 0,
+            "cancelled recording still accepted callback frames");
     require(!fs::exists(cancelled), "cancelled recording was committed");
     require(!fs::exists(fs::path(cancelled.u8string()
                 + ".agplayer-recording.tmp"))

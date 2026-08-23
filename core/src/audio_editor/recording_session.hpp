@@ -89,6 +89,9 @@ public:
         const std::filesystem::path& directory);
     [[nodiscard]] bool start(const RecordingConfig& config) override;
     [[nodiscard]] bool startManual(const RecordingConfig& config);
+    [[nodiscard]] bool startManual(
+        const RecordingConfig& config, const float* startupInterleaved,
+        std::size_t startupFrames);
     [[nodiscard]] bool pause() noexcept override;
     [[nodiscard]] bool resume() noexcept override;
     [[nodiscard]] RecordingResult stop() override;
