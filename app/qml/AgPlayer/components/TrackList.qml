@@ -39,10 +39,10 @@ ListView {
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
     property int dragPreviewCreationCount: 0
+    property int lastTrackDragDropAction: Qt.IgnoreAction
     property var dragTrackIds: []
     property var activeDragProxy: null
     property bool dragSessionActive: false
-    property bool dragDropInProgress: false
     property string draggedTrackId: ""
     property real dragOriginY: 0
     property real draggedRowHeight: 0
@@ -146,8 +146,7 @@ ListView {
                             originY, rowHeight) {
         if (dragSessionActive)
             cancelTrackDrag()
-        proxy.x = 0
-        proxy.y = 0
+        lastTrackDragDropAction = Qt.IgnoreAction
         dragTrackIds = ids.slice()
         dragPreviewTitle = title || qsTr("未知歌曲")
         dragPreviewCover = coverSource
@@ -157,6 +156,15 @@ ListView {
         activeDragProxy = proxy
         dragSessionActive = true
         dragPreviewLoader.active = true
+    }
+    function dragRowAtViewportPoint(point) {
+        var rowIndex = root.indexAt(point.x, point.y)
+        var row = rowIndex >= 0 ? root.itemAtIndex(rowIndex) : null
+        if (!row || !row.dragAreaItem)
+            return null
+        var local = root.mapToItem(row.dragAreaItem, point.x, point.y)
+        return local.x >= 0 && local.x <= row.dragAreaItem.width
+                ? row : null
     }
     function clearTrackDragSession() {
         if (!dragSessionActive && !dragPreviewLoader.active
@@ -176,24 +184,17 @@ ListView {
         if (proxy && proxy.Drag.active)
             proxy.Drag.cancel()
     }
-    function cancelTrackDragForProxy(proxy) {
-        if (activeDragProxy !== proxy)
-            return
-        if (dragDropInProgress)
-            clearTrackDragSession()
-        else
-            cancelTrackDrag()
-    }
-    function completeTrackDrag(proxy) {
+    function completeTrackDrag(proxy, rowDeltaY) {
         if (!dragSessionActive || activeDragProxy !== proxy)
             return
         var trackId = draggedTrackId
         var originY = dragOriginY
-        var deltaY = proxy.y
+        var deltaY = Number(rowDeltaY)
+        if (!isFinite(deltaY))
+            deltaY = 0
         var rowHeight = draggedRowHeight
-        dragDropInProgress = true
         var dropAction = proxy.Drag.drop()
-        dragDropInProgress = false
+        lastTrackDragDropAction = dropAction
         clearTrackDragSession()
         if (dropAction === Qt.IgnoreAction)
             finishRowDrag(trackId, originY, deltaY, rowHeight)
@@ -411,10 +412,18 @@ ListView {
         active: false
         onLoaded: root.dragPreviewCreationCount += 1
         z: 1000
-        x: root.activeDragProxy
-           ? root.activeDragProxy.mapToItem(parent, 12, 12).x : 0
-        y: root.activeDragProxy
-           ? root.activeDragProxy.mapToItem(parent, 12, 12).y : 0
+        x: {
+            if (!root.activeDragProxy)
+                return 0
+            root.activeDragProxy.x
+            return root.activeDragProxy.mapToItem(parent, 12, 12).x
+        }
+        y: {
+            if (!root.activeDragProxy)
+                return 0
+            root.activeDragProxy.y
+            return root.activeDragProxy.mapToItem(parent, 12, 12).y
+        }
         sourceComponent: Component {
             Rectangle {
                 objectName: "trackDragPreview"
@@ -443,16 +452,92 @@ ListView {
                         fillMode: Image.PreserveAspectFit
                     }
                     Text {
-                        text: root.dragTrackIds.length > 1
-                              ? qsTr("已选择 %1 首").arg(root.dragTrackIds.length)
-                              : root.dragPreviewTitle
+                        id: previewTitle
+                        objectName: "trackDragPreviewTitle"
+                        text: root.dragPreviewTitle
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 12
                         elide: Text.ElideRight
-                        Layout.maximumWidth: 230
+                        Layout.maximumWidth: root.dragTrackIds.length > 1
+                                             ? 176 : 230
+                    }
+                    Rectangle {
+                        visible: root.dragTrackIds.length > 1
+                        Layout.preferredWidth: previewCount.implicitWidth + 12
+                        Layout.preferredHeight: 22
+                        radius: 11
+                        color: Theme.listSelectedSurface
+                        border.color: Theme.accent
+                        border.width: 1
+
+                        Text {
+                            id: previewCount
+                            objectName: "trackDragPreviewCount"
+                            anchors.centerIn: parent
+                            text: qsTr("%1 首").arg(root.dragTrackIds.length)
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 11
+                        }
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        id: windowDragProxy
+        objectName: "trackDragProxy"
+        parent: Overlay.overlay
+        width: 1
+        height: 1
+        Drag.active: false
+        Drag.dragType: Drag.Internal
+        Drag.supportedActions: Qt.MoveAction
+        Drag.keys: ["application/x-agplayer-track-ids"]
+        Drag.source: root
+        Drag.hotSpot.x: 0
+        Drag.hotSpot.y: 0
+        Drag.mimeData: ({"application/x-agplayer-track-ids":
+                         JSON.stringify(root.dragTrackIds)})
+    }
+
+    DragHandler {
+        id: windowTrackDragHandler
+        parent: root
+        target: windowDragProxy
+        acceptedButtons: Qt.LeftButton
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+                         | PointerHandler.ApprovesTakeOverByAnything
+        property bool ownsTrackSession: false
+        property real activeTranslationY: 0
+        onTranslationChanged: {
+            if (active)
+                activeTranslationY = translation.y
+        }
+        onActiveChanged: {
+            if (active) {
+                activeTranslationY = 0
+                var row = root.dragRowAtViewportPoint(centroid.pressPosition)
+                if (!row)
+                    return
+                if (!root.isSelected(row.trackId))
+                    root.selectOnly(row.trackId, row.index)
+                var pointerOrigin = root.mapToItem(
+                            windowDragProxy.parent,
+                            centroid.pressPosition.x,
+                            centroid.pressPosition.y)
+                windowDragProxy.x = pointerOrigin.x
+                windowDragProxy.y = pointerOrigin.y
+                root.beginTrackDrag(row.trackId, row.dragTrackIds,
+                                    row.title, row.dragCoverSource,
+                                    windowDragProxy, row.y, row.height)
+                windowDragProxy.Drag.active = true
+                ownsTrackSession = true
+            } else if (ownsTrackSession) {
+                ownsTrackSession = false
+                root.completeTrackDrag(windowDragProxy, activeTranslationY)
             }
         }
     }
@@ -486,6 +571,8 @@ ListView {
         readonly property color systemHighlightText: Theme.primaryText
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
+        property alias dragAreaItem: titleCell
+        readonly property url dragCoverSource: trackCoverImage.source
         property int waveformGeneration: 0
         property bool pooled: false
         readonly property bool inViewport:
@@ -499,30 +586,12 @@ ListView {
 
         Component.onCompleted: waveformGeneration = ++root.nextWaveformGeneration
         ListView.onPooled: {
-            root.cancelTrackDragForProxy(rowDragProxy)
             pooled = true
             waveformGeneration = ++root.nextWaveformGeneration
         }
         ListView.onReused: {
             waveformGeneration = ++root.nextWaveformGeneration
             pooled = false
-        }
-
-        Item {
-            id: rowDragProxy
-            objectName: "trackDragProxy"
-            width: 1
-            height: 1
-            Drag.active: false
-            Drag.dragType: Drag.Internal
-            Drag.supportedActions: Qt.MoveAction
-            Drag.keys: ["application/x-agplayer-track-ids"]
-            Drag.source: root
-            Drag.hotSpot.x: 0
-            Drag.hotSpot.y: 0
-            Drag.mimeData: ({"application/x-agplayer-track-ids":
-                             JSON.stringify(root.dragTrackIds)})
-            Component.onDestruction: root.cancelTrackDragForProxy(rowDragProxy)
         }
 
         RowLayout {
@@ -679,28 +748,6 @@ ListView {
                                     provider: root.thumbnailProvider
                                 }
                             }
-                        }
-                    }
-                }
-                DragHandler {
-                    id: titleDragHandler
-                    target: rowDragProxy
-                    acceptedButtons: Qt.LeftButton
-                    onActiveChanged: {
-                        if (active) {
-                            if (!root.isSelected(rowItem.trackId))
-                                root.selectOnly(rowItem.trackId, rowItem.index)
-                            root.beginTrackDrag(
-                                        rowItem.trackId,
-                                        rowItem.dragTrackIds,
-                                        rowItem.title,
-                                        trackCoverImage.source,
-                                        rowDragProxy,
-                                        rowItem.y,
-                                        rowItem.height)
-                            rowDragProxy.Drag.active = true
-                        } else if (rowDragProxy.Drag.active) {
-                            root.completeTrackDrag(rowDragProxy)
                         }
                     }
                 }

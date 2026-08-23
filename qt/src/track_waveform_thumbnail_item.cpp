@@ -3,6 +3,7 @@
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
+#include <QSGVertexColorMaterial>
 #include <QQuickWindow>
 
 #include <algorithm>
@@ -25,8 +26,78 @@ public:
         setFlag(OwnsMaterial, false);
     }
 
+    void ensureCoverageNodes()
+    {
+        if (upperCoverage != nullptr) {
+            return;
+        }
+        upperCoverage = createCoverageNode();
+        lowerCoverage = createCoverageNode();
+        appendChildNode(upperCoverage);
+        appendChildNode(lowerCoverage);
+    }
+
+    void clearCoverageNodes()
+    {
+        if (upperCoverage == nullptr) {
+            return;
+        }
+        removeChildNode(upperCoverage);
+        removeChildNode(lowerCoverage);
+        delete upperCoverage;
+        delete lowerCoverage;
+        upperCoverage = nullptr;
+        lowerCoverage = nullptr;
+    }
+
+    void setWaveformColor(const QColor& color)
+    {
+        material.setColor(color);
+        recolorCoverage(upperCoverage, color, true);
+        recolorCoverage(lowerCoverage, color, false);
+    }
+
     QSGGeometry geometry;
     QSGFlatColorMaterial material;
+    QSGGeometryNode* upperCoverage = nullptr;
+    QSGGeometryNode* lowerCoverage = nullptr;
+
+private:
+    static QSGGeometryNode* createCoverageNode()
+    {
+        auto* node = new QSGGeometryNode();
+        auto* coverageGeometry = new QSGGeometry(
+            QSGGeometry::defaultAttributes_ColoredPoint2D(), 0);
+        coverageGeometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
+        coverageGeometry->setVertexDataPattern(QSGGeometry::DynamicPattern);
+        node->setGeometry(coverageGeometry);
+        node->setFlag(QSGNode::OwnsGeometry, true);
+        auto* coverageMaterial = new QSGVertexColorMaterial();
+        coverageMaterial->setFlag(QSGMaterial::Blending, true);
+        node->setMaterial(coverageMaterial);
+        node->setFlag(QSGNode::OwnsMaterial, true);
+        return node;
+    }
+
+    static void recolorCoverage(QSGGeometryNode* node, const QColor& color,
+                                const bool transparentFirst)
+    {
+        if (node == nullptr) {
+            return;
+        }
+        QSGGeometry* coverageGeometry = node->geometry();
+        auto* vertices = coverageGeometry->vertexDataAsColoredPoint2D();
+        for (int index = 0; index < coverageGeometry->vertexCount(); ++index) {
+            vertices[index].r = static_cast<uchar>(color.red());
+            vertices[index].g = static_cast<uchar>(color.green());
+            vertices[index].b = static_cast<uchar>(color.blue());
+            const bool transparent = (index % 2 == 0)
+                ? transparentFirst : !transparentFirst;
+            vertices[index].a = transparent
+                ? 0U : static_cast<uchar>(color.alpha());
+        }
+        node->markDirty(QSGNode::DirtyGeometry);
+    }
 };
 
 } // namespace
@@ -93,12 +164,12 @@ QSGNode* TrackWaveformThumbnailItem::updatePaintNode(
         colorDirty_ = true;
     }
     if (geometryDirty_) {
-        rebuildGeometry(&node->geometry);
+        rebuildGeometry(node);
         node->markDirty(QSGNode::DirtyGeometry);
         geometryDirty_ = false;
     }
     if (colorDirty_) {
-        node->material.setColor(waveformColor_);
+        node->setWaveformColor(waveformColor_);
         node->markDirty(QSGNode::DirtyMaterial);
         colorDirty_ = false;
     }
@@ -117,20 +188,20 @@ void TrackWaveformThumbnailItem::markColorDirty()
     update();
 }
 
-void TrackWaveformThumbnailItem::rebuildGeometry(QSGGeometry* geometry)
+void TrackWaveformThumbnailItem::rebuildGeometry(QSGNode* sceneNode)
 {
+    auto* node = static_cast<TrackWaveformThumbnailNode*>(sceneNode);
+    QSGGeometry* geometry = &node->geometry;
     const qreal deviceScale = window()
         ? std::max<qreal>(1.0, window()->effectiveDevicePixelRatio()) : 1.0;
     const int pixelColumns = std::clamp(
         static_cast<int>(std::ceil(width() * deviceScale)), 2, 16384);
     const bool sampledPolyline = pixelColumns > kPeakCount;
-    const int vertexCount = sampledPolyline
-        ? pixelColumns * 2 + 1 : pixelColumns * 2;
+    const int vertexCount = pixelColumns * 2;
     if (geometry->vertexCount() != vertexCount) {
         geometry->allocate(vertexCount);
     }
-    geometry->setDrawingMode(sampledPolyline
-        ? QSGGeometry::DrawLineStrip : QSGGeometry::DrawTriangleStrip);
+    geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
 
     auto* vertices = geometry->vertexDataAsPoint2D();
     const auto byteAt = [this](const int bucket, const int endpoint) {
@@ -146,6 +217,7 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGGeometry* geometry)
     };
 
     if (!sampledPolyline) {
+        node->clearCoverageNodes();
         for (int column = 0; column < pixelColumns; ++column) {
             const int first = kPeakCount * column / pixelColumns;
             const int last = std::max(
@@ -181,14 +253,41 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGGeometry* geometry)
             + (static_cast<qreal>(byteAt(second, endpoint))
                - static_cast<qreal>(byteAt(first, endpoint))) * fraction;
     };
-    for (int column = 0; column < pixelColumns; ++column) {
-        vertices[column].set(
-            static_cast<float>(xForColumn(column)),
-            static_cast<float>(yForByte(interpolatedEndpoint(column, 0))));
-        const int reverse = pixelColumns - 1 - column;
-        vertices[pixelColumns + column].set(
-            static_cast<float>(xForColumn(reverse)),
-            static_cast<float>(yForByte(interpolatedEndpoint(reverse, 1))));
+    node->ensureCoverageNodes();
+    QSGGeometry* upperCoverage = node->upperCoverage->geometry();
+    QSGGeometry* lowerCoverage = node->lowerCoverage->geometry();
+    if (upperCoverage->vertexCount() != vertexCount) {
+        upperCoverage->allocate(vertexCount);
+        lowerCoverage->allocate(vertexCount);
     }
-    vertices[vertexCount - 1] = vertices[0];
+    auto* upperCoverageVertices =
+        upperCoverage->vertexDataAsColoredPoint2D();
+    auto* lowerCoverageVertices =
+        lowerCoverage->vertexDataAsColoredPoint2D();
+    const uchar red = static_cast<uchar>(waveformColor_.red());
+    const uchar green = static_cast<uchar>(waveformColor_.green());
+    const uchar blue = static_cast<uchar>(waveformColor_.blue());
+    const uchar alpha = static_cast<uchar>(waveformColor_.alpha());
+    const qreal coverageWidth = 1.0 / deviceScale;
+    for (int column = 0; column < pixelColumns; ++column) {
+        const float x = static_cast<float>(xForColumn(column));
+        const qreal upperY = yForByte(interpolatedEndpoint(column, 0));
+        const qreal lowerY = yForByte(interpolatedEndpoint(column, 1));
+        vertices[column * 2].set(x, static_cast<float>(upperY));
+        vertices[column * 2 + 1].set(x, static_cast<float>(lowerY));
+        upperCoverageVertices[column * 2].set(
+            x, static_cast<float>(std::max<qreal>(0.0,
+                                                  upperY - coverageWidth)),
+            red, green, blue, 0U);
+        upperCoverageVertices[column * 2 + 1].set(
+            x, static_cast<float>(upperY), red, green, blue, alpha);
+        lowerCoverageVertices[column * 2].set(
+            x, static_cast<float>(lowerY), red, green, blue, alpha);
+        lowerCoverageVertices[column * 2 + 1].set(
+            x, static_cast<float>(std::min<qreal>(height(),
+                                                  lowerY + coverageWidth)),
+            red, green, blue, 0U);
+    }
+    node->upperCoverage->markDirty(QSGNode::DirtyGeometry);
+    node->lowerCoverage->markDirty(QSGNode::DirtyGeometry);
 }

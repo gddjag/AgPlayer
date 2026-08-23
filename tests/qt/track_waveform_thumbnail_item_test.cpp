@@ -20,7 +20,7 @@ class TrackWaveformThumbnailItemTest final : public QObject {
 private slots:
     void usesEveryCanvasPixelForContinuousEnvelope();
     void downsamplingPreservesMinimumAndMaximumEnvelope();
-    void switchesToAntialiasedSampledPolylineAboveCachedDensity();
+    void buildsCoverageGeometryForAntialiasedSampledPolyline();
     void reusesGeometryWhenOnlyColorChanges();
     void rebuildsOnlyForPeaksOrSize();
     void clearsOldNodeForInvalidContentOrSize();
@@ -102,10 +102,10 @@ void TrackWaveformThumbnailItemTest::downsamplingPreservesMinimumAndMaximumEnvel
     delete node;
 }
 
-void TrackWaveformThumbnailItemTest::switchesToAntialiasedSampledPolylineAboveCachedDensity()
+void TrackWaveformThumbnailItemTest::buildsCoverageGeometryForAntialiasedSampledPolyline()
 {
-    // Catches stretching the low-zoom envelope into wide aliased columns
-    // instead of sampling a smooth outline at every physical canvas pixel.
+    // Catches claiming antialiasing through QQuickItem::antialiasing alone:
+    // the sampled outline must carry transparent-to-opaque coverage geometry.
     TestableTrackWaveformThumbnailItem item;
     item.setWidth(4096.0);
     item.setHeight(10.0);
@@ -114,9 +114,40 @@ void TrackWaveformThumbnailItemTest::switchesToAntialiasedSampledPolylineAboveCa
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     QCOMPARE(geometryNode(node)->geometry()->drawingMode(),
-             QSGGeometry::DrawLineStrip);
-    QCOMPARE(geometryNode(node)->geometry()->vertexCount(), 8193);
-    QVERIFY(item.antialiasing());
+             QSGGeometry::DrawTriangleStrip);
+    QCOMPARE(geometryNode(node)->geometry()->vertexCount(), 8192);
+    QVERIFY2(node->childCount() == 2,
+             "high-zoom rendering must include upper/lower coverage strips");
+
+    auto* upperCoverage = geometryNode(node->firstChild());
+    auto* lowerCoverage = geometryNode(node->lastChild());
+    QCOMPARE(upperCoverage->geometry()->drawingMode(),
+             QSGGeometry::DrawTriangleStrip);
+    QCOMPARE(upperCoverage->geometry()->vertexCount(), 8192);
+    QCOMPARE(lowerCoverage->geometry()->vertexCount(), 8192);
+    const auto* upper =
+        upperCoverage->geometry()->vertexDataAsColoredPoint2D();
+    const auto* lower =
+        lowerCoverage->geometry()->vertexDataAsColoredPoint2D();
+    QCOMPARE(upper[0].a, 0U);
+    QCOMPARE(upper[1].a, 255U);
+    QVERIFY(upper[0].y < upper[1].y);
+    QCOMPARE(lower[0].a, 255U);
+    QCOMPARE(lower[1].a, 0U);
+    QVERIFY(lower[0].y < lower[1].y);
+
+    item.setWaveformColor(QColor(12, 34, 56, 0));
+    node = item.updatePaintNode(node, nullptr);
+    item.setWaveformColor(QColor(12, 34, 56, 255));
+    node = item.updatePaintNode(node, nullptr);
+    upperCoverage = geometryNode(node->firstChild());
+    lowerCoverage = geometryNode(node->lastChild());
+    upper = upperCoverage->geometry()->vertexDataAsColoredPoint2D();
+    lower = lowerCoverage->geometry()->vertexDataAsColoredPoint2D();
+    QCOMPARE(upper[0].a, 0U);
+    QCOMPARE(upper[1].a, 255U);
+    QCOMPARE(lower[0].a, 255U);
+    QCOMPARE(lower[1].a, 0U);
     delete node;
 }
 

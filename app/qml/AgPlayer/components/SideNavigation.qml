@@ -514,20 +514,24 @@ Item {
                         ids = drop.source.dragTrackIds
                     var targetId = root.playlistIdForNode(nodeRow.nodeId)
                     if (ids.length > 0 && targetId.length > 0) {
+                        var affected = 0
                         if (root.selectedCategory !== "all"
                                 && root.selectedCategory !== "favorites"
                                 && root.selectedCategory !== "history"
                                 && root.selectedCategory !== "recentAdded"
                                 && root.selectedCategory !== "neverPlayed"
                                 && root.selectedCategory !== "library") {
-                            root.playlistModel.moveTracks(root.selectedCategory,
-                                                          targetId, ids)
+                            affected = root.playlistModel.moveTracks(
+                                        root.selectedCategory, targetId, ids)
                         } else {
-                            root.playlistModel.addTracks(targetId, ids)
+                            affected = root.playlistModel.addTracks(targetId,
+                                                                    ids)
                         }
-                        acceptedAnimationCount += 1
-                        playlistLoadAnimation.restart()
-                        drop.acceptProposedAction()
+                        if (affected > 0) {
+                            acceptedAnimationCount += 1
+                            playlistLoadAnimation.restart()
+                            drop.acceptProposedAction()
+                        }
                     }
                 }
             }

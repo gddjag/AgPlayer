@@ -120,6 +120,14 @@ TestCase {
     }
 
     Component {
+        id: tagManagementPanelComponent
+        TagManagementPanel {
+            width: 400
+            height: 500
+        }
+    }
+
+    Component {
         id: resourceNavigationWindowComponent
         Window {
             visible: true
@@ -647,6 +655,19 @@ TestCase {
                "the minimum-width state must tighten typography before wrapping")
         compare(findChild(empty, "emptyImportButton").text, "Import music")
         empty.destroy()
+
+        var libraryEmpty = emptyLibraryComponent.createObject(
+                    mainWindow.contentItem, {
+                        "playlistMode": false,
+                        "width": 320
+                    })
+        verify(libraryEmpty)
+        var libraryFormats = findChild(libraryEmpty, "emptyLibraryFormats")
+        compare(libraryFormats.wrapMode, Text.WordWrap,
+                "single-line tightening is specific to empty playlists")
+        compare(libraryFormats.font.pixelSize, 13,
+                "the regular empty-library typography must stay unchanged")
+        libraryEmpty.destroy()
     }
 
     function test_failed_import_surfaces_status_in_main() {
@@ -770,7 +791,7 @@ TestCase {
         verify(findChild(list, "moveTracksMenu"))
         var firstRow = list.itemAtIndex(0)
         verify(firstRow, "a visible track row should exist")
-        var dragProxy = findChild(firstRow, "trackDragProxy")
+        var dragProxy = findChild(list, "trackDragProxy")
         verify(dragProxy)
         verify(dragProxy.Drag.keys.indexOf("application/x-agplayer-track-ids") >= 0,
                "track rows must advertise the same drag key accepted by playlists")
@@ -1266,7 +1287,7 @@ TestCase {
         var targetPoint = target.mapToItem(firstArea,
                                            target.width / 2,
                                            target.height / 2)
-        var proxy = findChild(firstRow, "trackDragProxy")
+        var proxy = findChild(list, "trackDragProxy")
         verify(proxy)
         mousePress(firstArea, firstArea.width / 2, firstArea.height / 2,
                    Qt.LeftButton)
@@ -1281,9 +1302,22 @@ TestCase {
         compare(preview.selectedCount, 2)
         verify(preview.windowOverlayHosted,
                "the drag preview must live in the window overlay, outside ListView clipping")
+        var previewTitle = findChild(preview, "trackDragPreviewTitle")
+        var previewCount = findChild(preview, "trackDragPreviewCount")
+        verify(previewTitle && previewCount)
+        compare(previewTitle.text, firstRow.title,
+                "multi-selection preview must retain the dragged song title")
+        verify(previewCount.text.indexOf("2") >= 0,
+               "multi-selection count must be separate from the song title")
+        var previewBefore = preview.mapToItem(mainWindow.contentItem, 0, 0)
         mouseMove(firstArea, targetPoint.x, targetPoint.y,
                   60, Qt.LeftButton)
         compare(list.dragPreviewCreationCount, 1)
+        tryVerify(function() {
+            var moved = preview.mapToItem(mainWindow.contentItem, 0, 0)
+            return Math.abs(moved.x - previewBefore.x) > 20
+                    || Math.abs(moved.y - previewBefore.y) > 20
+        }, 500, "the window-overlay preview must follow the active pointer")
         tryVerify(function() { return target.containsDrag }, 500)
         var feedback = findChild(navigation,
                                  "playlistDropFeedback-" + playlistId)
@@ -1953,8 +1987,18 @@ TestCase {
         var volume = findChild(mainWindow, "mainVolumeControl")
         verify(controls && core && play && volume)
 
+        function verifyCoreCentered() {
+            var controlsCenter = controls.mapToItem(
+                        mainWindow.contentItem, controls.width / 2, 0).x
+            var coreCenter = core.mapToItem(
+                        mainWindow.contentItem, core.width / 2, 0).x
+            compare(Math.round(coreCenter), Math.round(controlsCenter),
+                    "the core group geometric center must equal the player center")
+        }
+
         volume.expandedForQa = false
         wait(260)
+        verifyCoreCentered()
         var widthBefore = core.width
         var playCenterBefore = play.mapToItem(controls,
                                               play.width / 2,
@@ -1968,6 +2012,7 @@ TestCase {
                                           play.height / 2).x),
                 Math.round(playCenterBefore),
                 "expanding volume must not move the core transport controls")
+        verifyCoreCentered()
         verify(volume.x >= core.x + core.width,
                "the volume control must float to the right of the centered core")
         volume.expandedForQa = false
@@ -2610,6 +2655,110 @@ TestCase {
         window.destroy()
     }
 
+    function test_z_task5_tag_drop_shows_accepting_hover_before_drop() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        var tagName = "Task2 Hover " + Date.now()
+        var tagKey = tagName.toLocaleLowerCase()
+        task4TemporaryTagKeys = [tagKey]
+        verify(TagModel.createTag(tagName))
+        var filterModel = findChild(mainWindow, "filterModel")
+        var panel = tagManagementPanelComponent.createObject(
+                    mainWindow.contentItem, {
+                        "x": 0,
+                        "y": 0,
+                        "filterModel": filterModel,
+                        "searchText": tagName
+                    })
+        var list = trackListComponent.createObject(
+                    mainWindow.contentItem, {
+                        "x": 420,
+                        "y": 0,
+                        "width": 680
+                    })
+        verify(panel && list)
+        mainWindow.requestActivate()
+        tryCompare(panel, "visibleTagCount", 1, 500)
+        var tagGrid = findChild(panel, "tagGrid")
+        tagGrid.positionViewAtBeginning()
+        var tagCell = null
+        tryVerify(function() {
+            tagCell = tagGrid.itemAtIndex(0)
+            return tagCell !== null
+        }, 500)
+        var target = findChild(tagCell, "tagDropTarget-" + tagKey)
+        var feedback = findChild(tagCell, "tagDropFeedback-" + tagKey)
+        var firstIndex = LibraryModel.indexForTrackId(ids[0])
+        list.positionViewAtIndex(firstIndex, ListView.Beginning)
+        wait(30)
+        var row = list.itemAtIndex(firstIndex)
+        var area = findChild(row, "trackRowDragArea")
+        var proxy = findChild(list, "trackDragProxy")
+        verify(target && feedback)
+        verify(row && area && proxy)
+        var point = target.mapToItem(area, target.width / 2,
+                                     target.height / 2)
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        mouseMove(area, point.x, point.y, 60, Qt.LeftButton)
+        tryVerify(function() { return target.containsDrag }, 500)
+        verify(feedback.visible,
+               "tag target must expose a visible accepting hover state")
+        keyClick(Qt.Key_Escape)
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+        mouseRelease(area, point.x, point.y, Qt.LeftButton)
+        list.destroy()
+        panel.destroy()
+    }
+
+    function test_z_task5_playlist_noop_drop_is_not_accepted_or_animated() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        var playlistId = PlaylistModel.createPlaylist(
+                    "Task2 no-op " + Date.now())
+        verify(playlistId.length > 0)
+        compare(PlaylistModel.addTracks(playlistId, [ids[0]]), 1)
+        var navigation = sideNavigationComponent.createObject(
+                    mainWindow.contentItem, {
+                        "x": 0,
+                        "y": 0,
+                        "selectedCategory": playlistId
+                    })
+        var list = trackListComponent.createObject(
+                    mainWindow.contentItem, {
+                        "x": 220,
+                        "y": 0
+                    })
+        verify(navigation && list)
+        var target = findChild(navigation,
+                               "playlistDropTarget-" + playlistId)
+        verify(target)
+        var rowIndex = LibraryModel.indexForTrackId(ids[0])
+        list.positionViewAtIndex(rowIndex, ListView.Beginning)
+        wait(30)
+        var row = list.itemAtIndex(rowIndex)
+        var area = findChild(row, "trackRowDragArea")
+        var proxy = findChild(list, "trackDragProxy")
+        verify(row && area && proxy)
+        var point = target.mapToItem(area, target.width / 2,
+                                     target.height / 2)
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        tryVerify(function() { return proxy.Drag.active }, 500)
+        mouseMove(area, point.x, point.y, 60, Qt.LeftButton)
+        tryVerify(function() { return target.containsDrag }, 500)
+        mouseRelease(area, point.x, point.y, Qt.LeftButton)
+        tryVerify(function() { return !list.dragSessionActive }, 500)
+        compare(list.lastTrackDragDropAction, Qt.IgnoreAction,
+                "a no-op target must leave the drag action unaccepted")
+        compare(target.acceptedAnimationCount, 0,
+                "no-op drops must not play success feedback")
+        list.destroy()
+        navigation.destroy()
+        PlaylistModel.removePlaylist(playlistId)
+    }
+
     function test_z_task5_single_track_drag_cancel_releases_preview_without_data_change() {
         var ids = nativeDropHelper.ensureSortableTracks()
         var list = trackListComponent.createObject(mainWindow.contentItem)
@@ -2622,7 +2771,7 @@ TestCase {
         var firstRow = list.itemAtIndex(0)
         verify(firstRow)
         var firstArea = findChild(firstRow, "trackRowDragArea")
-        var proxy = findChild(firstRow, "trackDragProxy")
+        var proxy = findChild(list, "trackDragProxy")
         verify(firstArea && proxy)
         list.selectOnly(firstRow.trackId, 0)
         list.forceActiveFocus()
@@ -2704,7 +2853,7 @@ TestCase {
         verify(firstRow)
         var draggedId = firstRow.trackId
         var area = findChild(firstRow, "trackRowDragArea")
-        var proxy = findChild(firstRow, "trackDragProxy")
+        var proxy = findChild(list, "trackDragProxy")
         var dropArea = findChild(target, "destructiveTrackDropArea")
         verify(area && proxy && dropArea)
         var targetPoint = dropArea.mapToItem(area, dropArea.width / 2,
@@ -2727,7 +2876,7 @@ TestCase {
         list.destroy()
     }
 
-    function test_z_task5_drag_session_cleans_on_delegate_pool_and_focus_loss() {
+    function test_z_task5_drag_session_survives_delegate_pool_and_cleans_on_focus_loss() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
         var model = createIsolatedTrackModel("drag-pool-", 30)
@@ -2742,23 +2891,37 @@ TestCase {
         list.positionViewAtBeginning()
         wait(30)
         var firstRow = list.itemAtIndex(0)
-        var proxy = findChild(firstRow, "trackDragProxy")
-        verify(firstRow && proxy)
-        list.beginTrackDrag(firstRow.trackId, firstRow.dragTrackIds,
-                            firstRow.title, "", proxy,
-                            firstRow.y, firstRow.height)
-        proxy.Drag.active = true
-        verify(list.dragSessionActive && proxy.Drag.active)
-        proxy.Drag.active = false
-        verify(list.dragSessionActive,
-               "the pooled callback must clean a stale root-owned session")
+        var proxy = findChild(list, "trackDragProxy")
+        var firstArea = findChild(firstRow, "trackRowDragArea")
+        verify(firstRow && firstArea && proxy)
+        mousePress(firstArea, firstArea.width / 2,
+                   firstArea.height / 2, Qt.LeftButton)
+        mouseMove(firstArea, firstArea.width / 2 + 20,
+                  firstArea.height / 2, 20, Qt.LeftButton)
+        tryVerify(function() {
+            return list.dragSessionActive && proxy.Drag.active
+        }, 500)
         list.currentIndex = -1
         list.positionViewAtEnd()
-        tryVerify(function() { return !list.dragSessionActive }, 500)
-        compare(list.dragTrackIds.length, 0)
+        wait(100)
+        verify(list.dragSessionActive && proxy.Drag.active,
+               "delegate pooling must not terminate a window-owned drag")
+        compare(list.dragTrackIds.length, 1)
+        verify(findChild(list, "trackDragPreview"),
+               "the overlay preview must survive delegate pooling")
+        var pooledPreview = findChild(list, "trackDragPreview")
+        var pooledPreviewBefore = pooledPreview.mapToItem(
+                    mainWindow.contentItem, 0, 0)
+        mouseMove(host, host.width - 20, host.height / 2,
+                  30, Qt.LeftButton)
         tryVerify(function() {
-            return !findChild(list, "trackDragPreview")
-        }, 500)
+            var moved = pooledPreview.mapToItem(mainWindow.contentItem, 0, 0)
+            return Math.abs(moved.x - pooledPreviewBefore.x) > 20
+                    || Math.abs(moved.y - pooledPreviewBefore.y) > 20
+        }, 500, "the window-owned drag must keep tracking after pooling")
+        list.cancelTrackDrag()
+        mouseRelease(host, host.width - 20, host.height / 2, Qt.LeftButton)
+        tryVerify(function() { return !list.dragSessionActive }, 500)
         list.destroy()
         host.destroy()
         model.destroy()
@@ -2776,7 +2939,7 @@ TestCase {
             return windowRow !== null
         }, 500)
         var windowArea = findChild(windowRow, "trackRowDragArea")
-        var windowProxy = findChild(windowRow, "trackDragProxy")
+        var windowProxy = findChild(windowList, "trackDragProxy")
         verify(windowArea && windowProxy)
         mousePress(windowArea, windowArea.width / 2,
                    windowArea.height / 2, Qt.LeftButton)
@@ -2787,8 +2950,8 @@ TestCase {
         tryVerify(function() { return !dragWindow.active }, 1000)
         tryVerify(function() { return !windowList.dragSessionActive }, 500)
         compare(windowList.dragTrackIds.length, 0)
-        mouseRelease(windowArea, windowArea.width / 2 + 20,
-                     windowArea.height / 2, Qt.LeftButton)
+        mouseRelease(dragWindow, dragWindow.width / 2,
+                     dragWindow.height / 2, Qt.LeftButton)
         dragWindow.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }

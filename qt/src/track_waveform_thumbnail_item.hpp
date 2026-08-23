@@ -4,7 +4,7 @@
 #include <QColor>
 #include <QQuickItem>
 
-class QSGGeometry;
+class QSGNode;
 
 class TrackWaveformThumbnailItem : public QQuickItem {
     Q_OBJECT
@@ -36,7 +36,7 @@ protected:
 private:
     void markGeometryDirty();
     void markColorDirty();
-    void rebuildGeometry(QSGGeometry* geometry);
+    void rebuildGeometry(QSGNode* sceneNode);
 
     QByteArray peaks_;
     QColor waveformColor_ = Qt::white;

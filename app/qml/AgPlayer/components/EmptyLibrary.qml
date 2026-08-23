@@ -15,7 +15,8 @@ Rectangle {
         objectName: "emptyLibraryContent"
         anchors.centerIn: parent
         width: Math.min(520, Math.max(0, root.width - 24))
-        spacing: root.width <= 360 ? Theme.spacingSm : Theme.spacingLg
+        spacing: root.playlistMode && root.width <= 360
+                 ? Theme.spacingSm : Theme.spacingLg
         visible: !importStatus.active
 
         Image {
@@ -47,14 +48,17 @@ Rectangle {
                   : qsTr("Drag audio files into the window or click below to import")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: root.width <= 360 ? 8 : 13
-            font.letterSpacing: root.width <= 360 ? -1.5 : 0
+            font.pixelSize: root.playlistMode && root.width <= 360 ? 8 : 13
+            font.letterSpacing: root.playlistMode && root.width <= 360
+                                ? -1.5 : 0
             minimumPixelSize: 7
-            fontSizeMode: Text.HorizontalFit
+            fontSizeMode: root.playlistMode ? Text.HorizontalFit
+                                              : Text.FixedSize
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.NoWrap
+            wrapMode: root.playlistMode ? Text.NoWrap : Text.WordWrap
+            Layout.maximumWidth: root.playlistMode ? emptyContent.width : 360
         }
 
         Button {
