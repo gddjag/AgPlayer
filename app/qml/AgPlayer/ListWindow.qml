@@ -532,16 +532,29 @@ Window {
                                             || listWindow.customPlaylistEmpty() ? 1
                                           : filterModel && filterModel.count > 0
                                             ? 0 : 2
-                            TrackList {
-                                objectName: "sharedTrackList"
+                            Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                trackModel: filterModel
-                                playlistModel: listWindow.playlistModel
-                                selectedCategory: filterModel
-                                                  ? filterModel.category : "all"
-                                searchText: filterModel
-                                            ? filterModel.searchText : ""
+
+                                TrackList {
+                                    id: sharedTrackList
+                                    objectName: "sharedTrackList"
+                                    anchors.fill: parent
+                                    dragInputHost: sharedTrackListDragInputHost
+                                    trackModel: filterModel
+                                    playlistModel: listWindow.playlistModel
+                                    selectedCategory: filterModel
+                                                      ? filterModel.category : "all"
+                                    searchText: filterModel
+                                                ? filterModel.searchText : ""
+                                }
+
+                                Item {
+                                    id: sharedTrackListDragInputHost
+                                    anchors.fill: sharedTrackList
+                                    z: sharedTrackList.z + 1
+                                    visible: sharedTrackList.visible
+                                }
                             }
                             EmptyLibrary {
                                 objectName: "emptyLibrary"

@@ -17,6 +17,7 @@ ListView {
     property var trackModel: LibraryModel
     property var playlistModel: PlaylistModel
     property var thumbnailProvider: TrackWaveformThumbnailProvider
+    property Item dragInputHost: null
     property string selectedCategory: "all"
     property string searchText: ""
     property var selectedTrackIds: []
@@ -520,7 +521,7 @@ ListView {
 
     Item {
         id: windowTrackDragHost
-        parent: root.parent
+        parent: root.dragInputHost ? root.dragInputHost : root.parent
         x: root.x
         y: root.y
         z: root.z + 1

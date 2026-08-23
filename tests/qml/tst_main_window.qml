@@ -2891,6 +2891,74 @@ TestCase {
         list.destroy()
     }
 
+    function test_z_task5_list_window_drag_host_preserves_page_stack() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        SettingsController.listWaveformThumbnailEnabled = false
+        nativeDropHelper.ensureSortableTracks()
+        var filter = findChild(mainWindow, "filterModel")
+        filter.category = "all"
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        filter.searchText = ""
+
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var list = findChild(window, "sharedTrackList")
+        var proxy = findChild(list, "trackDragProxy")
+        verify(list && proxy)
+        tryVerify(function() { return list.visible && list.count > 0 }, 500)
+
+        var pageStack = list.parent
+        while (pageStack && pageStack.currentIndex === undefined)
+            pageStack = pageStack.parent
+        verify(pageStack, "the shared track list must remain inside its page stack")
+        var stackCountBefore = pageStack.count
+        var stackIndexBefore = pageStack.currentIndex
+
+        list.positionViewAtBeginning()
+        var row = null
+        tryVerify(function() {
+            row = list.itemAtIndex(0)
+            return row !== null
+        }, 500)
+        var area = findChild(row, "trackRowDragArea")
+        verify(area)
+        mousePress(area, area.width / 2, area.height / 2, Qt.LeftButton)
+        mouseMove(area, area.width / 2 + 20, area.height / 2,
+                  20, Qt.LeftButton)
+        wait(50)
+        var dragStarted = list.dragSessionActive && proxy.Drag.active
+        var proxyBefore = proxy.mapToItem(window.contentItem, 0, 0)
+        mouseMove(area, area.width / 2 + 100, area.height / 2,
+                  40, Qt.LeftButton)
+        wait(50)
+        var proxyAfter = proxy.mapToItem(window.contentItem, 0, 0)
+        var dragFollowed = Math.abs(proxyAfter.x - proxyBefore.x) > 40
+        var stackCountAfter = pageStack.count
+        var stackIndexAfter = pageStack.currentIndex
+
+        list.cancelTrackDrag()
+        mouseRelease(area, area.width / 2 + 100, area.height / 2,
+                     Qt.LeftButton)
+        window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+
+        verify(stackCountBefore === 4 && stackCountAfter === 4
+               && stackIndexBefore === 0 && stackIndexAfter === 0
+               && dragStarted && dragFollowed,
+               "ListWindow drag input must preserve the four page stack and "
+               + "track the pointer: count=" + stackCountBefore + "->"
+               + stackCountAfter + ", index=" + stackIndexBefore + "->"
+               + stackIndexAfter + ", started=" + dragStarted
+               + ", followed=" + dragFollowed)
+    }
+
     function test_z_task5_scrolled_visible_row_starts_window_drag() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
