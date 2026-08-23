@@ -15,6 +15,7 @@ private slots:
     void transformsStemWithoutChangingExtension();
     void blankAffixesRemoveRecognizableAffixesAndSequence();
     void removesExplicitLiteralAffixesAndEdgeSequenceOnly();
+    void appliesRemovalAdditionAndNumberingInSpecifiedOrder();
     void keepsHiddenFilesAndExtensionlessNamesWellDefined();
     void reportsUnsafeWindowsNames();
     void plansInternalCollisionsInImportOrder();
@@ -79,6 +80,29 @@ void FilenameProcessingTest::removesExplicitLiteralAffixesAndEdgeSequenceOnly()
     QCOMPARE(FilenameTransformEngine::transform(
                  u"DJ-Sunrise-Promo - 09.flac"_s, rules, 0),
              u"Sunrise.flac"_s);
+}
+
+void FilenameProcessingTest::appliesRemovalAdditionAndNumberingInSpecifiedOrder()
+{
+    FilenameRuleSet rules;
+    rules.removeSequenceAtStart = true;
+    rules.removeSequenceAtEnd = true;
+    rules.removePrefix = u"OLD-"_s;
+    rules.removeSuffix = u"-Tail"_s;
+    rules.removePrefixWhenEmpty = false;
+    rules.removeSuffixWhenEmpty = false;
+    rules.removeSequenceWhenEmpty = false;
+    rules.prefix = u"NEW-"_s;
+    rules.suffix = u"-DONE"_s;
+    rules.autoNumber = true;
+    rules.numberStart = 5;
+    rules.numberDigits = 2;
+    rules.numberPosition = NumberPosition::AfterSuffix;
+    rules.numberSeparator = u"_"_s;
+
+    QCOMPARE(FilenameTransformEngine::transform(
+                 u"007 - OLD-Song-Tail - 09.flac"_s, rules, 0),
+             u"NEW-Song-DONE_05.flac"_s);
 }
 
 void FilenameProcessingTest::keepsHiddenFilesAndExtensionlessNamesWellDefined()

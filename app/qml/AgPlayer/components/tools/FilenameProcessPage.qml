@@ -259,8 +259,9 @@ Control {
             preserveExtension: preserveExtensionCheck.checked,
             removePrefixWhenEmpty: prefixAddRadio.checked && prefixField.text.length === 0,
             removeSuffixWhenEmpty: suffixAddRadio.checked && suffixField.text.length === 0,
-            removeSequenceWhenEmpty: (prefixAddRadio.checked && prefixField.text.length === 0)
-                                     || (suffixAddRadio.checked && suffixField.text.length === 0),
+            removeSequenceWhenEmpty: false,
+            removeSequenceAtStart: removeSequenceCheck.checked,
+            removeSequenceAtEnd: removeSequenceCheck.checked,
             autoNumber: autoNumberCheck.checked,
             numberStart: numberStartSpin.value,
             numberDigits: numberDigitsSpin.value,
@@ -836,9 +837,18 @@ Control {
                                     Layout.columnSpan: 2
                                     Layout.fillWidth: true
                                     Label { text: qsTr("自动序号"); color: Theme.primaryText; font.weight: Font.DemiBold; Layout.leftMargin: 10 }
-                                    Item { Layout.fillWidth: true }
                                     ThemedSwitch {
                                         id: autoNumberCheck
+                                        objectName: "filenameAutoNumberCheck"
+                                        checked: false
+                                        text: ""
+                                        onToggled: page.refreshPreview()
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    Label { text: qsTr("删除序号"); color: Theme.primaryText; font.weight: Font.DemiBold }
+                                    ThemedSwitch {
+                                        id: removeSequenceCheck
+                                        objectName: "filenameRemoveSequenceCheck"
                                         Layout.rightMargin: 14
                                         checked: false
                                         text: ""

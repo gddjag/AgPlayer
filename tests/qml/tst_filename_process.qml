@@ -72,7 +72,7 @@ TestCase {
         compare(payload.suffix, "")
         compare(payload.removePrefixWhenEmpty, true)
         compare(payload.removeSuffixWhenEmpty, true)
-        compare(payload.removeSequenceWhenEmpty, true)
+        compare(payload.removeSequenceWhenEmpty, false)
 
         prefixField.text = "[Live]_"
         suffixField.text = "_Remaster"
@@ -97,5 +97,30 @@ TestCase {
         compare(payload.suffix, "")
         compare(payload.removeSuffix, "_HQ")
         compare(payload.removeSuffixWhenEmpty, false)
+    }
+
+    function test_removeSequenceIsIndependentAndAdjacentToAutoNumber() {
+        const page = createTemporaryObject(pageComponent, testCase)
+        verify(page)
+        wait(0)
+        const autoNumber = findChild(page, "filenameAutoNumberCheck")
+        const removeSequence = findChild(page, "filenameRemoveSequenceCheck")
+        verify(autoNumber && removeSequence)
+        compare(autoNumber.parent, removeSequence.parent)
+        verify(removeSequence.x > autoNumber.x)
+
+        autoNumber.checked = false
+        removeSequence.checked = true
+        const removeRules = page.rules()
+        verify(removeRules.removeSequenceAtStart)
+        verify(removeRules.removeSequenceAtEnd)
+        verify(!removeRules.autoNumber)
+
+        autoNumber.checked = true
+        removeSequence.checked = false
+        const addRules = page.rules()
+        verify(!addRules.removeSequenceAtStart)
+        verify(!addRules.removeSequenceAtEnd)
+        verify(addRules.autoNumber)
     }
 }

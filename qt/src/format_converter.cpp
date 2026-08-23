@@ -735,6 +735,9 @@ QVariantMap FormatConverter::previewSelected(const QVariantList& indices,
 
 QVariantList FormatConverter::supportedOutputFormats() const
 {
+    if (!outputCapabilitiesCache_.isEmpty()) {
+        return outputCapabilitiesCache_;
+    }
     struct Candidate {
         const char* key;
         const char* label;
@@ -794,7 +797,8 @@ QVariantList FormatConverter::supportedOutputFormats() const
                 {QStringLiteral("presets"),
                  presets_for(formatKey, capability.lossy)}});
         }
-        return actualFormats;
+        outputCapabilitiesCache_ = actualFormats;
+        return outputCapabilitiesCache_;
     }
     QVariantList formats;
     for (const Candidate& candidate : candidates) {
@@ -811,7 +815,8 @@ QVariantList FormatConverter::supportedOutputFormats() const
                       .arg(QString::fromLatin1(candidate.codec))},
         });
     }
-    return formats;
+    outputCapabilitiesCache_ = formats;
+    return outputCapabilitiesCache_;
 }
 
 void FormatConverter::updateEntryProgress(int index, double value,

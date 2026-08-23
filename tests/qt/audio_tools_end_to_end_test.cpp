@@ -87,6 +87,7 @@ private slots:
     void formatConverterSkipPolicyLeavesExistingOutputUntouched();
     void formatConverterExposesEveryPdfRequiredOutputFormat();
     void formatConverterAppliesRealCbrAndVbrModes();
+    void formatConverterExportsEveryAdvertisedBitrateMode();
     void formatConverterCancellationPreservesExistingOutput();
     void formatConverterExportsAndReopensEveryExposedFormat();
     void formatConverterRejectsUnsupportedParameterCombinations();
@@ -110,6 +111,7 @@ private slots:
     void metadataEditorAppendsDeduplicatesAndAggregatesScopeValues();
     void metadataEditorDetectsReplacementCoverFromContent();
     void metadataEditorPreflightIsAsyncAndRequiresDecision();
+    void metadataEditorDoesNotApplyWhenEveryTargetIsUnsupported();
     void metadataEditorAppliesUiPayloadToMixedContainerBatch();
     void filenameProcessorRenamesWithoutTouchingAudio();
     void filenameProcessorAppliesExactlyThePreviewedConflictPlan();
@@ -2238,6 +2240,92 @@ void AudioToolsEndToEndTest::metadataEditorPreflightIsAsyncAndRequiresDecision()
     QCOMPARE(editor.cancelledCount(), 0);
     QCOMPARE(editor.entryAt(0).value(QStringLiteral("title")).toString(),
              QStringLiteral("Ready"));
+}
+
+void AudioToolsEndToEndTest::formatConverterExportsEveryAdvertisedBitrateMode()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("advertised-modes.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 2));
+
+    const QVariantList formats = FormatConverter().supportedOutputFormats();
+    for (const QVariant& value : formats) {
+        const QVariantMap capability = value.toMap();
+        if (!capability.value(QStringLiteral("available")).toBool()) continue;
+        const QString format = capability.value(QStringLiteral("key")).toString();
+        const QVariantList modes = capability.value(QStringLiteral("bitrateModes"))
+                                       .toList();
+        for (const QVariant& modeValue : modes) {
+            const QString mode = modeValue.toMap()
+                                     .value(QStringLiteral("key")).toString();
+            const QString outputDir = temp.filePath(format + QLatin1Char('-') + mode);
+            QVERIFY(QDir().mkpath(outputDir));
+            FormatConverter converter;
+            converter.setBitrateMode(mode);
+            converter.loadFiles({QUrl::fromLocalFile(input)});
+            waitForConverterLoad(converter);
+            QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+            converter.start(format, 192000,
+                            format == QStringLiteral("opus") ? 48000 : 44100,
+                            2, outputDir, false, false, false);
+            if (completed.isEmpty()) {
+                QVERIFY2(completed.wait(30'000),
+                         qPrintable(format + QLatin1Char('/') + mode));
+            }
+            const QVariantMap row = converter.files().first().toMap();
+            QVERIFY2(converter.failedCount() == 0,
+                     qPrintable(QStringLiteral("%1/%2: %3")
+                                    .arg(format, mode,
+                                         row.value(QStringLiteral("errorDetail"))
+                                             .toString())));
+            verifyAudioFile(row.value(QStringLiteral("outputPath")).toString(),
+                            format == QStringLiteral("opus") ? 48000 : 44100,
+                            format + QLatin1Char('/') + mode);
+        }
+    }
+}
+
+void AudioToolsEndToEndTest::
+    metadataEditorDoesNotApplyWhenEveryTargetIsUnsupported()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString invalid = temp.filePath(QStringLiteral("broken.mp3"));
+    QFile broken(invalid);
+    QVERIFY(broken.open(QIODevice::WriteOnly));
+    QCOMPARE(broken.write("not audio"), qint64(9));
+    broken.close();
+
+    MetadataEditor editor;
+    QSignalSpy loaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(invalid)});
+    QVERIFY(loaded.wait(30'000));
+    QCOMPARE(editor.fileCount(), 1);
+
+    const QVariantMap fields{{QStringLiteral("title"),
+                              QVariantMap{{QStringLiteral("mode"),
+                                           QStringLiteral("set")},
+                                          {QStringLiteral("value"),
+                                           QStringLiteral("Must not write")}}}};
+    QSignalSpy preflight(&editor, &MetadataEditor::preflightCompleted);
+    QSignalSpy applied(&editor, &MetadataEditor::metadataApplied);
+    editor.applyMetadata(fields, {0});
+    QVERIFY(preflight.wait(30'000));
+    QCOMPARE(editor.supportedCount(), 0);
+    QCOMPARE(editor.unsupportedCount(), 1);
+    QVERIFY(editor.requiresPreflightDecision());
+    QCOMPARE(editor.results().size(), 1);
+
+    editor.applyPreflightDecision(QStringLiteral("skipUnsupported"));
+    QTest::qWait(500);
+    QCOMPARE(applied.count(), 0);
+    QCOMPARE(editor.results().size(), 1);
+    QCOMPARE(editor.results().first().toMap()
+                 .value(QStringLiteral("status")).toString(),
+             QStringLiteral("unsupported"));
+    QCOMPARE(editor.entryAt(0).value(QStringLiteral("title")).toString(),
+             QString());
 }
 
 void AudioToolsEndToEndTest::metadataEditorAppliesUiPayloadToMixedContainerBatch()

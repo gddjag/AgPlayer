@@ -268,6 +268,7 @@ private:
     QVariantMap pendingRequest_;
     QVector<FrozenConversionJob> pendingJobs_;
     QString selectedFormat_ = QStringLiteral("mp3");
+    mutable QVariantList outputCapabilitiesCache_;
 
     void setBusy(bool value);
     void setProgress(double value);

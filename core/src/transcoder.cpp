@@ -599,14 +599,15 @@ ag_result open_encoder(const std::string& output_path,
     enc.ctx->sample_rate = out_sample_rate;
     enc.ctx->bit_rate = config.bit_rate > 0 ? config.bit_rate : 0;
     if (config.variable_bit_rate) {
-        const int quality = std::clamp(config.quality, 0, 100);
-        const int qscale = std::clamp(9 - (quality * 9 / 100), 0, 9);
-        enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
-        enc.ctx->global_quality = FF_QP2LAMBDA * qscale;
-        if (enc.ctx->priv_data != nullptr) {
-            if (std::string_view(enc.codec->name) == "libopus") {
+        if (std::string_view(enc.codec->name) == "libopus") {
+            if (enc.ctx->priv_data != nullptr) {
                 av_opt_set(enc.ctx->priv_data, "vbr", "on", 0);
             }
+        } else {
+            const int quality = std::clamp(config.quality, 0, 100);
+            const int qscale = std::clamp(9 - (quality * 9 / 100), 0, 9);
+            enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
+            enc.ctx->global_quality = FF_QP2LAMBDA * qscale;
         }
     } else if (enc.ctx->priv_data != nullptr
                && std::string_view(enc.codec->name) == "libopus") {

@@ -19,6 +19,7 @@
 #include <QCoreApplication>
 #include <QAbstractTableModel>
 #include <QDragEnterEvent>
+#include <QDir>
 #include <QDropEvent>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -35,6 +36,7 @@
 #include <QSignalSpy>
 #include <QThread>
 #include <QTest>
+#include <QUuid>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
 
@@ -336,12 +338,45 @@ public:
         if (source.isEmpty() || !QFile::exists(source)) return {};
         const QString destination = QStandardPaths::writableLocation(
             QStandardPaths::TempLocation)
-            + QStringLiteral("/agplayer-metadata-ui-%1.%2")
+            + QStringLiteral("/agplayer-audio-tools-ui-%1-%2.%3")
                 .arg(QCoreApplication::applicationPid())
+                .arg(QUuid::createUuid().toString(QUuid::Id128))
                 .arg(QFileInfo(source).suffix());
-        QFile::remove(destination);
         return QFile::copy(source, destination)
             ? QUrl::fromLocalFile(destination) : QUrl{};
+    }
+
+    Q_INVOKABLE QVariantMap probeMedia(const QString& path) const
+    {
+        QVariantMap result{{QStringLiteral("readable"), false},
+                           {QStringLiteral("durationMs"), 0},
+                           {QStringLiteral("sampleRate"), 0}};
+        ag_metadata* metadata = nullptr;
+        if (ag_metadata_open(path.toUtf8().constData(), &metadata) != AG_OK
+            || metadata == nullptr) {
+            return result;
+        }
+        result.insert(QStringLiteral("readable"), true);
+        result.insert(QStringLiteral("durationMs"),
+                      ag_metadata_duration_ms(metadata));
+        result.insert(QStringLiteral("sampleRate"),
+                      ag_metadata_sample_rate(metadata));
+        ag_metadata_destroy(metadata);
+        return result;
+    }
+
+    Q_INVOKABLE QString probeMetadataTitle(const QUrl& url) const
+    {
+        const QString path = url.toLocalFile();
+        ag_metadata* metadata = nullptr;
+        if (path.isEmpty()
+            || ag_metadata_open(path.toUtf8().constData(), &metadata) != AG_OK
+            || metadata == nullptr) {
+            return {};
+        }
+        const QString title = QString::fromUtf8(ag_metadata_title(metadata));
+        ag_metadata_destroy(metadata);
+        return title;
     }
 
     Q_INVOKABLE bool dragItem(QObject* target, qreal x, qreal y,

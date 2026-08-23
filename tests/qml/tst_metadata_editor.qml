@@ -65,6 +65,31 @@ TestCase {
         verify(cover.height === 210)
     }
 
+    function test_changePreviewClipsAndScrollsInternally() {
+        const preview = findChild(page, "metadataChangePreview")
+        const scroll = findChild(page, "metadataChangePreviewScroll")
+        verify(preview && scroll)
+        verify(preview.clip)
+        verify(scroll.clip)
+        verify(scroll.mapToItem(preview, 0, 0).y >= 0)
+        verify(scroll.mapToItem(preview, scroll.width, scroll.height).x
+               <= preview.width)
+        verify(scroll.mapToItem(preview, scroll.width, scroll.height).y
+               <= preview.height)
+        for (let index = 0; index < page.fieldDefinitions.length; ++index) {
+            const key = page.fieldDefinitions[index].key
+            page.setFieldMode(key, "set")
+            page.setFieldValue(key, "long-preview-value-" + index)
+        }
+        tryVerify(function() {
+            return scroll.contentHeight > scroll.availableHeight
+        }, 1000)
+        scroll.contentItem.contentY = scroll.contentHeight
+                                      - scroll.availableHeight
+        tryVerify(function() { return scroll.contentItem.contentY > 0 }, 1000)
+        page.resetEdits()
+    }
+
     function test_compactLayoutKeepsBothWorkspacesReachable() {
         const compactPage = createTemporaryObject(compactPageComponent, testCase)
         verify(compactPage)
@@ -172,6 +197,77 @@ TestCase {
         compare(page.targetCount(), 1)
         scope.currentIndex = 2
         compare(page.targetCount(), MetadataEditor.fileCount)
+    }
+
+    function test_realCurrentSelectedAndAllScopesWriteAndReadBackSnapshots() {
+        const scope = findChild(page, "metadataScopeBox")
+        verify(scope)
+
+        function loadCopies(count) {
+            const urls = []
+            for (let index = 0; index < count; ++index) {
+                const copy = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+                verify(copy.toString().length > 0)
+                urls.push(copy)
+            }
+            MetadataEditor.loadFiles(urls)
+            tryVerify(function() { return !MetadataEditor.busy }, 5000)
+            compare(MetadataEditor.fileCount, count)
+            return urls
+        }
+
+        function applyTitle(title, mutateSelection) {
+            page.refreshFields()
+            page.setFieldMode("title", "set")
+            page.setFieldValue("title", title)
+            page.applyEdits()
+            mutateSelection()
+            tryVerify(function() { return !MetadataEditor.busy }, 30000)
+        }
+
+        let files = loadCopies(2)
+        page.selectedIndices = [0, 1]
+        page.selectionAnchor = 1
+        scope.currentIndex = 0
+        applyTitle("qml-current-snapshot", function() {
+            page.selectedIndices = [0]
+            page.selectionAnchor = 0
+        })
+        compare(nativeDropHelper.probeMetadataTitle(files[0]), "")
+        compare(nativeDropHelper.probeMetadataTitle(files[1]),
+                "qml-current-snapshot")
+        compare(MetadataEditor.results.length, 1)
+
+        MetadataEditor.clear()
+        files = loadCopies(3)
+        page.selectedIndices = [0, 2]
+        page.selectionAnchor = 0
+        scope.currentIndex = 1
+        applyTitle("qml-selected-snapshot", function() {
+            page.selectedIndices = [1]
+            page.selectionAnchor = 1
+        })
+        compare(nativeDropHelper.probeMetadataTitle(files[0]),
+                "qml-selected-snapshot")
+        compare(nativeDropHelper.probeMetadataTitle(files[1]), "")
+        compare(nativeDropHelper.probeMetadataTitle(files[2]),
+                "qml-selected-snapshot")
+        compare(MetadataEditor.results.length, 2)
+
+        MetadataEditor.clear()
+        files = loadCopies(2)
+        page.selectedIndices = [0]
+        page.selectionAnchor = 0
+        scope.currentIndex = 2
+        applyTitle("qml-all-snapshot", function() {
+            page.selectedIndices = []
+            page.selectionAnchor = -1
+        })
+        compare(nativeDropHelper.probeMetadataTitle(files[0]),
+                "qml-all-snapshot")
+        compare(nativeDropHelper.probeMetadataTitle(files[1]),
+                "qml-all-snapshot")
+        compare(MetadataEditor.results.length, 2)
     }
 
 

@@ -178,49 +178,6 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
-
-                TextField {
-                    id: searchField
-                    objectName: "formatSearchField"
-                    visible: !page.compactLayout
-                    Layout.preferredWidth: 360
-                    Layout.preferredHeight: 40
-                    placeholderText: qsTr("搜索文件名、格式或标签...")
-                    color: "#d7e0e6"
-                    onTextChanged: converter.filteredTaskModel.query = text
-                    background: Rectangle {
-                        color: "#09141c"
-                        border.color: searchField.activeFocus ? "#1688ff" : "#263b49"
-                        radius: 6
-                    }
-                    leftPadding: 16
-                }
-                ToolButton {
-                    objectName: "formatFilterButton"
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    icon.source: Theme.icon("filter-3-line")
-                    onClicked: filterMenu.open()
-                    background: Rectangle {
-                        color: parent.hovered ? "#172a37" : "#09141c"
-                        border.color: "#263b49"
-                        radius: 6
-                    }
-                }
-            }
-        }
-
-        Menu {
-            id: filterMenu
-            Repeater {
-                model: ["All", "Converting", "Done", "Error", "Cancelled"]
-                MenuItem {
-                    text: modelData === "All" ? qsTr("全部")
-                          : modelData === "Converting" ? qsTr("转换中")
-                          : modelData === "Done" ? qsTr("已完成")
-                          : modelData === "Error" ? qsTr("失败") : qsTr("已取消")
-                    onTriggered: converter.filteredTaskModel.statusFilter = modelData
-                }
             }
         }
 

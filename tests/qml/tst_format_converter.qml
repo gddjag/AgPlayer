@@ -18,6 +18,14 @@ TestCase {
     function init() {
         testCase.width = 1672
         testCase.height = 941
+        FormatConverter.rejectPendingPlan()
+        FormatConverter.selectedFormat = "mp3"
+        SettingsController.preserveMetadata = true
+        SettingsController.defaultOutputDirectory = ""
+        const settings = findChild(page, "formatSettingsPanel")
+        if (settings)
+            settings.expanded = true
+        wait(0)
         if (!FormatConverter.busy)
             FormatConverter.clear()
         tryCompare(FormatConverter, "fileCount", 0, 3000)
@@ -47,7 +55,8 @@ TestCase {
         const filenameHeaderPosition = filenameHeaderCell.mapToItem(page, 30, 0)
         verify(Math.round(filenameHeaderPosition.x) >= 92
                && Math.round(filenameHeaderPosition.x) <= 96)
-        verify(findChild(page, "formatSearchField"))
+        verify(!findChild(page, "formatSearchField"))
+        verify(!findChild(page, "formatFilterButton"))
         verify(findChild(page, "formatSelectAllCheck"))
         const metadataCheck = findChild(page, "keepMetadataCheck")
         const extractAudioCheck = findChild(page, "extractAudioCheck")
@@ -204,10 +213,9 @@ TestCase {
         const addFile = findChild(page, "formatAddFileButton")
         const convert = findChild(page, "convertAllButton")
         const table = findChild(page, "formatTaskTableView")
-        const search = findChild(page, "formatSearchField")
-        verify(taskPanel && settingsPanel && addFile && convert && table && search)
+        verify(taskPanel && settingsPanel && addFile && convert && table)
         tryCompare(settingsPanel, "width", 40, 1000)
-        verify(addFile.visible && convert.visible && !search.visible)
+        verify(addFile.visible && convert.visible)
         const addPosition = addFile.mapToItem(testCase, 0, 0)
         const convertPosition = convert.mapToItem(testCase, 0, 0)
         verify(addPosition.x >= 0 && addPosition.y >= 0)
@@ -231,6 +239,7 @@ TestCase {
         compare(FormatConverter.fileCount, 1)
         compare(FormatConverter.checkedCount, 1)
         FormatConverter.selectedFormat = "flac"
+        wait(0)
         const plan = FormatConverter.buildPreflight({
             outputFormat: "flac",
             outputDir: "",
@@ -242,6 +251,122 @@ TestCase {
         verify(plan.ready)
         compare(plan.taskCount, 1)
         FormatConverter.rejectPendingPlan()
+    }
+
+    function test_formatButtonsRebuildAndResetCapabilityParameters() {
+        const settings = findChild(page, "formatSettingsPanel")
+        const modeRow = findChild(page, "formatBitrateModeRow")
+        const bitrateRow = findChild(page, "formatBitrateRow")
+        const bitrateBox = findChild(page, "formatBitrateBox")
+        const sampleRateBox = findChild(page, "formatSampleRateBox")
+        const sampleFormatBox = findChild(page, "formatSampleFormatBox")
+        const channelBox = findChild(page, "formatChannelBox")
+        verify(settings && modeRow && bitrateRow && bitrateBox
+               && sampleRateBox && sampleFormatBox && channelBox)
+
+        const expectedKeys = ["mp3", "flac", "wav", "aac",
+                              "opus", "ogg", "alac", "m4a"]
+        const capabilities = FormatConverter.outputCapabilities
+        compare(capabilities.length, expectedKeys.length)
+        for (let index = 0; index < capabilities.length; ++index) {
+            const capability = capabilities[index]
+            verify(expectedKeys.indexOf(capability.key) >= 0)
+            const button = findChild(page,
+                                     "formatOutputFormatButton-" + capability.key)
+            verify(button)
+            compare(button.enabled, capability.available)
+            if (!capability.available) {
+                verify(String(capability.reason || "").length > 0)
+                continue
+            }
+
+            mouseClick(button, button.width / 2, button.height / 2,
+                       Qt.LeftButton)
+            tryCompare(FormatConverter, "selectedFormat", capability.key, 1000)
+            wait(0)
+
+            compare(modeRow.visible, capability.bitrateModes.length > 0)
+            compare(bitrateRow.visible, capability.lossy === true)
+            if (capability.bitrateModes.length > 0) {
+                const supportedModes = capability.bitrateModes.map(
+                            function(mode) { return mode.key })
+                verify(supportedModes.indexOf(settings.bitrateMode) >= 0)
+            } else {
+                compare(settings.bitrateMode, "")
+            }
+            if (capability.lossy) {
+                verify(capability.bitRates.indexOf(settings.bitRate) >= 0)
+                compare(bitrateBox.count, capability.bitRates.length)
+            } else {
+                compare(settings.bitRate, 0)
+            }
+            if (capability.key === "opus")
+                compare(settings.sampleRate, 48000)
+            else
+                verify(settings.sampleRate === 0
+                       || capability.sampleRates.indexOf(settings.sampleRate) >= 0)
+            verify(settings.sampleFormat === ""
+                   || capability.sampleFormats.indexOf(settings.sampleFormat) >= 0)
+            verify(settings.channelLayout === ""
+                   || capability.channelLayouts.indexOf(settings.channelLayout) >= 0)
+        }
+    }
+
+    function test_availableFormatButtonsProduceReopenableOutput() {
+        const capabilities = FormatConverter.outputCapabilities
+        const convert = findChild(page, "convertAllButton")
+        const preflight = findChild(page, "formatPreflightDialog")
+        const errorDialog = findChild(page, "formatErrorDialog")
+        verify(convert && preflight && errorDialog)
+
+        let availableCount = 0
+        for (let index = 0; index < capabilities.length; ++index) {
+            const capability = capabilities[index]
+            const button = findChild(page,
+                                     "formatOutputFormatButton-" + capability.key)
+            verify(button)
+            if (!capability.available) {
+                verify(!button.enabled)
+                verify(String(capability.reason || "").length > 0)
+                continue
+            }
+            ++availableCount
+            const input = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+            verify(input.toString().length > 0)
+            FormatConverter.addUrls([input])
+            tryVerify(function() { return !FormatConverter.busy }, 5000)
+            tryCompare(FormatConverter, "fileCount", 1, 3000)
+
+            mouseClick(button, button.width / 2, button.height / 2,
+                       Qt.LeftButton)
+            tryCompare(FormatConverter, "selectedFormat", capability.key, 1000)
+            mouseClick(convert, convert.width / 2, convert.height / 2,
+                       Qt.LeftButton)
+            tryVerify(function() {
+                return preflight.visible || errorDialog.visible
+            }, 3000)
+            verify(preflight.visible, capability.key + ": "
+                   + String(errorDialog.summary || ""))
+            preflight.accept()
+            tryVerify(function() {
+                return !FormatConverter.busy
+                       && FormatConverter.completedCount
+                              + FormatConverter.failedCount === 1
+            }, 30000)
+            compare(FormatConverter.failedCount, 0,
+                    capability.key + ": "
+                    + String(FormatConverter.files[0].errorDetail || ""))
+            const row = FormatConverter.files[0]
+            compare(row.status, "Done")
+            verify(String(row.outputPath || "").length > 0)
+            const probe = nativeDropHelper.probeMedia(row.outputPath)
+            verify(probe.readable, capability.key + " output could not reopen")
+            verify(probe.durationMs > 0)
+            verify(probe.sampleRate > 0)
+            FormatConverter.clear()
+            tryCompare(FormatConverter, "fileCount", 0, 3000)
+        }
+        verify(availableCount > 0)
     }
 
     function test_referenceWidthShowsCompleteProgressAndFileBadge() {

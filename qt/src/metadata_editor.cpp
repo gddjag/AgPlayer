@@ -1176,6 +1176,9 @@ void MetadataEditor::applyPreflightDecision(const QString& policy)
     emit preflightDecisionChanged();
     if (policy == QLatin1String("supportedOnly")
         || policy == QLatin1String("skipUnsupported")) {
+        if (pendingSupportedTargets_.isEmpty()) {
+            return;
+        }
         startApply(pendingFields_, pendingSupportedTargets_);
     }
 }

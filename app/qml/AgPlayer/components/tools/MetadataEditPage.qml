@@ -1242,11 +1242,21 @@ Rectangle {
                                 border.width: 1
                                 border.color: page.borderColor
                                 radius: 6
+                                clip: true
 
-                                ColumnLayout {
+                                ScrollView {
+                                    id: metadataChangePreviewScroll
+                                    objectName: "metadataChangePreviewScroll"
                                     anchors.fill: parent
                                     anchors.margins: 14
-                                    spacing: 4
+                                    clip: true
+                                    contentWidth: availableWidth
+                                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                                    ColumnLayout {
+                                        width: metadataChangePreviewScroll.availableWidth
+                                        spacing: 4
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Label {
@@ -1338,6 +1348,7 @@ Rectangle {
                                         }
                                     }
                                     Item { Layout.fillHeight: true }
+                                    }
                                 }
                             }
 
