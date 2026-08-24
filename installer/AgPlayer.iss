@@ -100,11 +100,14 @@ end;
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
-  if MsgBox('是否删除个人歌单、收藏和应用设置？'#13#10#13#10 +
-            '选择“是”将删除 AgPlayer 的个人数据；不会删除任何音乐文件。',
-            mbConfirmation, MB_YESNO) = IDYES then begin
-    DelTree(ExpandConstant('{userappdata}\\AgPlayer'), True, True, True);
-    DelTree(ExpandConstant('{localappdata}\\AgPlayer'), True, True, True);
+  { Silent enterprise/test uninstall keeps user data and must not block. }
+  if not UninstallSilent then begin
+    if MsgBox('是否删除个人歌单、收藏和应用设置？'#13#10#13#10 +
+              '选择“是”将删除 AgPlayer 的个人数据；不会删除任何音乐文件。',
+              mbConfirmation, MB_YESNO) = IDYES then begin
+      DelTree(ExpandConstant('{userappdata}\\AgPlayer'), True, True, True);
+      DelTree(ExpandConstant('{localappdata}\\AgPlayer'), True, True, True);
+    end;
   end;
 end;
 

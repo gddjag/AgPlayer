@@ -27,6 +27,9 @@ if ($installer -notmatch '\[Code\]' -or
     $installer -notmatch 'DelTree\(ExpandConstant\(') {
     throw "Uninstaller must explicitly offer deletion of personal playlists, favorites, and settings"
 }
+if ($installer -notmatch 'if not UninstallSilent then begin') {
+    throw "Silent uninstall must preserve personal data without blocking on the interactive deletion prompt"
+}
 if ($installer -notmatch '(?m)^DisableDirPage=no\r?$') {
     throw "Installer must allow choosing an installation directory"
 }
