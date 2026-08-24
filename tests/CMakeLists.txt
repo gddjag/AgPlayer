@@ -933,9 +933,20 @@ agplayer_enable_warnings(qml_audio_tools_test)
 add_dependencies(qml_audio_tools_test decoder_fixture)
 
 add_test(NAME qml_format_converter_test
-    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-format-converter.xml,junitxml
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
 set_tests_properties(qml_format_converter_test PROPERTIES
     TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_format_converter_matrix_test
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-format-converter-matrix.xml,junitxml
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter_matrix.qml)
+set_tests_properties(qml_format_converter_matrix_test PROPERTIES
+    TIMEOUT 90
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"

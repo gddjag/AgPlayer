@@ -82,6 +82,7 @@ Pane {
         function addFolder() {}
         function loadFiles() {}
         function retryFailed() {}
+        function retryTask(taskId) {}
         function cancelTask() {}
         function cancelAll() {}
         function copyText() {}

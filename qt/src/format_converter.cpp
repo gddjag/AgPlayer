@@ -506,6 +506,7 @@ QVariantList FormatConverter::files() const
         map[QStringLiteral("progress")] = entry.progress;
         map[QStringLiteral("outputFormat")] = entry.outputFormat;
         map[QStringLiteral("outputPath")] = entry.outputPath;
+        map[QStringLiteral("resolvedProfile")] = entry.resolvedProfile;
         map[QStringLiteral("status")] = statusString(entry.status);
         map[QStringLiteral("errorMessage")] = entry.errorMessage;
         list.append(map);
@@ -1246,10 +1247,11 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     }
     const int requestedSampleRate = plan.value(
         QStringLiteral("sampleRate"), 0).toInt(&validNumber);
-    if (!validNumber || (requestedSampleRate != 0
-        && (requestedSampleRate < 8000 || requestedSampleRate > 192000))) {
+    if (!validNumber || requestedSampleRate < 0
+        || requestedSampleRate > 384000) {
         return failPreflight(
-            QStringLiteral("Invalid sampleRate: expected 0 or 8000..192000"));
+            QStringLiteral("Invalid sampleRate '%1': expected 0..384000")
+                .arg(plan.value(QStringLiteral("sampleRate")).toString()));
     }
     conversionRequest.sampleRate = requestedSampleRate;
     const bool adjustsOpusSampleRate = format == QStringLiteral("opus")
@@ -1956,6 +1958,83 @@ void FormatConverter::retryFailed(const QString& outputFormat,
               false);
 }
 
+void FormatConverter::retryFailed()
+{
+    QVector<int> failed;
+    {
+        QMutexLocker lock(&mutex_);
+        failed.reserve(entries_.size());
+        for (int index = 0; index < entries_.size(); ++index) {
+            const FileEntry& entry = entries_.at(index);
+            if ((entry.status == FileStatus::Error
+                 || entry.status == FileStatus::Cancelled)
+                && !entry.resolvedProfile.isEmpty()) {
+                failed.push_back(index);
+            }
+        }
+    }
+    retryFrozenEntries(failed);
+}
+
+void FormatConverter::retryTask(const QString& taskId)
+{
+    QVector<int> indices;
+    {
+        QMutexLocker lock(&mutex_);
+        for (int index = 0; index < entries_.size(); ++index) {
+            const FileEntry& entry = entries_.at(index);
+            if (entry.taskId == taskId
+                && (entry.status == FileStatus::Error
+                    || entry.status == FileStatus::Cancelled)
+                && !entry.resolvedProfile.isEmpty()) {
+                indices.push_back(index);
+                break;
+            }
+        }
+    }
+    retryFrozenEntries(indices);
+}
+
+void FormatConverter::retryFrozenEntries(const QVector<int>& indices)
+{
+    QVector<FrozenConversionJob> jobs;
+    QVariantMap firstProfile;
+    {
+        QMutexLocker lock(&mutex_);
+        jobs.reserve(indices.size());
+        for (const int index : indices) {
+            if (index < 0 || index >= entries_.size()) continue;
+            const FileEntry& entry = entries_.at(index);
+            if (entry.resolvedProfile.isEmpty()) continue;
+            jobs.push_back({entry.taskId, entry.importInstanceId, entry.path,
+                            entry.canonicalPath, entry.importRoot,
+                            entry.outputPath, entry.fileSize,
+                            entry.sourceLastModifiedMs, entry.resolvedProfile,
+                            false, entry.overwriteExisting});
+            if (firstProfile.isEmpty()) firstProfile = entry.resolvedProfile;
+        }
+    }
+    if (jobs.isEmpty()) {
+        emit errorOccurred(tr("没有可重试的冻结转换任务"));
+        return;
+    }
+    QString layout = firstProfile.value(QStringLiteral("channelLayout"))
+                         .toString();
+    const int channels = layout == QStringLiteral("mono") ? 1
+        : layout == QStringLiteral("stereo") ? 2 : 0;
+    startJobs(indices, firstProfile.value(QStringLiteral("format")).toString(),
+              firstProfile.value(QStringLiteral("bitrate")).toInt(),
+              firstProfile.value(QStringLiteral("sampleRate")).toInt(),
+              channels, QString(),
+              firstProfile.value(QStringLiteral("keepMetadata")).toBool(),
+              false, false,
+              firstProfile.value(QStringLiteral("keepCover")).toBool(),
+              firstProfile.value(QStringLiteral("sampleFormat")).toString(),
+              layout,
+              firstProfile.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
+              false, jobs);
+}
+
 void FormatConverter::startJobs(const QVector<int>& jobIndices,
                                 const QString& outputFormat,
                                 int bitRate,
@@ -2011,8 +2090,8 @@ void FormatConverter::startJobs(const QVector<int>& jobIndices,
                                .arg(outputFormat.toUpper()));
         return;
     }
-    if (sampleRate != 0 && (sampleRate < 8000 || sampleRate > 192000)) {
-        emit errorOccurred(tr("采样率必须在 8 kHz 到 192 kHz 之间"));
+    if (sampleRate < 0 || sampleRate > 384000) {
+        emit errorOccurred(tr("采样率必须在自动到 384 kHz 之间"));
         return;
     }
     if (channels < 0 || channels > 2) {
@@ -2226,6 +2305,12 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                 : outputFormat;
             entries_[entryIndex].outputFormat = entryFormat.toUpper();
             entries_[entryIndex].outputPath = outputPaths.at(index);
+            if (usesPlannedJobs) {
+                entries_[entryIndex].resolvedProfile =
+                    plannedJobs.at(index).resolvedProfile;
+                entries_[entryIndex].overwriteExisting =
+                    plannedJobs.at(index).overwriteExisting;
+            }
             entries_[entryIndex].progress = 0.0;
         }
     }

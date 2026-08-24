@@ -287,14 +287,7 @@ Rectangle {
         MenuItem {
             text: qsTr("重试失败任务")
             enabled: taskContextMenu.status === "Error" && !converter.busy
-            onTriggered: converter.retryFailed(settingsPanel.outputFormat,
-                                               settingsPanel.bitRate,
-                                               settingsPanel.sampleRate,
-                                               settingsPanel.channels,
-                                               settingsPanel.outputDirectory,
-                                               settingsPanel.keepMetadata,
-                                               settingsPanel.volumeNormalize,
-                                               settingsPanel.extractAudio)
+            onTriggered: converter.retryTask(taskContextMenu.taskId)
         }
         MenuItem {
             text: qsTr("取消任务")

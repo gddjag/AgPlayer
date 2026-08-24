@@ -86,6 +86,8 @@ private slots:
     void formatConverterConfirmedPlanPreservesSkipAction();
     void formatConverterConfirmedPlanUsesFrozenQuality();
     void formatConverterHonorsVorbisQualityFlacCompressionAndLosslessDepth();
+    void formatConverterRetryPreservesFrozenProfile();
+    void formatConverterImportsRealAiffInput();
     void formatConverterSkipPolicyLeavesExistingOutputUntouched();
     void formatConverterExposesEveryPdfRequiredOutputFormat();
     void formatConverterAppliesRealCbrAndVbrModes();
@@ -1128,6 +1130,103 @@ void AudioToolsEndToEndTest::
         QCOMPARE(ag_metadata_bits_per_sample(metadata), 24);
         ag_metadata_destroy(metadata);
     }
+}
+
+void AudioToolsEndToEndTest::formatConverterRetryPreservesFrozenProfile()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("retry-source.wav"));
+    const QString outputDir = temp.filePath(QStringLiteral("out"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 123, 2));
+    QVERIFY(QDir().mkpath(outputDir));
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+    const QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("flac")},
+        {QStringLiteral("outputDir"), outputDir},
+        {QStringLiteral("quality"), 8},
+        {QStringLiteral("bitDepth"), QStringLiteral("s24")},
+        {QStringLiteral("conflictPolicy"), QStringLiteral("overwrite")},
+        {QStringLiteral("keepMetadata"), false},
+        {QStringLiteral("keepCover"), false}});
+    QVERIFY(plan.value(QStringLiteral("ready")).toBool());
+    const QVariantMap task = plan.value(QStringLiteral("tasks")).toList()
+                                 .constFirst().toMap();
+    const QString output = task.value(QStringLiteral("outputPath")).toString();
+    QVERIFY(QDir().mkpath(output));
+
+    QSignalSpy firstCompletion(&converter,
+                               &FormatConverter::transcodeCompleted);
+    converter.confirmPendingPlan();
+    QVERIFY(firstCompletion.wait(30'000));
+    QVariantMap failed = converter.files().constFirst().toMap();
+    QCOMPARE(failed.value(QStringLiteral("status")).toString(),
+             QStringLiteral("Error"));
+    QVERIFY(!failed.value(QStringLiteral("errorMessage")).toString().isEmpty());
+    QCOMPARE(failed.value(QStringLiteral("resolvedProfile")).toMap()
+                 .value(QStringLiteral("quality")).toInt(), 8);
+    QCOMPARE(failed.value(QStringLiteral("resolvedProfile")).toMap()
+                 .value(QStringLiteral("bitDepth")).toString(),
+             QStringLiteral("s24"));
+
+    QVERIFY(QDir(output).removeRecursively());
+    QSignalSpy retryCompletion(&converter,
+                               &FormatConverter::transcodeCompleted);
+    converter.retryTask(failed.value(QStringLiteral("taskId")).toString());
+    QVERIFY(retryCompletion.wait(30'000));
+    const QVariantMap retried = converter.files().constFirst().toMap();
+    QCOMPARE(retried.value(QStringLiteral("status")).toString(),
+             QStringLiteral("Done"));
+    ag_metadata* metadata = nullptr;
+    QCOMPARE(ag_metadata_open(output.toUtf8().constData(), &metadata), AG_OK);
+    QVERIFY(metadata != nullptr);
+    QCOMPARE(ag_metadata_bits_per_sample(metadata), 24);
+    ag_metadata_destroy(metadata);
+}
+
+void AudioToolsEndToEndTest::formatConverterImportsRealAiffInput()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString wav = temp.filePath(QStringLiteral("source.wav"));
+    const QString aiff = temp.filePath(QStringLiteral("source.aiff"));
+    QVERIFY(agplayer::test::writeClickTrackWav(wav, 120, 1));
+
+    const QByteArray aiffPath = aiff.toUtf8();
+    ag_transcode_request_v2 request{};
+    request.struct_size = sizeof(request);
+    request.api_version = AG_TRANSCODE_REQUEST_V2_VERSION;
+    request.output_path = aiffPath.constData();
+    request.muxer_name = "aiff";
+    request.codec_name = "pcm_s16be";
+    request.sample_format = "s16";
+    request.channel_layout = "stereo";
+    QCOMPARE(ag_transcode_v2(wav.toUtf8().constData(), &request, nullptr,
+                             nullptr, nullptr), AG_OK);
+    verifyAudioFile(aiff);
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(aiff)});
+    waitForConverterLoad(converter);
+    QCOMPARE(converter.fileCount(), 1);
+    const QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("flac")},
+        {QStringLiteral("outputDir"), temp.filePath(QStringLiteral("out"))},
+        {QStringLiteral("quality"), 5},
+        {QStringLiteral("keepMetadata"), false},
+        {QStringLiteral("keepCover"), false}});
+    QVERIFY2(plan.value(QStringLiteral("ready")).toBool(),
+             qPrintable(plan.value(QStringLiteral("error")).toString()));
+    QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+    converter.confirmPendingPlan();
+    QVERIFY(completed.wait(30'000));
+    const QVariantMap row = converter.files().constFirst().toMap();
+    QCOMPARE(row.value(QStringLiteral("status")).toString(),
+             QStringLiteral("Done"));
+    verifyAudioFile(row.value(QStringLiteral("outputPath")).toString());
 }
 
 void AudioToolsEndToEndTest::

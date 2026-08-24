@@ -150,6 +150,8 @@ public:
                                  bool keepMetadata,
                                  bool volumeNormalize,
                                  bool extractAudio);
+    Q_INVOKABLE void retryFailed();
+    Q_INVOKABLE void retryTask(const QString& taskId);
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void cancelEntry(int index);
 
@@ -217,6 +219,8 @@ private:
         double progress = 0.0;
         QString outputFormat;
         QString outputPath;
+        QVariantMap resolvedProfile;
+        bool overwriteExisting = false;
         qint64 sourceLastModifiedMs = 0;
         QString probeContainer;
         QString probeError;
@@ -281,6 +285,7 @@ private:
                              const QVector<int>& jobIndices);
     void syncTaskModel();
     void clearMetadataEditPlan();
+    void retryFrozenEntries(const QVector<int>& indices);
 
     // Generate a non-colliding output path for the given source and format.
     QString computeOutputPath(const QString& inputPath,

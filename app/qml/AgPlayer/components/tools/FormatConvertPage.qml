@@ -39,11 +39,14 @@ Rectangle {
     function requestPlan() {
         converter.bitrateMode = settingsPanel.bitrateMode
         converter.conflictPolicy = settingsPanel.conflictPolicy
+        const requestedBitRate = Number(settingsPanel.bitRate)
+        const requestedQuality = Number(settingsPanel.quality)
+        const requestedSampleRate = Number(settingsPanel.sampleRate)
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
-            bitRate: settingsPanel.bitRate,
-            quality: settingsPanel.quality,
-            sampleRate: settingsPanel.sampleRate,
+            bitRate: isFinite(requestedBitRate) ? requestedBitRate : 0,
+            quality: isFinite(requestedQuality) ? requestedQuality : 75,
+            sampleRate: isFinite(requestedSampleRate) ? requestedSampleRate : 0,
             channels: settingsPanel.channels,
             outputDir: outputDirectory,
             keepMetadata: settingsPanel.keepMetadata,
@@ -335,7 +338,7 @@ Rectangle {
         valueRole: "key"
     }
     Button { objectName: "convertSelectedButton"; visible: false; onClicked: page.requestPlan() }
-    Button { objectName: "retryFailedButton"; visible: false; onClicked: converter.retryFailed(settingsPanel.outputFormat, settingsPanel.bitRate, settingsPanel.sampleRate, settingsPanel.channels, page.outputDirectory, settingsPanel.keepMetadata, settingsPanel.volumeNormalize, settingsPanel.extractAudio) }
+    Button { objectName: "retryFailedButton"; visible: false; onClicked: converter.retryFailed() }
 
     DropArea {
         objectName: "formatDropArea"

@@ -15,11 +15,6 @@ TestCase {
         anchors.fill: parent
     }
 
-    Component {
-        id: formatPageComponent
-        FormatConvertPage { width: testCase.width; height: testCase.height }
-    }
-
     function init() {
         testCase.width = 1672
         testCase.height = 941
@@ -350,98 +345,6 @@ TestCase {
         compare(settings.bitRate, 0)
     }
 
-
-    function test_availableFormatButtonsAndEveryVisibleModeProduceReopenableOutput() {
-        const capabilities = FormatConverter.outputCapabilities
-        let availableCount = 0
-        for (let index = 0; index < capabilities.length; ++index) {
-            const capability = capabilities[index]
-            const referenceButton = findChild(
-                        page, "formatOutputFormatButton-" + capability.key)
-            verify(referenceButton)
-            if (!capability.available) {
-                verify(!referenceButton.enabled)
-                verify(String(capability.reason || "").length > 0)
-                continue
-            }
-            const modes = capability.bitrateModes.length > 0
-                        ? capability.bitrateModes : [{ key: "" }]
-            for (let modeIndex = 0; modeIndex < modes.length; ++modeIndex) {
-                const mode = modes[modeIndex]
-                const runPage = createTemporaryObject(formatPageComponent,
-                                                      testCase)
-                verify(runPage)
-                wait(0)
-                const formatButton = findChild(
-                            runPage, "formatOutputFormatButton-" + capability.key)
-                const convert = findChild(runPage, "convertAllButton")
-                const preflight = findChild(runPage, "formatPreflightDialog")
-                const errorDialog = findChild(runPage, "formatErrorDialog")
-                const settings = findChild(runPage, "formatSettingsPanel")
-                const modeRow = findChild(runPage, "formatBitrateModeRow")
-                verify(formatButton && convert && preflight && errorDialog
-                       && settings && modeRow)
-                mouseClick(formatButton, formatButton.width / 2,
-                           formatButton.height / 2, Qt.LeftButton)
-                tryCompare(FormatConverter, "selectedFormat",
-                           capability.key, 1000)
-                wait(0)
-                if (mode.key.length > 0) {
-                    const modeButton = findChild(
-                                runPage, "formatBitrateModeButton-" + mode.key)
-                    verify(modeButton, capability.key + "/" + mode.key)
-                    mouseClick(modeButton, modeButton.width / 2,
-                               modeButton.height / 2, Qt.LeftButton)
-                    compare(settings.bitrateMode, mode.key)
-                    tryCompare(modeButton, "checked", true, 1000)
-                } else {
-                    compare(settings.bitrateMode, "")
-                    verify(!modeRow.visible)
-                }
-
-                const input = nativeDropHelper.copyForNativeDrop(testAudioUrl)
-                verify(input.toString().length > 0)
-                FormatConverter.addUrls([input])
-                tryVerify(function() { return !FormatConverter.busy }, 5000)
-                tryCompare(FormatConverter, "fileCount", 1, 3000)
-                tryCompare(convert, "enabled", true, 3000)
-                mouseClick(convert, convert.width / 2, convert.height / 2,
-                           Qt.LeftButton)
-                tryVerify(function() {
-                    return preflight.visible || errorDialog.visible
-                }, 3000)
-                verify(preflight.visible, capability.key + "/" + mode.key
-                       + ": " + String(errorDialog.summary || ""))
-                preflight.accept()
-                tryVerify(function() {
-                    return !FormatConverter.busy
-                           && FormatConverter.completedCount
-                                  + FormatConverter.failedCount === 1
-                }, 30000, capability.key + "/" + mode.key)
-                compare(FormatConverter.failedCount, 0,
-                        capability.key + "/" + mode.key + ": "
-                        + String(FormatConverter.files[0].errorMessage || ""))
-                const row = FormatConverter.files[0]
-                compare(row.status, "Done")
-                verify(String(row.outputPath || "").length > 0)
-                const probe = nativeDropHelper.probeMedia(row.outputPath)
-                verify(probe.readable, capability.key + "/" + mode.key
-                       + " output could not reopen")
-                verify(probe.durationMs > 0)
-                verify(probe.sampleRate > 0)
-                tryVerify(function() {
-                    return !preflight.visible && !errorDialog.visible
-                }, 3000)
-                FormatConverter.clear()
-                tryCompare(FormatConverter, "fileCount", 0, 3000)
-                runPage.destroy()
-                wait(0)
-            }
-            ++availableCount
-        }
-        verify(availableCount > 0)
-    }
-
     function test_realRuntimeFailureShowsUnderlyingErrorInStatusRow() {
         const input = nativeDropHelper.copyForNativeDrop(testAudioUrl)
         verify(input.toString().length > 0)
@@ -500,6 +403,6 @@ TestCase {
         compare(Math.round(badge.radius), 6)
         verify(icon.source.toString().indexOf("file-music-fill") >= 0)
         verify(rowCheck.checked && rowMark.visible)
-        compare(rowIndicator.color.toString(), "#1688ff")
+        compare(rowIndicator.color.toString(), Theme.accent.toString())
     }
 }

@@ -14,11 +14,15 @@ Rectangle {
     readonly property var capability: converter.currentCapability || ({})
     readonly property string parameterKind: capability.parameterKind || "none"
     property int bitRate: parameterKind === "bitrate"
-                          ? (bitRateBox.currentValue || 0) : 0
-    property int quality: qualityBox.currentIndex >= 0
-                          ? Number(qualityBox.currentValue)
-                          : Number(capability.defaultQuality || 0)
-    property int sampleRate: sampleRateBox.currentValue || 0
+                          && isFinite(Number(bitRateBox.currentValue))
+                          ? Number(bitRateBox.currentValue) : 0
+    property int quality: parameterKind === "bitrate"
+                          ? 75
+                          : (qualityBox.currentIndex >= 0
+                             ? Number(qualityBox.currentValue)
+                             : Number(capability.defaultQuality || 0))
+    property int sampleRate: isFinite(Number(sampleRateBox.currentValue))
+                             ? Number(sampleRateBox.currentValue) : 0
     property int channels: channelLayout === "mono" ? 1
                            : channelLayout === "stereo" ? 2 : 0
     property string bitrateMode: selectedBitrateMode
@@ -59,8 +63,10 @@ Rectangle {
         }
         channelBox.currentIndex = 0
         sampleFormatBox.currentIndex = 0
-        qualityBox.currentIndex = Math.max(0,
-            (capability.qualityChoices || []).indexOf(capability.defaultQuality))
+        const qualityChoices = capability.qualityChoices || []
+        qualityBox.currentIndex = qualityChoices.length > 0
+                ? Math.max(0, qualityChoices.indexOf(capability.defaultQuality))
+                : -1
         bitDepthBox.currentIndex = 0
         if (capability.supportsMetadata !== true)
             SettingsController.preserveMetadata = false
