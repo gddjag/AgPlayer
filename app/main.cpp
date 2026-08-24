@@ -22,6 +22,7 @@
 #include <QStyle>
 #include <QStringList>
 #include <QSystemTrayIcon>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QWindow>
 #include <QtPlugin>
@@ -508,9 +509,20 @@ int main(int argc, char* argv[])
             library.replaceAll(loaded);
         }
         const QDir libraryDataDirectory = QFileInfo(libraryPath).dir();
+        QString tagStoragePath =
+            libraryDataDirectory.filePath(QStringLiteral("tags.json"));
+        std::unique_ptr<QTemporaryDir> qaTagStorageDirectory;
+        if (qaTestMode && !qaLibraryPath.isEmpty() && !qaSeedTags.isEmpty()) {
+            qaTagStorageDirectory = std::make_unique<QTemporaryDir>(
+                QDir(QDir::tempPath()).filePath(
+                    QStringLiteral("AgPlayer-qa-tags-XXXXXX")));
+            tagStoragePath = qaTagStorageDirectory->isValid()
+                ? qaTagStorageDirectory->filePath(QStringLiteral("tags.json"))
+                : QString();
+        }
         TagModel tagModel(
             &library,
-            libraryDataDirectory.filePath(QStringLiteral("tags.json")));
+            tagStoragePath);
         if (qaTestMode) {
             for (const QString& tagName : qaSeedTags) {
                 tagModel.createTag(tagName);

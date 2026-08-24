@@ -87,6 +87,10 @@ Assert-Matches $main 'arg == QStringLiteral\("--qa-tag"\)' `
     'QA tag seeds must be supplied through an explicit CLI argument'
 Assert-Matches $main '(?s)if \(qaTestMode\).*tagModel\.createTag' `
     'QA tag seeds must stay behind the test-mode boundary'
+Assert-Matches $main '(?s)!qaLibraryPath\.isEmpty\(\).*?!qaSeedTags\.isEmpty\(\).*?QTemporaryDir' `
+    'QA tag seeds combined with an explicit library must use isolated temporary storage'
+Assert-Matches $main 'qaTagStorageDirectory->filePath\(QStringLiteral\("tags\.json"\)\)' `
+    'Isolated QA tag seeds must never write the tags file beside an explicit library'
 Assert-Matches $qaMatrix '(?s)function New-QALibraryPath.*Join-Path \$StateRoot \$Surface' `
     'Each QA surface must isolate its adjacent tags.json state'
 
