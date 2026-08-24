@@ -5,8 +5,8 @@ import AgPlayer
 Rectangle {
     id: navigation
     objectName: "audioToolsTopNav"
-    color: "#06182a"
-    border.color: "#23415d"
+    color: Theme.panel
+    border.color: Theme.border
     border.width: 1
     implicitHeight: 43
 
@@ -36,7 +36,8 @@ Rectangle {
                 focusPolicy: Qt.StrongFocus
                 contentItem: Text {
                     text: parent.text
-                    color: parent.checked ? "#f4f8ff" : "#b6c5d5"
+                    color: parent.checked ? Theme.activeSelectionText
+                                          : Theme.secondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: 16
                     font.weight: parent.checked ? Font.DemiBold : Font.Normal
@@ -51,7 +52,7 @@ Rectangle {
                         anchors.bottom: parent.bottom
                         height: 3
                         radius: 1
-                        color: "#087cff"
+                        color: Theme.accent
                     }
                 }
                 onClicked: navigation.toolSelected(index)

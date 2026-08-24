@@ -35,6 +35,21 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
 
+if ($audioEditor -notmatch 'color:\s*Theme\.background' -or
+    $formatPage -notmatch 'color:\s*Theme\.background' -or
+    $metadataPage -notmatch 'color:\s*Theme\.background') {
+    throw 'Every audio-tool page root must use the shared light/dark Theme background.'
+}
+if ($metadataPage -notmatch 'canvasColor:\s*Theme\.editorCanvas' -or
+    $metadataPage -notmatch 'panelColor:\s*Theme\.panel' -or
+    $metadataPage -notmatch 'inputColor:\s*Theme\.elevated') {
+    throw 'Metadata surfaces must use the shared Theme tokens.'
+}
+if ($formatSurface -match '#(?:0f1820|101a21|0c1821|09141c|0a151d)' -or
+    $audioEditor -match '#(?:031426|041628|071a2d|06182a|05172a)') {
+    throw 'Audio editor and converter still contain fixed dark-only surfaces.'
+}
+
 foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
     'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',

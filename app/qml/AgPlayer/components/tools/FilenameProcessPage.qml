@@ -12,9 +12,9 @@ Control {
     focus: true
     background: Rectangle { color: Theme.background }
 
-    readonly property color panelColor: Theme.isLight ? Theme.panel : "#0F1921"
-    readonly property color neutralActionColor: Theme.isLight ? Theme.panel : "#222C37"
-    readonly property color actionBlue: Theme.isLight ? Theme.accent : "#0068FD"
+    readonly property color panelColor: Theme.panel
+    readonly property color neutralActionColor: Theme.elevated
+    readonly property color actionBlue: Theme.accent
 
     component AccentCheckBox: CheckBox {
         id: accentCheck

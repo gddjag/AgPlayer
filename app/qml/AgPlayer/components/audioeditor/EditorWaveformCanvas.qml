@@ -3,8 +3,8 @@ import AgPlayer
 
 Rectangle {
     id: canvas
-    color: "#04182b"
-    border.color: "#23415d"
+    color: Theme.editorCanvas
+    border.color: Theme.border
     border.width: 1
     clip: true
     property double playheadCandidateFrame: -1
@@ -56,7 +56,7 @@ Rectangle {
                / Math.max(1, AudioEditorController.channels)
             width: canvas.width
             height: 1
-            color: "#42617f"
+            color: Theme.border
             opacity: 0.7
         }
     }
@@ -100,8 +100,8 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.margins: 8
-        color: "#224b7d99"
-        border.color: "#5da8ff"
+        color: Theme.editorSelection
+        border.color: Theme.accent
         border.width: 1
         z: 3
         MouseArea {
@@ -131,7 +131,7 @@ Rectangle {
             height: canvas.height - 16
             visible: width > 0 && rawEnd > 0 && rawStart < canvas.width
             color: "transparent"
-            border.color: "#247fe0"
+            border.color: Theme.accent
             border.width: 1
             z: 2
 
@@ -381,8 +381,8 @@ Rectangle {
                 Rectangle {
                     anchors.centerIn: parent
                     width: 9; height: 9; radius: width / 2
-                    color: "#1d7fff"
-                    border.color: "#e7f1ff"; border.width: 2
+                    color: Theme.accent
+                    border.color: Theme.panel; border.width: 2
                 }
             }
 
@@ -452,8 +452,8 @@ Rectangle {
                 Rectangle {
                     anchors.centerIn: parent
                     width: 9; height: 9; radius: width / 2
-                    color: "#1d7fff"
-                    border.color: "#e7f1ff"; border.width: 2
+                    color: Theme.accent
+                    border.color: Theme.panel; border.width: 2
                 }
             }
 
@@ -466,7 +466,7 @@ Rectangle {
                 Rectangle {
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 1; color: "#d8e6f2"; opacity: 0.65
+                    height: 1; color: Theme.secondaryText; opacity: 0.65
                 }
                 Repeater {
                     model: modelData.envelope || []
@@ -479,8 +479,8 @@ Rectangle {
                         y: (1 - Math.max(0, Math.min(2,
                             Number(modelData.gain))) / 2) * volumeLine.height
                             - height / 2
-                        color: "#1d7fff"
-                        border.color: "#e7f1ff"; border.width: 1
+                        color: Theme.accent
+                        border.color: Theme.panel; border.width: 1
                     }
                 }
             }
@@ -514,14 +514,14 @@ Rectangle {
         width: playheadTimeLabel.implicitWidth + 12
         height: 22
         radius: 11
-        color: "#0b2b48"
-        border.color: "#2587ff"
+        color: Theme.elevated
+        border.color: Theme.accent
         z: 9
         Text {
             id: playheadTimeLabel
             anchors.centerIn: parent
             text: canvas.frameTimeText(canvas.displayedPlayheadFrame)
-            color: "#f4f8ff"
+            color: Theme.primaryText
             font.pixelSize: 10
         }
     }
@@ -536,8 +536,8 @@ Rectangle {
         width: selectionTimeLabel.implicitWidth + 12
         height: 22
         radius: 11
-        color: "#0b2b48"
-        border.color: "#5da8ff"
+        color: Theme.elevated
+        border.color: Theme.accent
         z: 9
         Text {
             id: selectionTimeLabel
@@ -545,7 +545,7 @@ Rectangle {
             text: canvas.frameTimeText(AudioEditorController.selectionStart)
                 + " – "
                 + canvas.frameTimeText(AudioEditorController.selectionEnd)
-            color: "#f4f8ff"
+            color: Theme.primaryText
             font.pixelSize: 10
         }
     }
@@ -561,15 +561,15 @@ Rectangle {
         width: selectionDurationLabel.implicitWidth + 12
         height: 22
         radius: 11
-        color: "#11447a"
-        border.color: "#72b5ff"
+        color: Theme.activeSelection
+        border.color: Theme.accent
         z: 9
         Text {
             id: selectionDurationLabel
             anchors.centerIn: parent
             text: qsTr("时长 %1").arg(canvas.frameTimeText(
                 AudioEditorController.selectionFrames))
-            color: "#f4f8ff"
+            color: Theme.activeSelectionText
             font.pixelSize: 10
         }
     }
@@ -584,7 +584,7 @@ Rectangle {
         width: selectionDragLabel.implicitWidth + 18
         height: 24
         radius: 12
-        color: "#0867ed"
+        color: Theme.accent
         z: 10
         Text {
             id: selectionDragLabel
@@ -629,7 +629,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.topMargin: 32
         text: qsTr("Ctrl+滚轮缩放 · Shift+滚轮平移")
-        color: "#8fa8bf"
+        color: Theme.secondaryText
         font.pixelSize: 9
         z: 9
     }
@@ -792,7 +792,7 @@ Rectangle {
         visible: !AudioEditorController.hasDocument
             && !AudioEditorController.recording
         text: qsTr("导入音频后开始编辑")
-        color: "#7891aa"
+        color: Theme.secondaryText
         font.family: Theme.fontPrimary
         font.pixelSize: 14
     }

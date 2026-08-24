@@ -7,18 +7,18 @@ import AgPlayer
 Rectangle {
     id: page
     objectName: "metadataEditPage"
-    color: "#081b29"
+    color: Theme.background
     focus: true
 
     readonly property real desktopMinimumWidth: 1206
     readonly property bool compactLayout: width < desktopMinimumWidth
     readonly property real inspectorRatio: 0.44
-    readonly property color canvasColor: "#071925"
-    readonly property color panelColor: "#0a1d2b"
-    readonly property color inputColor: "#081622"
-    readonly property color borderColor: "#162b3a"
-    readonly property color lineColor: "#132938"
-    readonly property color mutedColor: "#91a0ad"
+    readonly property color canvasColor: Theme.editorCanvas
+    readonly property color panelColor: Theme.panel
+    readonly property color inputColor: Theme.elevated
+    readonly property color borderColor: Theme.border
+    readonly property color lineColor: Theme.border
+    readonly property color mutedColor: Theme.secondaryText
 
     property var selectedIndices: []
     property int selectionAnchor: -1
@@ -54,8 +54,9 @@ Rectangle {
         palette.buttonText: Theme.primaryText
         background: Rectangle {
             radius: 5
-            color: parent.down ? "#173248"
-                               : parent.hovered ? "#122b3d" : "#0d2231"
+            color: parent.down ? Theme.activeSelection
+                               : parent.hovered ? Theme.hoverSurface
+                                                : Theme.elevated
             border.width: 1
             border.color: page.borderColor
         }
@@ -672,13 +673,13 @@ Rectangle {
                                 implicitWidth: selectedChipText.implicitWidth + 24
                                 implicitHeight: 28
                                 radius: 5
-                                color: "#103557"
-                                border.color: "#1c4d75"
+                                color: Theme.selectedTrackSelection
+                                border.color: Theme.accent
                                 Label {
                                     id: selectedChipText
                                     anchors.centerIn: parent
                                     text: qsTr("已选 %1").arg(page.selectedIndices.length)
-                                    color: "#cce8ff"
+                                    color: Theme.primaryText
                                     font.pixelSize: 13
                                 }
                             }
@@ -686,7 +687,7 @@ Rectangle {
                                 implicitWidth: totalChipText.implicitWidth + 24
                                 implicitHeight: 28
                                 radius: 5
-                                color: "#0d2130"
+                                color: Theme.elevated
                                 Label {
                                     id: totalChipText
                                     anchors.centerIn: parent
@@ -701,7 +702,7 @@ Rectangle {
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 38
-                            color: "#091b29"
+                            color: Theme.background
                             border.width: 1
                             border.color: page.lineColor
                             RowLayout {
@@ -750,8 +751,10 @@ Rectangle {
                                 readonly property var metadata: page.entry(sourceIndex)
                                 width: fileList.width
                                 height: 52
-                                color: page.isSelected(sourceIndex) ? "#0d2b42"
-                                      : (rowHover.hovered ? "#0c2638" : "transparent")
+                                color: page.isSelected(sourceIndex)
+                                      ? Theme.selectedTrackSelection
+                                      : (rowHover.hovered ? Theme.hoverSurface
+                                                          : "transparent")
                                 border.width: 1
                                 border.color: page.lineColor
                                 HoverHandler { id: rowHover }
@@ -1100,7 +1103,9 @@ Rectangle {
                                                                          : qsTr("保留原值")
                                                     font.pixelSize: 14
                                                     background: Rectangle {
-                                                        color: valueField.enabled ? page.inputColor : "#091825"
+                                                        color: valueField.enabled
+                                                               ? page.inputColor
+                                                               : Theme.background
                                                         radius: 4
                                                         border.width: valueField.activeFocus ? 1.5 : 1
                                                         border.color: valueField.activeFocus
@@ -1166,7 +1171,7 @@ Rectangle {
                                         Layout.preferredHeight: 210
                                         color: page.inputColor
                                         border.width: 1
-                                        border.color: "#314254"
+                                        border.color: Theme.border
                                         radius: 5
                                         clip: true
                                         Image {
@@ -1234,7 +1239,7 @@ Rectangle {
                                 objectName: "metadataChangePreview"
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 223
-                                color: "#081b28"
+                                color: Theme.background
                                 border.width: 1
                                 border.color: page.borderColor
                                 radius: 6
@@ -1355,9 +1360,10 @@ Rectangle {
                                     palette.buttonText: "white"
                                     background: Rectangle {
                                         radius: 5
-                                        color: !applyButton.enabled ? "#28465e"
-                                             : applyButton.down ? "#0055d8"
-                                             : applyButton.hovered ? "#087cff" : "#086bf2"
+                                        color: !applyButton.enabled ? Theme.border
+                                             : applyButton.down ? Theme.activeSelection
+                                             : applyButton.hovered ? Theme.accent
+                                                                   : Theme.accent
                                     }
                                     onClicked: page.applyEdits()
                                 }
@@ -1373,8 +1379,9 @@ Rectangle {
                                     palette.buttonText: Theme.primaryText
                                     background: Rectangle {
                                         radius: 5
-                                        color: cancelButton.down ? "#173248"
-                                             : cancelButton.hovered ? "#122b3d" : "#0d2231"
+                                        color: cancelButton.down ? Theme.activeSelection
+                                             : cancelButton.hovered ? Theme.hoverSurface
+                                                                    : Theme.elevated
                                         border.width: 1
                                         border.color: page.borderColor
                                     }

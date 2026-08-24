@@ -3,8 +3,8 @@ import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
-    color: "#071a2d"
-    border.color: "#294662"
+    color: Theme.panel
+    border.color: Theme.border
     border.width: 1
     radius: 6
 
@@ -31,12 +31,12 @@ Rectangle {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             radius: 5
-            color: "#0a2138"
-            border.color: "#294662"
+            color: Theme.elevated
+            border.color: Theme.border
             ThemedIcon {
                 anchors.centerIn: parent
                 source: Theme.icon("music-2-fill")
-                tint: "#f4f8ff"
+                tint: Theme.iconPrimary
                 sourceSize.width: 18
                 sourceSize.height: 18
             }
@@ -72,7 +72,7 @@ Rectangle {
                 Rectangle {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 20
-                    color: "#34506c"
+                    color: Theme.border
                 }
                 Text {
                     text: modelData

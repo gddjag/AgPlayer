@@ -85,8 +85,8 @@ Rectangle {
         exclusive: true
     }
 
-    color: "#101a21"
-    border.color: "#203340"
+    color: Theme.panel
+    border.color: Theme.border
     radius: 6
     clip: true
 
@@ -99,14 +99,16 @@ Rectangle {
             width: 20
             height: 20
             radius: 3
-            color: control.checked ? "#1688ff" : (control.enabled ? "#0c1821" : "#10181e")
-            border.color: control.checked ? "#1688ff" : (control.enabled ? "#3a4a53" : "#26343c")
+                color: control.checked ? Theme.accent
+                                       : (control.enabled ? Theme.elevated
+                                                          : Theme.background)
+            border.color: control.checked ? Theme.accent : Theme.border
             ThemedIcon {
                 objectName: control.objectName.length > 0 ? control.objectName + "Mark" : ""
                 anchors.centerIn: parent
                 visible: control.checked
                 source: Theme.icon("check-line")
-                tint: "#ffffff"
+                tint: Theme.accentText
                 sourceSize.width: 14
                 sourceSize.height: 14
             }
@@ -115,7 +117,7 @@ Rectangle {
             text: control.text
             leftPadding: control.indicator.width + 8
             verticalAlignment: Text.AlignVCenter
-            color: control.enabled ? "#d7e0e6" : "#667782"
+            color: control.enabled ? Theme.primaryText : Theme.secondaryText
             font.pixelSize: 13
         }
     }
@@ -127,7 +129,7 @@ Rectangle {
             x: control.width - width - 10
             y: (control.height - height) / 2
             source: Theme.icon("arrow-down-s-line")
-            tint: control.enabled ? "#d7e0e6" : "#667782"
+            tint: control.enabled ? Theme.iconPrimary : Theme.iconSecondary
             sourceSize.width: 18
             sourceSize.height: 18
         }
@@ -137,12 +139,12 @@ Rectangle {
             rightPadding: control.indicator.width + 16
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
-            color: control.enabled ? "#eef3f6" : "#667782"
+            color: control.enabled ? Theme.primaryText : Theme.secondaryText
             font.pixelSize: 13
         }
         background: Rectangle {
-            color: "#0c1821"
-            border.color: control.activeFocus ? "#1688ff" : "#263b49"
+            color: Theme.elevated
+            border.color: control.activeFocus ? Theme.accent : Theme.border
             radius: 5
         }
     }
@@ -161,7 +163,7 @@ Rectangle {
             visible: root.isExpanded
             Layout.fillWidth: true
             text: qsTr("转换设置")
-            color: "#eef3f6"
+            color: Theme.primaryText
             font.pixelSize: 16
             font.weight: Font.DemiBold
         }
@@ -196,7 +198,7 @@ Rectangle {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
                 spacing: 4
-                Text { text: qsTr("A. 输出格式"); color: "#c9d2d8"; font.pixelSize: 13 }
+                Text { text: qsTr("A. 输出格式"); color: Theme.primaryText; font.pixelSize: 13 }
                 GridLayout {
                     id: outputFormatGrid
                     objectName: "formatOutputFormatGrid"
@@ -226,13 +228,13 @@ Rectangle {
                             ToolTip.visible: hovered && !modelData.available
                             ToolTip.text: modelData.reason
                             background: Rectangle {
-                                color: parent.checked ? "#0c63c8" : "#0c1821"
-                                border.color: parent.checked ? "#1688ff" : "#263b49"
+                        color: parent.checked ? Theme.activeSelection : Theme.elevated
+                                border.color: parent.checked ? Theme.accent : Theme.border
                                 radius: 5
                             }
                             contentItem: Text {
                                 text: parent.text
-                                color: parent.enabled ? "#eef3f6" : "#667782"
+                                color: parent.enabled ? Theme.primaryText : Theme.secondaryText
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 font.pixelSize: 13
@@ -242,7 +244,7 @@ Rectangle {
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16; Layout.preferredHeight: 1; color: "#263b49" }
+            Rectangle { Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16; Layout.preferredHeight: 1; color: Theme.border }
 
             GridLayout {
                 id: encodingGroup
@@ -253,10 +255,10 @@ Rectangle {
                 columns: 2
                 columnSpacing: 11
                 rowSpacing: 4
-                Text { text: qsTr("B. 编码参数"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("编码器"); color: "#aeb9c1" }
+                Text { text: qsTr("B. 编码参数"); color: Theme.primaryText; font.pixelSize: 13; Layout.columnSpan: 2 }
+                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("编码器"); color: Theme.secondaryText }
                 ReferenceComboBox { objectName: "formatEncoderBox"; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [converter.currentCapability.encoderLabel || "--"] }
-                Text { visible: bitrateModeRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("码率模式"); color: "#aeb9c1" }
+                Text { visible: bitrateModeRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("码率模式"); color: Theme.secondaryText }
                 RowLayout {
                     id: bitrateModeRow
                     objectName: "formatBitrateModeRow"
@@ -273,12 +275,12 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 32
                             onClicked: root.selectedBitrateMode = modelData.key
-                            background: Rectangle { color: parent.checked ? "#0c63c8" : "#0c1821"; border.color: parent.checked ? "#1688ff" : "#263b49"; radius: 5 }
-                            contentItem: Text { text: parent.text; color: "#eef3f6"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        background: Rectangle { color: parent.checked ? Theme.activeSelection : Theme.elevated; border.color: parent.checked ? Theme.accent : Theme.border; radius: 5 }
+                            contentItem: Text { text: parent.text; color: Theme.primaryText; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         }
                     }
                 }
-                Text { visible: bitrateRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("目标码率"); color: "#aeb9c1" }
+                Text { visible: bitrateRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("目标码率"); color: Theme.secondaryText }
                 RowLayout {
                     id: bitrateRow
                     objectName: "formatBitrateRow"
@@ -301,7 +303,7 @@ Rectangle {
                     visible: qualityBox.visible
                     Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122
                     text: root.parameterKind === "compression" ? qsTr("压缩等级") : qsTr("质量等级")
-                    color: "#aeb9c1"
+                    color: Theme.secondaryText
                 }
                 ReferenceComboBox {
                     id: qualityBox
@@ -315,7 +317,7 @@ Rectangle {
                     })
                     textRole: "text"; valueRole: "value"
                 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("采样率"); color: "#aeb9c1" }
+                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("采样率"); color: Theme.secondaryText }
                 ReferenceComboBox {
                     id: sampleRateBox
                     objectName: "formatSampleRateBox"
@@ -328,7 +330,7 @@ Rectangle {
                         }))
                     textRole: "text"; valueRole: "value"
                 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("声道"); color: "#aeb9c1" }
+                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("声道"); color: Theme.secondaryText }
                 ReferenceComboBox {
                     id: channelBox
                     objectName: "formatChannelBox"
@@ -344,7 +346,7 @@ Rectangle {
                     textRole: "text"
                     valueRole: "value"
                 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: "#aeb9c1" }
+                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: Theme.secondaryText }
                 ReferenceComboBox {
                     id: bitDepthBox
                     objectName: "formatBitDepthBox"
@@ -368,7 +370,7 @@ Rectangle {
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16; Layout.preferredHeight: 1; color: "#263b49" }
+            Rectangle { Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16; Layout.preferredHeight: 1; color: Theme.border }
 
             GridLayout {
                 id: outputOptions
@@ -379,8 +381,8 @@ Rectangle {
                 columns: 2
                 columnSpacing: 11
                 rowSpacing: 4
-                Text { text: qsTr("C. 输出选项"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("输出目录"); color: "#aeb9c1" }
+                Text { text: qsTr("C. 输出选项"); color: Theme.primaryText; font.pixelSize: 13; Layout.columnSpan: 2 }
+                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("输出目录"); color: Theme.secondaryText }
                 RowLayout {
                     TextField {
                         objectName: "formatOutputDirectoryRow"
@@ -392,7 +394,7 @@ Rectangle {
                     }
                     ToolButton { icon.source: Theme.icon("folder-open-line"); onClicked: root.chooseOutputDirectory() }
                 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("文件冲突策略"); color: "#aeb9c1" }
+                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("文件冲突策略"); color: Theme.secondaryText }
                 ReferenceComboBox { id: conflictBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动序号"),value:"auto-number"},{text:qsTr("跳过"),value:"skip"},{text:qsTr("覆盖"),value:"overwrite"},{text:qsTr("询问"),value:"ask"}]; textRole:"text"; valueRole:"value" }
                 ReferenceCheckBox { id: keepMetadataCheck; objectName: "keepMetadataCheck"; Layout.preferredHeight: 28; text: qsTr("保留元数据"); checked: SettingsController.preserveMetadata; enabled: root.capability.supportsMetadata === true; onToggled: SettingsController.preserveMetadata = checked }
                 ReferenceCheckBox { id: keepCoverCheck; Layout.preferredHeight: 28; text: qsTr("保留封面"); checked: true; enabled: converter.currentCapability.supportsCover === true }
@@ -408,14 +410,14 @@ Rectangle {
                 Layout.topMargin: 32
                 Layout.bottomMargin: 6
                 Layout.preferredHeight: 54
-                color: "#0a151d"
-                border.color: "#263b49"
+                color: Theme.elevated
+                border.color: Theme.border
                 radius: 6
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 12
                     ThemedIcon { source: Theme.icon("information-line"); tint: "#49b7ff"; sourceSize.width: 20; sourceSize.height: 20 }
-                    Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: "#9aa8b2"; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                    Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: Theme.secondaryText; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                 }
             }
 
@@ -429,8 +431,8 @@ Rectangle {
                 columns: 2
                 columnSpacing: 10
                 rowSpacing: 6
-                Text { text: qsTr("高级设置"); color: "#c9d2d8"; font.pixelSize: 13; Layout.columnSpan: 2 }
-                Text { text: qsTr("并发任务"); color: "#aeb9c1" }
+                Text { text: qsTr("高级设置"); color: Theme.primaryText; font.pixelSize: 13; Layout.columnSpan: 2 }
+                Text { text: qsTr("并发任务"); color: Theme.secondaryText }
                 ReferenceComboBox {
                     objectName: "converterParallelJobsBox"
                     Layout.fillWidth: true

@@ -7,8 +7,8 @@ Rectangle {
     id: root
     property var converter
     property var settingsPanel
-    color: "#101a21"
-    border.color: "#203340"
+    color: Theme.panel
+    border.color: Theme.border
     radius: 6
     clip: true
 
@@ -32,14 +32,16 @@ Rectangle {
             width: 20
             height: 20
             radius: 3
-            color: control.checked ? "#1688ff" : (control.enabled ? "#0c1821" : "#10181e")
-            border.color: control.checked ? "#1688ff" : (control.enabled ? "#3a4a53" : "#26343c")
+                color: control.checked ? Theme.accent
+                                       : (control.enabled ? Theme.elevated
+                                                          : Theme.background)
+            border.color: control.checked ? Theme.accent : Theme.border
             ThemedIcon {
                 objectName: control.objectName.length > 0 ? control.objectName + "Mark" : ""
                 anchors.centerIn: parent
                 visible: control.checked
                 source: Theme.icon("check-line")
-                tint: "#ffffff"
+                tint: Theme.accentText
                 sourceSize.width: 14
                 sourceSize.height: 14
             }
@@ -48,7 +50,7 @@ Rectangle {
             text: control.text
             leftPadding: control.indicator.width + 8
             verticalAlignment: Text.AlignVCenter
-            color: control.enabled ? "#d7e0e6" : "#667782"
+            color: control.enabled ? Theme.primaryText : Theme.secondaryText
             font.pixelSize: 13
         }
     }
@@ -63,7 +65,7 @@ Rectangle {
             Layout.preferredHeight: 44
             Layout.leftMargin: 18
             spacing: 12
-            Text { text: qsTr("任务列表"); color: "#eef3f6"; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
             Repeater {
                 model: [
                     { key: "All", text: qsTr("全部"), count: converter.fileCount },
@@ -80,13 +82,13 @@ Rectangle {
                              || (modelData.key === "All" && converter.filteredTaskModel.statusFilter === "")
                     onClicked: converter.filteredTaskModel.statusFilter = modelData.key
                     background: Rectangle {
-                        color: parent.checked ? "#0c63c8" : "#0c1821"
-                        border.color: parent.checked ? "#1688ff" : "#203340"
+                    color: parent.checked ? Theme.activeSelection : Theme.elevated
+                        border.color: parent.checked ? Theme.accent : Theme.border
                         radius: 5
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: parent.checked ? "#ffffff" : "#c9d2d8"
+                        color: parent.checked ? Theme.activeSelectionText : Theme.primaryText
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 13
@@ -99,7 +101,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            color: "#162129"
+            color: Theme.elevated
             Row {
                 anchors.fill: parent
                 Repeater {
@@ -121,7 +123,7 @@ Rectangle {
                             anchors.leftMargin: index === 1 ? 30 : 10
                             verticalAlignment: Text.AlignVCenter
                             text: modelData
-                            color: "#aeb9c1"
+                            color: Theme.secondaryText
                             font.pixelSize: 13
                         }
                     }
@@ -142,8 +144,8 @@ Rectangle {
                 objectName: column === 1 && row === 0 ? "formatTaskFirstFilenameCell" : ""
                 implicitWidth: root.columnWidths[column]
                 implicitHeight: 44
-                color: row % 2 ? "#101a21" : "#0f1820"
-                border.color: "#172a36"
+                color: row % 2 ? Theme.panel : Theme.background
+                border.color: Theme.border
                 border.width: 1
 
                 ReferenceCheckBox {
@@ -200,7 +202,7 @@ Rectangle {
                     color: column === 7 && model.status === "Done" ? "#19c37d"
                          : column === 7 && model.status === "Error" ? "#ff4d4f"
                          : column === 7 && model.status === "Converting" ? "#1688ff"
-                         : "#c9d2d8"
+                         : Theme.primaryText
                     font.pixelSize: 13
                     ToolTip.visible: column === 7
                                          && model.status === "Error"
@@ -223,7 +225,7 @@ Rectangle {
                     anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
                     value: model.progress
-                    background: Rectangle { implicitHeight: 8; color: "#20303b"; radius: 4 }
+                    background: Rectangle { implicitHeight: 8; color: Theme.hoverSurface; radius: 4 }
                     contentItem: Item {
                         implicitHeight: 8
                         Rectangle {
@@ -243,7 +245,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 40
                     text: Math.round(model.progress * 100) + "%"
-                    color: "#c9d2d8"
+                    color: Theme.primaryText
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }
@@ -265,7 +267,7 @@ Rectangle {
             Layout.leftMargin: 18
             verticalAlignment: Text.AlignVCenter
             text: qsTr("共 %1 个任务 / 已选择 %2 个").arg(converter.fileCount).arg(converter.checkedCount)
-            color: "#91a0aa"
+            color: Theme.secondaryText
             font.pixelSize: 12
         }
     }

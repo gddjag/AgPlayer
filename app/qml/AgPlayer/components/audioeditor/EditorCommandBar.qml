@@ -38,7 +38,7 @@ Rectangle {
             spacing: 2
             ThemedIcon {
                 source: Theme.icon(iconName)
-                tint: parent.parent.enabled ? "#f4f8ff" : "#718096"
+                tint: parent.parent.enabled ? Theme.iconPrimary : Theme.iconSecondary
                 sourceSize.width: 24
                 sourceSize.height: 24
                 Layout.preferredWidth: 24
@@ -51,16 +51,16 @@ Rectangle {
             }
             Text {
                 text: parent.parent.label
-                color: parent.parent.enabled ? "#f4f8ff" : "#718096"
+                color: parent.parent.enabled ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
                 Layout.alignment: Qt.AlignHCenter
             }
         }
         background: Rectangle {
-            color: parent.selected ? "#0867ed"
-                : parent.hovered && parent.enabled ? "#123452" : "#0a2138"
-            border.color: parent.selected ? "#2587ff" : "#294662"
+            color: parent.selected ? Theme.activeSelection
+                : parent.hovered && parent.enabled ? Theme.hoverSurface : Theme.elevated
+            border.color: parent.selected ? Theme.accent : Theme.border
             border.width: 1
             radius: 6
         }
