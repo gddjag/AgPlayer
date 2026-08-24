@@ -29,6 +29,8 @@ public:
     qreal height_{};
     QColor color_;
     bool sample_mode_{};
+    qreal density_{1.0};
+    qreal line_width_{1.0};
 };
 
 } // namespace
@@ -122,6 +124,24 @@ void AudioEditorWaveformItem::setSampleMode(const bool enabled)
     emit sampleModeChanged();
 }
 
+void AudioEditorWaveformItem::setDensity(const double density)
+{
+    const double bounded = std::clamp(density, 0.5, 5.0);
+    if (qFuzzyCompare(density_, bounded)) return;
+    density_ = bounded;
+    update();
+    emit densityChanged();
+}
+
+void AudioEditorWaveformItem::setLineWidth(const double width)
+{
+    const double bounded = std::clamp(width, 1.0, 8.0);
+    if (qFuzzyCompare(line_width_, bounded)) return;
+    line_width_ = bounded;
+    update();
+    emit lineWidthChanged();
+}
+
 void AudioEditorWaveformItem::geometryChange(const QRectF& newGeometry,
                                              const QRectF& oldGeometry)
 {
@@ -152,7 +172,7 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         return nullptr;
     }
     const std::size_t maximum_buckets = std::max<std::size_t>(1U,
-        static_cast<std::size_t>(std::floor(width())));
+        static_cast<std::size_t>(std::floor(width() * density_)));
     const std::size_t stride = std::max<std::size_t>(
         1U, (pair_count + maximum_buckets - 1U) / maximum_buckets);
     std::size_t valid_bucket_count = 0;
@@ -198,7 +218,9 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
     if (node->revision_ != snapshot->revision
         || !qFuzzyCompare(node->width_, width())
         || !qFuzzyCompare(node->height_, height())
-        || node->sample_mode_ != sample_mode_) {
+        || node->sample_mode_ != sample_mode_
+        || !qFuzzyCompare(node->density_, density_)
+        || !qFuzzyCompare(node->line_width_, line_width_)) {
         node->geometry_.allocate(static_cast<int>(vertex_count));
         auto* vertices = node->geometry_.vertexDataAsPoint2D();
         const qreal channel_height = height()
@@ -266,6 +288,9 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         node->width_ = width();
         node->height_ = height();
         node->sample_mode_ = sample_mode_;
+        node->density_ = density_;
+        node->line_width_ = line_width_;
+        node->geometry_.setLineWidth(static_cast<float>(line_width_));
         generated_point_count_.store(static_cast<int>(vertex),
                                      std::memory_order_release);
         node->markDirty(QSGNode::DirtyGeometry);

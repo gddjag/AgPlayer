@@ -84,6 +84,30 @@ private slots:
         delete node;
     }
 
+    void densityAndLineWidthAreConfigurableWithoutDividingStereoBudget()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(10.0);
+        item.setHeight(80.0);
+        item.setDensity(2.0);
+        item.setLineWidth(3.0);
+        QVariantList dense;
+        for (int index = 0; index < 1'000; ++index) {
+            dense.append(-0.75);
+            dense.append(0.75);
+        }
+        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QCOMPARE(item.density(), 2.0);
+        QCOMPARE(item.lineWidth(), 3.0);
+        QCOMPARE(item.generatedPointCount(), 80);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->lineWidth(), 3.0F);
+        delete node;
+    }
+
     void onePixelStereoStillRepresentsEveryChannel()
     {
         TestableAudioEditorWaveformItem item;

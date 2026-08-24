@@ -104,6 +104,29 @@ TestCase {
         compare(shortcutText.indexOf("Phase"), -1)
     }
 
+    function test_editorWaveformUsesPlayerAppearanceSettings() {
+        const originalMode = SettingsController.waveformMode
+        const originalColor = SettingsController.waveformSolidBaseColor
+        const originalDensity = SettingsController.waveformDensity
+        const originalThickness = SettingsController.waveformThickness
+        SettingsController.waveformMode = 0
+        SettingsController.waveformSolidBaseColor = "#123456"
+        SettingsController.waveformDensity = 3.5
+        SettingsController.waveformThickness = 2.5
+        const waveform = findChild(page, "editorWaveformGeometry")
+        verify(waveform)
+        tryCompare(waveform, "waveformColor", "#123456")
+        tryCompare(waveform, "density", 3.5)
+        tryCompare(waveform, "lineWidth", 2.5)
+        compare(waveform.sampleMode,
+                AudioEditorController.viewport.visibleFrameCount
+                    <= Math.max(2, Math.floor(waveform.width) * 2))
+        SettingsController.waveformMode = originalMode
+        SettingsController.waveformSolidBaseColor = originalColor
+        SettingsController.waveformDensity = originalDensity
+        SettingsController.waveformThickness = originalThickness
+    }
+
     function test_spaceShortcutYieldsToTextInputAndModalDialog() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const shortcut = findChild(page, "editorSpaceShortcut")

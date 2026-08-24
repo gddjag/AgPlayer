@@ -68,7 +68,17 @@ Rectangle {
         anchors.topMargin: 12
         anchors.bottomMargin: 12
         channelPeaks: AudioEditorController.viewportChannelPeaks
-        waveformColor: "#2587ff"
+        waveformColor: SettingsController.waveformMode === 0
+                       ? (SettingsController.waveformSolidBaseColor
+                          || Theme.waveformMagenta)
+                       : (SettingsController.waveformMode === 2
+                          ? SettingsController.spectrumSolidColor
+                          : (SettingsController.waveformRgbBaseColor
+                             || Theme.waveformMagenta))
+        density: SettingsController.waveformMode === 2
+                 ? 1.0 : SettingsController.waveformDensity
+        lineWidth: SettingsController.waveformMode === 2
+                   ? 3.0 : SettingsController.waveformThickness
         sampleMode: AudioEditorController.viewport.visibleFrameCount
             <= Math.max(2, Math.floor(width) * 2)
         visible: AudioEditorController.hasDocument
