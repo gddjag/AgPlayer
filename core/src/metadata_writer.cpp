@@ -1156,7 +1156,7 @@ const char* read_field(const ag_metadata* metadata, const CanonicalField field)
     case CanonicalField::Date: return ag_metadata_date(metadata);
     case CanonicalField::Composer: return ag_metadata_composer(metadata);
     case CanonicalField::Bpm: return ag_metadata_bpm_tag(metadata);
-    case CanonicalField::CustomTag: return "";
+    case CanonicalField::CustomTag: return ag_metadata_custom_tag(metadata);
     }
     return "";
 }
