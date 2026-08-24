@@ -104,7 +104,7 @@ if ($table -notmatch 'component\s+ReferenceCheckBox\s*:\s*CheckBox' -or
     $combined -notmatch 'Theme\.icon\("check-line"\)' -or
     $combined -notmatch 'width:\s*20' -or
     $combined -notmatch 'radius:\s*3' -or
-    $combined -notmatch 'color:\s*control\.checked\s*\?\s*"#1688ff"') {
+    $combined -notmatch 'color:\s*control\.checked\s*\?\s*Theme\.accent') {
     throw 'Task and settings checkboxes must use the reference blue indicator with the official check asset.'
 }
 if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot 'assets/icons/check-line.svg'))) {
