@@ -27,6 +27,7 @@ enum class CanonicalField {
     Date,
     Composer,
     Bpm,
+    CustomTag,
 };
 
 // One authoritative read/write priority table for normalized fields.
@@ -201,6 +202,7 @@ struct MetadataUpdate {
     std::optional<std::string> composer;
     std::optional<std::string> comment;
     std::optional<std::string> bpm;
+    std::optional<std::string> custom_tag;
     std::optional<std::string> copyright;
     std::optional<std::string> encoder;
     std::optional<std::string> year;
