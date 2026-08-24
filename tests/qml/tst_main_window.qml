@@ -2302,14 +2302,110 @@ TestCase {
         var tagPanel = findChild(workspace, "tagManagementPanel")
         verify(tagPanel)
         tryCompare(tagPanel, "width", 248)
-        compare(tagPanel.gridColumnCount, 3)
-        var tagGrid = findChild(tagPanel, "tagGrid")
-        verify(tagGrid)
-        compare(tagGrid.cellWidth, tagGrid.width / 3)
-        verify(tagGrid.cellHeight <= 32)
+        var tagFlickable = findChild(tagPanel, "tagFlickable")
+        var tagFlow = findChild(tagPanel, "tagFlow")
+        verify(tagFlickable && tagFlow,
+               "the tag column must use a scrolling Flow layout")
+        compare(tagFlow.width, tagFlickable.width)
 
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task6_tag_flow_uses_natural_width_wrap_and_scroll() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = tagManagementPanelWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 248,
+            "height": 230
+        })
+        verify(window && filterModel)
+        var panel = findChild(window, "tagManagementPanel")
+        verify(panel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+
+        var suffix = String(Date.now() % 10000)
+        var prefix = "-" + suffix
+        var names = ["甲" + prefix, "乙" + prefix, "丙" + prefix,
+                     "long Chinese English natural-width capsule" + prefix,
+                     "丁" + prefix, "戊" + prefix, "己" + prefix,
+                     "庚" + prefix, "辛" + prefix, "壬" + prefix,
+                     "癸" + prefix, "子" + prefix]
+        var keys = []
+        for (var index = 0; index < names.length; ++index) {
+            var key = names[index].toLocaleLowerCase()
+            keys.push(key)
+            verify(panel.addTag(names[index]))
+        }
+        task4TemporaryTagKeys = keys
+        panel.searchText = prefix
+        tryCompare(panel, "visibleTagCount", names.length)
+
+        var flickable = findChild(panel, "tagFlickable")
+        var flow = findChild(panel, "tagFlow")
+        verify(flickable && flow)
+        var firstPill = findChild(panel, "tagPill-" + keys[0])
+        var secondPill = findChild(panel, "tagPill-" + keys[1])
+        var longPill = findChild(panel, "tagPill-" + keys[3])
+        verify(firstPill && secondPill && longPill)
+        wait(0)
+        verify(longPill.width > firstPill.width,
+               "long labels must retain a larger natural capsule width")
+        var shortPills = [firstPill, secondPill,
+                          findChild(panel, "tagPill-" + keys[2]),
+                          findChild(panel, "tagPill-" + keys[4])]
+        var sharesShortRow = false
+        for (var left = 0; left < shortPills.length; ++left) {
+            for (var right = left + 1; right < shortPills.length; ++right) {
+                if (shortPills[left] && shortPills[right]
+                        && shortPills[right].parent.x
+                           > shortPills[left].parent.x
+                        && shortPills[right].parent.y
+                           === shortPills[left].parent.y) {
+                    sharesShortRow = true
+                    break
+                }
+            }
+            if (sharesShortRow)
+                break
+        }
+        verify(sharesShortRow,
+               "short labels should share a Flow row in the 248px column")
+        verify(longPill.parent.y > firstPill.parent.y,
+               "a wide label must naturally wrap onto a later Flow row")
+        tryVerify(function() { return flickable.contentHeight > flickable.height },
+                  500, "many tags must make the Flow content scrollable")
+
+        panel.selectTag(keys[0])
+        tryVerify(function() { return firstPill.selectedVisual }, 500)
+        verify(firstPill.resolvedSurface.toString()
+               === Theme.tagPillSelectedSurface.toString(),
+               "selected tags must use the low-saturation blue token")
+
+        var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])
+        verify(pointer)
+        panel.selectTag(keys[0])
+        tryVerify(function() { return !firstPill.selectedVisual }, 500)
+        mouseMove(pointer, pointer.width / 2, pointer.height / 2)
+        tryVerify(function() { return firstPill.hoveredVisual }, 500)
+        verify(firstPill.resolvedSurface.toString()
+               === Theme.tagPillHoverSurface.toString())
+
+        var previousMode = Theme.mode
+        Theme.mode = 1
+        verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
+        verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
+        Theme.mode = 0
+        verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
+        verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
+        Theme.mode = previousMode
+
+        panel.searchText = names[3]
+        tryCompare(panel, "visibleTagCount", 1)
+        panel.searchText = prefix
+        tryCompare(panel, "visibleTagCount", names.length)
+        window.destroy()
     }
 
     function test_z_tag_panel_add_search_and_selection_update_real_models() {

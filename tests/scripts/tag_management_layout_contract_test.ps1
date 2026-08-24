@@ -26,6 +26,7 @@ function Assert-Matches(
 $window = Read-RequiredFile 'app/qml/AgPlayer/ListWindow.qml'
 $trackList = Read-RequiredFile 'app/qml/AgPlayer/components/TrackList.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
+$theme = Read-RequiredFile 'app/qml/AgPlayer/theme/Theme.qml'
 
 $trackListCount = ([regex]::Matches($window, '\bTrackList\s*\{')).Count
 if ($trackListCount -ne 1) {
@@ -41,19 +42,30 @@ Assert-Matches $window 'readonly property int dividerWidth:\s*1' `
 Assert-Matches $window '(?s)objectName:\s*"librarySearchFilter".*Layout\.preferredHeight:\s*listWindow\.filterBarHeight' `
     'Search/filter bar must be 54 px'
 
-Assert-Matches $tagPanel 'readonly property int gridColumnCount:\s*3' `
-    'Tag panel must expose a fixed three-column contract'
-Assert-Matches $tagPanel 'cellWidth:\s*width\s*/\s*3' `
-    'Tag GridView must compute cellWidth from width / 3'
-Assert-Matches $tagPanel 'cellHeight:\s*32' `
-    'Tag capsule grid must use compact 32 px rows'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*height:\s*24.*radius:\s*12' `
-    'Tag capsules must use compact 24 px linear pills'
+Assert-Matches $tagPanel '(?s)Flickable\s*\{.*id:\s*tagFlickable' `
+    'Tag panel must scroll with a Flickable'
+Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
+    'Tag panel must lay capsules out with Flow'
+Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
+    'Tag Flickable content height must follow the natural Flow height'
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:.*height:\s*28.*radius:\s*14' `
+    'Tag capsules must preserve natural width in compact rounded pills'
+Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|tagDropTarget\.containsDrag' `
+    'Tag capsules must expose selected, hover and drop visual states'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag search must use the incremental C++ proxy model'
-if ($tagPanel -match '\bcolumns\s*:') {
-    throw 'Do not use the nonexistent GridView.columns property'
+if ($tagPanel -match '\bGridView\s*\{') {
+    throw 'Tag capsules must not use a fixed GridView'
 }
+
+Assert-Matches $theme 'tagPillSurface' `
+    'Theme must expose a base translucent tag surface'
+Assert-Matches $theme 'tagPillHoverSurface' `
+    'Theme must expose a tag hover surface'
+Assert-Matches $theme 'tagPillSelectedSurface' `
+    'Theme must expose a low-saturation selected tag surface'
+Assert-Matches $theme 'tagPillDropSurface' `
+    'Theme must expose a tag drop surface'
 
 Assert-Matches $trackList 'reuseItems:\s*true' `
     'TrackList must reuse delegates'

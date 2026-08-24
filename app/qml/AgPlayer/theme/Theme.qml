@@ -78,6 +78,28 @@ QtObject {
     readonly property color tagSecondaryText: isLight ? "#745B43" : "#C8A77D"
     readonly property color listWaveformMono: isLight ? "#6B5A70" : "#C7B8CB"
 
+    // Tag capsules use opacity, highlights and a one-pixel border instead of
+    // per-item blur effects, keeping the dense tag column cheap to render.
+    readonly property color tagPillSurface: isLight
+                                           ? Qt.rgba(1.0, 1.0, 1.0, 0.72)
+                                           : Qt.rgba(0.10, 0.17, 0.23, 0.82)
+    readonly property color tagPillHoverSurface: isLight
+                                                ? Qt.rgba(0.87, 0.93, 0.97, 0.88)
+                                                : Qt.rgba(0.13, 0.24, 0.33, 0.92)
+    readonly property color tagPillSelectedSurface: isLight
+                                                   ? Qt.rgba(0.25, 0.49, 0.70, 0.20)
+                                                   : Qt.rgba(0.25, 0.49, 0.70, 0.40)
+    readonly property color tagPillDropSurface: isLight
+                                               ? Qt.rgba(0.27, 0.55, 0.76, 0.27)
+                                               : Qt.rgba(0.26, 0.56, 0.76, 0.50)
+    readonly property color tagPillBorder: isLight ? "#A5B8C6" : "#496477"
+    readonly property color tagPillHighlightBorder: isLight ? "#5A89AA" : "#76A8CB"
+    readonly property color tagPillText: isLight ? "#21313D" : "#EFF7FC"
+    readonly property color tagPillSecondaryText: isLight ? "#526B7C" : "#B9CCDA"
+    readonly property color tagPillShadow: isLight
+                                          ? Qt.rgba(0.10, 0.18, 0.24, 0.14)
+                                          : Qt.rgba(0.0, 0.0, 0.0, 0.30)
+
     readonly property int radiusSm: 8
     readonly property int radiusMd: 12
     readonly property int radiusLg: 18

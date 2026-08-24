@@ -11,8 +11,7 @@ Item {
     property var tagModel: TagModel
     property var filterModel: null
     property alias searchText: tagSearchField.text
-    readonly property int gridColumnCount: 3
-    readonly property int visibleTagCount: tagGrid.count
+    readonly property int visibleTagCount: tagRepeater.count
     property string contextTagKey: ""
     property string contextTagName: ""
     property color contextTagColor: "transparent"
@@ -321,139 +320,203 @@ Item {
             }
         }
 
-        GridView {
-            id: tagGrid
-            objectName: "tagGrid"
+        Flickable {
+            id: tagFlickable
+            objectName: "tagFlickable"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: width
+            contentHeight: tagFlow.height
+            flickableDirection: Flickable.VerticalFlick
             boundsBehavior: Flickable.StopAtBounds
-            reuseItems: true
-            cacheBuffer: 0
-            model: filteredTags
-            cellWidth: width / 3
-            cellHeight: 32
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            delegate: Item {
-                id: tagCell
-                required property string key
-                required property string displayName
-                required property int trackCount
-                required property color color
-                required property bool selected
-                property real dropLoadPulse: 0
-                width: tagGrid.cellWidth
-                height: tagGrid.cellHeight
-
-                Rectangle {
-                    id: tagPill
-                    objectName: "tagPill-" + tagCell.key
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: 24
-                    radius: 12
-                    color: tagDropTarget.containsDrag
-                           ? Theme.listSelectedSurface
-                           : tagCell.selected ? Theme.listSelectedSurface
-                                              : "transparent"
-                    border.color: tagCell.color
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 7
-                        anchors.rightMargin: 6
-                        spacing: 4
-                        Text {
-                            id: tagName
-                            text: tagCell.displayName
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 11
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        Text {
-                            text: tagCell.trackCount
-                            color: Theme.tagSecondaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 10
-                        }
-                    }
-                    HoverHandler { id: tagHover }
-                    MouseArea {
-                        objectName: "tagPillPointerArea-" + tagCell.key
-                        anchors.fill: parent
-                        z: 2
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.RightButton) {
-                                root.openTagMenu(tagCell.key,
-                                                 tagCell.displayName,
-                                                 tagCell.color)
-                            } else {
-                                root.selectTag(tagCell.key)
-                            }
-                        }
-                    }
-                    DropArea {
-                        id: tagDropTarget
-                        objectName: "tagDropTarget-" + tagCell.key
-                        property int acceptedAnimationCount: 0
-                        anchors.fill: parent
-                        keys: ["application/x-agplayer-track-ids"]
-                        onDropped: function(drop) {
-                            var encoded = drop.getDataAsString(
-                                        "application/x-agplayer-track-ids")
-                            var ids = encoded ? JSON.parse(encoded) : []
-                            if (ids.length === 0 && drop.source
-                                    && drop.source.dragTrackIds)
-                                ids = drop.source.dragTrackIds
-                            if (root.applyTagDrop(ids, tagCell.displayName)) {
-                                acceptedAnimationCount += 1
-                                tagLoadAnimation.restart()
-                                drop.acceptProposedAction()
-                            }
-                        }
-                    }
-                    Rectangle {
-                        objectName: "tagDropFeedback-" + tagCell.key
-                        anchors.fill: parent
-                        radius: parent.radius
-                        visible: tagDropTarget.containsDrag
-                                 || tagCell.dropLoadPulse > 0
-                        color: "transparent"
-                        border.color: tagCell.color
-                        border.width: 2
-                        opacity: tagDropTarget.containsDrag
-                                 ? 1 : tagCell.dropLoadPulse
-                        scale: 1 - tagCell.dropLoadPulse * 0.06
-                        z: 1
-                    }
-                    ToolTip.visible: tagHover.hovered && tagName.truncated
-                    ToolTip.text: tagCell.displayName
-                    ToolTip.delay: 350
+            // Existing QML interaction tests use this tiny adapter to find a
+            // delegate by model index. The visible layout remains Flow-based.
+            QtObject {
+                objectName: "tagGrid"
+                function positionViewAtBeginning() {
+                    tagFlickable.contentY = 0
                 }
-                SequentialAnimation {
-                    id: tagLoadAnimation
-                    NumberAnimation {
-                        target: tagCell
-                        property: "dropLoadPulse"
-                        from: 0
-                        to: 1
-                        duration: 90
-                        easing.type: Easing.OutCubic
-                    }
-                    NumberAnimation {
-                        target: tagCell
-                        property: "dropLoadPulse"
-                        from: 1
-                        to: 0
-                        duration: 150
-                        easing.type: Easing.InCubic
+                function itemAtIndex(index) {
+                    return tagRepeater.itemAt(index)
+                }
+            }
+
+            Flow {
+                id: tagFlow
+                objectName: "tagFlow"
+                width: tagFlickable.width
+                height: childrenRect.height
+                spacing: 6
+
+                Repeater {
+                    id: tagRepeater
+                    model: filteredTags
+
+                    delegate: Item {
+                        id: tagCell
+                        required property string key
+                        required property string displayName
+                        required property int trackCount
+                        required property color color
+                        required property bool selected
+                        property real dropLoadPulse: 0
+                        implicitWidth: tagPill.implicitWidth
+                        implicitHeight: tagPill.implicitHeight
+                        width: implicitWidth
+                        height: implicitHeight
+
+                        Rectangle {
+                            anchors.fill: tagPill
+                            anchors.topMargin: 1
+                            radius: tagPill.radius
+                            color: Theme.tagPillShadow
+                        }
+
+                        Rectangle {
+                            id: tagPill
+                            objectName: "tagPill-" + tagCell.key
+                            property bool selectedVisual: tagCell.selected
+                            property bool hoveredVisual: tagHover.hovered
+                            property bool focusedVisual: tagPointer.activeFocus
+                            property bool dropVisual: tagDropTarget.containsDrag
+                            property color resolvedSurface: dropVisual
+                                                           ? Theme.tagPillDropSurface
+                                                           : selectedVisual
+                                                             ? Theme.tagPillSelectedSurface
+                                                             : hoveredVisual || focusedVisual
+                                                               ? Theme.tagPillHoverSurface
+                                                               : Theme.tagPillSurface
+                            implicitWidth: Math.min(tagFlow.width,
+                                                    tagNameMeasure.implicitWidth
+                                                    + tagCount.implicitWidth + 29)
+                            implicitHeight: 28
+                            width: implicitWidth
+                            height: implicitHeight
+                            radius: 14
+                            clip: true
+                            color: resolvedSurface
+                            border.color: dropVisual || selectedVisual
+                                          || focusedVisual
+                                          ? Theme.tagPillHighlightBorder
+                                          : tagCell.color.a > 0
+                                            ? tagCell.color : Theme.tagPillBorder
+                            border.width: 1
+
+                            Text {
+                                id: tagNameMeasure
+                                visible: false
+                                text: tagCell.displayName
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 11
+                            }
+                            Row {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                anchors.right: parent.right
+                                anchors.rightMargin: 9
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 5
+                                Text {
+                                    id: tagName
+                                    width: Math.max(0, Math.min(implicitWidth,
+                                                                tagPill.width
+                                                                - tagCount.width - 30))
+                                    text: tagCell.displayName
+                                    color: Theme.tagPillText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    id: tagCount
+                                    text: tagCell.trackCount
+                                    color: Theme.tagPillSecondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 10
+                                }
+                            }
+                            HoverHandler { id: tagHover }
+                            MouseArea {
+                                id: tagPointer
+                                objectName: "tagPillPointerArea-" + tagCell.key
+                                anchors.fill: parent
+                                z: 2
+                                focus: true
+                                activeFocusOnTab: true
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                Keys.onReturnPressed: root.selectTag(tagCell.key)
+                                Keys.onSpacePressed: root.selectTag(tagCell.key)
+                                onClicked: function(mouse) {
+                                    forceActiveFocus()
+                                    if (mouse.button === Qt.RightButton) {
+                                        root.openTagMenu(tagCell.key,
+                                                         tagCell.displayName,
+                                                         tagCell.color)
+                                    } else {
+                                        root.selectTag(tagCell.key)
+                                    }
+                                }
+                            }
+                            DropArea {
+                                id: tagDropTarget
+                                objectName: "tagDropTarget-" + tagCell.key
+                                property int acceptedAnimationCount: 0
+                                anchors.fill: parent
+                                keys: ["application/x-agplayer-track-ids"]
+                                onDropped: function(drop) {
+                                    var encoded = drop.getDataAsString(
+                                                "application/x-agplayer-track-ids")
+                                    var ids = encoded ? JSON.parse(encoded) : []
+                                    if (ids.length === 0 && drop.source
+                                            && drop.source.dragTrackIds)
+                                        ids = drop.source.dragTrackIds
+                                    if (root.applyTagDrop(ids, tagCell.displayName)) {
+                                        acceptedAnimationCount += 1
+                                        tagLoadAnimation.restart()
+                                        drop.acceptProposedAction()
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                objectName: "tagDropFeedback-" + tagCell.key
+                                anchors.fill: parent
+                                radius: parent.radius
+                                visible: tagDropTarget.containsDrag
+                                         || tagCell.dropLoadPulse > 0
+                                color: "transparent"
+                                border.color: Theme.tagPillHighlightBorder
+                                border.width: 2
+                                opacity: tagDropTarget.containsDrag
+                                         ? 1 : tagCell.dropLoadPulse
+                                scale: 1 - tagCell.dropLoadPulse * 0.06
+                                z: 1
+                            }
+                            ToolTip.visible: tagHover.hovered && tagName.truncated
+                            ToolTip.text: tagCell.displayName
+                            ToolTip.delay: 350
+                        }
+                        SequentialAnimation {
+                            id: tagLoadAnimation
+                            NumberAnimation {
+                                target: tagCell
+                                property: "dropLoadPulse"
+                                from: 0
+                                to: 1
+                                duration: 90
+                                easing.type: Easing.OutCubic
+                            }
+                            NumberAnimation {
+                                target: tagCell
+                                property: "dropLoadPulse"
+                                from: 1
+                                to: 0
+                                duration: 150
+                                easing.type: Easing.InCubic
+                            }
+                        }
                     }
                 }
             }
