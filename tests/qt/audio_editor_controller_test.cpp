@@ -2104,6 +2104,45 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(hasVisiblePeak(), 10'000);
     }
 
+    void viewportWaveformDensityControlsPerChannelPointBudget()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(controller.openFile(QUrl::fromLocalFile(fixture)),
+                 qPrintable(controller.errorMessage()));
+        controller.viewport()->setViewportWidth(120.0);
+
+        controller.setViewportWaveformDensity(2.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        const qsizetype densityTwoValues =
+            controller.viewportChannelPeaks().front().toList().size();
+        QCOMPARE(densityTwoValues, qsizetype{480});
+
+        const quint64 previousGeneration = controller.viewportWaveformGeneration();
+        controller.setViewportWaveformDensity(5.0);
+        QVERIFY(controller.viewportWaveformGeneration() > previousGeneration);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().front().toList().size(),
+            qsizetype{1'200}, 10'000);
+
+        controller.setViewportWaveformDensity(0.5);
+        QVERIFY(controller.viewport()->setVisibleRange(0, 100));
+        QTRY_COMPARE_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().front().toList().size(),
+            qsizetype{200}, 10'000);
+    }
+
+    void viewportWaveformDensityRejectsNonFiniteValues()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.setViewportWaveformDensity(3.0);
+        controller.setViewportWaveformDensity(
+            std::numeric_limits<double>::quiet_NaN());
+        QCOMPARE(controller.viewportWaveformDensity(), 3.0);
+    }
+
     void viewportDecodeIsSingleFlightAndPublishesOnlyLatestPendingRequest()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));

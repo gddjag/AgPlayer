@@ -49,11 +49,17 @@ namespace {
 constexpr std::size_t kMaxProjectSources = 4'096;
 
 qint64 viewportTargetPoints(const qint64 visibleFrames,
-                           const qreal viewportWidth)
+                           const qreal viewportWidth,
+                           const double density)
 {
-    const qint64 width = std::max<qint64>(1, static_cast<qint64>(std::ceil(
-        std::max<qreal>(1.0, viewportWidth))));
-    return std::min<qint64>(visibleFrames, width * 2);
+    constexpr qint64 kMaximumViewportPoints = 2'000'000;
+    const long double requested = std::ceil(
+        static_cast<long double>(std::max<qreal>(1.0, viewportWidth))
+        * static_cast<long double>(std::clamp(density, 0.5, 5.0)));
+    const qint64 bounded = requested >= kMaximumViewportPoints
+        ? kMaximumViewportPoints
+        : std::max<qint64>(1, static_cast<qint64>(requested));
+    return std::min<qint64>(visibleFrames, bounded);
 }
 
 std::vector<std::vector<float>> peaksAsChannels(const QVariantList& channelPeaks)
@@ -2946,6 +2952,16 @@ void AudioEditorController::clearViewportWaveformState()
     viewport_channel_peaks_.clear();
 }
 
+void AudioEditorController::setViewportWaveformDensity(const double density)
+{
+    if (!std::isfinite(density)) return;
+    const double bounded = std::clamp(density, 0.5, 5.0);
+    if (qFuzzyCompare(viewport_waveform_density_, bounded)) return;
+    viewport_waveform_density_ = bounded;
+    emit viewportWaveformDensityChanged();
+    requestViewportWaveform();
+}
+
 void AudioEditorController::requestViewportWaveform()
 {
     const quint64 generation = ++viewport_waveform_generation_;
@@ -2970,18 +2986,23 @@ void AudioEditorController::requestViewportWaveform()
         endFrame = std::max<qint64>(1, clampedTotal);
     }
     const qint64 visibleFrames = std::max<qint64>(0, endFrame - startFrame);
+    const qint64 sampleModeBudget = std::max<qint64>(
+        2, static_cast<qint64>(std::floor(
+               std::max<qreal>(1.0, viewportWidth))) * 2);
+    const bool sampleMode = visibleFrames > 0
+        && visibleFrames <= sampleModeBudget;
     const qint64 targetPoints = visibleFrames <= 0 || viewportWidth <= 0.0
-        ? 0 : viewportTargetPoints(visibleFrames, viewportWidth);
+        ? 0 : (sampleMode
+            ? visibleFrames
+            : viewportTargetPoints(visibleFrames, viewportWidth,
+                                   viewport_waveform_density_));
     const bool recordingActive = recording();
     const int effectiveChannels = recordingActive
         ? recording_channels_ : channels_;
     const qint64 recordingStartFrame = insert_recording_at_cursor_ && has_document_
         ? recording_insert_frame_ : 0;
-    const qint64 sampleModeBudget = std::max<qint64>(
-        2, static_cast<qint64>(std::floor(
-               std::max<qreal>(1.0, viewportWidth))) * 2);
     const bool recordingSampleMode = recordingActive && recordedFrames > 0
-        && visibleFrames <= sampleModeBudget;
+        && sampleMode;
     agplayer::editor::RecordingPcmSnapshot recordingPcm;
     if (recordingSampleMode) {
         const qint64 relativeStart = std::clamp<qint64>(

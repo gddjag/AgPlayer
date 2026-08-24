@@ -71,6 +71,9 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(QVariantList channelPeaks READ channelPeaks NOTIFY waveformChanged)
     Q_PROPERTY(QVariantList viewportChannelPeaks READ viewportChannelPeaks
                    NOTIFY waveformChanged)
+    Q_PROPERTY(double viewportWaveformDensity READ viewportWaveformDensity
+                   WRITE setViewportWaveformDensity
+                   NOTIFY viewportWaveformDensityChanged)
     Q_PROPERTY(QVariantList timelineEventViews READ timelineEventViews
                    NOTIFY documentChanged)
     Q_PROPERTY(QString activeTool READ activeTool NOTIFY toolChanged)
@@ -169,6 +172,9 @@ public:
     [[nodiscard]] QVariantList channelPeaks() const;
     [[nodiscard]] QVariantList viewportChannelPeaks() const
     { return viewport_channel_peaks_; }
+    [[nodiscard]] double viewportWaveformDensity() const noexcept
+    { return viewport_waveform_density_; }
+    void setViewportWaveformDensity(double density);
     [[nodiscard]] QVariantList timelineEventViews() const;
     [[nodiscard]] QString activeTool() const { return active_tool_; }
     [[nodiscard]] constexpr bool formantPreservationSupported() const noexcept
@@ -322,6 +328,7 @@ signals:
     void stateChanged();
     void documentChanged();
     void waveformChanged();
+    void viewportWaveformDensityChanged();
     void toolChanged();
     void playbackChanged();
     void trackMixChanged();
@@ -420,6 +427,7 @@ private:
     qint64 bit_rate_{};
     QVariantList channel_peaks_;
     QVariantList viewport_channel_peaks_;
+    double viewport_waveform_density_{2.0};
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;

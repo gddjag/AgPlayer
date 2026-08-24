@@ -108,6 +108,43 @@ private slots:
         delete node;
     }
 
+    void subpixelLineWidthAndDensityAboveTwoRemainEffective()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(10.0);
+        item.setHeight(80.0);
+        item.setDensity(5.0);
+        item.setLineWidth(0.3);
+        QVariantList dense;
+        for (int index = 0; index < 1'000; ++index) {
+            dense.append(-0.75);
+            dense.append(0.75);
+        }
+        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QCOMPARE(item.density(), 5.0);
+        QCOMPARE(item.lineWidth(), 0.3);
+        QCOMPARE(item.generatedPointCount(), 200);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->lineWidth(), 0.3F);
+        delete node;
+    }
+
+    void nonFiniteAppearanceValuesAreIgnored()
+    {
+        AudioEditorWaveformItem item;
+        item.setDensity(3.0);
+        item.setLineWidth(0.6);
+
+        item.setDensity(std::numeric_limits<double>::quiet_NaN());
+        item.setLineWidth(std::numeric_limits<double>::infinity());
+
+        QCOMPARE(item.density(), 3.0);
+        QCOMPARE(item.lineWidth(), 0.6);
+    }
+
     void onePixelStereoStillRepresentsEveryChannel()
     {
         TestableAudioEditorWaveformItem item;

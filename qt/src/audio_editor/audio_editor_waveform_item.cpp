@@ -126,6 +126,7 @@ void AudioEditorWaveformItem::setSampleMode(const bool enabled)
 
 void AudioEditorWaveformItem::setDensity(const double density)
 {
+    if (!std::isfinite(density)) return;
     const double bounded = std::clamp(density, 0.5, 5.0);
     if (qFuzzyCompare(density_, bounded)) return;
     density_ = bounded;
@@ -135,7 +136,8 @@ void AudioEditorWaveformItem::setDensity(const double density)
 
 void AudioEditorWaveformItem::setLineWidth(const double width)
 {
-    const double bounded = std::clamp(width, 1.0, 8.0);
+    if (!std::isfinite(width)) return;
+    const double bounded = std::clamp(width, 0.1, 8.0);
     if (qFuzzyCompare(line_width_, bounded)) return;
     line_width_ = bounded;
     update();

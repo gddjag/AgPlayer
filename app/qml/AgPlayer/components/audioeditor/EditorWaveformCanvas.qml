@@ -81,6 +81,9 @@ Rectangle {
                    ? 3.0 : SettingsController.waveformThickness
         sampleMode: AudioEditorController.viewport.visibleFrameCount
             <= Math.max(2, Math.floor(width) * 2)
+        onDensityChanged: AudioEditorController.viewportWaveformDensity = density
+        Component.onCompleted:
+            AudioEditorController.viewportWaveformDensity = density
         visible: AudioEditorController.hasDocument
             || AudioEditorController.recording
     }
