@@ -217,7 +217,6 @@ void WindowController::setListWindow(QWindow* listWindow)
     // Restore the logical geometry before materializing the native handle so
     // DPI/frame adjustments do not overwrite the persisted client geometry.
     restoreGeometry(listWindow, listGeometryKey);
-    applyPlatformWindowStyle(listWindow);
     // Materialize the platform handle before publishing listWindow_. The
     // controller is already a native event filter at this point; calling
     // winId() from inside WM_NCCREATE would recursively create the same window.
@@ -229,6 +228,7 @@ void WindowController::setListWindow(QWindow* listWindow)
     listWindow_ = listWindow;
     listWindowHandle_ = nativeHandle;
     rememberNativePixelSize(listWindow_);
+    applyPlatformWindowStyle(listWindow_);
 
     listWindow_->installEventFilter(this);
     setListDockEdge(listWindowDetached_ ? QStringLiteral("none") : listDockEdge_);
@@ -330,6 +330,22 @@ void WindowController::applyPlatformWindowStyle(QWindow* window) const
     const int preference = isMaximized(window) ? kDoNotRound : kRound;
     const HWND hwnd = reinterpret_cast<HWND>(window->winId());
     if (hwnd != nullptr) {
+        LONG_PTR extendedStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        const LONG_PTR originalExtendedStyle = extendedStyle;
+        if (window == mainWindow_) {
+            extendedStyle |= WS_EX_APPWINDOW;
+            extendedStyle &= ~static_cast<LONG_PTR>(WS_EX_TOOLWINDOW);
+        } else if (window == listWindow_ || window == audioToolsWindow_
+                   || window == settingsWindow_) {
+            extendedStyle |= WS_EX_TOOLWINDOW;
+            extendedStyle &= ~static_cast<LONG_PTR>(WS_EX_APPWINDOW);
+        }
+        if (extendedStyle != originalExtendedStyle) {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, extendedStyle);
+            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
+                             | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
         DwmSetWindowAttribute(
             hwnd,
             static_cast<DWMWINDOWATTRIBUTE>(kCornerPreferenceAttribute),
@@ -811,6 +827,7 @@ void WindowController::setListDockEdge(const QString& edge)
         if (listWindow_->transientParent() != desiredOwner) {
             listWindow_->setTransientParent(desiredOwner);
         }
+        applyPlatformWindowStyle(listWindow_);
     }
     if (listDockEdge_ == normalized) {
         return;

@@ -46,6 +46,8 @@ private slots:
     void dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent();
 #ifdef Q_OS_WIN
     void dockedWindowsKeepNativeSizeAcrossScreens();
+    void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
+    void taskbarCommandsToggleDockedGroupWithoutResizing();
 #endif
     void mainMinimizeRestoresOnlyRequestedList();
     void showMainRestoresAndRaisesTheExistingWindowGroup();
@@ -668,6 +670,90 @@ void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
     QTRY_COMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
     QTRY_COMPARE(nativeSize(mainWindow), mainNativeSize);
     QTRY_COMPARE(nativeSize(listWindow), listNativeSize);
+}
+
+void WindowControllerTest::nativeTaskbarGroupUsesMainAsOnlyAppWindow()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    QWindow toolsWindow;
+    toolsWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    QWindow settingsWindow;
+    settingsWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.registerSettingsWindow(&settingsWindow);
+    windows.setListWindowDetached(true);
+
+    const auto exStyle = [](QWindow& window) {
+        return static_cast<DWORD>(GetWindowLongPtrW(
+            reinterpret_cast<HWND>(window.winId()), GWL_EXSTYLE));
+    };
+    const DWORD mainStyle = exStyle(mainWindow);
+    QVERIFY(mainStyle & WS_EX_APPWINDOW);
+    QVERIFY(!(mainStyle & WS_EX_TOOLWINDOW));
+    for (QWindow* auxiliary : {&listWindow, &toolsWindow, &settingsWindow}) {
+        const DWORD style = exStyle(*auxiliary);
+        QVERIFY2(style & WS_EX_TOOLWINDOW,
+                 "auxiliary windows must not create taskbar entries");
+        QVERIFY2(!(style & WS_EX_APPWINDOW),
+                 "only the main player may be the taskbar group entry");
+    }
+}
+
+void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+
+    const auto nativeRect = [](QWindow& window) {
+        RECT rect{};
+        if (!GetWindowRect(reinterpret_cast<HWND>(window.winId()), &rect)) {
+            return QRect();
+        }
+        return QRect(rect.left, rect.top, rect.right - rect.left,
+                     rect.bottom - rect.top);
+    };
+    const QRect mainBefore = nativeRect(mainWindow);
+    const QRect listBefore = nativeRect(listWindow);
+    const HWND mainHandle = reinterpret_cast<HWND>(mainWindow.winId());
+
+    SendMessageW(mainHandle, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    SendMessageW(mainHandle, WM_SYSCOMMAND, SC_RESTORE, 0);
+    QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+    QTRY_VERIFY(listWindow.isVisible());
+    QTRY_COMPARE(nativeRect(mainWindow).size(), mainBefore.size());
+    QTRY_COMPARE(nativeRect(listWindow).size(), listBefore.size());
 }
 #endif
 
