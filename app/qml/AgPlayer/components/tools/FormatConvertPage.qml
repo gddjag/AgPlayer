@@ -163,8 +163,9 @@ Rectangle {
                         contentItem: RowLayout {
                             spacing: 8
                             ThemedIcon {
+                                objectName: "formatToolbarIcon-" + modelData.action
                                 source: parent.parent.icon.source
-                                tint: "#d7e0e6"
+                                tint: Theme.iconPrimary
                                 sourceSize.width: 18
                                 sourceSize.height: 18
                                 Layout.preferredWidth: 18

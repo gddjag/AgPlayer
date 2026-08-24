@@ -104,6 +104,34 @@ TestCase {
         compare(shortcutText.indexOf("Phase"), -1)
     }
 
+    function test_composedToolsShellUsesReadableLightThemeColors() {
+        const previousMode = Theme.mode
+        Theme.mode = 1
+        const shell = createTemporaryObject(shellComponent, testCase)
+        verify(shell)
+        tryVerify(function() { return shell.visible })
+        const titleBar = findChild(shell, "audioToolsTitleBar")
+        const titleText = findChild(shell, "audioToolsWindowTitle")
+        const contentStack = findChild(shell, "audioToolsContentStack")
+        const minimize = findChild(shell, "audioToolsMinimizeButton")
+        const maximize = findChild(shell, "audioToolsMaximizeButton")
+        const close = findChild(shell, "audioToolsCloseButton")
+        verify(titleBar && titleText && contentStack
+               && minimize && maximize && close)
+        compare(titleBar.color.toString(), Theme.panel.toString())
+        compare(titleText.color.toString(), Theme.primaryText.toString())
+        compare(contentStack.color.toString(), Theme.background.toString())
+        compare(minimize.icon.color.toString(), Theme.iconPrimary.toString())
+        compare(maximize.icon.color.toString(), Theme.iconPrimary.toString())
+        compare(close.icon.color.toString(), Theme.iconPrimary.toString())
+        verify(titleText.color.toString() !== titleBar.color.toString())
+        verify(minimize.icon.color.toString() !== titleBar.color.toString())
+        verify(close.icon.color.toString() !== titleBar.color.toString())
+        Theme.mode = previousMode
+        shell.destroy()
+        wait(0)
+    }
+
     function test_editorWaveformUsesPlayerAppearanceSettings() {
         const originalMode = SettingsController.waveformMode
         const originalColor = SettingsController.waveformSolidBaseColor

@@ -58,8 +58,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: window.metadataWorkbench ? "#06141e" : Theme.background
-        border.color: window.metadataWorkbench ? "#173040" : Theme.border
+        color: Theme.background
+        border.color: Theme.border
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -72,7 +72,7 @@ Window {
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 49
-                color: "#031426"
+                color: Theme.panel
 
                 RowLayout {
                     z: 1
@@ -96,6 +96,7 @@ Window {
                         }
                     }
                     Text {
+                        objectName: "audioToolsWindowTitle"
                         text: qsTr("AgPlayer 音频编辑")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
@@ -115,7 +116,7 @@ Window {
                         Accessible.role: Accessible.Button
                         onClicked: window.showMinimized()
                         background: Rectangle {
-                            color: parent.hovered ? "#10283d" : "transparent"
+                            color: parent.hovered ? Theme.hoverSurface : "transparent"
                             radius: 3
                         }
                     }
@@ -133,7 +134,7 @@ Window {
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
                         background: Rectangle {
-                            color: parent.hovered ? "#10283d" : "transparent"
+                            color: parent.hovered ? Theme.hoverSurface : "transparent"
                             radius: 3
                         }
                     }
@@ -142,12 +143,13 @@ Window {
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
-                        icon.color: Theme.iconPrimary
+                        icon.color: hovered ? Theme.onBrandGradientText
+                                            : Theme.iconPrimary
                         Accessible.name: qsTr("关闭")
                         Accessible.role: Accessible.Button
                         onClicked: window.requestHide()
                         background: Rectangle {
-                            color: parent.hovered ? "#c42b35" : "transparent"
+                            color: parent.hovered ? Theme.favoriteRed : "transparent"
                             radius: 3
                         }
                     }
@@ -200,7 +202,7 @@ Window {
                 objectName: "audioToolsContentStack"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: "#031426"
+                color: Theme.background
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

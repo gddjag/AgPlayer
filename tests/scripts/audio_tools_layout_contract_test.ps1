@@ -71,6 +71,19 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
 }
+if ($toolsWindow -match '#(?:031426|10283d|c42b35)' -or
+    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}color:\s*Theme\.panel' -or
+    $toolsWindow -notmatch 'objectName:\s*"audioToolsWindowTitle"[\s\S]{0,160}color:\s*Theme\.primaryText' -or
+    $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.hoverSurface' -or
+    $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.favoriteRed' -or
+    $toolsWindow -notmatch 'icon\.color:\s*Theme\.iconPrimary') {
+    throw 'The audio-tools title bar, title, hover surfaces and window icons must use Theme tokens.'
+}
+if ($formatPage -match 'tint:\s*"#d7e0e6"' -or
+    $formatPage -notmatch 'objectName:\s*"formatToolbarIcon-"\s*\+\s*modelData\.action' -or
+    $formatPage -notmatch 'tint:\s*Theme\.iconPrimary') {
+    throw 'Format toolbar icons must expose stable objects and use the shared theme icon color.'
+}
 if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
     $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
     throw 'The composed tools shell is missing its real Space playback shortcut.'

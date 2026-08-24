@@ -118,8 +118,11 @@ TestCase {
         verify(!findChild(bottomBar, "converterParallelJobsBox"))
         verify(!findChild(bottomBar, "formatOutputDirectoryRow"))
         const formatBox = findChild(page, "converterOutputFormatBox")
+        const toolbarIcon = findChild(page, "formatToolbarIcon-file")
         verify(formatBox)
+        verify(toolbarIcon)
         compare(formatBox.count, 8)
+        compare(toolbarIcon.tint.toString(), Theme.iconPrimary.toString())
     }
 
     function test_realShellBodyShowsCompleteLocalProcessingHint() {
