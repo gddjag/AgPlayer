@@ -40,6 +40,11 @@
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <memory>
 
 namespace {
@@ -269,6 +274,8 @@ Q_IMPORT_PLUGIN(AgPlayerPlugin)
 class NativeDropHelper final : public QObject {
     Q_OBJECT
 public:
+    ~NativeDropHelper() override { unlockFiles(); }
+
     void bind(AudioToolsController* tools, FormatConverter* format,
               AudioEditorController* editor, MetadataEditor* metadata,
               FilenameProcessor* filenames)
@@ -379,6 +386,33 @@ public:
         return title;
     }
 
+    Q_INVOKABLE bool lockFileExclusive(const QUrl& url)
+    {
+#ifdef Q_OS_WIN
+        const QString path = url.toLocalFile();
+        if (path.isEmpty()) return false;
+        HANDLE handle = CreateFileW(
+            reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ, 0, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (handle == INVALID_HANDLE_VALUE) return false;
+        lockedFiles_.append(handle);
+        return true;
+#else
+        Q_UNUSED(url);
+        return false;
+#endif
+    }
+
+    Q_INVOKABLE void unlockFiles()
+    {
+#ifdef Q_OS_WIN
+        for (HANDLE handle : std::as_const(lockedFiles_)) {
+            CloseHandle(handle);
+        }
+        lockedFiles_.clear();
+#endif
+    }
+
     Q_INVOKABLE bool dragItem(QObject* target, qreal x, qreal y,
                               qreal deltaX, qreal deltaY)
     {
@@ -418,6 +452,9 @@ private:
     MetadataEditor* metadata_ = nullptr;
     FilenameProcessor* filenames_ = nullptr;
     bool delivered_ = false;
+#ifdef Q_OS_WIN
+    QList<HANDLE> lockedFiles_;
+#endif
 };
 
 class QmlAudioToolsSetup final : public QObject {

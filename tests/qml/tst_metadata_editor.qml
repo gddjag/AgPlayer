@@ -220,7 +220,10 @@ TestCase {
             page.refreshFields()
             page.setFieldMode("title", "set")
             page.setFieldValue("title", title)
-            page.applyEdits()
+            const apply = findChild(page, "metadataApplyButton")
+            verify(apply && apply.enabled)
+            mouseClick(apply, apply.width / 2, apply.height / 2,
+                       Qt.LeftButton)
             mutateSelection()
             tryVerify(function() { return !MetadataEditor.busy }, 30000)
         }

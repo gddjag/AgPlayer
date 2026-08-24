@@ -72,6 +72,11 @@ Rectangle {
     }
     Component.onCompleted: Qt.callLater(resetCapabilityParameters)
 
+    ButtonGroup {
+        id: bitrateModeGroup
+        exclusive: true
+    }
+
     color: "#101a21"
     border.color: "#203340"
     radius: 6
@@ -252,8 +257,10 @@ Rectangle {
                         model: root.capability.bitrateModes || []
                         Button {
                             required property var modelData
+                            objectName: "formatBitrateModeButton-" + modelData.key
                             text: modelData.label
                             checkable: true
+                            ButtonGroup.group: bitrateModeGroup
                             checked: root.selectedBitrateMode === modelData.key
                             Layout.fillWidth: true
                             Layout.preferredHeight: 32

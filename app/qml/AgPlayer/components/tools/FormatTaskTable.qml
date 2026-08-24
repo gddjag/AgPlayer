@@ -175,6 +175,9 @@ Rectangle {
                     }
                 }
                 Text {
+                    id: statusText
+                    objectName: column === 7 && row === 0
+                                ? "formatTaskFirstStatusText" : ""
                     visible: column > 0 && column < 8
                     anchors.fill: parent
                     anchors.leftMargin: column === 1 ? 48 : 10
@@ -189,13 +192,27 @@ Rectangle {
                         : column === 6 ? model.outputFormat
                         : model.status === "Converting" ? qsTr("转换中")
                         : model.status === "Done" ? qsTr("已完成")
-                        : model.status === "Error" ? qsTr("失败")
+                        : model.status === "Error"
+                          ? (model.errorDetail.length > 0
+                             ? model.errorDetail
+                             : qsTr("失败"))
                         : model.status === "Cancelled" ? qsTr("已取消") : qsTr("就绪")
                     color: column === 7 && model.status === "Done" ? "#19c37d"
                          : column === 7 && model.status === "Error" ? "#ff4d4f"
                          : column === 7 && model.status === "Converting" ? "#1688ff"
                          : "#c9d2d8"
                     font.pixelSize: 13
+                    ToolTip.visible: column === 7
+                                         && model.status === "Error"
+                                         && model.errorDetail.length > 0
+                                         && errorHover.hovered
+                    ToolTip.text: model.errorDetail
+                    ToolTip.delay: 300
+                    ToolTip.timeout: 10000
+                    HoverHandler {
+                        id: errorHover
+                        enabled: column === 7 && model.status === "Error"
+                    }
                 }
                 ProgressBar {
                     id: rowProgress
