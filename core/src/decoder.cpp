@@ -333,6 +333,7 @@ ag_result probe_media_metadata(const std::string& utf8_path,
         metadata.composer = read_canonical(CanonicalField::Composer);
         metadata.comment = read_limited("comment");
         metadata.bpm = read_canonical(CanonicalField::Bpm);
+        metadata.custom_tag = read_canonical(CanonicalField::CustomTag);
         metadata.copyright = read_limited("copyright");
         metadata.encoder = read_limited("encoded_by");
         if (metadata.encoder.empty() && !tag_limit_exceeded) {
@@ -691,6 +692,9 @@ private:
         metadata_.bpm = read_tag(audio_stream.metadata,
                                  format_context_->metadata,
                                  "bpm");
+        metadata_.custom_tag = read_tag(audio_stream.metadata,
+                                        format_context_->metadata,
+                                        "AGPLAYER_TAG");
         metadata_.copyright = read_tag(audio_stream.metadata,
                                        format_context_->metadata,
                                        "copyright");

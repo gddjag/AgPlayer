@@ -159,6 +159,11 @@ TestCase {
         tryCompare(coverSummary, "text", "当前封面：多种封面")
     }
 
+    function test_customTagReplacesYearInEditorSchema() {
+        verify(page.rowForField("customTag"))
+        compare(page.rowForField("year"), null)
+    }
+
     function test_processingScopeTracksCurrentSelectedAndAll() {
         MetadataEditor.loadFiles([testAudioUrl])
         tryVerify(function() { return !MetadataEditor.busy }, 5000)

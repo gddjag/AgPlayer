@@ -654,6 +654,11 @@ const char* ag_metadata_bpm_tag(const ag_metadata* metadata)
     return metadata == nullptr ? "" : metadata->value.bpm.c_str();
 }
 
+const char* ag_metadata_custom_tag(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? "" : metadata->value.custom_tag.c_str();
+}
+
 const char* ag_metadata_copyright(const ag_metadata* metadata)
 {
     return metadata == nullptr ? "" : metadata->value.copyright.c_str();
@@ -962,7 +967,7 @@ ag_result ag_transcode_v2(const char* input_path,
         config.quality = std::clamp(request->quality, 0, 100);
 
         if (request->struct_size >= sizeof(ag_transcode_request_v2)) {
-            if (request->metadata_field_count > 9
+            if (request->metadata_field_count > 10
                 || (request->metadata_field_count > 0
                     && request->metadata_fields == nullptr)) {
                 last_error = "invalid metadata field list in v2 transcode request";
@@ -992,6 +997,8 @@ ag_result ag_transcode_v2(const char* input_path,
                     field = agplayer::CanonicalField::Composer; break;
                 case AG_METADATA_FIELD_BPM:
                     field = agplayer::CanonicalField::Bpm; break;
+                case AG_METADATA_FIELD_CUSTOM_TAG:
+                    field = agplayer::CanonicalField::CustomTag; break;
                 default:
                     last_error = "invalid metadata field in v2 transcode request";
                     return AG_INVALID_ARGUMENT;

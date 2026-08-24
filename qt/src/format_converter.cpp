@@ -53,7 +53,7 @@ agplayer::CanonicalField canonical_field(const QString& key)
     if (key == QLatin1String("album")) return agplayer::CanonicalField::Album;
     if (key == QLatin1String("albumArtist")) return agplayer::CanonicalField::AlbumArtist;
     if (key == QLatin1String("genre")) return agplayer::CanonicalField::Genre;
-    if (key == QLatin1String("year")) return agplayer::CanonicalField::Year;
+    if (key == QLatin1String("customTag")) return agplayer::CanonicalField::CustomTag;
     if (key == QLatin1String("date")) return agplayer::CanonicalField::Date;
     if (key == QLatin1String("composer")) return agplayer::CanonicalField::Composer;
     return agplayer::CanonicalField::Bpm;
@@ -66,7 +66,7 @@ agplayer::MetadataEditPlan metadata_plan(const QVariantMap& fields,
     agplayer::MetadataEditPlan plan;
     const QStringList keys{QStringLiteral("title"), QStringLiteral("artist"),
         QStringLiteral("album"), QStringLiteral("albumArtist"), QStringLiteral("genre"),
-        QStringLiteral("year"), QStringLiteral("date"), QStringLiteral("composer"),
+        QStringLiteral("customTag"), QStringLiteral("date"), QStringLiteral("composer"),
         QStringLiteral("bpm")};
     for (const QString& key : keys) {
         const QVariantMap value = fields.value(key).toMap();

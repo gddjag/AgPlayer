@@ -166,6 +166,7 @@ const char* canonical_metadata_key(const CanonicalField field,
     case CanonicalField::Date: return "date";
     case CanonicalField::Composer: return "composer";
     case CanonicalField::Bpm: return "bpm";
+    case CanonicalField::CustomTag: return "AGPLAYER_TAG";
     }
     return "";
 }
