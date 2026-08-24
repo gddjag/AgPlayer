@@ -39,9 +39,9 @@ Rectangle {
         { key: "album", label: qsTr("专辑") },
         { key: "albumArtist", label: qsTr("专辑艺术家") },
         { key: "genre", label: qsTr("流派") },
-        { key: "year", label: qsTr("年份") },
-        { key: "date", label: qsTr("日期") },
         { key: "composer", label: qsTr("作曲") },
+        { key: "date", label: qsTr("日期") },
+        { key: "customTag", label: qsTr("自定义标签") },
         { key: "bpm", label: qsTr("BPM") }
     ]
 
@@ -320,10 +320,6 @@ Rectangle {
         else if (coverMode === "clear")
             lines.push(qsTr("封面：移除 · %1 个文件").arg(count))
         return lines
-    }
-
-    function hasYearDateConflict() {
-        return fieldMode("year") !== "keep" && fieldMode("date") !== "keep"
     }
 
     function resetEdits() {
@@ -730,7 +726,7 @@ Rectangle {
                                 ColumnHeader { text: qsTr("标题"); sortField: "title"; Layout.preferredWidth: 124 }
                                 ColumnHeader { text: qsTr("艺术家"); sortField: "artist"; Layout.preferredWidth: 122 }
                                 ColumnHeader { text: qsTr("专辑"); sortField: "album"; Layout.preferredWidth: 122 }
-                                ColumnHeader { text: qsTr("年份"); sortField: "year"; Layout.preferredWidth: 48 }
+                                ColumnHeader { objectName: "metadataTableTagHeader"; text: qsTr("标签"); sortField: "customTag"; Layout.preferredWidth: 48 }
                                 ColumnHeader { text: qsTr("时长"); sortField: "durationMs"; Layout.preferredWidth: 54 }
                                 Label { text: qsTr("封面"); color: page.mutedColor; Layout.preferredWidth: 46; horizontalAlignment: Text.AlignHCenter }
                                 Label { text: qsTr("状态"); color: page.mutedColor; Layout.preferredWidth: 52; horizontalAlignment: Text.AlignHCenter }
@@ -807,7 +803,7 @@ Rectangle {
                                     Label { text: metadata.title || "—"; color: Theme.primaryText; Layout.preferredWidth: 124; elide: Text.ElideRight }
                                     Label { text: metadata.artist || "—"; color: Theme.primaryText; Layout.preferredWidth: 122; elide: Text.ElideRight }
                                     Label { text: metadata.album || "—"; color: Theme.primaryText; Layout.preferredWidth: 122; elide: Text.ElideRight }
-                                    Label { text: metadata.year || "—"; color: page.mutedColor; Layout.preferredWidth: 48; horizontalAlignment: Text.AlignHCenter }
+                                    Label { text: metadata.customTag || "—"; color: page.mutedColor; Layout.preferredWidth: 48; horizontalAlignment: Text.AlignHCenter }
                                     Label { text: page.formatDuration(metadata.durationMs); color: page.mutedColor; Layout.preferredWidth: 54; horizontalAlignment: Text.AlignHCenter }
                                     Rectangle {
                                         Layout.preferredWidth: 46
@@ -1302,24 +1298,6 @@ Rectangle {
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                             }
-                                        }
-                                    }
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        visible: page.hasYearDateConflict()
-                                        spacing: 8
-                                        ThemedIcon {
-                                            source: Theme.icon("information-line")
-                                            tint: Theme.favoriteRed
-                                            sourceSize.width: 16
-                                            sourceSize.height: 16
-                                        }
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: qsTr("年份与日期可能映射到同一物理标签，预检将阻止冲突写入。")
-                                            color: Theme.favoriteRed
-                                            font.pixelSize: 11
-                                            elide: Text.ElideRight
                                         }
                                     }
                                     Label {

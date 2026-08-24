@@ -24,10 +24,27 @@ foreach ($control in @(
 }
 
 foreach ($field in @('title', 'artist', 'album', 'albumArtist', 'genre',
-                      'year', 'date', 'composer', 'bpm')) {
+                      'composer', 'date', 'customTag', 'bpm')) {
     if ($page -notmatch ('key:\s*"' + $field + '"')) {
         throw "Missing canonical metadata field: $field"
     }
+}
+if ($page -match 'key:\s*"year"') {
+    throw 'Year must not remain an editable metadata field.'
+}
+$tagHeaderText = [string]::Concat([char]0x6807, [char]0x7b7e)
+$customTagLabel = [string]::Concat([char]0x81ea, [char]0x5b9a, [char]0x4e49,
+                                    [char]0x6807, [char]0x7b7e)
+$tagHeaderPattern = 'ColumnHeader\s*\{\s*objectName:\s*"metadataTableTagHeader"\s*;\s*text:\s*qsTr\("' +
+                    [regex]::Escape($tagHeaderText) +
+                    '"\)\s*;\s*sortField:\s*"customTag"'
+if ($page -notmatch $tagHeaderPattern) {
+    throw 'The metadata table must expose the custom tag column as the custom tag label.'
+}
+$customTagFieldPattern = '\{\s*key:\s*"customTag",\s*label:\s*qsTr\("' +
+                         [regex]::Escape($customTagLabel) + '"\)\s*\}'
+if ($page -notmatch $customTagFieldPattern) {
+    throw 'The editable custom tag field must have the Chinese custom tag label.'
 }
 if ($page -notmatch 'objectName:\s*"metadataValueField_"\s*\+\s*fieldRow\.fieldKey') {
     throw 'Metadata fields must remain directly addressable.'
