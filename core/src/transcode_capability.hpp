@@ -22,6 +22,10 @@ struct TranscodeFormatCapability {
     bool lossy = false;
     bool supports_metadata = false;
     bool supports_cover = false;
+    std::string parameter_kind;
+    std::vector<int> quality_choices;
+    int default_quality = 0;
+    std::vector<TranscodeOptionChoice> bit_depth_choices;
     std::vector<int> sample_rates;
     std::vector<std::string> sample_formats;
     std::vector<std::string> channel_layouts;

@@ -12,14 +12,19 @@ Rectangle {
     readonly property bool isExpanded: expanded && !forceCollapsed
     property string outputFormat: converter.selectedFormat
     readonly property var capability: converter.currentCapability || ({})
-    property int bitRate: capability.lossy === true
+    readonly property string parameterKind: capability.parameterKind || "none"
+    property int bitRate: parameterKind === "bitrate"
                           ? (bitRateBox.currentValue || 0) : 0
+    property int quality: qualityBox.currentIndex >= 0
+                          ? Number(qualityBox.currentValue)
+                          : Number(capability.defaultQuality || 0)
     property int sampleRate: sampleRateBox.currentValue || 0
     property int channels: channelLayout === "mono" ? 1
                            : channelLayout === "stereo" ? 2 : 0
     property string bitrateMode: selectedBitrateMode
     property string conflictPolicy: conflictBox.currentValue || "auto-number"
     property string sampleFormat: sampleFormatBox.currentValue || ""
+    property string bitDepth: bitDepthBox.currentValue || ""
     property string channelLayout: channelBox.currentValue || ""
     property bool keepMetadata: keepMetadataCheck.checked
     property bool keepCover: keepCoverCheck.checked
@@ -43,7 +48,7 @@ Rectangle {
             selectedBitrateMode = modes[0].key
 
         bitRateBox.currentIndex = -1
-        if (capability.lossy === true && bitRateBox.count > 0) {
+        if (parameterKind === "bitrate" && bitRateBox.count > 0) {
             const recommended = (capability.bitRates || []).indexOf(192000)
             bitRateBox.currentIndex = recommended >= 0 ? recommended : 0
         }
@@ -54,6 +59,9 @@ Rectangle {
         }
         channelBox.currentIndex = 0
         sampleFormatBox.currentIndex = 0
+        qualityBox.currentIndex = Math.max(0,
+            (capability.qualityChoices || []).indexOf(capability.defaultQuality))
+        bitDepthBox.currentIndex = 0
         if (capability.supportsMetadata !== true)
             SettingsController.preserveMetadata = false
         if (capability.supportsCover !== true)
@@ -274,7 +282,7 @@ Rectangle {
                 RowLayout {
                     id: bitrateRow
                     objectName: "formatBitrateRow"
-                    visible: root.capability.lossy === true
+                    visible: root.parameterKind === "bitrate"
                     Layout.fillWidth: true
                     Layout.preferredHeight: visible ? 32 : 0
                     ReferenceComboBox {
@@ -288,6 +296,24 @@ Rectangle {
                         textRole: "text"
                         valueRole: "value"
                     }
+                }
+                Text {
+                    visible: qualityBox.visible
+                    Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122
+                    text: root.parameterKind === "compression" ? qsTr("压缩等级") : qsTr("质量等级")
+                    color: "#aeb9c1"
+                }
+                ReferenceComboBox {
+                    id: qualityBox
+                    objectName: "formatQualityBox"
+                    visible: root.parameterKind === "quality" || root.parameterKind === "compression"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? 32 : 0
+                    model: (root.capability.qualityChoices || []).map(function(value) {
+                        return { text: root.parameterKind === "quality" ? "Q" + value : String(value),
+                                 value: value }
+                    })
+                    textRole: "text"; valueRole: "value"
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("采样率"); color: "#aeb9c1" }
                 ReferenceComboBox {
@@ -320,10 +346,20 @@ Rectangle {
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: "#aeb9c1" }
                 ReferenceComboBox {
+                    id: bitDepthBox
+                    objectName: "formatBitDepthBox"
+                    visible: (root.capability.bitDepths || []).length > 0
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? 32 : 0
+                    model: root.capability.bitDepths || []
+                    textRole: "label"; valueRole: "key"
+                }
+                ReferenceComboBox {
                     id: sampleFormatBox
                     objectName: "formatSampleFormatBox"
+                    visible: (root.capability.bitDepths || []).length === 0
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 32
+                    Layout.preferredHeight: visible ? 32 : 0
                     model: [{text:qsTr("自动"), value:""}].concat(
                         (converter.currentCapability.sampleFormats || []).map(function(value) {
                             return { text: value, value: value }

@@ -43,13 +43,33 @@ int main()
     const auto* aac = agplayer::find_transcode_capability(capabilities, "aac");
     const auto* m4a = agplayer::find_transcode_capability(capabilities, "m4a");
     const auto* alac = agplayer::find_transcode_capability(capabilities, "alac");
-    assert(aac != nullptr && m4a != nullptr && alac != nullptr);
+    const auto* wav = agplayer::find_transcode_capability(capabilities, "wav");
+    const auto* flac = agplayer::find_transcode_capability(capabilities, "flac");
+    const auto* ogg = agplayer::find_transcode_capability(capabilities, "ogg");
+    assert(aac != nullptr && m4a != nullptr && alac != nullptr
+           && wav != nullptr && flac != nullptr && ogg != nullptr);
     assert(aac->codec_name == "aac");
     assert(aac->muxer_name == "adts");
     assert(m4a->codec_name == "aac");
     assert(m4a->muxer_name == "ipod");
     assert(alac->codec_name == "alac");
     assert(alac->muxer_name == "ipod");
+    assert(ogg->parameter_kind == "quality");
+    assert(ogg->quality_choices == std::vector<int>({0, 2, 4, 6, 8, 10}));
+    assert(ogg->default_quality == 6);
+    assert(flac->parameter_kind == "compression");
+    assert(flac->quality_choices == std::vector<int>({0, 3, 5, 8}));
+    assert(flac->default_quality == 5);
+    const auto assert_depths = [](const auto& capability) {
+        assert(capability->bit_depth_choices.size() >= 3);
+        assert(capability->bit_depth_choices.front().key.empty());
+        assert(capability->bit_depth_choices.front().is_default);
+        assert(capability->bit_depth_choices[1].key == "s16");
+        assert(capability->bit_depth_choices[2].key == "s24");
+    };
+    assert_depths(wav);
+    assert_depths(flac);
+    assert_depths(alac);
     assert(agplayer::find_transcode_capability(capabilities, "missing")
            == nullptr);
     return 0;

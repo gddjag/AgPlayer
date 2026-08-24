@@ -295,7 +295,7 @@ TestCase {
             wait(0)
 
             compare(modeRow.visible, capability.bitrateModes.length > 0)
-            compare(bitrateRow.visible, capability.lossy === true)
+            compare(bitrateRow.visible, capability.parameterKind === "bitrate")
             if (capability.bitrateModes.length > 0) {
                 const supportedModes = capability.bitrateModes.map(
                             function(mode) { return mode.key })
@@ -303,7 +303,7 @@ TestCase {
             } else {
                 compare(settings.bitrateMode, "")
             }
-            if (capability.lossy) {
+            if (capability.parameterKind === "bitrate") {
                 verify(capability.bitRates.indexOf(settings.bitRate) >= 0)
                 compare(bitrateBox.count, capability.bitRates.length)
             } else {
@@ -320,6 +320,33 @@ TestCase {
                    || capability.channelLayouts.indexOf(settings.channelLayout) >= 0)
         }
     }
+
+    function test_losslessDepthAndQualityControlsUseCapabilityDefaults() {
+        const bitDepthBox = findChild(page, "formatBitDepthBox")
+        const qualityBox = findChild(page, "formatQualityBox")
+        const settings = findChild(page, "formatSettingsPanel")
+        verify(bitDepthBox && qualityBox && settings)
+
+        FormatConverter.selectedFormat = "flac"
+        wait(0)
+        const flac = FormatConverter.currentCapability
+        compare(flac.parameterKind, "compression")
+        compare(flac.defaultQuality, 5)
+        compare((flac.bitDepths || []).length, 3)
+        tryCompare(qualityBox, "currentValue", 5, 1000)
+        compare(bitDepthBox.currentValue, "")
+        compare(settings.bitDepth, "")
+        compare(settings.sampleFormat, "")
+
+        FormatConverter.selectedFormat = "ogg"
+        wait(0)
+        const ogg = FormatConverter.currentCapability
+        compare(ogg.parameterKind, "quality")
+        compare(ogg.defaultQuality, 6)
+        tryCompare(qualityBox, "currentValue", 6, 1000)
+        compare(settings.bitRate, 0)
+    }
+
 
     function test_availableFormatButtonsAndEveryVisibleModeProduceReopenableOutput() {
         const capabilities = FormatConverter.outputCapabilities
@@ -387,7 +414,7 @@ TestCase {
                     return !FormatConverter.busy
                            && FormatConverter.completedCount
                                   + FormatConverter.failedCount === 1
-                }, 30000)
+                }, 30000, capability.key + "/" + mode.key)
                 compare(FormatConverter.failedCount, 0,
                         capability.key + "/" + mode.key + ": "
                         + String(FormatConverter.files[0].errorMessage || ""))

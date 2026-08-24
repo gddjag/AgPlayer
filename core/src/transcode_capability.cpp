@@ -36,6 +36,36 @@ constexpr std::array<FormatDefinition, 8> kFormats{{
     {"m4a", "M4A", "ipod", "aac", true, true, true, true},
 }};
 
+void apply_friendly_parameters(TranscodeFormatCapability& result)
+{
+    if (result.key == "ogg") {
+        result.parameter_kind = "quality";
+        result.quality_choices = {0, 2, 4, 6, 8, 10};
+        result.default_quality = 6;
+        result.bitrate_modes.clear();
+    } else if (result.key == "flac") {
+        result.parameter_kind = "compression";
+        result.quality_choices = {0, 3, 5, 8};
+        result.default_quality = 5;
+    } else if (result.lossy) {
+        result.parameter_kind = "bitrate";
+    } else {
+        result.parameter_kind = "none";
+    }
+
+    if (result.key == "wav") {
+        result.bit_depth_choices = {{"", "Source (Auto)", true},
+                                    {"s16", "16-bit PCM", false},
+                                    {"s24", "24-bit PCM", false},
+                                    {"s32", "32-bit PCM", false},
+                                    {"flt", "32-bit Float", false}};
+    } else if (result.key == "flac" || result.key == "alac") {
+        result.bit_depth_choices = {{"", "Source (Auto)", true},
+                                    {"s16", "16-bit", false},
+                                    {"s24", "24-bit", false}};
+    }
+}
+
 template <typename T>
 std::vector<T> supported_config(const AVCodec* codec,
                                 const AVCodecConfig config)
@@ -135,6 +165,7 @@ TranscodeFormatCapability inspect(const FormatDefinition& definition)
         result.bitrate_modes = {{"cbr", "CBR", true},
                                 {"vbr", "VBR", false}};
     }
+    apply_friendly_parameters(result);
 
     const AVCodec* codec = avcodec_find_encoder_by_name(definition.codec);
     if (codec == nullptr) {

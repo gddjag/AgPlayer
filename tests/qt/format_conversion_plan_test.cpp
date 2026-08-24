@@ -17,6 +17,8 @@ private slots:
     void plansConflictPoliciesWithoutCreatingOutput();
     void preservesImportRootAndRejectsTraversal();
     void rejectsVideoUnlessExtractionIsEnabled();
+    void probesAndPreservesFriendlySourceBitDepth();
+    void resolvesExplicitFriendlyDepthForLosslessFormats();
 };
 
 namespace {
@@ -178,6 +180,70 @@ void FormatConversionPlanTest::rejectsVideoUnlessExtractionIsEnabled()
     plan = build_format_conversion_plan({inputFor(input, {}, true)}, request);
     QVERIFY(plan.ready);
     QCOMPARE(plan.tasks.front().audioStreamIndex, 0);
+}
+
+void FormatConversionPlanTest::probesAndPreservesFriendlySourceBitDepth()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    agplayer::MediaProbe probed;
+    std::string error;
+    QCOMPARE(agplayer::probe_transcode_input(input.toUtf8().toStdString(),
+                                             probed, error), AG_OK);
+    QCOMPARE(probed.audio_streams.front().bits_per_sample, 16);
+
+    FormatPlanInput source = inputFor(input);
+    source.probe.audio_streams.front().bits_per_sample = 24;
+    source.probe.audio_streams.front().sample_format = "s32";
+    for (const QString& format : {QStringLiteral("wav"),
+                                  QStringLiteral("flac"),
+                                  QStringLiteral("alac")}) {
+        FormatConversionRequest request;
+        request.formatKey = format;
+        request.outputDirectory = temp.filePath(format);
+        const FormatBatchPlan plan = build_format_conversion_plan({source}, request);
+        QVERIFY2(plan.ready, qPrintable(plan.fatalError));
+        const QVariantMap profile = plan.tasks.front().resolvedProfile;
+        QCOMPARE(profile.value(QStringLiteral("bitDepth")).toString(),
+                 QStringLiteral("s24"));
+        QCOMPARE(profile.value(QStringLiteral("sampleFormat")).toString(),
+                 format == QStringLiteral("alac")
+                     ? QStringLiteral("s32p") : QStringLiteral("s32"));
+        if (format == QStringLiteral("wav")) {
+            QCOMPARE(profile.value(QStringLiteral("codec")).toString(),
+                     QStringLiteral("pcm_s24le"));
+        }
+    }
+}
+
+void FormatConversionPlanTest::resolvesExplicitFriendlyDepthForLosslessFormats()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    for (const QString& format : {QStringLiteral("wav"),
+                                  QStringLiteral("flac"),
+                                  QStringLiteral("alac")}) {
+        FormatConversionRequest request;
+        request.formatKey = format;
+        request.bitDepth = QStringLiteral("s24");
+        request.outputDirectory = temp.filePath(format);
+        const FormatBatchPlan plan = build_format_conversion_plan(
+            {inputFor(input)}, request);
+        QVERIFY2(plan.ready, qPrintable(plan.fatalError));
+        QCOMPARE(plan.tasks.front().resolvedProfile
+                     .value(QStringLiteral("bitDepth")).toString(),
+                 QStringLiteral("s24"));
+        QCOMPARE(plan.tasks.front().resolvedProfile
+                     .value(QStringLiteral("sampleFormat")).toString(),
+                 format == QStringLiteral("alac")
+                     ? QStringLiteral("s32p") : QStringLiteral("s32"));
+    }
 }
 
 QTEST_APPLESS_MAIN(FormatConversionPlanTest)

@@ -42,6 +42,7 @@ Rectangle {
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
             bitRate: settingsPanel.bitRate,
+            quality: settingsPanel.quality,
             sampleRate: settingsPanel.sampleRate,
             channels: settingsPanel.channels,
             outputDir: outputDirectory,
@@ -51,6 +52,7 @@ Rectangle {
             keepCover: settingsPanel.keepCover,
             preserveDirectories: settingsPanel.preserveDirectories,
             sampleFormat: settingsPanel.sampleFormat,
+            bitDepth: settingsPanel.bitDepth,
             channelLayout: settingsPanel.channelLayout,
             audioStreamIndex: -1
         })
@@ -68,7 +70,7 @@ Rectangle {
         id: fileDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: [qsTr("音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.mp4 *.mkv *.avi *.mov *.webm)")]
+            nameFilters: [qsTr("音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.aif *.aiff *.mp4 *.mkv *.avi *.mov *.webm)")]
             onAccepted: {
                 converter.addUrls(selectedFiles)
                 destroy()

@@ -23,6 +23,13 @@ foreach ($control in @(
 if ($page -match 'formatFilterButton' -or $page -match 'filter-3-line') {
     throw 'The format toolbar must not restore the removed search/filter control.'
 }
+if ($page -notmatch '\*\.aif\s+\*\.aiff') {
+    throw 'The format converter picker must accept AIFF input files.'
+}
+if ($settings -notmatch 'objectName:\s*"formatBitDepthBox"' -or
+    $settings -notmatch 'property\s+string\s+bitDepth') {
+    throw 'Lossless output settings must expose a friendly bit-depth selector.'
+}
 
 if ($combined -notmatch 'key:\s*"Converting"') {
     throw 'The reference task filters must expose the converting state.'

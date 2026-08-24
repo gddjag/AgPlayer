@@ -10,6 +10,7 @@
 #include <agplayer/c_api.h>
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
@@ -84,6 +85,7 @@ private slots:
     void formatConverterCreateActionRejectsPublishRace();
     void formatConverterConfirmedPlanPreservesSkipAction();
     void formatConverterConfirmedPlanUsesFrozenQuality();
+    void formatConverterHonorsVorbisQualityFlacCompressionAndLosslessDepth();
     void formatConverterSkipPolicyLeavesExistingOutputUntouched();
     void formatConverterExposesEveryPdfRequiredOutputFormat();
     void formatConverterAppliesRealCbrAndVbrModes();
@@ -1023,6 +1025,109 @@ void AudioToolsEndToEndTest::formatConverterConfirmedPlanUsesFrozenQuality()
     }
     QVERIFY2(sizes[0] != sizes[1],
              "Frozen VBR quality must change the encoded output");
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterHonorsVorbisQualityFlacCompressionAndLosslessDepth()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("parameter-source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 123, 3));
+
+    const auto convert = [&](const QString& format, const QString& directory,
+                             int quality, const QString& bitDepth = QString()) {
+        FormatConverter converter;
+        converter.loadFiles({QUrl::fromLocalFile(input)});
+        QElapsedTimer loadTimer;
+        loadTimer.start();
+        while (converter.busy() && loadTimer.elapsed() < 5000) {
+            QTest::qWait(10);
+        }
+        if (converter.busy()) {
+            return QVariantMap{{QStringLiteral("error"),
+                                QStringLiteral("input load timed out")}};
+        }
+        QVariantMap request{
+            {QStringLiteral("outputFormat"), format},
+            {QStringLiteral("outputDir"), temp.filePath(directory)},
+            {QStringLiteral("bitRate"),
+             format == QStringLiteral("ogg") ? 0 : 192000},
+            {QStringLiteral("quality"), quality},
+            {QStringLiteral("sampleRate"),
+             format == QStringLiteral("ogg") ? 0 : 44100},
+            {QStringLiteral("keepMetadata"), false},
+            {QStringLiteral("keepCover"), false},
+        };
+        if (!bitDepth.isEmpty()) {
+            request.insert(QStringLiteral("bitDepth"), bitDepth);
+        }
+        const QVariantMap plan = converter.buildPreflight(request);
+        if (!plan.value(QStringLiteral("ready")).toBool()) {
+            return QVariantMap{{QStringLiteral("error"),
+                                plan.value(QStringLiteral("error"))}};
+        }
+        QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+        converter.confirmPendingPlan();
+        if (completed.isEmpty() && !completed.wait(30000)) {
+            return QVariantMap{{QStringLiteral("error"),
+                                QStringLiteral("conversion timed out")}};
+        }
+        const QVariantMap row = converter.files().front().toMap();
+        if (converter.failedCount() != 0) {
+            return QVariantMap{{QStringLiteral("error"),
+                                row.value(QStringLiteral("errorMessage"))}};
+        }
+        return QVariantMap{{QStringLiteral("path"),
+                            row.value(QStringLiteral("outputPath"))}};
+    };
+
+    const QVariantMap oggLowResult = convert(QStringLiteral("ogg"),
+                                             QStringLiteral("ogg-low"), 0);
+    const QVariantMap oggHighResult = convert(QStringLiteral("ogg"),
+                                              QStringLiteral("ogg-high"), 10);
+    QVERIFY2(oggLowResult.value(QStringLiteral("error")).toString().isEmpty(),
+             qPrintable(oggLowResult.value(QStringLiteral("error")).toString()));
+    QVERIFY2(oggHighResult.value(QStringLiteral("error")).toString().isEmpty(),
+             qPrintable(oggHighResult.value(QStringLiteral("error")).toString()));
+    const QString oggLow = oggLowResult.value(QStringLiteral("path")).toString();
+    const QString oggHigh = oggHighResult.value(QStringLiteral("path")).toString();
+    verifyAudioFile(oggLow);
+    verifyAudioFile(oggHigh);
+    QVERIFY2(QFileInfo(oggHigh).size() > QFileInfo(oggLow).size(),
+             "Higher Vorbis quality must produce the larger encoded stream");
+
+    const QVariantMap flacFastResult = convert(QStringLiteral("flac"),
+                                               QStringLiteral("flac-fast"), 0);
+    const QVariantMap flacDenseResult = convert(QStringLiteral("flac"),
+                                                QStringLiteral("flac-dense"), 8);
+    QVERIFY2(flacFastResult.value(QStringLiteral("error")).toString().isEmpty(),
+             qPrintable(flacFastResult.value(QStringLiteral("error")).toString()));
+    QVERIFY2(flacDenseResult.value(QStringLiteral("error")).toString().isEmpty(),
+             qPrintable(flacDenseResult.value(QStringLiteral("error")).toString()));
+    const QString flacFast = flacFastResult.value(QStringLiteral("path")).toString();
+    const QString flacDense = flacDenseResult.value(QStringLiteral("path")).toString();
+    verifyAudioFile(flacFast);
+    verifyAudioFile(flacDense);
+    QVERIFY2(QFileInfo(flacDense).size() <= QFileInfo(flacFast).size(),
+             "FLAC compression level 8 must not be larger than level 0");
+
+    for (const QString& format : {QStringLiteral("wav"),
+                                  QStringLiteral("flac"),
+                                  QStringLiteral("alac")}) {
+        const QVariantMap result = convert(
+            format, QStringLiteral("depth-") + format,
+            format == QStringLiteral("flac") ? 5 : 75,
+            QStringLiteral("s24"));
+        QVERIFY2(result.value(QStringLiteral("error")).toString().isEmpty(),
+                 qPrintable(result.value(QStringLiteral("error")).toString()));
+        const QString output = result.value(QStringLiteral("path")).toString();
+        ag_metadata* metadata = nullptr;
+        QCOMPARE(ag_metadata_open(output.toUtf8().constData(), &metadata), AG_OK);
+        QVERIFY(metadata != nullptr);
+        QCOMPARE(ag_metadata_bits_per_sample(metadata), 24);
+        ag_metadata_destroy(metadata);
+    }
 }
 
 void AudioToolsEndToEndTest::
