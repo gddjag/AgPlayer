@@ -3,22 +3,26 @@
 ## 参考与候选
 
 - 参考图：`C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频编辑.png`
-- 候选图：`build/qa/phase6/accepted/tools-zh-theme0-tool0-1672x941.png`
-- 响应式候选：同目录 `1280x720`、`880x560`
-- 同屏对照与差异蒙版：`build/qa/phase6/accepted/comparison/`
+- Release 候选图：`build/qa/phase6/release-recording-waveform-final/tools-zh-theme0-tool0-1672x941.png`
+- Debug 候选图：`build/qa/phase6/debug-recording-waveform-final/tools-zh-theme0-tool0-1672x941.png`
+- 响应式候选：以上目录内的 `1280x720`、`880x560`
+- 同屏对照与差异蒙版：`build/qa/phase6/recording-waveform-comparison/`
 
 ## 结论
 
 - 1672×941 外壳、标题栏、四个文字 Tab、13 个命令、文件信息条、轨道头、标尺、284 px 波形区、滚动条、录音/播放面板、快捷键卡、A–E 检查器和状态区均已实现。
-- 真实 03:45.670、44.1 kHz、立体声 WAV 已用于截图；选区、播放头、BPM、升调和音调保护均来自 Controller 状态，不使用生产假数据。
+- 截图使用仓库内可重复生成的 2 秒、44.1 kHz、立体声 WAV 测试夹具；选区、播放头、BPM、升调和音调保护均来自 Controller 状态，生产界面不注入展示假数据。
 - 1280×720 与 880×560 保持主时间线优先，并保留播放、编辑设置和导出入口。
-- 差异脚本结果：`changed_ratio=0.383545`。该原始像素比包含不同真实波形内容、字体栅格化和系统控件渲染，不能单独作为几何失败判据；几何合同由自动布局测试独立验证。
+- 最新录音面板按参考图固定为左侧计时/状态与四个 74 px 圆形按键，分别绑定设备选择、暂停/继续、开始/继续和停止并保存；`R / Shift+R / Ctrl+R` 的真实快捷键与提示同步完成。
+- 编辑时间线与播放器共用波形颜色、密度和粗细设置。深度放大时按逻辑像素重采样，不再把少量帧稀疏铺满画布；NaN 片段空隙仍保持空白，顶点预算仍不超过 `2 × logical width`。
+- 差异脚本结果：`changed_ratio=0.373448`。该原始像素比包含不同音频内容、字体栅格化和系统控件渲染，不能单独作为几何失败判据；录音面板几何、快捷键、波形密度、空隙和点数上限由自动测试独立验证。
+- 本轮参考图变更的 P0/P1/P2（录音四键、录音快捷键、统一波形样式、放大稀疏）均已修复，视觉验收结果：通过。
 
 ## 自动验证
 
-- Release 音频编辑聚焦矩阵：17/17 通过。
-- Debug 关键门禁：4/4 通过（Controller、QML、布局、翻译）。
-- Release 全量 CTest：84/86 通过；`waveform_item_test` 无诊断退出 1，未在本次音频编辑改动范围内；翻译覆盖失败已修复并单独复测通过。
+- Release 本轮聚焦门禁：8/8 通过。
+- Debug 本轮聚焦门禁：8/8 通过。
+- Release 全量 CTest：85/86 通过；仅既有 `waveform_item_test` 无诊断退出 1，未在本次音频编辑改动范围内。
 - `git diff --check`：通过，仅有现有行尾转换提示。
 
 ## 仍需实机确认

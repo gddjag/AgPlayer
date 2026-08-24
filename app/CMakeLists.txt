@@ -58,6 +58,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-arrows-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/stop-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg

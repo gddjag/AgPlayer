@@ -48,6 +48,10 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
 }
+if ($toolsWindow -notmatch 'objectName:\s*"audioToolsLogo"' -or
+    $toolsWindow -match 'color:\s*"#0867ed"') {
+    throw 'The latest reference uses the transparent waveform brand mark.'
+}
 if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
     $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
     throw 'The composed tools shell is missing its real Space playback shortcut.'
@@ -169,7 +173,17 @@ if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'positionMs\s*\*\s*AudioEditorController\.sampleRate') {
     throw 'Waveform QML must consume visible peaks and exact playheadFrame without a second crop/time path.'
 }
-foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V')) {
+if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
+    $waveformCanvas -notmatch 'SettingsController\.waveformThickness' -or
+    $waveformCanvas -notmatch 'SettingsController\.waveformSolidBaseColor' -or
+    $waveformCanvas -notmatch 'SettingsController\.spectrumSolidColor' -or
+    $waveformCanvas -notmatch 'waveformMode\s*===\s*2\s*\?\s*1\.0' -or
+    $waveformCanvas -notmatch 'waveformMode\s*===\s*2\s*\?\s*3\.0' -or
+    $waveformCanvas -match 'waveformColor:\s*"#2587ff"') {
+    throw 'Editor and player waveforms must use the same configurable style inputs.'
+}
+foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V',
+    'sequence:\s*"R"', 'sequence:\s*"Shift\+R"', 'sequence:\s*"Ctrl\+R"')) {
     if ($audioEditor -notmatch $shortcut) {
         throw "The editor is missing the interaction shortcut: $shortcut"
     }
@@ -212,7 +226,8 @@ if ($audioEditor -notmatch 'objectName:\s*"recordingTimeText"[\s\S]{0,220}00:00:
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',
-    'recordingMicrophoneButton', 'recordingToggleButton',
+    'recordingMicrophoneButton', 'recordingPauseButton',
+    'recordingRecordButton', 'recordingStopButton',
     'editorPrimaryPlayButton', 'editorPlayheadHandle',
     'editorSelectionStartHandle', 'editorSelectionEndHandle',
     'editorEventLeftTrimHandle', 'editorEventRightTrimHandle')) {

@@ -113,9 +113,61 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
-        QCOMPARE(item.generatedPointCount(), 4);
+        QVERIFY(geometryNode->geometry()->vertexCount() > 4);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        for (int index = 0; index < geometryNode->geometry()->vertexCount(); ++index) {
+            QVERIFY2(vertices[index].x < 34.0F || vertices[index].x > 65.0F,
+                     "resampling must preserve the blank timeline gap");
+        }
+        QVERIFY(item.generatedPointCount() <= 200);
         delete node;
+    }
+
+    void downsampledBlankBucketsDoNotBridgeTimelineGaps()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(2.0);
+        item.setHeight(40.0);
+        item.setDensity(2.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -1.0, 1.0, QVariant{}, QVariant{},
+            QVariant{}, QVariant{}, -0.5, 0.5})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 0);
+        QCOMPARE(item.generatedPointCount(), 0);
+        delete node;
+    }
+
+    void zoomedSparseFramesAreResampledAcrossLogicalPixels()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(100.0);
+        item.setHeight(40.0);
+        item.setDensity(2.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -0.2, 0.2, -0.8, 0.8, -0.4, 0.4})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QVERIFY2(item.generatedPointCount() >= 190,
+                 "zooming into a short range must not leave sparse peak rails");
+        QVERIFY(item.generatedPointCount() <= 200);
+        delete node;
+    }
+
+    void exposesSharedPlayerStyleInputs()
+    {
+        AudioEditorWaveformItem item;
+        item.setDensity(1.5);
+        item.setLineWidth(2.0);
+        QCOMPARE(item.density(), 1.5);
+        QCOMPARE(item.lineWidth(), 2.0);
+        const QMetaObject& meta = AudioEditorWaveformItem::staticMetaObject;
+        QVERIFY(meta.indexOfProperty("density") >= 0);
+        QVERIFY(meta.indexOfProperty("lineWidth") >= 0);
     }
 
     void obsoleteSecondCropPropertiesAreAbsent()

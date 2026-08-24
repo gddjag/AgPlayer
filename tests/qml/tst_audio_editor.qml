@@ -232,10 +232,13 @@ TestCase {
 
     function test_transportControlsKeepReferenceAppearanceWhenUnavailable() {
         const microphone = findChild(page, "recordingMicrophoneButton")
-        const recording = findChild(page, "recordingToggleButton")
+        const pause = findChild(page, "recordingPauseButton")
+        const recording = findChild(page, "recordingRecordButton")
+        const stop = findChild(page, "recordingStopButton")
         const play = findChild(page, "editorPrimaryPlayButton")
         const narrowPlay = findChild(page, "editorNarrowPlaybackAccess")
-        for (const control of [microphone, recording, play, narrowPlay]) {
+        for (const control of [microphone, pause, recording, stop,
+                               play, narrowPlay]) {
             verify(control)
             verify(control.opacity >= 0.9,
                    control.objectName + " lost the reference appearance")
@@ -255,6 +258,9 @@ TestCase {
         compare(recordingState.text, "准备录音")
         compare(recordingTime.text, "00:00:00")
         verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
+        verify(shortcutFirst.text.indexOf("R = 开始录音") >= 0)
+        verify(shortcutFirst.text.indexOf("Shift+R = 暂停 / 继续录音") >= 0)
+        verify(shortcutFirst.text.indexOf("Ctrl+R = 停止并保存") >= 0)
         verify(shortcutSecond.text.indexOf("拖拽右上角 = 调整淡出") >= 0)
         verify(shortcutSecond.text.indexOf("双击音量线 = 添加控制点") >= 0)
         compare(shortcutFirst.text.indexOf("Phase"), -1)
@@ -264,17 +270,67 @@ TestCase {
 
     function test_recordingButtonsMatchReferenceRolesFromIdle() {
         const microphone = findChild(page, "recordingMicrophoneButton")
-        const record = findChild(page, "recordingToggleButton")
+        const pause = findChild(page, "recordingPauseButton")
+        const record = findChild(page, "recordingRecordButton")
+        const stop = findChild(page, "recordingStopButton")
         const device = findChild(page, "inspectorRecordingDevice")
-        verify(microphone && record && device)
+        verify(microphone && pause && record && stop && device)
         compare(microphone.Accessible.name, "选择录音设备")
+        compare(pause.Accessible.name, "暂停录音")
         compare(record.Accessible.name, "开始录音")
+        compare(stop.Accessible.name, "停止并保存录音")
         compare(record.enabled,
                 AudioEditorController.recordingSupported
                 && !AudioEditorController.busy)
+        compare(pause.enabled, false)
+        compare(stop.enabled, false)
+        verify(Math.abs(microphone.x - 151) <= 2)
+        verify(Math.abs(pause.x - 253) <= 2)
+        verify(Math.abs(record.x - 356) <= 2)
+        verify(Math.abs(stop.x - 458) <= 2)
+        for (const control of [microphone, pause, record, stop]) {
+            verify(Math.abs(control.y - 31) <= 2)
+            verify(Math.abs(control.width - 74) <= 2)
+            verify(Math.abs(control.height - 74) <= 2)
+        }
         mouseClick(microphone)
         verify(device.activeFocus,
                "microphone button must prepare the recording device selector")
+    }
+
+    function test_recordingShortcutsMatchReferenceRoles() {
+        const record = findChild(page, "editorRecordShortcut")
+        const pause = findChild(page, "editorPauseRecordingShortcut")
+        const stop = findChild(page, "editorStopRecordingShortcut")
+        verify(record && pause && stop)
+        compare(record.sequence.toString(), "R")
+        compare(pause.sequence.toString(), "Shift+R")
+        compare(stop.sequence.toString(), "Ctrl+R")
+    }
+
+    function test_recordingButtonsDoNotOverlapAtMinimumWindowWidth() {
+        host.width = 880
+        host.height = 560
+        wait(0)
+
+        const controls = [
+            findChild(page, "recordingMicrophoneButton"),
+            findChild(page, "recordingPauseButton"),
+            findChild(page, "recordingRecordButton"),
+            findChild(page, "recordingStopButton")
+        ]
+        for (let index = 0; index < controls.length; ++index) {
+            verify(controls[index])
+            verify(controls[index].width >= 40)
+            verify(controls[index].x >= 0)
+            verify(controls[index].x + controls[index].width
+                   <= controls[index].parent.width + 0.5)
+            if (index > 0) {
+                verify(controls[index].x
+                       >= controls[index - 1].x
+                          + controls[index - 1].width)
+            }
+        }
     }
 
     function test_fourthPlaybackButtonJumpsToDocumentEnd() {

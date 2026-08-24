@@ -57,6 +57,23 @@ Rectangle {
             + String(minutes).padStart(2, "0") + ":"
             + String(seconds).padStart(2, "0")
     }
+    function startOrResumeRecording() {
+        if (AudioEditorController.recordingPaused) {
+            AudioEditorController.resumeRecording()
+            return
+        }
+        if (!AudioEditorController.recording) {
+            AudioEditorController.startRecordingToTemporaryFile(
+                recordingDeviceCombo.currentValue || "",
+                44100, 2, recordingMonitorSwitch.checked, false)
+        }
+    }
+    function pauseOrResumeRecording() {
+        if (AudioEditorController.recordingPaused)
+            AudioEditorController.resumeRecording()
+        else if (AudioEditorController.recording)
+            AudioEditorController.pauseRecording()
+    }
 
     Shortcut {
         objectName: "editorSpaceShortcut"
@@ -66,6 +83,37 @@ Rectangle {
             && AudioEditorController.playbackSupported
             && AudioEditorController.hasDocument
         onActivated: AudioEditorController.playPause()
+    }
+    Shortcut {
+        objectName: "editorRecordShortcut"
+        sequence: "R"
+        context: Qt.WindowShortcut
+        enabled: page.visible && !page.textInputHasFocus()
+            && AudioEditorController.recordingSupported
+            && !AudioEditorController.busy
+            && (!AudioEditorController.recording
+                || AudioEditorController.recordingPaused)
+        onActivated: page.startOrResumeRecording()
+    }
+    Shortcut {
+        objectName: "editorPauseRecordingShortcut"
+        sequence: "Shift+R"
+        context: Qt.WindowShortcut
+        enabled: page.visible && !page.textInputHasFocus()
+            && AudioEditorController.recordingSupported
+            && AudioEditorController.recording
+            && !AudioEditorController.busy
+        onActivated: page.pauseOrResumeRecording()
+    }
+    Shortcut {
+        objectName: "editorStopRecordingShortcut"
+        sequence: "Ctrl+R"
+        context: Qt.WindowShortcut
+        enabled: page.visible && !page.textInputHasFocus()
+            && AudioEditorController.recordingSupported
+            && AudioEditorController.recording
+            && !AudioEditorController.busy
+        onActivated: AudioEditorController.stopRecording()
     }
     Shortcut {
         sequence: "Ctrl+1"
@@ -400,6 +448,16 @@ Rectangle {
                 border.color: "#23415d"
                 border.width: 1
                 radius: 6
+                readonly property real recordingButtonStartX:
+                    page.referenceLayout ? 151 : 135
+                readonly property real recordingButtonSize:
+                    page.referenceLayout ? 74
+                        : Math.max(40, Math.min(74,
+                            (width - recordingButtonStartX - 36) / 4))
+                readonly property real recordingButtonGap:
+                    page.referenceLayout ? 28
+                        : Math.max(4, (width - recordingButtonStartX
+                            - 4 * recordingButtonSize - 12) / 3)
                 Label {
                     x: 18; y: 12
                     text: qsTr("录音控制")
@@ -407,98 +465,160 @@ Rectangle {
                     font.pixelSize: 14
                     font.bold: true
                 }
-                RowLayout {
-                    x: 114
-                    y: 28
-                    width: parent.width - 136
-                    height: 78
-                    spacing: 14
-                    RoundButton {
-                        objectName: "recordingMicrophoneButton"
-                        Layout.preferredWidth: 62
-                        Layout.preferredHeight: 62
-                        icon.source: Theme.icon("mic-line")
-                        icon.color: "#f4f8ff"
-                        enabled: AudioEditorController.recordingSupported
-                            && !AudioEditorController.busy
-                        opacity: 1.0
-                        Accessible.name: qsTr("选择录音设备")
-                        Accessible.role: Accessible.Button
-                        onClicked: {
-                            recordingDeviceCombo.forceActiveFocus()
-                            if (recordingDeviceCombo.count > 0)
-                                recordingDeviceCombo.popup.open()
+                Label {
+                    objectName: "recordingTimeText"
+                    x: 18; y: 48
+                    text: AudioEditorController.recordingFrames <= 0
+                        ? "00:00:00"
+                        : page.recordingTimeText(
+                            AudioEditorController.recordingFrames)
+                    color: "#f4f8ff"
+                    font.pixelSize: 24
+                }
+                Label {
+                    objectName: "recordingStateText"
+                    x: 18; y: 88
+                    text: AudioEditorController.recording
+                        ? (AudioEditorController.recordingPaused
+                            ? qsTr("录音已暂停") : qsTr("正在录音"))
+                        : qsTr("准备录音")
+                    color: "#b5c8da"
+                    font.pixelSize: 13
+                }
+                RoundButton {
+                    id: recordingMicrophoneButton
+                    objectName: "recordingMicrophoneButton"
+                    x: recordingTransport.recordingButtonStartX
+                    y: 31
+                    width: recordingTransport.recordingButtonSize
+                    height: width
+                    enabled: AudioEditorController.recordingSupported
+                        && !AudioEditorController.recording
+                        && !AudioEditorController.busy
+                    opacity: 1.0
+                    Accessible.name: qsTr("选择录音设备")
+                    Accessible.role: Accessible.Button
+                    contentItem: Item {
+                        Rectangle {
+                            anchors.centerIn: parent
+                            anchors.verticalCenterOffset: -2
+                            width: 8; height: 23; radius: 4
+                            color: "#22e957"
                         }
-                        background: Rectangle {
-                            radius: width / 2
-                            color: "#0a2138"
-                            border.color: "#294662"
-                            border.width: 1
+                        ThemedIcon {
+                            anchors.centerIn: parent
+                            width: 44; height: 44
+                            source: Theme.icon("mic-line")
+                            tint: "#f4f8ff"
                         }
                     }
-                    RoundButton {
-                        id: recordingToggle
-                        objectName: "recordingToggleButton"
-                        Layout.preferredWidth: 62
-                        Layout.preferredHeight: 62
-                        enabled: AudioEditorController.recordingSupported
-                            && !AudioEditorController.busy
-                        opacity: 1.0
-                        Accessible.name: !AudioEditorController.recording
-                            ? qsTr("开始录音")
-                            : AudioEditorController.recordingPaused
-                            ? qsTr("继续录音") : qsTr("暂停录音")
-                        Accessible.role: Accessible.Button
-                        contentItem: Rectangle {
+                    onClicked: {
+                        recordingDeviceCombo.forceActiveFocus()
+                        if (recordingDeviceCombo.count > 0)
+                            recordingDeviceCombo.popup.open()
+                    }
+                    background: Rectangle {
+                        radius: width / 2
+                        color: "#0a2138"
+                        border.color: "#294662"
+                        border.width: 1
+                    }
+                }
+                RoundButton {
+                    objectName: "recordingPauseButton"
+                    x: page.referenceLayout ? 253
+                        : recordingTransport.recordingButtonStartX
+                            + recordingTransport.recordingButtonSize
+                            + recordingTransport.recordingButtonGap
+                    y: 31
+                    width: recordingTransport.recordingButtonSize
+                    height: width
+                    enabled: AudioEditorController.recordingSupported
+                        && AudioEditorController.recording
+                        && !AudioEditorController.busy
+                    opacity: 1.0
+                    Accessible.name: AudioEditorController.recordingPaused
+                        ? qsTr("继续录音") : qsTr("暂停录音")
+                    Accessible.role: Accessible.Button
+                    contentItem: Item {
+                        ThemedIcon {
+                            anchors.centerIn: parent
+                            source: Theme.icon("pause-fill")
+                            tint: "#f4f8ff"
+                            width: 44; height: 44
+                        }
+                    }
+                    onClicked: page.pauseOrResumeRecording()
+                    background: Rectangle {
+                        radius: width / 2
+                        color: "#0a2138"
+                        border.color: "#294662"
+                        border.width: 1
+                    }
+                }
+                RoundButton {
+                    objectName: "recordingRecordButton"
+                    x: page.referenceLayout ? 356
+                        : recordingTransport.recordingButtonStartX
+                            + 2 * (recordingTransport.recordingButtonSize
+                                + recordingTransport.recordingButtonGap)
+                    y: 31
+                    width: recordingTransport.recordingButtonSize
+                    height: width
+                    enabled: AudioEditorController.recordingSupported
+                        && !AudioEditorController.busy
+                        && (!AudioEditorController.recording
+                            || AudioEditorController.recordingPaused)
+                    opacity: 1.0
+                    Accessible.name: AudioEditorController.recordingPaused
+                        ? qsTr("继续录音") : qsTr("开始录音")
+                    Accessible.role: Accessible.Button
+                    contentItem: Rectangle {
+                        color: "transparent"
+                        Rectangle {
                             objectName: "recordingToggleIndicator"
                             anchors.centerIn: parent
                             width: 34; height: 34; radius: 17
                             color: "#ff3d4f"
                         }
-                        background: Rectangle {
-                            radius: width / 2
-                            color: "#0a2138"
-                            border.color: "#294662"
-                            border.width: 1
-                        }
-                        onClicked: {
-                            if (!AudioEditorController.recording) {
-                                AudioEditorController.startRecordingToTemporaryFile(
-                                    recordingDeviceCombo.currentValue || "",
-                                    44100, 2, recordingMonitorSwitch.checked, false)
-                            } else if (AudioEditorController.recordingPaused) {
-                                AudioEditorController.resumeRecording()
-                            } else {
-                                AudioEditorController.pauseRecording()
-                            }
+                    }
+                    background: Rectangle {
+                        radius: width / 2
+                        color: "#0a2138"
+                        border.color: "#294662"
+                        border.width: 1
+                    }
+                    onClicked: page.startOrResumeRecording()
+                }
+                RoundButton {
+                    objectName: "recordingStopButton"
+                    x: page.referenceLayout ? 458
+                        : recordingTransport.recordingButtonStartX
+                            + 3 * (recordingTransport.recordingButtonSize
+                                + recordingTransport.recordingButtonGap)
+                    y: 31
+                    width: recordingTransport.recordingButtonSize
+                    height: width
+                    enabled: AudioEditorController.recordingSupported
+                        && AudioEditorController.recording
+                        && !AudioEditorController.busy
+                    opacity: 1.0
+                    Accessible.name: qsTr("停止并保存录音")
+                    Accessible.role: Accessible.Button
+                    contentItem: Item {
+                        ThemedIcon {
+                            anchors.centerIn: parent
+                            source: Theme.icon("stop-fill")
+                            tint: "#f4f8ff"
+                            width: 42; height: 42
                         }
                     }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Label {
-                            objectName: "recordingTimeText"
-                            text: AudioEditorController.recordingFrames <= 0
-                                ? "00:00:00"
-                                : page.recordingTimeText(
-                                    AudioEditorController.recordingFrames)
-                            color: "#f4f8ff"
-                            font.pixelSize: 24
-                        }
-                        Label {
-                            objectName: "recordingStateText"
-                            text: AudioEditorController.recording
-                                ? (AudioEditorController.recordingPaused
-                                    ? qsTr("录音已暂停") : qsTr("正在录音"))
-                                : qsTr("准备录音")
-                            color: "#b5c8da"
-                            font.pixelSize: 13
-                        }
-                    }
-                    Button {
-                        visible: AudioEditorController.recording
-                        text: qsTr("停止")
-                        enabled: AudioEditorController.recordingSupported
-                        onClicked: AudioEditorController.stopRecording()
+                    onClicked: AudioEditorController.stopRecording()
+                    background: Rectangle {
+                        radius: width / 2
+                        color: "#0a2138"
+                        border.color: "#294662"
+                        border.width: 1
                     }
                 }
             }
@@ -635,7 +755,7 @@ Rectangle {
                 Text {
                     objectName: "editorShortcutText"
                     x: 22; y: 62; width: parent.width - 44
-                    text: qsTr("空格 = 播放 / 暂停       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做")
+                    text: qsTr("空格 = 播放 / 暂停       R = 开始录音       Shift+R = 暂停 / 继续录音       Ctrl+R = 停止并保存       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做")
                     color: "#c4d2df"
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap

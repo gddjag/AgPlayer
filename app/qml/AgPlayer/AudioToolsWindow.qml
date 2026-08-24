@@ -81,16 +81,14 @@ Window {
                     anchors.rightMargin: 8
                     spacing: 10
 
-                    Rectangle {
+                    Item {
+                        objectName: "audioToolsLogo"
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
-                        radius: 6
-                        color: "#0867ed"
-                        border.color: "#2587ff"
                         Image {
                             anchors.centerIn: parent
-                            width: 18
-                            height: 18
+                            width: 28
+                            height: 28
                             source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
                             fillMode: Image.PreserveAspectFit
                         }
