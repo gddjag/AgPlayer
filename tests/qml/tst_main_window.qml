@@ -432,6 +432,22 @@ TestCase {
         return -1
     }
 
+    function colorContrast(first, second) {
+        function channel(value) {
+            return value <= 0.04045 ? value / 12.92
+                                    : Math.pow((value + 0.055) / 1.055, 2.4)
+        }
+        function luminance(color) {
+            return 0.2126 * channel(color.r)
+                    + 0.7152 * channel(color.g)
+                    + 0.0722 * channel(color.b)
+        }
+        var firstLuminance = luminance(first)
+        var secondLuminance = luminance(second)
+        return (Math.max(firstLuminance, secondLuminance) + 0.05)
+                / (Math.min(firstLuminance, secondLuminance) + 0.05)
+    }
+
     function createIsolatedTrackModel(prefix, count) {
         var model = isolatedTrackModelComponent.createObject(testCase)
         var path = decodeURIComponent(testAudioUrl.toString()
@@ -2325,55 +2341,59 @@ TestCase {
         window.requestActivate()
         tryVerify(function() { return window.active }, 1000)
 
-        var suffix = String(Date.now() % 10000)
-        var prefix = "-" + suffix
-        var names = ["甲" + prefix, "乙" + prefix, "丙" + prefix,
-                     "long Chinese English natural-width capsule" + prefix,
-                     "丁" + prefix, "戊" + prefix, "己" + prefix,
-                     "庚" + prefix, "辛" + prefix, "壬" + prefix,
-                     "癸" + prefix, "子" + prefix]
+        var names = ["好", "中文", "好听", "音乐", "摇滚", "流行",
+                     "民谣", "电子", "古典", "爵士", "轻音乐",
+                     "long Chinese English natural-width capsule"]
         var keys = []
+        var createdKeys = []
         for (var index = 0; index < names.length; ++index) {
             var key = names[index].toLocaleLowerCase()
             keys.push(key)
-            verify(panel.addTag(names[index]))
+            if (tagRowForKey(key) < 0) {
+                verify(panel.addTag(names[index]))
+                createdKeys.push(key)
+            }
         }
-        task4TemporaryTagKeys = keys
-        panel.searchText = prefix
-        tryCompare(panel, "visibleTagCount", names.length)
+        task4TemporaryTagKeys = createdKeys
+        panel.searchText = ""
 
         var flickable = findChild(panel, "tagFlickable")
         var flow = findChild(panel, "tagFlow")
         verify(flickable && flow)
         var firstPill = findChild(panel, "tagPill-" + keys[0])
         var secondPill = findChild(panel, "tagPill-" + keys[1])
-        var longPill = findChild(panel, "tagPill-" + keys[3])
+        var longPill = findChild(panel, "tagPill-" + keys[keys.length - 1])
         verify(firstPill && secondPill && longPill)
-        wait(0)
         verify(longPill.width > firstPill.width,
                "long labels must retain a larger natural capsule width")
         var shortPills = [firstPill, secondPill,
-                          findChild(panel, "tagPill-" + keys[2]),
-                          findChild(panel, "tagPill-" + keys[4])]
+                          findChild(panel, "tagPill-" + keys[2])]
         var sharesShortRow = false
-        for (var left = 0; left < shortPills.length; ++left) {
-            for (var right = left + 1; right < shortPills.length; ++right) {
-                if (shortPills[left] && shortPills[right]
-                        && shortPills[right].parent.x
-                           > shortPills[left].parent.x
-                        && shortPills[right].parent.y
-                           === shortPills[left].parent.y) {
-                    sharesShortRow = true
-                    break
+        tryVerify(function() {
+            for (var left = 0; left < shortPills.length; ++left) {
+                for (var right = left + 1; right < shortPills.length; ++right) {
+                    if (shortPills[left] && shortPills[right]
+                            && shortPills[right].parent.x
+                               > shortPills[left].parent.x
+                            && shortPills[right].parent.y
+                               === shortPills[left].parent.y) {
+                        sharesShortRow = true
+                        return true
+                    }
                 }
             }
-            if (sharesShortRow)
-                break
-        }
+            return false
+        }, 500)
         verify(sharesShortRow,
-               "short labels should share a Flow row in the 248px column")
-        verify(longPill.parent.y > firstPill.parent.y,
-               "a wide label must naturally wrap onto a later Flow row")
+               "short labels should share a Flow row in the 248px column; "
+               + firstPill.parent.x + "," + firstPill.parent.y
+               + "," + firstPill.width + " / "
+               + secondPill.parent.x + "," + secondPill.parent.y
+               + "," + secondPill.width + " / "
+               + shortPills[2].parent.x + "," + shortPills[2].parent.y
+               + "," + shortPills[2].width + " flow=" + flow.width)
+        verify(longPill.parent.width === flow.width,
+               "a long label must naturally occupy the full available Flow row")
         tryVerify(function() { return flickable.contentHeight > flickable.height },
                   500, "many tags must make the Flow content scrollable")
 
@@ -2387,6 +2407,11 @@ TestCase {
         verify(pointer)
         panel.selectTag(keys[0])
         tryVerify(function() { return !firstPill.selectedVisual }, 500)
+        mouseClick(pointer, pointer.width / 2, pointer.height / 2)
+        tryVerify(function() { return pointer.activeFocus }, 500,
+                  "clicking a tag pill must give it focus")
+        panel.selectTag(keys[0])
+        tryVerify(function() { return !firstPill.selectedVisual }, 500)
         mouseMove(pointer, pointer.width / 2, pointer.height / 2)
         tryVerify(function() { return firstPill.hoveredVisual }, 500)
         verify(firstPill.resolvedSurface.toString()
@@ -2396,16 +2421,57 @@ TestCase {
         Theme.mode = 1
         verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
         verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
+        verify(colorContrast(Theme.tagPillText, Theme.tagPillSurface) >= 3)
+        verify(colorContrast(Theme.tagPillSecondaryText, Theme.tagPillSurface) >= 3)
         Theme.mode = 0
         verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
         verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
+        verify(colorContrast(Theme.tagPillText, Theme.tagPillSurface) >= 3)
+        verify(colorContrast(Theme.tagPillSecondaryText, Theme.tagPillSurface) >= 3)
         Theme.mode = previousMode
 
-        panel.searchText = names[3]
+        panel.searchText = names[names.length - 1]
         tryCompare(panel, "visibleTagCount", 1)
-        panel.searchText = prefix
-        tryCompare(panel, "visibleTagCount", names.length)
+        panel.searchText = ""
+        tryVerify(function() { return findChild(panel, "tagPill-" + keys[0]) }, 500)
         window.destroy()
+
+        mainWindow.requestActivate()
+        tryVerify(function() { return mainWindow.active }, 1000)
+        var focusPanel = tagManagementPanelComponent.createObject(
+                    mainWindow.contentItem, {
+                        "x": 0,
+                        "y": 0,
+                        "width": 248,
+                        "height": 230,
+                        "filterModel": filterModel,
+                        "searchText": names[1]
+                    })
+        verify(focusPanel)
+        var focusPill = findChild(focusPanel, "tagPill-" + keys[1])
+        var focusPointer = findChild(
+                    focusPill, "tagPillPointerArea-" + keys[1])
+        var focusSearch = findChild(focusPanel, "tagSearchField")
+        verify(focusPill && focusPointer && focusSearch)
+        verify(!focusPointer.activeFocus,
+               "tag delegates must not steal focus when the panel opens")
+        focusSearch.forceActiveFocus()
+        for (var tabStep = 0; tabStep < 4 && !focusPointer.activeFocus;
+             ++tabStep) {
+            verify(nativeDropHelper.sendKey(focusSearch, Qt.Key_Tab))
+            wait(0)
+        }
+        verify(focusPointer.activeFocus,
+               "Tab must be able to enter a tag pill")
+        mouseClick(focusPointer, focusPointer.width / 2,
+                   focusPointer.height / 2)
+        tryVerify(function() { return focusPointer.activeFocus }, 500,
+                  "clicking a tag pill must give it focus")
+        var selectedAfterClick = TagModel.selectedKey
+        keyClick(Qt.Key_Space)
+        compare(TagModel.selectedKey, selectedAfterClick,
+                "Space must remain available to the global playback shortcut")
+        focusPanel.destroy()
     }
 
     function test_z_tag_panel_add_search_and_selection_update_real_models() {

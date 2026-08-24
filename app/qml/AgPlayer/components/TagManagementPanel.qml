@@ -12,6 +12,9 @@ Item {
     property var filterModel: null
     property alias searchText: tagSearchField.text
     readonly property int visibleTagCount: tagRepeater.count
+    readonly property int pillHorizontalPadding: 10
+    readonly property int pillContentSpacing: 5
+    readonly property int pillMinimumWidth: 64
     property string contextTagKey: ""
     property string contextTagName: ""
     property color contextTagColor: "transparent"
@@ -369,9 +372,14 @@ Item {
                         height: implicitHeight
 
                         Rectangle {
-                            anchors.fill: tagPill
+                            anchors.left: tagPill.left
+                            anchors.right: tagPill.right
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            anchors.top: tagPill.bottom
                             anchors.topMargin: 1
-                            radius: tagPill.radius
+                            height: 3
+                            radius: 2
                             color: Theme.tagPillShadow
                         }
 
@@ -390,8 +398,11 @@ Item {
                                                                ? Theme.tagPillHoverSurface
                                                                : Theme.tagPillSurface
                             implicitWidth: Math.min(tagFlow.width,
-                                                    tagNameMeasure.implicitWidth
-                                                    + tagCount.implicitWidth + 29)
+                                                    Math.max(root.pillMinimumWidth,
+                                                             tagNameMeasure.implicitWidth
+                                                             + tagCount.implicitWidth
+                                                             + root.pillHorizontalPadding * 2
+                                                             + root.pillContentSpacing))
                             implicitHeight: 28
                             width: implicitWidth
                             height: implicitHeight
@@ -414,16 +425,18 @@ Item {
                             }
                             Row {
                                 anchors.left: parent.left
-                                anchors.leftMargin: 10
+                                anchors.leftMargin: root.pillHorizontalPadding
                                 anchors.right: parent.right
-                                anchors.rightMargin: 9
+                                anchors.rightMargin: root.pillHorizontalPadding
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 5
+                                spacing: root.pillContentSpacing
                                 Text {
                                     id: tagName
                                     width: Math.max(0, Math.min(implicitWidth,
                                                                 tagPill.width
-                                                                - tagCount.width - 30))
+                                                                - tagCount.width
+                                                                - root.pillHorizontalPadding * 2
+                                                                - root.pillContentSpacing))
                                     text: tagCell.displayName
                                     color: Theme.tagPillText
                                     font.family: Theme.fontPrimary
@@ -444,11 +457,9 @@ Item {
                                 objectName: "tagPillPointerArea-" + tagCell.key
                                 anchors.fill: parent
                                 z: 2
-                                focus: true
                                 activeFocusOnTab: true
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 Keys.onReturnPressed: root.selectTag(tagCell.key)
-                                Keys.onSpacePressed: root.selectTag(tagCell.key)
                                 onClicked: function(mouse) {
                                     forceActiveFocus()
                                     if (mouse.button === Qt.RightButton) {

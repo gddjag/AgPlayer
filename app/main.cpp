@@ -229,6 +229,8 @@ int main(int argc, char* argv[])
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
+    //   --qa-tag <name>              seed a tag in --qa-test-mode only
+    //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
@@ -239,6 +241,8 @@ int main(int argc, char* argv[])
     QSize qaToolsSize;
     QString qaScreenshotList;
     QString qaListCategory;
+    QStringList qaSeedTags;
+    QString qaSelectedTag;
     bool qaShowTrackDetails = false;
     QString qaTheme;
     QString qaLanguage;
@@ -293,6 +297,11 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-list-category")
                        && i + 1 < cliArgs.size()) {
                 qaListCategory = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-tag") && i + 1 < cliArgs.size()) {
+                qaSeedTags.append(cliArgs.at(++i));
+            } else if (arg == QStringLiteral("--qa-selected-tag")
+                       && i + 1 < cliArgs.size()) {
+                qaSelectedTag = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-show-track-details")) {
                 qaShowTrackDetails = true;
             } else if (arg == QStringLiteral("--qa-theme")
@@ -502,6 +511,14 @@ int main(int argc, char* argv[])
         TagModel tagModel(
             &library,
             libraryDataDirectory.filePath(QStringLiteral("tags.json")));
+        if (qaTestMode) {
+            for (const QString& tagName : qaSeedTags) {
+                tagModel.createTag(tagName);
+            }
+            if (!qaSelectedTag.isEmpty()) {
+                tagModel.setSelectedKey(qaSelectedTag);
+            }
+        }
 
         PlaybackController playback(core, &library);
         EqualizerController equalizer(core);
@@ -1416,6 +1433,9 @@ int main(int argc, char* argv[])
                 };
 
                 if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
+                    QTimer::singleShot(1500, captureWindow);
+                } else if (wantScreenshotList
+                           && qaListCategory == QStringLiteral("tags")) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList) {
                     auto attempts = std::make_shared<int>(0);

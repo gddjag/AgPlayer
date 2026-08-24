@@ -27,6 +27,7 @@
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QKeyEvent>
 #include <QMimeData>
 #include <QPointer>
 #include <QQmlComponent>
@@ -202,6 +203,20 @@ public:
                         Qt::LeftButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &drop);
         return enter.isAccepted() && drop.isAccepted();
+    }
+
+    Q_INVOKABLE bool sendKey(QObject* target, int key)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QWindow* window = item == nullptr ? qobject_cast<QWindow*>(target)
+                                           : item->window();
+        if (window == nullptr) return false;
+
+        QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &press);
+        QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &release);
+        return true;
     }
 
     Q_INVOKABLE bool registerListDropWindow(QObject* target)

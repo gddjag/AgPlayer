@@ -27,6 +27,7 @@ $window = Read-RequiredFile 'app/qml/AgPlayer/ListWindow.qml'
 $trackList = Read-RequiredFile 'app/qml/AgPlayer/components/TrackList.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
 $theme = Read-RequiredFile 'app/qml/AgPlayer/theme/Theme.qml'
+$main = Read-RequiredFile 'app/main.cpp'
 
 $trackListCount = ([regex]::Matches($window, '\bTrackList\s*\{')).Count
 if ($trackListCount -ne 1) {
@@ -52,6 +53,18 @@ Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:.*height:\s*28.*radiu
     'Tag capsules must preserve natural width in compact rounded pills'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'
+if ($tagPanel -match 'Keys\.onSpacePressed') {
+    throw 'Tag pills must leave Space for global playback shortcuts'
+}
+if ($tagPanel -match '\bfocus\s*:\s*true') {
+    throw 'Tag delegates must not claim initial keyboard focus'
+}
+Assert-Matches $tagPanel 'property int pillHorizontalPadding' `
+    'Tag pill geometry must use explicit horizontal padding'
+Assert-Matches $tagPanel 'property int pillContentSpacing' `
+    'Tag pill geometry must use explicit content spacing'
+Assert-Matches $tagPanel 'anchors\.top:\s*tagPill\.bottom' `
+    'Tag pill shadow must be offset below the capsule'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag search must use the incremental C++ proxy model'
 if ($tagPanel -match '\bGridView\s*\{') {
@@ -66,6 +79,13 @@ Assert-Matches $theme 'tagPillSelectedSurface' `
     'Theme must expose a low-saturation selected tag surface'
 Assert-Matches $theme 'tagPillDropSurface' `
     'Theme must expose a tag drop surface'
+
+Assert-Matches $main 'QStringList qaSeedTags' `
+    'QA screenshots must support temporary tag seeds'
+Assert-Matches $main 'arg == QStringLiteral\("--qa-tag"\)' `
+    'QA tag seeds must be supplied through an explicit CLI argument'
+Assert-Matches $main '(?s)if \(qaTestMode\).*tagModel\.createTag' `
+    'QA tag seeds must stay behind the test-mode boundary'
 
 Assert-Matches $trackList 'reuseItems:\s*true' `
     'TrackList must reuse delegates'
