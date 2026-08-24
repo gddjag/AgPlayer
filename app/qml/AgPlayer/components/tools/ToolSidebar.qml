@@ -12,6 +12,7 @@ Rectangle {
 
     property int currentTool: 0
     property Window window
+    readonly property color activeLabelColor: Theme.primaryText
     signal toolSelected(int index)
 
     Row {
@@ -36,7 +37,7 @@ Rectangle {
                 focusPolicy: Qt.StrongFocus
                 contentItem: Text {
                     text: parent.text
-                    color: parent.checked ? Theme.activeSelectionText
+                    color: parent.checked ? navigation.activeLabelColor
                                           : Theme.secondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: 16

@@ -84,6 +84,12 @@ if ($formatPage -match 'tint:\s*"#d7e0e6"' -or
     $formatPage -notmatch 'tint:\s*Theme\.iconPrimary') {
     throw 'Format toolbar icons must expose stable objects and use the shared theme icon color.'
 }
+$toolSidebar = Get-Content -LiteralPath (Join-Path $SourceRoot `
+    'app/qml/AgPlayer/components/tools/ToolSidebar.qml') -Raw
+if ($toolSidebar -notmatch 'activeLabelColor:\s*Theme\.primaryText' -or
+    $toolSidebar -notmatch 'parent\.checked\s*\?\s*navigation\.activeLabelColor') {
+    throw 'Selected audio-tool navigation labels must remain readable on the panel.'
+}
 if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
     $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
     throw 'The composed tools shell is missing its real Space playback shortcut.'

@@ -116,8 +116,11 @@ TestCase {
         const minimize = findChild(shell, "audioToolsMinimizeButton")
         const maximize = findChild(shell, "audioToolsMaximizeButton")
         const close = findChild(shell, "audioToolsCloseButton")
+        const topNav = findChild(shell, "audioToolsTopNav")
         verify(titleBar && titleText && contentStack
-               && minimize && maximize && close)
+               && minimize && maximize && close,
+               "the themed tools shell objects must exist")
+        verify(topNav, "the top navigation surface must exist")
         compare(titleBar.color.toString(), Theme.panel.toString())
         compare(titleText.color.toString(), Theme.primaryText.toString())
         compare(contentStack.color.toString(), Theme.background.toString())
@@ -127,6 +130,10 @@ TestCase {
         verify(titleText.color.toString() !== titleBar.color.toString())
         verify(minimize.icon.color.toString() !== titleBar.color.toString())
         verify(close.icon.color.toString() !== titleBar.color.toString())
+        compare(topNav.activeLabelColor.toString(),
+                Theme.primaryText.toString())
+        verify(topNav.activeLabelColor.toString()
+               !== titleBar.color.toString())
         Theme.mode = previousMode
         shell.destroy()
         wait(0)
