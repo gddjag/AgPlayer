@@ -262,6 +262,8 @@ FormatBatchPlan build_format_conversion_plan(
             {QStringLiteral("audioStreamIndex"), task.audioStreamIndex},
             {QStringLiteral("keepMetadata"), request.keepMetadata},
             {QStringLiteral("keepCover"), request.keepCover},
+            {QStringLiteral("extractAudio"), request.extractAudio},
+            {QStringLiteral("preserveDirectories"), request.preserveDirectories},
         };
         const auto selectedStream = std::find_if(
             input.probe.audio_streams.cbegin(), input.probe.audio_streams.cend(),

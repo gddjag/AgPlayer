@@ -221,6 +221,12 @@ private:
         QString outputPath;
         QVariantMap resolvedProfile;
         bool overwriteExisting = false;
+        bool frozenExtractAudio = false;
+        bool frozenPreserveDirectories = false;
+        QVariantMap frozenMetadataFields;
+        QByteArray frozenMetadataCoverData;
+        QString frozenMetadataCoverMime;
+        bool frozenMetadataPlanActive = false;
         qint64 sourceLastModifiedMs = 0;
         QString probeContainer;
         QString probeError;
@@ -243,6 +249,12 @@ private:
         QVariantMap resolvedProfile;
         bool skipped = false;
         bool overwriteExisting = false;
+        bool extractAudio = false;
+        bool preserveDirectories = false;
+        QVariantMap metadataFields;
+        QByteArray metadataCoverData;
+        QString metadataCoverMime;
+        bool metadataPlanActive = false;
     };
 
     mutable QMutex mutex_;

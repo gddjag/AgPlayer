@@ -180,6 +180,8 @@ void FormatConversionPlanTest::rejectsVideoUnlessExtractionIsEnabled()
     plan = build_format_conversion_plan({inputFor(input, {}, true)}, request);
     QVERIFY(plan.ready);
     QCOMPARE(plan.tasks.front().audioStreamIndex, 0);
+    QCOMPARE(plan.tasks.front().resolvedProfile
+                 .value(QStringLiteral("extractAudio")).toBool(), true);
 }
 
 void FormatConversionPlanTest::probesAndPreservesFriendlySourceBitDepth()

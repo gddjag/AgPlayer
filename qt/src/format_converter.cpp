@@ -1512,18 +1512,31 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
                 ? QStringLiteral("skip")
                 : confirmedOverwrite ? QStringLiteral("overwrite")
                                      : QStringLiteral("create")}});
-        frozenJobs.append({
-            externalTaskId,
-            entry.importInstanceId,
-            entry.path,
-            entry.canonicalPath,
-            entry.importRoot,
-            task.outputPath,
-            entry.fileSize,
-            entry.sourceLastModifiedMs,
-            task.resolvedProfile,
-            task.skipped,
-            confirmedOverwrite});
+        const bool metadataPlanApplies = metadataPlanActive_
+            && (metadataTargetPaths_.isEmpty()
+                || metadataTargetPaths_.contains(
+                    normalized_path_key(entry.path)));
+        FrozenConversionJob frozenJob;
+        frozenJob.taskId = externalTaskId;
+        frozenJob.importInstanceId = entry.importInstanceId;
+        frozenJob.inputPath = entry.path;
+        frozenJob.canonicalPath = entry.canonicalPath;
+        frozenJob.importRoot = entry.importRoot;
+        frozenJob.outputPath = task.outputPath;
+        frozenJob.sourceSize = entry.fileSize;
+        frozenJob.sourceLastModifiedMs = entry.sourceLastModifiedMs;
+        frozenJob.resolvedProfile = task.resolvedProfile;
+        frozenJob.skipped = task.skipped;
+        frozenJob.overwriteExisting = confirmedOverwrite;
+        frozenJob.extractAudio = conversionRequest.extractAudio;
+        frozenJob.preserveDirectories = conversionRequest.preserveDirectories;
+        frozenJob.metadataPlanActive = metadataPlanApplies;
+        if (metadataPlanApplies) {
+            frozenJob.metadataFields = metadataFields_;
+            frozenJob.metadataCoverData = metadataCoverData_;
+            frozenJob.metadataCoverMime = metadataCoverMime_;
+        }
+        frozenJobs.append(std::move(frozenJob));
     }
     plan.insert(QStringLiteral("tasks"), serializedTasks);
     plan.insert(QStringLiteral("taskCount"), serializedTasks.size());
@@ -2006,11 +2019,24 @@ void FormatConverter::retryFrozenEntries(const QVector<int>& indices)
             if (index < 0 || index >= entries_.size()) continue;
             const FileEntry& entry = entries_.at(index);
             if (entry.resolvedProfile.isEmpty()) continue;
-            jobs.push_back({entry.taskId, entry.importInstanceId, entry.path,
-                            entry.canonicalPath, entry.importRoot,
-                            entry.outputPath, entry.fileSize,
-                            entry.sourceLastModifiedMs, entry.resolvedProfile,
-                            false, entry.overwriteExisting});
+            FrozenConversionJob job;
+            job.taskId = entry.taskId;
+            job.importInstanceId = entry.importInstanceId;
+            job.inputPath = entry.path;
+            job.canonicalPath = entry.canonicalPath;
+            job.importRoot = entry.importRoot;
+            job.outputPath = entry.outputPath;
+            job.sourceSize = entry.fileSize;
+            job.sourceLastModifiedMs = entry.sourceLastModifiedMs;
+            job.resolvedProfile = entry.resolvedProfile;
+            job.overwriteExisting = entry.overwriteExisting;
+            job.extractAudio = entry.frozenExtractAudio;
+            job.preserveDirectories = entry.frozenPreserveDirectories;
+            job.metadataFields = entry.frozenMetadataFields;
+            job.metadataCoverData = entry.frozenMetadataCoverData;
+            job.metadataCoverMime = entry.frozenMetadataCoverMime;
+            job.metadataPlanActive = entry.frozenMetadataPlanActive;
+            jobs.push_back(std::move(job));
             if (firstProfile.isEmpty()) firstProfile = entry.resolvedProfile;
         }
     }
@@ -2027,12 +2053,12 @@ void FormatConverter::retryFrozenEntries(const QVector<int>& indices)
               firstProfile.value(QStringLiteral("sampleRate")).toInt(),
               channels, QString(),
               firstProfile.value(QStringLiteral("keepMetadata")).toBool(),
-              false, false,
+              false, jobs.first().extractAudio,
               firstProfile.value(QStringLiteral("keepCover")).toBool(),
               firstProfile.value(QStringLiteral("sampleFormat")).toString(),
               layout,
               firstProfile.value(QStringLiteral("audioStreamIndex"), -1).toInt(),
-              false, jobs);
+              jobs.first().preserveDirectories, jobs);
 }
 
 void FormatConverter::startJobs(const QVector<int>& jobIndices,
@@ -2310,6 +2336,18 @@ void FormatConverter::runTranscode(const QString& outputFormat,
                     plannedJobs.at(index).resolvedProfile;
                 entries_[entryIndex].overwriteExisting =
                     plannedJobs.at(index).overwriteExisting;
+                entries_[entryIndex].frozenExtractAudio =
+                    plannedJobs.at(index).extractAudio;
+                entries_[entryIndex].frozenPreserveDirectories =
+                    plannedJobs.at(index).preserveDirectories;
+                entries_[entryIndex].frozenMetadataFields =
+                    plannedJobs.at(index).metadataFields;
+                entries_[entryIndex].frozenMetadataCoverData =
+                    plannedJobs.at(index).metadataCoverData;
+                entries_[entryIndex].frozenMetadataCoverMime =
+                    plannedJobs.at(index).metadataCoverMime;
+                entries_[entryIndex].frozenMetadataPlanActive =
+                    plannedJobs.at(index).metadataPlanActive;
             }
             entries_[entryIndex].progress = 0.0;
         }
@@ -2357,13 +2395,22 @@ void FormatConverter::runTranscode(const QString& outputFormat,
 
         const QString& inputPath = inputPaths.at(i);
         const QString& outputPath = outputPaths.at(i);
-        const bool applyMetadataPlan = metadataPlanActive
-            && (metadataTargetPaths.isEmpty()
-                || metadataTargetPaths.contains(normalized_path_key(inputPath)));
         const FrozenConversionJob* plannedJob = usesPlannedJobs
             ? &plannedJobs.at(i) : nullptr;
         const QVariantMap resolvedProfile = plannedJob != nullptr
             ? plannedJob->resolvedProfile : QVariantMap{};
+        const bool applyMetadataPlan = plannedJob != nullptr
+            ? plannedJob->metadataPlanActive
+            : metadataPlanActive
+                && (metadataTargetPaths.isEmpty()
+                    || metadataTargetPaths.contains(
+                        normalized_path_key(inputPath)));
+        const agplayer::MetadataEditPlan entryMetadataPlan =
+            plannedJob != nullptr && applyMetadataPlan
+            ? metadata_plan(plannedJob->metadataFields,
+                            plannedJob->metadataCoverData,
+                            plannedJob->metadataCoverMime)
+            : plan;
         const QString jobFormat = plannedJob != nullptr
             ? resolvedProfile.value(QStringLiteral("format")).toString()
             : outputFormat;
@@ -2407,6 +2454,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             : 75;
         const bool jobOverwriteExisting = plannedJob != nullptr
             ? plannedJob->overwriteExisting : overwriteExisting;
+        const bool jobExtractAudio = plannedJob != nullptr
+            ? plannedJob->extractAudio : extractAudio;
         if (plannedJob != nullptr && !plannedJob->skipped) {
             const QFileInfo currentSource(inputPath);
             QString currentCanonicalPath = currentSource.canonicalFilePath();
@@ -2446,7 +2495,7 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         const QString stagedPath = staging_path_for(outputPath);
 
         setEntryStatus(entryIndex, FileStatus::Converting);
-        if (is_video_file(inputPath) && !extractAudio) {
+        if (is_video_file(inputPath) && !jobExtractAudio) {
             complete(FileStatus::Error,
                      tr("视频文件需要启用“从视频中提取音频”"));
             return;
@@ -2464,8 +2513,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         const QByteArray sampleFormatUtf8 = jobSampleFormat.toUtf8();
         const QByteArray channelLayoutUtf8 = resolvedLayout.toUtf8();
         std::vector<ag_metadata_field_edit> metadataEdits;
-        metadataEdits.reserve(plan.fields.size());
-        for (const agplayer::FieldEdit& edit : plan.fields) {
+        metadataEdits.reserve(entryMetadataPlan.fields.size());
+        for (const agplayer::FieldEdit& edit : entryMetadataPlan.fields) {
             metadataEdits.push_back({
                 static_cast<ag_metadata_field>(edit.field),
                 static_cast<ag_metadata_edit_action>(edit.action),
@@ -2500,7 +2549,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         request.keep_cover =
             (jobKeepCover
              || (applyMetadataPlan
-                 && plan.cover_action == agplayer::CoverAction::Keep))
+                 && entryMetadataPlan.cover_action
+                     == agplayer::CoverAction::Keep))
             ? 1 : 0;
         request.bitrate_mode = jobBitrateMode == QStringLiteral("vbr") ? 1 : 0;
         request.quality = jobQuality;
@@ -2509,13 +2559,16 @@ void FormatConverter::runTranscode(const QString& outputFormat,
         request.metadata_field_count = applyMetadataPlan
             ? metadataEdits.size() : 0;
         request.metadata_cover_action = applyMetadataPlan
-            ? static_cast<ag_metadata_cover_action>(plan.cover_action)
+            ? static_cast<ag_metadata_cover_action>(
+                entryMetadataPlan.cover_action)
             : AG_METADATA_COVER_KEEP;
-        request.metadata_cover_data = applyMetadataPlan ? plan.cover_data : nullptr;
-        request.metadata_cover_size = applyMetadataPlan ? plan.cover_size : 0;
+        request.metadata_cover_data = applyMetadataPlan
+            ? entryMetadataPlan.cover_data : nullptr;
+        request.metadata_cover_size = applyMetadataPlan
+            ? entryMetadataPlan.cover_size : 0;
         request.metadata_cover_mime_type = !applyMetadataPlan
-                || plan.cover_mime_type.empty()
-            ? nullptr : plan.cover_mime_type.c_str();
+                || entryMetadataPlan.cover_mime_type.empty()
+            ? nullptr : entryMetadataPlan.cover_mime_type.c_str();
         const ag_result result = ag_transcode_v2(
             inputUtf8.constData(), &request, token, progressCallback,
             &progressContext);
