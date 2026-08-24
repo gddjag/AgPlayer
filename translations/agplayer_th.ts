@@ -522,6 +522,7 @@
     <message><source>继续录音</source><translation>บันทึกต่อ</translation></message><message><source>跳到末尾</source><translation>ไปยังจุดสิ้นสุด</translation></message><message><source>选择录音设备</source><translation>เลือกอุปกรณ์บันทึกเสียง</translation></message><message><source>暂停录音</source><translation>หยุดการบันทึกชั่วคราว</translation></message>
     <message><source>展开导出设置</source><translation>ขยายการตั้งค่าการส่งออก</translation></message><message><source>展开录音设置</source><translation>ขยายการตั้งค่าการบันทึก</translation></message><message><source>展开升降调设置</source><translation>ขยายการตั้งค่าระดับเสียง</translation></message><message><source>展开速度设置</source><translation>ขยายการตั้งค่าความเร็ว</translation></message><message><source>展开音调保护设置</source><translation>ขยายการตั้งค่ารักษาระดับเสียง</translation></message>
     <message><source>折叠导出设置</source><translation>ยุบการตั้งค่าการส่งออก</translation></message><message><source>折叠录音设置</source><translation>ยุบการตั้งค่าการบันทึก</translation></message><message><source>折叠升降调设置</source><translation>ยุบการตั้งค่าระดับเสียง</translation></message><message><source>折叠速度设置</source><translation>ยุบการตั้งค่าความเร็ว</translation></message><message><source>折叠音调保护设置</source><translation>ยุบการตั้งค่ารักษาระดับเสียง</translation></message>
+    <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24 บิต, %1 kHz)</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -802,6 +803,11 @@
         <source>导入音频后开始编辑</source>
         <translation>นำเข้าเสียงเพื่อเริ่มแก้ไข</translation>
     </message>
+    <message><source>淡入控制点</source><translation>จุดควบคุมเฟดเข้า</translation></message>
+    <message><source>时长 %1</source><translation>ระยะเวลา %1</translation></message>
+    <message><source>拖出片段 WAV</source><translation>ลากคลิป WAV ออก</translation></message>
+    <message><source>按住准备 WAV</source><translation>กดค้างเพื่อเตรียม WAV</translation></message>
+    <message><source>Ctrl+滚轮缩放 · Shift+滚轮平移</source><translation>Ctrl+ล้อเมาส์เพื่อซูม · Shift+ล้อเมาส์เพื่อเลื่อน</translation></message>
 </context>
 <context>
     <name>EmptyLibrary</name>

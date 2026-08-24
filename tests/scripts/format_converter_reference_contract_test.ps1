@@ -10,7 +10,7 @@ $settings = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlay
 $combined = $page + "`n" + $table + "`n" + $settings
 
 foreach ($control in @(
-    'formatToolbar', 'formatFilterButton', 'formatSelectAllCheck',
+    'formatToolbar', 'formatSelectAllCheck',
     'formatTaskPanel', 'formatSettingsPanel', 'formatBottomBar',
     'formatEncoderBox', 'formatOutputDirectoryRow', 'formatSummaryCard',
     'formatLocalProcessingHint', 'formatSettingsAdvancedToggle',
@@ -18,6 +18,10 @@ foreach ($control in @(
     if ($combined -notmatch [regex]::Escape($control)) {
         throw "The reference format-conversion workbench is missing $control."
     }
+}
+
+if ($page -match 'formatFilterButton' -or $page -match 'filter-3-line') {
+    throw 'The format toolbar must not restore the removed search/filter control.'
 }
 
 if ($combined -notmatch 'key:\s*"Converting"') {
@@ -104,7 +108,7 @@ if ($page -match 'converterParallelJobsBox' -or
     throw 'The reference footer must not expose parallel-jobs or output-directory controls.'
 }
 foreach ($asset in @(
-    'filter-3-line.svg', 'arrow-up-s-line.svg', 'checkbox-circle-line.svg',
+    'arrow-up-s-line.svg', 'checkbox-circle-line.svg',
     'arrow-down-s-line.svg', 'checkbox-blank-fill.svg', 'error-warning-line.svg',
     'file-music-fill.svg')) {
     if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot "assets/icons/$asset"))) {

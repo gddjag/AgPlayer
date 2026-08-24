@@ -522,6 +522,7 @@
     <message><source>继续录音</source><translation>Tiếp tục ghi âm</translation></message><message><source>跳到末尾</source><translation>Đi đến cuối</translation></message><message><source>选择录音设备</source><translation>Chọn thiết bị ghi âm</translation></message><message><source>暂停录音</source><translation>Tạm dừng ghi âm</translation></message>
     <message><source>展开导出设置</source><translation>Mở rộng cài đặt xuất</translation></message><message><source>展开录音设置</source><translation>Mở rộng cài đặt ghi âm</translation></message><message><source>展开升降调设置</source><translation>Mở rộng cài đặt cao độ</translation></message><message><source>展开速度设置</source><translation>Mở rộng cài đặt tốc độ</translation></message><message><source>展开音调保护设置</source><translation>Mở rộng cài đặt giữ cao độ</translation></message>
     <message><source>折叠导出设置</source><translation>Thu gọn cài đặt xuất</translation></message><message><source>折叠录音设置</source><translation>Thu gọn cài đặt ghi âm</translation></message><message><source>折叠升降调设置</source><translation>Thu gọn cài đặt cao độ</translation></message><message><source>折叠速度设置</source><translation>Thu gọn cài đặt tốc độ</translation></message><message><source>折叠音调保护设置</source><translation>Thu gọn cài đặt giữ cao độ</translation></message>
+    <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24-bit, %1 kHz)</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -802,6 +803,11 @@
         <source>导入音频后开始编辑</source>
         <translation>Nhập âm thanh để bắt đầu chỉnh sửa</translation>
     </message>
+    <message><source>淡入控制点</source><translation>Điểm điều khiển fade-in</translation></message>
+    <message><source>时长 %1</source><translation>Thời lượng %1</translation></message>
+    <message><source>拖出片段 WAV</source><translation>Kéo đoạn WAV ra</translation></message>
+    <message><source>按住准备 WAV</source><translation>Giữ để chuẩn bị WAV</translation></message>
+    <message><source>Ctrl+滚轮缩放 · Shift+滚轮平移</source><translation>Ctrl+con lăn để thu phóng · Shift+con lăn để cuộn</translation></message>
 </context>
 <context>
     <name>EmptyLibrary</name>

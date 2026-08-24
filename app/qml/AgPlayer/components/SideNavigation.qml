@@ -23,7 +23,9 @@ Item {
     property string contextResourceFolder: ""
     property bool contextResourceIsRoot: false
     property string pendingResourceFolderRemoval: ""
-    property var resourceDropSubmitter: null
+    property bool resourceDropAccepted: false
+    readonly property int navigationRowHeight: 38
+    readonly property int resourceSectionHeight: 54
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -38,10 +40,9 @@ Item {
     signal resourceFolderRemoved(string folder)
 
     function submitResourceUrls(urls) {
-        if (typeof resourceDropSubmitter === "function")
-            return resourceDropSubmitter(urls) === true
+        resourceDropAccepted = false
         resourceUrlsDropped(urls)
-        return true
+        return resourceDropAccepted
     }
 
     function resourceDropContainsPoint(x, y) {
@@ -66,7 +67,9 @@ Item {
                             root, 0, sectionContentY)
                 return Math.max(listTop, Math.min(listBottom, position.y))
             }
-            sectionContentY += 38 + navigationList.spacing
+            sectionContentY += (type === "resourceSection"
+                                ? resourceSectionHeight
+                                : navigationRowHeight) + navigationList.spacing
         }
         return listBottom
     }
@@ -299,7 +302,8 @@ Item {
                                                  resourceFolder)
             property real dropLoadPulse: 0
             width: navigationList.width
-            height: nodeType === "resourceSection" ? 54 : 38
+            height: nodeType === "resourceSection"
+                    ? root.resourceSectionHeight : root.navigationRowHeight
             radius: nodeType === "resourceSection" ? 0 : Theme.radiusSm
             color: nodeType === "resourceSection" ? "transparent"
                    : selected ? Theme.listSelectedSurface

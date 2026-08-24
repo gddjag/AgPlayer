@@ -522,6 +522,7 @@
     <message><source>继续录音</source><translation>继续录音</translation></message><message><source>跳到末尾</source><translation>跳到末尾</translation></message><message><source>选择录音设备</source><translation>选择录音设备</translation></message><message><source>暂停录音</source><translation>暂停录音</translation></message>
     <message><source>展开导出设置</source><translation>展开导出设置</translation></message><message><source>展开录音设置</source><translation>展开录音设置</translation></message><message><source>展开升降调设置</source><translation>展开升降调设置</translation></message><message><source>展开速度设置</source><translation>展开速度设置</translation></message><message><source>展开音调保护设置</source><translation>展开音调保护设置</translation></message>
     <message><source>折叠导出设置</source><translation>折叠导出设置</translation></message><message><source>折叠录音设置</source><translation>折叠录音设置</translation></message><message><source>折叠升降调设置</source><translation>折叠升降调设置</translation></message><message><source>折叠速度设置</source><translation>折叠速度设置</translation></message><message><source>折叠音调保护设置</source><translation>折叠音调保护设置</translation></message>
+    <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV（24 位，%1 kHz）</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -802,6 +803,11 @@
         <source>导入音频后开始编辑</source>
         <translation>导入音频后开始编辑</translation>
     </message>
+    <message><source>淡入控制点</source><translation>淡入控制点</translation></message>
+    <message><source>时长 %1</source><translation>时长 %1</translation></message>
+    <message><source>拖出片段 WAV</source><translation>拖出片段 WAV</translation></message>
+    <message><source>按住准备 WAV</source><translation>按住准备 WAV</translation></message>
+    <message><source>Ctrl+滚轮缩放 · Shift+滚轮平移</source><translation>Ctrl+滚轮缩放 · Shift+滚轮平移</translation></message>
 </context>
 <context>
     <name>EmptyLibrary</name>

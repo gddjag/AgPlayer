@@ -481,8 +481,9 @@ Window {
                         selectedTagKey: filterModel ? filterModel.tagKey : ""
                         selectedResourceFolder: filterModel
                                                 ? filterModel.resourceFolder : ""
-                        resourceDropSubmitter: function(urls) {
-                            return listWindow.handleResourceDropUrls(urls)
+                        onResourceUrlsDropped: function(urls) {
+                            resourceDropAccepted =
+                                    listWindow.handleResourceDropUrls(urls)
                         }
                         playlistModel: listWindow.playlistModel
                         onNavigationSelected: function(nodeType, nodeId,

@@ -522,6 +522,7 @@
     <message><source>继续录音</source><translation>Resume recording</translation></message><message><source>跳到末尾</source><translation>Jump to end</translation></message><message><source>选择录音设备</source><translation>Choose recording device</translation></message><message><source>暂停录音</source><translation>Pause recording</translation></message>
     <message><source>展开导出设置</source><translation>Expand export settings</translation></message><message><source>展开录音设置</source><translation>Expand recording settings</translation></message><message><source>展开升降调设置</source><translation>Expand pitch settings</translation></message><message><source>展开速度设置</source><translation>Expand speed settings</translation></message><message><source>展开音调保护设置</source><translation>Expand pitch preservation settings</translation></message>
     <message><source>折叠导出设置</source><translation>Collapse export settings</translation></message><message><source>折叠录音设置</source><translation>Collapse recording settings</translation></message><message><source>折叠升降调设置</source><translation>Collapse pitch settings</translation></message><message><source>折叠速度设置</source><translation>Collapse speed settings</translation></message><message><source>折叠音调保护设置</source><translation>Collapse pitch preservation settings</translation></message>
+    <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24-bit, %1 kHz)</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -802,6 +803,11 @@
         <source>导入音频后开始编辑</source>
         <translation>Import audio to start editing</translation>
     </message>
+    <message><source>淡入控制点</source><translation>Fade-in control point</translation></message>
+    <message><source>时长 %1</source><translation>Duration %1</translation></message>
+    <message><source>拖出片段 WAV</source><translation>Drag clip WAV out</translation></message>
+    <message><source>按住准备 WAV</source><translation>Hold to prepare WAV</translation></message>
+    <message><source>Ctrl+滚轮缩放 · Shift+滚轮平移</source><translation>Ctrl+wheel to zoom · Shift+wheel to pan</translation></message>
 </context>
 <context>
     <name>EmptyLibrary</name>

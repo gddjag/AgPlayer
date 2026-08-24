@@ -180,6 +180,19 @@ function Measure-ThemeDifference {
     }
 }
 
+function New-QALibraryPath {
+    param(
+        [string]$StateRoot,
+        [string]$Surface
+    )
+
+    # TagModel persists tags.json beside the library file. Give every capture
+    # its own directory so one seeded surface cannot contaminate another.
+    $surfaceRoot = Join-Path $StateRoot $Surface
+    New-Item -ItemType Directory -Force -Path $surfaceRoot | Out-Null
+    return Join-Path $surfaceRoot "library.json"
+}
+
 function Invoke-Capture {
     param(
         [string]$Language,
@@ -244,41 +257,41 @@ try {
 
             if ($Surfaces -contains "startup") {
                 Invoke-Capture $language $theme "startup" @(
-                    "--qa-library", (Join-Path $stateRoot "startup.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "startup"),
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "playback") {
                 Invoke-Capture $language $theme "playback" @(
-                    "--qa-library", (Join-Path $stateRoot "playback.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "playback"),
                     "--qa-play", $playFixture,
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "mini") {
                 Invoke-Capture $language $theme "mini" @(
-                    "--qa-library", (Join-Path $stateRoot "mini.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "mini"),
                     "--qa-play", $playFixture,
                     "--qa-screenshot-mini"
                 )
             }
             if ($Surfaces -contains "settings") {
                 Invoke-Capture $language $theme "settings" @(
-                    "--qa-library", (Join-Path $stateRoot "settings.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "settings"),
                     "--qa-open-settings",
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "list") {
                 Invoke-Capture $language $theme "list" @(
-                    "--qa-library", (Join-Path $stateRoot "list.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "list"),
                     "--qa-import-folder", $formatFixtures,
                     "--qa-screenshot-list"
                 )
             }
             if ($Surfaces -contains "details") {
                 Invoke-Capture $language $theme "details" @(
-                    "--qa-library", (Join-Path $stateRoot "details.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "details"),
                     "--qa-import-folder", $formatFixtures,
                     "--qa-show-track-details",
                     "--qa-screenshot-list"
@@ -290,7 +303,7 @@ try {
                     continue
                 }
                 Invoke-Capture $language $theme $toolSurface @(
-                    "--qa-library", (Join-Path $stateRoot ("tool-{0}.json" -f $tool)),
+                    "--qa-library", (New-QALibraryPath $stateRoot $toolSurface),
                     "--qa-tool", [string]$tool,
                     "--qa-screenshot-tools"
                 )

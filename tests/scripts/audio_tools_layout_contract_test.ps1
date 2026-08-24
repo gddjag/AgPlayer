@@ -108,12 +108,12 @@ foreach ($laterPhaseAction in @('cropToSelection', 'fadeIn', 'fadeOut', 'silence
         throw "The later-phase command must retain its honest disabled state: $laterPhaseAction"
     }
 }
-if ($commandBar -notmatch 'clearTransientState\(\)' -or
-    $commandBar -match 'clearDocument\(') {
-    throw 'Clear must only clear selection and transient tool state.'
+if ($commandBar -notmatch 'clearDocument\(\)' -or
+    $commandBar -match 'clearTransientState\(\)') {
+    throw 'Clear must clear the loaded timeline document.'
 }
 foreach ($obsolete in @(
-    'insertSilence', 'clearDocument', 'exportMenu',
+    'insertSilence', 'exportMenu',
     'gainRequested', 'addMarker')) {
     if ($commandBar -match $obsolete) {
         throw "The Phase 6 toolbar still contains obsolete UI: $obsolete"

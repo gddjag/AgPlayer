@@ -28,6 +28,7 @@ $trackList = Read-RequiredFile 'app/qml/AgPlayer/components/TrackList.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
 $theme = Read-RequiredFile 'app/qml/AgPlayer/theme/Theme.qml'
 $main = Read-RequiredFile 'app/main.cpp'
+$qaMatrix = Read-RequiredFile 'scripts/qa-final-ui-matrix.ps1'
 
 $trackListCount = ([regex]::Matches($window, '\bTrackList\s*\{')).Count
 if ($trackListCount -ne 1) {
@@ -86,6 +87,8 @@ Assert-Matches $main 'arg == QStringLiteral\("--qa-tag"\)' `
     'QA tag seeds must be supplied through an explicit CLI argument'
 Assert-Matches $main '(?s)if \(qaTestMode\).*tagModel\.createTag' `
     'QA tag seeds must stay behind the test-mode boundary'
+Assert-Matches $qaMatrix '(?s)function New-QALibraryPath.*Join-Path \$StateRoot \$Surface' `
+    'Each QA surface must isolate its adjacent tags.json state'
 
 Assert-Matches $trackList 'reuseItems:\s*true' `
     'TrackList must reuse delegates'

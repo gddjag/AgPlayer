@@ -105,7 +105,8 @@ Control {
         implicitHeight: 36
         contentItem: TextInput {
             z: 2
-            text: compactSpin.textFromValue(compactSpin.value, compactSpin.locale)
+            text: Number(compactSpin.value).toLocaleString(
+                      compactSpin.locale, "f", 0)
             color: Theme.primaryText
             selectionColor: Theme.accent
             selectedTextColor: Theme.onCyanText
