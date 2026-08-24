@@ -195,6 +195,7 @@ private:
         QString channelLayout;
         qint64 bitRate = 0;
         qint64 durationMs = 0;
+        int bitsPerSample = 0;
     };
 
     struct FileEntry {

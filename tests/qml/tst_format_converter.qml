@@ -104,6 +104,88 @@ TestCase {
         compare(formatBox.count, 8)
     }
 
+    function test_outputCatalogUsesAiffInsteadOfM4a() {
+        const aiffButton = findChild(page, "formatOutputFormatButton-aiff")
+        const m4aButton = findChild(page, "formatOutputFormatButton-m4a")
+        verify(aiffButton, "AIFF must be one of the eight conversion outputs")
+        verify(!m4aButton, "M4A remains an accepted input container, not an output format")
+        compare(aiffButton.text, "AIFF")
+    }
+
+    function test_channelSelectionDefaultsToAutomatic() {
+        const channelBox = findChild(page, "formatChannelBox")
+        verify(channelBox)
+        compare(channelBox.currentValue, "")
+        compare(channelBox.displayText, qsTr("自动"))
+    }
+
+    function test_lossyFormatsExposeRecommendedDefaults() {
+        const bitRateLabel = findChild(page, "formatBitRateLabel")
+        const bitRateBox = findChild(page, "formatBitRateBox")
+        const qualityLabel = findChild(page, "formatQualityLabel")
+        const qualityBox = findChild(page, "formatQualityBox")
+        const sampleRateBox = findChild(page, "formatSampleRateBox")
+        const bitDepthBox = findChild(page, "formatBitDepthBox")
+        const settingsPanel = findChild(page, "formatSettingsPanel")
+        verify(bitRateLabel && bitRateBox && qualityLabel && qualityBox
+               && sampleRateBox && bitDepthBox && settingsPanel)
+
+        FormatConverter.selectedFormat = "mp3"
+        tryCompare(bitRateBox, "currentValue", 320000, 1000)
+        compare(bitRateLabel.visible, true)
+        compare(qualityLabel.visible, false)
+        compare(sampleRateBox.currentValue, 0)
+        compare(bitDepthBox.currentValue, "")
+        compare(bitDepthBox.count, 1)
+        compare(bitDepthBox.enabled, false)
+        compare(settingsPanel.sampleFormat, "")
+        compare(settingsPanel.bitrateMode, "cbr")
+        compare(settingsPanel.quality, 0)
+
+        FormatConverter.selectedFormat = "aac"
+        tryCompare(bitRateBox, "currentValue", 256000, 1000)
+        compare(settingsPanel.quality, 0)
+
+        FormatConverter.selectedFormat = "opus"
+        tryCompare(bitRateBox, "currentValue", 192000, 1000)
+        compare(sampleRateBox.currentValue, 48000)
+        compare(settingsPanel.quality, 0)
+
+        FormatConverter.selectedFormat = "ogg"
+        tryCompare(qualityBox, "currentValue", 6, 1000)
+        compare(bitRateLabel.visible, false)
+        compare(qualityLabel.visible, true)
+        compare(qualityLabel.text, qsTr("质量等级"))
+        compare(settingsPanel.bitrateMode, "")
+        compare(sampleRateBox.count, 3)
+    }
+
+    function test_losslessFormatsExposeOnlyApplicableParameters() {
+        const bitRateLabel = findChild(page, "formatBitRateLabel")
+        const qualityLabel = findChild(page, "formatQualityLabel")
+        const qualityBox = findChild(page, "formatQualityBox")
+        const bitDepthLabel = findChild(page, "formatBitDepthLabel")
+        const bitDepthBox = findChild(page, "formatBitDepthBox")
+        verify(bitRateLabel && qualityLabel && qualityBox && bitDepthLabel && bitDepthBox)
+
+        FormatConverter.selectedFormat = "flac"
+        tryCompare(qualityBox, "currentValue", 5, 1000)
+        compare(bitRateLabel.visible, false)
+        compare(qualityLabel.visible, true)
+        compare(qualityLabel.text, qsTr("压缩等级"))
+        compare(bitDepthLabel.visible, true)
+        compare(bitDepthBox.currentValue, "")
+
+        for (const format of ["wav", "alac", "aiff"]) {
+            FormatConverter.selectedFormat = format
+            tryCompare(FormatConverter, "selectedFormat", format, 1000)
+            compare(bitRateLabel.visible, false)
+            compare(qualityLabel.visible, false)
+            compare(bitDepthLabel.visible, true)
+            compare(bitDepthBox.currentValue, "")
+        }
+    }
+
     function test_realShellBodyShowsCompleteLocalProcessingHint() {
         testCase.height = 833
         wait(0)
@@ -241,6 +323,23 @@ TestCase {
         })
         verify(plan.ready)
         compare(plan.taskCount, 1)
+        FormatConverter.rejectPendingPlan()
+    }
+
+    function test_mp3UiDefaultsReachPreflight() {
+        FormatConverter.addUrls([testAudioUrl])
+        tryVerify(function() { return !FormatConverter.busy }, 5000)
+        FormatConverter.selectedFormat = "mp3"
+        const settingsPanel = findChild(page, "formatSettingsPanel")
+        const preflightDialog = findChild(page, "formatPreflightDialog")
+        verify(settingsPanel && preflightDialog)
+        tryCompare(settingsPanel, "bitRate", 320000, 1000)
+        compare(settingsPanel.quality, 0)
+
+        page.requestPlan()
+        tryVerify(function() { return preflightDialog.visible }, 1000)
+        compare(FormatConverter.pendingPlan.taskCount, 1)
+        preflightDialog.close()
         FormatConverter.rejectPendingPlan()
     }
 

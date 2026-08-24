@@ -12,8 +12,65 @@ namespace {
 
 QString extension_for(const QString& format_key)
 {
-    return format_key.compare(QStringLiteral("alac"), Qt::CaseInsensitive) == 0
-        ? QStringLiteral("m4a") : format_key.toLower();
+    const QString normalized = format_key.toLower();
+    return normalized == QStringLiteral("alac")
+        ? QStringLiteral("m4a") : normalized;
+}
+
+struct ResolvedDepth {
+    QString key;
+    QString codec;
+    QString sampleFormat;
+};
+
+ResolvedDepth resolve_depth(const QString& format, const QString& requested,
+                            const agplayer::AudioStreamProbe& source)
+{
+    QString depth = requested.trimmed().toLower();
+    if (depth.isEmpty() || depth == QStringLiteral("auto")) {
+        if (format == QStringLiteral("wav")
+            && source.sample_format.find("flt") != std::string::npos) {
+            depth = QStringLiteral("flt");
+        } else if (source.bits_per_sample > 24) {
+            depth = QStringLiteral("s32");
+        } else if (source.bits_per_sample > 16) {
+            depth = QStringLiteral("s24");
+        } else {
+            depth = QStringLiteral("s16");
+        }
+    }
+
+    if (format == QStringLiteral("wav")) {
+        if (depth == QStringLiteral("s24"))
+            return {depth, QStringLiteral("pcm_s24le"), QStringLiteral("s32")};
+        if (depth == QStringLiteral("flt"))
+            return {depth, QStringLiteral("pcm_f32le"), QStringLiteral("flt")};
+        return {QStringLiteral("s16"), QStringLiteral("pcm_s16le"),
+                QStringLiteral("s16")};
+    }
+    if (format == QStringLiteral("aiff")) {
+        if (depth == QStringLiteral("s24"))
+            return {depth, QStringLiteral("pcm_s24be"), QStringLiteral("s32")};
+        if (depth == QStringLiteral("s32"))
+            return {depth, QStringLiteral("pcm_s32be"), QStringLiteral("s32")};
+        return {QStringLiteral("s16"), QStringLiteral("pcm_s16be"),
+                QStringLiteral("s16")};
+    }
+    if (format == QStringLiteral("flac")) {
+        return (depth == QStringLiteral("s24")
+                || depth == QStringLiteral("s32"))
+            ? ResolvedDepth{depth, QStringLiteral("flac"), QStringLiteral("s32")}
+            : ResolvedDepth{QStringLiteral("s16"), QStringLiteral("flac"),
+                            QStringLiteral("s16")};
+    }
+    if (format == QStringLiteral("alac")) {
+        return (depth == QStringLiteral("s24")
+                || depth == QStringLiteral("s32"))
+            ? ResolvedDepth{depth, QStringLiteral("alac"), QStringLiteral("s32p")}
+            : ResolvedDepth{QStringLiteral("s16"), QStringLiteral("alac"),
+                            QStringLiteral("s16p")};
+    }
+    return {};
 }
 
 QString folded_path(const QString& path)
@@ -208,10 +265,51 @@ FormatBatchPlan build_format_conversion_plan(
             {QStringLiteral("sampleRate"), request.sampleRate},
             {QStringLiteral("channelLayout"), request.channelLayout},
             {QStringLiteral("sampleFormat"), request.sampleFormat},
+            {QStringLiteral("bitDepth"), request.bitDepth},
             {QStringLiteral("audioStreamIndex"), task.audioStreamIndex},
             {QStringLiteral("keepMetadata"), request.keepMetadata},
             {QStringLiteral("keepCover"), request.keepCover},
         };
+        const auto selectedStream = std::find_if(
+            input.probe.audio_streams.cbegin(), input.probe.audio_streams.cend(),
+            [&task](const agplayer::AudioStreamProbe& stream) {
+                return stream.stream_index == task.audioStreamIndex;
+            });
+        if (selectedStream != input.probe.audio_streams.cend()) {
+            const ResolvedDepth depth = resolve_depth(
+                request.formatKey.toLower(), request.bitDepth, *selectedStream);
+            if (!depth.key.isEmpty()) {
+                QString resolvedDepth = depth.key;
+                const QString format = request.formatKey.toLower();
+                const bool automaticDepth = request.bitDepth.trimmed().isEmpty()
+                    || request.bitDepth.compare(QStringLiteral("auto"),
+                                                Qt::CaseInsensitive) == 0;
+                if (automaticDepth && selectedStream->bits_per_sample > 24
+                    && (format == QStringLiteral("flac")
+                        || format == QStringLiteral("alac"))) {
+                    resolvedDepth = QStringLiteral("s24");
+                    task.differences.push_back({
+                        QStringLiteral("bitDepth"), QStringLiteral("s32"),
+                        resolvedDepth,
+                        QStringLiteral("Output format supports at most 24-bit audio"),
+                        true});
+                }
+                if (automaticDepth && format == QStringLiteral("aiff")
+                    && selectedStream->sample_format.find("flt")
+                           != std::string::npos) {
+                    task.differences.push_back({
+                        QStringLiteral("sampleFormat"),
+                        QString::fromStdString(selectedStream->sample_format),
+                        QStringLiteral("s32"),
+                        QStringLiteral("AIFF output uses integer PCM"), true});
+                }
+                task.resolvedProfile.insert(QStringLiteral("bitDepth"),
+                                            resolvedDepth);
+                task.resolvedProfile.insert(QStringLiteral("codec"), depth.codec);
+                task.resolvedProfile.insert(QStringLiteral("sampleFormat"),
+                                            depth.sampleFormat);
+            }
+        }
         for (const FormatPlanDifference& difference : task.differences) {
             batch.requiresConfirmation = batch.requiresConfirmation
                 || difference.requiresConfirmation;

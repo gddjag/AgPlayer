@@ -312,19 +312,31 @@ ag_result open_encoder(const std::string& output_path,
     }
     enc.ctx->sample_rate = out_sample_rate;
     enc.ctx->bit_rate = config.bit_rate > 0 ? config.bit_rate : 0;
-    if (config.variable_bit_rate) {
+    const std::string_view encoder_name(enc.codec->name);
+    if (encoder_name == "libvorbis") {
+        const int quality = config.quality <= 10
+            ? std::clamp(config.quality, 0, 10)
+            : std::clamp((config.quality + 5) / 10, 0, 10);
+        enc.ctx->bit_rate = 0;
+        enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
+        enc.ctx->global_quality = FF_QP2LAMBDA * quality;
+    } else if (config.variable_bit_rate) {
         const int quality = std::clamp(config.quality, 0, 100);
         const int qscale = std::clamp(9 - (quality * 9 / 100), 0, 9);
         enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
         enc.ctx->global_quality = FF_QP2LAMBDA * qscale;
         if (enc.ctx->priv_data != nullptr) {
-            if (std::string_view(enc.codec->name) == "libopus") {
+            if (encoder_name == "libopus") {
                 av_opt_set(enc.ctx->priv_data, "vbr", "on", 0);
             }
         }
     } else if (enc.ctx->priv_data != nullptr
-               && std::string_view(enc.codec->name) == "libopus") {
+               && encoder_name == "libopus") {
         av_opt_set(enc.ctx->priv_data, "vbr", "off", 0);
+    }
+    if (encoder_name == "flac" && config.quality >= 0
+        && config.quality <= 8) {
+        enc.ctx->compression_level = config.quality;
     }
     enc.ctx->thread_count = 1;
     if (!config.channel_layout.empty()) {

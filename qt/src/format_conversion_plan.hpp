@@ -24,6 +24,7 @@ struct FormatConversionRequest {
     int sampleRate = 0;
     QString channelLayout;
     QString sampleFormat;
+    QString bitDepth;
     QString outputDirectory;
     FormatConflictPolicy conflictPolicy = FormatConflictPolicy::AutoNumber;
     bool keepMetadata = false;

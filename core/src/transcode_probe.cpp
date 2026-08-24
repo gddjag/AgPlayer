@@ -118,6 +118,18 @@ ag_result probe_transcode_input(const std::string_view utf8_path,
         audio.channel_layout = channel_layout_name(parameters);
         audio.bit_rate = parameters->bit_rate;
         audio.duration_ms = stream_duration_ms(format, stream);
+        audio.bits_per_sample = parameters->bits_per_raw_sample > 0
+            ? parameters->bits_per_raw_sample
+            : parameters->bits_per_coded_sample;
+        const bool lossless_codec = descriptor != nullptr
+            && (descriptor->props & AV_CODEC_PROP_LOSSLESS) != 0;
+        if (audio.bits_per_sample <= 0 && lossless_codec
+            && parameters->format >= 0) {
+            const int bytes = av_get_bytes_per_sample(
+                static_cast<AVSampleFormat>(parameters->format));
+            if (bytes > 0)
+                audio.bits_per_sample = bytes * 8;
+        }
         probe.audio_streams.push_back(std::move(audio));
     }
     avformat_close_input(&format);

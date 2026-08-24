@@ -46,13 +46,7 @@ Pane {
         property string etaText: "03:42"
         property var files: []
         property var pendingPlan: ({ taskCount: 0, requiresConfirmation: false })
-        property var currentCapability: ({
-            encoderLabel: "LAME MP3",
-            lossy: true,
-            supportsCover: true,
-            sampleRates: [44100, 48000],
-            sampleFormats: ["s16", "fltp"]
-        })
+        property var currentCapability: capabilityForFormat(selectedFormat)
         property var outputCapabilities: [
             { key: "mp3", label: "MP3", available: true, reason: "" },
             { key: "flac", label: "FLAC", available: true, reason: "" },
@@ -61,11 +55,35 @@ Pane {
             { key: "opus", label: "Opus", available: true, reason: "" },
             { key: "ogg", label: "OGG", available: true, reason: "" },
             { key: "alac", label: "ALAC", available: true, reason: "" },
-            { key: "m4a", label: "M4A", available: true, reason: "" }
+            { key: "aiff", label: "AIFF", available: true, reason: "" }
         ]
         property var filteredTaskModel: visualFormatTaskModel
 
         signal errorOccurred(string message)
+
+        function capabilityForFormat(format) {
+            const losslessRates = [0, 44100, 48000, 88200, 96000, 176400, 192000]
+            const source16And24 = [
+                { key: "", label: qsTr("原始位深（自动）"), isDefault: true },
+                { key: "s16", label: "16-bit PCM", isDefault: false },
+                { key: "s24", label: "24-bit PCM", isDefault: false }
+            ]
+            if (format === "mp3")
+                return { encoderLabel: "LAME MP3", parameterKind: "bitrate", supportsCover: true, sampleRateChoices: [0, 44100, 48000], bitRateChoices: [128000, 192000, 256000, 320000], defaultBitRate: 320000, qualityChoices: [], bitDepthChoices: [] }
+            if (format === "aac")
+                return { encoderLabel: "AAC", parameterKind: "bitrate", supportsCover: true, sampleRateChoices: [0, 44100, 48000], bitRateChoices: [96000, 128000, 192000, 256000, 320000], defaultBitRate: 256000, qualityChoices: [], bitDepthChoices: [] }
+            if (format === "opus")
+                return { encoderLabel: "Opus", parameterKind: "bitrate", supportsCover: false, sampleRateChoices: [48000], bitRateChoices: [64000, 96000, 128000, 160000, 192000, 256000], defaultBitRate: 192000, qualityChoices: [], bitDepthChoices: [] }
+            if (format === "ogg")
+                return { encoderLabel: "Vorbis", parameterKind: "quality", supportsCover: false, sampleRateChoices: [0, 44100, 48000], bitRateChoices: [], qualityChoices: [0,1,2,3,4,5,6,7,8,9,10], defaultQuality: 6, bitDepthChoices: [] }
+            if (format === "flac")
+                return { encoderLabel: "FLAC", parameterKind: "compression", supportsCover: true, sampleRateChoices: losslessRates, bitRateChoices: [], qualityChoices: [0,3,5,8], defaultQuality: 5, bitDepthChoices: source16And24 }
+            if (format === "wav")
+                return { encoderLabel: "PCM", parameterKind: "none", supportsCover: false, sampleRateChoices: losslessRates, bitRateChoices: [], qualityChoices: [], bitDepthChoices: source16And24.concat([{ key: "flt", label: "32-bit Float", isDefault: false }]) }
+            if (format === "alac")
+                return { encoderLabel: "ALAC", parameterKind: "none", supportsCover: true, sampleRateChoices: losslessRates, bitRateChoices: [], qualityChoices: [], bitDepthChoices: source16And24 }
+            return { encoderLabel: "PCM", parameterKind: "none", supportsCover: false, sampleRateChoices: losslessRates, bitRateChoices: [], qualityChoices: [], bitDepthChoices: source16And24.concat([{ key: "s32", label: "32-bit PCM", isDefault: false }]) }
+        }
 
         function formatDuration(milliseconds) {
             const totalSeconds = Math.floor(milliseconds / 1000)

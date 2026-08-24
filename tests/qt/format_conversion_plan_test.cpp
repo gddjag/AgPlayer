@@ -17,6 +17,9 @@ private slots:
     void plansConflictPoliciesWithoutCreatingOutput();
     void preservesImportRootAndRejectsTraversal();
     void rejectsVideoUnlessExtractionIsEnabled();
+    void plansRecommendedOutputExtensions();
+    void confirmsAutomaticDepthConversionsThatCannotBePreservedExactly();
+    void doesNotPromoteUnknownLossySourceDepth();
 };
 
 namespace {
@@ -178,6 +181,86 @@ void FormatConversionPlanTest::rejectsVideoUnlessExtractionIsEnabled()
     plan = build_format_conversion_plan({inputFor(input, {}, true)}, request);
     QVERIFY(plan.ready);
     QCOMPARE(plan.tasks.front().audioStreamIndex, 0);
+}
+
+void FormatConversionPlanTest::plansRecommendedOutputExtensions()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    struct Expected {
+        const char* format;
+        const char* suffix;
+    };
+    const Expected expected[] = {
+        {"aac", "aac"}, {"alac", "m4a"}, {"aiff", "aiff"},
+    };
+    for (const Expected& item : expected) {
+        FormatConversionRequest request;
+        request.formatKey = QString::fromLatin1(item.format);
+        request.outputDirectory = temp.path();
+        const FormatBatchPlan plan = build_format_conversion_plan(
+            {inputFor(input)}, request);
+        QVERIFY2(plan.ready, qPrintable(plan.fatalError));
+        QCOMPARE(QFileInfo(plan.tasks.front().outputPath).suffix(),
+                 QString::fromLatin1(item.suffix));
+    }
+}
+
+void FormatConversionPlanTest::confirmsAutomaticDepthConversionsThatCannotBePreservedExactly()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatPlanInput planInput = inputFor(input);
+    planInput.probe.audio_streams.front().bits_per_sample = 32;
+    planInput.probe.audio_streams.front().sample_format = "flt";
+
+    FormatConversionRequest request;
+    request.outputDirectory = temp.path();
+    request.formatKey = QStringLiteral("flac");
+    FormatBatchPlan plan = build_format_conversion_plan({planInput}, request);
+    QVERIFY(plan.ready);
+    QVERIFY(plan.requiresConfirmation);
+    QCOMPARE(plan.tasks.front().resolvedProfile.value(QStringLiteral("bitDepth")),
+             QVariant(QStringLiteral("s24")));
+
+    request.formatKey = QStringLiteral("aiff");
+    plan = build_format_conversion_plan({planInput}, request);
+    QVERIFY(plan.ready);
+    QVERIFY(plan.requiresConfirmation);
+    QCOMPARE(plan.tasks.front().resolvedProfile.value(QStringLiteral("bitDepth")),
+             QVariant(QStringLiteral("s32")));
+}
+
+void FormatConversionPlanTest::doesNotPromoteUnknownLossySourceDepth()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("source.mp3"));
+    QFile marker(input);
+    QVERIFY(marker.open(QIODevice::WriteOnly));
+    marker.write("fixture-marker");
+    marker.close();
+
+    FormatPlanInput planInput = inputFor(input);
+    auto& stream = planInput.probe.audio_streams.front();
+    stream.codec = "mp3";
+    stream.sample_format = "fltp";
+    stream.bits_per_sample = 0;
+
+    FormatConversionRequest request;
+    request.outputDirectory = temp.path();
+    request.formatKey = QStringLiteral("flac");
+    const FormatBatchPlan plan = build_format_conversion_plan({planInput}, request);
+    QVERIFY(plan.ready);
+    QVERIFY(!plan.requiresConfirmation);
+    QCOMPARE(plan.tasks.front().resolvedProfile.value(QStringLiteral("bitDepth")),
+             QVariant(QStringLiteral("s16")));
 }
 
 QTEST_APPLESS_MAIN(FormatConversionPlanTest)
