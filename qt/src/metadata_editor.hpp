@@ -24,6 +24,7 @@ struct MetadataEntry {
     QString album;
     QString albumArtist;
     QString year;
+    QString customTag;
     QString date;
     QString genre;
     QString track;

@@ -55,7 +55,7 @@ const QStringList& aggregateFieldKeys()
     static const QStringList keys{
         QStringLiteral("title"), QStringLiteral("artist"),
         QStringLiteral("album"), QStringLiteral("albumArtist"),
-        QStringLiteral("genre"), QStringLiteral("year"),
+        QStringLiteral("genre"), QStringLiteral("customTag"),
         QStringLiteral("date"), QStringLiteral("composer"),
         QStringLiteral("bpm")};
     return keys;
@@ -68,7 +68,7 @@ QString entryFieldValue(const MetadataEntry& entry, const QString& key)
     if (key == QLatin1String("album")) return entry.album;
     if (key == QLatin1String("albumArtist")) return entry.albumArtist;
     if (key == QLatin1String("genre")) return entry.genre;
-    if (key == QLatin1String("year")) return entry.year;
+    if (key == QLatin1String("customTag")) return entry.customTag;
     if (key == QLatin1String("date")) return entry.date;
     if (key == QLatin1String("composer")) return entry.composer;
     return entry.bpm;
@@ -114,7 +114,7 @@ agplayer::CanonicalField canonicalFieldForKey(const QString& key)
     if (key == QLatin1String("album")) return agplayer::CanonicalField::Album;
     if (key == QLatin1String("albumArtist")) return agplayer::CanonicalField::AlbumArtist;
     if (key == QLatin1String("genre")) return agplayer::CanonicalField::Genre;
-    if (key == QLatin1String("year")) return agplayer::CanonicalField::Year;
+    if (key == QLatin1String("customTag")) return agplayer::CanonicalField::CustomTag;
     if (key == QLatin1String("date")) return agplayer::CanonicalField::Date;
     if (key == QLatin1String("composer")) return agplayer::CanonicalField::Composer;
     return agplayer::CanonicalField::Bpm;
@@ -153,7 +153,7 @@ agplayer::MetadataEditPlan planForPayload(const QVariantMap& fields,
     agplayer::MetadataEditPlan plan;
     static const QStringList supportedKeys{
         QStringLiteral("title"), QStringLiteral("artist"), QStringLiteral("album"),
-        QStringLiteral("albumArtist"), QStringLiteral("genre"), QStringLiteral("year"),
+        QStringLiteral("albumArtist"), QStringLiteral("genre"), QStringLiteral("customTag"),
         QStringLiteral("date"), QStringLiteral("composer"), QStringLiteral("bpm")};
     for (const QString& key : supportedKeys) {
         if (const auto edit = editForField(fields, key); edit.has_value()) {
@@ -440,6 +440,7 @@ void MetadataEditor::startMetadataLoad(QList<QUrl> expandedUrls)
                 entry.album = QString::fromUtf8(ag_metadata_album(md));
                 entry.albumArtist = QString::fromUtf8(ag_metadata_album_artist(md));
                 entry.year = QString::fromUtf8(ag_metadata_year(md));
+                entry.customTag = QString::fromUtf8(ag_metadata_custom_tag(md));
                 entry.date = QString::fromUtf8(ag_metadata_date(md));
                 entry.genre = QString::fromUtf8(ag_metadata_genre(md));
                 entry.track = QString::fromUtf8(ag_metadata_track(md));
@@ -513,7 +514,7 @@ QVariantMap MetadataEditor::entryAt(int index) const
     map["artist"] = e.artist;
     map["album"] = e.album;
     map["albumArtist"] = e.albumArtist;
-    map["year"] = e.year;
+    map["customTag"] = e.customTag;
     map["date"] = e.date;
     map["genre"] = e.genre;
     map["track"] = e.track;
@@ -793,6 +794,7 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                         case agplayer::CanonicalField::Date: e.date = actual; break;
                         case agplayer::CanonicalField::Composer: e.composer = actual; break;
                         case agplayer::CanonicalField::Bpm: e.bpm = actual; break;
+                        case agplayer::CanonicalField::CustomTag: e.customTag = actual; break;
                         }
                     }
                     ag_metadata* refreshed = nullptr;
@@ -805,6 +807,8 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                             ag_metadata_album_artist(refreshed));
                         e.genre = QString::fromUtf8(ag_metadata_genre(refreshed));
                         e.year = QString::fromUtf8(ag_metadata_year(refreshed));
+                        e.customTag = QString::fromUtf8(
+                            ag_metadata_custom_tag(refreshed));
                         e.date = QString::fromUtf8(ag_metadata_date(refreshed));
                         e.composer = QString::fromUtf8(ag_metadata_composer(refreshed));
                         e.bpm = QString::fromUtf8(ag_metadata_bpm_tag(refreshed));
@@ -1236,7 +1240,7 @@ bool MetadataEditor::exportCurrentList(const QUrl& destination,
     if (path.endsWith(QLatin1String(".csv"), Qt::CaseInsensitive)) {
         QTextStream out(&file);
         out.setEncoding(QStringConverter::Utf8);
-        out << "fileName,path,title,artist,album,albumArtist,genre,year,composer,bpm\n";
+        out << "fileName,path,title,artist,album,albumArtist,genre,customTag,composer,bpm\n";
         const auto csv = [](QString text) {
             text.replace('"', QStringLiteral("\"\""));
             return QStringLiteral("\"") + text + QStringLiteral("\"");
@@ -1251,7 +1255,7 @@ bool MetadataEditor::exportCurrentList(const QUrl& destination,
                 << csv(row.value(QStringLiteral("album")).toString()) << ','
                 << csv(row.value(QStringLiteral("albumArtist")).toString()) << ','
                 << csv(row.value(QStringLiteral("genre")).toString()) << ','
-                << csv(row.value(QStringLiteral("year")).toString()) << ','
+                << csv(row.value(QStringLiteral("customTag")).toString()) << ','
                 << csv(row.value(QStringLiteral("composer")).toString()) << ','
                 << csv(row.value(QStringLiteral("bpm")).toString()) << '\n';
         }

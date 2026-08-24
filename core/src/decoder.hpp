@@ -20,6 +20,7 @@ struct MediaMetadata final {
     std::string composer;
     std::string comment;
     std::string bpm;
+    std::string custom_tag;
     std::string copyright;
     std::string encoder;
     std::string format;

@@ -170,6 +170,7 @@ const char* ag_metadata_disc(const ag_metadata* metadata);
 const char* ag_metadata_composer(const ag_metadata* metadata);
 const char* ag_metadata_comment(const ag_metadata* metadata);
 const char* ag_metadata_bpm_tag(const ag_metadata* metadata);
+const char* ag_metadata_custom_tag(const ag_metadata* metadata);
 const char* ag_metadata_copyright(const ag_metadata* metadata);
 const char* ag_metadata_encoder(const ag_metadata* metadata);
 const char* ag_metadata_format(const ag_metadata* metadata);
@@ -321,7 +322,8 @@ typedef enum ag_metadata_field {
     AG_METADATA_FIELD_YEAR = 5,
     AG_METADATA_FIELD_DATE = 6,
     AG_METADATA_FIELD_COMPOSER = 7,
-    AG_METADATA_FIELD_BPM = 8
+    AG_METADATA_FIELD_BPM = 8,
+    AG_METADATA_FIELD_CUSTOM_TAG = 9
 } ag_metadata_field;
 
 typedef struct ag_metadata_field_edit {

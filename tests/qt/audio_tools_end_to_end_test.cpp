@@ -1825,6 +1825,9 @@ void AudioToolsEndToEndTest::formatConverterWritesMetadataPlanToNewOutput()
     fields.insert(QStringLiteral("title"), QVariantMap{
         {QStringLiteral("mode"), QStringLiteral("set")},
         {QStringLiteral("value"), QStringLiteral("Converted title")}});
+    fields.insert(QStringLiteral("customTag"), QVariantMap{
+        {QStringLiteral("mode"), QStringLiteral("set")},
+        {QStringLiteral("value"), QStringLiteral("转换标签")}});
     QVERIFY(converter.setMetadataEditPlan(fields, {}));
     converter.loadFiles({QUrl::fromLocalFile(input)});
     waitForConverterLoad(converter);
@@ -1844,6 +1847,8 @@ void AudioToolsEndToEndTest::formatConverterWritesMetadataPlanToNewOutput()
     QCOMPARE(ag_metadata_open(output.toUtf8().constData(), &metadata), AG_OK);
     QCOMPARE(QString::fromUtf8(ag_metadata_title(metadata)),
              QStringLiteral("Converted title"));
+    QCOMPARE(QString::fromUtf8(ag_metadata_custom_tag(metadata)),
+             QStringLiteral("转换标签"));
     ag_metadata_destroy(metadata);
     QVERIFY(QFileInfo::exists(input));
 }
@@ -1961,10 +1966,7 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
     setField(QStringLiteral("album"), QStringLiteral("Edited album"));
     setField(QStringLiteral("albumArtist"), QStringLiteral("Album artist"));
     setField(QStringLiteral("genre"), QStringLiteral("Edited genre"));
-    // MP3 stores Year and Date in the same physical tag. Equivalent edits are
-    // valid and must be reflected through both logical fields.
-    setField(QStringLiteral("year"), QStringLiteral("2026-08-20"));
-    setField(QStringLiteral("date"), QStringLiteral("2026-08-20"));
+    setField(QStringLiteral("customTag"), QStringLiteral("电子"));
     setField(QStringLiteral("composer"), QStringLiteral("Composer"));
     setField(QStringLiteral("bpm"), QStringLiteral("128.50"));
 
@@ -1995,10 +1997,12 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
              QStringLiteral("Edited title"));
     QCOMPARE(editor.entryAt(0).value(QStringLiteral("artist")).toString(),
              QStringLiteral("Edited artist"));
-    QCOMPARE(editor.entryAt(0).value(QStringLiteral("date")).toString(),
-             QStringLiteral("2026-08-20"));
-    QCOMPARE(editor.entryAt(0).value(QStringLiteral("year")).toString(),
-             QStringLiteral("2026-08-20"));
+    const QVariantMap updatedEntry = editor.entryAt(0);
+    QCOMPARE(updatedEntry.value(QStringLiteral("date")).toString(),
+             QString());
+    QCOMPARE(updatedEntry.value(QStringLiteral("customTag")).toString(),
+             QStringLiteral("电子"));
+    QVERIFY(!updatedEntry.contains(QStringLiteral("year")));
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::TitleRole).toString(),
              QStringLiteral("Edited title"));
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::ArtistRole).toString(),
@@ -2011,9 +2015,9 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::GenreRole).toString(),
              QStringLiteral("Edited genre"));
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::YearRole).toString(),
-             QStringLiteral("2026-08-20"));
+             QString());
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::DateRole).toString(),
-             QStringLiteral("2026-08-20"));
+             QString());
     QCOMPARE(library.data(library.index(0, 0),
                           LibraryModel::ComposerRole).toString(),
              QStringLiteral("Composer"));
@@ -2037,7 +2041,7 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
                qulonglong{0});
       QCOMPARE(completedResult.value(QStringLiteral("encoderOpenCount")).toULongLong(),
                qulonglong{0});
-      QCOMPARE(completedResult.value(QStringLiteral("fields")).toList().size(), 9);
+      QCOMPARE(completedResult.value(QStringLiteral("fields")).toList().size(), 8);
       QVERIFY(completedResult.value(QStringLiteral("cover")).toMap()
                   .contains(QStringLiteral("status")));
 
@@ -2057,10 +2061,12 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
              QStringLiteral("Composer"));
     QCOMPARE(QString::fromUtf8(ag_metadata_bpm_tag(metadata)),
              QStringLiteral("128.50"));
+    QCOMPARE(QString::fromUtf8(ag_metadata_custom_tag(metadata)),
+             QStringLiteral("电子"));
     QCOMPARE(QString::fromUtf8(ag_metadata_year(metadata)),
-             QStringLiteral("2026-08-20"));
+             QString());
     QCOMPARE(QString::fromUtf8(ag_metadata_date(metadata)),
-             QStringLiteral("2026-08-20"));
+             QString());
     ag_metadata_destroy(metadata);
 
     QVariantMap clearArtist;
