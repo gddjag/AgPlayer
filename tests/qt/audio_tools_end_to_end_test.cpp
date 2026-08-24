@@ -1096,6 +1096,56 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
                           nullptr, nullptr, nullptr), AG_OK);
     QVERIFY(QFile::rename(encoded, input));
 
+    const QString originalYearDate = QStringLiteral("1999-07-04");
+    QCOMPARE(ag_metadata_write(input.toUtf8().constData(), nullptr, nullptr,
+                               nullptr,
+                               originalYearDate.toUtf8().constData(), nullptr,
+                               nullptr, nullptr, 0, nullptr),
+             AG_OK);
+
+    {
+        LibraryModel preservationLibrary;
+        TrackRecord preservationTrack;
+        preservationTrack.trackId = QStringLiteral("metadata-preservation-track");
+        preservationTrack.path = input;
+        preservationTrack.available = true;
+        QVERIFY(preservationLibrary.append(preservationTrack));
+
+        MetadataEditor preservationEditor;
+        preservationEditor.setLibraryModel(&preservationLibrary);
+        QSignalSpy preservationLoaded(&preservationEditor,
+                                      &MetadataEditor::entriesLoaded);
+        preservationEditor.loadFiles({QUrl::fromLocalFile(input)});
+        QVERIFY(preservationLoaded.wait(30000));
+
+        const QVariantMap customTagOnly{
+            {QStringLiteral("customTag"),
+             QVariantMap{{QStringLiteral("mode"), QStringLiteral("set")},
+                         {QStringLiteral("value"), QStringLiteral("电子")}}}};
+        QSignalSpy preservationApplied(&preservationEditor,
+                                       &MetadataEditor::metadataApplied);
+        preservationEditor.applyMetadata(customTagOnly, {});
+        QVERIFY(preservationApplied.wait(30000));
+        QCOMPARE(preservationApplied.first().first().toInt(), 1);
+        QCOMPARE(preservationLibrary.data(preservationLibrary.index(0, 0),
+                                          LibraryModel::YearRole).toString(),
+                 originalYearDate);
+        QCOMPARE(preservationLibrary.data(preservationLibrary.index(0, 0),
+                                          LibraryModel::DateRole).toString(),
+                 originalYearDate);
+
+        ag_metadata* preservedMetadata = nullptr;
+        QCOMPARE(ag_metadata_open(input.toUtf8().constData(), &preservedMetadata),
+                 AG_OK);
+        QCOMPARE(QString::fromUtf8(ag_metadata_custom_tag(preservedMetadata)),
+                 QStringLiteral("电子"));
+        QCOMPARE(QString::fromUtf8(ag_metadata_year(preservedMetadata)),
+                 originalYearDate);
+        QCOMPARE(QString::fromUtf8(ag_metadata_date(preservedMetadata)),
+                 originalYearDate);
+        ag_metadata_destroy(preservedMetadata);
+    }
+
     LibraryModel library;
     TrackRecord libraryTrack;
     libraryTrack.trackId = QStringLiteral("metadata-library-track");
@@ -1154,7 +1204,7 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
              QStringLiteral("Edited artist"));
     const QVariantMap updatedEntry = editor.entryAt(0);
     QCOMPARE(updatedEntry.value(QStringLiteral("date")).toString(),
-             QString());
+             originalYearDate);
     QCOMPARE(updatedEntry.value(QStringLiteral("customTag")).toString(),
              QStringLiteral("电子"));
     QVERIFY(!updatedEntry.contains(QStringLiteral("year")));
@@ -1170,9 +1220,9 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::GenreRole).toString(),
              QStringLiteral("Edited genre"));
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::YearRole).toString(),
-             QString());
+             originalYearDate);
     QCOMPARE(library.data(library.index(0, 0), LibraryModel::DateRole).toString(),
-             QString());
+             originalYearDate);
     QCOMPARE(library.data(library.index(0, 0),
                           LibraryModel::ComposerRole).toString(),
              QStringLiteral("Composer"));
@@ -1219,9 +1269,9 @@ void AudioToolsEndToEndTest::metadataEditorWritesTags()
     QCOMPARE(QString::fromUtf8(ag_metadata_custom_tag(metadata)),
              QStringLiteral("电子"));
     QCOMPARE(QString::fromUtf8(ag_metadata_year(metadata)),
-             QString());
+             originalYearDate);
     QCOMPARE(QString::fromUtf8(ag_metadata_date(metadata)),
-             QString());
+             originalYearDate);
     ag_metadata_destroy(metadata);
 
     QVariantMap clearArtist;
