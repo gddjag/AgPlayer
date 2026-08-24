@@ -160,8 +160,21 @@ TestCase {
     }
 
     function test_customTagReplacesYearInEditorSchema() {
+        const expectedKeys = ["title", "artist", "album", "albumArtist", "genre",
+                              "composer", "date", "customTag", "bpm"]
+        const expectedLabels = ["标题", "艺术家", "专辑", "专辑艺术家", "流派",
+                                "作曲", "日期", "自定义标签", "BPM"]
+        compare(page.fieldDefinitions.length, expectedKeys.length)
+        for (let index = 0; index < expectedKeys.length; ++index) {
+            compare(page.fieldDefinitions[index].key, expectedKeys[index])
+            compare(page.fieldDefinitions[index].label, expectedLabels[index])
+        }
         verify(page.rowForField("customTag"))
         compare(page.rowForField("year"), null)
+
+        const tagHeader = findChild(page, "metadataTableTagHeader")
+        verify(tagHeader)
+        compare(tagHeader.text, "标签")
     }
 
     function test_processingScopeTracksCurrentSelectedAndAll() {
