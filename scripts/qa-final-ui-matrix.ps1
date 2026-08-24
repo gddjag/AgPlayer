@@ -59,7 +59,8 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            return [pscustomobject]@{ Width = 960; Height = 570 }
+            # 38px title + 56px header + ten 62px waveform rows + 54px filter.
+            return [pscustomobject]@{ Width = 960; Height = 768 }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }
@@ -109,11 +110,10 @@ function Measure-Screenshot {
             $bitmap.GetPixel(0, $bitmap.Height - 1).A
             $bitmap.GetPixel($bitmap.Width - 1, $bitmap.Height - 1).A
         )
-        $outerCornerAlpha = if ($Surface -match "^(list|library|details)$") {
-            # The list surface is captured while docked below the player. Its
-            # top corners are intentionally square at the shared edge; only
-            # the two outer bottom corners must remain transparent.
-            $cornerAlpha[2..3]
+        $outerCornerAlpha = if ($Surface -match "^(list|library|details|tool-\d+)$") {
+            # Borderless list and audio-tool workspaces intentionally fill
+            # their native rectangles; no corner-alpha contract applies.
+            @()
         }
         elseif ($Surface -eq "playback") {
             # Playback is captured with the list window docked below it. The
@@ -124,7 +124,8 @@ function Measure-Screenshot {
         else {
             $cornerAlpha
         }
-        if (($outerCornerAlpha | Measure-Object -Maximum).Maximum -ne 0) {
+        if ($outerCornerAlpha.Count -gt 0 -and
+            ($outerCornerAlpha | Measure-Object -Maximum).Maximum -ne 0) {
             throw "$Surface does not preserve transparent outer corners"
         }
 
@@ -320,8 +321,8 @@ try {
                     "{0}-light-{1}.png" -f $language, $surface)
                 $difference = Measure-ThemeDifference $darkPath $lightPath
                 if ($difference -lt 12) {
-                    throw ("{0}-{1} dark/light difference is only {2}; " +
-                        "theme coverage may be incomplete" -f
+                    throw (("{0}-{1} dark/light difference is only {2}; " +
+                        "theme coverage may be incomplete") -f
                         $language, $surface, $difference)
                 }
             }

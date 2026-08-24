@@ -5,7 +5,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-back-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-up-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-right-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/bar-chart-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg

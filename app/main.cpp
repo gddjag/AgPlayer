@@ -1429,7 +1429,11 @@ int main(int argc, char* argv[])
                     } else {
                         qWarning("QA screenshot target is not a QQuickWindow");
                     }
-                    QCoreApplication::quit();
+                    // grabWindow() can leave a Qt Quick render job in flight.
+                    // Hide the captured surface and let the render loop drain
+                    // before QQmlApplicationEngine begins destroying windows.
+                    targetWindow->setVisible(false);
+                    QTimer::singleShot(250, QCoreApplication::quit);
                 };
 
                 if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {

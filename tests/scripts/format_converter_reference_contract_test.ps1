@@ -125,7 +125,8 @@ foreach ($asset in @('checkbox-circle-line.svg', 'error-warning-line.svg')) {
 if ($cmake -notmatch [regex]::Escape('assets/icons/check-line.svg')) {
     throw 'The checkbox check-line icon is not registered as an application resource.'
 }
-foreach ($asset in @('arrow-down-s-line.svg', 'checkbox-blank-fill.svg')) {
+foreach ($asset in @('arrow-up-s-line.svg', 'arrow-down-s-line.svg',
+    'checkbox-blank-fill.svg')) {
     if ($cmake -notmatch [regex]::Escape("assets/icons/$asset")) {
         throw "The format icon $asset is not registered as an application resource."
     }
