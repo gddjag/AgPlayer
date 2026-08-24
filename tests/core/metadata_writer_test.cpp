@@ -561,6 +561,58 @@ int main(const int argc, char** argv)
     assert(ag_metadata_open(mp3.u8string().c_str(), &metadata) == AG_OK);
     assert(ag_metadata_sample_rate(metadata) == 44'100);
     ag_metadata_destroy(metadata);
+
+    // CustomTag is a player-owned tag: writing a different field must
+    // preserve it, while Clear removes only that tag.
+    const std::filesystem::path custom_tag_flac = work_dir / "meta-custom-tag.flac";
+    std::filesystem::remove(custom_tag_flac);
+    std::filesystem::remove(custom_tag_flac.u8string() + ".agbak");
+    assert(ag_transcode(fixture.u8string().c_str(), custom_tag_flac.u8string().c_str(),
+                        "flac", 0, 44100, 2, nullptr, nullptr, nullptr) == AG_OK);
+    agplayer::MetadataEditPlan custom_tag_set_plan;
+    custom_tag_set_plan.fields = {
+        {agplayer::CanonicalField::CustomTag, agplayer::MetadataAction::Set,
+         "电子"},
+    };
+    agplayer::MetadataFileResult custom_tag_set_result;
+    assert(agplayer::write_metadata_plan(custom_tag_flac.u8string(),
+                                          custom_tag_set_plan,
+                                          custom_tag_set_result) == AG_OK);
+    assert(custom_tag_set_result.fields.size() == 1);
+    assert(custom_tag_set_result.fields[0].actual_value == "电子");
+    assert(custom_tag_set_result.fields[0].status
+           == agplayer::FieldWriteStatus::Updated);
+
+    agplayer::MetadataEditPlan custom_tag_keep_plan;
+    custom_tag_keep_plan.fields = {
+        {agplayer::CanonicalField::Title, agplayer::MetadataAction::Set,
+         "Custom Tag Preserved"},
+        {agplayer::CanonicalField::CustomTag, agplayer::MetadataAction::Keep,
+         std::nullopt},
+    };
+    agplayer::MetadataFileResult custom_tag_keep_result;
+    assert(agplayer::write_metadata_plan(custom_tag_flac.u8string(),
+                                          custom_tag_keep_plan,
+                                          custom_tag_keep_result) == AG_OK);
+    assert(custom_tag_keep_result.fields.size() == 2);
+    assert(custom_tag_keep_result.fields[1].actual_value == "电子");
+    assert(custom_tag_keep_result.fields[1].status
+           == agplayer::FieldWriteStatus::Kept);
+
+    agplayer::MetadataEditPlan custom_tag_clear_plan;
+    custom_tag_clear_plan.fields = {
+        {agplayer::CanonicalField::CustomTag, agplayer::MetadataAction::Clear,
+         std::nullopt},
+    };
+    agplayer::MetadataFileResult custom_tag_clear_result;
+    assert(agplayer::write_metadata_plan(custom_tag_flac.u8string(),
+                                          custom_tag_clear_plan,
+                                          custom_tag_clear_result) == AG_OK);
+    assert(custom_tag_clear_result.fields.size() == 1);
+    assert(custom_tag_clear_result.fields[0].actual_value.empty());
+    assert(custom_tag_clear_result.fields[0].status
+           == agplayer::FieldWriteStatus::Cleared);
+
     assert(ag_metadata_write_extended(
                mp3.u8string().c_str(), nullptr, nullptr, nullptr,
                "Album Artist", "2025-08-09", nullptr, "3/12", "1/2",
@@ -1005,6 +1057,8 @@ int main(const int argc, char** argv)
     std::filesystem::remove(backup);
     std::filesystem::remove(mp3);
     std::filesystem::remove(mp3.string() + ".agbak");
+    std::filesystem::remove(custom_tag_flac);
+    std::filesystem::remove(custom_tag_flac.u8string() + ".agbak");
     std::filesystem::remove(dated_flac);
     std::filesystem::remove(dated_flac.u8string() + ".agbak");
     std::filesystem::remove(preservation_flac);

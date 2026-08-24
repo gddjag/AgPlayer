@@ -52,6 +52,7 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
         "composer", "TCOM", "©wrt", "WM/Composer"};
     static const std::vector<const char*> bpm{
         "bpm", "TBPM", "tmpo", "WM/BeatsPerMinute"};
+    static const std::vector<const char*> custom_tag{"AGPLAYER_TAG"};
     switch (field) {
     case CanonicalField::Title: return title;
     case CanonicalField::Artist: return artist;
@@ -62,6 +63,7 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
     case CanonicalField::Date: return date;
     case CanonicalField::Composer: return composer;
     case CanonicalField::Bpm: return bpm;
+    case CanonicalField::CustomTag: return custom_tag;
     }
     return title;
 }
@@ -330,6 +332,7 @@ const char* canonical_key(const CanonicalField field)
     case CanonicalField::Date: return "date";
     case CanonicalField::Composer: return "composer";
     case CanonicalField::Bpm: return "bpm";
+    case CanonicalField::CustomTag: return "AGPLAYER_TAG";
     }
     return "";
 }
@@ -420,7 +423,7 @@ struct MetadataSnapshot {
                 && metadata == other.metadata;
         }
     };
-    std::array<std::string, 9> fields;
+    std::array<std::string, 10> fields;
     Dictionary format_metadata;
     std::vector<Stream> streams;
     std::vector<Chapter> chapter_details;
@@ -448,10 +451,11 @@ MetadataSnapshot::Dictionary snapshot_dictionary(AVDictionary* dictionary)
 std::string explicit_muxer_for_path(const std::filesystem::path& path);
 bool muxer_shares_year_date(const std::string& muxer);
 
-constexpr std::array<CanonicalField, 9> kCanonicalFields{
+constexpr std::array<CanonicalField, 10> kCanonicalFields{
     CanonicalField::Title, CanonicalField::Artist, CanonicalField::Album,
     CanonicalField::AlbumArtist, CanonicalField::Genre, CanonicalField::Year,
-    CanonicalField::Date, CanonicalField::Composer, CanonicalField::Bpm};
+    CanonicalField::Date, CanonicalField::Composer, CanonicalField::Bpm,
+    CanonicalField::CustomTag};
 
 std::size_t canonical_index(const CanonicalField field)
 {
@@ -465,6 +469,7 @@ std::size_t canonical_index(const CanonicalField field)
     case CanonicalField::Date: return 6;
     case CanonicalField::Composer: return 7;
     case CanonicalField::Bpm: return 8;
+    case CanonicalField::CustomTag: return 9;
     }
     return 0;
 }
@@ -1134,6 +1139,7 @@ std::optional<std::string>* update_slot(MetadataUpdate& update,
     case CanonicalField::Date: return &update.date;
     case CanonicalField::Composer: return &update.composer;
     case CanonicalField::Bpm: return &update.bpm;
+    case CanonicalField::CustomTag: return &update.custom_tag;
     }
     return nullptr;
 }
@@ -1150,6 +1156,7 @@ const char* read_field(const ag_metadata* metadata, const CanonicalField field)
     case CanonicalField::Date: return ag_metadata_date(metadata);
     case CanonicalField::Composer: return ag_metadata_composer(metadata);
     case CanonicalField::Bpm: return ag_metadata_bpm_tag(metadata);
+    case CanonicalField::CustomTag: return "";
     }
     return "";
 }
@@ -1672,6 +1679,7 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
     set_canonical_tag(CanonicalField::AlbumArtist, update.album_artist);
     set_canonical_tag(CanonicalField::Composer, update.composer);
     set_canonical_tag(CanonicalField::Bpm, update.bpm);
+    set_canonical_tag(CanonicalField::CustomTag, update.custom_tag);
     set_canonical_tag(CanonicalField::Year, update.year);
     set_canonical_tag(CanonicalField::Date, update.date);
     set_canonical_tag(CanonicalField::Genre, update.genre);
