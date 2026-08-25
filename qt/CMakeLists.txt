@@ -67,6 +67,8 @@ add_library(agplayer_qt STATIC
     src/tag_filter_model.hpp
     src/tag_store.cpp
     src/tag_store.hpp
+    src/theme_manager.cpp
+    src/theme_manager.hpp
     src/metadata_editor.cpp
     src/metadata_editor.hpp
     src/metadata_text.cpp
