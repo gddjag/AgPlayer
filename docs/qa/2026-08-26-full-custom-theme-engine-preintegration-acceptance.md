@@ -2,7 +2,7 @@
 
 ## 结论
 
-**状态：NEEDS WORK / 不批准最终发布。** Theme 功能的 Release 构建、主题聚焦测试、完整 Release CTest、当前运行截图和两种真实 WAV 播放启动状态均有本轮证据；但 Debug 全量仍有 3 个既有非主题失败，且 QA harness 尚不能抓取菜单、Popup、Tooltip 或同列表的播放中/仅选中双状态。本记录不执行分支集成、打包或安装器复制。
+**状态：NEEDS WORK / 不批准最终发布。** Theme 功能的 Release 构建、主题聚焦测试、完整 Release CTest 和当前运行截图有本轮证据；但 Debug 全量仍有 3 个既有非主题失败，预集成 WAV 目录没有保留退出码或进程采样原始记录，且 QA harness 尚不能抓取菜单、Popup、Tooltip 或同列表的播放中/仅选中双状态。本记录不执行分支集成、打包或安装器复制。
 
 ## 审核范围和命令
 
@@ -67,8 +67,8 @@ scripts/qa-final-ui-matrix.ps1 -BuildDirectory build/release `
 ## 交互、播放和性能证据
 
 - `ThemeColorSelector` 的 Space/Enter、预设/自定义、事务取消/恢复和媒体色不变由上述 Release 测试覆盖；截图不能证明读屏器实际宣布或键盘焦点移动，因此不作辅助技术合规声称。
-- Default 和 `#FF0000` 各启动一次 `AgPlayer.exe --qa-test-mode --qa-play build/release/tests/fixtures/sine-440hz.wav --qa-skin ... --qa-screenshot-main ...`。两次都生成有效截图和 QA 日志、没有 `[WARN]`/`[ERROR]`/`[FATAL]`、退出码 0，并在 30 秒守护时间内自行结束。产物在 `build/qa/2026-08-26-theme-preintegration/playback-performance/`。
-- 每个启动仅采样本进程早期两个时间点：Default 0.30 s 为 CPU 0.125 s / Working Set 30.64 MiB，0.80 s 为 0.359 s / 56.70 MiB；Red 0.30 s 为 0.250 s / 57.12 MiB，0.80 s 为 0.375 s / 57.39 MiB。它们不是长期 CPU/内存基准，也不能证明热切换的性能。
+- `build/qa/2026-08-26-theme-preintegration/playback-performance/` 另有 Default/Red 共 4 张 WAV 播放界面截图；它们不属于上述 90 张矩阵截图。四份 `.log` 均为 0 字节，且没有保留命令、退出码或进程采样原始记录，因此该目录只能证明播放界面被截图，不能独立证明退出状态、无运行时告警、声卡输出或性能数值。
+- 预集成记录中曾写入的四个 CPU/Working Set 数值因没有原始 CSV 或命令记录而撤回，不作为验收证据。可复核的 WAV 路径和性能采样必须在集成后重新生成。
 
 ## 未关闭的风险和集成门禁
 
