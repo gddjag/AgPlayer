@@ -75,7 +75,7 @@ if ($toolsWindow -match '#(?:031426|10283d|c42b35)' -or
     $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}color:\s*Theme\.panel' -or
     $toolsWindow -notmatch 'objectName:\s*"audioToolsWindowTitle"[\s\S]{0,160}color:\s*Theme\.primaryText' -or
     $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.hoverSurface' -or
-    $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.favoriteRed' -or
+    $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.danger' -or
     $toolsWindow -notmatch 'icon\.color:\s*Theme\.iconPrimary') {
     throw 'The audio-tools title bar, title, hover surfaces and window icons must use Theme tokens.'
 }
