@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $page = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/FormatConvertPage.qml')
 $table = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/FormatTaskTable.qml')
 $settings = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/FormatSettingsPanel.qml')
+$fixture = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'tests/qml/FormatConverterVisualFixture.qml')
 $combined = $page + "`n" + $table + "`n" + $settings
 
 foreach ($control in @(
@@ -74,6 +75,24 @@ if ($page -notmatch 'SettingsController\.parallelJobs') {
 }
 if ($page -notmatch 'plan\.error\s*\|\|\s*plan\.reason') {
     throw 'Every preflight rejection must surface the backend reason.'
+}
+if ($page -notmatch 'requestedQuality' -or
+    $page -notmatch 'bitDepth:\s*settingsPanel\.bitDepth') {
+    throw 'Preflight requests must carry the selected quality/compression level and bit depth.'
+}
+if ($page -notmatch '\*\.aif\s+\*\.aiff' -or $page -notmatch '\*\.m4a') {
+    throw 'The import picker must accept AIFF and keep accepting M4A source files.'
+}
+if ($settings -notmatch 'objectName:\s*"formatChannelBox"') {
+    throw 'Channel selection must remain available in the parameter matrix.'
+}
+if ($settings -notmatch 'property\s+string\s+sampleFormat:\s*bitDepthBox\.visible' -or
+    $settings -notmatch 'property\s+string\s+bitrateMode:\s*converter') {
+    throw 'Bit-depth keys must not leak into sampleFormat, and bitrate mode must be empty when unused.'
+}
+if ($fixture -notmatch 'key:\s*"aiff",\s*label:\s*"AIFF"' -or
+    $fixture -match 'key:\s*"m4a",\s*label:\s*"M4A"') {
+    throw 'The eight-format output catalog must expose AIFF instead of M4A.'
 }
 if ($combined -notmatch 'taskId' -or
     $combined -notmatch 'cancelTask\(' -or

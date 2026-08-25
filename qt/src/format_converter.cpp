@@ -781,6 +781,12 @@ QVariantList FormatConverter::supportedOutputFormats() const
             QVariantList qualityChoices;
             for (const int value : capability.quality_choices)
                 qualityChoices.append(value);
+            QVariantList sampleRateChoices;
+            for (const int value : capability.sample_rate_choices)
+                sampleRateChoices.append(value);
+            QVariantList bitRateChoices;
+            for (const int value : capability.bit_rate_choices)
+                bitRateChoices.append(value);
             QVariantList bitDepths;
             for (const agplayer::TranscodeOptionChoice& depth
                  : capability.bit_depth_choices) {
@@ -796,6 +802,8 @@ QVariantList FormatConverter::supportedOutputFormats() const
                 {QStringLiteral("codec"), QString::fromStdString(capability.codec_name)},
                 {QStringLiteral("encoderLabel"), QString::fromStdString(capability.codec_name)},
                 {QStringLiteral("muxer"), QString::fromStdString(capability.muxer_name)},
+                {QStringLiteral("outputExtension"),
+                 QString::fromStdString(capability.output_extension)},
                 {QStringLiteral("available"), capability.available},
                 {QStringLiteral("reason"), QString::fromStdString(capability.unavailable_reason)},
                 {QStringLiteral("lossy"), capability.lossy},
@@ -807,9 +815,12 @@ QVariantList FormatConverter::supportedOutputFormats() const
                 {QStringLiteral("defaultQuality"), capability.default_quality},
                 {QStringLiteral("bitDepths"), bitDepths},
                 {QStringLiteral("sampleRates"), sampleRates},
+                {QStringLiteral("sampleRateChoices"), sampleRateChoices},
                 {QStringLiteral("sampleFormats"), sampleFormats},
                 {QStringLiteral("channelLayouts"), channelLayouts},
                 {QStringLiteral("bitrateModes"), bitrateModes},
+                {QStringLiteral("bitRateChoices"), bitRateChoices},
+                {QStringLiteral("defaultBitRate"), capability.default_bit_rate},
                 {QStringLiteral("bitRates"), bitrate_choices_for(formatKey)},
                 {QStringLiteral("presets"),
                  presets_for(formatKey, capability.lossy)}});
@@ -1228,7 +1239,9 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     }
     bool validNumber = false;
     conversionRequest.bitrate = plan.value(
-        QStringLiteral("bitRate"), 192000).toLongLong(&validNumber);
+        QStringLiteral("bitRate"),
+        capability.value(QStringLiteral("defaultBitRate"), 0))
+                                     .toLongLong(&validNumber);
     if (!validNumber || conversionRequest.bitrate < 0
         || conversionRequest.bitrate > 512000) {
         return failPreflight(
@@ -1326,17 +1339,23 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
                                  .arg(conversionRequest.channelLayout));
     }
     const QVariantList supportedRates = capability.value(
-        QStringLiteral("sampleRates")).toList();
+        QStringLiteral("sampleRateChoices")).toList();
     if (conversionRequest.sampleRate != 0
         && !supportedRates.contains(conversionRequest.sampleRate)) {
         return failPreflight(QStringLiteral("Unsupported sampleRate: %1")
                                  .arg(conversionRequest.sampleRate));
     }
-    if (parameterKind == QStringLiteral("bitrate")
-        && (conversionRequest.bitrate < 8000
-            || conversionRequest.bitrate > 512000)) {
-        return failPreflight(
-            QStringLiteral("Invalid bitRate: expected 8000..512000"));
+    const QVariantList bitRateChoices = capability.value(
+        QStringLiteral("bitRateChoices")).toList();
+    if (parameterKind == QStringLiteral("bitrate")) {
+        if (!bitRateChoices.contains(conversionRequest.bitrate)) {
+            return failPreflight(QStringLiteral("Invalid bitRate for %1: %2")
+                                     .arg(format)
+                                     .arg(conversionRequest.bitrate));
+        }
+    } else if (conversionRequest.bitrate != 0) {
+        return failPreflight(QStringLiteral("Unsupported bitRate for %1")
+                                 .arg(format));
     }
     const QString requestedCodec = conversionRequest.codecName.trimmed();
     if (!requestedCodec.isEmpty()

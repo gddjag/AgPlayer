@@ -27,7 +27,8 @@ Rectangle {
                            : channelLayout === "stereo" ? 2 : 0
     readonly property string bitrateMode: converter ? converter.bitrateMode : ""
     property string conflictPolicy: conflictBox.currentValue || "auto-number"
-    property string sampleFormat: sampleFormatBox.currentValue || ""
+    property string sampleFormat: bitDepthBox.visible
+                                  ? "" : (sampleFormatBox.currentValue || "")
     property string bitDepth: bitDepthBox.currentValue || ""
     property string channelLayout: channelBox.currentValue || ""
     property bool keepMetadata: keepMetadataCheck.checked
@@ -38,6 +39,26 @@ Rectangle {
     property string lastCapabilityKey: ""
     signal chooseOutputDirectory()
     signal outputDirectoryEdited(string directory)
+
+    function bitRateValues() {
+        return capability.bitRateChoices !== undefined
+                ? capability.bitRateChoices : (capability.bitRates || [])
+    }
+
+    function sampleRateValues() {
+        return capability.sampleRateChoices !== undefined
+                ? capability.sampleRateChoices
+                : [0].concat(capability.sampleRates || [])
+    }
+
+    function bitDepthChoices() {
+        const depths = capability.bitDepths || []
+        if (depths.length > 0)
+            return depths
+        if (parameterKind === "bitrate" || parameterKind === "quality")
+            return [{label: qsTr("自动"), key: "", default: true}]
+        return []
+    }
 
     function resetCapabilityParameters() {
         const modes = capability.bitrateModes || []
@@ -57,15 +78,15 @@ Rectangle {
         if (parameterKind === "bitrate" && bitRateBox.count > 0) {
             const configured = bitRateBox.indexOfValue(
                 SettingsController.transcodeBitrateKbps * 1000)
-            const recommended = bitRateBox.indexOfValue(320000)
+            const recommended = bitRateBox.indexOfValue(
+                Number(capability.defaultBitRate || 0))
             bitRateBox.currentIndex = configured >= 0 ? configured
                 : (recommended >= 0 ? recommended : 0)
         }
         const configuredRate = sampleRateBox.indexOfValue(
             SettingsController.transcodeSampleRateHz)
-        const opusRate = sampleRateBox.indexOfValue(48000)
         sampleRateBox.currentIndex = configuredRate >= 0 ? configuredRate
-            : (capability.key === "opus" && opusRate >= 0 ? opusRate : 0)
+            : (sampleRateBox.count > 0 ? 0 : -1)
         const configuredChannel = channelBox.indexOfValue(
             SettingsController.transcodeChannels === 1 ? "mono" : "stereo")
         channelBox.currentIndex = configuredChannel >= 0 ? configuredChannel : 0
@@ -74,7 +95,16 @@ Rectangle {
         qualityBox.currentIndex = qualityChoices.length > 0
                 ? Math.max(0, qualityChoices.indexOf(capability.defaultQuality))
                 : -1
-        bitDepthBox.currentIndex = 0
+        const depths = bitDepthBox.model || []
+        bitDepthBox.currentIndex = -1
+        for (let depthIndex = 0; depthIndex < depths.length; ++depthIndex) {
+            if (depths[depthIndex].default === true) {
+                bitDepthBox.currentIndex = depthIndex
+                break
+            }
+        }
+        if (bitDepthBox.currentIndex < 0 && depths.length > 0)
+            bitDepthBox.currentIndex = 0
     }
 
     function syncGlobalNumericDefaults() {
@@ -255,10 +285,7 @@ Rectangle {
                             text: modelData.label
                             checkable: true
                             checked: root.outputFormat === modelData.key
-                            onClicked: {
-                                root.outputFormat = modelData.key
-                                converter.selectedFormat = modelData.key
-                            }
+                            onClicked: converter.selectedFormat = modelData.key
                             ToolTip.visible: hovered && !modelData.available
                             ToolTip.text: modelData.reason
                             background: Rectangle {
@@ -320,7 +347,7 @@ Rectangle {
                         }
                     }
                 }
-                Text { visible: bitrateRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("目标码率"); color: Theme.secondaryText }
+                Text { objectName: "formatBitRateLabel"; visible: bitrateRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("目标码率"); color: Theme.secondaryText }
                 RowLayout {
                     id: bitrateRow
                     objectName: "formatBitrateRow"
@@ -332,7 +359,7 @@ Rectangle {
                         objectName: "formatBitrateBox"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 32
-                        model: (root.capability.bitRates || []).map(function(value) {
+                        model: root.bitRateValues().map(function(value) {
                             return { text: (value / 1000) + " kbps", value: value }
                         })
                         textRole: "text"
@@ -342,6 +369,7 @@ Rectangle {
                     }
                 }
                 Text {
+                    objectName: "formatQualityLabel"
                     visible: qualityBox.visible
                     Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122
                     text: root.parameterKind === "compression" ? qsTr("压缩等级") : qsTr("质量等级")
@@ -365,11 +393,11 @@ Rectangle {
                     objectName: "formatSampleRateBox"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
-                    model: (root.capability.key === "opus" ? []
-                            : [{text:qsTr("原始采样率（自动）"), value:0}]).concat(
-                        (converter.currentCapability.sampleRates || []).map(function(value) {
-                            return { text: (value / 1000) + " kHz", value: value }
-                        }))
+                    model: root.sampleRateValues().map(function(value) {
+                        return { text: value === 0 ? qsTr("原始采样率（自动）")
+                                                  : (value / 1000) + " kHz",
+                                 value: value }
+                    })
                     textRole: "text"; valueRole: "value"
                     onActivated: SettingsController.transcodeSampleRateHz = currentValue
                 }
@@ -393,20 +421,21 @@ Rectangle {
                         else if (currentValue === "stereo") SettingsController.transcodeChannels = 2
                     }
                 }
-                Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: Theme.secondaryText }
+                Text { objectName: "formatBitDepthLabel"; visible: bitDepthBox.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: Theme.secondaryText }
                 ReferenceComboBox {
                     id: bitDepthBox
                     objectName: "formatBitDepthBox"
-                    visible: (root.capability.bitDepths || []).length > 0
+                    visible: model.length > 0
+                    enabled: model.length > 1
                     Layout.fillWidth: true
                     Layout.preferredHeight: visible ? 32 : 0
-                    model: root.capability.bitDepths || []
+                    model: root.bitDepthChoices()
                     textRole: "label"; valueRole: "key"
                 }
                 ReferenceComboBox {
                     id: sampleFormatBox
                     objectName: "formatSampleFormatBox"
-                    visible: (root.capability.bitDepths || []).length === 0
+                    visible: root.bitDepthChoices().length === 0
                     Layout.fillWidth: true
                     Layout.preferredHeight: visible ? 32 : 0
                     model: [{text:qsTr("自动"), value:""}].concat(

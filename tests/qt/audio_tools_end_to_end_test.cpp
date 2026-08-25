@@ -94,6 +94,7 @@ private slots:
     void formatConverterImportsRealAiffInput();
     void formatConverterSkipPolicyLeavesExistingOutputUntouched();
     void formatConverterExposesEveryPdfRequiredOutputFormat();
+    void formatConverterPreflightValidatesRecommendedParameterChoices();
     void formatConverterAppliesRealCbrAndVbrModes();
     void formatConverterExportsEveryAdvertisedBitrateMode();
     void formatConverterCancellationPreservesExistingOutput();
@@ -595,7 +596,8 @@ void AudioToolsEndToEndTest::
     const QVariantMap plan = converter.buildPreflight({
         {QStringLiteral("outputFormat"), format},
         {QStringLiteral("outputDir"), temp.filePath(QStringLiteral("out"))},
-        {QStringLiteral("bitRate"), 128000},
+        {QStringLiteral("bitRate"),
+         format == QStringLiteral("aac") ? 128000 : 0},
         {QStringLiteral("keepMetadata"), keepMetadata},
         {QStringLiteral("keepCover"), keepCover}});
 
@@ -1090,8 +1092,7 @@ void AudioToolsEndToEndTest::
         QVariantMap request{
             {QStringLiteral("outputFormat"), format},
             {QStringLiteral("outputDir"), temp.filePath(directory)},
-            {QStringLiteral("bitRate"),
-             format == QStringLiteral("ogg") ? 0 : 192000},
+            {QStringLiteral("bitRate"), 0},
             {QStringLiteral("quality"), quality},
             {QStringLiteral("sampleRate"),
              format == QStringLiteral("ogg") ? 0 : 44100},
@@ -1409,6 +1410,65 @@ void AudioToolsEndToEndTest::formatConverterExposesEveryPdfRequiredOutputFormat(
         QStringLiteral("ogg"), QStringLiteral("opus"),
         QStringLiteral("alac"), QStringLiteral("aac")};
     QCOMPARE(keys, required);
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterPreflightValidatesRecommendedParameterChoices()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("recommended.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+
+    QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("ogg")},
+        {QStringLiteral("bitRate"), 0},
+        {QStringLiteral("quality"), 6},
+        {QStringLiteral("sampleRate"), 0},
+        {QStringLiteral("channels"), 0},
+        {QStringLiteral("outputDir"), temp.path()},
+    });
+    QVERIFY2(plan.value(QStringLiteral("ready")).toBool(),
+             qPrintable(plan.value(QStringLiteral("error")).toString()));
+    QCOMPARE(plan.value(QStringLiteral("resolvedProfile")).toMap()
+                 .value(QStringLiteral("quality")).toInt(), 6);
+
+    plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("aiff")},
+        {QStringLiteral("bitRate"), 0},
+        {QStringLiteral("quality"), 0},
+        {QStringLiteral("sampleRate"), 0},
+        {QStringLiteral("bitDepth"), QStringLiteral("s24")},
+        {QStringLiteral("channels"), 0},
+        {QStringLiteral("keepMetadata"), false},
+        {QStringLiteral("keepCover"), false},
+        {QStringLiteral("outputDir"), temp.path()},
+    });
+    QVERIFY2(plan.value(QStringLiteral("ready")).toBool(),
+             qPrintable(plan.value(QStringLiteral("error")).toString()));
+    const QVariantMap profile = plan.value(
+        QStringLiteral("resolvedProfile")).toMap();
+    QCOMPARE(profile.value(QStringLiteral("format")).toString(),
+             QStringLiteral("aiff"));
+    QCOMPARE(profile.value(QStringLiteral("bitDepth")).toString(),
+             QStringLiteral("s24"));
+    QVERIFY(plan.value(QStringLiteral("tasks")).toList().front().toMap()
+                .value(QStringLiteral("outputPath")).toString()
+                .endsWith(QStringLiteral(".aiff")));
+
+    plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("mp3")},
+        {QStringLiteral("bitRate"), 96000},
+        {QStringLiteral("sampleRate"), 44100},
+        {QStringLiteral("outputDir"), temp.path()},
+    });
+    QVERIFY(!plan.value(QStringLiteral("ready")).toBool());
+    QVERIFY(plan.value(QStringLiteral("error")).toString()
+                .contains(QStringLiteral("bitRate")));
 }
 
 void AudioToolsEndToEndTest::formatConverterAppliesRealCbrAndVbrModes()

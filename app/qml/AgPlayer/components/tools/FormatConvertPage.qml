@@ -64,6 +64,7 @@ Rectangle {
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
             bitRate: isFinite(requestedBitRate) ? requestedBitRate : 0,
+            bitrateMode: settingsPanel.bitrateMode,
             quality: isFinite(requestedQuality) ? requestedQuality : 75,
             sampleRate: isFinite(requestedSampleRate) ? requestedSampleRate : 0,
             channels: settingsPanel.channels,

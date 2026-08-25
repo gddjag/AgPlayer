@@ -250,10 +250,11 @@ Rectangle {
                     horizontalAlignment: Text.AlignRight
                     font.pixelSize: 12
                 }
-                TapHandler {
+                MouseArea {
+                    anchors.fill: parent
                     enabled: column === 1
                     acceptedButtons: Qt.RightButton
-                    onTapped: {
+                    onClicked: {
                         taskContextMenu.taskId = model.taskId
                         taskContextMenu.status = model.status
                         taskContextMenu.errorDetail = model.errorDetail

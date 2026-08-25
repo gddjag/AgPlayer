@@ -31,7 +31,8 @@ ResolvedDepth resolve_depth(const QString& format, const QString& requested,
             && source.sample_format.find("flt") != std::string::npos) {
             depth = QStringLiteral("flt");
         } else if (source.bits_per_sample > 24
-                   && format == QStringLiteral("wav")) {
+                   && (format == QStringLiteral("wav")
+                       || format == QStringLiteral("aiff"))) {
             depth = QStringLiteral("s32");
         } else if (source.bits_per_sample > 16) {
             depth = QStringLiteral("s24");
@@ -51,6 +52,16 @@ ResolvedDepth resolve_depth(const QString& format, const QString& requested,
             return {depth, QStringLiteral("pcm_f32le"), QStringLiteral("flt")};
         }
         return {QStringLiteral("s16"), QStringLiteral("pcm_s16le"),
+                QStringLiteral("s16")};
+    }
+    if (format == QStringLiteral("aiff")) {
+        if (depth == QStringLiteral("s24")) {
+            return {depth, QStringLiteral("pcm_s24be"), QStringLiteral("s32")};
+        }
+        if (depth == QStringLiteral("s32")) {
+            return {depth, QStringLiteral("pcm_s32be"), QStringLiteral("s32")};
+        }
+        return {QStringLiteral("s16"), QStringLiteral("pcm_s16be"),
                 QStringLiteral("s16")};
     }
     if (format == QStringLiteral("flac")) {
@@ -293,6 +304,14 @@ FormatBatchPlan build_format_conversion_plan(
                         QStringLiteral("s24"),
                         QStringLiteral("Output format supports at most 24-bit audio"),
                         true});
+                } else if (automatic && format == QStringLiteral("aiff")
+                           && selectedStream->sample_format.find("flt")
+                               != std::string::npos) {
+                    task.differences.push_back({
+                        QStringLiteral("bitDepth"),
+                        QString::fromStdString(selectedStream->sample_format),
+                        depth.key,
+                        QStringLiteral("AIFF uses integer PCM"), true});
                 }
             }
         }

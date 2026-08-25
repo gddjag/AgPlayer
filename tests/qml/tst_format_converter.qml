@@ -120,6 +120,29 @@ TestCase {
         compare(toolbarIcon.tint.toString(), Theme.iconPrimary.toString())
     }
 
+    function test_outputCatalogUsesAiffInsteadOfM4a() {
+        const aiffButton = findChild(page, "formatOutputFormatButton-aiff")
+        const m4aButton = findChild(page, "formatOutputFormatButton-m4a")
+        verify(aiffButton, "AIFF must be one of the eight conversion outputs")
+        verify(!m4aButton, "M4A remains an input container, not an output format")
+        compare(aiffButton.text, "AIFF")
+    }
+
+    function test_recommendedCapabilityMatrixIsExposed() {
+        const capabilities = FormatConverter.supportedOutputFormats
+        verify(capabilities.length === 8)
+        const expectedDefaults = {mp3: 320000, aac: 256000, opus: 320000}
+        for (let index = 0; index < capabilities.length; ++index) {
+            const capability = capabilities[index]
+            verify(String(capability.outputExtension || "").length > 0)
+            verify(capability.sampleRateChoices !== undefined)
+            verify(capability.bitRateChoices !== undefined)
+            if (expectedDefaults[capability.key] !== undefined)
+                compare(capability.defaultBitRate,
+                        expectedDefaults[capability.key])
+        }
+    }
+
     function test_realShellBodyShowsCompleteLocalProcessingHint() {
         testCase.height = 833
         wait(0)
@@ -179,7 +202,8 @@ TestCase {
         const secondUrl = nativeDropHelper.copyForNativeDrop(testAudioUrl)
         verify(secondUrl.toString().length > 0)
         FormatConverter.addUrls([testAudioUrl, secondUrl])
-        tryVerify(function() { return !FormatConverter.busy }, 5000)
+        tryVerify(function() { return !FormatConverter.busy }, 5000,
+                  "context-menu fixtures did not finish importing")
         tryCompare(FormatConverter, "fileCount", 2, 3000)
 
         const table = findChild(page, "formatTaskTableView")
@@ -191,14 +215,15 @@ TestCase {
             firstCell = findChild(table, "formatTaskFirstFilenameCell")
             return firstCell && firstCell.visible && firstCell.width > 0 && firstCell.height > 0
                    && table.contentWidth > 0 && table.contentHeight > 0
-        }, 3000)
+        }, 3000, "first table-row delegate did not become interactive")
         // Let TableView finish polishing its delegate before sending a full
         // right-button gesture to that live row, rather than to the flickable.
         wait(100)
         mousePress(firstCell, firstCell.width / 2, firstCell.height / 2, Qt.RightButton)
         wait(20)
         mouseRelease(firstCell, firstCell.width / 2, firstCell.height / 2, Qt.RightButton)
-        tryVerify(function() { return menu.visible }, 2000)
+        tryVerify(function() { return menu.visible }, 2000,
+                  "right click did not open the row context menu")
         mouseClick(remove, remove.width / 2, remove.height / 2, Qt.LeftButton)
         tryCompare(FormatConverter, "fileCount", 1, 3000)
     }
@@ -318,8 +343,10 @@ TestCase {
                 compare(settings.bitrateMode, "")
             }
             if (capability.parameterKind === "bitrate") {
-                verify(capability.bitRates.indexOf(settings.bitRate) >= 0)
-                compare(bitrateBox.count, capability.bitRates.length)
+                const supportedBitRates = capability.bitRateChoices !== undefined
+                        ? capability.bitRateChoices : capability.bitRates
+                verify(supportedBitRates.indexOf(settings.bitRate) >= 0)
+                compare(bitrateBox.count, supportedBitRates.length)
             } else {
                 compare(settings.bitRate, 0)
             }
@@ -327,7 +354,8 @@ TestCase {
                 compare(settings.sampleRate, 48000)
             else
                 verify(settings.sampleRate === 0
-                       || capability.sampleRates.indexOf(settings.sampleRate) >= 0)
+                       || capability.sampleRateChoices.indexOf(
+                           settings.sampleRate) >= 0)
             verify(settings.sampleFormat === ""
                    || capability.sampleFormats.indexOf(settings.sampleFormat) >= 0)
             verify(settings.channelLayout === ""
@@ -372,7 +400,8 @@ TestCase {
         const input = nativeDropHelper.copyForNativeDrop(testAudioUrl)
         verify(input.toString().length > 0)
         FormatConverter.addUrls([input])
-        tryVerify(function() { return !FormatConverter.busy }, 5000)
+        tryVerify(function() { return !FormatConverter.busy }, 5000,
+                  "locked-file fixture did not finish importing")
         tryCompare(FormatConverter, "fileCount", 1, 3000)
 
         const formatButton = findChild(page, "formatOutputFormatButton-mp3")
@@ -383,12 +412,16 @@ TestCase {
                    formatButton.height / 2, Qt.LeftButton)
         mouseClick(convert, convert.width / 2, convert.height / 2,
                    Qt.LeftButton)
-        tryVerify(function() { return preflight.visible }, 3000)
+        const errorDialog = findChild(page, "formatErrorDialog")
+        tryVerify(function() { return preflight.visible || errorDialog.visible }, 3000,
+                  "runtime-failure conversion opened no result dialog")
+        verify(preflight.visible,
+               "runtime-failure preflight rejected settings: " + errorDialog.summary)
         verify(nativeDropHelper.lockFileExclusive(input))
         preflight.accept()
         tryVerify(function() {
             return !FormatConverter.busy && FormatConverter.failedCount === 1
-        }, 30000)
+        }, 30000, "locked output did not finish as one failed conversion")
         nativeDropHelper.unlockFiles()
 
         const row = FormatConverter.files[0]
@@ -401,8 +434,33 @@ TestCase {
             statusText = findChild(page, "formatTaskFirstStatusText")
             return statusText !== null && statusText.visible
                    && statusText.text.indexOf(rawError) >= 0
-        }, 3000)
+        }, 3000, "failed row did not display the underlying error")
         verify(statusText.text.indexOf(rawError) >= 0)
+    }
+
+    function test_mp3UiDefaultsReachPreflight() {
+        const originalBitrate = SettingsController.transcodeBitrateKbps
+        SettingsController.transcodeBitrateKbps = 320
+        FormatConverter.addUrls([testAudioUrl])
+        tryVerify(function() { return !FormatConverter.busy }, 5000,
+                  "MP3 fixture import did not finish")
+        FormatConverter.selectedFormat = "mp3"
+        const settingsPanel = findChild(page, "formatSettingsPanel")
+        const preflightDialog = findChild(page, "formatPreflightDialog")
+        verify(settingsPanel && preflightDialog)
+        tryCompare(settingsPanel, "bitRate", 320000, 1000)
+        compare(settingsPanel.quality, 75)
+
+        page.requestPlan()
+        const errorDialog = findChild(page, "formatErrorDialog")
+        tryVerify(function() { return preflightDialog.visible || errorDialog.visible }, 1000,
+                  "MP3 defaults produced no preflight result dialog")
+        verify(preflightDialog.visible,
+               "MP3 defaults were rejected: " + errorDialog.summary)
+        compare(FormatConverter.pendingPlan.taskCount, 1)
+        preflightDialog.close()
+        FormatConverter.rejectPendingPlan()
+        SettingsController.transcodeBitrateKbps = originalBitrate
     }
 
     function test_referenceWidthShowsCompleteProgressAndFileBadge() {

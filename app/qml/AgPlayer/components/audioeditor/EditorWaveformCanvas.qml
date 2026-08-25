@@ -87,7 +87,7 @@ Rectangle {
         anchors.topMargin: 12
         anchors.bottomMargin: 12
         channelPeaks: AudioEditorController.recordingOverlayPeaks
-        waveformColor: "#ff3d4f"
+        waveformColor: "#ff3d4f" // theme-color-allow: fixed recording waveform
         density: SettingsController.waveformDensity
         lineWidth: SettingsController.waveformThickness
         sampleMode: AudioEditorController.viewport.visibleFrameCount
