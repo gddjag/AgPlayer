@@ -65,7 +65,6 @@ class SettingsController final : public QObject {
                    NOTIFY highlightPresetChanged)
     Q_PROPERTY(QString highlightCustomColor READ highlightCustomColor
                    WRITE setHighlightCustomColor NOTIFY highlightCustomColorChanged)
-    Q_PROPERTY(bool glassEffect READ glassEffect WRITE setGlassEffect NOTIFY glassEffectChanged)
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight WRITE setWaveformHeight
                    NOTIFY waveformHeightChanged)
@@ -75,12 +74,20 @@ class SettingsController final : public QObject {
                    NOTIFY waveformThicknessChanged)
     Q_PROPERTY(int waveformPeakAlgorithm READ waveformPeakAlgorithm
                    WRITE setWaveformPeakAlgorithm NOTIFY waveformPeakAlgorithmChanged)
-    Q_PROPERTY(int waveformColorMode READ waveformColorMode WRITE setWaveformColorMode
-                   NOTIFY waveformColorModeChanged)
-    Q_PROPERTY(QString waveformUnplayedColor READ waveformUnplayedColor
-                   WRITE setWaveformUnplayedColor NOTIFY waveformUnplayedColorChanged)
-    Q_PROPERTY(QString waveformPlayedColor READ waveformPlayedColor
-                   WRITE setWaveformPlayedColor NOTIFY waveformPlayedColorChanged)
+    Q_PROPERTY(QString waveformSolidBaseColor READ waveformSolidBaseColor
+                   WRITE setWaveformSolidBaseColor NOTIFY waveformSolidBaseColorChanged)
+    Q_PROPERTY(QString waveformSolidProgressColor READ waveformSolidProgressColor
+                   WRITE setWaveformSolidProgressColor NOTIFY waveformSolidProgressColorChanged)
+    Q_PROPERTY(QString waveformRgbBaseColor READ waveformRgbBaseColor
+                   WRITE setWaveformRgbBaseColor NOTIFY waveformRgbBaseColorChanged)
+    Q_PROPERTY(QString waveformRgbStartColor READ waveformRgbStartColor
+                   WRITE setWaveformRgbStartColor NOTIFY waveformRgbStartColorChanged)
+    Q_PROPERTY(QString waveformRgbMiddleColor READ waveformRgbMiddleColor
+                   WRITE setWaveformRgbMiddleColor NOTIFY waveformRgbMiddleColorChanged)
+    Q_PROPERTY(QString waveformRgbEndColor READ waveformRgbEndColor
+                   WRITE setWaveformRgbEndColor NOTIFY waveformRgbEndColorChanged)
+    Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
+                   WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
                    WRITE setWaveformHoverTimePreview NOTIFY waveformHoverTimePreviewChanged)
     Q_PROPERTY(bool waveformPlaybackGuide READ waveformPlaybackGuide
@@ -99,10 +106,14 @@ class SettingsController final : public QObject {
                    NOTIFY listWaveformThumbnailModeChanged)
     Q_PROPERTY(int spectrumColorMode READ spectrumColorMode WRITE setSpectrumColorMode
                    NOTIFY spectrumColorModeChanged)
-    Q_PROPERTY(QString spectrumUnplayedColor READ spectrumUnplayedColor
-                   WRITE setSpectrumUnplayedColor NOTIFY spectrumUnplayedColorChanged)
-    Q_PROPERTY(QString spectrumPlayedColor READ spectrumPlayedColor
-                   WRITE setSpectrumPlayedColor NOTIFY spectrumPlayedColorChanged)
+    Q_PROPERTY(QString spectrumSolidColor READ spectrumSolidColor
+                   WRITE setSpectrumSolidColor NOTIFY spectrumSolidColorChanged)
+    Q_PROPERTY(QString spectrumRgbStartColor READ spectrumRgbStartColor
+                   WRITE setSpectrumRgbStartColor NOTIFY spectrumRgbStartColorChanged)
+    Q_PROPERTY(QString spectrumRgbMiddleColor READ spectrumRgbMiddleColor
+                   WRITE setSpectrumRgbMiddleColor NOTIFY spectrumRgbMiddleColorChanged)
+    Q_PROPERTY(QString spectrumRgbEndColor READ spectrumRgbEndColor
+                   WRITE setSpectrumRgbEndColor NOTIFY spectrumRgbEndColorChanged)
     Q_PROPERTY(int replayGainMode READ replayGainMode WRITE setReplayGainMode
                    NOTIFY replayGainModeChanged)
     Q_PROPERTY(bool replayGainClipProtection READ replayGainClipProtection
@@ -198,15 +209,18 @@ public:
     int highlightMode() const noexcept;
     QString highlightPreset() const;
     QString highlightCustomColor() const;
-    bool glassEffect() const noexcept;
     int waveformMode() const noexcept;
     double waveformHeight() const noexcept;
     double waveformDensity() const noexcept;
     double waveformThickness() const noexcept;
     int waveformPeakAlgorithm() const noexcept;
-    int waveformColorMode() const noexcept;
-    QString waveformUnplayedColor() const;
-    QString waveformPlayedColor() const;
+    QString waveformSolidBaseColor() const;
+    QString waveformSolidProgressColor() const;
+    QString waveformRgbBaseColor() const;
+    QString waveformRgbStartColor() const;
+    QString waveformRgbMiddleColor() const;
+    QString waveformRgbEndColor() const;
+    bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
     bool waveformPlaybackGuide() const noexcept;
     int waveformCanvasHeight() const noexcept;
@@ -214,8 +228,10 @@ public:
     bool listWaveformThumbnailEnabled() const noexcept;
     QString listWaveformThumbnailMode() const;
     int spectrumColorMode() const noexcept;
-    QString spectrumUnplayedColor() const;
-    QString spectrumPlayedColor() const;
+    QString spectrumSolidColor() const;
+    QString spectrumRgbStartColor() const;
+    QString spectrumRgbMiddleColor() const;
+    QString spectrumRgbEndColor() const;
     int replayGainMode() const noexcept;
     bool replayGainClipProtection() const noexcept;
 
@@ -283,15 +299,18 @@ public:
     void setHighlightMode(int value);
     void setHighlightPreset(const QString& value);
     void setHighlightCustomColor(const QString& value);
-    void setGlassEffect(bool value);
     void setWaveformMode(int value);
     void setWaveformHeight(double value);
     void setWaveformDensity(double value);
     void setWaveformThickness(double value);
     void setWaveformPeakAlgorithm(int value);
-    void setWaveformColorMode(int value);
-    void setWaveformUnplayedColor(const QString& value);
-    void setWaveformPlayedColor(const QString& value);
+    void setWaveformSolidBaseColor(const QString& value);
+    void setWaveformSolidProgressColor(const QString& value);
+    void setWaveformRgbBaseColor(const QString& value);
+    void setWaveformRgbStartColor(const QString& value);
+    void setWaveformRgbMiddleColor(const QString& value);
+    void setWaveformRgbEndColor(const QString& value);
+    void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
     void setWaveformPlaybackGuide(bool value);
     void setWaveformCanvasHeight(int value);
@@ -299,8 +318,10 @@ public:
     void setListWaveformThumbnailEnabled(bool value);
     void setListWaveformThumbnailMode(const QString& value);
     void setSpectrumColorMode(int value);
-    void setSpectrumUnplayedColor(const QString& value);
-    void setSpectrumPlayedColor(const QString& value);
+    void setSpectrumSolidColor(const QString& value);
+    void setSpectrumRgbStartColor(const QString& value);
+    void setSpectrumRgbMiddleColor(const QString& value);
+    void setSpectrumRgbEndColor(const QString& value);
     void setReplayGainMode(int value);
     void setReplayGainClipProtection(bool value);
 
@@ -377,15 +398,18 @@ signals:
     void highlightModeChanged();
     void highlightPresetChanged();
     void highlightCustomColorChanged();
-    void glassEffectChanged();
     void waveformModeChanged();
     void waveformHeightChanged();
     void waveformDensityChanged();
     void waveformThicknessChanged();
     void waveformPeakAlgorithmChanged();
-    void waveformColorModeChanged();
-    void waveformUnplayedColorChanged();
-    void waveformPlayedColorChanged();
+    void waveformSolidBaseColorChanged();
+    void waveformSolidProgressColorChanged();
+    void waveformRgbBaseColorChanged();
+    void waveformRgbStartColorChanged();
+    void waveformRgbMiddleColorChanged();
+    void waveformRgbEndColorChanged();
+    void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
     void waveformPlaybackGuideChanged();
     void waveformCanvasHeightChanged();
@@ -393,8 +417,10 @@ signals:
     void listWaveformThumbnailEnabledChanged();
     void listWaveformThumbnailModeChanged();
     void spectrumColorModeChanged();
-    void spectrumUnplayedColorChanged();
-    void spectrumPlayedColorChanged();
+    void spectrumSolidColorChanged();
+    void spectrumRgbStartColorChanged();
+    void spectrumRgbMiddleColorChanged();
+    void spectrumRgbEndColorChanged();
     void replayGainModeChanged();
     void replayGainClipProtectionChanged();
 
@@ -483,15 +509,18 @@ private:
     int highlightMode_ = 0;
     QString highlightPreset_ = QStringLiteral("systemBlue");
     QString highlightCustomColor_ = QStringLiteral("#D27722");
-    bool glassEffect_ = false;
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;
     double waveformDensity_ = 2.0;
     double waveformThickness_ = 1.0;
     int waveformPeakAlgorithm_ = 0;
-    int waveformColorMode_ = 0;
-    QString waveformUnplayedColor_ = QStringLiteral("#9098a6");
-    QString waveformPlayedColor_ = QStringLiteral("#d27722");
+    QString waveformSolidBaseColor_ = QStringLiteral("#9098a6");
+    QString waveformSolidProgressColor_ = QStringLiteral("#d27722");
+    QString waveformRgbBaseColor_ = QStringLiteral("#00b4a0");
+    QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
+    QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+    QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+    bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
     bool waveformPlaybackGuide_ = false;
     int waveformCanvasHeight_ = 78;
@@ -499,8 +528,10 @@ private:
     bool listWaveformThumbnailEnabled_ = true;
     QString listWaveformThumbnailMode_ = QStringLiteral("Color36");
     int spectrumColorMode_ = 0;
-    QString spectrumUnplayedColor_ = QStringLiteral("#e62e9b");
-    QString spectrumPlayedColor_ = QStringLiteral("#e62e9b");
+    QString spectrumSolidColor_ = QStringLiteral("#0078d4");
+    QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
+    QString spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+    QString spectrumRgbEndColor_ = QStringLiteral("#e62e9b");
     int replayGainMode_ = 0;
     bool replayGainClipProtection_ = true;
 

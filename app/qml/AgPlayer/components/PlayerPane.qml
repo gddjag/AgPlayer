@@ -483,16 +483,29 @@ Rectangle {
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformMode === 2
-                           ? SettingsController.spectrumUnplayedColor
-                           : SettingsController.waveformUnplayedColor
-                progressColor: SettingsController.waveformMode === 2
-                               ? SettingsController.spectrumPlayedColor
-                               : SettingsController.waveformPlayedColor
-                gradientStartColor: baseColor
-                gradientMiddleColor: baseColor
-                gradientEndColor: baseColor
-                rgbProgress: false
+                baseColor: SettingsController.waveformMode === 0
+                           ? SettingsController.waveformSolidBaseColor
+                           : (SettingsController.waveformMode === 2
+                              ? SettingsController.spectrumSolidColor
+                              : SettingsController.waveformRgbBaseColor)
+                progressColor: SettingsController.waveformSolidProgressColor
+                gradientStartColor: SettingsController.waveformMode === 2
+                                    ? (SettingsController.spectrumColorMode === 0
+                                       ? SettingsController.spectrumSolidColor
+                                       : SettingsController.spectrumRgbStartColor)
+                                    : SettingsController.waveformRgbStartColor
+                gradientMiddleColor: SettingsController.waveformMode === 2
+                                     ? (SettingsController.spectrumColorMode === 0
+                                        ? SettingsController.spectrumSolidColor
+                                        : SettingsController.spectrumRgbMiddleColor)
+                                     : SettingsController.waveformRgbMiddleColor
+                gradientEndColor: SettingsController.waveformMode === 2
+                                  ? (SettingsController.spectrumColorMode === 0
+                                     ? SettingsController.spectrumSolidColor
+                                     : SettingsController.spectrumRgbEndColor)
+                                  : SettingsController.waveformRgbEndColor
+                rgbProgress: SettingsController.waveformMode === 1
+                             && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformMode === 2
                                 ? 1.0 : SettingsController.waveformHeight
                 density: SettingsController.waveformMode === 2

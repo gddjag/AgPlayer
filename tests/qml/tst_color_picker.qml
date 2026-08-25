@@ -12,7 +12,7 @@ TestCase {
     height: 640
 
     property int savedThemeMode: 0
-    property string savedWaveformUnplayedColor: ""
+    property string savedWaveformSolidBaseColor: ""
     property var savedThemeChoices: ({})
 
     Item {
@@ -32,8 +32,8 @@ TestCase {
                     ? testCase.Window.window.contentItem : null
             x: Math.round(((parent ? parent.width : 0) - width) / 2)
             y: (parent ? parent.height : 0) - height - 28
-            colorValue: SettingsController.waveformUnplayedColor
-            targetProperty: "waveformUnplayedColor"
+            colorValue: SettingsController.waveformSolidBaseColor
+            targetProperty: "waveformSolidBaseColor"
         }
 
         ThemeColorSelector {
@@ -134,7 +134,7 @@ TestCase {
         picker.close()
         acceptedSpy.clear()
         integratedEditedSpy.clear()
-        savedWaveformUnplayedColor = SettingsController.waveformUnplayedColor
+        savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
         savedThemeChoices = {
             accentMode: SettingsController.accentMode,
             accentPreset: SettingsController.accentPreset,
@@ -153,7 +153,7 @@ TestCase {
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
         if (integratedPicker)
             integratedPicker.close()
-        SettingsController.waveformUnplayedColor = savedWaveformUnplayedColor
+        SettingsController.waveformSolidBaseColor = savedWaveformSolidBaseColor
         SettingsController.accentMode = savedThemeChoices.accentMode
         SettingsController.accentPreset = savedThemeChoices.accentPreset
         SettingsController.accentCustomColor = savedThemeChoices.accentCustomColor
@@ -474,7 +474,7 @@ TestCase {
     }
 
     function test_color_field_commits_candidate_and_cancellation_preserves_setting() {
-        SettingsController.waveformUnplayedColor = "#63316B"
+        SettingsController.waveformSolidBaseColor = "#63316B"
         tryVerify(function() {
             return normalizedColor(integratedField.colorValue) === "#63316B"
         })
@@ -496,7 +496,7 @@ TestCase {
         mouseClick(findChild(integratedPicker.contentItem, "colorCandidate-0"))
 
         tryVerify(function() {
-            return normalizedColor(SettingsController.waveformUnplayedColor)
+            return normalizedColor(SettingsController.waveformSolidBaseColor)
                     === "#F8EBFA"
         })
         compare(integratedEditedSpy.count, 1)
@@ -509,13 +509,13 @@ TestCase {
         mouseClick(findChild(integratedPicker, "colorPickerClose"))
 
         compare(integratedPicker.visible, false)
-        compare(normalizedColor(SettingsController.waveformUnplayedColor),
+        compare(normalizedColor(SettingsController.waveformSolidBaseColor),
                 "#F8EBFA")
         compare(integratedEditedSpy.count, 1)
     }
 
     function test_color_field_is_focusable_accessible_and_keyboard_operable() {
-        SettingsController.waveformUnplayedColor = "#63316B"
+        SettingsController.waveformSolidBaseColor = "#63316B"
         tryVerify(function() {
             return normalizedColor(integratedField.colorValue) === "#63316B"
         })
@@ -539,8 +539,50 @@ TestCase {
         tryCompare(integratedField, "activeFocus", true)
 
         compare(integratedEditedSpy.count, 0)
-        compare(normalizedColor(SettingsController.waveformUnplayedColor),
+        compare(normalizedColor(SettingsController.waveformSolidBaseColor),
                 "#63316B")
+    }
+
+    function test_system_swatch_is_accessible_and_opens_with_mouse_and_keyboard() {
+        openReferenceColor()
+        var swatch = findChild(picker, "colorPickerSystemSwatch")
+        var dialog = findChild(picker, "colorPickerSystemDialog")
+        verify(swatch && dialog)
+        compare(swatch.focusPolicy, Qt.StrongFocus)
+        compare(swatch.Accessible.role, Accessible.Button)
+        verify(swatch.Accessible.name.length > 0)
+
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+
+        swatch.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+        swatch.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+    }
+
+    function test_system_dialog_accept_updates_working_color_but_cancel_does_not_commit() {
+        openReferenceColor()
+        var swatch = findChild(picker, "colorPickerSystemSwatch")
+        var dialog = findChild(picker, "colorPickerSystemDialog")
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.selectedColor = "#123456"
+        dialog.accepted()
+        tryCompare(picker, "baseColor", "#123456")
+        compare(acceptedSpy.count, 0)
+
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.selectedColor = "#abcdef"
+        dialog.rejected()
+        compare(normalizedColor(picker.baseColor), "#123456")
+        compare(acceptedSpy.count, 0)
     }
 
     function test_theme_switch_updates_chrome_not_candidates() {

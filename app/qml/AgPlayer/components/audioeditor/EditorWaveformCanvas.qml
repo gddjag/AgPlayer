@@ -64,10 +64,12 @@ Rectangle {
         anchors.bottomMargin: 12
         channelPeaks: AudioEditorController.viewportChannelPeaks
         waveformColor: SettingsController.waveformMode === 2
-                       ? (SettingsController.spectrumUnplayedColor
-                          || Theme.waveformMagenta)
-                       : (SettingsController.waveformUnplayedColor
-                          || Theme.waveformMagenta)
+                       ? (SettingsController.spectrumColorMode === 0
+                          ? SettingsController.spectrumSolidColor
+                          : SettingsController.spectrumRgbStartColor)
+                       : (SettingsController.waveformMode === 0
+                          ? SettingsController.waveformSolidBaseColor
+                          : SettingsController.waveformRgbBaseColor)
         density: SettingsController.waveformMode === 2
                  ? 1.0 : SettingsController.waveformDensity
         lineWidth: SettingsController.waveformMode === 2

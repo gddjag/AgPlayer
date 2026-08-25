@@ -185,15 +185,18 @@ bool SettingsController::highlightFollowAccent() const noexcept { return highlig
 int SettingsController::highlightMode() const noexcept { return highlightMode_; }
 QString SettingsController::highlightPreset() const { return highlightPreset_; }
 QString SettingsController::highlightCustomColor() const { return highlightCustomColor_; }
-bool SettingsController::glassEffect() const noexcept { return glassEffect_; }
 int SettingsController::waveformMode() const noexcept { return waveformMode_; }
 double SettingsController::waveformHeight() const noexcept { return waveformHeight_; }
 double SettingsController::waveformDensity() const noexcept { return waveformDensity_; }
 double SettingsController::waveformThickness() const noexcept { return waveformThickness_; }
 int SettingsController::waveformPeakAlgorithm() const noexcept { return waveformPeakAlgorithm_; }
-int SettingsController::waveformColorMode() const noexcept { return waveformColorMode_; }
-QString SettingsController::waveformUnplayedColor() const { return waveformUnplayedColor_; }
-QString SettingsController::waveformPlayedColor() const { return waveformPlayedColor_; }
+QString SettingsController::waveformSolidBaseColor() const { return waveformSolidBaseColor_; }
+QString SettingsController::waveformSolidProgressColor() const { return waveformSolidProgressColor_; }
+QString SettingsController::waveformRgbBaseColor() const { return waveformRgbBaseColor_; }
+QString SettingsController::waveformRgbStartColor() const { return waveformRgbStartColor_; }
+QString SettingsController::waveformRgbMiddleColor() const { return waveformRgbMiddleColor_; }
+QString SettingsController::waveformRgbEndColor() const { return waveformRgbEndColor_; }
+bool SettingsController::waveformRgbProgress() const noexcept { return waveformRgbProgress_; }
 bool SettingsController::waveformHoverTimePreview() const noexcept { return waveformHoverTimePreview_; }
 bool SettingsController::waveformPlaybackGuide() const noexcept { return waveformPlaybackGuide_; }
 int SettingsController::waveformCanvasHeight() const noexcept { return waveformCanvasHeight_; }
@@ -207,8 +210,10 @@ QString SettingsController::listWaveformThumbnailMode() const
     return listWaveformThumbnailMode_;
 }
 int SettingsController::spectrumColorMode() const noexcept { return spectrumColorMode_; }
-QString SettingsController::spectrumUnplayedColor() const { return spectrumUnplayedColor_; }
-QString SettingsController::spectrumPlayedColor() const { return spectrumPlayedColor_; }
+QString SettingsController::spectrumSolidColor() const { return spectrumSolidColor_; }
+QString SettingsController::spectrumRgbStartColor() const { return spectrumRgbStartColor_; }
+QString SettingsController::spectrumRgbMiddleColor() const { return spectrumRgbMiddleColor_; }
+QString SettingsController::spectrumRgbEndColor() const { return spectrumRgbEndColor_; }
 int SettingsController::replayGainMode() const noexcept { return replayGainMode_; }
 bool SettingsController::replayGainClipProtection() const noexcept { return replayGainClipProtection_; }
 
@@ -524,16 +529,6 @@ void SettingsController::setHighlightCustomColor(const QString& value)
     emit highlightCustomColorChanged();
 }
 
-void SettingsController::setGlassEffect(bool value)
-{
-    if (glassEffect_ == value) {
-        return;
-    }
-    glassEffect_ = value;
-    persistValue(QStringLiteral("appearance/glassEffect"), value);
-    emit glassEffectChanged();
-}
-
 void SettingsController::setWaveformMode(int value)
 {
     value = clampValue(value, 0, 2);
@@ -589,35 +584,35 @@ void SettingsController::setWaveformPeakAlgorithm(int value)
     emit waveformPeakAlgorithmChanged();
 }
 
-void SettingsController::setWaveformColorMode(int value)
-{
-    value = clampValue(value, 0, 1);
-    if (waveformColorMode_ == value) return;
-    waveformColorMode_ = value;
-    persistValue(QStringLiteral("appearance/waveformColorMode"), value);
-    emit waveformColorModeChanged();
-}
-
-void SettingsController::setWaveformUnplayedColor(const QString& value)
-{
-    const QString color = normalizedColor(value);
-    if (color.isEmpty() || waveformUnplayedColor_ == color) {
-        return;
+#define AGPLAYER_COLOR_SETTER(Name, member, key, signalName) \
+    void SettingsController::Name(const QString& value)      \
+    {                                                        \
+        const QString color = normalizedColor(value);        \
+        if (color.isEmpty() || member == color) return;       \
+        member = color;                                      \
+        persistValue(QStringLiteral(key), color);             \
+        emit signalName();                                   \
     }
-    waveformUnplayedColor_ = color;
-    persistValue(QStringLiteral("appearance/waveformUnplayedColor"), color);
-    emit waveformUnplayedColorChanged();
-}
 
-void SettingsController::setWaveformPlayedColor(const QString& value)
+AGPLAYER_COLOR_SETTER(setWaveformSolidBaseColor, waveformSolidBaseColor_,
+                      "appearance/waveformSolidBaseColor", waveformSolidBaseColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformSolidProgressColor, waveformSolidProgressColor_,
+                      "appearance/waveformSolidProgressColor", waveformSolidProgressColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformRgbBaseColor, waveformRgbBaseColor_,
+                      "appearance/waveformRgbBaseColor", waveformRgbBaseColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformRgbStartColor, waveformRgbStartColor_,
+                      "appearance/waveformRgbStartColor", waveformRgbStartColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformRgbMiddleColor, waveformRgbMiddleColor_,
+                      "appearance/waveformRgbMiddleColor", waveformRgbMiddleColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformRgbEndColor, waveformRgbEndColor_,
+                      "appearance/waveformRgbEndColor", waveformRgbEndColorChanged)
+
+void SettingsController::setWaveformRgbProgress(bool value)
 {
-    const QString color = normalizedColor(value);
-    if (color.isEmpty() || waveformPlayedColor_ == color) {
-        return;
-    }
-    waveformPlayedColor_ = color;
-    persistValue(QStringLiteral("appearance/waveformPlayedColor"), color);
-    emit waveformPlayedColorChanged();
+    if (waveformRgbProgress_ == value) return;
+    waveformRgbProgress_ = value;
+    persistValue(QStringLiteral("appearance/waveformRgbProgress"), value);
+    emit waveformRgbProgressChanged();
 }
 
 void SettingsController::setWaveformHoverTimePreview(bool value)
@@ -691,23 +686,16 @@ void SettingsController::setSpectrumColorMode(int value)
     emit spectrumColorModeChanged();
 }
 
-void SettingsController::setSpectrumUnplayedColor(const QString& value)
-{
-    const QString color = normalizedColor(value);
-    if (color.isEmpty() || spectrumUnplayedColor_ == color) return;
-    spectrumUnplayedColor_ = color;
-    persistValue(QStringLiteral("appearance/spectrumUnplayedColor"), color);
-    emit spectrumUnplayedColorChanged();
-}
+AGPLAYER_COLOR_SETTER(setSpectrumSolidColor, spectrumSolidColor_,
+                      "appearance/spectrumSolidColor", spectrumSolidColorChanged)
+AGPLAYER_COLOR_SETTER(setSpectrumRgbStartColor, spectrumRgbStartColor_,
+                      "appearance/spectrumRgbStartColor", spectrumRgbStartColorChanged)
+AGPLAYER_COLOR_SETTER(setSpectrumRgbMiddleColor, spectrumRgbMiddleColor_,
+                      "appearance/spectrumRgbMiddleColor", spectrumRgbMiddleColorChanged)
+AGPLAYER_COLOR_SETTER(setSpectrumRgbEndColor, spectrumRgbEndColor_,
+                      "appearance/spectrumRgbEndColor", spectrumRgbEndColorChanged)
 
-void SettingsController::setSpectrumPlayedColor(const QString& value)
-{
-    const QString color = normalizedColor(value);
-    if (color.isEmpty() || spectrumPlayedColor_ == color) return;
-    spectrumPlayedColor_ = color;
-    persistValue(QStringLiteral("appearance/spectrumPlayedColor"), color);
-    emit spectrumPlayedColorChanged();
-}
+#undef AGPLAYER_COLOR_SETTER
 
 
 void SettingsController::setReplayGainMode(int value)
@@ -994,15 +982,21 @@ void SettingsController::resetWaveformDefaults()
     setWaveformDensity(2.0);
     setWaveformThickness(1.0);
     setWaveformPeakAlgorithm(0);
-    setWaveformColorMode(0);
-    setWaveformUnplayedColor(QStringLiteral("#9098a6"));
-    setWaveformPlayedColor(QStringLiteral("#d27722"));
+    setWaveformSolidBaseColor(QStringLiteral("#9098a6"));
+    setWaveformSolidProgressColor(QStringLiteral("#d27722"));
+    setWaveformRgbBaseColor(QStringLiteral("#00b4a0"));
+    setWaveformRgbStartColor(QStringLiteral("#00d4ff"));
+    setWaveformRgbMiddleColor(QStringLiteral("#7b2ff7"));
+    setWaveformRgbEndColor(QStringLiteral("#e62e9b"));
+    setWaveformRgbProgress(false);
     setWaveformPlaybackGuide(false);
     setWaveformCanvasHeight(78);
     setWaveformCanvasLocked(true);
     setSpectrumColorMode(0);
-    setSpectrumUnplayedColor(QStringLiteral("#e62e9b"));
-    setSpectrumPlayedColor(QStringLiteral("#e62e9b"));
+    setSpectrumSolidColor(QStringLiteral("#0078d4"));
+    setSpectrumRgbStartColor(QStringLiteral("#00d4ff"));
+    setSpectrumRgbMiddleColor(QStringLiteral("#7b2ff7"));
+    setSpectrumRgbEndColor(QStringLiteral("#e62e9b"));
     setListWaveformThumbnailEnabled(true);
     setListWaveformThumbnailMode(QStringLiteral("Color36"));
 }
@@ -1099,16 +1093,19 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit highlightModeChanged();
     emit highlightPresetChanged();
     emit highlightCustomColorChanged();
-    emit glassEffectChanged();
     if (includeMediaSettings) {
         emit waveformModeChanged();
         emit waveformHeightChanged();
         emit waveformDensityChanged();
         emit waveformThicknessChanged();
         emit waveformPeakAlgorithmChanged();
-        emit waveformColorModeChanged();
-        emit waveformUnplayedColorChanged();
-        emit waveformPlayedColorChanged();
+        emit waveformSolidBaseColorChanged();
+        emit waveformSolidProgressColorChanged();
+        emit waveformRgbBaseColorChanged();
+        emit waveformRgbStartColorChanged();
+        emit waveformRgbMiddleColorChanged();
+        emit waveformRgbEndColorChanged();
+        emit waveformRgbProgressChanged();
         emit waveformHoverTimePreviewChanged();
         emit waveformPlaybackGuideChanged();
         emit waveformCanvasHeightChanged();
@@ -1116,8 +1113,10 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
         emit listWaveformThumbnailEnabledChanged();
         emit listWaveformThumbnailModeChanged();
         emit spectrumColorModeChanged();
-        emit spectrumUnplayedColorChanged();
-        emit spectrumPlayedColorChanged();
+        emit spectrumSolidColorChanged();
+        emit spectrumRgbStartColorChanged();
+        emit spectrumRgbMiddleColorChanged();
+        emit spectrumRgbEndColorChanged();
     }
     emit replayGainModeChanged();
     emit replayGainClipProtectionChanged();
@@ -1370,7 +1369,7 @@ void SettingsController::load()
         QStringLiteral("highlightPreset"), highlightPreset_).toString();
     highlightCustomColor_ = settings_.value(
         QStringLiteral("highlightCustomColor"), highlightCustomColor_).toString();
-    glassEffect_ = settings_.value(QStringLiteral("glassEffect"), glassEffect_).toBool();
+    settings_.remove(QStringLiteral("glassEffect"));
     waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
     waveformHeight_ =
         settings_.value(QStringLiteral("waveformHeight"), waveformHeight_).toDouble();
@@ -1380,58 +1379,44 @@ void SettingsController::load()
     waveformPeakAlgorithm_ =
         settings_.value(QStringLiteral("waveformPeakAlgorithm"),
                         waveformPeakAlgorithm_).toInt();
-    const int visualColorSchema =
-        settings_.value(QStringLiteral("visualColorSchema"), 0).toInt();
     spectrumColorMode_ = settings_.value(
         QStringLiteral("spectrumColorMode"), spectrumColorMode_).toInt();
-    if (visualColorSchema < 1) {
-        const bool hadCustomWaveform = settings_.contains(QStringLiteral("waveformRgbBaseColor"));
-        waveformColorMode_ = hadCustomWaveform ? 1 : 0;
-        waveformUnplayedColor_ = settings_.value(
-            hadCustomWaveform ? QStringLiteral("waveformRgbBaseColor")
-                              : QStringLiteral("waveformSolidBaseColor"),
-            waveformUnplayedColor_).toString();
-        waveformPlayedColor_ = settings_.value(
-            hadCustomWaveform ? QStringLiteral("waveformRgbStartColor")
-                              : QStringLiteral("waveformSolidProgressColor"),
-            waveformPlayedColor_).toString();
-        spectrumColorMode_ = settings_.value(
-            QStringLiteral("spectrumColorMode"), spectrumColorMode_).toInt();
-        const bool hadCustomSpectrum = spectrumColorMode_ == 1;
-        spectrumUnplayedColor_ = settings_.value(
-            hadCustomSpectrum ? QStringLiteral("spectrumRgbStartColor")
-                              : QStringLiteral("spectrumSolidColor"),
-            spectrumUnplayedColor_).toString();
-        spectrumPlayedColor_ = settings_.value(
-            hadCustomSpectrum ? QStringLiteral("spectrumRgbMiddleColor")
-                              : QStringLiteral("spectrumSolidColor"),
-            spectrumPlayedColor_).toString();
-        for (const QString& legacy : {QStringLiteral("waveformSolidBaseColor"),
-                                      QStringLiteral("waveformSolidProgressColor"),
-                                      QStringLiteral("waveformRgbBaseColor"),
-                                      QStringLiteral("waveformRgbStartColor"),
-                                      QStringLiteral("waveformRgbMiddleColor"),
-                                      QStringLiteral("waveformRgbEndColor"),
-                                      QStringLiteral("waveformRgbProgress"),
-                                      QStringLiteral("spectrumSolidColor"),
-                                      QStringLiteral("spectrumRgbStartColor"),
-                                      QStringLiteral("spectrumRgbMiddleColor"),
-                                      QStringLiteral("spectrumRgbEndColor")}) {
-            settings_.remove(legacy);
-        }
-        settings_.setValue(QStringLiteral("visualColorSchema"), 1);
-        settings_.setValue(QStringLiteral("waveformColorMode"), waveformColorMode_);
-        settings_.setValue(QStringLiteral("waveformUnplayedColor"), waveformUnplayedColor_);
-        settings_.setValue(QStringLiteral("waveformPlayedColor"), waveformPlayedColor_);
-        settings_.setValue(QStringLiteral("spectrumUnplayedColor"), spectrumUnplayedColor_);
-        settings_.setValue(QStringLiteral("spectrumPlayedColor"), spectrumPlayedColor_);
-    } else {
-        waveformColorMode_ = settings_.value(QStringLiteral("waveformColorMode"), waveformColorMode_).toInt();
-        waveformUnplayedColor_ = settings_.value(QStringLiteral("waveformUnplayedColor"), waveformUnplayedColor_).toString();
-        waveformPlayedColor_ = settings_.value(QStringLiteral("waveformPlayedColor"), waveformPlayedColor_).toString();
-        spectrumUnplayedColor_ = settings_.value(QStringLiteral("spectrumUnplayedColor"), spectrumUnplayedColor_).toString();
-        spectrumPlayedColor_ = settings_.value(QStringLiteral("spectrumPlayedColor"), spectrumPlayedColor_).toString();
-    }
+    const auto restoredColor = [this](const QString& legacyKey,
+                                      const QString& simplifiedKey,
+                                      const QString& fallback) {
+        return settings_.value(
+            legacyKey,
+            settings_.value(simplifiedKey, fallback)).toString();
+    };
+    waveformSolidBaseColor_ = restoredColor(
+        QStringLiteral("waveformSolidBaseColor"),
+        QStringLiteral("waveformUnplayedColor"), waveformSolidBaseColor_);
+    waveformSolidProgressColor_ = restoredColor(
+        QStringLiteral("waveformSolidProgressColor"),
+        QStringLiteral("waveformPlayedColor"), waveformSolidProgressColor_);
+    waveformRgbBaseColor_ = restoredColor(
+        QStringLiteral("waveformRgbBaseColor"),
+        QStringLiteral("waveformUnplayedColor"), waveformRgbBaseColor_);
+    waveformRgbStartColor_ = restoredColor(
+        QStringLiteral("waveformRgbStartColor"),
+        QStringLiteral("waveformPlayedColor"), waveformRgbStartColor_);
+    waveformRgbMiddleColor_ = settings_.value(
+        QStringLiteral("waveformRgbMiddleColor"), waveformRgbMiddleColor_).toString();
+    waveformRgbEndColor_ = settings_.value(
+        QStringLiteral("waveformRgbEndColor"), waveformRgbEndColor_).toString();
+    waveformRgbProgress_ = settings_.value(
+        QStringLiteral("waveformRgbProgress"), waveformRgbProgress_).toBool();
+    spectrumSolidColor_ = restoredColor(
+        QStringLiteral("spectrumSolidColor"),
+        QStringLiteral("spectrumUnplayedColor"), spectrumSolidColor_);
+    spectrumRgbStartColor_ = restoredColor(
+        QStringLiteral("spectrumRgbStartColor"),
+        QStringLiteral("spectrumUnplayedColor"), spectrumRgbStartColor_);
+    spectrumRgbMiddleColor_ = restoredColor(
+        QStringLiteral("spectrumRgbMiddleColor"),
+        QStringLiteral("spectrumPlayedColor"), spectrumRgbMiddleColor_);
+    spectrumRgbEndColor_ = settings_.value(
+        QStringLiteral("spectrumRgbEndColor"), spectrumRgbEndColor_).toString();
     waveformHoverTimePreview_ = settings_.value(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_).toBool();
     waveformPlaybackGuide_ = settings_.value(
         QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_).toBool();
@@ -1635,17 +1620,22 @@ void SettingsController::load()
     waveformThickness_ = quantize(waveformThickness_, 0.3, 3.0, 0.1);
     waveformPeakAlgorithm_ = clampValue(waveformPeakAlgorithm_, 0, 1);
     waveformCanvasHeight_ = clampValue(waveformCanvasHeight_, 48, 84);
-    waveformColorMode_ = clampValue(waveformColorMode_, 0, 1);
     spectrumColorMode_ = clampValue(spectrumColorMode_, 0, 1);
     replayGainMode_ = clampValue(replayGainMode_, 0, 2);
     const auto validOr = [](const QString& value, const QString& fallback) {
         const QString normalized = normalizedColor(value);
         return normalized.isEmpty() ? fallback : normalized;
     };
-    waveformUnplayedColor_ = validOr(waveformUnplayedColor_, QStringLiteral("#9098a6"));
-    waveformPlayedColor_ = validOr(waveformPlayedColor_, QStringLiteral("#d27722"));
-    spectrumUnplayedColor_ = validOr(spectrumUnplayedColor_, QStringLiteral("#e62e9b"));
-    spectrumPlayedColor_ = validOr(spectrumPlayedColor_, QStringLiteral("#e62e9b"));
+    waveformSolidBaseColor_ = validOr(waveformSolidBaseColor_, QStringLiteral("#9098a6"));
+    waveformSolidProgressColor_ = validOr(waveformSolidProgressColor_, QStringLiteral("#d27722"));
+    waveformRgbBaseColor_ = validOr(waveformRgbBaseColor_, QStringLiteral("#00b4a0"));
+    waveformRgbStartColor_ = validOr(waveformRgbStartColor_, QStringLiteral("#00d4ff"));
+    waveformRgbMiddleColor_ = validOr(waveformRgbMiddleColor_, QStringLiteral("#7b2ff7"));
+    waveformRgbEndColor_ = validOr(waveformRgbEndColor_, QStringLiteral("#e62e9b"));
+    spectrumSolidColor_ = validOr(spectrumSolidColor_, QStringLiteral("#0078d4"));
+    spectrumRgbStartColor_ = validOr(spectrumRgbStartColor_, QStringLiteral("#00d4ff"));
+    spectrumRgbMiddleColor_ = validOr(spectrumRgbMiddleColor_, QStringLiteral("#7b2ff7"));
+    spectrumRgbEndColor_ = validOr(spectrumRgbEndColor_, QStringLiteral("#e62e9b"));
     overwritePolicy_ = clampValue(overwritePolicy_, 0, 1);
     transcodeFormat_ = transcodeFormat_.trimmed().toUpper();
     static const QSet<QString> supportedFormats = {
@@ -1718,17 +1708,19 @@ void SettingsController::saveAll(const bool includeMediaSettings)
     persistValue(QStringLiteral("highlightMode"), highlightMode_);
     persistValue(QStringLiteral("highlightPreset"), highlightPreset_);
     persistValue(QStringLiteral("highlightCustomColor"), highlightCustomColor_);
-    persistValue(QStringLiteral("glassEffect"), glassEffect_);
     if (includeMediaSettings) {
         persistValue(QStringLiteral("waveformMode"), waveformMode_);
         persistValue(QStringLiteral("waveformHeight"), waveformHeight_);
         persistValue(QStringLiteral("waveformDensity"), waveformDensity_);
         persistValue(QStringLiteral("waveformThickness"), waveformThickness_);
         persistValue(QStringLiteral("waveformPeakAlgorithm"), waveformPeakAlgorithm_);
-        persistValue(QStringLiteral("visualColorSchema"), 1);
-        persistValue(QStringLiteral("waveformColorMode"), waveformColorMode_);
-        persistValue(QStringLiteral("waveformUnplayedColor"), waveformUnplayedColor_);
-        persistValue(QStringLiteral("waveformPlayedColor"), waveformPlayedColor_);
+        persistValue(QStringLiteral("waveformSolidBaseColor"), waveformSolidBaseColor_);
+        persistValue(QStringLiteral("waveformSolidProgressColor"), waveformSolidProgressColor_);
+        persistValue(QStringLiteral("waveformRgbBaseColor"), waveformRgbBaseColor_);
+        persistValue(QStringLiteral("waveformRgbStartColor"), waveformRgbStartColor_);
+        persistValue(QStringLiteral("waveformRgbMiddleColor"), waveformRgbMiddleColor_);
+        persistValue(QStringLiteral("waveformRgbEndColor"), waveformRgbEndColor_);
+        persistValue(QStringLiteral("waveformRgbProgress"), waveformRgbProgress_);
         persistValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
         persistValue(QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_);
         persistValue(QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_);
@@ -1738,8 +1730,10 @@ void SettingsController::saveAll(const bool includeMediaSettings)
         persistValue(QStringLiteral("listWaveformThumbnailMode"),
                      listWaveformThumbnailMode_);
         persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
-        persistValue(QStringLiteral("spectrumUnplayedColor"), spectrumUnplayedColor_);
-        persistValue(QStringLiteral("spectrumPlayedColor"), spectrumPlayedColor_);
+        persistValue(QStringLiteral("spectrumSolidColor"), spectrumSolidColor_);
+        persistValue(QStringLiteral("spectrumRgbStartColor"), spectrumRgbStartColor_);
+        persistValue(QStringLiteral("spectrumRgbMiddleColor"), spectrumRgbMiddleColor_);
+        persistValue(QStringLiteral("spectrumRgbEndColor"), spectrumRgbEndColor_);
     }
     settings_.endGroup();
 
@@ -1810,16 +1804,19 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     highlightMode_ = kDefaultColorChoiceMode;
     highlightPreset_ = defaultThemePresetId();
     highlightCustomColor_ = defaultThemeCustomColor();
-    glassEffect_ = false;
     if (includeMediaSettings) {
         waveformMode_ = 0;
         waveformHeight_ = 0.8;
         waveformDensity_ = 2.0;
         waveformThickness_ = 1.0;
         waveformPeakAlgorithm_ = 0;
-        waveformColorMode_ = 0;
-        waveformUnplayedColor_ = QStringLiteral("#9098a6");
-        waveformPlayedColor_ = QStringLiteral("#d27722");
+        waveformSolidBaseColor_ = QStringLiteral("#9098a6");
+        waveformSolidProgressColor_ = QStringLiteral("#d27722");
+        waveformRgbBaseColor_ = QStringLiteral("#00b4a0");
+        waveformRgbStartColor_ = QStringLiteral("#00d4ff");
+        waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+        waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+        waveformRgbProgress_ = false;
         waveformHoverTimePreview_ = true;
         waveformPlaybackGuide_ = false;
         waveformCanvasHeight_ = 78;
@@ -1827,8 +1824,10 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
         listWaveformThumbnailEnabled_ = true;
         listWaveformThumbnailMode_ = QStringLiteral("Color36");
         spectrumColorMode_ = 0;
-        spectrumUnplayedColor_ = QStringLiteral("#e62e9b");
-        spectrumPlayedColor_ = QStringLiteral("#e62e9b");
+        spectrumSolidColor_ = QStringLiteral("#0078d4");
+        spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
+        spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
+        spectrumRgbEndColor_ = QStringLiteral("#e62e9b");
     }
     replayGainMode_ = 0;
     replayGainClipProtection_ = true;

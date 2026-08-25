@@ -53,7 +53,7 @@ private slots:
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
     void spectrumPeakCapsNeverFallInsideTheirBars();
-    void spectrumRecolorsBarsAndPeakCapsAfterSeek();
+    void spectrumColorIsIndependentOfPlaybackProgress();
     void zeroPositionLeavesCompleteWaveformUnplayed();
     void silentTailRemainsVisibleAtTheTimelineEnd();
     void cursorAndSeekShareRenderWidth();
@@ -308,7 +308,7 @@ void WaveformItemTest::spectrumPeakCapsNeverFallInsideTheirBars()
     delete node;
 }
 
-void WaveformItemTest::spectrumRecolorsBarsAndPeakCapsAfterSeek()
+void WaveformItemTest::spectrumColorIsIndependentOfPlaybackProgress()
 {
     TestableWaveformItem item;
     item.setWidth(70);
@@ -323,12 +323,13 @@ void WaveformItemTest::spectrumRecolorsBarsAndPeakCapsAfterSeek()
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    compareColor(vertices(node)[0], 0x20, 0x20, 0x20, 0xFF);
+    compareColor(vertices(node)[0], 0x00, 0x2F, 0xA7, 0xFF);
 
     item.setPosition(50);
     node = item.updatePaintNode(node, nullptr);
     const auto* data = vertices(node);
-    // The first spectrum bar and its peak-hold cap must change together on seek.
+    // Spectrum colour represents frequency, not playback progress. Seeking must
+    // leave both the bar and its peak-hold cap on the configured colour model.
     compareColor(data[0], 0x00, 0x2F, 0xA7, 0xFF);
     const int barCount = 10;
     const int capOffset = barCount * 2 * 5;

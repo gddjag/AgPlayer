@@ -2192,9 +2192,9 @@ TestCase {
         })
         compare(waveform.visualMode, 0)
         compare(waveform.baseColor.toString(),
-                SettingsController.waveformUnplayedColor)
+                SettingsController.waveformSolidBaseColor)
         compare(waveform.progressColor.toString(),
-                SettingsController.waveformPlayedColor)
+                SettingsController.waveformSolidProgressColor)
 
         SettingsController.waveformMode = 1
         tryVerify(function() {

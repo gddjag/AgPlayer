@@ -923,7 +923,11 @@ Item {
                     ctx.stroke()
 
                     if (mode === 1) {
-                        ctx.strokeStyle = SettingsController.waveformPlayedColor
+                        var waveformGradient = ctx.createLinearGradient(0, 0, width, 0)
+                        waveformGradient.addColorStop(0, SettingsController.waveformRgbStartColor)
+                        waveformGradient.addColorStop(0.5, SettingsController.waveformRgbMiddleColor)
+                        waveformGradient.addColorStop(1, SettingsController.waveformRgbEndColor)
+                        ctx.strokeStyle = waveformGradient
                         ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (var x = 0; x <= width; x += 2) {
@@ -942,16 +946,20 @@ Item {
                             var bx = i * (step + 2)
                             var envelope = 0.22 + 0.78 * Math.sin(Math.PI * i / Math.max(1, barCount - 1))
                             var barHeight = Math.max(2, Math.abs(Math.sin(i * 0.4) * Math.cos(i * 0.17)) * (height * 0.82) * envelope)
-                            var t = i / barCount
-                            var rr = Math.round(170 * (1 - t) + 55 * t)
-                            var gg = Math.round(55 * (1 - t) + 140 * t)
-                            var bb = Math.round(55 + 90 * t)
-                            ctx.fillStyle = "rgba(" + rr + "," + gg + "," + bb + ",0.72)"
+                            if (SettingsController.spectrumColorMode === 0) {
+                                ctx.fillStyle = SettingsController.spectrumSolidColor
+                            } else {
+                                var spectrumGradient = ctx.createLinearGradient(0, 0, width, 0)
+                                spectrumGradient.addColorStop(0, SettingsController.spectrumRgbStartColor)
+                                spectrumGradient.addColorStop(0.5, SettingsController.spectrumRgbMiddleColor)
+                                spectrumGradient.addColorStop(1, SettingsController.spectrumRgbEndColor)
+                                ctx.fillStyle = spectrumGradient
+                            }
                             ctx.fillRect(bx, cy - barHeight / 2, step, barHeight)
                         }
                     } else {
                         // Solid cyan filled waveform
-                        ctx.fillStyle = SettingsController.waveformUnplayedColor
+                        ctx.fillStyle = SettingsController.waveformSolidBaseColor
                         ctx.beginPath()
                         ctx.moveTo(0, cy)
                         for (var sx = 0; sx <= width; sx += 2) {
@@ -964,7 +972,7 @@ Item {
                         ctx.closePath()
                         ctx.fill()
 
-                        ctx.strokeStyle = SettingsController.waveformPlayedColor
+                        ctx.strokeStyle = SettingsController.waveformSolidProgressColor
                         ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (sx = 0; sx <= width; sx += 2) {
@@ -1011,8 +1019,17 @@ Item {
             target: SettingsController
             function onWaveformHeightChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformThicknessChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformUnplayedColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformPlayedColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformSolidBaseColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformSolidProgressColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbBaseColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumColorModeChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumSolidColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
         }
 
         MouseArea {
@@ -1547,11 +1564,6 @@ Item {
                     }
                 }
 
-                SettingSwitch {
-                    text: qsTr("播放器与列表毛玻璃背景（Windows 支持时使用系统背景）")
-                    checked: SettingsController.glassEffect
-                    onToggled: SettingsController.glassEffect = checked
-                }
             }
 
             SettingCard {
@@ -1700,12 +1712,32 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
-                    label: qsTr("未播放 / 已播放")
+                    label: SettingsController.waveformMode === 0
+                           ? qsTr("底色 / 进度色") : qsTr("底色 / RGB 渐变")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
-                        ColorField { colorValue: SettingsController.waveformUnplayedColor; targetProperty: "waveformUnplayedColor" }
-                        ColorField { colorValue: SettingsController.waveformPlayedColor; targetProperty: "waveformPlayedColor" }
+                        ColorField { objectName: "waveformSolidBaseColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidBaseColor; targetProperty: "waveformSolidBaseColor" }
+                        ColorField { objectName: "waveformSolidProgressColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidProgressColor; targetProperty: "waveformSolidProgressColor" }
+                        ColorField { objectName: "waveformRgbBaseColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbBaseColor; targetProperty: "waveformRgbBaseColor" }
+                        ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; targetProperty: "waveformRgbStartColor" }
+                        ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; targetProperty: "waveformRgbMiddleColor" }
+                        ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; targetProperty: "waveformRgbEndColor" }
+                    }
+                }
+
+                SettingRow {
+                    visible: SettingsController.waveformMode === 1
+                    label: qsTr("RGB 显示区域")
+                    SettingCombo {
+                        objectName: "waveformRgbRegionSelector"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("已播放区域为 RGB"), value: true },
+                            { text: qsTr("未播放区域为 RGB"), value: false }
+                        ]
+                        currentIndex: SettingsController.waveformRgbProgress ? 0 : 1
+                        onActivated: SettingsController.waveformRgbProgress = currentValue
                     }
                 }
 
@@ -1728,20 +1760,37 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         SettingCombo {
+                            objectName: "spectrumColorModeSelector"
                             valueModel: [
-                            { text: qsTr("纯色"), value: 0 },
-                            { text: qsTr("自定义"), value: 1 }
+                            { text: qsTr("单色"), value: 0 },
+                            { text: qsTr("自定义 RGB"), value: 1 }
                             ]
                             currentIndex: SettingsController.spectrumColorMode
                             onActivated: SettingsController.spectrumColorMode = currentValue
                         }
                         ColorField {
-                            colorValue: SettingsController.spectrumUnplayedColor
-                            targetProperty: "spectrumUnplayedColor"
+                            objectName: "spectrumSolidColorField"
+                            visible: SettingsController.spectrumColorMode === 0
+                            colorValue: SettingsController.spectrumSolidColor
+                            targetProperty: "spectrumSolidColor"
                         }
                         ColorField {
-                            colorValue: SettingsController.spectrumPlayedColor
-                            targetProperty: "spectrumPlayedColor"
+                            objectName: "spectrumRgbStartColorField"
+                            visible: SettingsController.spectrumColorMode === 1
+                            colorValue: SettingsController.spectrumRgbStartColor
+                            targetProperty: "spectrumRgbStartColor"
+                        }
+                        ColorField {
+                            objectName: "spectrumRgbMiddleColorField"
+                            visible: SettingsController.spectrumColorMode === 1
+                            colorValue: SettingsController.spectrumRgbMiddleColor
+                            targetProperty: "spectrumRgbMiddleColor"
+                        }
+                        ColorField {
+                            objectName: "spectrumRgbEndColorField"
+                            visible: SettingsController.spectrumColorMode === 1
+                            colorValue: SettingsController.spectrumRgbEndColor
+                            targetProperty: "spectrumRgbEndColor"
                         }
                     }
                 }

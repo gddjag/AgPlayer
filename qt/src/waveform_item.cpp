@@ -107,14 +107,13 @@ VertexColor mixColor(double normalizedX,
         return {{baseColor.red(), baseColor.green(), baseColor.blue()}, 255U};
     }
     if (visualMode == 2) {
-        // The spectrum is rendered twice: the complete, unplayed canvas and
-        // the clipped played canvas.  Preserve that distinction so a seek
-        // immediately moves the played colour with the real playback clock.
-        const Rgb color = played
-            == rgbProgress
-                ? gradientColor(normalizedX, gradientStart, gradientMiddle, gradientEnd)
-                : Rgb{baseColor.red(), baseColor.green(), baseColor.blue()};
-        return {color, 255U};
+        // Spectrum colour represents frequency, not playback progress.  A
+        // solid preset supplies three identical stops; custom RGB supplies
+        // the configured start/middle/end stops.  Seeking must not recolour
+        // bars or their peak-hold caps.
+        return {gradientColor(normalizedX, gradientStart, gradientMiddle,
+                              gradientEnd),
+                255U};
     }
     if (legacyColor.isValid()) {
         return {{legacyColor.red(), legacyColor.green(), legacyColor.blue()},
