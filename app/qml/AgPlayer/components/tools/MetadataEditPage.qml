@@ -1317,11 +1317,13 @@ Rectangle {
                                         }
                                     }
                                     Label {
+                                        objectName: "metadataResultsSummaryLabel"
                                         Layout.fillWidth: true
                                         visible: MetadataEditor.results.length > 0
-                                        text: qsTr("成功 %1 · 失败 %2 · 取消 %3")
+                                        text: qsTr("成功 %1 · 失败 %2 · 不支持 %3 · 取消 %4")
                                               .arg(MetadataEditor.successCount)
                                               .arg(MetadataEditor.failedCount)
+                                              .arg(MetadataEditor.unsupportedCount)
                                               .arg(MetadataEditor.cancelledCount)
                                         color: Theme.accent
                                         font.pixelSize: 12

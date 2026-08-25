@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $page = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools/MetadataEditPage.qml')
+$controller = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'qt/src/metadata_editor.cpp')
 
 foreach ($control in @(
     'metadataToolbar', 'metadataFilePanel', 'metadataFileHeader',
@@ -94,6 +95,12 @@ if ($page -notmatch 'encodeURI\(localPath\)\.replace\(/#/g,\s*"%23"\)') {
 }
 if ($page -notmatch 'function onErrorOccurred\(message\)') {
     throw 'Controller errors must be visible instead of silently ignored.'
+}
+if ($controller -notmatch '(?s)catch \(const std::exception& exception\).*?writeResult\.error_code\s*=\s*agplayer::MetadataErrorCode::InternalError.*?catch \(\.\.\.\).*?writeResult\.error_code\s*=\s*agplayer::MetadataErrorCode::InternalError') {
+    throw 'Metadata writer exceptions must expose InternalError through the result row.'
+}
+if ($controller -notmatch 'failedCount_\s*=\s*summary\.failureCount') {
+    throw 'Preflight internal failures must propagate to the public failed count.'
 }
 
 Write-Output 'Metadata editor pixel-reference layout contract passed.'

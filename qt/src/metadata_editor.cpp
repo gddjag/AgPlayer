@@ -695,6 +695,12 @@ void MetadataEditor::startApply(const QVariantMap& fields,
             results_.append(result.results);
             successCount_ = result.successCount;
             failedCount_ = result.failureCount;
+            for (const QVariant& value : std::as_const(pendingUnsupportedResults_)) {
+                if (value.toMap().value(QStringLiteral("status")).toString()
+                    == QLatin1String("failed")) {
+                    ++failedCount_;
+                }
+            }
             cancelledCount_ = result.cancelledCount;
             if (libraryModel_ != nullptr) {
                 QStringList refreshedPaths;
@@ -711,7 +717,7 @@ void MetadataEditor::startApply(const QVariantMap& fields,
             emit entriesChanged();
             emit resultsChanged();
             emit statisticsChanged();
-            emit metadataApplied(result.successCount, result.failureCount);
+            emit metadataApplied(successCount_, failedCount_);
             watcher->deleteLater();
         });
 
@@ -797,6 +803,10 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                     || currentStableSourceId != e.stableSourceId) {
                     writeResult.message = tr("源文件在预检后发生变化，请重新预检")
                         .toStdString();
+                    writeResult.error_code =
+                        agplayer::MetadataErrorCode::SourceChanged;
+                    writeResult.final_status =
+                        agplayer::FileResultStatus::Failed;
                     result = AG_IO_ERROR;
                 } else {
                     try {
@@ -807,8 +817,16 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                         writeResult.message = tr("元数据写入异常：%1")
                                                   .arg(QString::fromUtf8(exception.what()))
                                                   .toStdString();
+                        writeResult.error_code =
+                            agplayer::MetadataErrorCode::InternalError;
+                        writeResult.final_status =
+                            agplayer::FileResultStatus::Failed;
                     } catch (...) {
                         writeResult.message = tr("元数据写入发生未知异常").toStdString();
+                        writeResult.error_code =
+                            agplayer::MetadataErrorCode::InternalError;
+                        writeResult.final_status =
+                            agplayer::FileResultStatus::Failed;
                     }
                 }
                 if (result == AG_OK) {
@@ -1051,13 +1069,14 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
                          tr("Metadata preflight failed unexpectedly.")},
                         {QStringLiteral("errorCode"), static_cast<int>(
                              agplayer::MetadataErrorCode::InternalError)}});
-                    ++summary.unsupportedCount;
+                    ++summary.failureCount;
                 }
             }
             watcher->deleteLater();
             results_ = summary.results;
             supportedCount_ = summary.supportedCount;
             unsupportedCount_ = summary.unsupportedCount;
+            failedCount_ = summary.failureCount;
             cancelledCount_ = summary.cancelledCount;
             pendingSupportedTargets_ = summary.supportedTargets;
             pendingUnsupportedResults_.clear();
@@ -1079,6 +1098,7 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
                 emit preflightDecisionRequired(supportedCount_, unsupportedCount_);
                 return;
             }
+            if (pendingSupportedTargets_.isEmpty()) return;
             startApply(pendingFields_, pendingSupportedTargets_,
                        pendingEntrySnapshot_);
         });
@@ -1116,7 +1136,7 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
                     {QStringLiteral("errorCode"), static_cast<int>(
                          agplayer::MetadataErrorCode::InternalError)}};
                 summary.results.append(item);
-                ++summary.unsupportedCount;
+                ++summary.failureCount;
             };
             agplayer::MetadataEditPlan plan;
             try {
@@ -1140,7 +1160,18 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
                 QVariantMap item;
                 const int index = targets.at(i);
                 if (index < 0 || index >= snapshot.size()) {
-                    ++summary.unsupportedCount;
+                    summary.results.append(QVariantMap{
+                        {QStringLiteral("path"), QString()},
+                        {QStringLiteral("fileName"), QString()},
+                        {QStringLiteral("stage"), QStringLiteral("preflight")},
+                        {QStringLiteral("success"), false},
+                        {QStringLiteral("status"), QStringLiteral("failed")},
+                        {QStringLiteral("message"), tr("Metadata target is no longer available.")},
+                        {QStringLiteral("preflightReason"),
+                         tr("Metadata target is no longer available.")},
+                        {QStringLiteral("errorCode"), static_cast<int>(
+                             agplayer::MetadataErrorCode::InternalError)}});
+                    ++summary.failureCount;
                     continue;
                 }
                 const MetadataEntry& entry = snapshot.at(index);
