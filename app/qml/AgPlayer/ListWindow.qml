@@ -589,6 +589,33 @@ Window {
                             }
                         }
 
+                        Item {
+                            id: centerTrackFooter
+                            objectName: "centerTrackFooter"
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: centerColumn.width
+                            Layout.maximumWidth: centerColumn.width
+                            Layout.preferredHeight: listWindow.filterBarHeight
+                            visible: !filterModel || filterModel.category !== "library"
+
+                            SearchFilter {
+                                id: searchFilter
+                                objectName: "librarySearchFilter"
+                                anchors.fill: parent
+                                searchText: filterModel ? filterModel.searchText : ""
+                                exactRating: filterModel ? filterModel.exactRating : 0
+                                minBpm: filterModel ? filterModel.minBpm : 60
+                                maxBpm: filterModel ? filterModel.maxBpm : 160
+                                onSearchTextChanged: if (filterModel)
+                                                         filterModel.searchText = searchText
+                                onExactRatingChanged: if (filterModel)
+                                                          filterModel.exactRating = exactRating
+                                onMinBpmChanged: if (filterModel)
+                                                     filterModel.minBpm = minBpm
+                                onMaxBpmChanged: if (filterModel)
+                                                     filterModel.maxBpm = maxBpm
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -611,25 +638,6 @@ Window {
                     }
                     }
 
-                    SearchFilter {
-                        id: searchFilter
-                        objectName: "librarySearchFilter"
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: listWindow.filterBarHeight
-                        visible: !filterModel || filterModel.category !== "library"
-                        searchText: filterModel ? filterModel.searchText : ""
-                        exactRating: filterModel ? filterModel.exactRating : 0
-                        minBpm: filterModel ? filterModel.minBpm : 60
-                        maxBpm: filterModel ? filterModel.maxBpm : 160
-                        onSearchTextChanged: if (filterModel)
-                                                 filterModel.searchText = searchText
-                        onExactRatingChanged: if (filterModel)
-                                                  filterModel.exactRating = exactRating
-                        onMinBpmChanged: if (filterModel)
-                                             filterModel.minBpm = minBpm
-                        onMaxBpmChanged: if (filterModel)
-                                             filterModel.maxBpm = maxBpm
-                    }
                 }
             }
         }

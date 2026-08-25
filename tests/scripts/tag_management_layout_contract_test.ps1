@@ -41,7 +41,7 @@ Assert-Matches $window 'readonly property int rightColumnWidth:\s*248' `
     'Right tag column must be 248 px'
 Assert-Matches $window 'readonly property int dividerWidth:\s*1' `
     'Workspace dividers must remain 1 px'
-Assert-Matches $window '(?s)objectName:\s*"librarySearchFilter".*Layout\.preferredHeight:\s*listWindow\.filterBarHeight' `
+Assert-Matches $window '(?s)objectName:\s*"centerTrackFooter".*Layout\.preferredHeight:\s*listWindow\.filterBarHeight' `
     'Search/filter bar must be 54 px'
 
 Assert-Matches $tagPanel '(?s)Flickable\s*\{.*id:\s*tagFlickable' `
@@ -50,7 +50,7 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
     'Tag panel must lay capsules out with Flow'
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:.*height:\s*28.*radius:\s*14' `
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:.*implicitHeight:\s*26.*height:\s*implicitHeight.*radius:\s*13' `
     'Tag capsules must preserve natural width in compact rounded pills'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'

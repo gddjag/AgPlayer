@@ -26,19 +26,21 @@ ListView {
     readonly property bool windowActive: root.Window.active
     readonly property bool showAlbumColumn: true
     readonly property bool compactColumns: width < 900
-    readonly property int favoriteAlbumGap: 10
-    readonly property int artistAlbumGap: 8
-    readonly property int albumRatingGap: 10
+    readonly property int favoriteAlbumGap: 6
+    readonly property int artistAlbumGap: 6
+    readonly property int albumRatingGap: 6
     readonly property int sequenceWidth: compactColumns ? 34 : 42
     readonly property int favoriteWidth: compactColumns ? 42 : 52
-    readonly property int albumWidth: compactColumns ? 92 : 136
-    readonly property int artistWidth: compactColumns ? 94 : 130
-    readonly property int ratingWidth: compactColumns ? 82 : 110
+    readonly property int albumWidth: compactColumns ? 78 : 112
+    readonly property int artistWidth: compactColumns ? 80 : 112
+    readonly property int ratingWidth: tagFilterActive
+                                     ? (compactColumns ? 64 : 86)
+                                     : (compactColumns ? 82 : 110)
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
-    readonly property int titleMinimumWidth: !tagFilterActive
-                                                ? (compactColumns ? 150 : 180)
-                                                : (compactColumns ? 178 : 212)
+    readonly property int titleMinimumWidth: compactColumns ? 150 : 180
+    readonly property bool showBpmColumn: !tagFilterActive
+    readonly property bool showDurationColumn: !tagFilterActive
     readonly property int rowHeight: SettingsController.listWaveformThumbnailEnabled
                                      ? 62 : 42
     property int thumbnailItemCount: 0
@@ -423,8 +425,8 @@ ListView {
             HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             Item { objectName: "trackHeaderAlbumRatingGap"; visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumRatingGap : 0; Layout.preferredWidth: visible ? root.albumRatingGap : 0; Layout.maximumWidth: visible ? root.albumRatingGap : 0 }
             HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
-            HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
-            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); horizontalAlignment: Text.AlignRight; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
+            HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; visible: root.showBpmColumn; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
+            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; horizontalAlignment: Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
     }
 
@@ -681,6 +683,7 @@ ListView {
                         Layout.fillHeight: true
 
                         MarqueeBodyText {
+                            id: trackTitleMarquee
                             objectName: "trackTitleMarquee"
                             anchors.left: parent.left
                             anchors.right: parent.right
@@ -698,9 +701,9 @@ ListView {
                             id: waveformWrapperLoader
                             anchors.left: parent.left
                             anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 6
-                            height: 15
+                            anchors.top: trackTitleMarquee.bottom
+                            anchors.topMargin: 3
+                            height: 16
                             active: SettingsController.listWaveformThumbnailEnabled
                                     && root && root.thumbnailHostVisible
                                     && rowItem.inViewport
@@ -881,8 +884,8 @@ ListView {
                     }
                 }
             }
-            BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
-            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
+            BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); visible: root.showBpmColumn; horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
+            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
 
         HoverHandler { id: rowHover }

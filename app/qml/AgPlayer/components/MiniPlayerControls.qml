@@ -144,34 +144,53 @@ Rectangle {
             }
             RowLayout {
                 objectName: "miniMetadataRow"
-                Layout.fillWidth: true; Layout.preferredHeight: 42; spacing: 8
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    Text {
-                        objectName: "miniArtist"
-                        text: root.currentTrackValue(LibraryModel.ArtistRole)
-                              || qsTr("未知艺术家")
-                        color: Theme.secondaryText; font.family: Theme.fontPrimary
-                        font.pixelSize: 10; elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    Text {
-                        objectName: "miniAlbum"
-                        text: root.currentTrackValue(LibraryModel.AlbumRole)
-                              || qsTr("未知专辑")
-                        color: Theme.secondaryText; font.family: Theme.fontPrimary
-                        font.pixelSize: 10; elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    Text {
-                        objectName: "miniTags"
-                        text: root.currentTrackTags()
-                        visible: text.length > 0
-                        color: Theme.tagSecondaryText; font.family: Theme.fontPrimary
-                        font.pixelSize: 10; elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
+                Layout.fillWidth: true; Layout.preferredHeight: 26; spacing: 4
+                Text {
+                    id: miniArtist
+                    objectName: "miniArtist"
+                    text: root.currentTrackValue(LibraryModel.ArtistRole)
+                          || qsTr("未知艺术家")
+                    color: Theme.secondaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    Layout.fillWidth: true; Layout.maximumWidth: 120
+                    ToolTip.visible: miniArtistHover.hovered && truncated
+                    ToolTip.text: text
+                    HoverHandler { id: miniArtistHover }
+                }
+                Text {
+                    objectName: "miniArtistAlbumSeparator"
+                    text: "·"; color: Theme.secondaryText; font.pixelSize: 10
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                Text {
+                    id: miniAlbum
+                    objectName: "miniAlbum"
+                    text: root.currentTrackValue(LibraryModel.AlbumRole)
+                          || qsTr("未知专辑")
+                    color: Theme.secondaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    Layout.fillWidth: true; Layout.maximumWidth: 120
+                    ToolTip.visible: miniAlbumHover.hovered && truncated
+                    ToolTip.text: text
+                    HoverHandler { id: miniAlbumHover }
+                }
+                Text {
+                    objectName: "miniTagSeparator"
+                    text: "·"; visible: miniTags.visible
+                    color: Theme.tagSecondaryText; font.pixelSize: 10
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                Text {
+                    id: miniTags
+                    objectName: "miniTags"
+                    text: root.currentTrackTags()
+                    visible: text.length > 0
+                    color: Theme.tagSecondaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    Layout.fillWidth: true; Layout.maximumWidth: 100
+                    ToolTip.visible: miniTagsHover.hovered && truncated
+                    ToolTip.text: text
+                    HoverHandler { id: miniTagsHover }
                 }
                 RowLayout {
                     id: miniRating
@@ -184,7 +203,7 @@ Rectangle {
                             objectName: "miniRatingStar-" + index
                             source: index < root.currentTrackRating() ? Theme.icon("star-fill") : Theme.icon("star-line")
                             tint: index < root.currentTrackRating() ? Theme.ratingColor(index) : Theme.iconSecondary
-                            sourceSize.width: 13; sourceSize.height: 13
+                            sourceSize.width: 16; sourceSize.height: 16
                             Layout.preferredWidth: sourceSize.width
                             Layout.preferredHeight: sourceSize.height
                             Layout.alignment: Qt.AlignVCenter
@@ -194,13 +213,13 @@ Rectangle {
                 ToolButton {
                     id: favoriteButton
                     objectName: "miniFavoriteButton"
-                    Layout.preferredWidth: 13
-                    Layout.preferredHeight: 13
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
                     Layout.alignment: Qt.AlignVCenter
                     padding: 0
                     icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                     icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
-                    icon.width: 13; icon.height: 13; enabled: root.currentRow() >= 0
+                    icon.width: 16; icon.height: 16; enabled: root.currentRow() >= 0
                     onClicked: if (playback) playback.toggleFavorite(); background: null
                 }
             }

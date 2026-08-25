@@ -204,9 +204,17 @@ TestCase {
         var firstStar = findChild(rating, "miniRatingStar-0")
         verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
-               "rating and favorite must follow artist/album instead of the title")
+               "metadata must stay below the title")
+        compare(metadataRow.height, 26,
+                "metadata must use a compact single-row height")
+        compare(artist.wrapMode, Text.NoWrap)
+        compare(album.wrapMode, Text.NoWrap)
+        compare(tags.wrapMode, Text.NoWrap)
+        verify(Math.abs(artist.mapToItem(metadataRow, 0, artist.height / 2).y
+                        - album.mapToItem(metadataRow, 0, album.height / 2).y) <= 1,
+               "artist and album must share one baseline")
         verify(rating.x >= artist.x + artist.width,
-               "rating must follow the separate metadata fields")
+               "rating must follow the single metadata text run")
         verify(favorite.x >= rating.x + rating.width,
                "favorite must immediately follow rating in the metadata row")
         verify(!tags.visible,
@@ -214,15 +222,15 @@ TestCase {
         compare(rating.spacing, 1)
         compare(firstStar.width, firstStar.sourceSize.width)
         compare(firstStar.height, firstStar.sourceSize.height)
-        compare(favorite.width, 13)
-        compare(favorite.height, 13)
+        compare(favorite.width, 16)
+        compare(favorite.height, 16)
         compare(Math.round(firstStar.mapToItem(metadataRow, 0,
                                                firstStar.height / 2).y),
                 Math.round(favorite.mapToItem(metadataRow, 0,
                                               favorite.height / 2).y),
                 "stars and favorite must share one visual centerline")
-        compare(favorite.icon.width, 13)
-        compare(favorite.icon.height, 13)
+        compare(favorite.icon.width, 16)
+        compare(favorite.icon.height, 16)
         compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)
         compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize, 11)
         compare(play.width, 34)

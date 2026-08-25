@@ -18,6 +18,7 @@ class LibraryNavigationModelTest final : public QObject {
 
 private slots:
     void buildsRequiredLibraryAndTopLevelHierarchy();
+    void keepsLibraryExpandableWhenThereAreNoCustomPlaylists();
     void expandsOnlyTheRequestedFolderRange();
     void expandsThreeLevelsIndependentlyFromIndexedTopology();
     void addsAndRemovesTrackOnlyFolderTopology();
@@ -109,6 +110,29 @@ void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
     QVERIFY(navigation.setExpanded(libraryId, true));
     QVERIFY(rowForNode(navigation, firstId) >= 0);
     QVERIFY(rowForNode(navigation, secondId) >= 0);
+}
+
+void LibraryNavigationModelTest::keepsLibraryExpandableWhenThereAreNoCustomPlaylists()
+{
+    // Keeps the library chevron available as a stable affordance even before
+    // the user creates a first custom playlist.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryModel library;
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    LibraryManagerController manager;
+    manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
+    LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
+
+    const int libraryRow = rowForNode(navigation, QStringLiteral("library:all"));
+    QVERIFY(libraryRow >= 0);
+    const QModelIndex index = navigation.index(libraryRow, 0);
+    QVERIFY(navigation.data(index, LibraryNavigationModel::HasChildrenRole).toBool());
+    QVERIFY(navigation.data(index, LibraryNavigationModel::ExpandedRole).toBool());
+    QVERIFY(navigation.setExpanded(QStringLiteral("library:all"), false));
+    QVERIFY(!navigation.data(index, LibraryNavigationModel::ExpandedRole).toBool());
+    QVERIFY(navigation.setExpanded(QStringLiteral("library:all"), true));
 }
 
 void LibraryNavigationModelTest::propagatesPlaylistRenameWithoutRebuildingNavigation()
