@@ -522,6 +522,10 @@
     <message><source>继续录音</source><translation>继续录音</translation></message><message><source>跳到末尾</source><translation>跳到末尾</translation></message><message><source>选择录音设备</source><translation>选择录音设备</translation></message><message><source>暂停录音</source><translation>暂停录音</translation></message>
     <message><source>展开导出设置</source><translation>展开导出设置</translation></message><message><source>展开录音设置</source><translation>展开录音设置</translation></message><message><source>展开升降调设置</source><translation>展开升降调设置</translation></message><message><source>展开速度设置</source><translation>展开速度设置</translation></message><message><source>展开音调保护设置</source><translation>展开音调保护设置</translation></message>
     <message><source>折叠导出设置</source><translation>折叠导出设置</translation></message><message><source>折叠录音设置</source><translation>折叠录音设置</translation></message><message><source>折叠升降调设置</source><translation>折叠升降调设置</translation></message><message><source>折叠速度设置</source><translation>折叠速度设置</translation></message><message><source>折叠音调保护设置</source><translation>折叠音调保护设置</translation></message>
+    <message><source>停止录音</source><translation>停止录音</translation></message>
+    <message><source>刷新输入设备</source><translation>刷新输入设备</translation></message>
+    <message><source>正在处理音频…</source><translation>正在处理音频…</translation></message>
+    <message><source>已导出到：</source><translation>已导出到：</translation></message>
     <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV（24 位，%1 kHz）</translation></message>
 </context>
 <context>
@@ -604,9 +608,9 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="17"/>
-        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="95"/>
-        <source>AgPlayer 音频编辑</source>
-        <translation>AgPlayer 音频编辑</translation>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="100"/>
+        <source>AgPlayer · 音频工具</source>
+        <translation>AgPlayer · 音频工具</translation>
     </message>
 </context>
 <context>

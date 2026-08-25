@@ -304,7 +304,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="346"/>
         <source>取消</source>
-        <translation>取消</translation>
+        <translation>Hủy</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="118"/>
@@ -522,6 +522,10 @@
     <message><source>继续录音</source><translation>Tiếp tục ghi âm</translation></message><message><source>跳到末尾</source><translation>Đi đến cuối</translation></message><message><source>选择录音设备</source><translation>Chọn thiết bị ghi âm</translation></message><message><source>暂停录音</source><translation>Tạm dừng ghi âm</translation></message>
     <message><source>展开导出设置</source><translation>Mở rộng cài đặt xuất</translation></message><message><source>展开录音设置</source><translation>Mở rộng cài đặt ghi âm</translation></message><message><source>展开升降调设置</source><translation>Mở rộng cài đặt cao độ</translation></message><message><source>展开速度设置</source><translation>Mở rộng cài đặt tốc độ</translation></message><message><source>展开音调保护设置</source><translation>Mở rộng cài đặt giữ cao độ</translation></message>
     <message><source>折叠导出设置</source><translation>Thu gọn cài đặt xuất</translation></message><message><source>折叠录音设置</source><translation>Thu gọn cài đặt ghi âm</translation></message><message><source>折叠升降调设置</source><translation>Thu gọn cài đặt cao độ</translation></message><message><source>折叠速度设置</source><translation>Thu gọn cài đặt tốc độ</translation></message><message><source>折叠音调保护设置</source><translation>Thu gọn cài đặt giữ cao độ</translation></message>
+    <message><source>停止录音</source><translation>Dừng ghi âm</translation></message>
+    <message><source>刷新输入设备</source><translation>Làm mới thiết bị đầu vào</translation></message>
+    <message><source>正在处理音频…</source><translation>Đang xử lý âm thanh…</translation></message>
+    <message><source>已导出到：</source><translation>Đã xuất đến:</translation></message>
     <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24-bit, %1 kHz)</translation></message>
 </context>
 <context>
@@ -604,9 +608,9 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="17"/>
-        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="95"/>
-        <source>AgPlayer 音频编辑</source>
-        <translation>Trình chỉnh sửa âm thanh AgPlayer</translation>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="100"/>
+        <source>AgPlayer · 音频工具</source>
+        <translation>AgPlayer · Công cụ âm thanh</translation>
     </message>
 </context>
 <context>

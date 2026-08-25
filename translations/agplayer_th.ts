@@ -522,6 +522,10 @@
     <message><source>继续录音</source><translation>บันทึกต่อ</translation></message><message><source>跳到末尾</source><translation>ไปยังจุดสิ้นสุด</translation></message><message><source>选择录音设备</source><translation>เลือกอุปกรณ์บันทึกเสียง</translation></message><message><source>暂停录音</source><translation>หยุดการบันทึกชั่วคราว</translation></message>
     <message><source>展开导出设置</source><translation>ขยายการตั้งค่าการส่งออก</translation></message><message><source>展开录音设置</source><translation>ขยายการตั้งค่าการบันทึก</translation></message><message><source>展开升降调设置</source><translation>ขยายการตั้งค่าระดับเสียง</translation></message><message><source>展开速度设置</source><translation>ขยายการตั้งค่าความเร็ว</translation></message><message><source>展开音调保护设置</source><translation>ขยายการตั้งค่ารักษาระดับเสียง</translation></message>
     <message><source>折叠导出设置</source><translation>ยุบการตั้งค่าการส่งออก</translation></message><message><source>折叠录音设置</source><translation>ยุบการตั้งค่าการบันทึก</translation></message><message><source>折叠升降调设置</source><translation>ยุบการตั้งค่าระดับเสียง</translation></message><message><source>折叠速度设置</source><translation>ยุบการตั้งค่าความเร็ว</translation></message><message><source>折叠音调保护设置</source><translation>ยุบการตั้งค่ารักษาระดับเสียง</translation></message>
+    <message><source>停止录音</source><translation>หยุดการบันทึก</translation></message>
+    <message><source>刷新输入设备</source><translation>รีเฟรชอุปกรณ์อินพุต</translation></message>
+    <message><source>正在处理音频…</source><translation>กำลังประมวลผลเสียง…</translation></message>
+    <message><source>已导出到：</source><translation>ส่งออกไปยัง:</translation></message>
     <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24 บิต, %1 kHz)</translation></message>
 </context>
 <context>
@@ -604,9 +608,9 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="17"/>
-        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="95"/>
-        <source>AgPlayer 音频编辑</source>
-        <translation>ตัวแก้ไขเสียง AgPlayer</translation>
+        <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="100"/>
+        <source>AgPlayer · 音频工具</source>
+        <translation>AgPlayer · เครื่องมือเสียง</translation>
     </message>
 </context>
 <context>
