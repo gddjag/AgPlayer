@@ -74,6 +74,26 @@ TestCase {
     }
 
     Component {
+        id: emptyLibraryNavigationComponent
+        SideNavigation {
+            width: 208
+            height: 260
+            navigationModel: ListModel {
+                ListElement {
+                    nodeId: "library:all"
+                    nodeType: "library"
+                    depth: 0
+                    displayName: "我的音乐库"
+                    count: 0
+                    expanded: true
+                    resourceFolder: ""
+                    hasChildren: false
+                }
+            }
+        }
+    }
+
+    Component {
         id: dockedWindowFrameComponent
         DockedWindowFrame {
             width: 320
@@ -1123,8 +1143,8 @@ TestCase {
         var album = findChild(row, "trackAlbumMarquee")
         var artist = findChild(row, "trackArtistMarquee")
         verify(album && artist)
-        compare(Math.round(album.width), 136)
-        compare(Math.round(artist.width), 130)
+        compare(Math.round(album.width), 112)
+        compare(Math.round(artist.width), 112)
         verify(album.overflowing && artist.overflowing)
         compare(album.textOffset, 0)
         mouseMove(list, 2, list.height - 2)
@@ -1156,8 +1176,8 @@ TestCase {
                     Math.round(cell.mapToItem(list, 0, 0).x))
             compare(Math.round(header.width), Math.round(cell.width))
         }
-        compare(Math.round(findChild(row, "trackAlbumCell").width), 136)
-        compare(Math.round(findChild(row, "trackArtistCell").width), 130)
+        compare(Math.round(findChild(row, "trackAlbumCell").width), 112)
+        compare(Math.round(findChild(row, "trackArtistCell").width), 112)
         list.destroy()
     }
 
@@ -2319,12 +2339,12 @@ TestCase {
         verify(list)
         compare(findChild(list, "trackHeaderIndex").width, 42)
         compare(findChild(list, "trackHeaderFavorite").width, 52)
-        compare(findChild(list, "trackHeaderAlbum").width, 136)
-        compare(findChild(list, "trackHeaderArtist").width, 130)
+        compare(findChild(list, "trackHeaderAlbum").width, 112)
+        compare(findChild(list, "trackHeaderArtist").width, 112)
         compare(findChild(list, "trackHeaderRating").width, 110)
         compare(findChild(list, "trackHeaderBpm").width, 64)
         compare(findChild(list, "trackHeaderDuration").width, 72)
-        compare(findChild(list, "trackHeaderFavoriteAlbumGap").width, 10)
+        compare(findChild(list, "trackHeaderFavoriteAlbumGap").width, 6)
         verify(!findChild(list, "trackRowOptionsButton"),
                "the duration column must be the final visible column")
         list.destroy()
@@ -3863,6 +3883,111 @@ TestCase {
         compare(PlaybackController.currentTrackId, playbackTrackId)
 
         window.destroy()
+        SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_z_task2_runtime_list_geometry_stays_inside_its_columns() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        var filter = findChild(mainWindow, "filterModel")
+        var trackIds = nativeDropHelper.ensureSortableTracks()
+        compare(trackIds.length, 3)
+        filter.category = "all"
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        filter.searchText = ""
+        TagModel.selectedKey = ""
+        SettingsController.listWaveformThumbnailEnabled = true
+
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filter,
+            "width": 1400,
+            "height": 720
+        })
+        verify(window)
+        var workspace = findChild(window, "listWorkspace")
+        var navigation = findChild(workspace, "referenceSideNavigation")
+        var centerColumn = findChild(workspace, "centerTrackColumn")
+        var footer = findChild(window, "centerTrackFooter")
+        var trackList = findChild(workspace, "sharedTrackList")
+        var tagPanel = findChild(workspace, "tagManagementPanel")
+        verify(workspace && navigation && centerColumn && footer
+               && trackList && tagPanel)
+
+        navigation.activateNode("tags", "tags:manage", "")
+        tryVerify(function() {
+            return tagPanel.visible && footer.visible && centerColumn.width > 0
+        }, 1000)
+        var footerScene = footer.mapToItem(null, 0, 0)
+        var centerScene = centerColumn.mapToItem(null, 0, 0)
+        var navigationScene = navigation.mapToItem(null, 0, 0)
+        var tagPanelScene = tagPanel.mapToItem(null, 0, 0)
+        compare(Math.round(footerScene.x), Math.round(centerScene.x),
+                "the filter footer must begin at the center track column")
+        compare(Math.round(footer.width), Math.round(centerColumn.width),
+                "the filter footer must exactly match the center track width")
+        verify(footerScene.x >= navigationScene.x + navigation.width,
+               "the footer must not cover the 208px sidebar")
+        verify(footerScene.x + footer.width <= tagPanelScene.x + 1,
+               "the footer must not cover the 248px tag panel")
+
+        trackList.positionViewAtBeginning()
+        var firstRow = null
+        tryVerify(function() {
+            firstRow = trackList.itemAtIndex(0)
+            return firstRow !== null
+        }, 1000)
+        var title = findChild(firstRow, "trackTitleMarquee")
+        var thumbnail = findChild(firstRow, "trackWaveformThumbnailLoader")
+        verify(title && thumbnail)
+        tryVerify(function() { return thumbnail.active && thumbnail.item }, 1000)
+        compare(Math.round(thumbnail.y - (title.y + title.height)), 3,
+                "the waveform thumbnail must sit 2-4px below the title")
+        compare(thumbnail.height, 16)
+
+        var tagName = "Task2 Runtime Geometry " + Date.now()
+        verify(TagModel.createTag(tagName))
+        var tagKey = ""
+        for (var tagRow = 0; tagRow < TagModel.rowCount(); ++tagRow) {
+            var index = TagModel.index(tagRow, 0)
+            if (TagModel.data(index, TagModel.DisplayNameRole) === tagName) {
+                tagKey = TagModel.data(index, TagModel.KeyRole)
+                break
+            }
+        }
+        verify(tagKey.length > 0)
+        var tagPill = null
+        tryVerify(function() {
+            tagPill = findChild(tagPanel, "tagPill-" + tagKey)
+            return tagPill !== null
+        }, 1000)
+        compare(tagPill.height, 26)
+        TagModel.removeTag(tagKey)
+        tryVerify(function() {
+            for (var row = 0; row < TagModel.rowCount(); ++row) {
+                var candidate = TagModel.index(row, 0)
+                if (TagModel.data(candidate, TagModel.KeyRole) === tagKey)
+                    return false
+            }
+            return true
+        }, 1000)
+
+        var emptyNavigation = emptyLibraryNavigationComponent.createObject(
+                    mainWindow.contentItem)
+        verify(emptyNavigation)
+        var emptyLibraryNode = findChild(emptyNavigation,
+                                         "navigationNode-library:all")
+        var chevron = findChild(emptyLibraryNode, "navigationExpandButton")
+        verify(emptyLibraryNode && chevron)
+        tryVerify(function() { return chevron.visible }, 500)
+        compare(chevron.width, 28)
+        compare(chevron.height, 28)
+        compare(chevron.icon.width, 18)
+        compare(chevron.icon.height, 18)
+
+        emptyNavigation.destroy()
+        window.destroy()
+        filter.tagKey = ""
+        TagModel.selectedKey = ""
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 

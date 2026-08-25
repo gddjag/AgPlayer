@@ -699,6 +699,7 @@ ListView {
 
                         Loader {
                             id: waveformWrapperLoader
+                            objectName: "trackWaveformThumbnailLoader"
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: trackTitleMarquee.bottom
