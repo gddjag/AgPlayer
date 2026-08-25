@@ -27,9 +27,10 @@ TestCase {
 
         ColorField {
             id: integratedField
-            parent: testCase.Window.window.contentItem
-            x: Math.round((parent.width - width) / 2)
-            y: parent.height - height - 28
+            parent: testCase.Window.window
+                    ? testCase.Window.window.contentItem : null
+            x: Math.round(((parent ? parent.width : 0) - width) / 2)
+            y: (parent ? parent.height : 0) - height - 28
             colorValue: SettingsController.waveformSolidBaseColor
             targetProperty: "waveformSolidBaseColor"
         }
@@ -322,8 +323,7 @@ TestCase {
                     === "#F8EBFA"
         })
         compare(integratedEditedSpy.count, 1)
-        compare(normalizedColor(integratedEditedSpy.signalArguments[0][0]),
-                "#F8EBFA")
+        compare(integratedEditedSpy.signalArguments[0][0], "#F8EBFA")
         compare(integratedPicker.visible, false)
 
         mouseClick(integratedField, integratedField.width / 2,
@@ -335,6 +335,34 @@ TestCase {
         compare(normalizedColor(SettingsController.waveformSolidBaseColor),
                 "#F8EBFA")
         compare(integratedEditedSpy.count, 1)
+    }
+
+    function test_color_field_is_focusable_accessible_and_keyboard_operable() {
+        SettingsController.waveformSolidBaseColor = "#63316B"
+        tryVerify(function() {
+            return normalizedColor(integratedField.colorValue) === "#63316B"
+        })
+        compare(integratedField.objectName, "colorFieldButton")
+        compare(integratedField.focusPolicy, Qt.StrongFocus)
+        compare(integratedField.Accessible.role, Accessible.Button)
+        compare(integratedField.Accessible.name, "Color #63316B")
+
+        integratedField.forceActiveFocus()
+        verify(integratedField.activeFocus)
+        keyClick(Qt.Key_Space)
+        var integratedPicker = findChild(integratedField, "colorFieldPicker")
+        tryCompare(integratedPicker, "visible", true)
+        integratedPicker.close()
+
+        integratedField.forceActiveFocus()
+        verify(integratedField.activeFocus)
+        keyClick(Qt.Key_Return)
+        tryCompare(integratedPicker, "visible", true)
+        integratedPicker.close()
+
+        compare(integratedEditedSpy.count, 0)
+        compare(normalizedColor(SettingsController.waveformSolidBaseColor),
+                "#63316B")
     }
 
     function test_theme_switch_updates_chrome_not_candidates() {

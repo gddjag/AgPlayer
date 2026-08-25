@@ -3,8 +3,9 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
-Control {
+AbstractButton {
     id: root
+    objectName: "colorFieldButton"
     property color colorValue: "#000000"
     property string targetProperty: ""
     signal colorEdited(string value)
@@ -16,6 +17,9 @@ Control {
     implicitWidth: 106
     implicitHeight: 32
     padding: 1
+    focusPolicy: Qt.StrongFocus
+    Accessible.role: Accessible.Button
+    Accessible.name: qsTr("Color %1").arg(root.normalized(root.colorValue))
 
     function normalized(value) {
         var text = String(value || "").trim().toUpperCase()
@@ -50,8 +54,18 @@ Control {
         radius: Theme.radiusSm
     }
 
-    TapHandler {
-        onTapped: picker.openForColor(root.colorValue)
+    onClicked: picker.openForColor(root.colorValue)
+    Keys.onSpacePressed: function(event) {
+        root.clicked()
+        event.accepted = true
+    }
+    Keys.onReturnPressed: function(event) {
+        root.clicked()
+        event.accepted = true
+    }
+    Keys.onEnterPressed: function(event) {
+        root.clicked()
+        event.accepted = true
     }
 
     AgColorPicker {
