@@ -8,6 +8,7 @@ Rectangle {
     id: page
     objectName: "metadataEditPage"
     color: Theme.background
+    clip: true
     focus: true
 
     readonly property real desktopMinimumWidth: 1206

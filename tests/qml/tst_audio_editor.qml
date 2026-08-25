@@ -751,8 +751,16 @@ TestCase {
 
     function test_responsivePlaybackAndInspectorAccess_data() {
         return [
-            { tag: "desktop", w: 1280, h: 628, access: "editorInspectorScroller" },
-            { tag: "narrow", w: 880, h: 468, access: "editorInspectorAccess" }
+            { tag: "wide", w: 1672, h: 849, access: "editorInspectorScroller",
+              wide: true, medium: false, compact: false },
+            { tag: "medium", w: 1280, h: 628, access: "editorInspectorScroller",
+              wide: false, medium: true, compact: false },
+            { tag: "medium-boundary", w: 1000, h: 628, access: "editorInspectorScroller",
+              wide: false, medium: true, compact: false },
+            { tag: "compact-boundary", w: 999, h: 468, access: "editorInspectorAccess",
+              wide: false, medium: false, compact: true },
+            { tag: "minimum", w: 880, h: 468, access: "editorInspectorAccess",
+              wide: false, medium: false, compact: true }
         ]
     }
 
@@ -760,14 +768,30 @@ TestCase {
         host.width = data.w
         host.height = data.h
         wait(0)
+        compare(page.referenceLayout, data.wide)
+        compare(page.mediumLayout, data.medium)
+        compare(page.compactInspectorLayout, data.compact)
         const playback = findChild(page, "editorPlaybackTransport")
+        const main = findChild(page, "editorMainColumn")
+        const inspector = findChild(page, "editorInspector")
+        verify(main && inspector)
+        verify(main.x >= 0 && main.x + main.width <= page.width)
+        if (!data.compact) {
+            verify(inspector.visible)
+            verify(inspector.x >= main.x + main.width)
+            verify(inspector.x + inspector.width <= page.width)
+            if (data.medium) {
+                compare(inspector.width, page.mediumInspectorWidth)
+                compare(main.width + inspector.width, page.width)
+            }
+        }
         const exportGroup = findChild(page, "inspectorExportGroup")
         const access = findChild(page, data.access)
         verify(playback && playback.visible)
         verify(exportGroup)
         verify(access && access.visible)
         verify(findChild(page, "editorCommand_importAudio").visible)
-        if (data.w === 880) {
+        if (data.compact) {
             const commandBar = findChild(page, "editorCommandBar")
             verify(access.y >= commandBar.y + commandBar.height,
                    "narrow inspector access overlaps the command toolbar")
@@ -783,7 +807,11 @@ TestCase {
             const inspector = findChild(page, "editorInspector")
             const scroller = findChild(page, "editorInspectorScroller")
             const exportButton = findChild(page, "editorExportButton")
-            verify(inspector.visible && scroller && exportButton)
+            const tabs = findChild(page, "editorCompactInspectorTabs")
+            verify(inspector.visible && scroller && exportButton && tabs)
+            verify(tabs.visible)
+            tabs.currentIndex = 2
+            tryVerify(function() { return exportButton.visible })
             scroller.contentY = Math.max(0,
                 scroller.contentHeight - scroller.height)
             wait(0)
@@ -793,6 +821,67 @@ TestCase {
                    "narrow export action cannot be fully scrolled into view")
             mouseClick(access)
         }
+    }
+
+    function test_runtimeMatrixKeepsPrimaryEditorRegionsReachable_data() {
+        return [
+            { tag: "minimum", w: 880, h: 560 },
+            { tag: "medium-start", w: 1000, h: 720 },
+            { tag: "medium", w: 1280, h: 720 },
+            { tag: "wide", w: 1672, h: 942 }
+        ]
+    }
+
+    function test_runtimeMatrixKeepsPrimaryEditorRegionsReachable(data) {
+        host.width = data.w
+        host.height = data.h
+        wait(0)
+        const main = findChild(page, "editorMainColumn")
+        const command = findChild(page, "editorCommandBar")
+        const timeline = findChild(page, "editorTimelineWorkspace")
+        const recording = findChild(page, "editorRecordingTransport")
+        const playback = findChild(page, "editorPlaybackTransport")
+        const access = findChild(page, "editorInspectorAccess")
+        verify(main && command && timeline && recording && playback && access)
+        verify(main.x >= 0 && main.x + main.width <= page.width)
+        for (const item of [command, timeline, recording, playback]) {
+            const position = item.mapToItem(main.contentItem, 0, 0)
+            verify(position.x >= 0 && position.x + item.width <= main.contentWidth)
+            verify(position.y >= 0 && position.y + item.height <= main.contentHeight)
+        }
+        if (page.compactInspectorLayout) {
+            verify(access.visible)
+            verify(access.x >= 0 && access.x + access.width <= page.width)
+            mouseClick(access)
+            const inspector = findChild(page, "editorInspector")
+            const tabs = findChild(page, "editorCompactInspectorTabs")
+            verify(inspector.visible && tabs.visible)
+            verify(inspector.x >= 0 && inspector.x + inspector.width <= page.width)
+            mouseClick(access)
+        }
+    }
+
+    function test_compactRecordingStateKeepsTimelineMeterAndStopReachable() {
+        host.width = 880
+        host.height = 560
+        wait(0)
+        const output = RecordingTestDriver.nextOutputUrl()
+        verify(AudioEditorController.startRecording(
+            output, "", 16000, 2, false, false))
+        tryVerify(function() { return AudioEditorController.recording }, 5000)
+        const overlay = findChild(page, "editorRecordingOverlayWaveform")
+        const stop = findChild(page, "recordingStopButton")
+        const access = findChild(page, "editorInspectorAccess")
+        verify(overlay && stop && stop.visible && access && access.visible)
+        mouseClick(access)
+        const inspector = findChild(page, "editorInspector")
+        const tabs = findChild(page, "editorCompactInspectorTabs")
+        tabs.currentIndex = 0
+        const meter = findChild(page, "inspectorInputMeter")
+        verify(inspector.visible && meter && meter.visible)
+        verify(inspector.x + inspector.width <= page.width)
+        verify(AudioEditorController.stopRecording())
+        tryVerify(function() { return !AudioEditorController.recording }, 5000)
     }
 
     function test_exportGroupShowsPersistedReadOnlyFields() {

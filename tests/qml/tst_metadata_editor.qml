@@ -90,6 +90,42 @@ TestCase {
         page.resetEdits()
     }
 
+    function test_runtimeLayoutMatrix_data() {
+        return [
+            { tag: "minimum", w: 880, h: 560 },
+            { tag: "compact", w: 1000, h: 720 },
+            { tag: "desktop", w: 1280, h: 720 },
+            { tag: "reference", w: 1672, h: 942 }
+        ]
+    }
+
+    function test_runtimeLayoutMatrix(data) {
+        const candidate = createTemporaryObject(responsivePageComponent,
+                                                 testCase,
+                                                 { width: data.w, height: data.h })
+        verify(candidate)
+        wait(0)
+        const toolbar = findChild(candidate, "metadataToolbar")
+        const files = findChild(candidate, "metadataFilePanel")
+        const inspector = findChild(candidate, "metadataInspectorPanel")
+        const tabs = findChild(candidate, "metadataCompactTabs")
+        verify(toolbar && files && inspector && tabs)
+        const toolbarPosition = toolbar.mapToItem(candidate, 0, 0)
+        verify(toolbarPosition.x >= 0 && toolbarPosition.y >= 0)
+        verify(toolbarPosition.x + toolbar.width <= candidate.width)
+        verify(toolbarPosition.y + toolbar.height <= candidate.height)
+        if (candidate.compactLayout) {
+            verify(tabs.visible && files.visible)
+            tabs.currentIndex = 1
+            tryVerify(function() { return inspector.visible })
+        }
+        const visiblePanel = candidate.compactLayout ? inspector : files
+        const panelPosition = visiblePanel.mapToItem(candidate, 0, 0)
+        verify(panelPosition.x >= 0 && panelPosition.y >= 0)
+        verify(panelPosition.x + visiblePanel.width <= candidate.width)
+        verify(panelPosition.y + visiblePanel.height <= candidate.height)
+    }
+
     function test_resultsSummaryIncludesUnsupportedCount() {
         const summary = findChild(page, "metadataResultsSummaryLabel")
         verify(summary)

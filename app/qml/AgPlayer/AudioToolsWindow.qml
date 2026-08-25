@@ -81,19 +81,14 @@ Window {
                     anchors.rightMargin: 8
                     spacing: 10
 
-                    Rectangle {
+                    Image {
+                        objectName: "audioToolsBrandMark"
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
-                        radius: 6
-                        color: Theme.accent
-                        border.color: Theme.accentBorder
-                        Image {
-                            anchors.centerIn: parent
-                            width: 18
-                            height: 18
-                            source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                            fillMode: Image.PreserveAspectFit
-                        }
+                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
                     }
                     Text {
                         objectName: "audioToolsWindowTitle"

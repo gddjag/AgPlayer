@@ -11,13 +11,18 @@ Rectangle {
     clip: true
     focus: true
 
-    readonly property bool referenceLayout: width >= 1500 && height >= 800
-    readonly property bool narrowLayout: width < 1000
+    readonly property bool referenceLayout: width >= 1500
+    readonly property bool mediumLayout: width >= 1000 && width < 1500
+    readonly property bool compactInspectorLayout: width < 1000
+    readonly property bool narrowLayout: compactInspectorLayout
+    readonly property real mediumInspectorWidth: mediumLayout
+        ? Math.min(340, Math.max(300, Math.round(width * 0.265625))) : 320
     readonly property real mainWidth: referenceLayout ? 1300
-        : narrowLayout ? width : Math.max(680, width - 320)
+        : narrowLayout ? width : width - mediumInspectorWidth
     readonly property real responsiveContentHeight: narrowLayout ? 720
         : Math.max(height, 660)
     property bool inspectorExpanded: false
+    property int compactInspectorPage: 0
     property bool showLastExportResult: false
     readonly property bool editorOperationActive:
         AudioEditorController.busy && !AudioEditorController.recording
@@ -883,7 +888,8 @@ Rectangle {
         x: page.referenceLayout ? 1300
             : page.narrowLayout ? page.width - width : page.mainWidth
         y: 0
-        width: page.referenceLayout ? 372 : page.narrowLayout ? 350 : 320
+        width: page.referenceLayout ? 372
+            : page.narrowLayout ? 350 : page.mediumInspectorWidth
         height: page.height
         visible: !page.narrowLayout || page.inspectorExpanded
         z: page.narrowLayout ? 30 : 2
@@ -891,11 +897,27 @@ Rectangle {
         border.color: Theme.border
         border.width: 1
 
+        TabBar {
+            id: compactInspectorTabs
+            objectName: "editorCompactInspectorTabs"
+            visible: page.compactInspectorLayout
+            x: 6
+            y: 6
+            width: parent.width - 12
+            height: 38
+            currentIndex: page.compactInspectorPage
+            onCurrentIndexChanged: page.compactInspectorPage = currentIndex
+            TabButton { text: qsTr("录音") }
+            TabButton { text: qsTr("处理") }
+            TabButton { text: qsTr("导出") }
+        }
+
         Flickable {
             id: inspectorScroller
             objectName: "editorInspectorScroller"
             anchors.fill: parent
             anchors.margins: 6
+            anchors.topMargin: compactInspectorTabs.visible ? 50 : 6
             contentWidth: width
             contentHeight: inspectorGroups.height
             clip: true
@@ -909,6 +931,8 @@ Rectangle {
                 Rectangle {
                     id: recordingGroup
                     objectName: "inspectorRecordingGroup"
+                    visible: !page.compactInspectorLayout
+                        || page.compactInspectorPage === 0
                     width: parent.width
                     property bool collapsed: false
                     height: collapsed ? 38 : 186
@@ -1042,6 +1066,8 @@ Rectangle {
                 Rectangle {
                     id: tempoGroup
                     objectName: "inspectorTempoGroup"
+                    visible: !page.compactInspectorLayout
+                        || page.compactInspectorPage === 1
                     width: parent.width
                     property bool collapsed: false
                     height: collapsed ? 38 : 129
@@ -1123,6 +1149,8 @@ Rectangle {
                 Rectangle {
                     id: pitchGroup
                     objectName: "inspectorPitchGroup"
+                    visible: !page.compactInspectorLayout
+                        || page.compactInspectorPage === 1
                     width: parent.width
                     property bool collapsed: false
                     height: collapsed ? 38 : 107
@@ -1203,6 +1231,8 @@ Rectangle {
                 Rectangle {
                     id: preservePitchGroup
                     objectName: "inspectorPreservePitchGroup"
+                    visible: !page.compactInspectorLayout
+                        || page.compactInspectorPage === 1
                     width: parent.width
                     property bool collapsed: false
                     height: collapsed ? 38 : 104
@@ -1266,6 +1296,8 @@ Rectangle {
                 Rectangle {
                     id: exportGroup
                     objectName: "inspectorExportGroup"
+                    visible: !page.compactInspectorLayout
+                        || page.compactInspectorPage === 2
                     width: parent.width
                     property bool collapsed: false
                     height: collapsed ? 38 : 276

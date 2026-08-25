@@ -35,8 +35,8 @@ SetupLogging=yes
 DisableProgramGroupPage=yes
 DisableDirPage=no
 SetupIconFile=..\assets\brand\agplayer.ico
-WizardImageFile=..\assets\brand\logo-lockup.png
-WizardSmallImageFile=..\assets\brand\agplayer-icon.png
+WizardImageFile=..\assets\brand\installer-wizard.png
+WizardSmallImageFile=..\assets\brand\installer-small.png
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "languages\ChineseSimplified.isl"
