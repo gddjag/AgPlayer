@@ -26,6 +26,30 @@ double contrastRatio(const QColor& first, const QColor& second)
         / (qMin(firstLuminance, secondLuminance) + 0.05);
 }
 
+void verifyInteractiveTokens(const ThemePalette& palette)
+{
+    QVERIFY2(contrastRatio(palette.accent, palette.surface) >= 4.5,
+             "resolved accent must be readable as a link or icon");
+    QVERIFY2(contrastRatio(palette.highlight, palette.surface) >= 4.5,
+             "independent highlight must be readable as a selection color");
+    QVERIFY2(contrastRatio(palette.accentHover, palette.surface) >= 4.5,
+             "accent hover must preserve control contrast");
+    QVERIFY2(contrastRatio(palette.accentPressed, palette.surface) >= 4.5,
+             "accent pressed must preserve control contrast");
+    QVERIFY2(contrastRatio(palette.highlightHover, palette.surface) >= 4.5,
+             "highlight hover must preserve control contrast");
+    QVERIFY2(contrastRatio(palette.highlightPressed, palette.surface) >= 4.5,
+             "highlight pressed must preserve control contrast");
+    QVERIFY2(contrastRatio(palette.focus, palette.surface) >= 3.0,
+             "focus must remain visible against the surface");
+    QVERIFY2(contrastRatio(palette.borderStrong, palette.surface) >= 3.0,
+             "strong border must remain visible against the surface");
+    QVERIFY(palette.accentHover != palette.accent);
+    QVERIFY(palette.accentPressed != palette.accentHover);
+    QVERIFY(palette.highlightHover != palette.highlight);
+    QVERIFY(palette.highlightPressed != palette.highlightHover);
+}
+
 } // namespace
 
 class ThemeManagerTest final : public QObject {
@@ -36,6 +60,8 @@ private slots:
     void exposesStablePresetSeeds();
     void resolvesExtremeSeedsWithReadableTokens_data();
     void resolvesExtremeSeedsWithReadableTokens();
+    void resolvesPresetStates_data();
+    void resolvesPresetStates();
     void keepsNeutralAndSemanticTokensIndependent();
     void makesHighlightFollowAccentOnlyWhenRequested();
     void refreshesSystemPaletteOncePerRealChange();
@@ -48,7 +74,7 @@ void ThemeManagerTest::exposesStablePresetSeeds_data()
     QTest::addColumn<QString>("id");
     QTest::addColumn<QColor>("seed");
     const QList<ThemeManager::Preset> expected = {
-        {QStringLiteral("system-blue"), QColor(QStringLiteral("#007AFF"))},
+        {QStringLiteral("systemBlue"), QColor(QStringLiteral("#007AFF"))},
         {QStringLiteral("indigo"), QColor(QStringLiteral("#5856D6"))},
         {QStringLiteral("purple"), QColor(QStringLiteral("#AF52DE"))},
         {QStringLiteral("pink"), QColor(QStringLiteral("#FF2D55"))},
@@ -97,16 +123,45 @@ void ThemeManagerTest::resolvesExtremeSeedsWithReadableTokens()
     for (const auto mode : {ThemeManager::AppearanceMode::Light,
              ThemeManager::AppearanceMode::Dark}) {
         ThemeManager manager(*qApp);
-        manager.applyPreferences({mode, seed, ThemeManager::defaultSeed(), true});
+        manager.applyPreferences({mode, seed, seed, false});
         const ThemePalette& palette = manager.palette();
 
         QVERIFY2(contrastRatio(palette.textPrimary, palette.background) >= 4.5,
                  "primary text must remain readable");
         QVERIFY2(contrastRatio(palette.accentText, palette.accent) >= 3.0,
                  "accent text must select the readable foreground");
-        QVERIFY2(contrastRatio(palette.accent, palette.background) >= 3.0,
-                 "resolved accent must remain visible against the surface");
-        QCOMPARE(palette.highlight, palette.accent);
+        verifyInteractiveTokens(palette);
+    }
+}
+
+void ThemeManagerTest::resolvesPresetStates_data()
+{
+    QTest::addColumn<QColor>("seed");
+    const QList<ThemeManager::Preset> expected = {
+        {QStringLiteral("systemBlue"), QColor(QStringLiteral("#007AFF"))},
+        {QStringLiteral("indigo"), QColor(QStringLiteral("#5856D6"))},
+        {QStringLiteral("purple"), QColor(QStringLiteral("#AF52DE"))},
+        {QStringLiteral("pink"), QColor(QStringLiteral("#FF2D55"))},
+        {QStringLiteral("red"), QColor(QStringLiteral("#FF3B30"))},
+        {QStringLiteral("orange"), QColor(QStringLiteral("#FF9500"))},
+        {QStringLiteral("gold"), QColor(QStringLiteral("#FFCC00"))},
+        {QStringLiteral("green"), QColor(QStringLiteral("#34C759"))},
+        {QStringLiteral("teal"), QColor(QStringLiteral("#30B0C7"))},
+        {QStringLiteral("cyan"), QColor(QStringLiteral("#32ADE6"))},
+    };
+    for (const ThemeManager::Preset& preset : expected) {
+        QTest::newRow(preset.id.toLatin1().constData()) << preset.seed;
+    }
+}
+
+void ThemeManagerTest::resolvesPresetStates()
+{
+    QFETCH(QColor, seed);
+    for (const auto mode : {ThemeManager::AppearanceMode::Light,
+             ThemeManager::AppearanceMode::Dark}) {
+        ThemeManager manager(*qApp);
+        manager.applyPreferences({mode, seed, seed, false});
+        verifyInteractiveTokens(manager.palette());
     }
 }
 
@@ -163,21 +218,37 @@ void ThemeManagerTest::refreshesSystemPaletteOncePerRealChange()
     manager.applyPreferences({ThemeManager::AppearanceMode::System,
                               ThemeManager::defaultSeed(),
                               ThemeManager::defaultSeed(), true});
+    QVERIFY(QMetaObject::invokeMethod(
+        &manager, "handleSystemColorSchemeChanged", Qt::DirectConnection,
+        Q_ARG(Qt::ColorScheme, Qt::ColorScheme::Light)));
+    QCOMPARE(manager.palette().background, QColor(QStringLiteral("#F5F5F7")));
     QSignalSpy changed(&manager, &ThemeManager::paletteChanged);
 
-    QEvent unchanged(QEvent::ApplicationPaletteChange);
-    QCoreApplication::sendEvent(qApp, &unchanged);
-    QCOMPARE(changed.count(), 0);
+    QVERIFY(QMetaObject::invokeMethod(
+        &manager, "handleSystemColorSchemeChanged", Qt::DirectConnection,
+        Q_ARG(Qt::ColorScheme, Qt::ColorScheme::Dark)));
+    QCOMPARE(manager.palette().background, QColor(QStringLiteral("#101114")));
+    QCOMPARE(changed.count(), 1);
 
-    QPalette darkPalette = qApp->palette();
-    darkPalette.setColor(QPalette::Window, QColor(QStringLiteral("#101114")));
-    qApp->setPalette(darkPalette);
-    QVERIFY(changed.count() <= 1);
-    const int afterExternalChange = changed.count();
+    QVERIFY(QMetaObject::invokeMethod(
+        &manager, "handleSystemColorSchemeChanged", Qt::DirectConnection,
+        Q_ARG(Qt::ColorScheme, Qt::ColorScheme::Dark)));
+    QCOMPARE(changed.count(), 1);
+
+    QPalette lightPalette = qApp->palette();
+    lightPalette.setColor(QPalette::Window, QColor(QStringLiteral("#F5F5F7")));
+    qApp->setPalette(lightPalette);
+    QCOMPARE(changed.count(), 1);
+
+    QVERIFY(QMetaObject::invokeMethod(
+        &manager, "handleSystemColorSchemeChanged", Qt::DirectConnection,
+        Q_ARG(Qt::ColorScheme, Qt::ColorScheme::Unknown)));
+    QCOMPARE(manager.palette().background, QColor(QStringLiteral("#F5F5F7")));
+    QCOMPARE(changed.count(), 2);
 
     QEvent duplicate(QEvent::ApplicationPaletteChange);
     QCoreApplication::sendEvent(qApp, &duplicate);
-    QCOMPARE(changed.count(), afterExternalChange);
+    QCOMPARE(changed.count(), 2);
 }
 
 void ThemeManagerTest::ownsNoTimers()

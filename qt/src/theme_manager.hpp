@@ -154,6 +154,9 @@ signals:
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
+private slots:
+    void handleSystemColorSchemeChanged(Qt::ColorScheme scheme);
+
 private:
     AppearanceMode effectiveAppearance() const;
     void refreshPalette();
@@ -162,5 +165,6 @@ private:
     QGuiApplication& application_;
     Preferences preferences_;
     ThemePalette palette_;
+    Qt::ColorScheme systemColorScheme_ = Qt::ColorScheme::Unknown;
     bool applyingApplicationPalette_ = false;
 };

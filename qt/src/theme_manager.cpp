@@ -9,8 +9,7 @@
 
 namespace {
 
-constexpr qreal kBodyContrast = 4.5;
-constexpr qreal kControlContrast = 3.0;
+constexpr qreal kActionContrast = 4.5;
 
 qreal linearChannel(const qreal channel)
 {
@@ -44,51 +43,50 @@ QColor readableForeground(const QColor& background)
         : white;
 }
 
-QColor adjustLightness(const QColor& color, const qreal lightness)
+QColor withHslLightness(const QColor& color, const int lightness)
 {
     QColor hsl = color.toHsl();
-    hsl.setHslF(hsl.hslHueF(), hsl.hslSaturationF(),
-                qBound<qreal>(0.0, lightness, 1.0), color.alphaF());
+    hsl.setHsl(hsl.hslHue(), hsl.hslSaturation(), qBound(0, lightness, 255),
+               color.alpha());
     return hsl.toRgb();
 }
 
-QColor resolvedSeed(const QColor& requested, const QColor& background)
+QColor resolvedSeed(const QColor& requested, const QColor& surface)
 {
-    const QColor seed = requested.isValid() ? requested.toRgb()
-                                            : ThemeManager::defaultSeed();
-    if (contrastRatio(seed, background) >= kControlContrast) {
+    QColor seed = requested.isValid() ? requested.toRgb()
+                                      : ThemeManager::defaultSeed();
+    seed.setAlpha(255);
+    if (contrastRatio(seed, surface) >= kActionContrast) {
         return seed;
     }
 
     const QColor hsl = seed.toHsl();
-    const qreal originalLightness = hsl.lightnessF();
-    const bool darken = relativeLuminance(background) > 0.5;
-    qreal low = darken ? 0.0 : originalLightness;
-    qreal high = darken ? originalLightness : 1.0;
-    QColor candidate = seed;
-    for (int i = 0; i < 16; ++i) {
-        const qreal midpoint = (low + high) / 2.0;
-        candidate = adjustLightness(seed, midpoint);
-        if (contrastRatio(candidate, background) >= kControlContrast) {
-            if (darken) {
-                low = midpoint;
-            } else {
-                high = midpoint;
-            }
-        } else if (darken) {
-            high = midpoint;
-        } else {
-            low = midpoint;
+    const int step = relativeLuminance(surface) > 0.5 ? -1 : 1;
+    for (int lightness = hsl.lightness(); lightness >= 0 && lightness <= 255;
+         lightness += step) {
+        const QColor candidate = withHslLightness(seed, lightness);
+        if (contrastRatio(candidate, surface) >= kActionContrast) {
+            return candidate;
         }
     }
-    return adjustLightness(seed, darken ? low : high);
+    return withHslLightness(seed, step < 0 ? 0 : 255);
 }
 
-QColor stateTone(const QColor& base, const bool dark, const qreal amount)
+QColor stateTone(const QColor& base, const QColor& surface, const bool dark,
+                 const int amount)
 {
     const QColor hsl = base.toHsl();
-    const qreal lightness = hsl.lightnessF() + (dark ? amount : -amount);
-    return adjustLightness(base, lightness);
+    const int preferredLightness = hsl.lightness() + (dark ? amount : -amount);
+    const QColor preferred = withHslLightness(base, preferredLightness);
+    if (preferred != base && contrastRatio(preferred, surface) >= kActionContrast) {
+        return preferred;
+    }
+    const QColor alternate = withHslLightness(
+        base, hsl.lightness() + (dark ? -amount : amount));
+    if (alternate != base && contrastRatio(alternate, surface) >= kActionContrast) {
+        return alternate;
+    }
+    return base;
 }
 
 QColor softTone(const QColor& color, const qreal alpha)
@@ -114,7 +112,7 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.textTertiary = QColor(QStringLiteral("#9DA3AD"));
         palette.textDisabled = QColor(QStringLiteral("#747A84"));
         palette.border = QColor(QStringLiteral("#30333A"));
-        palette.borderStrong = QColor(QStringLiteral("#4A4E57"));
+        palette.borderStrong = QColor(QStringLiteral("#666C76"));
         palette.divider = QColor(QStringLiteral("#282B30"));
         palette.disabled = QColor(QStringLiteral("#3A3D44"));
         palette.success = QColor(QStringLiteral("#4CCD78"));
@@ -134,7 +132,7 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.textTertiary = QColor(QStringLiteral("#777D88"));
         palette.textDisabled = QColor(QStringLiteral("#9AA0AA"));
         palette.border = QColor(QStringLiteral("#D7D9DE"));
-        palette.borderStrong = QColor(QStringLiteral("#B8BCC5"));
+        palette.borderStrong = QColor(QStringLiteral("#858B96"));
         palette.divider = QColor(QStringLiteral("#E5E6EA"));
         palette.disabled = QColor(QStringLiteral("#D9DBE0"));
         palette.success = QColor(QStringLiteral("#208A4A"));
@@ -145,20 +143,20 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.critical = QColor(QStringLiteral("#C93632"));
     }
 
-    palette.accent = resolvedSeed(preferences.accentSeed, palette.background);
+    palette.accent = resolvedSeed(preferences.accentSeed, palette.surface);
     const QColor highlightSeed = preferences.highlightFollowsAccent
         ? preferences.accentSeed
         : preferences.highlightSeed;
-    palette.highlight = resolvedSeed(highlightSeed, palette.background);
-    palette.accentHover = stateTone(palette.accent, dark, 0.06);
-    palette.accentPressed = stateTone(palette.accent, dark, 0.12);
+    palette.highlight = resolvedSeed(highlightSeed, palette.surface);
+    palette.accentHover = stateTone(palette.accent, palette.surface, dark, 15);
+    palette.accentPressed = stateTone(palette.accent, palette.surface, dark, 31);
     palette.accentSoft = softTone(palette.accent, dark ? 0.22 : 0.12);
     palette.accentText = readableForeground(palette.accent);
-    palette.highlightHover = stateTone(palette.highlight, dark, 0.06);
-    palette.highlightPressed = stateTone(palette.highlight, dark, 0.12);
+    palette.highlightHover = stateTone(palette.highlight, palette.surface, dark, 15);
+    palette.highlightPressed = stateTone(palette.highlight, palette.surface, dark, 31);
     palette.highlightSoft = softTone(palette.highlight, dark ? 0.20 : 0.10);
     palette.highlightText = readableForeground(palette.highlight);
-    palette.focus = resolvedSeed(palette.accent, palette.background);
+    palette.focus = palette.accent;
     return palette;
 }
 
@@ -189,12 +187,9 @@ ThemeManager::ThemeManager(QGuiApplication& application, QObject* parent)
     , application_(application)
 {
     application_.installEventFilter(this);
+    systemColorScheme_ = application_.styleHints()->colorScheme();
     connect(application_.styleHints(), &QStyleHints::colorSchemeChanged, this,
-            [this](const Qt::ColorScheme) {
-                if (preferences_.appearanceMode == AppearanceMode::System) {
-                    refreshPalette();
-                }
-            });
+            &ThemeManager::handleSystemColorSchemeChanged);
     refreshPalette();
 }
 
@@ -206,7 +201,7 @@ QColor ThemeManager::defaultSeed()
 QList<ThemeManager::Preset> ThemeManager::presets()
 {
     return {
-        {QStringLiteral("system-blue"), QColor(QStringLiteral("#007AFF"))},
+        {QStringLiteral("systemBlue"), QColor(QStringLiteral("#007AFF"))},
         {QStringLiteral("indigo"), QColor(QStringLiteral("#5856D6"))},
         {QStringLiteral("purple"), QColor(QStringLiteral("#AF52DE"))},
         {QStringLiteral("pink"), QColor(QStringLiteral("#FF2D55"))},
@@ -241,12 +236,23 @@ bool ThemeManager::eventFilter(QObject* watched, QEvent* event)
     return QObject::eventFilter(watched, event);
 }
 
+void ThemeManager::handleSystemColorSchemeChanged(const Qt::ColorScheme scheme)
+{
+    if (systemColorScheme_ == scheme) {
+        return;
+    }
+    systemColorScheme_ = scheme;
+    if (preferences_.appearanceMode == AppearanceMode::System) {
+        refreshPalette();
+    }
+}
+
 ThemeManager::AppearanceMode ThemeManager::effectiveAppearance() const
 {
     if (preferences_.appearanceMode != AppearanceMode::System) {
         return preferences_.appearanceMode;
     }
-    switch (application_.styleHints()->colorScheme()) {
+    switch (systemColorScheme_) {
     case Qt::ColorScheme::Light:
         return AppearanceMode::Light;
     case Qt::ColorScheme::Dark:
