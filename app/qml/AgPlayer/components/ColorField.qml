@@ -51,7 +51,7 @@ AbstractButton {
     background: Rectangle {
         color: Theme.background
         border.width: root.activeFocus ? 2 : 1
-        border.color: root.activeFocus ? Theme.accent : Theme.border
+        border.color: root.activeFocus ? Theme.focus : Theme.border
         radius: Theme.radiusSm
     }
 

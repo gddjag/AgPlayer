@@ -433,7 +433,7 @@ Window {
                         icon.height: 16
                         onClicked: windows.hideListWindow()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.favoriteRed
+                            color: parent.hovered ? Theme.danger
                                                   : "transparent"
                             radius: Theme.radiusSm
                         }
@@ -461,7 +461,7 @@ Window {
                 readonly property int dividerWidth: 1
                 readonly property real centerWidth: centerColumn.width
                 color: SettingsController.glassEffect
-                       ? Qt.rgba(Theme.listWorkspaceSurface.r,
+                       ? /* theme-color-allow: transparent glass surface */ Qt.rgba(Theme.listWorkspaceSurface.r,
                                  Theme.listWorkspaceSurface.g,
                                  Theme.listWorkspaceSurface.b, 0.91)
                        : Theme.listWorkspaceSurface

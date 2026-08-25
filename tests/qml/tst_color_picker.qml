@@ -57,6 +57,40 @@ TestCase {
             }
         }
 
+        Item {
+            x: 18
+            y: 600
+            width: 680
+            height: 32
+
+            ThemedSwitch {
+                id: representativeSwitch
+                objectName: "representativeThemeSwitch"
+                checked: true
+            }
+            ThemedCheckBox {
+                id: representativeCheckBox
+                objectName: "representativeThemeCheckBox"
+                x: 60
+                checked: true
+            }
+            ThemedRangeSlider {
+                id: representativeRangeSlider
+                objectName: "representativeThemeRangeSlider"
+                x: 110
+                width: 180
+                first.value: 0.25
+                second.value: 0.75
+            }
+            ThemedComboBox {
+                id: representativeComboBox
+                objectName: "representativeThemeComboBox"
+                x: 310
+                width: 160
+                model: ["A", "B"]
+            }
+        }
+
         ThemeColorSelector {
             id: highlightSelector
             parent: testHost
@@ -522,6 +556,46 @@ TestCase {
         tryCompare(SettingsController, "highlightMode", 1)
         tryCompare(SettingsController, "highlightPreset", "purple")
         compare(SettingsController.accentPreset, "systemBlue")
+    }
+
+    function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {
+        SettingsController.themeMode = 1
+        SettingsController.accentMode = 1
+        SettingsController.accentPreset = "systemBlue"
+        SettingsController.highlightFollowAccent = false
+        SettingsController.highlightMode = 1
+        SettingsController.highlightPreset = "purple"
+        wait(0)
+
+        verify(Theme.accent.toString() !== Theme.highlight.toString())
+        compare(representativeSwitch.indicator.color.toString(),
+                Theme.accent.toString())
+        compare(representativeCheckBox.indicator.color.toString(),
+                Theme.accent.toString())
+        compare(representativeRangeSlider.background.children[0].color.toString(),
+                Theme.accent.toString())
+        compare(representativeComboBox.palette.highlight.toString(),
+                Theme.highlight.toString())
+
+        representativeComboBox.forceActiveFocus()
+        tryCompare(representativeComboBox, "activeFocus", true)
+        compare(representativeComboBox.background.border.color.toString(),
+                Theme.focus.toString())
+
+        representativeSwitch.enabled = false
+        representativeCheckBox.enabled = false
+        representativeRangeSlider.enabled = false
+        wait(0)
+        compare(representativeSwitch.indicator.color.toString(),
+                Theme.disabled.toString())
+        compare(representativeCheckBox.indicator.color.toString(),
+                Theme.disabled.toString())
+        compare(representativeRangeSlider.background.color.toString(),
+                Theme.disabled.toString())
+
+        representativeSwitch.enabled = true
+        representativeCheckBox.enabled = true
+        representativeRangeSlider.enabled = true
     }
 
     function test_follow_accent_disables_highlight_and_restores_independent_choice() {

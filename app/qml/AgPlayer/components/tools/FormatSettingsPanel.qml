@@ -178,7 +178,7 @@ Rectangle {
         }
         background: Rectangle {
             color: Theme.elevated
-            border.color: control.activeFocus ? Theme.accent : Theme.border
+            border.color: control.activeFocus ? Theme.focus : Theme.border
             radius: 5
         }
     }
@@ -463,7 +463,7 @@ Rectangle {
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 12
-                    ThemedIcon { source: Theme.icon("information-line"); tint: "#49b7ff"; sourceSize.width: 20; sourceSize.height: 20 }
+                    ThemedIcon { source: Theme.icon("information-line"); tint: Theme.accent; sourceSize.width: 20; sourceSize.height: 20 }
                     Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: Theme.secondaryText; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                 }
             }

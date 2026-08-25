@@ -87,7 +87,7 @@ Rectangle {
             objectName: "equalizerButton"
             flat: true
             icon.source: Theme.icon("equalizer-line")
-            icon.color: Theme.isLight ? "#000000" : "#ffffff"
+            icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
             contentItem.rotation: 90
@@ -315,7 +315,7 @@ Rectangle {
                     width: 10
                     height: 10
                     radius: 5
-                    color: "#ffffff"
+                    color: Theme.onBrandGradientText
                     border.width: 1
                     border.color: Theme.border
                 }

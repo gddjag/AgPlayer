@@ -85,8 +85,8 @@ Window {
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
                         radius: 6
-                        color: "#0867ed"
-                        border.color: "#2587ff"
+                        color: Theme.accent
+                        border.color: Theme.accentBorder
                         Image {
                             anchors.centerIn: parent
                             width: 18
@@ -149,7 +149,7 @@ Window {
                         Accessible.role: Accessible.Button
                         onClicked: window.requestHide()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.favoriteRed : "transparent"
+                            color: parent.hovered ? Theme.danger : "transparent"
                             radius: 3
                         }
                     }

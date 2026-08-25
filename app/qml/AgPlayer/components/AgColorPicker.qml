@@ -147,7 +147,7 @@ Popup {
                 radius: 8
                     color: Theme.panel
                     border.width: 1
-                    border.color: hexInput.activeFocus ? Theme.accent
+                    border.color: hexInput.activeFocus ? Theme.focus
                                                    : Theme.border
 
                 TextInput {
@@ -609,7 +609,7 @@ Popup {
         radius: height / 2
         color: "#FFFFFF"
         border.width: 1
-        border.color: slider.activeFocus ? Theme.accent : "#B8B8B8"
+        border.color: slider.activeFocus ? Theme.focus : "#B8B8B8"
 
         Rectangle {
             anchors.centerIn: parent

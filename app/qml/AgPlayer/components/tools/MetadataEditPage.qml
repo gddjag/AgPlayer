@@ -382,12 +382,12 @@ Rectangle {
 
     function fileAccent(fileName) {
         const suffix = String(fileName || "").split(".").pop().toLowerCase()
-        if (suffix === "mp3") return "#19a56f"
-        if (suffix === "flac") return "#ea5f32"
-        if (suffix === "m4a") return "#805fd0"
-        if (suffix === "opus") return "#2cb3bd"
-        if (suffix === "wav") return "#159ec7"
-        return "#6d7f8c"
+        if (suffix === "mp3") return "#19a56f" // theme-color-allow: file format badge
+        if (suffix === "flac") return "#ea5f32" // theme-color-allow: file format badge
+        if (suffix === "m4a") return "#805fd0" // theme-color-allow: file format badge
+        if (suffix === "opus") return "#2cb3bd" // theme-color-allow: file format badge
+        if (suffix === "wav") return "#159ec7" // theme-color-allow: file format badge
+        return "#6d7f8c" // theme-color-allow: file format badge
     }
 
     Keys.onPressed: function(event) {
@@ -583,7 +583,7 @@ Rectangle {
                     color: page.inputColor
                     radius: 5
                     border.width: 1
-                    border.color: parent.activeFocus ? Theme.accent : page.borderColor
+                    border.color: parent.activeFocus ? Theme.focus : page.borderColor
                 }
                 onTextChanged: page.searchText = text
             }
@@ -841,7 +841,7 @@ Rectangle {
                                                        ? qsTr("已取消") : qsTr("失败"))
                                                 : qsTr("就绪")
                                         color: metadata.hasError || (applyResult && !applyResult.success)
-                                               ? Theme.favoriteRed : Theme.accent
+                                               ? Theme.error : Theme.accent
                                         Layout.preferredWidth: 52
                                         horizontalAlignment: Text.AlignHCenter
                                     }
@@ -1303,7 +1303,7 @@ Rectangle {
                                             spacing: 8
                                             ThemedIcon {
                                                 source: Theme.icon("checkbox-blank-circle-fill")
-                                                tint: "#39bd72"
+                                                tint: Theme.success
                                                 sourceSize.width: 16
                                                 sourceSize.height: 16
                                             }
@@ -1336,7 +1336,7 @@ Rectangle {
                                                      ? (modelData.message || modelData.stage || qsTr("完成"))
                                                      : (modelData.preflightReason || modelData.message
                                                         || modelData.errorCode || qsTr("失败")))
-                                            color: modelData.success ? "#39bd72" : Theme.favoriteRed
+                                            color: modelData.success ? Theme.success : Theme.error
                                             font.pixelSize: 11
                                             elide: Text.ElideMiddle
                                         }
@@ -1368,12 +1368,12 @@ Rectangle {
                                     enabled: page.targetCount() > 0
                                              && page.configuredEditCount() > 0
                                              && !MetadataEditor.busy
-                                    palette.buttonText: "white"
+                                    palette.buttonText: Theme.accentText
                                     background: Rectangle {
                                         radius: 5
-                                        color: !applyButton.enabled ? Theme.border
-                                             : applyButton.down ? Theme.activeSelection
-                                             : applyButton.hovered ? Theme.accent
+                                        color: !applyButton.enabled ? Theme.disabled
+                                             : applyButton.down ? Theme.accentPressed
+                                             : applyButton.hovered ? Theme.accentHover
                                                                    : Theme.accent
                                     }
                                     onClicked: page.applyEdits()
@@ -1390,7 +1390,7 @@ Rectangle {
                                     palette.buttonText: Theme.primaryText
                                     background: Rectangle {
                                         radius: 5
-                                        color: cancelButton.down ? Theme.activeSelection
+                                        color: cancelButton.down ? Theme.surfacePressed
                                              : cancelButton.hovered ? Theme.hoverSurface
                                                                     : Theme.elevated
                                         border.width: 1

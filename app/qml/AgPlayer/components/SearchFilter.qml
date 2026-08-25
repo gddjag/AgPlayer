@@ -82,9 +82,7 @@ Rectangle {
                 placeholderText: qsTr("歌曲 · 艺术家 · 专辑 · 标签")
                 text: root.searchText
                 color: Theme.primaryText
-                placeholderTextColor: Qt.rgba(Theme.secondaryText.r,
-                                               Theme.secondaryText.g,
-                                               Theme.secondaryText.b, 0.55)
+                placeholderTextColor: Theme.textTertiary
                 leftPadding: 34
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
@@ -208,8 +206,8 @@ Rectangle {
             onClicked: root.clearFilters()
             palette.buttonText: Theme.primaryText
             background: Rectangle {
-                color: parent.pressed ? Theme.cyan
-                      : parent.hovered ? Theme.border : Theme.panel
+                color: parent.pressed ? Theme.surfacePressed
+                      : parent.hovered ? Theme.surfaceHover : Theme.panel
                 border.color: Theme.border
                 border.width: 1
                 radius: Theme.radiusSm

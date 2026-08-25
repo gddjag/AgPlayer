@@ -48,7 +48,7 @@ Window {
         anchors.margins: 2
         radius: Theme.windowRadius
         color: SettingsController.glassEffect
-               ? Qt.rgba(Theme.background.r, Theme.background.g,
+               ? /* theme-color-allow: transparent glass surface */ Qt.rgba(Theme.background.r, Theme.background.g,
                          Theme.background.b, 0.94)
                : Theme.background
         border.color: Theme.border
@@ -152,7 +152,7 @@ Window {
                         Accessible.name: qsTr("Close")
                         onClicked: windows.requestClose()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.favoriteRed
+                            color: parent.hovered ? Theme.danger
                                                   : "transparent"
                             radius: Theme.radiusSm
                         }

@@ -652,7 +652,7 @@ Rectangle {
                             objectName: "recordingToggleIndicator"
                             anchors.centerIn: parent
                             width: 34; height: 34; radius: 17
-                            color: "#ff3d4f"
+                            color: "#ff3d4f" // theme-color-allow: recording indicator
                         }
                         background: Rectangle {
                             radius: width / 2
@@ -779,7 +779,7 @@ Rectangle {
                             objectName: "editorPrimaryPlayBackground"
                             radius: width / 2
                             color: Theme.elevated
-                            border.color: "#00e676"
+                            border.color: "#00e676" // theme-color-allow: editor playback ring
                             border.width: 3
                         }
                         onClicked: AudioEditorController.playPause()
@@ -973,8 +973,9 @@ Rectangle {
                                             objectName:
                                                 "inspectorInputMeterSegment" + index
                                             width: 8; height: 13; radius: 1
-                                            color: index < 9 ? "#16e969"
-                                                : index < 12 ? "#ffca28" : "#d9364f"
+                                            color: index < 9 ? "#16e969" /* theme-color-allow: editor level meter */
+                                                : index < 12 ? "#ffca28" /* theme-color-allow: editor level meter */
+                                                             : "#d9364f" /* theme-color-allow: editor level meter */
                                             opacity: index / 14
                                                 <= parent.parent.level
                                                 ? 1.0 : 0.18

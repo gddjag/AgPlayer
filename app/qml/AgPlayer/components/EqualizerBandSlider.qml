@@ -97,7 +97,7 @@ Item {
                 height: 10
                 radius: 3
                 color: Theme.elevated
-                border.color: slider.activeFocus ? Theme.accent : Theme.secondaryText
+                border.color: slider.activeFocus ? Theme.focus : Theme.secondaryText
                 border.width: slider.activeFocus ? 2 : 1
 
                 TapHandler {

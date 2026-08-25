@@ -36,7 +36,7 @@ ComboBox {
 
     background: Rectangle {
         color: control.enabled ? Theme.elevated : Theme.panel
-        border.color: control.activeFocus ? Theme.accent : Theme.border
+        border.color: control.activeFocus ? Theme.focus : Theme.border
         border.width: 1
         radius: Theme.radiusSm
     }

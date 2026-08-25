@@ -580,9 +580,9 @@ TestCase {
         compare(button.contentItem.rotation, 90)
         var previousThemeMode = SettingsController.themeMode
         SettingsController.themeMode = 0
-        compare(button.icon.color, "#ffffff")
+        compare(button.icon.color.toString(), Theme.iconPrimary.toString())
         SettingsController.themeMode = 1
-        compare(button.icon.color, "#000000")
+        compare(button.icon.color.toString(), Theme.iconPrimary.toString())
         SettingsController.themeMode = previousThemeMode
         verify(findChild(window, "equalizerResponseCurve"))
         var presetBox = findChild(window, "equalizerPresetBox")

@@ -329,7 +329,7 @@ Rectangle {
                         Number(modelData.timelineStart)
                             + fadeInHandle.displayedFadeIn)
                         - eventDelegate.x
-                    context.strokeStyle = "#e9d7cf"
+                    context.strokeStyle = "#e9d7cf" // theme-color-allow: editor fade curve
                     context.lineWidth = 1.2
                     context.beginPath()
                     context.moveTo(2, height - 10)
@@ -400,7 +400,7 @@ Rectangle {
                         Number(modelData.timelineEnd)
                             - fadeOutHandle.displayedFadeOut)
                         - eventDelegate.x
-                    context.strokeStyle = "#e9d7cf"
+                    context.strokeStyle = "#e9d7cf" // theme-color-allow: editor fade curve
                     context.lineWidth = 1.2
                     context.beginPath()
                     context.moveTo(Math.max(0, startX), 10)
@@ -494,7 +494,7 @@ Rectangle {
         y: 0
         width: 2
         height: canvas.height
-        color: AudioEditorController.recording ? "#ff3d4f" : "#ffaf00"
+        color: AudioEditorController.recording ? "#ff3d4f" : "#ffaf00" // theme-color-allow: editor playhead
         visible: (AudioEditorController.hasDocument
                   || AudioEditorController.recording)
             && canvas.displayedPlayheadFrame
@@ -515,7 +515,7 @@ Rectangle {
         width: playheadTimeLabel.implicitWidth + 12
         height: 22
         radius: 11
-        color: Qt.rgba(Theme.waveformGreen.r, Theme.waveformGreen.g,
+        color: /* theme-color-allow: editor playhead capsule */ Qt.rgba(Theme.waveformGreen.r, Theme.waveformGreen.g,
                        Theme.waveformGreen.b, 0.18)
         border.color: Theme.waveformGreen
         z: 9

@@ -1073,7 +1073,7 @@ ListView {
         }
     }
     component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 12; font.weight: Font.Medium; elide: Text.ElideRight }
-    component BodyText: Text { property bool trackAvailable: true; property bool highlighted: false; property color highlightText: Theme.activeSelectionText; color: highlighted ? highlightText : trackAvailable ? Theme.secondaryText : Theme.favoriteRed; font.family: Theme.fontPrimary; font.pixelSize: 13; elide: Text.ElideRight; wrapMode: Text.NoWrap; maximumLineCount: 1; clip: true }
+    component BodyText: Text { property bool trackAvailable: true; property bool highlighted: false; property color highlightText: Theme.activeSelectionText; color: highlighted ? highlightText : trackAvailable ? Theme.secondaryText : Theme.error; font.family: Theme.fontPrimary; font.pixelSize: 13; elide: Text.ElideRight; wrapMode: Text.NoWrap; maximumLineCount: 1; clip: true }
     component MarqueeBodyText: Item {
         id: marqueeRoot
         property alias text: marqueeText.text
@@ -1092,7 +1092,7 @@ ListView {
             anchors.verticalCenter: parent.verticalCenter
             color: marqueeRoot.highlighted ? marqueeRoot.highlightText
                    : marqueeRoot.trackAvailable ? Theme.secondaryText
-                                                 : Theme.favoriteRed
+                                                 : Theme.error
             font.family: Theme.fontPrimary
             font.pixelSize: 13
             font.weight: marqueeRoot.fontWeight
@@ -1127,5 +1127,5 @@ ListView {
             }
         }
     }
-    component HoverBackground: Rectangle { color: parent.pressed ? Theme.cyan : parent.visualFocus ? Theme.border : parent.hovered ? Theme.hoverSurface : "transparent"; border.color: parent.visualFocus ? Theme.cyan : "transparent"; border.width: parent.visualFocus ? 2 : 0; radius: Theme.radiusSm }
+    component HoverBackground: Rectangle { color: parent.pressed ? Theme.surfacePressed : parent.visualFocus ? Theme.surfaceHover : parent.hovered ? Theme.hoverSurface : "transparent"; border.color: parent.visualFocus ? Theme.focus : "transparent"; border.width: parent.visualFocus ? 2 : 0; radius: Theme.radiusSm }
 }

@@ -332,8 +332,8 @@ Item {
                 Accessible.name: qsTr("Close settings")
 
                 background: Rectangle {
-                    color: parent.pressed ? Theme.favoriteRed
-                          : parent.hovered ? Theme.border
+                    color: parent.pressed ? Theme.danger
+                          : parent.hovered ? Theme.surfaceHover
                           : "transparent"
                     radius: Theme.radiusSm
                 }
@@ -380,8 +380,8 @@ Item {
                         height: 32
                         radius: Theme.radiusSm
                         color: root.selectedSection === modelData.index
-                               ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
-                               : (mouseArea.containsMouse ? Theme.border : "transparent")
+                               ? Theme.highlightSoft
+                               : (mouseArea.containsMouse ? Theme.surfaceHover : "transparent")
 
                         RowLayout {
                             anchors.fill: parent
@@ -392,7 +392,7 @@ Item {
                             ThemedIcon {
                                 source: Theme.icon(modelData.icon)
                                 tint: root.selectedSection === modelData.index
-                                      ? Theme.iconAccent
+                                      ? Theme.highlight
                                       : Theme.iconSecondary
                                 sourceSize.width: 17
                                 sourceSize.height: 17
@@ -403,7 +403,7 @@ Item {
                             Text {
                                 text: modelData.text
                                 color: root.selectedSection === modelData.index
-                                       ? Theme.primaryText
+                                       ? Theme.highlightText
                                        : Theme.secondaryText
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: 14
@@ -550,9 +550,9 @@ Item {
                 }
 
                 background: Rectangle {
-                    color: parent.pressed ? Qt.lighter(Theme.cyan, 1.1)
-                          : parent.hovered ? Qt.lighter(Theme.cyan, 1.2)
-                          : Theme.cyan
+                    color: parent.pressed ? Theme.accentPressed
+                          : parent.hovered ? Theme.accentHover
+                          : Theme.accent
                     radius: Theme.radiusSm
                     implicitWidth: 110
                     implicitHeight: 36
@@ -732,7 +732,7 @@ Item {
             }
 
             background: Rectangle {
-                color: highlighted ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
+                color: highlighted ? Theme.highlightSoft
                                   : "transparent"
             }
         }
@@ -895,9 +895,9 @@ Item {
         width: 96
         height: 72
         radius: Theme.radiusSm
-        color: selected ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.12)
+        color: selected ? Theme.highlightSoft
                         : Theme.background
-        border.color: selected ? Theme.cyan : Theme.border
+        border.color: selected ? Theme.highlightBorder : Theme.border
         border.width: 1
 
         ColumnLayout {
@@ -1310,7 +1310,7 @@ Item {
                                 !== PlaybackController.Stopped
                              && !PlaybackController.exclusiveModeActive
                     text: qsTr("独占不可用，当前使用共享模式")
-                    color: Theme.ratingGold
+                    color: Theme.warning
                     font.pixelSize: 12
                     Layout.leftMargin: Theme.spacingMd
                 }
@@ -1400,7 +1400,7 @@ Item {
                 Label {
                     visible: PlaybackController.replayGainClippingWarning
                     text: qsTr("当前 ReplayGain 增益可能削波，已按设置限制峰值")
-                    color: Theme.ratingGold
+                    color: Theme.warning
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
                 }
@@ -2002,7 +2002,7 @@ Item {
             Layout.fillHeight: true
             color: Theme.background
             radius: Theme.radiusSm
-            border.color: parent.invalidShortcut ? Theme.favoriteRed : Theme.border
+            border.color: parent.invalidShortcut ? Theme.error : Theme.border
             border.width: 1
 
             TextField {
@@ -2215,7 +2215,7 @@ Item {
                         onClicked: clearCacheConfirmDialog.open()
                         contentItem: Text {
                             text: parent.text
-                            color: "#FFFFFF"
+                            color: Theme.onBrandGradientText
                             font.family: Theme.fontPrimary
                             font.pixelSize: 12
                             font.weight: Font.Medium
@@ -2223,9 +2223,8 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
                         background: Rectangle {
-                            color: parent.pressed ? Qt.darker(Theme.favoriteRed, 1.2)
-                                  : parent.hovered ? Qt.lighter(Theme.favoriteRed, 1.1)
-                                  : Theme.favoriteRed
+                            color: parent.pressed ? Theme.critical
+                                  : Theme.danger
                             radius: Theme.radiusSm
                             implicitWidth: 90
                             implicitHeight: 32

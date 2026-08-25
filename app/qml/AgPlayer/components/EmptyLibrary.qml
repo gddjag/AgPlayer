@@ -71,10 +71,10 @@ Rectangle {
 
             background: Rectangle {
                 color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.hovered ? Theme.cyan
+                      : parent.pressed ? Theme.accentPressed
+                      : parent.hovered ? Theme.accentHover
                       : "transparent"
-                border.color: Theme.cyan
+                border.color: parent.visualFocus ? Theme.focus : Theme.accentBorder
                 border.width: parent.visualFocus ? 2 : 1
                 radius: Theme.radiusSm
                 implicitHeight: 36
@@ -83,7 +83,7 @@ Rectangle {
             contentItem: Text {
                 id: importLabel
                 text: parent.text
-                color: parent.hovered ? Theme.background : Theme.cyan
+                color: parent.hovered ? Theme.accentText : Theme.accent
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
                 horizontalAlignment: Text.AlignHCenter

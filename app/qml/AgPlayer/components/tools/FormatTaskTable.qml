@@ -164,14 +164,15 @@ Rectangle {
                     width: 28
                     height: 28
                     radius: 6
-                    color: model.sourceFormat === "WAV" ? "#e9964a"
-                         : model.sourceFormat === "MP3" ? "#35b8e7"
-                         : model.sourceFormat === "FLAC" ? "#9c6ade" : "#35bc85"
+                    color: model.sourceFormat === "WAV" ? "#e9964a" /* theme-color-allow: file format badge */
+                         : model.sourceFormat === "MP3" ? "#35b8e7" /* theme-color-allow: file format badge */
+                         : model.sourceFormat === "FLAC" ? "#9c6ade" /* theme-color-allow: file format badge */
+                                                        : "#35bc85" /* theme-color-allow: file format badge */
                     ThemedIcon {
                         objectName: column === 1 && row === 0 ? "formatTaskFirstFileIcon" : ""
                         anchors.centerIn: parent
                         source: Theme.icon("file-music-fill")
-                        tint: "#ffffff"
+                        tint: "#ffffff" // theme-color-allow: file format badge text
                         sourceSize.width: 18
                         sourceSize.height: 18
                     }
@@ -199,9 +200,9 @@ Rectangle {
                              ? model.errorDetail
                              : qsTr("失败"))
                         : model.status === "Cancelled" ? qsTr("已取消") : qsTr("就绪")
-                    color: column === 7 && model.status === "Done" ? "#19c37d"
-                         : column === 7 && model.status === "Error" ? "#ff4d4f"
-                         : column === 7 && model.status === "Converting" ? "#1688ff"
+                    color: column === 7 && model.status === "Done" ? Theme.success
+                         : column === 7 && model.status === "Error" ? Theme.error
+                         : column === 7 && model.status === "Converting" ? Theme.accent
                          : Theme.primaryText
                     font.pixelSize: 13
                     ToolTip.visible: column === 7
@@ -232,7 +233,7 @@ Rectangle {
                             width: rowProgress.visualPosition * parent.width
                             height: parent.height
                             radius: 4
-                            color: model.status === "Done" ? "#19c37d" : "#1688ff"
+                            color: model.status === "Done" ? Theme.success : Theme.accent
                         }
                     }
                 }

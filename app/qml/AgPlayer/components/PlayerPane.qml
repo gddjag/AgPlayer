@@ -568,7 +568,7 @@ Rectangle {
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: "#54ff84"
+                color: "#54ff84" // theme-color-allow: waveform hover guide
                 opacity: 0.96
             }
 
@@ -586,7 +586,7 @@ Rectangle {
                 height: hoverTime.implicitHeight + 6
                 radius: height / 2
                 color: Theme.panel
-                border.color: "#54ff84"
+                border.color: "#54ff84" // theme-color-allow: waveform hover guide
 
                 Text {
                     id: hoverTime
@@ -606,7 +606,7 @@ Rectangle {
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: "#002fa7"
+                color: "#002fa7" // theme-color-allow: waveform playback guide
                 z: 10
             }
 

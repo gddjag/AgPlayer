@@ -14,10 +14,10 @@ T.Switch {
         x: 0
         y: (control.height - height) / 2
         radius: height / 2
-        color: !control.enabled ? Qt.rgba(Theme.border.r, Theme.border.g, Theme.border.b, 0.55)
-               : control.checked ? (control.hovered ? Theme.accent : Theme.cyan)
+        color: !control.enabled ? Theme.disabled
+               : control.checked ? (control.hovered ? Theme.accentHover : Theme.accent)
                : (control.hovered ? Theme.hoverSurface : Theme.border)
-        border.color: control.activeFocus ? Theme.accent : "transparent"
+        border.color: control.activeFocus ? Theme.focus : "transparent"
         border.width: control.activeFocus ? 2 : 0
 
         Rectangle {
@@ -26,7 +26,7 @@ T.Switch {
             width: 16
             height: 16
             radius: width / 2
-            color: control.enabled ? "#FFFFFF" : Qt.rgba(Theme.primaryText.r, Theme.primaryText.g, Theme.primaryText.b, 0.55)
+            color: control.enabled ? Theme.onBrandGradientText : Theme.textDisabled
 
             Behavior on x {
                 NumberAnimation { duration: 120 }

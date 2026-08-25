@@ -35,7 +35,7 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: Theme.spacingXs
+        spacing: Math.max(2, Theme.spacingXs / 2)
 
         Button {
             id: defaultButton
@@ -56,7 +56,7 @@ ColumnLayout {
                 verticalAlignment: Text.AlignVCenter
             }
             background: Rectangle {
-                implicitWidth: 58
+                implicitWidth: 52
                 implicitHeight: 28
                 radius: Theme.radiusSm
                 color: defaultButton.checked ? Theme.accent : Theme.background
@@ -78,8 +78,8 @@ ColumnLayout {
                 checked: root.selectedMode === 1
                          && root.selectedPreset === modelData.id
                 focusPolicy: Qt.StrongFocus
-                implicitWidth: checked ? 26 : 22
-                implicitHeight: checked ? 26 : 22
+                implicitWidth: checked ? 24 : 20
+                implicitHeight: checked ? 24 : 20
                 padding: 0
                 Accessible.role: Accessible.Button
                 Accessible.name: root.title + " " + modelData.id
@@ -105,7 +105,7 @@ ColumnLayout {
                     border.color: swatch.checked
                                   ? (swatch.modelData.id === "gold"
                                      ? "#1B1B1B" : "#FFFFFF")
-                                  : (swatch.activeFocus ? Theme.accent : Theme.border)
+                                  : (swatch.activeFocus ? Theme.focus : Theme.border)
 
                     Rectangle {
                         anchors.fill: parent
@@ -132,7 +132,7 @@ ColumnLayout {
         }
 
         Item {
-            implicitWidth: customField.implicitWidth
+            implicitWidth: 92
             implicitHeight: customField.implicitHeight
 
             ColorField {

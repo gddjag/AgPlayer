@@ -799,6 +799,14 @@ add_test(
 )
 set_tests_properties(source_encoding_test PROPERTIES TIMEOUT 10)
 
+add_test(
+    NAME qml_theme_color_contract_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+)
+set_tests_properties(qml_theme_color_contract_test PROPERTIES TIMEOUT 10)
+
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog must not terminate that performance test at the old 10-second

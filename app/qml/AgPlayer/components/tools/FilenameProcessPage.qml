@@ -53,7 +53,7 @@ Control {
             visible: glyph.status !== 1
             color: "transparent"
             border.width: 1.5
-            border.color: glyph.status === 2 ? Theme.favoriteRed : Theme.waveformGreen
+            border.color: glyph.status === 2 ? Theme.error : Theme.success
             Text {
                 anchors.centerIn: parent
                 visible: glyph.status === 2
@@ -75,7 +75,7 @@ Control {
                     height: 1.5
                     radius: 1
                     rotation: 43
-                    color: Theme.waveformGreen
+                    color: Theme.success
                     transformOrigin: Item.Left
                 }
                 Rectangle {
@@ -85,7 +85,7 @@ Control {
                     height: 1.5
                     radius: 1
                     rotation: -47
-                    color: Theme.waveformGreen
+                    color: Theme.success
                     transformOrigin: Item.Left
                 }
             }
@@ -94,7 +94,7 @@ Control {
             anchors.centerIn: parent
             visible: glyph.status === 1
             text: "⚠"
-            color: Theme.ratingGold
+            color: Theme.warning
             font.pixelSize: glyph.fontSize + 5
         }
     }
@@ -138,7 +138,7 @@ Control {
             color: Theme.background
             radius: Theme.radiusSm
             border.width: 1
-            border.color: compactSpin.activeFocus ? Theme.accent : Theme.border
+            border.color: compactSpin.activeFocus ? Theme.focus : Theme.border
         }
     }
 
@@ -521,7 +521,7 @@ Control {
                                     ThemedIcon {
                                         anchors.centerIn: parent
                                         source: Theme.icon("music-2-line")
-                                        tint: "#FFFFFF"
+                                        tint: Theme.onBrandGradientText
                                         sourceSize.width: 14
                                         sourceSize.height: 14
                                     }
@@ -984,7 +984,7 @@ Control {
                                         spacing: 8
                                         Label { text: index + 1; color: Theme.secondaryText; Layout.preferredWidth: 46 }
                                         Label { text: modelData.original || ""; color: Theme.primaryText; Layout.preferredWidth: 186; elide: Text.ElideRight }
-                                        Label { text: modelData.preview || ""; color: modelData.conflict ? Theme.ratingGold : Theme.primaryText; Layout.fillWidth: true; elide: Text.ElideRight }
+                                        Label { text: modelData.preview || ""; color: modelData.conflict ? Theme.warning : Theme.primaryText; Layout.fillWidth: true; elide: Text.ElideRight }
                                         Item {
                                             Layout.preferredWidth: 62
                                             StatusGlyph {
@@ -996,7 +996,7 @@ Control {
                                         Label {
                                             text: modelData.reason || (modelData.preview === modelData.original
                                                   ? qsTr("无需修改") : qsTr("就绪"))
-                                            color: modelData.severity === 2 ? Theme.favoriteRed : Theme.secondaryText
+                                            color: modelData.severity === 2 ? Theme.error : Theme.secondaryText
                                             Layout.preferredWidth: 83
                                         }
                                     }
@@ -1030,11 +1030,11 @@ Control {
                                     { label: qsTr("全部文件"), value: previewRows.length,
                                       icon: "file-copy-line", status: -1, tint: Theme.primaryText },
                                     { label: qsTr("就绪"), value: readyCount,
-                                      icon: "", status: 0, tint: Theme.waveformGreen },
+                                      icon: "", status: 0, tint: Theme.success },
                                     { label: qsTr("警告"), value: warningCount,
-                                      icon: "", status: 1, tint: Theme.ratingGold },
+                                      icon: "", status: 1, tint: Theme.warning },
                                     { label: qsTr("错误"), value: errorCount,
-                                      icon: "", status: 2, tint: Theme.favoriteRed }
+                                      icon: "", status: 2, tint: Theme.error }
                                 ]
                                 delegate: RowLayout {
                                     required property var modelData
@@ -1104,9 +1104,9 @@ Control {
                         spacing: 10
                         Label { text: qsTr("冲突与验证"); color: Theme.primaryText; font.weight: Font.DemiBold }
                         Label { text: qsTr("全部 %1").arg(previewRows.length); color: Theme.secondaryText }
-                        Label { text: qsTr("就绪 %1").arg(readyCount); color: Theme.waveformGreen }
-                        Label { text: qsTr("警告 %1").arg(warningCount); color: warningCount > 0 ? Theme.ratingGold : Theme.secondaryText }
-                        Label { text: qsTr("错误 %1").arg(errorCount); color: errorCount > 0 ? Theme.favoriteRed : Theme.secondaryText }
+                        Label { text: qsTr("就绪 %1").arg(readyCount); color: Theme.success }
+                        Label { text: qsTr("警告 %1").arg(warningCount); color: warningCount > 0 ? Theme.warning : Theme.secondaryText }
+                        Label { text: qsTr("错误 %1").arg(errorCount); color: errorCount > 0 ? Theme.error : Theme.secondaryText }
                         Item { Layout.fillWidth: true }
                         Label { text: qsTr("事务提交，失败回滚"); color: Theme.secondaryText; font.pixelSize: 10 }
                     }
@@ -1151,7 +1151,7 @@ Control {
                             Label { text: qsTr("成功预览数量"); color: Theme.secondaryText; font.pixelSize: 14 }
                             RowLayout {
                                 spacing: 6
-                                Label { text: readyCount; color: Theme.waveformGreen; font.pixelSize: 24; font.weight: Font.DemiBold }
+                                Label { text: readyCount; color: Theme.success; font.pixelSize: 24; font.weight: Font.DemiBold }
                                 Label { text: qsTr("个文件"); color: Theme.secondaryText; font.pixelSize: 13 }
                             }
                         }
@@ -1179,7 +1179,7 @@ Control {
                             Label { text: qsTr("冲突数量"); color: Theme.secondaryText; font.pixelSize: 14 }
                             RowLayout {
                                 spacing: 6
-                                Label { text: conflictCount; color: conflictCount > 0 ? Theme.favoriteRed : Theme.secondaryText; font.pixelSize: 24; font.weight: Font.DemiBold }
+                                Label { text: conflictCount; color: conflictCount > 0 ? Theme.error : Theme.secondaryText; font.pixelSize: 24; font.weight: Font.DemiBold }
                                 Label { text: qsTr("个文件"); color: Theme.secondaryText; font.pixelSize: 13 }
                             }
                         }
