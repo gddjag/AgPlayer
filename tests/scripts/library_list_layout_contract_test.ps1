@@ -25,8 +25,11 @@ $navigation = Read-RequiredFile 'app/qml/AgPlayer/components/SideNavigation.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
 $mini = Read-RequiredFile 'app/qml/AgPlayer/components/MiniPlayerControls.qml'
 
-Assert-Matches $window '(?s)id:\s*centerTrackFooter.*objectName:\s*"centerTrackFooter".*Layout\.minimumWidth:\s*centerColumn\.width.*Layout\.maximumWidth:\s*centerColumn\.width' `
-    'Search/rating/BPM footer must be constrained to the center track column'
+Assert-Matches $window '(?s)id:\s*centerColumn.*id:\s*centerTrackFooter.*objectName:\s*"centerTrackFooter".*Layout\.fillWidth:\s*true' `
+    'Search/rating/BPM footer must remain inside and fill the center track column'
+if ($window -match '(?s)id:\s*centerTrackFooter.*Layout\.(minimumWidth|maximumWidth):\s*centerColumn\.width') {
+    throw 'The center footer must not introduce a circular width binding to its parent column'
+}
 
 Assert-Matches $trackList '(?s)id:\s*trackTitleMarquee.*fontWeight:\s*Font\.DemiBold.*id:\s*waveformWrapperLoader.*anchors\.top:\s*trackTitleMarquee\.bottom.*anchors\.topMargin:\s*[2-4].*height:\s*(15|16)' `
     'Thumbnail waveform must sit 2-4 px below the bold title'
