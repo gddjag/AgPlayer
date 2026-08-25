@@ -357,26 +357,27 @@ void ThemeManager::applyApplicationPalette(const ThemePalette& palette)
 
 ThemeSettingsSynchronizer::ThemeSettingsSynchronizer(
     ThemeManager& manager, SettingsController& settings)
-    : manager_(manager)
+    : QObject(&manager)
+    , manager_(manager)
     , settings_(settings)
 {
     const auto apply = [this]() { applyFromCompleteSettings(); };
     QObject::connect(&settings_, &SettingsController::themeModeChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::accentModeChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::accentPresetChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::accentCustomColorChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::highlightFollowAccentChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::highlightModeChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::highlightPresetChanged,
-                     &manager_, apply);
+                     this, apply);
     QObject::connect(&settings_, &SettingsController::highlightCustomColorChanged,
-                     &manager_, apply);
+                     this, apply);
     applyFromCompleteSettings();
 }
 

@@ -6,6 +6,8 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <type_traits>
+
 namespace {
 
 double contrastRatio(const QColor& first, const QColor& second)
@@ -66,6 +68,7 @@ private slots:
     void makesHighlightFollowAccentOnlyWhenRequested();
     void refreshesSystemPaletteOncePerRealChange();
     void applicationPaletteChangeRefreshesUnknownSystemPalette();
+    void synchronizerOwnsConnectionLifetime();
     void ownsNoTimers();
 };
 
@@ -277,6 +280,11 @@ void ThemeManagerTest::applicationPaletteChangeRefreshesUnknownSystemPalette()
     QEvent duplicate(QEvent::ApplicationPaletteChange);
     QCoreApplication::sendEvent(qApp, &duplicate);
     QCOMPARE(changed.count(), 1);
+}
+
+void ThemeManagerTest::synchronizerOwnsConnectionLifetime()
+{
+    QVERIFY((std::is_base_of_v<QObject, ThemeSettingsSynchronizer>));
 }
 
 void ThemeManagerTest::ownsNoTimers()

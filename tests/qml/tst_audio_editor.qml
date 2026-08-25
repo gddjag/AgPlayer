@@ -139,6 +139,50 @@ TestCase {
         wait(0)
     }
 
+    function test_editor_media_colors_stay_exact_and_ignore_theme_seeds() {
+        const previousMode = SettingsController.themeMode
+        const previousAccentMode = SettingsController.accentMode
+        const previousAccentPreset = SettingsController.accentPreset
+        const previousFollow = SettingsController.highlightFollowAccent
+        const previousHighlightMode = SettingsController.highlightMode
+        const previousHighlightPreset = SettingsController.highlightPreset
+
+        SettingsController.themeMode = 1
+        SettingsController.accentMode = 1
+        SettingsController.accentPreset = "systemBlue"
+        SettingsController.highlightFollowAccent = false
+        SettingsController.highlightMode = 1
+        SettingsController.highlightPreset = "purple"
+        wait(0)
+        compare(Theme.editorWaveform.toString(), "#169b97")
+        compare(Theme.editorOverviewWaveform.toString(), "#2b9692")
+        compare(Theme.editorSelection.toString(), "#26169b97")
+        compare(Theme.editorOverviewSelection.toString(), "#122b9692")
+        compare(Theme.listWaveformMono.toString(), "#6b5a70")
+
+        SettingsController.accentPreset = "red"
+        SettingsController.highlightPreset = "green"
+        wait(0)
+        compare(Theme.editorWaveform.toString(), "#169b97")
+        compare(Theme.editorSelection.toString(), "#26169b97")
+
+        SettingsController.themeMode = 0
+        wait(0)
+        compare(Theme.editorWaveform.toString(), "#39c7c0")
+        compare(Theme.editorOverviewWaveform.toString(), "#297e7b")
+        compare(Theme.editorSelection.toString(), "#2639c7c0")
+        compare(Theme.editorOverviewSelection.toString(), "#12297e7b")
+        compare(Theme.listWaveformMono.toString(), "#c7b8cb")
+
+        SettingsController.themeMode = previousMode
+        SettingsController.accentMode = previousAccentMode
+        SettingsController.accentPreset = previousAccentPreset
+        SettingsController.highlightFollowAccent = previousFollow
+        SettingsController.highlightMode = previousHighlightMode
+        SettingsController.highlightPreset = previousHighlightPreset
+        wait(0)
+    }
+
     function test_editorWaveformUsesPlayerAppearanceSettings() {
         const originalMode = SettingsController.waveformMode
         const originalColor = SettingsController.waveformUnplayedColor

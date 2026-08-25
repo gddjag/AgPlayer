@@ -175,7 +175,7 @@ private:
 // Keeps the complete settings transaction as the only runtime input to the
 // palette.  It deliberately shares one apply callback for every theme field,
 // so previews and cancel restoration take the same path as startup.
-class ThemeSettingsSynchronizer final {
+class ThemeSettingsSynchronizer final : public QObject {
 public:
     ThemeSettingsSynchronizer(ThemeManager& manager, SettingsController& settings);
 

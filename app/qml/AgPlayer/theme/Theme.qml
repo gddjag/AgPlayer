@@ -83,10 +83,10 @@ QtObject {
     readonly property color editorCanvas: surface
     readonly property color editorRuler: surfaceElevated
     readonly property color editorOverview: surfaceHover
-    readonly property color editorWaveform: waveformGreen
-    readonly property color editorOverviewWaveform: "#297E7B"
-    readonly property color editorSelection: "#2639C7C0"
-    readonly property color editorOverviewSelection: "#12297E7B"
+    readonly property color editorWaveform: isLight ? "#169B97" : "#39C7C0"
+    readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
+    readonly property color editorSelection: isLight ? "#26169B97" : "#2639C7C0"
+    readonly property color editorOverviewSelection: isLight ? "#122B9692" : "#12297E7B"
     readonly property color playRingPlaying: waveformGreen
     readonly property color playRingPaused: "#FFB020"
 
@@ -99,7 +99,7 @@ QtObject {
     readonly property color listSelectedSurface: highlightSoft
     readonly property color tagAddSurface: accentSoft
     readonly property color tagSecondaryText: textSecondary
-    readonly property color listWaveformMono: "#6B5A70"
+    readonly property color listWaveformMono: isLight ? "#6B5A70" : "#C7B8CB"
     readonly property color tagPillSurface: surface
     readonly property color tagPillHoverSurface: surfaceHover
     readonly property color tagPillSelectedSurface: highlightSoft
