@@ -1359,6 +1359,55 @@ private slots:
         QCOMPARE(exported.read(4), QByteArray("RIFF", 4));
     }
 
+    void configuredDirectoryExportMapsSharedFormats_data()
+    {
+        QTest::addColumn<QString>("codec");
+        QTest::addColumn<QString>("extension");
+        QTest::newRow("upper-case-opus") << QStringLiteral("OPUS")
+                                            << QStringLiteral("opus");
+        QTest::newRow("alac") << QStringLiteral("ALAC")
+                               << QStringLiteral("m4a");
+        QTest::newRow("aiff") << QStringLiteral("AIFF")
+                               << QStringLiteral("aif");
+    }
+
+    void configuredDirectoryExportMapsSharedFormats()
+    {
+        using agplayer::editor::AudioFileAnalyzer;
+        using agplayer::editor::ProjectExportSettings;
+        QFETCH(QString, codec);
+        QFETCH(QString, extension);
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        ProjectExportSettings settings;
+        settings.codecName = codec;
+        settings.sampleRate = 48'000;
+        settings.channels = 2;
+        settings.bitRate = 320'000;
+        settings.outputDirectory = temporary.path();
+        QVERIFY(controller.setProjectExportSettings(settings));
+        QVERIFY2(controller.exportToConfiguredDirectory(),
+                 qPrintable(controller.errorMessage()));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.state() == EditorSessionState::Ready
+                                 || controller.state() == EditorSessionState::Error,
+                                 10'000);
+        QVERIFY2(controller.errorMessage().isEmpty(),
+                 qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        const QString exportedPath = temporary.filePath(
+            QStringLiteral("source_edited.%1").arg(extension));
+        const auto exported = AudioFileAnalyzer::analyze(
+            std::filesystem::path(exportedPath.toStdWString()), 64);
+        QVERIFY2(exported.success, exported.message.c_str());
+    }
+
     void trackMixPropertiesClampAndEnforceSingleTrackSolo()
     {
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);

@@ -1285,6 +1285,12 @@ bool AudioEditorController::exportToConfiguredDirectory()
                || key == QStringLiteral("libopus")) {
         extension = QStringLiteral("opus");
         encoder = QStringLiteral("libopus");
+    } else if (key == QStringLiteral("alac")) {
+        extension = QStringLiteral("m4a");
+        encoder = QStringLiteral("alac");
+    } else if (key == QStringLiteral("aiff")) {
+        extension = QStringLiteral("aif");
+        encoder = QStringLiteral("pcm_s16be");
     } else {
         setError(tr("不支持的导出格式"));
         return false;

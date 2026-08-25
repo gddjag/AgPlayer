@@ -202,6 +202,10 @@ WriteResult DocumentWriter::write(
     config.keep_metadata = request.keep_metadata;
     config.variable_bit_rate = request.variable_bit_rate;
     config.quality = std::clamp(request.quality, 0, 100);
+    if (request.output_path.extension() == ".aif"
+        || request.output_path.extension() == ".aiff") {
+        config.container_name = "aiff";
+    }
     std::string encode_error;
     const ag_result encoded = agplayer::transcode(
         render_path.u8string(), config, cancelled,

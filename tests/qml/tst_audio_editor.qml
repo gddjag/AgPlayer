@@ -695,14 +695,14 @@ TestCase {
         const originalDirectory = SettingsController.defaultOutputDirectory
         const originalPitch = SettingsController.keepPitchWhileSpeedChange
         const originalVocal = SettingsController.vocalProtection
-        SettingsController.transcodeFormat = "MP3"
+        SettingsController.transcodeFormat = "OPUS"
         SettingsController.transcodeSampleRateHz = 48000
         SettingsController.transcodeChannels = 1
         SettingsController.transcodeBitrateKbps = 192
         SettingsController.defaultOutputDirectory = "C:/shared-export"
         SettingsController.keepPitchWhileSpeedChange = true
         SettingsController.vocalProtection = true
-        tryCompare(findChild(page, "editorExportCodec"), "text", "MP3")
+        tryCompare(findChild(page, "editorExportCodec"), "text", "Opus")
         tryCompare(findChild(page, "editorExportSampleRate"), "text", "48 kHz")
         tryCompare(findChild(page, "editorExportChannels"), "text", "单声道")
         tryCompare(findChild(page, "editorExportBitRate"), "text", "192 kbps")

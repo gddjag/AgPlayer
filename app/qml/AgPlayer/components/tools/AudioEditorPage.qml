@@ -21,10 +21,14 @@ Rectangle {
     readonly property bool modalInputActive: openDialog.visible
         || saveProjectDialog.visible || exportDirectoryDialog.visible
         || discardDialog.visible
+    function displayCodecName(value) {
+        const normalized = String(value || "").trim().toUpperCase()
+        return normalized === "OPUS" ? "Opus" : normalized
+    }
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
     readonly property var sharedExportSettings: ({
-        "codecName": SettingsController.transcodeFormat,
+        "codecName": page.displayCodecName(SettingsController.transcodeFormat),
         "sampleRate": SettingsController.transcodeSampleRateHz,
         "channels": SettingsController.transcodeChannels,
         "bitRate": SettingsController.transcodeBitrateKbps * 1000,
@@ -44,7 +48,7 @@ Rectangle {
         AudioEditorController.triggerAction("editor.split")
     }
     function updateExportSetting(name, value) {
-        if (name === "codecName") SettingsController.transcodeFormat = value
+        if (name === "codecName") SettingsController.transcodeFormat = String(value).toUpperCase()
         else if (name === "sampleRate") SettingsController.transcodeSampleRateHz = value
         else if (name === "channels") SettingsController.transcodeChannels = value
         else if (name === "bitRate") SettingsController.transcodeBitrateKbps = Math.round(value / 1000)

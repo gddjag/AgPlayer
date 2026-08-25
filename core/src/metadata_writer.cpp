@@ -725,6 +725,7 @@ std::string explicit_muxer_for_path(const std::filesystem::path& path)
     if (extension == ".flac") return "flac";
     if (extension == ".ogg" || extension == ".opus") return "ogg";
     if (extension == ".m4a") return "ipod";
+    if (extension == ".aif" || extension == ".aiff") return "aiff";
     if (extension == ".wma") return "asf";
     if (extension == ".ape") return "ape";
     return {};

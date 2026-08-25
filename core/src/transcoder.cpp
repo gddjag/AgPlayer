@@ -540,8 +540,10 @@ ag_result open_encoder(const std::string& output_path,
                        const TranscodeConfig& config,
                        EncoderState& enc,
                        AVSampleFormat in_sample_fmt,
-                       std::string& error)
+                       std::string& error,
+                       bool* output_has_cover = nullptr)
 {
+    if (output_has_cover != nullptr) *output_has_cover = false;
     // Output format guessed from file extension.
     const char* muxer_name = config.container_name.empty()
         ? nullptr : config.container_name.c_str();
@@ -690,6 +692,7 @@ ag_result open_encoder(const std::string& output_path,
         enc.cover_stream->attached_pic.flags |= AV_PKT_FLAG_KEY;
         av_dict_set(&enc.cover_stream->metadata, "title", "Album cover", 0);
         av_dict_set(&enc.cover_stream->metadata, "comment", "Cover (front)", 0);
+        if (output_has_cover != nullptr) *output_has_cover = true;
     } else if (config.keep_cover
                && config.metadata_edit_plan.cover_action
                       == CoverAction::Keep) {
@@ -717,6 +720,7 @@ ag_result open_encoder(const std::string& output_path,
             enc.cover_stream->time_base = source->time_base;
             av_dict_copy(&enc.cover_stream->metadata, source->metadata, 0);
             enc.input_cover_stream_index = static_cast<int>(index);
+            if (output_has_cover != nullptr) *output_has_cover = true;
             break;
         }
     }
@@ -929,7 +933,8 @@ ag_result run_transcode_pass(const std::string& input_path,
                              const std::atomic_bool* cancelled,
                              std::function<void(float)> progress_callback,
                              std::string& error,
-                             double gain = 1.0)
+                             double gain = 1.0,
+                             bool* output_has_cover = nullptr)
 {
     if (config.output_path.empty()) {
         error = "Output path is empty";
@@ -951,7 +956,7 @@ ag_result run_transcode_pass(const std::string& input_path,
     EncoderState enc;
     r = open_encoder(config.output_path, config.codec_name, dec, config, enc,
                      apply_gain ? AV_SAMPLE_FMT_FLTP : dec.ctx->sample_fmt,
-                     error);
+                     error, output_has_cover);
     if (r != AG_OK) return r;
 
     if (config.keep_metadata || has_metadata_edits(config.metadata_edit_plan)) {
@@ -1646,13 +1651,22 @@ ag_result transcode(const std::string& input_path,
     if (staged_config.stage_callback) {
         staged_config.stage_callback("encoding");
     }
+    bool output_has_cover = false;
     const ag_result encode_result = run_transcode_pass(
         input_path, staged_config, cancelled, std::move(progress_callback),
-        error, gain);
+        error, gain, &output_has_cover);
     if (encode_result != AG_OK) {
         std::error_code remove_error;
         fs::remove(staged_output, remove_error);
         return encode_result;
+    }
+    if (staged_config.keep_cover && !output_has_cover
+        && staged_config.metadata_edit_plan.cover_action == CoverAction::Keep) {
+        // A source image codec rejected by the selected muxer is optional
+        // media. Keep the encoded audio and make all later verification use
+        // the same coverless staged configuration.
+        staged_config.keep_cover = false;
+        staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
     }
 
     if (staged_config.stage_callback) {
@@ -1682,7 +1696,8 @@ ag_result transcode(const std::string& input_path,
                                           && muxer_key != "wav"
                                           && muxer_key != ".wav"
                                           && muxer_key != "aiff"
-                                          && muxer_key != ".aiff";
+                                          && muxer_key != ".aiff"
+                                          && muxer_key != ".aif";
     const bool sets_metadata = std::any_of(
         staged_config.metadata_edit_plan.fields.cbegin(),
         staged_config.metadata_edit_plan.fields.cend(),

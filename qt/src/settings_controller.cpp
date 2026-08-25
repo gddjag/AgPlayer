@@ -1387,11 +1387,11 @@ void SettingsController::load()
     const bool cacheSizeLimitUserModified =
         settings_.value(QStringLiteral("sizeLimitUserModified"), false).toBool();
     cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
-    // Schema-less releases used 1024 MB as their product default.  The first
-    // post-schema run records the decision; an explicit user marker always
-    // wins, including a deliberate 1024 MB choice.
+    // Schema-less releases cannot distinguish their historical 1024 MB
+    // default from a deliberate 1 GB choice. Preserve it conservatively;
+    // only schema 1 with an explicit untouched marker is safe to migrate.
     if (hasCacheSizeLimit && !cacheSizeLimitUserModified
-        && (cacheSchemaVersion == 0 || cacheSchemaVersion == 1)
+        && cacheSchemaVersion == 1 && hasCacheSizeLimitUserModified
         && cacheSizeLimitMB_ == 1024) {
         cacheSizeLimitMB_ = 10 * 1024;
         settings_.setValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);

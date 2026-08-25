@@ -253,6 +253,35 @@ int main(const int argc, char** argv)
                            nullptr, nullptr) == AG_OK);
     assert(std::filesystem::exists(unsupported_output));
 
+    // MP4 accepts the PNG cover from the source FLAC. Confirm the positive
+    // path still preserves it while unsupported containers are downgraded by
+    // the earlier ADTS case.
+    const std::filesystem::path incompatible_cover_output =
+        input.parent_path() / "transcode-v2-incompatible-cover-output.m4a";
+    std::filesystem::remove(incompatible_cover_output);
+    const std::string incompatible_cover_output_utf8 =
+        incompatible_cover_output.u8string();
+    request.output_path = incompatible_cover_output_utf8.c_str();
+    request.muxer_name = "mp4";
+    request.codec_name = "aac";
+    request.keep_metadata = 0;
+    request.keep_cover = 1;
+    request.metadata_cover_action = AG_METADATA_COVER_KEEP;
+    request.metadata_cover_data = nullptr;
+    request.metadata_cover_size = 0;
+    request.metadata_cover_mime_type = nullptr;
+    assert(ag_transcode_v2(output_utf8.c_str(), &request, nullptr,
+                           nullptr, nullptr) == AG_OK);
+    assert(std::filesystem::exists(incompatible_cover_output));
+    metadata = nullptr;
+    assert(ag_metadata_open(incompatible_cover_output_utf8.c_str(), &metadata)
+           == AG_OK);
+    cover_size = 0;
+    cover_mime = nullptr;
+    assert(ag_metadata_cover(metadata, &cover_size, &cover_mime) != nullptr);
+    assert(cover_size > 0);
+    ag_metadata_destroy(metadata);
+
     const std::filesystem::path date_conflict_output =
         input.parent_path() / "transcode-v2-date-conflict.mp3";
     std::filesystem::remove(date_conflict_output);
@@ -327,5 +356,6 @@ int main(const int argc, char** argv)
     std::filesystem::remove(multi_cover_input);
     std::filesystem::remove(multi_cover_output);
     std::filesystem::remove(unsupported_output);
+    std::filesystem::remove(incompatible_cover_output);
     return 0;
 }
