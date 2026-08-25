@@ -70,6 +70,14 @@ if (-not $SkipBuild) {
 if (-not (Test-Path -LiteralPath $exe)) {
     throw "AgPlayer executable not found: $exe"
 }
+$expectedPeVersion = "$appVersion.0"
+$exeVersionInfo = (Get-Item -LiteralPath $exe).VersionInfo
+$actualFileVersion = ([string]$exeVersionInfo.FileVersion).Trim()
+$actualProductVersion = ([string]$exeVersionInfo.ProductVersion).Trim()
+if ($actualFileVersion -ne $expectedPeVersion -or
+    $actualProductVersion -ne $expectedPeVersion) {
+    throw "AgPlayer.exe PE version $actualFileVersion / $actualProductVersion does not match release version $expectedPeVersion"
+}
 
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse -Force

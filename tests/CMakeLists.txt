@@ -862,6 +862,16 @@ set_tests_properties(qml_main_window_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_about_version_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml
+        MainWindowControls::test_settings_y_about_uses_one_name_and_version_line)
+set_tests_properties(qml_about_version_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 
 add_executable(qml_mini_player_test
     qt/qml_mini_player_test_main.cpp
@@ -1190,6 +1200,19 @@ if (WIN32)
                 -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/release_version_contract_test.ps1
                 -SourceRoot ${CMAKE_SOURCE_DIR}
     )
+    file(RELATIVE_PATH AGPLAYER_TEST_BUILD_DIRECTORY
+        "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}")
+    add_test(
+        NAME package_version_guard_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_version_guard_test.ps1
+                -SourceRoot ${CMAKE_SOURCE_DIR}
+                -BuildDirectory ${AGPLAYER_TEST_BUILD_DIRECTORY}
+                -AppPath $<TARGET_FILE:AgPlayer>
+    )
+    set_tests_properties(package_version_guard_test PROPERTIES
+        TIMEOUT 120
+        RUN_SERIAL TRUE)
 endif()
 if(WIN32)
     add_test(NAME window_icon_contract_test

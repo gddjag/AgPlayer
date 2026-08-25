@@ -4403,6 +4403,12 @@ TestCase {
     }
 
     function test_settings_y_about_uses_one_name_and_version_line() {
+        if (!findChild(mainWindow, "settingsPage")) {
+            mainWindow.openSettingsPage()
+            tryVerify(function() {
+                return findChild(mainWindow, "settingsPage") !== null
+            })
+        }
         var page = findChild(mainWindow, "settingsPage")
         verify(page)
         page.open()
@@ -4410,7 +4416,7 @@ TestCase {
         wait(250)
         var productLine = findChild(page, "aboutProductLine")
         verify(productLine)
-        compare(productLine.text, "AgPlayer v1.0")
+        compare(productLine.text, "AgPlayer " + SettingsController.version)
         verify(productLine.font.weight >= Font.Bold)
         verify(!findChild(page, "aboutStandaloneVersion"),
                "about page must not repeat the product or version")

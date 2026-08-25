@@ -10,6 +10,12 @@ if ($installer -match '#define AppVersion\s+"[0-9]+\.[0-9]+\.[0-9]+"' -or
     $packageScript -notmatch '/DAppVersion=') {
     throw "Installer version and output name must derive from the repository release version"
 }
+if ($packageScript -notmatch '\.VersionInfo' -or
+    $packageScript -notmatch '\.FileVersion' -or
+    $packageScript -notmatch '\.ProductVersion' -or
+    $packageScript -notmatch 'does not match release version') {
+    throw "Packaging must reject an executable whose PE version differs from the release version"
+}
 
 if ($installer -notmatch '(?m)^ShowLanguageDialog=yes\r?$' -or
     $installer -notmatch '(?m)^LanguageDetectionMethod=none\r?$' -or
