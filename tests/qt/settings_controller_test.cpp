@@ -21,6 +21,7 @@ private slots:
     void emptyTestCacheLocationFallsBackBeforeAppending();
     void defaultOutputDirectoryUsesStandardPaths();
     void parallelJobsClampAndPersistAcrossReload();
+    void cacheLimitMigratesOnlyUntouchedLegacyDefault();
     void transcodeDefaultsAreSplitAndPersisted();
     void migratesCombinedTranscodePreset();
     void loadCreatesDefaultDirectories();
@@ -120,11 +121,11 @@ void SettingsControllerTest::parallelJobsClampAndPersistAcrossReload()
 
     {
         SettingsController settings;
-        QCOMPARE(settings.parallelJobs(), 4);
+        QCOMPARE(settings.parallelJobs(), 5);
         settings.setParallelJobs(0);
         QCOMPARE(settings.parallelJobs(), 1);
-        settings.setParallelJobs(9);
-        QCOMPARE(settings.parallelJobs(), 4);
+        settings.setParallelJobs(11);
+        QCOMPARE(settings.parallelJobs(), 10);
         settings.setParallelJobs(3);
         QCOMPARE(settings.parallelJobs(), 3);
     }
@@ -145,18 +146,28 @@ void SettingsControllerTest::transcodeDefaultsAreSplitAndPersisted()
         QCOMPARE(settings.transcodeBitrateKbps(), 320);
         QCOMPARE(settings.transcodeSampleRateHz(), 44100);
         QCOMPARE(settings.transcodeChannels(), 2);
+        QCOMPARE(settings.preserveMetadata(), true);
+        QCOMPARE(settings.preserveCover(), true);
+        QCOMPARE(settings.preserveDirectoryStructure(), true);
+        QCOMPARE(settings.extractVideoAudio(), true);
 
-        settings.setTranscodeFormat(QStringLiteral("FLAC"));
+        settings.setTranscodeFormat(QStringLiteral("AIFF"));
         settings.setTranscodeBitrateKbps(256);
         settings.setTranscodeSampleRateHz(192000);
         settings.setTranscodeChannels(1);
+        settings.setPreserveCover(false);
+        settings.setPreserveDirectoryStructure(false);
+        settings.setExtractVideoAudio(false);
     }
 
     SettingsController reloaded;
-    QCOMPARE(reloaded.transcodeFormat(), QStringLiteral("FLAC"));
+    QCOMPARE(reloaded.transcodeFormat(), QStringLiteral("AIFF"));
     QCOMPARE(reloaded.transcodeBitrateKbps(), 256);
     QCOMPARE(reloaded.transcodeSampleRateHz(), 192000);
     QCOMPARE(reloaded.transcodeChannels(), 1);
+    QCOMPARE(reloaded.preserveCover(), false);
+    QCOMPARE(reloaded.preserveDirectoryStructure(), false);
+    QCOMPARE(reloaded.extractVideoAudio(), false);
     persisted.clear();
 }
 
@@ -336,6 +347,22 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformPlayedColor(), QStringLiteral("#d27722"));
     QCOMPARE(reloaded.waveformMode(), 0);
     QCOMPARE(reloaded.waveformPlaybackGuide(), false);
+    persisted.clear();
+}
+
+void SettingsControllerTest::cacheLimitMigratesOnlyUntouchedLegacyDefault()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 1024);
+    SettingsController migrated;
+    QCOMPARE(migrated.cacheSizeLimitMB(), 10 * 1024);
+    QCOMPARE(persisted.value(QStringLiteral("cache/sizeLimitMB")).toInt(), 10 * 1024);
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 2048);
+    SettingsController customized;
+    QCOMPARE(customized.cacheSizeLimitMB(), 2048);
     persisted.clear();
 }
 

@@ -33,7 +33,7 @@ constexpr std::array<FormatDefinition, 8> kFormats{{
     {"opus", "Opus", "ogg", "libopus", true, true, true, true},
     {"ogg", "OGG", "ogg", "libvorbis", true, true, true, true},
     {"alac", "ALAC", "ipod", "alac", false, true, true, false},
-    {"m4a", "M4A", "ipod", "aac", true, true, true, true},
+    {"aiff", "AIFF", "aiff", "pcm_s16be", false, false, false, false},
 }};
 
 void apply_friendly_parameters(TranscodeFormatCapability& result)

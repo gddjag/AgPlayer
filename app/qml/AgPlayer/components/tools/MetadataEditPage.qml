@@ -1069,8 +1069,9 @@ Rectangle {
                                             function reset(summary) {
                                                 sourceValue = String(summary.value || "")
                                                 sourceMultiple = Boolean(summary.multiple)
-                                                selectedMode = !sourceMultiple && sourceValue !== ""
-                                                               ? "set" : "keep"
+                                                // Loading an existing value is not an edit.  A field only
+                                                // becomes set/clear after the user acts on it.
+                                                selectedMode = "keep"
                                                 valueField.text = sourceMultiple ? "" : sourceValue
                                             }
                                             function descriptor() {
@@ -1112,7 +1113,10 @@ Rectangle {
                                                                       ? Theme.accent : page.borderColor
                                                     }
                                                     onTextEdited: fieldRow.selectedMode = text.length > 0
-                                                                                  ? "set" : "keep"
+                                                                                  ? "set"
+                                                                                  : ((!fieldRow.sourceMultiple
+                                                                                      && fieldRow.sourceValue !== "")
+                                                                                     ? "clear" : "keep")
                                                 }
                                                 ThemedIcon {
                                                     visible: fieldRow.fieldKey === "date"

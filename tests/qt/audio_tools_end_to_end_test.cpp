@@ -57,6 +57,7 @@ class AudioToolsEndToEndTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void formatConverterExposesOnlyReleaseFormats();
     void audioToolsControllerSupportsFourBuiltInTools();
     void toolsExpandDroppedFoldersRecursively();
     void audioFileDiscoveryExpandsFoldersOffTheGuiThread();
@@ -73,6 +74,7 @@ private slots:
     void formatConverterPreflightRejectsInvalidRequest();
     void formatConverterPreflightRejectsUnsupportedCapability_data();
     void formatConverterPreflightRejectsUnsupportedCapability();
+    void formatConverterDisablesCoverRetentionWhenSourceHasNoCover();
     void formatConverterPreflightResolvesLosslessBitrateMode_data();
     void formatConverterPreflightResolvesLosslessBitrateMode();
     void formatConverterPreflightRejectsBlockedPreservedOutputParent();
@@ -126,6 +128,19 @@ private slots:
     void filenameProcessorUsesTwoStageTransactions();
     void filenameProcessorSanitizesWindowsReservedAndLongNames();
 };
+
+void AudioToolsEndToEndTest::formatConverterExposesOnlyReleaseFormats()
+{
+    const QVariantList capabilities = FormatConverter().supportedOutputFormats();
+    QStringList keys;
+    for (const QVariant& value : capabilities) {
+        keys.append(value.toMap().value(QStringLiteral("key")).toString());
+    }
+    QCOMPARE(keys, QStringList({QStringLiteral("mp3"), QStringLiteral("flac"),
+                                QStringLiteral("wav"), QStringLiteral("aac"),
+                                QStringLiteral("opus"), QStringLiteral("ogg"),
+                                QStringLiteral("alac"), QStringLiteral("aiff")}));
+}
 
 void AudioToolsEndToEndTest::
     formatConverterBuildPreflightUsesSmartProfilesAndRejectsInvalidCustomValues()
@@ -553,17 +568,12 @@ void AudioToolsEndToEndTest::
     QTest::addColumn<QString>("format");
     QTest::addColumn<bool>("keepMetadata");
     QTest::addColumn<bool>("keepCover");
-    QTest::addColumn<QString>("reasonPart");
-
     QTest::newRow("aac-metadata")
-        << QStringLiteral("aac") << true << false
-        << QStringLiteral("keepMetadata");
+        << QStringLiteral("aac") << true << false;
     QTest::newRow("aac-cover")
-        << QStringLiteral("aac") << false << true
-        << QStringLiteral("keepCover");
+        << QStringLiteral("aac") << false << true;
     QTest::newRow("wav-cover")
-        << QStringLiteral("wav") << true << true
-        << QStringLiteral("keepCover");
+        << QStringLiteral("wav") << true << true;
 }
 
 void AudioToolsEndToEndTest::
@@ -572,7 +582,6 @@ void AudioToolsEndToEndTest::
     QFETCH(QString, format);
     QFETCH(bool, keepMetadata);
     QFETCH(bool, keepCover);
-    QFETCH(QString, reasonPart);
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
     const QString input = temp.filePath(QStringLiteral("capability.wav"));
@@ -589,10 +598,35 @@ void AudioToolsEndToEndTest::
         {QStringLiteral("keepMetadata"), keepMetadata},
         {QStringLiteral("keepCover"), keepCover}});
 
-    QVERIFY(!plan.value(QStringLiteral("ready")).toBool());
-    QVERIFY(plan.value(QStringLiteral("reason")).toString().contains(reasonPart));
-    QCOMPARE(errors.count(), 1);
-    QVERIFY(converter.pendingPlan().isEmpty());
+    QVERIFY(plan.value(QStringLiteral("ready")).toBool());
+    QCOMPARE(errors.count(), 0);
+    QVERIFY(!converter.pendingPlan().isEmpty());
+    converter.rejectPendingPlan();
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterDisablesCoverRetentionWhenSourceHasNoCover()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("without-cover.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+    const QVariantMap plan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("mp3")},
+        {QStringLiteral("outputDir"), temp.filePath(QStringLiteral("out"))},
+        {QStringLiteral("bitRate"), 128000},
+        {QStringLiteral("keepCover"), true}});
+
+    QVERIFY(plan.value(QStringLiteral("ready")).toBool());
+    const QVariantMap resolved = plan.value(QStringLiteral("tasks")).toList()
+                                     .constFirst().toMap()
+                                     .value(QStringLiteral("resolvedProfile")).toMap();
+    QCOMPARE(resolved.value(QStringLiteral("keepCover")).toBool(), false);
+    converter.rejectPendingPlan();
 }
 
 void AudioToolsEndToEndTest::
@@ -1370,7 +1404,7 @@ void AudioToolsEndToEndTest::formatConverterExposesEveryPdfRequiredOutputFormat(
     }
     const QSet<QString> required{
         QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("flac"), QStringLiteral("m4a"),
+        QStringLiteral("flac"), QStringLiteral("aiff"),
         QStringLiteral("ogg"), QStringLiteral("opus"),
         QStringLiteral("alac"), QStringLiteral("aac")};
     QCOMPARE(keys, required);
@@ -1495,7 +1529,8 @@ void AudioToolsEndToEndTest::formatConverterExportsAndReopensEveryExposedFormat(
         QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
         const bool lossless = key == QStringLiteral("wav")
             || key == QStringLiteral("flac")
-            || key == QStringLiteral("alac");
+            || key == QStringLiteral("alac")
+            || key == QStringLiteral("aiff");
         const int sampleRate = key == QStringLiteral("opus") ? 48000 : 44100;
         converter.start(key, lossless ? 0 : 192000, sampleRate, 2,
                         outputDir, true, false, false);

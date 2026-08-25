@@ -53,7 +53,7 @@ Rectangle {
 
         bitRateBox.currentIndex = -1
         if (parameterKind === "bitrate" && bitRateBox.count > 0) {
-            const recommended = (capability.bitRates || []).indexOf(192000)
+            const recommended = (capability.bitRates || []).indexOf(320000)
             bitRateBox.currentIndex = recommended >= 0 ? recommended : 0
         }
         sampleRateBox.currentIndex = 0
@@ -70,8 +70,6 @@ Rectangle {
         bitDepthBox.currentIndex = 0
         if (capability.supportsMetadata !== true)
             SettingsController.preserveMetadata = false
-        if (capability.supportsCover !== true)
-            keepCoverCheck.checked = false
     }
 
     Connections {
@@ -79,8 +77,6 @@ Rectangle {
         function onCurrentCapabilityChanged() {
             if (root.capability.supportsMetadata !== true)
                 SettingsController.preserveMetadata = false
-            if (root.capability.supportsCover !== true)
-                keepCoverCheck.checked = false
             Qt.callLater(root.resetCapabilityParameters)
         }
     }
@@ -403,9 +399,9 @@ Rectangle {
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("文件冲突策略"); color: Theme.secondaryText }
                 ReferenceComboBox { id: conflictBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动序号"),value:"auto-number"},{text:qsTr("跳过"),value:"skip"},{text:qsTr("覆盖"),value:"overwrite"},{text:qsTr("询问"),value:"ask"}]; textRole:"text"; valueRole:"value" }
                 ReferenceCheckBox { id: keepMetadataCheck; objectName: "keepMetadataCheck"; Layout.preferredHeight: 28; text: qsTr("保留元数据"); checked: SettingsController.preserveMetadata; enabled: root.capability.supportsMetadata === true; onToggled: SettingsController.preserveMetadata = checked }
-                ReferenceCheckBox { id: keepCoverCheck; Layout.preferredHeight: 28; text: qsTr("保留封面"); checked: true; enabled: converter.currentCapability.supportsCover === true }
-                ReferenceCheckBox { id: preserveDirectoriesCheck; Layout.preferredHeight: 28; text: qsTr("保留目录结构"); checked: true }
-                ReferenceCheckBox { id: extractAudioCheck; objectName: "extractAudioCheck"; Layout.preferredHeight: 28; text: qsTr("从视频中提取音频"); checked: false }
+                ReferenceCheckBox { id: keepCoverCheck; Layout.preferredHeight: 28; text: qsTr("保留封面"); checked: SettingsController.preserveCover; enabled: converter.currentCapability.supportsCover === true; onToggled: SettingsController.preserveCover = checked }
+                ReferenceCheckBox { id: preserveDirectoriesCheck; Layout.preferredHeight: 28; text: qsTr("保留目录结构"); checked: SettingsController.preserveDirectoryStructure; onToggled: SettingsController.preserveDirectoryStructure = checked }
+                ReferenceCheckBox { id: extractAudioCheck; objectName: "extractAudioCheck"; Layout.preferredHeight: 28; text: qsTr("从视频中提取音频"); checked: SettingsController.extractVideoAudio; onToggled: SettingsController.extractVideoAudio = checked }
             }
 
             Rectangle {
@@ -442,7 +438,7 @@ Rectangle {
                 ReferenceComboBox {
                     objectName: "converterParallelJobsBox"
                     Layout.fillWidth: true
-                    model: [1, 2, 3, 4]
+                    model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
                     currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
                     onActivated: SettingsController.parallelJobs = currentValue
                 }

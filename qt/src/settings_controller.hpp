@@ -112,6 +112,13 @@ class SettingsController final : public QObject {
                    NOTIFY transcodeChannelsChanged)
     Q_PROPERTY(bool preserveMetadata READ preserveMetadata WRITE setPreserveMetadata
                    NOTIFY preserveMetadataChanged)
+    Q_PROPERTY(bool preserveCover READ preserveCover WRITE setPreserveCover
+                   NOTIFY preserveCoverChanged)
+    Q_PROPERTY(bool preserveDirectoryStructure READ preserveDirectoryStructure
+                   WRITE setPreserveDirectoryStructure
+                   NOTIFY preserveDirectoryStructureChanged)
+    Q_PROPERTY(bool extractVideoAudio READ extractVideoAudio WRITE setExtractVideoAudio
+                   NOTIFY extractVideoAudioChanged)
     Q_PROPERTY(bool keepPitchWhileSpeedChange READ keepPitchWhileSpeedChange
                    WRITE setKeepPitchWhileSpeedChange NOTIFY keepPitchWhileSpeedChangeChanged)
     Q_PROPERTY(bool vocalProtection READ vocalProtection WRITE setVocalProtection
@@ -201,6 +208,9 @@ public:
     int transcodeSampleRateHz() const noexcept;
     int transcodeChannels() const noexcept;
     bool preserveMetadata() const noexcept;
+    bool preserveCover() const noexcept;
+    bool preserveDirectoryStructure() const noexcept;
+    bool extractVideoAudio() const noexcept;
     bool keepPitchWhileSpeedChange() const noexcept;
     bool vocalProtection() const noexcept;
 
@@ -276,6 +286,9 @@ public:
     void setTranscodeSampleRateHz(int value);
     void setTranscodeChannels(int value);
     void setPreserveMetadata(bool value);
+    void setPreserveCover(bool value);
+    void setPreserveDirectoryStructure(bool value);
+    void setExtractVideoAudio(bool value);
     void setKeepPitchWhileSpeedChange(bool value);
     void setVocalProtection(bool value);
 
@@ -359,6 +372,9 @@ signals:
     void transcodeSampleRateHzChanged();
     void transcodeChannelsChanged();
     void preserveMetadataChanged();
+    void preserveCoverChanged();
+    void preserveDirectoryStructureChanged();
+    void extractVideoAudioChanged();
     void keepPitchWhileSpeedChangeChanged();
     void vocalProtectionChanged();
 
@@ -449,13 +465,16 @@ private:
 
     // Audio Tools
     QString defaultOutputDirectory_;
-    int parallelJobs_ = 4;
+    int parallelJobs_ = 5;
     int overwritePolicy_ = 0;
     QString transcodeFormat_ = QStringLiteral("MP3");
     int transcodeBitrateKbps_ = 320;
     int transcodeSampleRateHz_ = 44100;
     int transcodeChannels_ = 2;
     bool preserveMetadata_ = true;
+    bool preserveCover_ = true;
+    bool preserveDirectoryStructure_ = true;
+    bool extractVideoAudio_ = true;
     bool keepPitchWhileSpeedChange_ = true;
     bool vocalProtection_ = true;
 
@@ -472,6 +491,6 @@ private:
     QString cacheDirectory_;
     bool autoCleanCache_ = true;
     bool cleanTempOnExit_ = true;
-    int cacheSizeLimitMB_ = 1024;
+    int cacheSizeLimitMB_ = 10 * 1024;
     int currentCacheSizeMB_ = 0;
 };

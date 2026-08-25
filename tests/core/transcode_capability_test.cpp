@@ -14,7 +14,7 @@ extern "C" {
 int main()
 {
     constexpr std::array<std::string_view, 8> expected_keys{
-        "mp3", "flac", "wav", "aac", "opus", "ogg", "alac", "m4a"};
+        "mp3", "flac", "wav", "aac", "opus", "ogg", "alac", "aiff"};
 
     const auto capabilities = agplayer::transcode_capabilities();
     assert(capabilities.size() == expected_keys.size());
@@ -41,17 +41,17 @@ int main()
     }
 
     const auto* aac = agplayer::find_transcode_capability(capabilities, "aac");
-    const auto* m4a = agplayer::find_transcode_capability(capabilities, "m4a");
+    const auto* aiff = agplayer::find_transcode_capability(capabilities, "aiff");
     const auto* alac = agplayer::find_transcode_capability(capabilities, "alac");
     const auto* wav = agplayer::find_transcode_capability(capabilities, "wav");
     const auto* flac = agplayer::find_transcode_capability(capabilities, "flac");
     const auto* ogg = agplayer::find_transcode_capability(capabilities, "ogg");
-    assert(aac != nullptr && m4a != nullptr && alac != nullptr
+    assert(aac != nullptr && aiff != nullptr && alac != nullptr
            && wav != nullptr && flac != nullptr && ogg != nullptr);
     assert(aac->codec_name == "aac");
     assert(aac->muxer_name == "adts");
-    assert(m4a->codec_name == "aac");
-    assert(m4a->muxer_name == "ipod");
+    assert(aiff->codec_name == "pcm_s16be");
+    assert(aiff->muxer_name == "aiff");
     assert(alac->codec_name == "alac");
     assert(alac->muxer_name == "ipod");
     assert(ogg->parameter_kind == "quality");

@@ -1663,7 +1663,9 @@ ag_result transcode(const std::string& input_path,
     const bool output_supports_metadata = muxer_key != "adts"
                                           && muxer_key != ".aac"
                                           && muxer_key != "wav"
-                                          && muxer_key != ".wav";
+                                          && muxer_key != ".wav"
+                                          && muxer_key != "aiff"
+                                          && muxer_key != ".aiff";
     const bool sets_metadata = std::any_of(
         staged_config.metadata_edit_plan.fields.cbegin(),
         staged_config.metadata_edit_plan.fields.cend(),

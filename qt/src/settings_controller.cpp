@@ -130,6 +130,9 @@ int SettingsController::transcodeBitrateKbps() const noexcept { return transcode
 int SettingsController::transcodeSampleRateHz() const noexcept { return transcodeSampleRateHz_; }
 int SettingsController::transcodeChannels() const noexcept { return transcodeChannels_; }
 bool SettingsController::preserveMetadata() const noexcept { return preserveMetadata_; }
+bool SettingsController::preserveCover() const noexcept { return preserveCover_; }
+bool SettingsController::preserveDirectoryStructure() const noexcept { return preserveDirectoryStructure_; }
+bool SettingsController::extractVideoAudio() const noexcept { return extractVideoAudio_; }
 bool SettingsController::keepPitchWhileSpeedChange() const noexcept { return keepPitchWhileSpeedChange_; }
 bool SettingsController::vocalProtection() const noexcept { return vocalProtection_; }
 
@@ -556,7 +559,7 @@ void SettingsController::setDefaultOutputDirectory(const QString& value)
 
 void SettingsController::setParallelJobs(int value)
 {
-    value = clampValue(value, 1, 4);
+    value = clampValue(value, 1, 10);
     if (parallelJobs_ == value) {
         return;
     }
@@ -579,8 +582,12 @@ void SettingsController::setOverwritePolicy(int value)
 void SettingsController::setTranscodeFormat(const QString& value)
 {
     const QString normalized = value.trimmed().toUpper();
-    const QString accepted = normalized == QStringLiteral("WAV")
-            || normalized == QStringLiteral("FLAC")
+    static const QSet<QString> supportedFormats = {
+        QStringLiteral("MP3"), QStringLiteral("FLAC"),
+        QStringLiteral("WAV"), QStringLiteral("AAC"),
+        QStringLiteral("OPUS"), QStringLiteral("OGG"),
+        QStringLiteral("ALAC"), QStringLiteral("AIFF")};
+    const QString accepted = supportedFormats.contains(normalized)
         ? normalized : QStringLiteral("MP3");
     if (transcodeFormat_ == accepted) {
         return;
@@ -631,6 +638,30 @@ void SettingsController::setPreserveMetadata(bool value)
     preserveMetadata_ = value;
     persistValue(QStringLiteral("audioTools/preserveMetadata"), value);
     emit preserveMetadataChanged();
+}
+
+void SettingsController::setPreserveCover(bool value)
+{
+    if (preserveCover_ == value) return;
+    preserveCover_ = value;
+    persistValue(QStringLiteral("audioTools/preserveCover"), value);
+    emit preserveCoverChanged();
+}
+
+void SettingsController::setPreserveDirectoryStructure(bool value)
+{
+    if (preserveDirectoryStructure_ == value) return;
+    preserveDirectoryStructure_ = value;
+    persistValue(QStringLiteral("audioTools/preserveDirectoryStructure"), value);
+    emit preserveDirectoryStructureChanged();
+}
+
+void SettingsController::setExtractVideoAudio(bool value)
+{
+    if (extractVideoAudio_ == value) return;
+    extractVideoAudio_ = value;
+    persistValue(QStringLiteral("audioTools/extractVideoAudio"), value);
+    emit extractVideoAudioChanged();
 }
 
 void SettingsController::setKeepPitchWhileSpeedChange(bool value)
@@ -1248,7 +1279,7 @@ void SettingsController::load()
                 + defaultOutputDirectory_);
     }
     parallelJobs_ = clampValue(
-        settings_.value(QStringLiteral("parallelJobs"), parallelJobs_).toInt(), 1, 4);
+        settings_.value(QStringLiteral("parallelJobs"), parallelJobs_).toInt(), 1, 10);
     overwritePolicy_ = settings_.value(QStringLiteral("overwritePolicy"), overwritePolicy_).toInt();
     const bool hasSplitTranscodeSettings =
         settings_.contains(QStringLiteral("transcodeFormat"))
@@ -1292,6 +1323,9 @@ void SettingsController::load()
         settings_.remove(QStringLiteral("defaultTranscodeFormat"));
     }
     preserveMetadata_ = settings_.value(QStringLiteral("preserveMetadata"), preserveMetadata_).toBool();
+    preserveCover_ = settings_.value(QStringLiteral("preserveCover"), preserveCover_).toBool();
+    preserveDirectoryStructure_ = settings_.value(QStringLiteral("preserveDirectoryStructure"), preserveDirectoryStructure_).toBool();
+    extractVideoAudio_ = settings_.value(QStringLiteral("extractVideoAudio"), extractVideoAudio_).toBool();
     keepPitchWhileSpeedChange_ = settings_.value(QStringLiteral("keepPitchWhileSpeedChange"), keepPitchWhileSpeedChange_).toBool();
     vocalProtection_ = settings_.value(QStringLiteral("vocalProtection"), vocalProtection_).toBool();
     settings_.endGroup();
@@ -1342,7 +1376,14 @@ void SettingsController::load()
     }
     autoCleanCache_ = settings_.value(QStringLiteral("autoCleanCache"), autoCleanCache_).toBool();
     cleanTempOnExit_ = settings_.value(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_).toBool();
+    const bool hasCacheSizeLimit = settings_.contains(QStringLiteral("sizeLimitMB"));
     cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
+    // 1 GB was the product default before the release plan.  It is safe to
+    // migrate that exact untouched default, but never reinterpret a custom cap.
+    if (hasCacheSizeLimit && cacheSizeLimitMB_ == 1024) {
+        cacheSizeLimitMB_ = 10 * 1024;
+        settings_.setValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);
+    }
     settings_.endGroup();
 
     // Ensure clamped values are stored within valid ranges.
@@ -1369,9 +1410,12 @@ void SettingsController::load()
     spectrumPlayedColor_ = validOr(spectrumPlayedColor_, QStringLiteral("#e62e9b"));
     overwritePolicy_ = clampValue(overwritePolicy_, 0, 1);
     transcodeFormat_ = transcodeFormat_.trimmed().toUpper();
-    if (transcodeFormat_ != QStringLiteral("MP3")
-        && transcodeFormat_ != QStringLiteral("WAV")
-        && transcodeFormat_ != QStringLiteral("FLAC")) {
+    static const QSet<QString> supportedFormats = {
+        QStringLiteral("MP3"), QStringLiteral("FLAC"),
+        QStringLiteral("WAV"), QStringLiteral("AAC"),
+        QStringLiteral("OPUS"), QStringLiteral("OGG"),
+        QStringLiteral("ALAC"), QStringLiteral("AIFF")};
+    if (!supportedFormats.contains(transcodeFormat_)) {
         transcodeFormat_ = QStringLiteral("MP3");
     }
     if (!QList<int>{128, 192, 256, 320}.contains(transcodeBitrateKbps_)) {
@@ -1463,6 +1507,9 @@ void SettingsController::saveAll()
                  transcodeSampleRateHz_);
     persistValue(QStringLiteral("transcodeChannels"), transcodeChannels_);
     persistValue(QStringLiteral("preserveMetadata"), preserveMetadata_);
+    persistValue(QStringLiteral("preserveCover"), preserveCover_);
+    persistValue(QStringLiteral("preserveDirectoryStructure"), preserveDirectoryStructure_);
+    persistValue(QStringLiteral("extractVideoAudio"), extractVideoAudio_);
     persistValue(QStringLiteral("keepPitchWhileSpeedChange"), keepPitchWhileSpeedChange_);
     persistValue(QStringLiteral("vocalProtection"), vocalProtection_);
     settings_.endGroup();
@@ -1527,13 +1574,16 @@ void SettingsController::restoreDefaults()
     replayGainClipProtection_ = true;
 
     defaultOutputDirectory_ = defaultExportDir();
-    parallelJobs_ = 4;
+    parallelJobs_ = 5;
     overwritePolicy_ = 0;
     transcodeFormat_ = QStringLiteral("MP3");
     transcodeBitrateKbps_ = 320;
     transcodeSampleRateHz_ = 44100;
     transcodeChannels_ = 2;
     preserveMetadata_ = true;
+    preserveCover_ = true;
+    preserveDirectoryStructure_ = true;
+    extractVideoAudio_ = true;
     keepPitchWhileSpeedChange_ = true;
     vocalProtection_ = true;
 
@@ -1548,7 +1598,7 @@ void SettingsController::restoreDefaults()
     cacheDirectory_ = defaultCacheDirectory();
     autoCleanCache_ = true;
     cleanTempOnExit_ = true;
-    cacheSizeLimitMB_ = 1024;
+    cacheSizeLimitMB_ = 10 * 1024;
 }
 
 void SettingsController::recalculateCacheSize()

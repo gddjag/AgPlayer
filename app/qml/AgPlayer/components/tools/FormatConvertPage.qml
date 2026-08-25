@@ -15,7 +15,10 @@ Rectangle {
     function usesCompactLayout(availableWidth) { return availableWidth <= 1000 }
     readonly property bool compactLayout: usesCompactLayout(width)
 
-    Component.onCompleted: converter.parallelJobs = SettingsController.parallelJobs
+    Component.onCompleted: {
+        converter.parallelJobs = SettingsController.parallelJobs
+        converter.selectedFormat = SettingsController.transcodeFormat.toLowerCase()
+    }
 
     onOutputDirectoryChanged: {
         if (SettingsController.defaultOutputDirectory !== outputDirectory)
@@ -42,6 +45,13 @@ Rectangle {
         const requestedBitRate = Number(settingsPanel.bitRate)
         const requestedQuality = Number(settingsPanel.quality)
         const requestedSampleRate = Number(settingsPanel.sampleRate)
+        SettingsController.transcodeFormat = settingsPanel.outputFormat.toUpperCase()
+        if (isFinite(requestedBitRate) && requestedBitRate > 0)
+            SettingsController.transcodeBitrateKbps = Math.round(requestedBitRate / 1000)
+        if (isFinite(requestedSampleRate) && requestedSampleRate > 0)
+            SettingsController.transcodeSampleRateHz = requestedSampleRate
+        if (settingsPanel.channels === 1 || settingsPanel.channels === 2)
+            SettingsController.transcodeChannels = settingsPanel.channels
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
             bitRate: isFinite(requestedBitRate) ? requestedBitRate : 0,
@@ -283,6 +293,22 @@ Rectangle {
                         Text { text: qsTr("已完成 %1").arg(converter.completedCount); color: "#19c37d" }
                         ThemedIcon { objectName: "formatSummaryFailedIcon"; source: Theme.icon("error-warning-line"); tint: "#ff4d4f"; sourceSize.width: 18; sourceSize.height: 18 }
                         Text { text: qsTr("失败 %1").arg(converter.failedCount); color: "#ff4d4f" }
+                    }
+                    MouseArea {
+                        objectName: "formatCompletedSummaryFilter"
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width / 2
+                        height: parent.height
+                        onClicked: converter.filteredTaskModel.statusFilter = "Done"
+                    }
+                    MouseArea {
+                        objectName: "formatFailedSummaryFilter"
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width / 2
+                        height: parent.height
+                        onClicked: converter.filteredTaskModel.statusFilter = "Error"
                     }
                 }
 

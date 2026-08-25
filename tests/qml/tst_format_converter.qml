@@ -73,7 +73,7 @@ TestCase {
         compare(metadataIndicator.color.toString(), Theme.accent.toString())
         verify(metadataMark.visible)
         verify(metadataMark.source.toString().indexOf("check-line") >= 0)
-        compare(extractIndicator.color.toString(), Theme.elevated.toString())
+        compare(extractIndicator.color.toString(), Theme.accent.toString())
         verify(findChild(page, "formatEncoderBox"))
         verify(findChild(page, "formatOutputDirectoryRow"))
         verify(findChild(page, "formatTotalProgress"))
@@ -260,6 +260,18 @@ TestCase {
         FormatConverter.rejectPendingPlan()
     }
 
+    function test_summaryCardsFilterCompletedAndFailedTasks() {
+        const completeFilter = findChild(page, "formatCompletedSummaryFilter")
+        const failedFilter = findChild(page, "formatFailedSummaryFilter")
+        verify(completeFilter && failedFilter)
+        mouseClick(completeFilter, completeFilter.width / 2,
+                   completeFilter.height / 2, Qt.LeftButton)
+        compare(FormatConverter.filteredTaskModel.statusFilter, "Done")
+        mouseClick(failedFilter, failedFilter.width / 2,
+                   failedFilter.height / 2, Qt.LeftButton)
+        compare(FormatConverter.filteredTaskModel.statusFilter, "Error")
+    }
+
     function test_formatButtonsRebuildAndResetCapabilityParameters() {
         const settings = findChild(page, "formatSettingsPanel")
         const modeRow = findChild(page, "formatBitrateModeRow")
@@ -272,7 +284,7 @@ TestCase {
                && sampleRateBox && sampleFormatBox && channelBox)
 
         const expectedKeys = ["mp3", "flac", "wav", "aac",
-                              "opus", "ogg", "alac", "m4a"]
+                              "opus", "ogg", "alac", "aiff"]
         const capabilities = FormatConverter.outputCapabilities
         compare(capabilities.length, expectedKeys.length)
         for (let index = 0; index < capabilities.length; ++index) {

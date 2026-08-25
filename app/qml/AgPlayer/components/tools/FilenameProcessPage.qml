@@ -167,7 +167,7 @@ Control {
         suffixField.text = "_Remaster"
         replaceSpacesCheck.checked = true
         preserveExtensionCheck.checked = true
-        autoNumberCheck.checked = true
+        autoNumberCheck.checked = false
         numberStartSpin.value = 1
         numberDigitsSpin.value = 2
         numberPositionBox.currentIndex = 1
@@ -843,7 +843,12 @@ Control {
                                         objectName: "filenameAutoNumberCheck"
                                         checked: false
                                         text: ""
-                                        onToggled: page.refreshPreview()
+                                        enabled: !removeSequenceCheck.checked
+                                        onCheckedChanged: {
+                                            if (checked)
+                                                removeSequenceCheck.checked = false
+                                            page.refreshPreview()
+                                        }
                                     }
                                     Item { Layout.fillWidth: true }
                                     Label { text: qsTr("删除序号"); color: Theme.primaryText; font.weight: Font.DemiBold }
@@ -853,7 +858,12 @@ Control {
                                         Layout.rightMargin: 14
                                         checked: false
                                         text: ""
-                                        onToggled: page.refreshPreview()
+                                        enabled: !autoNumberCheck.checked
+                                        onCheckedChanged: {
+                                            if (checked)
+                                                autoNumberCheck.checked = false
+                                            page.refreshPreview()
+                                        }
                                     }
                                 }
                                 Label { text: qsTr("起始序号"); color: Theme.secondaryText; Layout.preferredWidth: 108 }

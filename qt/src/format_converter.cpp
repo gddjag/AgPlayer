@@ -201,8 +201,8 @@ FormatInfo format_info(const QString& format)
         return {"flac", "flac", "flac"};
     if (f == QStringLiteral("aac"))
         return {"aac", "aac", "adts"};
-    if (f == QStringLiteral("m4a"))
-        return {"aac", "m4a", "ipod"};
+    if (f == QStringLiteral("aiff"))
+        return {"pcm_s16be", "aiff", "aiff"};
     if (f == QStringLiteral("ogg"))
         return {"libvorbis", "ogg", "ogg"};
     if (f == QStringLiteral("opus"))
@@ -224,8 +224,7 @@ QVariantList bitrate_choices_for(const QString& format)
         return {96000, 128000, 192000, 256000, 320000};
     }
     if (format == QStringLiteral("mp3")
-        || format == QStringLiteral("aac")
-        || format == QStringLiteral("m4a")) {
+        || format == QStringLiteral("aac")) {
         return {128000, 192000, 256000, 320000};
     }
     return {};
@@ -260,7 +259,7 @@ QVariantList presets_for(const QString& format, bool lossy)
                 preset(QStringLiteral("custom"), QStringLiteral("自定义"),
                        192000, QStringLiteral("vbr"), 48000, 85)};
     }
-    if (format == QStringLiteral("aac") || format == QStringLiteral("m4a")) {
+    if (format == QStringLiteral("aac")) {
         return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
                        256000, QStringLiteral("vbr"), 0, 85),
                 preset(QStringLiteral("high"), QStringLiteral("高质量"),
@@ -747,13 +746,13 @@ QVariantList FormatConverter::supportedOutputFormats() const
     };
     static constexpr Candidate candidates[] = {
         {"mp3", "MP3", "libmp3lame", "LAME MP3"},
-        {"wav", "WAV", "pcm_s16le", "PCM"},
         {"flac", "FLAC", "flac", "FLAC"},
+        {"wav", "WAV", "pcm_s16le", "PCM"},
         {"aac", "AAC", "aac", "AAC"},
-        {"m4a", "AAC / M4A", "aac", "AAC"},
-        {"ogg", "OGG", "libvorbis", "Vorbis"},
         {"opus", "Opus", "libopus", "libopus"},
+        {"ogg", "OGG", "libvorbis", "Vorbis"},
         {"alac", "ALAC", "alac", "ALAC"},
+        {"aiff", "AIFF", "pcm_s16be", "PCM"},
     };
     const std::vector<agplayer::TranscodeFormatCapability> capabilities =
         agplayer::transcode_capabilities();
@@ -1364,21 +1363,18 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
     conversionRequest.keepMetadata = request.value(
         QStringLiteral("keepMetadata"), true).toBool();
     conversionRequest.keepCover = request.value(
-        QStringLiteral("keepCover"), false).toBool();
+        QStringLiteral("keepCover"), true).toBool()
+        && capability.value(QStringLiteral("supportsCover")).toBool();
+    // Unsupported ancillary data must not turn a valid audio conversion into
+    // a failure.  The resolved profile records that it was omitted.
     if (conversionRequest.keepMetadata
         && !capability.value(QStringLiteral("supportsMetadata")).toBool()) {
-        return failPreflight(QStringLiteral(
-            "Unsupported keepMetadata for output format: %1").arg(format));
-    }
-    if (conversionRequest.keepCover
-        && !capability.value(QStringLiteral("supportsCover")).toBool()) {
-        return failPreflight(QStringLiteral(
-            "Unsupported keepCover for output format: %1").arg(format));
+        conversionRequest.keepMetadata = false;
     }
     conversionRequest.preserveDirectories = request.value(
-        QStringLiteral("preserveDirectories"), false).toBool();
+        QStringLiteral("preserveDirectories"), true).toBool();
     conversionRequest.extractAudio = request.value(
-        QStringLiteral("extractAudio"), false).toBool();
+        QStringLiteral("extractAudio"), true).toBool();
 
     static const QUuid taskNamespace(
         QStringLiteral("{76df29bf-589f-4dc4-a64a-9938f8b862d8}"));
@@ -1493,6 +1489,12 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         }
         const QString externalTaskId = externalTaskIds.value(task.taskId);
         const FileEntry entry = selectedByTaskId.value(externalTaskId);
+        QVariantMap resolvedProfile = task.resolvedProfile;
+        // A batch may combine files with and without embedded artwork.  Keep
+        // the request frozen per source so an absent cover is never treated as
+        // an encoding failure or a request to synthesize artwork.
+        resolvedProfile.insert(QStringLiteral("keepCover"),
+                               conversionRequest.keepCover && entry.probeHasCover);
         const bool confirmedOverwrite = conflictPolicy
                 == FormatConflictPolicy::Overwrite
             || (conflictPolicy == FormatConflictPolicy::Ask
@@ -1505,7 +1507,7 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
             {QStringLiteral("inputPath"), task.inputPath},
             {QStringLiteral("outputPath"), task.outputPath},
             {QStringLiteral("audioStreamIndex"), task.audioStreamIndex},
-            {QStringLiteral("resolvedProfile"), task.resolvedProfile},
+            {QStringLiteral("resolvedProfile"), resolvedProfile},
             {QStringLiteral("differences"), differences},
             {QStringLiteral("skipped"), task.skipped},
             {QStringLiteral("action"), task.skipped
@@ -1525,7 +1527,7 @@ QVariantMap FormatConverter::buildPreflight(const QVariantMap& request)
         frozenJob.outputPath = task.outputPath;
         frozenJob.sourceSize = entry.fileSize;
         frozenJob.sourceLastModifiedMs = entry.sourceLastModifiedMs;
-        frozenJob.resolvedProfile = task.resolvedProfile;
+        frozenJob.resolvedProfile = resolvedProfile;
         frozenJob.skipped = task.skipped;
         frozenJob.overwriteExisting = confirmedOverwrite;
         frozenJob.extractAudio = conversionRequest.extractAudio;

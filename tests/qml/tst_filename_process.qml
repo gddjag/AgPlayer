@@ -99,7 +99,7 @@ TestCase {
         compare(payload.removeSuffixWhenEmpty, false)
     }
 
-    function test_removeSequenceIsIndependentAndAdjacentToAutoNumber() {
+    function test_removeSequenceIsMutuallyExclusiveWithAutoNumber() {
         const page = createTemporaryObject(pageComponent, testCase)
         verify(page)
         wait(0)
@@ -117,10 +117,16 @@ TestCase {
         verify(!removeRules.autoNumber)
 
         autoNumber.checked = true
-        removeSequence.checked = false
+        compare(removeSequence.checked, false)
         const addRules = page.rules()
         verify(!addRules.removeSequenceAtStart)
         verify(!addRules.removeSequenceAtEnd)
         verify(addRules.autoNumber)
+
+        removeSequence.checked = true
+        compare(autoNumber.checked, false)
+        const removeAgainRules = page.rules()
+        verify(removeAgainRules.removeSequenceAtStart)
+        verify(!removeAgainRules.autoNumber)
     }
 }

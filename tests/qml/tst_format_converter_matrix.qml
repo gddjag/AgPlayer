@@ -60,7 +60,7 @@ TestCase {
                   "VBR fixture did not finish loading")
         tryCompare(FormatConverter, "fileCount", 1, 3000)
 
-        const formats = ["mp3", "m4a", "opus"]
+        const formats = ["mp3", "aac", "opus"]
         for (let index = 0; index < formats.length; ++index) {
             const key = formats[index]
             const formatButton = findChild(page,

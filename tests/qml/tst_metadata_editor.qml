@@ -184,6 +184,18 @@ TestCase {
         tryCompare(coverSummary, "text", "当前封面：多种封面")
     }
 
+    function test_loadedFieldsStayUntouchedAndDeletingExistingValueClears() {
+        const titleRow = page.rowForField("title")
+        const titleField = findChild(page, "metadataValueField_title")
+        verify(titleRow && titleField)
+        titleRow.reset({ value: "Existing title", multiple: false })
+        compare(titleRow.selectedMode, "keep")
+        titleField.text = ""
+        titleField.textEdited()
+        compare(titleRow.selectedMode, "clear")
+        compare(titleRow.descriptor().mode, "clear")
+    }
+
     function test_customTagReplacesYearInEditorSchema() {
         const expectedKeys = ["title", "artist", "album", "albumArtist", "genre",
                               "composer", "date", "customTag", "bpm"]

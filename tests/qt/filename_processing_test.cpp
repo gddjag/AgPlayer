@@ -24,6 +24,7 @@ private slots:
     void autoNumbersTargetsOccupiedByStationarySources();
     void refusesToOverwriteStationaryBatchSources();
     void refusesDuplicateOverwriteTargets();
+    void automaticNumberingAndSequenceRemovalAreMutuallyExclusive();
 };
 
 void FilenameProcessingTest::transformsStemWithoutChangingExtension()
@@ -82,6 +83,17 @@ void FilenameProcessingTest::removesExplicitLiteralAffixesAndEdgeSequenceOnly()
              u"Sunrise.flac"_s);
 }
 
+void FilenameProcessingTest::automaticNumberingAndSequenceRemovalAreMutuallyExclusive()
+{
+    FilenameRuleSet rules;
+    rules.autoNumber = true;
+    rules.removeSequenceWhenEmpty = true;
+    rules.numberPosition = NumberPosition::AfterSuffix;
+
+    QCOMPARE(FilenameTransformEngine::transform(u"01 Sunrise.flac"_s, rules, 0),
+             u"01 Sunrise_01.flac"_s);
+}
+
 void FilenameProcessingTest::appliesRemovalAdditionAndNumberingInSpecifiedOrder()
 {
     FilenameRuleSet rules;
@@ -94,7 +106,7 @@ void FilenameProcessingTest::appliesRemovalAdditionAndNumberingInSpecifiedOrder(
     rules.removeSequenceWhenEmpty = false;
     rules.prefix = u"NEW-"_s;
     rules.suffix = u"-DONE"_s;
-    rules.autoNumber = true;
+    rules.autoNumber = false;
     rules.numberStart = 5;
     rules.numberDigits = 2;
     rules.numberPosition = NumberPosition::AfterSuffix;
@@ -102,7 +114,7 @@ void FilenameProcessingTest::appliesRemovalAdditionAndNumberingInSpecifiedOrder(
 
     QCOMPARE(FilenameTransformEngine::transform(
                  u"007 - OLD-Song-Tail - 09.flac"_s, rules, 0),
-             u"NEW-Song-DONE_05.flac"_s);
+             u"NEW-Song-DONE.flac"_s);
 }
 
 void FilenameProcessingTest::keepsHiddenFilesAndExtensionlessNamesWellDefined()
