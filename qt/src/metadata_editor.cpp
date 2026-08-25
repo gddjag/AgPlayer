@@ -797,7 +797,6 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                     || currentStableSourceId != e.stableSourceId) {
                     writeResult.message = tr("源文件在预检后发生变化，请重新预检")
                         .toStdString();
-                    ++summary.failureCount;
                     result = AG_IO_ERROR;
                 } else {
                     try {

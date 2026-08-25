@@ -1132,7 +1132,7 @@ Rectangle {
                                             ToolButton {
                                                 objectName: "metadataClearButton_" + fieldRow.fieldKey
                                                 text: qsTr("清空")
-                                                accessibleName: qsTr("清空") + fieldRow.fieldLabel
+                                                Accessible.name: qsTr("清空") + fieldRow.fieldLabel
                                                 Layout.preferredWidth: 46
                                                 onClicked: fieldRow.selectMode("clear")
                                             }

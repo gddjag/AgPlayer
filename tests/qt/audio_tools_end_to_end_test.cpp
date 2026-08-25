@@ -188,7 +188,7 @@ void AudioToolsEndToEndTest::
     });
     QVERIFY(opus.value(QStringLiteral("ready")).toBool());
     QCOMPARE(opus.value(QStringLiteral("sampleRate")).toInt(), 48000);
-    QCOMPARE(opus.value(QStringLiteral("bitRate")).toInt(), 192000);
+    QCOMPARE(opus.value(QStringLiteral("bitRate")).toInt(), 320000);
     QCOMPARE(opus.value(QStringLiteral("bitrateMode")).toString(),
              QStringLiteral("vbr"));
     converter.rejectPendingPlan();
