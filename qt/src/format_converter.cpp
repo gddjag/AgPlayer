@@ -368,7 +368,8 @@ void FormatConverter::setBitrateMode(const QString& value)
         return;
     }
     const QString normalized = value.trimmed().toLower();
-    if (normalized != QStringLiteral("cbr")
+    if (!normalized.isEmpty()
+        && normalized != QStringLiteral("cbr")
         && normalized != QStringLiteral("vbr")) {
         return;
     }

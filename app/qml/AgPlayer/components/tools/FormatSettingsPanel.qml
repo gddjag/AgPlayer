@@ -25,7 +25,7 @@ Rectangle {
                              ? Number(sampleRateBox.currentValue) : 0
     property int channels: channelLayout === "mono" ? 1
                            : channelLayout === "stereo" ? 2 : 0
-    property string bitrateMode: selectedBitrateMode
+    readonly property string bitrateMode: converter ? converter.bitrateMode : ""
     property string conflictPolicy: conflictBox.currentValue || "auto-number"
     property string sampleFormat: sampleFormatBox.currentValue || ""
     property string bitDepth: bitDepthBox.currentValue || ""
@@ -35,30 +35,23 @@ Rectangle {
     property bool preserveDirectories: preserveDirectoriesCheck.checked
     property bool extractAudio: extractAudioCheck.checked
     property bool volumeNormalize: false
-    property string selectedBitrateMode: ""
     property string lastCapabilityKey: ""
-    property string pendingUserBitrateMode: ""
     signal chooseOutputDirectory()
     signal outputDirectoryEdited(string directory)
 
     function resetCapabilityParameters() {
         const modes = capability.bitrateModes || []
-        selectedBitrateMode = ""
+        let defaultMode = ""
         for (let index = 0; index < modes.length; ++index) {
-            if (modes[index].key === pendingUserBitrateMode) {
-                selectedBitrateMode = pendingUserBitrateMode
-                pendingUserBitrateMode = ""
+            if (modes[index].default) {
+                defaultMode = modes[index].key
                 break
             }
         }
-        for (let index = 0; index < modes.length; ++index) {
-            if (selectedBitrateMode === "" && modes[index].default) {
-                selectedBitrateMode = modes[index].key
-                break
-            }
-        }
-        if (selectedBitrateMode === "" && modes.length > 0)
-            selectedBitrateMode = modes[0].key
+        if (defaultMode === "" && modes.length > 0)
+            defaultMode = modes[0].key
+        if (converter && converter.bitrateMode !== defaultMode)
+            converter.bitrateMode = defaultMode
 
         bitRateBox.currentIndex = -1
         if (parameterKind === "bitrate" && bitRateBox.count > 0) {
@@ -98,11 +91,15 @@ Rectangle {
     Connections {
         target: converter
         function onCurrentCapabilityChanged() {
-            const key = String(root.capability.key || "")
-            if (key !== root.lastCapabilityKey) {
-                root.lastCapabilityKey = key
-                root.resetCapabilityParameters()
-            }
+            const key = String(converter.selectedFormat || "")
+            root.lastCapabilityKey = key
+            // The notification is emitted before QML re-evaluates the
+            // currentCapability binding. Reset on the next turn so the
+            // controls use the new format, not the old one.
+            Qt.callLater(function() {
+                if (String(converter.selectedFormat || "") === key)
+                    root.resetCapabilityParameters()
+            })
         }
     }
     Component.onCompleted: {
@@ -308,7 +305,7 @@ Rectangle {
                             text: modelData.label
                             checkable: true
                             ButtonGroup.group: bitrateModeGroup
-                            checked: root.selectedBitrateMode === modelData.key
+                            checked: root.bitrateMode === modelData.key
                             Layout.fillWidth: true
                             Layout.preferredHeight: 32
                             onClicked: {
@@ -316,8 +313,7 @@ Rectangle {
                                 // click; mark this key observed so that late
                                 // notification cannot replace the user's mode.
                                 root.lastCapabilityKey = String(root.capability.key || "")
-                                root.pendingUserBitrateMode = modelData.key
-                                root.selectedBitrateMode = modelData.key
+                                root.converter.bitrateMode = modelData.key
                             }
                         background: Rectangle { color: parent.checked ? Theme.activeSelection : Theme.elevated; border.color: parent.checked ? Theme.accent : Theme.border; radius: 5 }
                             contentItem: Text { text: parent.text; color: Theme.primaryText; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }

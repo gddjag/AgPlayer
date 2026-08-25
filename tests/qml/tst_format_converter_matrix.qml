@@ -72,6 +72,7 @@ TestCase {
             mouseClick(formatButton, formatButton.width / 2,
                        formatButton.height / 2, Qt.LeftButton)
             tryCompare(FormatConverter, "selectedFormat", key, 1000)
+            tryCompare(settings, "bitrateMode", "cbr", 1000)
             const vbrButton = findChild(page,
                                 "formatBitrateModeButton-vbr")
             verify(vbrButton, key)

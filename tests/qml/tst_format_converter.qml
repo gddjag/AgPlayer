@@ -340,6 +340,8 @@ TestCase {
         const qualityBox = findChild(page, "formatQualityBox")
         const settings = findChild(page, "formatSettingsPanel")
         verify(bitDepthBox && qualityBox && settings)
+        const originalBitrate = SettingsController.transcodeBitrateKbps
+        SettingsController.transcodeBitrateKbps = 320
 
         FormatConverter.selectedFormat = "flac"
         wait(0)
@@ -363,6 +365,7 @@ TestCase {
         FormatConverter.selectedFormat = "opus"
         wait(0)
         tryCompare(findChild(page, "formatBitrateBox"), "currentValue", 320000, 1000)
+        SettingsController.transcodeBitrateKbps = originalBitrate
     }
 
     function test_realRuntimeFailureShowsUnderlyingErrorInStatusRow() {

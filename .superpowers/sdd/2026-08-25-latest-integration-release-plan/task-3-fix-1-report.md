@@ -51,3 +51,19 @@ and pitch workflows.
 - Remaining risk: `qml_format_converter_matrix_test` still has one rapid
   capability refresh failure that replaces a VBR click with CBR; not counted
   as passing.
+
+## Repair round 3
+
+- Fixed the format-mode state race by making `FormatConverter.bitrateMode`
+  the single QML source and allowing the empty value for formats without a
+  bitrate mode. Capability resets run after the new capability binding has
+  settled, before the user selects CBR/VBR.
+- Regression coverage uses a real VBR button click after each format switch;
+  OGG remains Q8 and the shared bitrate test explicitly establishes its global
+  320 kbps precondition.
+- Focused Task 3 suite passed: `transcode_v2_api_test`,
+  `transcode_capability_test`, `settings_controller_test`,
+  `audio_tools_end_to_end_test`, `qml_audio_editor_test`,
+  `qml_format_converter_test`, `qml_format_converter_matrix_test`,
+  `qml_filename_process_test`, and `qml_metadata_editor_test` (9/9, with the
+  final two converter tests rerun after their test-only setup update).
