@@ -1,10 +1,76 @@
 import QtQuick
+import QtQuick.Controls
 import QtTest
+import AgPlayer
 import "../../app/qml/AgPlayer/components/ColorScale.js" as ColorScale
 
 TestCase {
+    id: testCase
     name: "AgColorPicker"
     when: windowShown
+    width: 720
+    height: 640
+
+    property int savedThemeMode: 0
+
+    Item {
+        id: testHost
+        anchors.fill: parent
+
+        AgColorPicker {
+            id: picker
+            parent: testHost
+            x: Math.round((testHost.width - picker.width) / 2)
+            y: 28
+        }
+    }
+
+    SignalSpy {
+        id: acceptedSpy
+        target: picker
+        signalName: "colorAccepted"
+    }
+
+    function initTestCase() {
+        savedThemeMode = Theme.mode
+    }
+
+    function init() {
+        picker.close()
+        acceptedSpy.clear()
+        Theme.mode = 0
+        wait(0)
+    }
+
+    function cleanup() {
+        picker.close()
+        acceptedSpy.clear()
+        Theme.mode = savedThemeMode
+        wait(0)
+    }
+
+    function normalizedColor(value) {
+        return ColorScale.normalizeHex(value)
+    }
+
+    function replaceText(input, text) {
+        testCase.Window.window.requestActivate()
+        tryCompare(testCase.Window.window, "active", true)
+        mouseClick(input)
+        input.forceActiveFocus()
+        verify(input.activeFocus)
+        input.selectAll()
+        keyClick(Qt.Key_Backspace)
+        for (var index = 0; index < text.length; ++index)
+            keyClick(text.charAt(index))
+        keyClick(Qt.Key_Return)
+        wait(0)
+    }
+
+    function openReferenceColor() {
+        picker.openForColor("#63316B")
+        tryCompare(picker, "visible", true)
+    }
 
     function test_normalization_and_rgb_round_trip() {
         compare(ColorScale.normalizeHex("63316b"), "#63316B")
@@ -25,5 +91,173 @@ TestCase {
         var actual = ColorScale.buildPalette("#63316B")
         compare(actual.length, expected.length)
         compare(actual.join(","), expected.join(","))
+    }
+
+    function test_open_initializes_both_states_and_candidates() {
+        var expected = [
+            "#F8EBFA", "#E9D2EC", "#D6B9DB", "#C09CC6", "#A76BB0",
+            "#63316B", "#512C57", "#432248", "#341938", "#251028"
+        ]
+
+        picker.openForColor("#123456")
+        tryCompare(picker, "visible", true)
+        picker.close()
+        openReferenceColor()
+
+        compare(normalizedColor(picker.baseColor), "#63316B")
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(picker.candidateColors.join(","), expected.join(","))
+        compare(acceptedSpy.count, 0)
+    }
+
+    function test_hex_edit_changes_base_and_candidates_only() {
+        openReferenceColor()
+        var originalCandidates = picker.candidateColors.join(",")
+        var hexInput = findChild(picker, "colorPickerHex")
+        verify(hexInput)
+
+        replaceText(hexInput, "#123456")
+
+        compare(normalizedColor(picker.baseColor), "#123456")
+        compare(hexInput.text, "#123456")
+        verify(picker.candidateColors.join(",") !== originalCandidates)
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
+    }
+
+    function test_rgb_fields_synchronize_hex_and_sliders() {
+        openReferenceColor()
+        var redInput = findChild(picker, "colorPickerR")
+        var greenInput = findChild(picker, "colorPickerG")
+        var blueInput = findChild(picker, "colorPickerB")
+        var redSlider = findChild(picker, "colorPickerRSlider")
+        var greenSlider = findChild(picker, "colorPickerGSlider")
+        var blueSlider = findChild(picker, "colorPickerBSlider")
+        var hexInput = findChild(picker, "colorPickerHex")
+        verify(redInput && greenInput && blueInput)
+        verify(redSlider && greenSlider && blueSlider && hexInput)
+
+        replaceText(redInput, "18")
+        replaceText(greenInput, "52")
+        replaceText(blueInput, "86")
+
+        compare(normalizedColor(picker.baseColor), "#123456")
+        compare(hexInput.text, "#123456")
+        compare(redInput.text, "18")
+        compare(greenInput.text, "52")
+        compare(blueInput.text, "86")
+        compare(Math.round(redSlider.value), 18)
+        compare(Math.round(greenSlider.value), 52)
+        compare(Math.round(blueSlider.value), 86)
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
+    }
+
+    function test_each_slider_synchronizes_rgb_fields_and_hex() {
+        picker.openForColor("#123456")
+        tryCompare(picker, "visible", true)
+        var redSlider = findChild(picker, "colorPickerRSlider")
+        var greenSlider = findChild(picker, "colorPickerGSlider")
+        var blueSlider = findChild(picker, "colorPickerBSlider")
+        var redInput = findChild(picker, "colorPickerR")
+        var greenInput = findChild(picker, "colorPickerG")
+        var blueInput = findChild(picker, "colorPickerB")
+        var hexInput = findChild(picker, "colorPickerHex")
+
+        mouseClick(redSlider, redSlider.width - 1, redSlider.height / 2)
+        compare(normalizedColor(picker.baseColor), "#FF3456")
+        compare(redInput.text, "255")
+        compare(hexInput.text, "#FF3456")
+
+        mouseClick(greenSlider, 1, greenSlider.height / 2)
+        compare(normalizedColor(picker.baseColor), "#FF0056")
+        compare(greenInput.text, "0")
+        compare(hexInput.text, "#FF0056")
+
+        mouseClick(blueSlider, blueSlider.width - 1, blueSlider.height / 2)
+        compare(normalizedColor(picker.baseColor), "#FF00FF")
+        compare(blueInput.text, "255")
+        compare(hexInput.text, "#FF00FF")
+        compare(normalizedColor(picker.selectedColor), "#123456")
+        compare(acceptedSpy.count, 0)
+    }
+
+    function test_invalid_hex_restores_last_valid_value() {
+        openReferenceColor()
+        var hexInput = findChild(picker, "colorPickerHex")
+
+        replaceText(hexInput, "invalid")
+
+        compare(hexInput.text, "#63316B")
+        compare(normalizedColor(picker.baseColor), "#63316B")
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
+    }
+
+    function test_candidate_accepts_once_and_closes_immediately() {
+        openReferenceColor()
+        tryVerify(function() {
+            return findChild(picker.contentItem, "colorCandidate-0") !== null
+        })
+        var candidate = findChild(picker.contentItem, "colorCandidate-0")
+        verify(candidate)
+
+        mouseClick(candidate)
+
+        compare(acceptedSpy.count, 1)
+        compare(normalizedColor(acceptedSpy.signalArguments[0][0]), "#F8EBFA")
+        compare(normalizedColor(picker.selectedColor), "#F8EBFA")
+        compare(picker.visible, false)
+    }
+
+    function test_close_button_cancels_without_acceptance() {
+        openReferenceColor()
+        var closeButton = findChild(picker, "colorPickerClose")
+        verify(closeButton)
+
+        mouseClick(closeButton)
+
+        compare(picker.visible, false)
+        compare(acceptedSpy.count, 0)
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+    }
+
+    function test_escape_cancels_without_acceptance() {
+        openReferenceColor()
+        findChild(picker, "colorPickerHex").forceActiveFocus()
+
+        keyClick(Qt.Key_Escape)
+
+        tryCompare(picker, "visible", false)
+        compare(acceptedSpy.count, 0)
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+    }
+
+    function test_outside_press_cancels_without_acceptance() {
+        openReferenceColor()
+
+        mouseClick(testHost, 4, 4)
+
+        tryCompare(picker, "visible", false)
+        compare(acceptedSpy.count, 0)
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+    }
+
+    function test_theme_switch_updates_chrome_not_candidates() {
+        Theme.mode = 0
+        openReferenceColor()
+        var candidatesBefore = picker.candidateColors.slice(0)
+        var darkChrome = picker.background.color.toString()
+        compare(darkChrome, Theme.elevated.toString())
+
+        Theme.mode = 1
+        wait(0)
+
+        compare(picker.background.color.toString(), Theme.elevated.toString())
+        verify(picker.background.color.toString() !== darkChrome)
+        compare(picker.candidateColors.join(","), candidatesBefore.join(","))
+        compare(normalizedColor(picker.baseColor), "#63316B")
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
     }
 }
