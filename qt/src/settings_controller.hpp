@@ -431,9 +431,9 @@ private:
     friend class SettingsControllerTest;
 
     void load();
-    void saveAll();
-    void restoreDefaults();
-    void emitAllChanged();
+    void saveAll(bool includeMediaSettings = true);
+    void restoreDefaults(bool includeMediaSettings = true);
+    void emitAllChanged(bool includeMediaSettings = true);
     void persistValue(const QString& key, const QVariant& value);
     void applyAutoStartWithWindows();
     void applyCommittedEffects();

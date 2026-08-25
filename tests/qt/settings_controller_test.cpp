@@ -38,6 +38,7 @@ private slots:
     void themeColorSettingsPersistAndNormalize();
     void themeColorSettingsMigrateLegacyAppearanceAndInvalidValues();
     void themeColorEditTransactionPreviewsCommitsCancelsAndPreservesMediaSettings();
+    void themeColorDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
@@ -118,10 +119,11 @@ void SettingsControllerTest::themeColorSettingsMigrateLegacyAppearanceAndInvalid
 {
     QSettings persisted;
     persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/themeMode"), 1);
-    {
+    for (const int legacyMode : {0, 1, 2}) {
+        persisted.clear();
+        persisted.setValue(QStringLiteral("appearance/themeMode"), legacyMode);
         SettingsController legacy;
-        QCOMPARE(legacy.themeMode(), 1);
+        QCOMPARE(legacy.themeMode(), legacyMode);
     }
 
     persisted.clear();
@@ -144,6 +146,20 @@ void SettingsControllerTest::themeColorSettingsMigrateLegacyAppearanceAndInvalid
         QCOMPARE(invalid.highlightPreset(), QStringLiteral("systemBlue"));
         QCOMPARE(invalid.highlightCustomColor(), QStringLiteral("#D27722"));
     }
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/themeMode"),
+                       QStringLiteral("not-a-mode"));
+    persisted.setValue(QStringLiteral("appearance/highlightFollowAccent"),
+                       QStringLiteral("not-a-bool"));
+    {
+        SettingsController malformed;
+        QCOMPARE(malformed.themeMode(), 2);
+        QCOMPARE(malformed.highlightFollowAccent(), true);
+    }
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 2);
+    QCOMPARE(persisted.value(QStringLiteral("appearance/highlightFollowAccent")).toBool(),
+             true);
 }
 
 void SettingsControllerTest::themeColorEditTransactionPreviewsCommitsCancelsAndPreservesMediaSettings()
@@ -195,6 +211,57 @@ void SettingsControllerTest::themeColorEditTransactionPreviewsCommitsCancelsAndP
     QCOMPARE(committed.highlightCustomColor(), QStringLiteral("#ABCDEF"));
     QCOMPARE(committed.waveformHeight(), waveformHeight);
     QCOMPARE(committed.spectrumPlayedColor(), spectrumPlayedColor);
+}
+
+void SettingsControllerTest::themeColorDefaultResetDoesNotTouchMediaSettingsOutsideEdit()
+{
+    QSettings persisted;
+    persisted.clear();
+    const QStringList mediaKeys = {
+        QStringLiteral("appearance/waveformMode"),
+        QStringLiteral("appearance/waveformHeight"),
+        QStringLiteral("appearance/waveformDensity"),
+        QStringLiteral("appearance/waveformThickness"),
+        QStringLiteral("appearance/waveformPeakAlgorithm"),
+        QStringLiteral("appearance/waveformColorMode"),
+        QStringLiteral("appearance/waveformUnplayedColor"),
+        QStringLiteral("appearance/waveformPlayedColor"),
+        QStringLiteral("appearance/waveformHoverTimePreview"),
+        QStringLiteral("appearance/waveformPlaybackGuide"),
+        QStringLiteral("appearance/waveformCanvasHeight"),
+        QStringLiteral("appearance/waveformCanvasLocked"),
+        QStringLiteral("appearance/listWaveformThumbnailEnabled"),
+        QStringLiteral("appearance/listWaveformThumbnailMode"),
+        QStringLiteral("appearance/spectrumColorMode"),
+        QStringLiteral("appearance/spectrumUnplayedColor"),
+        QStringLiteral("appearance/spectrumPlayedColor"),
+    };
+
+    SettingsController settings;
+    for (const QString& key : mediaKeys) {
+        persisted.remove(key);
+    }
+    persisted.sync();
+    for (const QString& key : mediaKeys) {
+        QVERIFY2(!persisted.contains(key), qPrintable(key));
+    }
+    settings.setThemeMode(0);
+    settings.setAccentMode(1);
+    QSignalSpy waveformChanged(&settings, &SettingsController::waveformModeChanged);
+    QSignalSpy spectrumChanged(&settings, &SettingsController::spectrumColorModeChanged);
+    QSignalSpy thumbnailChanged(
+        &settings, &SettingsController::listWaveformThumbnailModeChanged);
+
+    settings.resetToDefaults();
+
+    QCOMPARE(settings.themeMode(), 2);
+    QCOMPARE(settings.accentMode(), 0);
+    QCOMPARE(waveformChanged.count(), 0);
+    QCOMPARE(spectrumChanged.count(), 0);
+    QCOMPARE(thumbnailChanged.count(), 0);
+    for (const QString& key : mediaKeys) {
+        QVERIFY2(!persisted.contains(key), qPrintable(key));
+    }
 }
 
 void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
@@ -595,8 +662,8 @@ void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndRese
     reloaded.resetToDefaults();
     QCOMPARE(reloaded.listWaveformThumbnailEnabled(), false);
     QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Mono"));
-    QVERIFY(enabledReset.count() >= 1);
-    QVERIFY(modeReset.count() >= 1);
+    QCOMPARE(enabledReset.count(), 0);
+    QCOMPARE(modeReset.count(), 0);
 
     persisted.setValue(QStringLiteral("appearance/listWaveformThumbnailMode"),
                        QStringLiteral("invalid-on-disk"));

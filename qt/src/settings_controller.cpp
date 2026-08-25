@@ -12,6 +12,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QList>
+#include <QMetaType>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -22,6 +23,7 @@
 #include "file_association_controller.hpp"
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -79,6 +81,39 @@ QString normalizedOpaqueThemeColor(const QString& value)
     return color.isValid() && color.alpha() == 255
         ? color.name(QColor::HexRgb).toUpper()
         : QString();
+}
+
+std::optional<int> storedInteger(const QVariant& value)
+{
+    switch (value.metaType().id()) {
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong: {
+        bool ok = false;
+        const int parsed = value.toInt(&ok);
+        return ok ? std::optional<int>(parsed) : std::nullopt;
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+std::optional<bool> storedBoolean(const QVariant& value)
+{
+    if (value.metaType().id() == QMetaType::Bool) {
+        return value.toBool();
+    }
+    if (value.metaType().id() == QMetaType::QString) {
+        const QString stored = value.toString();
+        if (stored == QStringLiteral("true")) {
+            return true;
+        }
+        if (stored == QStringLiteral("false")) {
+            return false;
+        }
+    }
+    return std::nullopt;
 }
 
 void retireLegacySmartPlaylists()
@@ -936,46 +971,12 @@ void SettingsController::setCacheSizeLimitMB(int value)
 
 void SettingsController::resetToDefaults()
 {
-    const int waveformMode = waveformMode_;
-    const double waveformHeight = waveformHeight_;
-    const double waveformDensity = waveformDensity_;
-    const double waveformThickness = waveformThickness_;
-    const int waveformPeakAlgorithm = waveformPeakAlgorithm_;
-    const int waveformColorMode = waveformColorMode_;
-    const QString waveformUnplayedColor = waveformUnplayedColor_;
-    const QString waveformPlayedColor = waveformPlayedColor_;
-    const bool waveformHoverTimePreview = waveformHoverTimePreview_;
-    const bool waveformPlaybackGuide = waveformPlaybackGuide_;
-    const int waveformCanvasHeight = waveformCanvasHeight_;
-    const bool waveformCanvasLocked = waveformCanvasLocked_;
-    const bool listWaveformThumbnailEnabled = listWaveformThumbnailEnabled_;
-    const QString listWaveformThumbnailMode = listWaveformThumbnailMode_;
-    const int spectrumColorMode = spectrumColorMode_;
-    const QString spectrumUnplayedColor = spectrumUnplayedColor_;
-    const QString spectrumPlayedColor = spectrumPlayedColor_;
-    restoreDefaults();
-    waveformMode_ = waveformMode;
-    waveformHeight_ = waveformHeight;
-    waveformDensity_ = waveformDensity;
-    waveformThickness_ = waveformThickness;
-    waveformPeakAlgorithm_ = waveformPeakAlgorithm;
-    waveformColorMode_ = waveformColorMode;
-    waveformUnplayedColor_ = waveformUnplayedColor;
-    waveformPlayedColor_ = waveformPlayedColor;
-    waveformHoverTimePreview_ = waveformHoverTimePreview;
-    waveformPlaybackGuide_ = waveformPlaybackGuide;
-    waveformCanvasHeight_ = waveformCanvasHeight;
-    waveformCanvasLocked_ = waveformCanvasLocked;
-    listWaveformThumbnailEnabled_ = listWaveformThumbnailEnabled;
-    listWaveformThumbnailMode_ = listWaveformThumbnailMode;
-    spectrumColorMode_ = spectrumColorMode;
-    spectrumUnplayedColor_ = spectrumUnplayedColor;
-    spectrumPlayedColor_ = spectrumPlayedColor;
-    saveAll();
+    restoreDefaults(false);
+    saveAll(false);
     if (!editActive_) {
         applyCommittedEffects();
     }
-    emitAllChanged();
+    emitAllChanged(false);
 }
 
 void SettingsController::resetWaveformDefaults()
@@ -1062,7 +1063,7 @@ void SettingsController::applyCommittedEffects()
     }
 }
 
-void SettingsController::emitAllChanged()
+void SettingsController::emitAllChanged(const bool includeMediaSettings)
 {
     emit autoStartWithWindowsChanged();
     emit restoreLastPlaybackOnStartupChanged();
@@ -1091,23 +1092,25 @@ void SettingsController::emitAllChanged()
     emit highlightPresetChanged();
     emit highlightCustomColorChanged();
     emit glassEffectChanged();
-    emit waveformModeChanged();
-    emit waveformHeightChanged();
-    emit waveformDensityChanged();
-    emit waveformThicknessChanged();
-    emit waveformPeakAlgorithmChanged();
-    emit waveformColorModeChanged();
-    emit waveformUnplayedColorChanged();
-    emit waveformPlayedColorChanged();
-    emit waveformHoverTimePreviewChanged();
-    emit waveformPlaybackGuideChanged();
-    emit waveformCanvasHeightChanged();
-    emit waveformCanvasLockedChanged();
-    emit listWaveformThumbnailEnabledChanged();
-    emit listWaveformThumbnailModeChanged();
-    emit spectrumColorModeChanged();
-    emit spectrumUnplayedColorChanged();
-    emit spectrumPlayedColorChanged();
+    if (includeMediaSettings) {
+        emit waveformModeChanged();
+        emit waveformHeightChanged();
+        emit waveformDensityChanged();
+        emit waveformThicknessChanged();
+        emit waveformPeakAlgorithmChanged();
+        emit waveformColorModeChanged();
+        emit waveformUnplayedColorChanged();
+        emit waveformPlayedColorChanged();
+        emit waveformHoverTimePreviewChanged();
+        emit waveformPlaybackGuideChanged();
+        emit waveformCanvasHeightChanged();
+        emit waveformCanvasLockedChanged();
+        emit listWaveformThumbnailEnabledChanged();
+        emit listWaveformThumbnailModeChanged();
+        emit spectrumColorModeChanged();
+        emit spectrumUnplayedColorChanged();
+        emit spectrumPlayedColorChanged();
+    }
     emit replayGainModeChanged();
     emit replayGainClipProtectionChanged();
 
@@ -1330,12 +1333,30 @@ void SettingsController::load()
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
-    themeMode_ = settings_.value(QStringLiteral("themeMode"), themeMode_).toInt();
+    if (settings_.contains(QStringLiteral("themeMode"))) {
+        const std::optional<int> storedThemeMode =
+            storedInteger(settings_.value(QStringLiteral("themeMode")));
+        themeMode_ = storedThemeMode.has_value()
+                && *storedThemeMode >= 0 && *storedThemeMode <= 2
+            ? *storedThemeMode
+            : 2;
+        if (!storedThemeMode.has_value()
+            || *storedThemeMode < 0 || *storedThemeMode > 2) {
+            settings_.setValue(QStringLiteral("themeMode"), themeMode_);
+        }
+    }
     accentMode_ = settings_.value(QStringLiteral("accentMode"), accentMode_).toInt();
     accentPreset_ = settings_.value(QStringLiteral("accentPreset"), accentPreset_).toString();
     accentCustomColor_ = settings_.value(QStringLiteral("accentCustomColor"), accentCustomColor_).toString();
-    highlightFollowAccent_ = settings_.value(
-        QStringLiteral("highlightFollowAccent"), highlightFollowAccent_).toBool();
+    if (settings_.contains(QStringLiteral("highlightFollowAccent"))) {
+        const std::optional<bool> storedFollowAccent = storedBoolean(
+            settings_.value(QStringLiteral("highlightFollowAccent")));
+        highlightFollowAccent_ = storedFollowAccent.value_or(true);
+        if (!storedFollowAccent.has_value()) {
+            settings_.setValue(QStringLiteral("highlightFollowAccent"),
+                               highlightFollowAccent_);
+        }
+    }
     highlightMode_ = settings_.value(QStringLiteral("highlightMode"), highlightMode_).toInt();
     highlightPreset_ = settings_.value(
         QStringLiteral("highlightPreset"), highlightPreset_).toString();
@@ -1652,7 +1673,7 @@ bool SettingsController::openDefaultAppsSettings()
 #endif
 }
 
-void SettingsController::saveAll()
+void SettingsController::saveAll(const bool includeMediaSettings)
 {
     settings_.beginGroup(QStringLiteral("general"));
     persistValue(QStringLiteral("autoStartWithWindows"), autoStartWithWindows_);
@@ -1690,26 +1711,28 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("highlightPreset"), highlightPreset_);
     persistValue(QStringLiteral("highlightCustomColor"), highlightCustomColor_);
     persistValue(QStringLiteral("glassEffect"), glassEffect_);
-    persistValue(QStringLiteral("waveformMode"), waveformMode_);
-    persistValue(QStringLiteral("waveformHeight"), waveformHeight_);
-    persistValue(QStringLiteral("waveformDensity"), waveformDensity_);
-    persistValue(QStringLiteral("waveformThickness"), waveformThickness_);
-    persistValue(QStringLiteral("waveformPeakAlgorithm"), waveformPeakAlgorithm_);
-    persistValue(QStringLiteral("visualColorSchema"), 1);
-    persistValue(QStringLiteral("waveformColorMode"), waveformColorMode_);
-    persistValue(QStringLiteral("waveformUnplayedColor"), waveformUnplayedColor_);
-    persistValue(QStringLiteral("waveformPlayedColor"), waveformPlayedColor_);
-    persistValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
-    persistValue(QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_);
-    persistValue(QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_);
-    persistValue(QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_);
-    persistValue(QStringLiteral("listWaveformThumbnailEnabled"),
-                 listWaveformThumbnailEnabled_);
-    persistValue(QStringLiteral("listWaveformThumbnailMode"),
-                 listWaveformThumbnailMode_);
-    persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
-    persistValue(QStringLiteral("spectrumUnplayedColor"), spectrumUnplayedColor_);
-    persistValue(QStringLiteral("spectrumPlayedColor"), spectrumPlayedColor_);
+    if (includeMediaSettings) {
+        persistValue(QStringLiteral("waveformMode"), waveformMode_);
+        persistValue(QStringLiteral("waveformHeight"), waveformHeight_);
+        persistValue(QStringLiteral("waveformDensity"), waveformDensity_);
+        persistValue(QStringLiteral("waveformThickness"), waveformThickness_);
+        persistValue(QStringLiteral("waveformPeakAlgorithm"), waveformPeakAlgorithm_);
+        persistValue(QStringLiteral("visualColorSchema"), 1);
+        persistValue(QStringLiteral("waveformColorMode"), waveformColorMode_);
+        persistValue(QStringLiteral("waveformUnplayedColor"), waveformUnplayedColor_);
+        persistValue(QStringLiteral("waveformPlayedColor"), waveformPlayedColor_);
+        persistValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
+        persistValue(QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_);
+        persistValue(QStringLiteral("waveformCanvasHeight"), waveformCanvasHeight_);
+        persistValue(QStringLiteral("waveformCanvasLocked"), waveformCanvasLocked_);
+        persistValue(QStringLiteral("listWaveformThumbnailEnabled"),
+                     listWaveformThumbnailEnabled_);
+        persistValue(QStringLiteral("listWaveformThumbnailMode"),
+                     listWaveformThumbnailMode_);
+        persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
+        persistValue(QStringLiteral("spectrumUnplayedColor"), spectrumUnplayedColor_);
+        persistValue(QStringLiteral("spectrumPlayedColor"), spectrumPlayedColor_);
+    }
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("audioTools"));
@@ -1752,7 +1775,7 @@ void SettingsController::saveAll()
     settings_.endGroup();
 }
 
-void SettingsController::restoreDefaults()
+void SettingsController::restoreDefaults(const bool includeMediaSettings)
 {
     autoStartWithWindows_ = false;
     restoreLastPlaybackOnStartup_ = true;
@@ -1780,23 +1803,25 @@ void SettingsController::restoreDefaults()
     highlightPreset_ = defaultThemePresetId();
     highlightCustomColor_ = defaultThemeCustomColor();
     glassEffect_ = false;
-    waveformMode_ = 0;
-    waveformHeight_ = 0.8;
-    waveformDensity_ = 2.0;
-    waveformThickness_ = 1.0;
-    waveformPeakAlgorithm_ = 0;
-    waveformColorMode_ = 0;
-    waveformUnplayedColor_ = QStringLiteral("#9098a6");
-    waveformPlayedColor_ = QStringLiteral("#d27722");
-    waveformHoverTimePreview_ = true;
-    waveformPlaybackGuide_ = false;
-    waveformCanvasHeight_ = 78;
-    waveformCanvasLocked_ = true;
-    listWaveformThumbnailEnabled_ = true;
-    listWaveformThumbnailMode_ = QStringLiteral("Color36");
-    spectrumColorMode_ = 0;
-    spectrumUnplayedColor_ = QStringLiteral("#e62e9b");
-    spectrumPlayedColor_ = QStringLiteral("#e62e9b");
+    if (includeMediaSettings) {
+        waveformMode_ = 0;
+        waveformHeight_ = 0.8;
+        waveformDensity_ = 2.0;
+        waveformThickness_ = 1.0;
+        waveformPeakAlgorithm_ = 0;
+        waveformColorMode_ = 0;
+        waveformUnplayedColor_ = QStringLiteral("#9098a6");
+        waveformPlayedColor_ = QStringLiteral("#d27722");
+        waveformHoverTimePreview_ = true;
+        waveformPlaybackGuide_ = false;
+        waveformCanvasHeight_ = 78;
+        waveformCanvasLocked_ = true;
+        listWaveformThumbnailEnabled_ = true;
+        listWaveformThumbnailMode_ = QStringLiteral("Color36");
+        spectrumColorMode_ = 0;
+        spectrumUnplayedColor_ = QStringLiteral("#e62e9b");
+        spectrumPlayedColor_ = QStringLiteral("#e62e9b");
+    }
     replayGainMode_ = 0;
     replayGainClipProtection_ = true;
 
