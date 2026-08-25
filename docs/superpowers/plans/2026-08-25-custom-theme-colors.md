@@ -12,6 +12,10 @@
 - Use test-first development. Each production change must be preceded by a focused failing test or contract check.
 - Do not package, push, or merge. Commit only theme-related code, tests, translations, and acceptance evidence.
 
+### User amendment — 2026-08-25
+
+After the theme-specific tasks above are complete and reviewed, audit and integrate the latest **committed** work from other active session branches, resolve conflicts by feature ownership, rerun integrated verification, and package the resulting latest Windows EXE to the desktop. This later instruction supersedes the no-merge/no-package restriction only for the post-theme delivery stage; it does not authorize mixing uncommitted worktree changes, pushing remotes, or packaging before integrated verification.
+
 ## Task 1: ThemeManager and palette algorithm
 
 Create `ThemeManager` and an internal complete palette value. Construct and calculate it before QML/window creation. Expose neutral surfaces, four text levels, border/divider/disabled tokens, accent/highlight state tokens, focus, and independent semantic colors. Implement stable preset IDs and exact seeds, default `#D27722`, sRGB/HSL derivation, WCAG relative luminance/contrast, foreground selection, and neutral seed preservation. React to `QStyleHints::colorSchemeChanged`; for `Unknown`, fall back to `ApplicationPaletteChange` and window-color luminance. Replace and notify only when the whole palette changes; update the Qt application palette from the same source. Add table-driven `theme_manager_test` for presets, extreme seeds, contrast, semantic independence, follow/independent highlight, system events, de-duplicated notification, and no timer activity.
