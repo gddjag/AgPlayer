@@ -1142,15 +1142,35 @@ if (WIN32)
     # prerequisites and exercise it below.
     if (CMAKE_GENERATOR MATCHES "Ninja" AND
         CMAKE_TOOLCHAIN_FILE AND VCPKG_INSTALLED_DIR)
+        string(REPLACE ";" "\\;" audio_editor_feature_options_qt_prefix
+            "${CMAKE_PREFIX_PATH}")
+        set(audio_editor_feature_options_arguments
+            "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
+            "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/feature-options-contract"
+            "-DTOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+            "-DQT_PREFIX=${audio_editor_feature_options_qt_prefix}"
+            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}"
+            "-DSOUNDTOUCH_DIR=${SoundTouch_DIR}"
+            "-DNINJA_EXECUTABLE=${CMAKE_MAKE_PROGRAM}"
+            "-DC_COMPILER=${CMAKE_C_COMPILER}"
+            "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        )
+        if (MSVC)
+            get_filename_component(msvc_compiler_directory
+                "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            get_filename_component(msvc_vc_directory
+                "${msvc_compiler_directory}/../../../../../.." ABSOLUTE)
+            set(msvc_vcvars64
+                "${msvc_vc_directory}/Auxiliary/Build/vcvars64.bat")
+            if (EXISTS "${msvc_vcvars64}")
+                list(APPEND audio_editor_feature_options_arguments
+                    "-DVCVARS_BAT=${msvc_vcvars64}")
+            endif()
+        endif()
         add_test(
             NAME audio_editor_feature_options_test
             COMMAND "${CMAKE_COMMAND}"
-                "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
-                "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/feature-options-contract"
-                "-DTOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
-                "-DQT_PREFIX=${CMAKE_PREFIX_PATH}"
-                "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}"
-                "-DNINJA_EXECUTABLE=${CMAKE_MAKE_PROGRAM}"
+                ${audio_editor_feature_options_arguments}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/audio_editor_feature_options_test.cmake"
         )
         set_tests_properties(audio_editor_feature_options_test PROPERTIES TIMEOUT 120)

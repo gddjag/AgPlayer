@@ -67,7 +67,7 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 960; Height = 768 }
         }
         "^tool-\d+$" {
-            return [pscustomobject]@{ Width = 1672; Height = 941 }
+            return [pscustomobject]@{ Width = 1672; Height = 942 }
         }
         default {
             throw "No screenshot expectation configured for surface '$Surface'"

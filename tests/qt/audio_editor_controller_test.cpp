@@ -5,6 +5,7 @@
 #include "decoder.hpp"
 
 #include <QDir>
+#include <QDataStream>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -15,6 +16,7 @@
 #include <QtTest>
 
 #include <atomic>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <thread>
@@ -77,12 +79,68 @@ double positiveCrossingFrequency(const DecodedProbe& probe)
     return seconds > 0.0 ? crossings / seconds : 0.0;
 }
 
+bool writeOppositeStereoWave(const QString& path)
+{
+    constexpr quint32 sampleRate = 48'000;
+    constexpr quint16 channels = 2;
+    constexpr quint16 bitsPerSample = 16;
+    constexpr quint32 frames = 4'096;
+    constexpr quint32 dataBytes = frames * channels * sizeof(qint16);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) return false;
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream.writeRawData("RIFF", 4);
+    stream << quint32{36U + dataBytes};
+    stream.writeRawData("WAVEfmt ", 8);
+    stream << quint32{16} << quint16{1} << channels << sampleRate
+           << quint32{sampleRate * channels * bitsPerSample / 8U}
+           << quint16{channels * bitsPerSample / 8U} << bitsPerSample;
+    stream.writeRawData("data", 4);
+    stream << dataBytes;
+    for (quint32 frame = 0; frame < frames; ++frame) {
+        const qint16 left = frame % 2 == 0 ? qint16{26'000} : qint16{-26'000};
+        stream << left << qint16{-left};
+    }
+    return stream.status() == QDataStream::Ok;
+}
+
 } // namespace
 
 class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void ordinaryZoomMixesSamplesBeforeComputingTheEnvelope()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString path = temporary.filePath(QStringLiteral("opposite.wav"));
+        QVERIFY(writeOppositeStereoWave(path));
+
+        const auto analysis = agplayer::editor::AudioFileAnalyzer::analyze(
+            std::filesystem::path(path.toStdWString()), 32);
+        QVERIFY(analysis.success);
+        QCOMPARE(analysis.channel_peaks.size(), std::size_t{2});
+        QCOMPARE(analysis.visual_mix_peaks.size(), std::size_t{64});
+        QVERIFY(std::all_of(analysis.visual_mix_peaks.begin(),
+                            analysis.visual_mix_peaks.end(),
+                            [](const float value) {
+                                return std::abs(value) < 0.0001F;
+                            }));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(path)));
+        controller.viewport()->setViewportWidth(16.0);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.viewportChannelPeaks().size(), 1,
+                                  5'000);
+        const QVariantList visual =
+            controller.viewportChannelPeaks().front().toList();
+        QVERIFY(std::all_of(visual.begin(), visual.end(), [](const QVariant& value) {
+            return !value.isValid() || std::abs(value.toFloat()) < 0.0001F;
+        }));
+    }
+
     void emptyDocumentDisablesEditActions()
     {
         AudioEditorController controller;
@@ -390,6 +448,27 @@ private slots:
                      .value(QStringLiteral("fadeOut")).toLongLong(), qint64{0});
     }
 
+    void gainGestureCommitsOneObservableUndoStep()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        const auto historyBefore = controller.historyStateIdForTesting();
+
+        QVERIFY(controller.beginEventGesture(id, QStringLiteral("gain"), false));
+        QVERIFY(controller.setEventGain(id, 1.25));
+        QVERIFY(controller.setEventGain(id, 1.5));
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("gain")).toDouble(), 1.5);
+        QVERIFY(controller.endEventGesture());
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("gain")).toDouble(), 1.0);
+    }
+
     void activeRecordingPublishesLiveTimelineAndFinalPlayableDocument()
     {
         auto capture = std::make_unique<ManualRecordingCapture>();
@@ -416,22 +495,23 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(controller.positionMs(), 1'000, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() > 0.79, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT(
-            controller.viewportChannelPeaks().size() == 2, 2'000);
+            controller.recordingOverlayPeaks().size() == 1, 2'000);
+        QCOMPARE(controller.channelPeaks().size(), 2);
 
         std::vector<float> quiet(16'000U * 2U, 0.0F);
         QCOMPARE(driver->feed(quiet, 16'000), 16'000U);
         QTRY_COMPARE_WITH_TIMEOUT(controller.playheadFrame(), 32'000, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() < 0.01, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT([&controller] {
-            const QVariantList channels = controller.viewportChannelPeaks();
-            if (channels.size() != 2) return false;
+            const QVariantList channels = controller.recordingOverlayPeaks();
+            if (channels.size() != 1) return false;
             const QVariantList left = channels.front().toList();
             bool sawSignal = false;
             bool sawQuiet = false;
             for (qsizetype index = 0; index + 1 < left.size(); index += 2) {
                 const double minimum = left[index].toDouble();
                 const double maximum = left[index + 1].toDouble();
-                sawSignal = sawSignal || minimum < -0.79 || maximum > 0.29;
+                sawSignal = sawSignal || minimum < -0.49 || maximum > 0.44;
                 sawQuiet = sawQuiet || (std::abs(minimum) < 0.001
                                         && std::abs(maximum) < 0.001);
             }
@@ -443,7 +523,7 @@ private slots:
         QVERIFY(controller.recording());
         QVERIFY(!controller.cancelRecording());
         QCOMPARE(controller.totalFrames(), 32'000);
-        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+        QVERIFY(!controller.recordingOverlayPeaks().isEmpty());
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
                                   EditorSessionState::Ready, 5'000);
         QVERIFY(controller.hasDocument());
@@ -619,10 +699,10 @@ private slots:
             controller.viewport()->documentFrames(), 16, 1'000);
         QVERIFY(controller.viewport()->setVisibleRange(4, 12));
         QTRY_VERIFY_WITH_TIMEOUT(
-            controller.viewportChannelPeaks().size() == 1, 1'000);
+            controller.recordingOverlayPeaks().size() == 1, 1'000);
 
         const QVariantList channel =
-            controller.viewportChannelPeaks().front().toList();
+            controller.recordingOverlayPeaks().front().toList();
         QCOMPARE(channel.size(), 16);
         for (qsizetype point = 0; point < 8; ++point) {
             const double expected = samples[static_cast<std::size_t>(point + 4)];
@@ -2117,7 +2197,7 @@ private slots:
         QCOMPARE(controller.fileName(), QFileInfo(fixture).fileName());
     }
 
-    void metadataEditKeepsFixturePeaksAndDefersViewportDecode()
+    void timelineMutationsImmediatelyRestoreTheCurrentViewportWaveform()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
@@ -2132,6 +2212,11 @@ private slots:
         QSignalSpy stateChanges(&controller, &AudioEditorController::stateChanged);
         QSignalSpy waveformChanges(&controller, &AudioEditorController::waveformChanged);
 
+        controller.viewport()->setViewportWidth(320.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        quint64 generation = controller.viewportWaveformGeneration();
+
         QVERIFY(controller.setSelection(96, 288));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QCOMPARE(controller.channelPeaks(), sourcePeaks);
@@ -2140,10 +2225,28 @@ private slots:
         QCOMPARE(stateChanges.count(), 0);
         QCOMPARE(fixtureDirectory.entryList(QDir::Files | QDir::NoDotAndDotDot,
                                             QDir::Name), filesBefore);
-        QVERIFY(controller.viewportChannelPeaks().isEmpty());
-
-        controller.viewport()->setViewportWidth(48'000.0);
         QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
+        QVERIFY(controller.viewportWaveformGeneration() > generation);
+        generation = controller.viewportWaveformGeneration();
+
+        const QVariantMap lastEvent = controller.timelineEventViews().back().toMap();
+        QVERIFY(controller.trimEvent(
+            lastEvent.value(QStringLiteral("id")).toString(),
+            lastEvent.value(QStringLiteral("sourceStart")).toLongLong(),
+            lastEvent.value(QStringLiteral("sourceEnd")).toLongLong() - 10,
+            lastEvent.value(QStringLiteral("timelineStart")).toLongLong()));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
+        QVERIFY(controller.viewportWaveformGeneration() > generation);
+        generation = controller.viewportWaveformGeneration();
+
+        QVERIFY(controller.undo());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
+        QVERIFY(controller.viewportWaveformGeneration() > generation);
+        generation = controller.viewportWaveformGeneration();
+
+        QVERIFY(controller.redo());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
+        QVERIFY(controller.viewportWaveformGeneration() > generation);
         QVERIFY(waveformChanges.count() >= 2);
         QVERIFY(!controller.busy());
         QCOMPARE(controller.state(), EditorSessionState::Ready);
@@ -2199,6 +2302,67 @@ private slots:
             return false;
         };
         QTRY_VERIFY_WITH_TIMEOUT(hasVisiblePeak(), 10'000);
+    }
+
+    void recordingTicksDoNotCancelAnInFlightHistoricalViewportDecode()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        auto capture = std::make_unique<ManualRecordingCapture>();
+        ManualRecordingCapture* const driver = capture.get();
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        controller.viewport()->setViewportWidth(320.0);
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(temporary.filePath(QStringLiteral("overlay.wav"))),
+            {}, 16'000, 2, false, true));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Recording, 5'000);
+        const quint64 generation = controller.viewportWaveformGeneration();
+        std::vector<float> samples(1'600U * 2U, 0.25F);
+        QCOMPARE(driver->feed(samples, 1'600), 1'600U);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.recordingOverlayPeaks().isEmpty(),
+                                 1'000);
+        QTest::qWait(120);
+        QCOMPARE(controller.viewportWaveformGeneration(), generation);
+        QVERIFY(controller.cancelRecording());
+    }
+
+    void ordinaryZoomRecordingOverlayMixesSamplesBeforeEnvelopeAggregation()
+    {
+        auto capture = std::make_unique<ManualRecordingCapture>();
+        ManualRecordingCapture* const driver = capture.get();
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        controller.viewport()->setViewportWidth(10.0);
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(temporary.filePath(QStringLiteral("opposite.wav"))),
+            {}, 16'000, 2, false, false));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Recording, 5'000);
+
+        std::vector<float> opposite(1'600U * 2U);
+        for (std::size_t frame = 0; frame < 1'600U; ++frame) {
+            const float left = frame % 2U == 0U ? 0.8F : -0.8F;
+            opposite[frame * 2U] = left;
+            opposite[frame * 2U + 1U] = -left;
+        }
+        QCOMPARE(driver->feed(opposite, 1'600), 1'600U);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingOverlayPeaks().size(), 1,
+                                  1'000);
+        QCOMPARE(controller.channelPeaks().size(), 2);
+        const QVariantList visual =
+            controller.recordingOverlayPeaks().front().toList();
+        QVERIFY(std::all_of(visual.begin(), visual.end(), [](const QVariant& value) {
+            return !value.isValid() || std::abs(value.toFloat()) < 0.0001F;
+        }));
+        QVERIFY(controller.cancelRecording());
     }
 
     void viewportWaveformDensityControlsPerChannelPointBudget()

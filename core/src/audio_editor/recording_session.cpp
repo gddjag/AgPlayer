@@ -219,6 +219,8 @@ public:
         std::atomic<SampleFrame> end_frame{0};
         std::array<std::atomic<float>, 2> minima{};
         std::array<std::atomic<float>, 2> maxima{};
+        std::atomic<float> visual_mix_minimum{0.0F};
+        std::atomic<float> visual_mix_maximum{0.0F};
     };
 
     struct LivePcmSlot final {
@@ -320,6 +322,10 @@ public:
             for (auto& peakSample : envelope.maxima) {
                 peakSample.store(0.0F, std::memory_order_relaxed);
             }
+            envelope.visual_mix_minimum.store(0.0F,
+                                              std::memory_order_relaxed);
+            envelope.visual_mix_maximum.store(0.0F,
+                                              std::memory_order_relaxed);
         }
         for (auto& sample : live_pcm) {
             sample.sequence.store(0, std::memory_order_relaxed);
@@ -432,16 +438,24 @@ public:
         if (accepted > 0) {
             std::array<float, 2> minima{1.0F, 1.0F};
             std::array<float, 2> maxima{-1.0F, -1.0F};
+            float visualMixMinimum = 1.0F;
+            float visualMixMaximum = -1.0F;
             float local_peak = 0.0F;
             for (std::size_t frame = 0; frame < accepted; ++frame) {
+                double mixedSample = 0.0;
                 for (std::size_t channel = 0; channel < config.channels;
                      ++channel) {
                     const float sample = std::clamp(
                         input[frame * config.channels + channel], -1.0F, 1.0F);
                     minima[channel] = (std::min)(minima[channel], sample);
                     maxima[channel] = (std::max)(maxima[channel], sample);
+                    mixedSample += sample;
                     local_peak = (std::max)(local_peak, std::abs(sample));
                 }
+                const float visualSample = static_cast<float>(
+                    mixedSample / config.channels);
+                visualMixMinimum = (std::min)(visualMixMinimum, visualSample);
+                visualMixMaximum = (std::max)(visualMixMaximum, visualSample);
             }
             const SampleFrame start = captured.load(std::memory_order_relaxed);
             for (std::size_t frame = 0; frame < accepted; ++frame) {
@@ -479,6 +493,10 @@ public:
                 slot.maxima[channel].store(maxima[channel],
                                            std::memory_order_relaxed);
             }
+            slot.visual_mix_minimum.store(visualMixMinimum,
+                                          std::memory_order_relaxed);
+            slot.visual_mix_maximum.store(visualMixMaximum,
+                                          std::memory_order_relaxed);
             slot.sequence.store(envelope_index + 1,
                                 std::memory_order_release);
             envelope_write_index.store(envelope_index + 1,
@@ -857,6 +875,10 @@ RecordingLiveSnapshot RecordingSession::takeLiveSnapshot(
             point.channel_maxima[channel] = slot.maxima[channel].load(
                 std::memory_order_relaxed);
         }
+        point.visual_mix_minimum = slot.visual_mix_minimum.load(
+            std::memory_order_relaxed);
+        point.visual_mix_maximum = slot.visual_mix_maximum.load(
+            std::memory_order_relaxed);
         if (slot.sequence.load(std::memory_order_acquire)
             != expectedSequence) {
             continue;

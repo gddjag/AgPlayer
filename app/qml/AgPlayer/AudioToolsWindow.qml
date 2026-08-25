@@ -9,12 +9,12 @@ Window {
     visible: false
     // Reference workbench baseline. Layouts still contract below this size.
     width: 1672
-    height: 941
+    height: 942
     minimumWidth: 880
     minimumHeight: 560
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
-    title: qsTr("AgPlayer 音频编辑")
+    title: qsTr("AgPlayer · 音频工具")
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -97,7 +97,7 @@ Window {
                     }
                     Text {
                         objectName: "audioToolsWindowTitle"
-                        text: qsTr("AgPlayer 音频编辑")
+                        text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
                         font.pixelSize: 18

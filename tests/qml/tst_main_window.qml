@@ -4342,7 +4342,7 @@ TestCase {
         verify(bitrateCombo)
         verify(sampleRateCombo)
         verify(channelCombo)
-        compare(formatCombo.valueModel.length, 3)
+        compare(formatCombo.valueModel.length, 8)
         compare(bitrateCombo.valueModel.length, 4)
         compare(sampleRateCombo.valueModel.length, 6)
         compare(sampleRateCombo.valueModel[0].value, 44100)

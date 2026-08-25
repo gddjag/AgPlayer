@@ -5,6 +5,8 @@
 #include <QSGGeometryNode>
 #include <QtTest>
 
+#include <algorithm>
+
 class TestableAudioEditorWaveformItem final : public AudioEditorWaveformItem {
 public:
     using AudioEditorWaveformItem::updatePaintNode;
@@ -14,7 +16,7 @@ class AudioEditorWaveformItemTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void rendersBoundedStereoPeakGeometryInOneBuffer()
+    void rendersOneCenteredMixWhileRetainingStereoInput()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(4.0);
@@ -26,9 +28,12 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 8);
+        QCOMPARE(item.channelPeaks().size(), 2);
+        QCOMPARE(geometry_node->geometry()->drawingMode(),
+                 unsigned{QSGGeometry::DrawTriangles});
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 36);
         QCOMPARE(node->childCount(), 0);
-        QCOMPARE(item.generatedPointCount(), 8);
+        QCOMPARE(item.generatedPointCount(), 4);
         delete node;
     }
 
@@ -66,7 +71,7 @@ private slots:
         delete node;
     }
 
-    void highDensityStereoGivesEveryChannelItsFullLogicalPixelBudget()
+    void highDensityStereoSharesOneVisualLogicalPixelBudget()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(10.0);
@@ -80,11 +85,11 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QCOMPARE(item.generatedPointCount(), 40);
+        QCOMPARE(item.generatedPointCount(), 20);
         delete node;
     }
 
-    void densityAndLineWidthAreConfigurableWithoutDividingStereoBudget()
+    void densityAndLineWidthConfigureTheCenteredMixBudget()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(10.0);
@@ -102,9 +107,10 @@ private slots:
         QVERIFY(node != nullptr);
         QCOMPARE(item.density(), 2.0);
         QCOMPARE(item.lineWidth(), 3.0);
-        QCOMPARE(item.generatedPointCount(), 80);
+        QCOMPARE(item.generatedPointCount(), 40);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->lineWidth(), 3.0F);
+        QCOMPARE(geometryNode->geometry()->drawingMode(),
+                 unsigned{QSGGeometry::DrawTriangles});
         delete node;
     }
 
@@ -126,9 +132,10 @@ private slots:
         QVERIFY(node != nullptr);
         QCOMPARE(item.density(), 5.0);
         QCOMPARE(item.lineWidth(), 0.3);
-        QCOMPARE(item.generatedPointCount(), 200);
+        QCOMPARE(item.generatedPointCount(), 100);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->lineWidth(), 0.3F);
+        QCOMPARE(geometryNode->geometry()->drawingMode(),
+                 unsigned{QSGGeometry::DrawTriangles});
         delete node;
     }
 
@@ -145,7 +152,7 @@ private slots:
         QCOMPARE(item.lineWidth(), 0.6);
     }
 
-    void onePixelStereoStillRepresentsEveryChannel()
+    void onePixelStereoRendersOneMixedEnvelope()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(1.0);
@@ -159,7 +166,58 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QCOMPARE(item.generatedPointCount(), 4);
+        QCOMPARE(item.generatedPointCount(), 2);
+        delete node;
+    }
+
+    void oppositeStereoSamplesMixAtTheVisualCenter()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(20.0);
+        item.setHeight(100.0);
+        item.setChannelPeaks({
+            QVariant(QVariantList{-1.0, -1.0, 0.5, 0.5}),
+            QVariant(QVariantList{1.0, 1.0, -0.5, -0.5})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 36);
+        const auto* vertices =
+            geometryNode->geometry()->vertexDataAsColoredPoint2D();
+        QVERIFY(std::all_of(vertices, vertices + 36,
+                            [](const auto& vertex) {
+                                return vertex.y >= 48.0F && vertex.y <= 52.0F;
+                            }));
+        delete node;
+    }
+
+    void sceneGraphUsesFeatheredTriangleCoverageForAntialiasing()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(20.0);
+        item.setHeight(20.0);
+        item.setSampleMode(true);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -1.0, -1.0, 1.0, 1.0})});
+
+        QVERIFY(item.antialiasing());
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->drawingMode(),
+                 unsigned{QSGGeometry::DrawTriangles});
+        const auto* vertices =
+            geometryNode->geometry()->vertexDataAsColoredPoint2D();
+        bool sawTransparentEdge = false;
+        bool sawOpaqueCore = false;
+        for (int index = 0; index < geometryNode->geometry()->vertexCount();
+             ++index) {
+            sawTransparentEdge = sawTransparentEdge || vertices[index].a == 0;
+            sawOpaqueCore = sawOpaqueCore || vertices[index].a == 255;
+        }
+        QVERIFY(sawTransparentEdge);
+        QVERIFY(sawOpaqueCore);
         delete node;
     }
 
@@ -176,13 +234,9 @@ private slots:
         QVERIFY(node != nullptr);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
         QCOMPARE(geometryNode->geometry()->drawingMode(),
-                 unsigned{QSGGeometry::DrawLines});
-        QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
-        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
-        QCOMPARE(vertices[0].x, 0.0F);
-        QCOMPARE(vertices[1].x, 50.0F);
-        QCOMPARE(vertices[2].x, 50.0F);
-        QCOMPARE(vertices[3].x, 100.0F);
+                 unsigned{QSGGeometry::DrawTriangles});
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 36);
+        QCOMPARE(item.generatedPointCount(), 4);
         delete node;
     }
 
@@ -197,7 +251,7 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 36);
         QCOMPARE(item.generatedPointCount(), 4);
         delete node;
     }

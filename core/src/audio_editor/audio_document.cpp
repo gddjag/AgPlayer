@@ -307,6 +307,16 @@ bool AudioDocument::setEventFadeIn(const EventId id,
     return isValid(*event) && applyCandidate(std::move(candidate));
 }
 
+bool AudioDocument::setEventGain(const EventId id, const float gain)
+{
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.begin(), candidate.end(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.end()) return false;
+    event->gain = gain;
+    return isValid(*event) && applyCandidate(std::move(candidate));
+}
+
 bool AudioDocument::addEnvelopePoint(const EventId id,
                                      const SampleFrame offset,
                                      const float gain)

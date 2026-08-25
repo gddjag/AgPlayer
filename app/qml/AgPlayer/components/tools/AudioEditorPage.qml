@@ -104,6 +104,7 @@ Rectangle {
             + String(seconds).padStart(2, "0")
     }
     function chooseRecordingDevice() {
+        AudioEditorController.refreshRecordingDevices()
         recordingDeviceCombo.forceActiveFocus()
         if (recordingDeviceCombo.count > 0)
             recordingDeviceCombo.popup.open()
@@ -355,6 +356,9 @@ Rectangle {
         function onOpenRequested() { openDialog.open() }
         function onSaveProjectAsRequested() { saveProjectDialog.open() }
         function onDiscardConfirmationRequested() { discardDialog.open() }
+        function onRecordingDevicesChanged() {
+            recordingDeviceCombo.syncCurrentDevice()
+        }
         function onExportResultChanged() {
             if (AudioEditorController.lastExportPath.length > 0) {
                 page.showLastExportResult = true
@@ -934,24 +938,44 @@ Rectangle {
                             Layout.fillWidth: true
                             columns: 2
                             Label { text: qsTr("输入设备"); color: Theme.secondaryText }
-                            ComboBox {
-                                id: recordingDeviceCombo
-                                objectName: "inspectorRecordingDevice"
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: AudioEditorController.recordingDevices
-                                textRole: "name"; valueRole: "id"
-                                enabled: AudioEditorController.recordingSupported
-                                    && !AudioEditorController.recording
-                                displayText: count > 0 ? currentText
-                                    : qsTr("未检测到输入设备")
-                                Component.onCompleted: {
-                                    for (let index = 0; index < count; ++index) {
-                                        if (valueAt(index)
-                                                === AudioEditorController.recordingDeviceId) {
-                                            currentIndex = index
-                                            break
+                                spacing: 4
+                                ComboBox {
+                                    id: recordingDeviceCombo
+                                    objectName: "inspectorRecordingDevice"
+                                    Layout.fillWidth: true
+                                    model: AudioEditorController.recordingDevices
+                                    textRole: "name"; valueRole: "id"
+                                    enabled: AudioEditorController.recordingSupported
+                                        && !AudioEditorController.recording
+                                    displayText: count > 0 ? currentText
+                                        : qsTr("未检测到输入设备")
+                                    function syncCurrentDevice() {
+                                        currentIndex = count > 0 ? 0 : -1
+                                        for (let index = 0; index < count; ++index) {
+                                            if (valueAt(index)
+                                                    === AudioEditorController.recordingDeviceId) {
+                                                currentIndex = index
+                                                break
+                                            }
                                         }
                                     }
+                                    Component.onCompleted: syncCurrentDevice()
+                                }
+                                ToolButton {
+                                    objectName: "recordingDeviceRefreshButton"
+                                    Layout.preferredWidth: 28
+                                    Layout.preferredHeight: 28
+                                    icon.source: Theme.icon("restore-line")
+                                    icon.color: Theme.iconPrimary
+                                    enabled: AudioEditorController.recordingSupported
+                                        && !AudioEditorController.recording
+                                    Accessible.name: qsTr("刷新输入设备")
+                                    Accessible.role: Accessible.Button
+                                    onClicked: AudioEditorController.refreshRecordingDevices()
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("刷新输入设备")
                                 }
                             }
                             Label { text: qsTr("输入电平"); color: Theme.secondaryText }

@@ -1,8 +1,8 @@
 #include "audio_editor_waveform_item.hpp"
 
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
+#include <QSGVertexColorMaterial>
 
 #include <algorithm>
 #include <cmath>
@@ -10,12 +10,72 @@
 
 namespace {
 
+constexpr std::size_t kVerticesPerSegment = 18U;
+
+void appendVertex(QSGGeometry::ColoredPoint2D* vertices, std::size_t& index,
+                  const qreal x, const qreal y, const QColor& color,
+                  const int alpha)
+{
+    vertices[index++].set(static_cast<float>(x), static_cast<float>(y),
+                          static_cast<uchar>(color.red()),
+                          static_cast<uchar>(color.green()),
+                          static_cast<uchar>(color.blue()),
+                          static_cast<uchar>(alpha));
+}
+
+void appendQuad(QSGGeometry::ColoredPoint2D* vertices, std::size_t& index,
+                const QPointF& topLeft, const QPointF& bottomLeft,
+                const QPointF& topRight, const QPointF& bottomRight,
+                const QColor& color, const int leftAlpha,
+                const int rightAlpha)
+{
+    appendVertex(vertices, index, topLeft.x(), topLeft.y(), color, leftAlpha);
+    appendVertex(vertices, index, bottomLeft.x(), bottomLeft.y(), color,
+                 leftAlpha);
+    appendVertex(vertices, index, topRight.x(), topRight.y(), color,
+                 rightAlpha);
+    appendVertex(vertices, index, topRight.x(), topRight.y(), color,
+                 rightAlpha);
+    appendVertex(vertices, index, bottomLeft.x(), bottomLeft.y(), color,
+                 leftAlpha);
+    appendVertex(vertices, index, bottomRight.x(), bottomRight.y(), color,
+                 rightAlpha);
+}
+
+void appendAntialiasedSegment(QSGGeometry::ColoredPoint2D* vertices,
+                              std::size_t& index, const QPointF& start,
+                              const QPointF& end, const qreal lineWidth,
+                              const QColor& color)
+{
+    QPointF segmentEnd = end;
+    QPointF direction = segmentEnd - start;
+    qreal length = std::hypot(direction.x(), direction.y());
+    if (length <= std::numeric_limits<qreal>::epsilon()) {
+        segmentEnd.rx() += 0.001;
+        direction = segmentEnd - start;
+        length = 0.001;
+    }
+    const QPointF normal{-direction.y() / length, direction.x() / length};
+    const qreal halfCore = std::max<qreal>(0.05, lineWidth * 0.5);
+    constexpr qreal feather = 1.0;
+    const QPointF inner = normal * halfCore;
+    const QPointF outer = normal * (halfCore + feather);
+    const int coreAlpha = color.alpha();
+
+    appendQuad(vertices, index, start + outer, segmentEnd + outer,
+               start + inner, segmentEnd + inner, color, 0, coreAlpha);
+    appendQuad(vertices, index, start + inner, segmentEnd + inner,
+               start - inner, segmentEnd - inner, color, coreAlpha, coreAlpha);
+    appendQuad(vertices, index, start - inner, segmentEnd - inner,
+               start - outer, segmentEnd - outer, color, coreAlpha, 0);
+}
+
 class EditorWaveformNode final : public QSGGeometryNode {
 public:
     EditorWaveformNode()
-        : geometry_(QSGGeometry::defaultAttributes_Point2D(), 0)
+        : geometry_(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0)
     {
-        geometry_.setDrawingMode(QSGGeometry::DrawLines);
+        geometry_.setDrawingMode(QSGGeometry::DrawTriangles);
         setGeometry(&geometry_);
         setFlag(OwnsGeometry, false);
         setMaterial(&material_);
@@ -23,7 +83,7 @@ public:
     }
 
     QSGGeometry geometry_;
-    QSGFlatColorMaterial material_;
+    QSGVertexColorMaterial material_;
     std::uint64_t revision_{};
     qreal width_{};
     qreal height_{};
@@ -39,15 +99,23 @@ AudioEditorWaveformItem::AudioEditorWaveformItem(QQuickItem* parent)
     : QQuickItem(parent)
 {
     setFlag(ItemHasContents, true);
+    setAntialiasing(true);
 }
 
 void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
 {
     auto snapshot = std::make_shared<Snapshot>();
     QVariantList normalized;
+    qsizetype pairCount = -1;
     for (const QVariant& channel_value : channels) {
         const QVariantList values = channel_value.toList();
         if (values.empty() || values.size() % 2 != 0) {
+            snapshot->channels.clear();
+            normalized.clear();
+            break;
+        }
+        if (pairCount < 0) pairCount = values.size() / 2;
+        if (values.size() / 2 != pairCount) {
             snapshot->channels.clear();
             normalized.clear();
             break;
@@ -95,6 +163,31 @@ void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
         }
         snapshot->channels.push_back(std::move(channel));
         normalized.append(QVariant(normalized_channel));
+    }
+    if (!snapshot->channels.empty()) {
+        std::vector<float> mix(static_cast<std::size_t>(pairCount) * 2U,
+                               std::numeric_limits<float>::quiet_NaN());
+        for (qsizetype pair = 0; pair < pairCount; ++pair) {
+            double minimum = 0.0;
+            double maximum = 0.0;
+            std::size_t contributors = 0;
+            for (const auto& channel : snapshot->channels) {
+                const std::size_t index = static_cast<std::size_t>(pair) * 2U;
+                if (!std::isfinite(channel[index])
+                    || !std::isfinite(channel[index + 1U])) {
+                    continue;
+                }
+                minimum += channel[index];
+                maximum += channel[index + 1U];
+                ++contributors;
+            }
+            if (contributors > 0U) {
+                const std::size_t index = static_cast<std::size_t>(pair) * 2U;
+                mix[index] = static_cast<float>(minimum / contributors);
+                mix[index + 1U] = static_cast<float>(maximum / contributors);
+            }
+        }
+        snapshot->channels = {std::move(mix)};
     }
     if (channel_peaks_ == normalized) {
         return;
@@ -207,7 +300,7 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
             }
         }
     }
-    const std::size_t vertex_count = valid_bucket_count * 2U;
+    const std::size_t vertex_count = valid_bucket_count * kVerticesPerSegment;
     if (vertex_count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         generated_point_count_.store(0, std::memory_order_release);
         delete oldNode;
@@ -222,9 +315,10 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         || !qFuzzyCompare(node->height_, height())
         || node->sample_mode_ != sample_mode_
         || !qFuzzyCompare(node->density_, density_)
-        || !qFuzzyCompare(node->line_width_, line_width_)) {
+        || !qFuzzyCompare(node->line_width_, line_width_)
+        || node->color_ != waveform_color_) {
         node->geometry_.allocate(static_cast<int>(vertex_count));
-        auto* vertices = node->geometry_.vertexDataAsPoint2D();
+        auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
         const qreal channel_height = height()
             / static_cast<qreal>(snapshot->channels.size());
         std::size_t vertex = 0;
@@ -253,10 +347,12 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
                         + peaks[previous + 1U]) * 0.5F;
                     const float currentSample = (peaks[current]
                         + peaks[current + 1U]) * 0.5F;
-                    vertices[vertex++].set(static_cast<float>(previousX),
-                        static_cast<float>(center + previousSample * half_height));
-                    vertices[vertex++].set(static_cast<float>(currentX),
-                        static_cast<float>(center + currentSample * half_height));
+                    appendAntialiasedSegment(vertices, vertex,
+                        QPointF(previousX,
+                            center + previousSample * half_height),
+                        QPointF(currentX,
+                            center + currentSample * half_height),
+                        line_width_, waveform_color_);
                 }
                 continue;
             }
@@ -280,10 +376,10 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
                 const qreal bucket_center = static_cast<qreal>(start + end - 1U) * 0.5;
                 const qreal x = pair_count == 1U ? width() * 0.5
                     : bucket_center * width() / static_cast<qreal>(pair_count - 1U);
-                vertices[vertex++].set(static_cast<float>(x),
-                    static_cast<float>(center + minimum * half_height));
-                vertices[vertex++].set(static_cast<float>(x),
-                    static_cast<float>(center + maximum * half_height));
+                appendAntialiasedSegment(vertices, vertex,
+                    QPointF(x, center + minimum * half_height),
+                    QPointF(x, center + maximum * half_height),
+                    line_width_, waveform_color_);
             }
         }
         node->revision_ = snapshot->revision;
@@ -292,15 +388,11 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         node->sample_mode_ = sample_mode_;
         node->density_ = density_;
         node->line_width_ = line_width_;
-        node->geometry_.setLineWidth(static_cast<float>(line_width_));
-        generated_point_count_.store(static_cast<int>(vertex),
+        node->color_ = waveform_color_;
+        generated_point_count_.store(static_cast<int>(
+            valid_bucket_count * 2U),
                                      std::memory_order_release);
         node->markDirty(QSGNode::DirtyGeometry);
-    }
-    if (node->color_ != waveform_color_) {
-        node->material_.setColor(waveform_color_);
-        node->color_ = waveform_color_;
-        node->markDirty(QSGNode::DirtyMaterial);
     }
     return node;
 }
