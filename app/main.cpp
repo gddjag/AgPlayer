@@ -732,7 +732,6 @@ int main(int argc, char* argv[])
                          &app, applyApplicationPalette);
         if (qaTestMode) {
             settings.setWaveformMode(1);
-            settings.setWaveformRgbProgress(false);
         }
         TranslationManager translations;
         if (!translations.setLanguage(settings.language())) {
