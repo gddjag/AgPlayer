@@ -62,32 +62,6 @@ qint64 viewportTargetPoints(const qint64 visibleFrames,
     return std::min<qint64>(visibleFrames, bounded);
 }
 
-std::vector<std::vector<float>> peaksAsChannels(const QVariantList& channelPeaks)
-{
-    std::vector<std::vector<float>> result;
-    result.reserve(static_cast<std::size_t>(channelPeaks.size()));
-    for (const QVariant& channel_value : channelPeaks) {
-        const QVariantList values = channel_value.toList();
-        if (values.empty() || values.size() % 2 != 0) {
-            return {};
-        }
-        std::vector<float> channel;
-        channel.reserve(static_cast<std::size_t>(values.size()));
-        for (qsizetype index = 0; index < values.size(); index += 2) {
-            const double minimum = values[index].toDouble();
-            const double maximum = values[index + 1].toDouble();
-            if (!std::isfinite(minimum) || !std::isfinite(maximum)
-                || minimum > maximum) {
-                return {};
-            }
-            channel.push_back(static_cast<float>(minimum));
-            channel.push_back(static_cast<float>(maximum));
-        }
-        result.push_back(std::move(channel));
-    }
-    return result;
-}
-
 QVariantList build_variant_peaks(
     const std::vector<std::vector<float>>& channels)
 {
@@ -288,7 +262,7 @@ void includePeak(std::vector<float>& output, const qint64 point,
 
 void mergeEventFromSourcePeaks(
     const AudioEvent& event,
-    const std::vector<std::vector<float>>& sourcePeaks,
+    const std::vector<float>& sourcePeaks,
     const qint64 visibleStart, const qint64 visibleEnd,
     const qint64 targetPoints, std::vector<std::vector<float>>& output)
 {
@@ -300,6 +274,8 @@ void mergeEventFromSourcePeaks(
     if (intersectionEnd <= intersectionStart) return;
     const qint64 visibleFrames = visibleEnd - visibleStart;
 
+    if (output.empty()) return;
+    auto& visual = output.front();
     for (qint64 point = 0; point < targetPoints; ++point) {
         const qint64 pointStart = visibleStart
             + static_cast<qint64>(static_cast<long double>(point)
@@ -314,32 +290,25 @@ void mergeEventFromSourcePeaks(
             + overlapStart - event.timelineStart;
         const qint64 sourceEnd = event.sourceStart
             + overlapEnd - event.timelineStart;
-        for (std::size_t channelIndex = 0;
-             channelIndex < output.size(); ++channelIndex) {
-            const auto sourceIndex = std::min(channelIndex,
-                                              sourcePeaks.size() - 1U);
-            const auto& channel = sourcePeaks[sourceIndex];
-            const qint64 buckets = static_cast<qint64>(channel.size() / 2U);
-            if (buckets <= 0) continue;
-            const qint64 first = scaledBucket(sourceStart,
-                                               event.source->total_frames,
-                                               buckets);
-            const qint64 last = scaledBucket(
-                std::max(sourceStart, sourceEnd - 1),
-                event.source->total_frames, buckets);
-            float minimum = std::numeric_limits<float>::infinity();
-            float maximum = -std::numeric_limits<float>::infinity();
-            for (qint64 bucket = first; bucket <= last; ++bucket) {
-                const auto index = static_cast<std::size_t>(bucket * 2);
-                if (index + 1U >= channel.size()) break;
-                minimum = std::min(minimum, channel[index]);
-                maximum = std::max(maximum, channel[index + 1U]);
-            }
-            includePeak(output[channelIndex], point,
-                        event.mute ? 0.0F : minimum,
-                        event.mute ? 0.0F : maximum,
-                        event.mute ? 1.0F : event.gain);
+        const qint64 buckets = static_cast<qint64>(sourcePeaks.size() / 2U);
+        if (buckets <= 0) continue;
+        const qint64 first = scaledBucket(sourceStart,
+                                           event.source->total_frames,
+                                           buckets);
+        const qint64 last = scaledBucket(
+            std::max(sourceStart, sourceEnd - 1),
+            event.source->total_frames, buckets);
+        float minimum = std::numeric_limits<float>::infinity();
+        float maximum = -std::numeric_limits<float>::infinity();
+        for (qint64 bucket = first; bucket <= last; ++bucket) {
+            const auto index = static_cast<std::size_t>(bucket * 2);
+            if (index + 1U >= sourcePeaks.size()) break;
+            minimum = std::min(minimum, sourcePeaks[index]);
+            maximum = std::max(maximum, sourcePeaks[index + 1U]);
         }
+        includePeak(visual, point, event.mute ? 0.0F : minimum,
+                    event.mute ? 0.0F : maximum,
+                    event.mute ? 1.0F : event.gain);
     }
 }
 
@@ -405,16 +374,21 @@ bool mergeEventFromDecodedSlice(
             const std::size_t sampleBase = static_cast<std::size_t>(
                 sourceFrame - blockStart) * static_cast<std::size_t>(sourceChannels);
             if (sampleBase >= block.samples.size()) break;
-            for (std::size_t outputChannel = 0;
-                 outputChannel < output.size(); ++outputChannel) {
-                const std::size_t sourceChannel = std::min<std::size_t>(
-                    outputChannel, static_cast<std::size_t>(sourceChannels - 1));
-                if (sampleBase + sourceChannel >= block.samples.size()) break;
-                const float value = event.mute ? 0.0F
-                    : block.samples[sampleBase + sourceChannel];
-                includePeak(output[outputChannel], point, value, value,
-                            event.mute ? 1.0F : event.gain);
+            double mixedSample = 0.0;
+            for (int sourceChannel = 0; sourceChannel < sourceChannels;
+                 ++sourceChannel) {
+                const std::size_t sampleIndex = sampleBase
+                    + static_cast<std::size_t>(sourceChannel);
+                if (sampleIndex >= block.samples.size()) {
+                    decoder.close();
+                    return wrote;
+                }
+                mixedSample += block.samples[sampleIndex];
             }
+            const float value = event.mute ? 0.0F : static_cast<float>(
+                mixedSample / sourceChannels);
+            includePeak(output.front(), point, value, value,
+                        event.mute ? 1.0F : event.gain);
             wrote = true;
         }
         currentFrame = std::max(currentFrame + 1, blockEnd);
@@ -427,17 +401,16 @@ bool mergeEventFromDecodedSlice(
 std::vector<std::vector<float>> composeVisibleTimelinePeaks(
     const agplayer::editor::TimelineSnapshot& snapshot,
     const QString& primarySourcePath,
-    const std::vector<std::vector<float>>& primarySourcePeaks,
+    const std::vector<float>& primarySourceVisualPeaks,
     const qint64 visibleStart, const qint64 visibleEnd,
-    const qint64 targetPoints, const int channels,
+    const qint64 targetPoints,
     const std::shared_ptr<std::atomic_bool>& cancelToken)
 {
     const float blank = std::numeric_limits<float>::quiet_NaN();
-    std::vector<std::vector<float>> result(
-        static_cast<std::size_t>(std::max(0, channels)),
+    std::vector<std::vector<float>> result(1U,
         std::vector<float>(static_cast<std::size_t>(targetPoints * 2), blank));
     const qint64 visibleFrames = visibleEnd - visibleStart;
-    if (visibleFrames <= 0 || targetPoints <= 0 || channels <= 0) return result;
+    if (visibleFrames <= 0 || targetPoints <= 0) return result;
     const bool preciseSlice = visibleFrames <= targetPoints * 2;
 
     for (const AudioEvent& event : snapshot.events) {
@@ -450,7 +423,7 @@ std::vector<std::vector<float>> composeVisibleTimelinePeaks(
         }
         const QString eventPath = QString::fromStdWString(event.source->path.wstring());
         const bool primary = eventPath == primarySourcePath
-            && !primarySourcePeaks.empty();
+            && !primarySourceVisualPeaks.empty();
         bool decoded = false;
         if (preciseSlice || !primary) {
             decoded = mergeEventFromDecodedSlice(
@@ -458,7 +431,7 @@ std::vector<std::vector<float>> composeVisibleTimelinePeaks(
                 cancelToken, result);
         }
         if (!decoded && primary) {
-            mergeEventFromSourcePeaks(event, primarySourcePeaks,
+            mergeEventFromSourcePeaks(event, primarySourceVisualPeaks,
                                       visibleStart, visibleEnd,
                                       targetPoints, result);
         }
@@ -987,6 +960,8 @@ bool AudioEditorController::createUntitledDocument(
     for (quint32 channel = 0; channel < channels; ++channel) {
         channel_peaks_.append(QVariant::fromValue(flat));
     }
+    primary_visual_mix_peaks_.assign(
+        static_cast<std::size_t>(silent_points * 2), 0.0F);
     has_document_ = true;
     position_ms_ = 0;
     playhead_frame_ = 0;
@@ -1041,6 +1016,7 @@ bool AudioEditorController::openFile(const QUrl& source)
     bits_per_sample_ = analysis.bits_per_sample;
     bit_rate_ = analysis.bit_rate;
     channel_peaks_ = build_variant_peaks(analysis.channel_peaks);
+    primary_visual_mix_peaks_ = analysis.visual_mix_peaks;
     clearViewportWaveformState();
     has_document_ = true;
     position_ms_ = 0;
@@ -1175,6 +1151,7 @@ bool AudioEditorController::openProject(const QUrl& source)
     project_path_ = QFileInfo(path).absoluteFilePath();
     syncPrimarySourceSummary();
     channel_peaks_.clear();
+    primary_visual_mix_peaks_.clear();
     clearViewportWaveformState();
     has_document_ = true;
     playhead_frame_ = loaded.playheadFrame;
@@ -2492,6 +2469,7 @@ bool AudioEditorController::clearDocument()
     bits_per_sample_ = 0;
     bit_rate_ = 0;
     channel_peaks_.clear();
+    primary_visual_mix_peaks_.clear();
     has_document_ = false;
     position_ms_ = 0;
     playhead_frame_ = 0;
@@ -2603,6 +2581,7 @@ bool AudioEditorController::stopRecording()
             bits_per_sample_ = 24;
             bit_rate_ = sample_rate_ * channels_ * bits_per_sample_;
             channel_peaks_ = build_variant_peaks(analysis.channel_peaks);
+            primary_visual_mix_peaks_ = analysis.visual_mix_peaks;
             has_document_ = true;
             project_path_.clear();
             project_sources_ = {project_source_record(1,
@@ -3151,17 +3130,17 @@ void AudioEditorController::requestViewportWaveform()
     }
 
     const auto snapshot = document_.timelineSnapshot();
-    const auto primaryPeaks = peaksAsChannels(channel_peaks_);
+    const auto primaryVisualPeaks = primary_visual_mix_peaks_;
     const auto cancelToken = std::make_shared<std::atomic_bool>(false);
     ViewportWaveformJob job{
         generation,
         cancelToken,
-        [snapshot, primaryPath = source_path_, primaryPeaks,
-         startFrame, endFrame, targetPoints, channels = channels_,
+        [snapshot, primaryPath = source_path_, primaryVisualPeaks,
+         startFrame, endFrame, targetPoints,
          cancelToken]() mutable {
             return composeVisibleTimelinePeaks(
-                snapshot, primaryPath, primaryPeaks, startFrame, endFrame,
-                targetPoints, channels, cancelToken);
+                snapshot, primaryPath, primaryVisualPeaks, startFrame, endFrame,
+                targetPoints, cancelToken);
         }};
     if (viewport_waveform_watcher_) {
         pending_viewport_waveform_job_ = std::move(job);

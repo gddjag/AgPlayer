@@ -5,6 +5,7 @@
 #include "decoder.hpp"
 
 #include <QDir>
+#include <QDataStream>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -15,6 +16,7 @@
 #include <QtTest>
 
 #include <atomic>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <thread>
@@ -77,12 +79,68 @@ double positiveCrossingFrequency(const DecodedProbe& probe)
     return seconds > 0.0 ? crossings / seconds : 0.0;
 }
 
+bool writeOppositeStereoWave(const QString& path)
+{
+    constexpr quint32 sampleRate = 48'000;
+    constexpr quint16 channels = 2;
+    constexpr quint16 bitsPerSample = 16;
+    constexpr quint32 frames = 4'096;
+    constexpr quint32 dataBytes = frames * channels * sizeof(qint16);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) return false;
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream.writeRawData("RIFF", 4);
+    stream << quint32{36U + dataBytes};
+    stream.writeRawData("WAVEfmt ", 8);
+    stream << quint32{16} << quint16{1} << channels << sampleRate
+           << quint32{sampleRate * channels * bitsPerSample / 8U}
+           << quint16{channels * bitsPerSample / 8U} << bitsPerSample;
+    stream.writeRawData("data", 4);
+    stream << dataBytes;
+    for (quint32 frame = 0; frame < frames; ++frame) {
+        const qint16 left = frame % 2 == 0 ? qint16{26'000} : qint16{-26'000};
+        stream << left << qint16{-left};
+    }
+    return stream.status() == QDataStream::Ok;
+}
+
 } // namespace
 
 class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void ordinaryZoomMixesSamplesBeforeComputingTheEnvelope()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString path = temporary.filePath(QStringLiteral("opposite.wav"));
+        QVERIFY(writeOppositeStereoWave(path));
+
+        const auto analysis = agplayer::editor::AudioFileAnalyzer::analyze(
+            std::filesystem::path(path.toStdWString()), 32);
+        QVERIFY(analysis.success);
+        QCOMPARE(analysis.channel_peaks.size(), std::size_t{2});
+        QCOMPARE(analysis.visual_mix_peaks.size(), std::size_t{64});
+        QVERIFY(std::all_of(analysis.visual_mix_peaks.begin(),
+                            analysis.visual_mix_peaks.end(),
+                            [](const float value) {
+                                return std::abs(value) < 0.0001F;
+                            }));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(path)));
+        controller.viewport()->setViewportWidth(16.0);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.viewportChannelPeaks().size(), 1,
+                                  5'000);
+        const QVariantList visual =
+            controller.viewportChannelPeaks().front().toList();
+        QVERIFY(std::all_of(visual.begin(), visual.end(), [](const QVariant& value) {
+            return !value.isValid() || std::abs(value.toFloat()) < 0.0001F;
+        }));
+    }
+
     void emptyDocumentDisablesEditActions()
     {
         AudioEditorController controller;

@@ -19,6 +19,7 @@
 - 中心增益线具备真实垂直拖动，松开后作为单个可撤销命令提交；自动化点测试改用真实双击，24 px 选区热区增加可见 resize cue。
 - 录音 33 ms 更新改为独立增量 overlay，不再提升 historical waveform generation 或取消其解码；输入设备组合框展开前刷新，并提供显式刷新按钮，刷新后保留有效选择，否则选默认设备。
 - 音频工具窗口标题统一为 `AgPlayer · 音频工具`，参考外窗尺寸修正为 `1672x942`，并保留 `1280x720` 与最小断点自动化契约。
+- 完成前只读复审进一步校正了视觉细节：普通缩放在音频分析/精确时间线解码阶段先逐样本混音再计算包络（反相立体声回归可证明抵消），源声道峰值仍独立保留；Scene Graph 改为带透明 feather coverage 的彩色三角形而非依赖原生 `DrawLines`；增益线使用本地候选值在按住拖动期间实时跟随，松开仍只提交一次 undo。
 
 ## TDD 与验证
 
@@ -34,7 +35,7 @@ cmake --build build\task2-clean --target \
 ctest --test-dir build\task2-clean --output-on-failure \
   -R "event_edit_test|qml_audio_editor_test|audio_editor_controller_test|audio_editor_waveform_item_test|audio_tools_layout_contract_test"
 
-5/5 passed（20.75 s）
+5/5 passed（最终回归 17.18 s）
 Release AgPlayer target built successfully
 agplayer_app_qml_qmllint: passed（仅既有 ThemedRangeSlider.qml unused-import 提示）
 git diff --check: passed

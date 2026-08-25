@@ -472,8 +472,10 @@ Rectangle {
                 id: volumeLine
                 objectName: "editorEventVolumeLine"
                 x: 10; width: parent.width - 20
+                readonly property real displayedGain: gainDragArea.pressed
+                    ? gainDragArea.candidateGain : Number(modelData.gain)
                 readonly property real gainY: (1 - Math.max(0, Math.min(2,
-                    Number(modelData.gain))) / 2) * eventDelegate.height
+                    displayedGain)) / 2) * eventDelegate.height
                 y: Math.max(0, Math.min(eventDelegate.height - height,
                     gainY - height / 2))
                 height: 24
@@ -484,14 +486,17 @@ Rectangle {
                     height: 1; color: Theme.secondaryText; opacity: 0.65
                 }
                 MouseArea {
+                    id: gainDragArea
                     anchors.fill: parent
                     cursorShape: Qt.SizeVerCursor
                     acceptedButtons: Qt.LeftButton
                     property real pressCanvasY: 0
                     property real originalGain: 1
+                    property real candidateGain: 1
                     onPressed: function(mouse) {
                         pressCanvasY = mapToItem(canvas, mouse.x, mouse.y).y
                         originalGain = Number(modelData.gain)
+                        candidateGain = originalGain
                         AudioEditorController.beginEventGesture(
                             modelData.id, "gain")
                         mouse.accepted = true
@@ -499,10 +504,11 @@ Rectangle {
                     onPositionChanged: function(mouse) {
                         if (!pressed) return
                         const currentY = mapToItem(canvas, mouse.x, mouse.y).y
+                        candidateGain = Math.max(0, Math.min(2,
+                            originalGain - 2 * (currentY - pressCanvasY)
+                                / eventDelegate.height))
                         AudioEditorController.setEventGain(modelData.id,
-                            Math.max(0, Math.min(2,
-                                originalGain - 2 * (currentY - pressCanvasY)
-                                    / eventDelegate.height)))
+                            candidateGain)
                     }
                     onReleased: AudioEditorController.endEventGesture()
                     onCanceled: AudioEditorController.cancelEventGesture()

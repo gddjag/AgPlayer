@@ -561,12 +561,15 @@ TestCase {
         volumeLine = findChild(canvas, "editorEventVolumeLine")
         verify(volumeLine)
         const gainBefore = Number(AudioEditorController.timelineEventViews[0].gain)
+        const gainLineYBefore = volumeLine.y
         const gainStart = volumeLine.mapToItem(
             canvas, volumeLine.width / 2, volumeLine.height / 2)
         const gainEnd = Qt.point(
             gainStart.x, gainStart.y - Math.round(volumeLine.height / 4))
         mousePress(canvas, gainStart.x, gainStart.y, Qt.LeftButton)
         mouseMove(canvas, gainEnd.x, gainEnd.y, 30)
+        verify(volumeLine.y < gainLineYBefore,
+            "gain line must follow the pointer before release")
         mouseRelease(canvas, gainEnd.x, gainEnd.y, Qt.LeftButton)
         verify(Number(AudioEditorController.timelineEventViews[0].gain) > gainBefore)
         verify(AudioEditorController.undo())

@@ -437,6 +437,7 @@ private:
     int bits_per_sample_{};
     qint64 bit_rate_{};
     QVariantList channel_peaks_;
+    std::vector<float> primary_visual_mix_peaks_;
     QVariantList viewport_channel_peaks_;
     QVariantList recording_overlay_peaks_;
     double viewport_waveform_density_{2.0};
