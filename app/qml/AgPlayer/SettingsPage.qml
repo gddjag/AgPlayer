@@ -1761,9 +1761,14 @@ Item {
                         valueModel: [
                             { text: "MP3", value: "MP3" },
                             { text: "WAV", value: "WAV" },
-                            { text: "FLAC", value: "FLAC" }
+                            { text: "FLAC", value: "FLAC" },
+                            { text: "AAC", value: "AAC" },
+                            { text: "Opus", value: "OPUS" },
+                            { text: "OGG", value: "OGG" },
+                            { text: "ALAC", value: "ALAC" },
+                            { text: "AIFF", value: "AIFF" }
                         ]
-                        currentIndex: ["MP3", "WAV", "FLAC"].indexOf(
+                        currentIndex: ["MP3", "WAV", "FLAC", "AAC", "OPUS", "OGG", "ALAC", "AIFF"].indexOf(
                                           SettingsController.transcodeFormat)
                         onActivated: SettingsController.transcodeFormat = currentValue
                     }

@@ -119,6 +119,7 @@ private slots:
     void metadataEditorAppendsDeduplicatesAndAggregatesScopeValues();
     void metadataEditorDetectsReplacementCoverFromContent();
     void metadataEditorPreflightIsAsyncAndRequiresDecision();
+    void metadataEditorRejectsTargetChangedAfterPreflight();
     void metadataEditorDoesNotApplyWhenEveryTargetIsUnsupported();
     void metadataEditorAppliesUiPayloadToMixedContainerBatch();
     void filenameProcessorRenamesWithoutTouchingAudio();
@@ -2636,6 +2637,43 @@ void AudioToolsEndToEndTest::metadataEditorPreflightIsAsyncAndRequiresDecision()
     QCOMPARE(editor.cancelledCount(), 0);
     QCOMPARE(editor.entryAt(0).value(QStringLiteral("title")).toString(),
              QStringLiteral("Ready"));
+}
+
+void AudioToolsEndToEndTest::metadataEditorRejectsTargetChangedAfterPreflight()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString valid = temp.filePath(QStringLiteral("stable.wav"));
+    const QString invalid = temp.filePath(QStringLiteral("broken.mp3"));
+    QVERIFY(agplayer::test::writeClickTrackWav(valid, 120, 2));
+    QFile broken(invalid);
+    QVERIFY(broken.open(QIODevice::WriteOnly));
+    QCOMPARE(broken.write("not audio"), qint64(9));
+    broken.close();
+
+    MetadataEditor editor;
+    QSignalSpy loaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(valid), QUrl::fromLocalFile(invalid)});
+    QVERIFY(loaded.wait(30'000));
+    const QVariantMap fields{{QStringLiteral("title"),
+                              QVariantMap{{QStringLiteral("mode"), QStringLiteral("set")},
+                                          {QStringLiteral("value"), QStringLiteral("Must not write")}}}};
+    QSignalSpy preflight(&editor, &MetadataEditor::preflightCompleted);
+    QSignalSpy decision(&editor, &MetadataEditor::preflightDecisionRequired);
+    editor.applyMetadata(fields, {});
+    QVERIFY(preflight.wait(30'000));
+    QVERIFY(decision.count() == 1);
+
+    // The bytes and modification time no longer match the target frozen at
+    // preflight.  Confirming must fail safely instead of addressing by a stale
+    // list index.
+    QVERIFY(agplayer::test::writeClickTrackWav(valid, 127, 1));
+    QSignalSpy applied(&editor, &MetadataEditor::metadataApplied);
+    editor.applyPreflightDecision(QStringLiteral("supportedOnly"));
+    QVERIFY(applied.wait(30'000));
+    QCOMPARE(editor.successCount(), 0);
+    QCOMPARE(editor.failedCount(), 1);
+    QCOMPARE(editor.entryAt(0).value(QStringLiteral("title")).toString(), QString());
 }
 
 void AudioToolsEndToEndTest::formatConverterExportsEveryAdvertisedBitrateMode()

@@ -354,10 +354,19 @@ void SettingsControllerTest::cacheLimitMigratesOnlyUntouchedLegacyDefault()
 {
     QSettings persisted;
     persisted.clear();
+    persisted.setValue(QStringLiteral("cache/schemaVersion"), 1);
+    persisted.setValue(QStringLiteral("cache/sizeLimitUserModified"), false);
     persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 1024);
     SettingsController migrated;
     QCOMPARE(migrated.cacheSizeLimitMB(), 10 * 1024);
     QCOMPARE(persisted.value(QStringLiteral("cache/sizeLimitMB")).toInt(), 10 * 1024);
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("cache/schemaVersion"), 1);
+    persisted.setValue(QStringLiteral("cache/sizeLimitUserModified"), true);
+    persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 1024);
+    SettingsController customizedLegacyDefault;
+    QCOMPARE(customizedLegacyDefault.cacheSizeLimitMB(), 1024);
 
     persisted.clear();
     persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 2048);

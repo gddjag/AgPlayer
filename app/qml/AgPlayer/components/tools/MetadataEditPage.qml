@@ -1021,7 +1021,7 @@ Rectangle {
                                 }
                                 Label {
                                     Layout.fillWidth: true
-                                    text: qsTr("直接编辑以下信息，留空表示保持原值不变。")
+                                    text: qsTr("未修改字段保持原值；点击清空会删除字段。")
                                     color: page.mutedColor
                                     font.pixelSize: 12
                                 }
@@ -1128,6 +1128,13 @@ Rectangle {
                                                     sourceSize.width: 17
                                                     sourceSize.height: 17
                                                 }
+                                            }
+                                            ToolButton {
+                                                objectName: "metadataClearButton_" + fieldRow.fieldKey
+                                                text: qsTr("清空")
+                                                accessibleName: qsTr("清空") + fieldRow.fieldLabel
+                                                Layout.preferredWidth: 46
+                                                onClicked: fieldRow.selectMode("clear")
                                             }
                                             Item {
                                                 visible: false

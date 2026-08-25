@@ -218,7 +218,7 @@ FormatInfo format_info(const QString& format)
 QVariantList bitrate_choices_for(const QString& format)
 {
     if (format == QStringLiteral("opus")) {
-        return {64000, 96000, 128000, 160000, 192000, 256000};
+        return {64000, 96000, 128000, 160000, 192000, 256000, 320000};
     }
     if (format == QStringLiteral("ogg")) {
         return {96000, 128000, 192000, 256000, 320000};
@@ -251,13 +251,13 @@ QVariantList presets_for(const QString& format, bool lossy)
     }
     if (format == QStringLiteral("opus")) {
         return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
-                       192000, QStringLiteral("vbr"), 48000, 85),
+                       320000, QStringLiteral("vbr"), 48000, 85),
                 preset(QStringLiteral("high"), QStringLiteral("高质量"),
-                       256000, QStringLiteral("vbr"), 48000, 95),
+                       320000, QStringLiteral("vbr"), 48000, 95),
                 preset(QStringLiteral("compatible"), QStringLiteral("兼容"),
                        128000, QStringLiteral("cbr"), 48000, 70),
                 preset(QStringLiteral("custom"), QStringLiteral("自定义"),
-                       192000, QStringLiteral("vbr"), 48000, 85)};
+                       320000, QStringLiteral("vbr"), 48000, 85)};
     }
     if (format == QStringLiteral("aac")) {
         return {preset(QStringLiteral("recommended"), QStringLiteral("推荐"),
@@ -354,7 +354,7 @@ void FormatConverter::setParallelJobs(int value)
     if (busy()) {
         return;
     }
-    const int bounded = std::clamp(value, 1, 4);
+    const int bounded = std::clamp(value, 1, 10);
     if (parallelJobs_ == bounded) {
         return;
     }

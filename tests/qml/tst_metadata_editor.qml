@@ -175,11 +175,16 @@ TestCase {
     function test_mixedValuesAndCoversAreVisibleWithoutChoosingFirstFile() {
         const titleRow = page.rowForField("title")
         const titleField = findChild(page, "metadataValueField_title")
+        const clearButton = findChild(page, "metadataClearButton_title")
         const coverSummary = findChild(page, "metadataCoverSummaryLabel")
-        verify(titleRow && titleField && coverSummary)
+        verify(titleRow && titleField && clearButton && coverSummary)
         titleRow.reset({ value: "", multiple: true })
         compare(titleField.text, "")
         compare(titleField.placeholderText, "多种值")
+        verify(clearButton.visible)
+        mouseClick(clearButton)
+        compare(titleRow.selectedMode, "clear")
+        compare(titleField.placeholderText, "将清除")
         page.scopeAggregate = { cover: { state: "multiple" } }
         tryCompare(coverSummary, "text", "当前封面：多种封面")
     }

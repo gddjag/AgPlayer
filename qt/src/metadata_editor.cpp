@@ -638,7 +638,8 @@ void MetadataEditor::removeFiles(const QList<int>& indices)
 }
 
 void MetadataEditor::startApply(const QVariantMap& fields,
-                                const QList<int>& indices)
+                                const QList<int>& indices,
+                                const QList<MetadataEntry>& snapshot)
 {
     if (busy_.load(std::memory_order_acquire)) {
         return;
@@ -672,21 +673,38 @@ void MetadataEditor::startApply(const QVariantMap& fields,
         [this, watcher]() {
             operationWatcher_.clear();
             const auto result = watcher->result();
-            entries_ = result.entries;
+            QSet<QString> updatedPaths;
+            for (const QVariant& value : result.results) {
+                const QVariantMap row = value.toMap();
+                if (row.value(QStringLiteral("success")).toBool()) {
+                    updatedPaths.insert(normalizedPathKey(
+                        row.value(QStringLiteral("path")).toString()));
+                }
+            }
+            for (const MetadataEntry& updated : result.entries) {
+                if (!updatedPaths.contains(normalizedPathKey(updated.path))) continue;
+                for (MetadataEntry& current : entries_) {
+                    if (normalizedPathKey(current.path)
+                        == normalizedPathKey(updated.path)) {
+                        current = updated;
+                        break;
+                    }
+                }
+            }
             results_ = pendingUnsupportedResults_;
             results_.append(result.results);
             successCount_ = result.successCount;
             failedCount_ = result.failureCount;
             cancelledCount_ = result.cancelledCount;
             if (libraryModel_ != nullptr) {
-                QStringList updatedPaths;
+                QStringList refreshedPaths;
                 for (const QVariant& value : result.results) {
                     const QVariantMap row = value.toMap();
                     if (row.value(QStringLiteral("success")).toBool()) {
-                        updatedPaths.append(row.value(QStringLiteral("path")).toString());
+                        refreshedPaths.append(row.value(QStringLiteral("path")).toString());
                     }
                 }
-                libraryModel_->refreshMetadataForPaths(updatedPaths);
+                libraryModel_->refreshMetadataForPaths(refreshedPaths);
             }
             setBusy(false);
             setProgress(1.0);
@@ -700,8 +718,6 @@ void MetadataEditor::startApply(const QVariantMap& fields,
     const QByteArray coverData = coverData_;
     const QByteArray coverMime = coverMime_.toUtf8();
     const QVariantMap coverDetails = replacementCoverDetails_;
-    const QList<MetadataEntry> snapshot = entries_;
-
     watcher->setFuture(QtConcurrent::run(
         [fields, targets, coverData, coverMime, coverDetails, coverMode, snapshot,
           this]() mutable {
@@ -770,16 +786,31 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                 MetadataEntry& e = summary.entries[idx];
                 agplayer::MetadataFileResult writeResult;
                 ag_result result = AG_INTERNAL_ERROR;
-                try {
-                    result = agplayer::write_metadata_plan(
-                        e.path.toUtf8().toStdString(), plan, writeResult,
-                        &cancelFlag_);
-                } catch (const std::exception& exception) {
-                    writeResult.message = tr("元数据写入异常：%1")
-                                              .arg(QString::fromUtf8(exception.what()))
-                                              .toStdString();
-                } catch (...) {
-                    writeResult.message = tr("元数据写入发生未知异常").toStdString();
+                const QFileInfo currentSource(e.path);
+                const QString currentCanonicalPath = normalizedLocalPath(e.path);
+                const QString currentStableSourceId = QStringLiteral("%1|%2|%3")
+                    .arg(currentCanonicalPath)
+                    .arg(currentSource.size())
+                    .arg(currentSource.lastModified().toMSecsSinceEpoch());
+                if (!currentSource.isFile()
+                    || currentCanonicalPath != e.canonicalPath
+                    || currentStableSourceId != e.stableSourceId) {
+                    writeResult.message = tr("源文件在预检后发生变化，请重新预检")
+                        .toStdString();
+                    ++summary.failureCount;
+                    result = AG_IO_ERROR;
+                } else {
+                    try {
+                        result = agplayer::write_metadata_plan(
+                            e.path.toUtf8().toStdString(), plan, writeResult,
+                            &cancelFlag_);
+                    } catch (const std::exception& exception) {
+                        writeResult.message = tr("元数据写入异常：%1")
+                                                  .arg(QString::fromUtf8(exception.what()))
+                                                  .toStdString();
+                    } catch (...) {
+                        writeResult.message = tr("元数据写入发生未知异常").toStdString();
+                    }
                 }
                 if (result == AG_OK) {
                     ++summary.successCount;
@@ -1049,10 +1080,22 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
                 emit preflightDecisionRequired(supportedCount_, unsupportedCount_);
                 return;
             }
-            startApply(pendingFields_, pendingSupportedTargets_);
+            startApply(pendingFields_, pendingSupportedTargets_,
+                       pendingEntrySnapshot_);
         });
 
-    const QList<MetadataEntry> snapshot = entries_;
+    QList<MetadataEntry> snapshot = entries_;
+    for (MetadataEntry& entry : snapshot) {
+        const QFileInfo source(entry.path);
+        entry.canonicalPath = normalizedLocalPath(entry.path);
+        entry.fileSize = source.size();
+        entry.sourceLastModifiedMs = source.lastModified().toMSecsSinceEpoch();
+        entry.stableSourceId = QStringLiteral("%1|%2|%3")
+            .arg(entry.canonicalPath)
+            .arg(entry.fileSize)
+            .arg(entry.sourceLastModifiedMs);
+    }
+    pendingEntrySnapshot_ = snapshot;
     const QByteArray coverData = coverData_;
     const QByteArray coverMime = coverMime_.toUtf8();
     watcher->setFuture(QtConcurrent::run(
@@ -1182,7 +1225,8 @@ void MetadataEditor::applyPreflightDecision(const QString& policy)
         if (pendingSupportedTargets_.isEmpty()) {
             return;
         }
-        startApply(pendingFields_, pendingSupportedTargets_);
+        startApply(pendingFields_, pendingSupportedTargets_,
+                   pendingEntrySnapshot_);
     }
 }
 

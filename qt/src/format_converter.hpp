@@ -271,7 +271,7 @@ private:
     QPointer<QFutureWatcher<QList<FileEntry>>> loadWatcher_;
     QPointer<QFutureWatcher<void>> watcher_;
     bool overwriteExisting_ = false;
-    int parallelJobs_ = 4;
+    int parallelJobs_ = 5;
     QString bitrateMode_ = QStringLiteral("cbr");
     QString conflictPolicy_ = QStringLiteral("auto-number");
     QVariantMap metadataFields_;

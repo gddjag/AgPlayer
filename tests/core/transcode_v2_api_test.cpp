@@ -243,13 +243,15 @@ int main(const int argc, char** argv)
     request.muxer_name = "adts";
     request.codec_name = "aac";
     request.sample_format = nullptr;
+    request.metadata_fields = nullptr;
+    request.metadata_field_count = 0;
     request.metadata_cover_action = AG_METADATA_COVER_KEEP;
     request.metadata_cover_data = nullptr;
     request.metadata_cover_size = 0;
     request.metadata_cover_mime_type = nullptr;
     assert(ag_transcode_v2(input_utf8.c_str(), &request, nullptr,
-                           nullptr, nullptr) == AG_UNSUPPORTED_FORMAT);
-    assert(!std::filesystem::exists(unsupported_output));
+                           nullptr, nullptr) == AG_OK);
+    assert(std::filesystem::exists(unsupported_output));
 
     const std::filesystem::path date_conflict_output =
         input.parent_path() / "transcode-v2-date-conflict.mp3";
@@ -286,8 +288,7 @@ int main(const int argc, char** argv)
            != std::string::npos);
     assert(!std::filesystem::exists(year_keep_date_output));
 
-    // Cover Keep is an exact preservation promise. A source with two attached
-    // pictures must not be reduced to the first picture and reported as OK.
+    // A cover limitation must not prevent a usable audio conversion.
     const std::filesystem::path multi_cover_input =
         input.parent_path() / "transcode-v2-multi-cover-input.mp3";
     std::filesystem::remove(multi_cover_input);
@@ -316,15 +317,15 @@ int main(const int argc, char** argv)
     request.metadata_cover_size = 0;
     request.metadata_cover_mime_type = nullptr;
     assert(ag_transcode_v2(multi_cover_input_utf8.c_str(), &request, nullptr,
-                           nullptr, nullptr) == AG_UNSUPPORTED_FORMAT);
-    assert(std::string(ag_last_error()).find("multiple attached pictures")
-           != std::string::npos);
-    assert(!std::filesystem::exists(multi_cover_output));
+                           nullptr, nullptr) == AG_OK);
+    assert(std::filesystem::exists(multi_cover_output));
 
     std::filesystem::remove(output);
     std::filesystem::remove(output_utf8 + ".agbak");
     std::filesystem::remove(legacy_output);
     std::filesystem::remove(legacy_utf8 + ".agbak");
     std::filesystem::remove(multi_cover_input);
+    std::filesystem::remove(multi_cover_output);
+    std::filesystem::remove(unsupported_output);
     return 0;
 }

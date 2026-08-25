@@ -56,7 +56,7 @@ int main()
     assert(alac->muxer_name == "ipod");
     assert(ogg->parameter_kind == "quality");
     assert(ogg->quality_choices == std::vector<int>({0, 2, 4, 6, 8, 10}));
-    assert(ogg->default_quality == 6);
+    assert(ogg->default_quality == 8);
     assert(flac->parameter_kind == "compression");
     assert(flac->quality_choices == std::vector<int>({0, 3, 5, 8}));
     assert(flac->default_quality == 5);

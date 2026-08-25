@@ -266,6 +266,15 @@ Rectangle {
                             }
                         }
                         Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.primaryText }
+                        Text { text: qsTr("并发"); color: Theme.secondaryText; font.pixelSize: 13 }
+                        ComboBox {
+                            id: converterParallelJobsBox
+                            objectName: "converterParallelJobsBox"
+                            Layout.preferredWidth: 72
+                            model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                            currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
+                            onActivated: SettingsController.parallelJobs = currentValue
+                        }
                     }
                     Text {
                         text: qsTr("%1 个任务 / 预计剩余 %2").arg(converter.fileCount)
@@ -300,7 +309,8 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width / 2
                         height: parent.height
-                        onClicked: converter.filteredTaskModel.statusFilter = "Done"
+                        onClicked: converter.filteredTaskModel.statusFilter =
+                            converter.filteredTaskModel.statusFilter === "Done" ? "All" : "Done"
                     }
                     MouseArea {
                         objectName: "formatFailedSummaryFilter"
@@ -308,7 +318,8 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width / 2
                         height: parent.height
-                        onClicked: converter.filteredTaskModel.statusFilter = "Error"
+                        onClicked: converter.filteredTaskModel.statusFilter =
+                            converter.filteredTaskModel.statusFilter === "Error" ? "All" : "Error"
                     }
                 }
 

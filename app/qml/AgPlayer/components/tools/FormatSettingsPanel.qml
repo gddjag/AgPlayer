@@ -41,11 +41,20 @@ Rectangle {
 
     function resetCapabilityParameters() {
         const modes = capability.bitrateModes || []
+        const previousMode = selectedBitrateMode
         selectedBitrateMode = ""
         for (let index = 0; index < modes.length; ++index) {
-            if (modes[index].default) {
+            if (modes[index].key === previousMode) {
                 selectedBitrateMode = modes[index].key
                 break
+            }
+        }
+        if (selectedBitrateMode === "") {
+            for (let index = 0; index < modes.length; ++index) {
+                if (modes[index].default) {
+                    selectedBitrateMode = modes[index].key
+                    break
+                }
             }
         }
         if (selectedBitrateMode === "" && modes.length > 0)
@@ -53,34 +62,42 @@ Rectangle {
 
         bitRateBox.currentIndex = -1
         if (parameterKind === "bitrate" && bitRateBox.count > 0) {
-            const recommended = (capability.bitRates || []).indexOf(320000)
-            bitRateBox.currentIndex = recommended >= 0 ? recommended : 0
+            const configured = bitRateBox.indexOfValue(
+                SettingsController.transcodeBitrateKbps * 1000)
+            const recommended = bitRateBox.indexOfValue(320000)
+            bitRateBox.currentIndex = configured >= 0 ? configured
+                : (recommended >= 0 ? recommended : 0)
         }
-        sampleRateBox.currentIndex = 0
-        if (capability.key === "opus") {
-            const opusIndex = sampleRateBox.indexOfValue(48000)
-            sampleRateBox.currentIndex = opusIndex >= 0 ? opusIndex : 0
-        }
-        channelBox.currentIndex = 0
+        const configuredRate = sampleRateBox.indexOfValue(
+            SettingsController.transcodeSampleRateHz)
+        const opusRate = sampleRateBox.indexOfValue(48000)
+        sampleRateBox.currentIndex = configuredRate >= 0 ? configuredRate
+            : (capability.key === "opus" && opusRate >= 0 ? opusRate : 0)
+        const configuredChannel = channelBox.indexOfValue(
+            SettingsController.transcodeChannels === 1 ? "mono" : "stereo")
+        channelBox.currentIndex = configuredChannel >= 0 ? configuredChannel : 0
         sampleFormatBox.currentIndex = 0
         const qualityChoices = capability.qualityChoices || []
         qualityBox.currentIndex = qualityChoices.length > 0
                 ? Math.max(0, qualityChoices.indexOf(capability.defaultQuality))
                 : -1
         bitDepthBox.currentIndex = 0
-        if (capability.supportsMetadata !== true)
-            SettingsController.preserveMetadata = false
     }
 
     Connections {
         target: converter
         function onCurrentCapabilityChanged() {
-            if (root.capability.supportsMetadata !== true)
-                SettingsController.preserveMetadata = false
-            Qt.callLater(root.resetCapabilityParameters)
+            root.resetCapabilityParameters()
         }
     }
-    Component.onCompleted: Qt.callLater(resetCapabilityParameters)
+    Component.onCompleted: resetCapabilityParameters()
+
+    Connections {
+        target: SettingsController
+        function onTranscodeBitrateKbpsChanged() { root.resetCapabilityParameters() }
+        function onTranscodeSampleRateHzChanged() { root.resetCapabilityParameters() }
+        function onTranscodeChannelsChanged() { root.resetCapabilityParameters() }
+    }
 
     ButtonGroup {
         id: bitrateModeGroup
@@ -299,6 +316,8 @@ Rectangle {
                         })
                         textRole: "text"
                         valueRole: "value"
+                        onActivated: SettingsController.transcodeBitrateKbps =
+                            Math.round(Number(currentValue) / 1000)
                     }
                 }
                 Text {
@@ -331,6 +350,7 @@ Rectangle {
                             return { text: (value / 1000) + " kHz", value: value }
                         }))
                     textRole: "text"; valueRole: "value"
+                    onActivated: SettingsController.transcodeSampleRateHz = currentValue
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("声道"); color: Theme.secondaryText }
                 ReferenceComboBox {
@@ -347,6 +367,10 @@ Rectangle {
                         }))
                     textRole: "text"
                     valueRole: "value"
+                    onActivated: {
+                        if (currentValue === "mono") SettingsController.transcodeChannels = 1
+                        else if (currentValue === "stereo") SettingsController.transcodeChannels = 2
+                    }
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("位深 / 采样格式"); color: Theme.secondaryText }
                 ReferenceComboBox {
@@ -433,16 +457,20 @@ Rectangle {
                 columns: 2
                 columnSpacing: 10
                 rowSpacing: 6
-                Text { text: qsTr("高级设置"); color: Theme.primaryText; font.pixelSize: 13; Layout.columnSpan: 2 }
-                Text { text: qsTr("并发任务"); color: Theme.secondaryText }
-                ReferenceComboBox {
-                    objectName: "converterParallelJobsBox"
-                    Layout.fillWidth: true
-                    model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-                    currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
-                    onActivated: SettingsController.parallelJobs = currentValue
+                Text {
+                    text: qsTr("高级设置")
+                    color: Theme.primaryText
+                    font.pixelSize: 13
+                    Layout.columnSpan: 2
+                }
+                Text {
+                    text: qsTr("并发数可在任务总进度旁调整")
+                    color: Theme.secondaryText
+                    font.pixelSize: 12
+                    Layout.columnSpan: 2
                 }
             }
+
         }
     }
 }

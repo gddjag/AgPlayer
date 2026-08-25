@@ -1571,10 +1571,6 @@ ag_result transcode(const std::string& input_path,
         error = "Input and output path must be different";
         return AG_INVALID_ARGUMENT;
     }
-    const ag_result metadata_preflight =
-        preflight_transcode_metadata(config, error);
-    if (metadata_preflight != AG_OK) return metadata_preflight;
-
     const fs::path final_output = path_from_utf8(config.output_path);
     const fs::path staged_output = make_staging_path(final_output);
     if (staged_output.empty()) {
@@ -1590,18 +1586,38 @@ ag_result transcode(const std::string& input_path,
         error = std::move(probe_error);
         return AG_DECODE_ERROR;
     }
+    const std::string output_muxer = staged_config.container_name.empty()
+        ? final_output.extension().u8string() : staged_config.container_name;
+    const bool output_supports_cover = output_muxer == "mp3" || output_muxer == ".mp3"
+        || output_muxer == "flac" || output_muxer == ".flac"
+        || output_muxer == "ipod" || output_muxer == "mp4" || output_muxer == ".m4a"
+        || output_muxer == "mov";
+    // A cover is optional media.  When the target cannot carry it, keep the
+    // audio conversion usable and make the resulting plan explicitly coverless.
+    if (!output_supports_cover
+        && (staged_config.keep_cover
+            || staged_config.metadata_edit_plan.cover_action != CoverAction::Keep)) {
+        staged_config.keep_cover = false;
+        staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
+    }
     if (staged_config.keep_cover
         && staged_config.metadata_edit_plan.cover_action == CoverAction::Keep
         && source_probe.has_cover) {
         std::size_t attached_picture_count = 0;
         const ag_result cover_probe_result = count_attached_pictures(
             input_path, attached_picture_count, error);
-        if (cover_probe_result != AG_OK) return cover_probe_result;
+        if (cover_probe_result != AG_OK) {
+            staged_config.keep_cover = false;
+            staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
+        }
         if (attached_picture_count > 1U) {
-            error = "Cover Keep cannot preserve multiple attached pictures";
-            return AG_UNSUPPORTED_FORMAT;
+            staged_config.keep_cover = false;
+            staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
         }
     }
+    const ag_result metadata_preflight =
+        preflight_transcode_metadata(staged_config, error);
+    if (metadata_preflight != AG_OK) return metadata_preflight;
     if (staged_config.stage_callback) {
         staged_config.stage_callback("probing");
     }

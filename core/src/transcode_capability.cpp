@@ -41,7 +41,9 @@ void apply_friendly_parameters(TranscodeFormatCapability& result)
     if (result.key == "ogg") {
         result.parameter_kind = "quality";
         result.quality_choices = {0, 2, 4, 6, 8, 10};
-        result.default_quality = 6;
+        // Vorbis is quality-based. Q8 is the documented high-quality default,
+        // rather than pretending it maps to a 320 kbps CBR setting.
+        result.default_quality = 8;
         result.bitrate_modes.clear();
     } else if (result.key == "flac") {
         result.parameter_kind = "compression";

@@ -110,7 +110,7 @@ TestCase {
         verify(localProcessingHint.visible)
         verify(findChild(page, "formatSettingsAdvancedToggle"))
         verify(findChild(page, "formatTaskContextMenu"))
-        verify(!findChild(bottomBar, "converterParallelJobsBox"))
+        verify(findChild(bottomBar, "converterParallelJobsBox"))
         verify(!findChild(bottomBar, "formatOutputDirectoryRow"))
         const formatBox = findChild(page, "converterOutputFormatBox")
         const toolbarIcon = findChild(page, "formatToolbarIcon-file")
@@ -167,11 +167,12 @@ TestCase {
     function test_parallelJobsPersistThroughSettingsController() {
         const parallelBox = findChild(page, "converterParallelJobsBox")
         verify(parallelBox)
-        SettingsController.parallelJobs = 3
-        tryCompare(FormatConverter, "parallelJobs", 3, 1000)
-        compare(parallelBox.currentValue, 3)
-        SettingsController.parallelJobs = 4
-        tryCompare(FormatConverter, "parallelJobs", 4, 1000)
+        SettingsController.resetToDefaults()
+        tryCompare(FormatConverter, "parallelJobs", 5, 1000)
+        compare(parallelBox.currentValue, 5)
+        SettingsController.parallelJobs = 10
+        tryCompare(FormatConverter, "parallelJobs", 10, 1000)
+        compare(parallelBox.currentValue, 10)
     }
 
     function test_rowContextMenuRemovesExactlyOneTask() {
@@ -267,6 +268,9 @@ TestCase {
         mouseClick(completeFilter, completeFilter.width / 2,
                    completeFilter.height / 2, Qt.LeftButton)
         compare(FormatConverter.filteredTaskModel.statusFilter, "Done")
+        mouseClick(completeFilter, completeFilter.width / 2,
+                   completeFilter.height / 2, Qt.LeftButton)
+        compare(FormatConverter.filteredTaskModel.statusFilter, "All")
         mouseClick(failedFilter, failedFilter.width / 2,
                    failedFilter.height / 2, Qt.LeftButton)
         compare(FormatConverter.filteredTaskModel.statusFilter, "Error")
@@ -352,9 +356,13 @@ TestCase {
         wait(0)
         const ogg = FormatConverter.currentCapability
         compare(ogg.parameterKind, "quality")
-        compare(ogg.defaultQuality, 6)
-        tryCompare(qualityBox, "currentValue", 6, 1000)
+        compare(ogg.defaultQuality, 8)
+        tryCompare(qualityBox, "currentValue", 8, 1000)
         compare(settings.bitRate, 0)
+
+        FormatConverter.selectedFormat = "opus"
+        wait(0)
+        tryCompare(findChild(page, "formatBitrateBox"), "currentValue", 320000, 1000)
     }
 
     function test_realRuntimeFailureShowsUnderlyingErrorInStatusRow() {

@@ -797,6 +797,7 @@ void SettingsController::setCacheSizeLimitMB(int value)
     }
     cacheSizeLimitMB_ = value;
     persistValue(QStringLiteral("cache/sizeLimitMB"), value);
+    persistValue(QStringLiteral("cache/sizeLimitUserModified"), true);
     emit cacheSizeLimitMBChanged();
     if (!editActive_ && autoCleanCache_ && cacheSizeLimitMB_ > 0) {
         enforceCacheSizeLimit();
@@ -947,6 +948,9 @@ void SettingsController::emitAllChanged()
     emit transcodeSampleRateHzChanged();
     emit transcodeChannelsChanged();
     emit preserveMetadataChanged();
+    emit preserveCoverChanged();
+    emit preserveDirectoryStructureChanged();
+    emit extractVideoAudioChanged();
     emit keepPitchWhileSpeedChangeChanged();
     emit vocalProtectionChanged();
 
@@ -1377,13 +1381,18 @@ void SettingsController::load()
     autoCleanCache_ = settings_.value(QStringLiteral("autoCleanCache"), autoCleanCache_).toBool();
     cleanTempOnExit_ = settings_.value(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_).toBool();
     const bool hasCacheSizeLimit = settings_.contains(QStringLiteral("sizeLimitMB"));
+    const int cacheSchemaVersion = settings_.value(QStringLiteral("schemaVersion"), 0).toInt();
+    const bool cacheSizeLimitUserModified =
+        settings_.value(QStringLiteral("sizeLimitUserModified"), true).toBool();
     cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
-    // 1 GB was the product default before the release plan.  It is safe to
-    // migrate that exact untouched default, but never reinterpret a custom cap.
-    if (hasCacheSizeLimit && cacheSizeLimitMB_ == 1024) {
+    // Only a versioned legacy default may be migrated.  A bare 1024 MB value
+    // is ambiguous and is therefore preserved as a user choice.
+    if (hasCacheSizeLimit && cacheSchemaVersion == 1 && !cacheSizeLimitUserModified
+        && cacheSizeLimitMB_ == 1024) {
         cacheSizeLimitMB_ = 10 * 1024;
         settings_.setValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);
     }
+    settings_.setValue(QStringLiteral("schemaVersion"), 2);
     settings_.endGroup();
 
     // Ensure clamped values are stored within valid ranges.
@@ -1529,6 +1538,10 @@ void SettingsController::saveAll()
     persistValue(QStringLiteral("autoCleanCache"), autoCleanCache_);
     persistValue(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_);
     persistValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);
+    persistValue(QStringLiteral("schemaVersion"), 2);
+    if (!settings_.contains(QStringLiteral("sizeLimitUserModified"))) {
+        persistValue(QStringLiteral("sizeLimitUserModified"), false);
+    }
     settings_.endGroup();
 }
 
