@@ -400,35 +400,35 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8 + nodeRow.depth * 14
+                anchors.leftMargin: 6 + nodeRow.depth * 12
                 anchors.rightMargin: 8
-                spacing: 5
+                spacing: 4
                 visible: nodeRow.nodeType !== "resourceSection"
 
                 ToolButton {
                     objectName: "navigationExpandButton"
-                    visible: (nodeRow.nodeType === "library"
-                              || nodeRow.nodeType === "resourceRoot"
-                              || nodeRow.nodeType === "resourceFolder")
-                             && nodeRow.hasChildren
-                    Layout.preferredWidth: visible ? 18 : 0
+                    visible: nodeRow.nodeType === "library"
+                             || ((nodeRow.nodeType === "resourceRoot"
+                                  || nodeRow.nodeType === "resourceFolder")
+                                 && nodeRow.hasChildren)
+                    Layout.preferredWidth: visible ? 28 : 0
                     Layout.preferredHeight: 28
                     icon.source: Theme.icon(nodeRow.expanded
                                             ? "arrow-down-s-line"
                                             : "arrow-right-s-line")
                     icon.color: Theme.tagSecondaryText
-                    icon.width: 15
-                    icon.height: 15
+                    icon.width: 18
+                    icon.height: 18
                     background: null
                     onClicked: root.navigationModel.setExpanded(
                                    nodeRow.nodeId, !nodeRow.expanded)
                 }
                 Item {
-                    visible: !((nodeRow.nodeType === "library"
-                                || nodeRow.nodeType === "resourceRoot"
+                    visible: !(nodeRow.nodeType === "library"
+                                || ((nodeRow.nodeType === "resourceRoot"
                                 || nodeRow.nodeType === "resourceFolder")
-                               && nodeRow.hasChildren)
-                    Layout.preferredWidth: visible ? 18 : 0
+                               && nodeRow.hasChildren))
+                    Layout.preferredWidth: visible ? 28 : 0
                     Layout.preferredHeight: 1
                 }
                 Image {

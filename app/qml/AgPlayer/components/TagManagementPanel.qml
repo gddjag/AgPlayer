@@ -403,10 +403,10 @@ Item {
                                                              + tagCount.implicitWidth
                                                              + root.pillHorizontalPadding * 2
                                                              + root.pillContentSpacing))
-                            implicitHeight: 28
+                            implicitHeight: 26
                             width: implicitWidth
                             height: implicitHeight
-                            radius: 14
+                            radius: 13
                             clip: true
                             color: resolvedSurface
                             border.color: dropVisual || selectedVisual

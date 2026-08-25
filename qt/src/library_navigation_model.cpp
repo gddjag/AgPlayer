@@ -238,10 +238,9 @@ void LibraryNavigationModel::rebuildBaseRows()
     QList<Node> rows;
     const int libraryCount = library_ == nullptr ? 0 : library_->count();
     const int favoriteCount = library_ == nullptr ? 0 : library_->favoriteCount();
-    const bool hasPlaylists = playlists_ != nullptr && playlists_->rowCount() > 0;
     rows.append({navigationNodeId(QStringLiteral("library"), QStringLiteral("all")),
                  QStringLiteral("library"), 0, tr("我的音乐库"), libraryCount,
-                 libraryExpanded_ && hasPlaylists, {}, hasPlaylists});
+                 libraryExpanded_, {}, true});
     if (libraryExpanded_ && playlists_ != nullptr) {
         for (int row = 0; row < playlists_->rowCount(); ++row) {
             const QModelIndex sourceIndex = playlists_->index(row, 0);
