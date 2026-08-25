@@ -25,3 +25,4 @@ Task 3: implementation commit 1f9ce3f; independent review NOT APPROVED (1 Critic
 Task 3: fix round 1/5 in progress. AudioEditor consumption of the shared export/pitch contract remains an explicit Task 3 -> Task 2 dependency; Task 3 must finish the provider contract and converter consumer now, Task 2 must consume it before completion.
 Task 2: complete (commits 9f1ed1c, a9b24ca; fresh Release focused CTest 5/5 passed; real WASAPI/audio hardware and native Explorer drag remain manual-only).
 Task 4: complete (implementation commit 8b50950; Release AgPlayer build passed, focused CTest 7/7 passed, multilingual Inno package produced; interactive Explorer/taskbar and installer/uninstaller visuals remain manual-only Shell acceptance).
+Task 4: review fix round 1/5 complete (commit 930cb01; stale PE/new source SkipBuild is rejected, matching PE guard path passes, rebuilt About QML test passes, fresh Release focused CTest 9/9 passed; ready for independent re-review).

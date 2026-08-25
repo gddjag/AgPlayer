@@ -48,3 +48,21 @@ EXE 的 FileVersion/ProductVersion 为 `1.0.0.0`，Setup 的 FileVersion 为
   缓存刷新后的 AUMID/品牌图标。自动安装未在当前用户执行，以免覆盖现有快捷方式。
 - 交互卸载时分别验证四种语言的个人数据提示，以及“是/否”对个人数据的实际保留/
   删除行为；音乐文件必须始终保留。
+
+## 复审修复 round 1
+
+修复提交：`930cb01`。
+
+- `package-windows.ps1` 在 staging 和 ISCC 之前读取待打包 `AgPlayer.exe` 的
+  FileVersion/ProductVersion，并要求二者都等于单一版本源派生的四段版本；
+  `-SkipBuild` 不再能把旧 PE 包装成新版本安装器。
+- 新增真实 PE 守卫测试：同一个 1.0.0.0 EXE 配合临时 2.3.4 源码必须被提前拒绝；
+  恢复 1.0.0 源码后必须越过版本守卫，直到测试刻意省略的运行库检查才停止。
+- About QML 断言改为 `"AgPlayer " + SettingsController.version`，不再复制发布版本；
+  用例可独立加载设置窗口，并注册为 `qml_about_version_test`。
+
+最终 Release 聚焦 CTest 9/9 通过，其中包含原 Task 4 七项测试、新 PE 守卫测试和
+真实 About QML 用例。重建 `qml_main_window_test` 目标通过，About 用例 3/3 通过。
+Windows PowerShell 5.1 下完整 `-SkipBuild` 打包通过；最新安装器为 34,428,837 bytes，
+SHA-256 `93CA0108FF4FE4C0CD3A3AE9F40FE22B8BE635BC3FFC891AB93EB99293F40B57`。
+提交级 `git diff --check` 通过。
