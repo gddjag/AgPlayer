@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -32,37 +31,32 @@ Control {
             radius: 4
             color: root.colorValue
             border.color: Theme.border
-            TapHandler { onTapped: picker.open() }
         }
 
-        TextField {
+        Text {
             id: field
+            objectName: "colorFieldHex"
             Layout.fillWidth: true
-            text: root.colorValue.toString().toUpperCase()
-            selectByMouse: true
-            color: acceptableInput ? Theme.primaryText : Theme.favoriteRed
-            validator: RegularExpressionValidator {
-                regularExpression: /^#[0-9A-Fa-f]{6}$/
-            }
-            onEditingFinished: {
-                var value = root.normalized(text)
-                if (value.length > 0) root.colorEdited(value)
-                else text = root.colorValue.toString().toUpperCase()
-            }
-            background: null
+            text: root.normalized(root.colorValue)
+            color: Theme.primaryText
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
         }
     }
 
     background: Rectangle {
         color: Theme.background
-        border.color: field.acceptableInput ? Theme.border : Theme.favoriteRed
+        border.color: Theme.border
         radius: Theme.radiusSm
     }
 
-    ColorDialog {
+    TapHandler {
+        onTapped: picker.openForColor(root.colorValue)
+    }
+
+    AgColorPicker {
         id: picker
-        title: qsTr("选择颜色")
-        selectedColor: root.colorValue
-        onAccepted: root.colorEdited(selectedColor.toString().toUpperCase())
+        objectName: "colorFieldPicker"
+        onColorAccepted: color => root.colorEdited(root.normalized(color))
     }
 }

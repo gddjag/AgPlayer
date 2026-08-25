@@ -12,6 +12,7 @@ TestCase {
     height: 640
 
     property int savedThemeMode: 0
+    property string savedWaveformSolidBaseColor: ""
 
     Item {
         id: testHost
@@ -23,12 +24,27 @@ TestCase {
             x: Math.round((testHost.width - picker.width) / 2)
             y: 28
         }
+
+        ColorField {
+            id: integratedField
+            parent: testCase.Window.window.contentItem
+            x: Math.round((parent.width - width) / 2)
+            y: parent.height - height - 28
+            colorValue: SettingsController.waveformSolidBaseColor
+            targetProperty: "waveformSolidBaseColor"
+        }
     }
 
     SignalSpy {
         id: acceptedSpy
         target: picker
         signalName: "colorAccepted"
+    }
+
+    SignalSpy {
+        id: integratedEditedSpy
+        target: integratedField
+        signalName: "colorEdited"
     }
 
     function initTestCase() {
@@ -38,13 +54,20 @@ TestCase {
     function init() {
         picker.close()
         acceptedSpy.clear()
+        integratedEditedSpy.clear()
+        savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
         Theme.mode = 0
         wait(0)
     }
 
     function cleanup() {
         picker.close()
+        var integratedPicker = findChild(integratedField, "colorFieldPicker")
+        if (integratedPicker)
+            integratedPicker.close()
+        SettingsController.waveformSolidBaseColor = savedWaveformSolidBaseColor
         acceptedSpy.clear()
+        integratedEditedSpy.clear()
         Theme.mode = savedThemeMode
         wait(0)
     }
@@ -270,6 +293,48 @@ TestCase {
         tryCompare(picker, "visible", false)
         compare(acceptedSpy.count, 0)
         compare(normalizedColor(picker.selectedColor), "#63316B")
+    }
+
+    function test_color_field_commits_candidate_and_cancellation_preserves_setting() {
+        SettingsController.waveformSolidBaseColor = "#63316B"
+        tryVerify(function() {
+            return normalizedColor(integratedField.colorValue) === "#63316B"
+        })
+        var hexEntry = findChild(integratedField, "colorFieldHex")
+        verify(hexEntry)
+        compare(hexEntry.text, "#63316B")
+
+        mouseClick(integratedField, integratedField.width / 2,
+                   integratedField.height / 2)
+        var integratedPicker = findChild(integratedField, "colorFieldPicker")
+        verify(integratedPicker)
+        tryCompare(integratedPicker, "visible", true)
+        compare(normalizedColor(integratedPicker.baseColor), "#63316B")
+
+        tryVerify(function() {
+            return findChild(integratedPicker.contentItem,
+                             "colorCandidate-0") !== null
+        })
+        mouseClick(findChild(integratedPicker.contentItem, "colorCandidate-0"))
+
+        tryVerify(function() {
+            return normalizedColor(SettingsController.waveformSolidBaseColor)
+                    === "#F8EBFA"
+        })
+        compare(integratedEditedSpy.count, 1)
+        compare(normalizedColor(integratedEditedSpy.signalArguments[0][0]),
+                "#F8EBFA")
+        compare(integratedPicker.visible, false)
+
+        mouseClick(integratedField, integratedField.width / 2,
+                   integratedField.height / 2)
+        tryCompare(integratedPicker, "visible", true)
+        mouseClick(findChild(integratedPicker, "colorPickerClose"))
+
+        compare(integratedPicker.visible, false)
+        compare(normalizedColor(SettingsController.waveformSolidBaseColor),
+                "#F8EBFA")
+        compare(integratedEditedSpy.count, 1)
     }
 
     function test_theme_switch_updates_chrome_not_candidates() {
