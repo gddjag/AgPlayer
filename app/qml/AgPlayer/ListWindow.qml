@@ -460,11 +460,7 @@ Window {
                 readonly property int rightColumnWidth: 248
                 readonly property int dividerWidth: 1
                 readonly property real centerWidth: centerColumn.width
-                color: SettingsController.glassEffect
-                       ? /* theme-color-allow: transparent glass surface */ Qt.rgba(Theme.listWorkspaceSurface.r,
-                                 Theme.listWorkspaceSurface.g,
-                                 Theme.listWorkspaceSurface.b, 0.91)
-                       : Theme.listWorkspaceSurface
+                color: Theme.listWorkspaceSurface
                 border.width: 0
                 radius: 0
                 clip: true

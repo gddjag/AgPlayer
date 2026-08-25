@@ -18,8 +18,6 @@ class WindowController final : public QObject, public QAbstractNativeEventFilter
     Q_PROPERTY(bool miniVisible READ miniVisible NOTIFY miniVisibleChanged)
     Q_PROPERTY(bool audioToolsVisible READ audioToolsVisible NOTIFY audioToolsVisibleChanged)
     Q_PROPERTY(bool alwaysOnTop READ alwaysOnTop WRITE setAlwaysOnTop NOTIFY alwaysOnTopChanged)
-    Q_PROPERTY(bool glassBackdropEnabled READ glassBackdropEnabled
-                   WRITE setGlassBackdropEnabled NOTIFY glassBackdropEnabledChanged)
     Q_PROPERTY(bool magneticSnapEnabled READ magneticSnapEnabled WRITE setMagneticSnapEnabled
                    NOTIFY magneticSnapEnabledChanged)
     Q_PROPERTY(int preferredDockEdge READ preferredDockEdge WRITE setPreferredDockEdge
@@ -56,7 +54,6 @@ public:
     bool miniVisible() const noexcept;
     bool audioToolsVisible() const noexcept;
     bool alwaysOnTop() const noexcept;
-    bool glassBackdropEnabled() const noexcept;
     bool magneticSnapEnabled() const noexcept;
     int preferredDockEdge() const noexcept;
     QString listDockEdge() const;
@@ -94,7 +91,6 @@ public:
     Q_INVOKABLE void requestClose();
     Q_INVOKABLE void requestExit();
     Q_INVOKABLE void setAlwaysOnTop(bool alwaysOnTop);
-    Q_INVOKABLE void setGlassBackdropEnabled(bool enabled);
     Q_INVOKABLE void showListWindow();
     Q_INVOKABLE void hideListWindow();
     Q_INVOKABLE void toggleListWindow();
@@ -111,7 +107,6 @@ signals:
     void miniVisibleChanged();
     void audioToolsVisibleChanged();
     void alwaysOnTopChanged();
-    void glassBackdropEnabledChanged();
     void magneticSnapEnabledChanged();
     void preferredDockEdgeChanged();
     void listDockEdgeChanged();
@@ -175,7 +170,6 @@ private:
     bool miniVisible_ = false;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
-    bool glassBackdropEnabled_ = false;
     bool magneticSnapEnabled_ = true;
     int preferredDockEdge_ = 1;
     QString listDockEdge_ = QStringLiteral("bottom");

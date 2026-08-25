@@ -47,10 +47,7 @@ Window {
         anchors.fill: parent
         anchors.margins: 2
         radius: Theme.windowRadius
-        color: SettingsController.glassEffect
-               ? /* theme-color-allow: transparent glass surface */ Qt.rgba(Theme.background.r, Theme.background.g,
-                         Theme.background.b, 0.94)
-               : Theme.background
+        color: Theme.background
         border.color: Theme.border
         border.width: 1
         clip: true

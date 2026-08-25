@@ -30,10 +30,11 @@ private slots:
     void migratesLegacyPlaybackModes();
     void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
     void waveformAppearanceSettingsClampPersistAndReset();
-    void migratesLegacyRgbColorsOnceAndRetiresKeys();
+    void restoresLegacyRgbColorsWithoutDeletingKeys();
+    void mapsSimplifiedColorsIntoRestoredContract();
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
-    void listGlassBackgroundDefaultsOffAndPersists();
+    void glassFeatureIsAbsentFromSettingsContract();
     void skinSettingsDefaultToSystemAppearanceAndDefaultSkin();
     void skinSettingsPersistAndNormalize();
     void skinSettingsIgnoreLegacyAccentAndHighlightKeys();
@@ -56,18 +57,15 @@ void SettingsControllerTest::initTestCase()
     QSettings().clear();
 }
 
-void SettingsControllerTest::listGlassBackgroundDefaultsOffAndPersists()
+void SettingsControllerTest::glassFeatureIsAbsentFromSettingsContract()
 {
     QSettings persisted;
     persisted.clear();
-    {
-        SettingsController settings;
-        QCOMPARE(settings.glassEffect(), false);
-        settings.setGlassEffect(true);
-    }
-    SettingsController reloaded;
-    QCOMPARE(reloaded.glassEffect(), true);
-    QCOMPARE(persisted.value(QStringLiteral("appearance/glassEffect")).toBool(), true);
+    persisted.setValue(QStringLiteral("appearance/glassEffect"), true);
+
+    SettingsController settings;
+    QCOMPARE(settings.metaObject()->indexOfProperty("glassEffect"), -1);
+    QVERIFY(!persisted.contains(QStringLiteral("appearance/glassEffect")));
     persisted.clear();
 }
 
@@ -157,9 +155,9 @@ void SettingsControllerTest::skinEditTransactionPreviewsCommitsCancelsAndPreserv
     persisted.clear();
     SettingsController settings;
     settings.setWaveformHeight(1.3);
-    settings.setSpectrumPlayedColor(QStringLiteral("#123456"));
+    settings.setSpectrumRgbMiddleColor(QStringLiteral("#123456"));
     const double waveformHeight = settings.waveformHeight();
-    const QString spectrumPlayedColor = settings.spectrumPlayedColor();
+    const QString spectrumMiddleColor = settings.spectrumRgbMiddleColor();
 
     settings.beginEdit();
     QSignalSpy skinChanged(&settings, &SettingsController::skinCustomColorChanged);
@@ -173,11 +171,11 @@ void SettingsControllerTest::skinEditTransactionPreviewsCommitsCancelsAndPreserv
     QCOMPARE(settings.themeMode(), 2);
     QCOMPARE(settings.skinColorMode(), 0);
     QCOMPARE(settings.waveformHeight(), waveformHeight);
-    QCOMPARE(settings.spectrumPlayedColor(), spectrumPlayedColor);
+    QCOMPARE(settings.spectrumRgbMiddleColor(), spectrumMiddleColor);
     settings.cancelEdit();
     QCOMPARE(settings.skinColorMode(), 0);
     QCOMPARE(settings.waveformHeight(), waveformHeight);
-    QCOMPARE(settings.spectrumPlayedColor(), spectrumPlayedColor);
+    QCOMPARE(settings.spectrumRgbMiddleColor(), spectrumMiddleColor);
 
     settings.beginEdit();
     settings.setSkinColorMode(1);
@@ -188,7 +186,7 @@ void SettingsControllerTest::skinEditTransactionPreviewsCommitsCancelsAndPreserv
     QCOMPARE(committed.skinColorMode(), 1);
     QCOMPARE(committed.skinPreset(), QStringLiteral("purple"));
     QCOMPARE(committed.waveformHeight(), waveformHeight);
-    QCOMPARE(committed.spectrumPlayedColor(), spectrumPlayedColor);
+    QCOMPARE(committed.spectrumRgbMiddleColor(), spectrumMiddleColor);
 }
 
 void SettingsControllerTest::skinDefaultResetDoesNotTouchMediaSettingsOutsideEdit()
@@ -201,9 +199,13 @@ void SettingsControllerTest::skinDefaultResetDoesNotTouchMediaSettingsOutsideEdi
         QStringLiteral("appearance/waveformDensity"),
         QStringLiteral("appearance/waveformThickness"),
         QStringLiteral("appearance/waveformPeakAlgorithm"),
-        QStringLiteral("appearance/waveformColorMode"),
-        QStringLiteral("appearance/waveformUnplayedColor"),
-        QStringLiteral("appearance/waveformPlayedColor"),
+        QStringLiteral("appearance/waveformSolidBaseColor"),
+        QStringLiteral("appearance/waveformSolidProgressColor"),
+        QStringLiteral("appearance/waveformRgbBaseColor"),
+        QStringLiteral("appearance/waveformRgbStartColor"),
+        QStringLiteral("appearance/waveformRgbMiddleColor"),
+        QStringLiteral("appearance/waveformRgbEndColor"),
+        QStringLiteral("appearance/waveformRgbProgress"),
         QStringLiteral("appearance/waveformHoverTimePreview"),
         QStringLiteral("appearance/waveformPlaybackGuide"),
         QStringLiteral("appearance/waveformCanvasHeight"),
@@ -211,8 +213,10 @@ void SettingsControllerTest::skinDefaultResetDoesNotTouchMediaSettingsOutsideEdi
         QStringLiteral("appearance/listWaveformThumbnailEnabled"),
         QStringLiteral("appearance/listWaveformThumbnailMode"),
         QStringLiteral("appearance/spectrumColorMode"),
-        QStringLiteral("appearance/spectrumUnplayedColor"),
-        QStringLiteral("appearance/spectrumPlayedColor"),
+        QStringLiteral("appearance/spectrumSolidColor"),
+        QStringLiteral("appearance/spectrumRgbStartColor"),
+        QStringLiteral("appearance/spectrumRgbMiddleColor"),
+        QStringLiteral("appearance/spectrumRgbEndColor"),
     };
 
     SettingsController settings;
@@ -485,8 +489,13 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformDensity(), 2.0);
         QCOMPARE(settings.waveformThickness(), 1.0);
         QCOMPARE(settings.waveformPeakAlgorithm(), 0);
-        QCOMPARE(settings.waveformUnplayedColor(), QStringLiteral("#9098a6"));
-        QCOMPARE(settings.waveformPlayedColor(), QStringLiteral("#d27722"));
+        QCOMPARE(settings.property("waveformSolidBaseColor").toString(), QStringLiteral("#9098a6"));
+        QCOMPARE(settings.property("waveformSolidProgressColor").toString(), QStringLiteral("#d27722"));
+        QCOMPARE(settings.property("waveformRgbBaseColor").toString(), QStringLiteral("#00b4a0"));
+        QCOMPARE(settings.property("waveformRgbStartColor").toString(), QStringLiteral("#00d4ff"));
+        QCOMPARE(settings.property("waveformRgbMiddleColor").toString(), QStringLiteral("#7b2ff7"));
+        QCOMPARE(settings.property("waveformRgbEndColor").toString(), QStringLiteral("#e62e9b"));
+        QCOMPARE(settings.property("waveformRgbProgress").toBool(), false);
         QCOMPARE(settings.waveformMode(), 0);
         QCOMPARE(settings.waveformPlaybackGuide(), false);
 
@@ -494,16 +503,18 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         settings.setWaveformDensity(0.1);
         settings.setWaveformThickness(2.34);
         settings.setWaveformPeakAlgorithm(1);
-        settings.setWaveformUnplayedColor(QStringLiteral("#112233"));
-        settings.setWaveformPlayedColor(QStringLiteral("invalid"));
+        QVERIFY(settings.setProperty("waveformSolidBaseColor", QStringLiteral("#112233")));
+        QVERIFY(settings.setProperty("waveformSolidProgressColor", QStringLiteral("invalid")));
+        QVERIFY(settings.setProperty("waveformRgbProgress", true));
         settings.setWaveformPlaybackGuide(true);
 
         QCOMPARE(settings.waveformHeight(), 1.5);
         QCOMPARE(settings.waveformDensity(), 0.5);
         QCOMPARE(settings.waveformThickness(), 2.3);
         QCOMPARE(settings.waveformPeakAlgorithm(), 1);
-        QCOMPARE(settings.waveformUnplayedColor(), QStringLiteral("#112233"));
-        QCOMPARE(settings.waveformPlayedColor(), QStringLiteral("#d27722"));
+        QCOMPARE(settings.property("waveformSolidBaseColor").toString(), QStringLiteral("#112233"));
+        QCOMPARE(settings.property("waveformSolidProgressColor").toString(), QStringLiteral("#d27722"));
+        QCOMPARE(settings.property("waveformRgbProgress").toBool(), true);
         QCOMPARE(settings.waveformPlaybackGuide(), true);
     }
 
@@ -512,7 +523,8 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformDensity(), 0.5);
     QCOMPARE(reloaded.waveformThickness(), 2.3);
     QCOMPARE(reloaded.waveformPeakAlgorithm(), 1);
-    QCOMPARE(reloaded.waveformUnplayedColor(), QStringLiteral("#112233"));
+    QCOMPARE(reloaded.property("waveformSolidBaseColor").toString(), QStringLiteral("#112233"));
+    QCOMPARE(reloaded.property("waveformRgbProgress").toBool(), true);
     QCOMPARE(reloaded.waveformPlaybackGuide(), true);
 
     reloaded.resetWaveformDefaults();
@@ -520,8 +532,9 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.waveformDensity(), 2.0);
     QCOMPARE(reloaded.waveformThickness(), 1.0);
     QCOMPARE(reloaded.waveformPeakAlgorithm(), 0);
-    QCOMPARE(reloaded.waveformUnplayedColor(), QStringLiteral("#9098a6"));
-    QCOMPARE(reloaded.waveformPlayedColor(), QStringLiteral("#d27722"));
+    QCOMPARE(reloaded.property("waveformSolidBaseColor").toString(), QStringLiteral("#9098a6"));
+    QCOMPARE(reloaded.property("waveformSolidProgressColor").toString(), QStringLiteral("#d27722"));
+    QCOMPARE(reloaded.property("waveformRgbProgress").toBool(), false);
     QCOMPARE(reloaded.waveformMode(), 0);
     QCOMPARE(reloaded.waveformPlaybackGuide(), false);
     persisted.clear();
@@ -568,24 +581,55 @@ void SettingsControllerTest::cacheLimitMigratesOnlyUntouchedLegacyDefault()
     persisted.clear();
 }
 
-void SettingsControllerTest::migratesLegacyRgbColorsOnceAndRetiresKeys()
+void SettingsControllerTest::restoresLegacyRgbColorsWithoutDeletingKeys()
 {
     QSettings persisted;
     persisted.clear();
     persisted.setValue(QStringLiteral("appearance/waveformRgbBaseColor"), "#112233");
     persisted.setValue(QStringLiteral("appearance/waveformRgbStartColor"), "#445566");
+    persisted.setValue(QStringLiteral("appearance/waveformRgbMiddleColor"), "#556677");
+    persisted.setValue(QStringLiteral("appearance/waveformRgbEndColor"), "#667788");
+    persisted.setValue(QStringLiteral("appearance/waveformRgbProgress"), true);
+    persisted.setValue(QStringLiteral("appearance/waveformUnplayedColor"), "#badbad");
     persisted.setValue(QStringLiteral("appearance/spectrumColorMode"), 1);
     persisted.setValue(QStringLiteral("appearance/spectrumRgbStartColor"), "#778899");
     persisted.setValue(QStringLiteral("appearance/spectrumRgbMiddleColor"), "#aabbcc");
     SettingsController settings;
-    QCOMPARE(settings.waveformColorMode(), 1);
-    QCOMPARE(settings.waveformUnplayedColor(), QStringLiteral("#112233"));
-    QCOMPARE(settings.waveformPlayedColor(), QStringLiteral("#445566"));
-    QCOMPARE(settings.spectrumUnplayedColor(), QStringLiteral("#778899"));
-    QCOMPARE(settings.spectrumPlayedColor(), QStringLiteral("#aabbcc"));
-    QCOMPARE(persisted.value(QStringLiteral("appearance/visualColorSchema")).toInt(), 1);
-    QVERIFY(!persisted.contains(QStringLiteral("appearance/waveformRgbBaseColor")));
-    QVERIFY(!persisted.contains(QStringLiteral("appearance/spectrumRgbStartColor")));
+    QCOMPARE(settings.property("waveformRgbBaseColor").toString(), QStringLiteral("#112233"));
+    QCOMPARE(settings.property("waveformRgbStartColor").toString(), QStringLiteral("#445566"));
+    QCOMPARE(settings.property("waveformRgbMiddleColor").toString(), QStringLiteral("#556677"));
+    QCOMPARE(settings.property("waveformRgbEndColor").toString(), QStringLiteral("#667788"));
+    QCOMPARE(settings.property("waveformRgbProgress").toBool(), true);
+    QCOMPARE(settings.property("spectrumRgbStartColor").toString(), QStringLiteral("#778899"));
+    QCOMPARE(settings.property("spectrumRgbMiddleColor").toString(), QStringLiteral("#aabbcc"));
+    QVERIFY(persisted.contains(QStringLiteral("appearance/waveformRgbBaseColor")));
+    QVERIFY(persisted.contains(QStringLiteral("appearance/spectrumRgbStartColor")));
+    persisted.clear();
+}
+
+void SettingsControllerTest::mapsSimplifiedColorsIntoRestoredContract()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/visualColorSchema"), 1);
+    persisted.setValue(QStringLiteral("appearance/waveformUnplayedColor"), "#112233");
+    persisted.setValue(QStringLiteral("appearance/waveformPlayedColor"), "#445566");
+    persisted.setValue(QStringLiteral("appearance/spectrumUnplayedColor"), "#778899");
+    persisted.setValue(QStringLiteral("appearance/spectrumPlayedColor"), "#aabbcc");
+
+    SettingsController settings;
+    QCOMPARE(settings.property("waveformSolidBaseColor").toString(), QStringLiteral("#112233"));
+    QCOMPARE(settings.property("waveformSolidProgressColor").toString(), QStringLiteral("#445566"));
+    QCOMPARE(settings.property("waveformRgbBaseColor").toString(), QStringLiteral("#112233"));
+    QCOMPARE(settings.property("waveformRgbStartColor").toString(), QStringLiteral("#445566"));
+    QCOMPARE(settings.property("waveformRgbMiddleColor").toString(), QStringLiteral("#7b2ff7"));
+    QCOMPARE(settings.property("waveformRgbEndColor").toString(), QStringLiteral("#e62e9b"));
+    QCOMPARE(settings.property("spectrumSolidColor").toString(), QStringLiteral("#778899"));
+    QCOMPARE(settings.property("spectrumRgbStartColor").toString(), QStringLiteral("#778899"));
+    QCOMPARE(settings.property("spectrumRgbMiddleColor").toString(), QStringLiteral("#aabbcc"));
+    QCOMPARE(settings.property("spectrumRgbEndColor").toString(), QStringLiteral("#e62e9b"));
+    QVERIFY(persisted.contains(QStringLiteral("appearance/waveformUnplayedColor")));
+    QVERIFY(persisted.contains(QStringLiteral("appearance/spectrumPlayedColor")));
     persisted.clear();
 }
 
@@ -660,16 +704,18 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
         QCOMPARE(settings.waveformCanvasHeight(), 78);
         QCOMPARE(settings.waveformCanvasLocked(), true);
         QCOMPARE(settings.spectrumColorMode(), 0);
-        QCOMPARE(settings.spectrumUnplayedColor(), QStringLiteral("#e62e9b"));
-        QCOMPARE(settings.spectrumPlayedColor(), QStringLiteral("#e62e9b"));
+        QCOMPARE(settings.spectrumSolidColor(), QStringLiteral("#0078d4"));
+        QCOMPARE(settings.spectrumRgbStartColor(), QStringLiteral("#00d4ff"));
+        QCOMPARE(settings.spectrumRgbMiddleColor(), QStringLiteral("#7b2ff7"));
+        QCOMPARE(settings.spectrumRgbEndColor(), QStringLiteral("#e62e9b"));
         QCOMPARE(settings.replayGainMode(), 0);
         QCOMPARE(settings.replayGainClipProtection(), true);
 
         settings.setWaveformCanvasHeight(120);
         settings.setWaveformCanvasLocked(false);
         settings.setSpectrumColorMode(1);
-        settings.setSpectrumUnplayedColor(QStringLiteral("#112233"));
-        settings.setSpectrumPlayedColor(QStringLiteral("#445566"));
+        settings.setSpectrumSolidColor(QStringLiteral("#112233"));
+        settings.setSpectrumRgbMiddleColor(QStringLiteral("#445566"));
         settings.setReplayGainMode(2);
         settings.setReplayGainClipProtection(false);
 
@@ -680,8 +726,8 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
     QCOMPARE(reloaded.waveformCanvasHeight(), 84);
     QCOMPARE(reloaded.waveformCanvasLocked(), false);
     QCOMPARE(reloaded.spectrumColorMode(), 1);
-    QCOMPARE(reloaded.spectrumUnplayedColor(), QStringLiteral("#112233"));
-    QCOMPARE(reloaded.spectrumPlayedColor(), QStringLiteral("#445566"));
+    QCOMPARE(reloaded.spectrumSolidColor(), QStringLiteral("#112233"));
+    QCOMPARE(reloaded.spectrumRgbMiddleColor(), QStringLiteral("#445566"));
     QCOMPARE(reloaded.replayGainMode(), 2);
     QCOMPARE(reloaded.replayGainClipProtection(), false);
     persisted.clear();

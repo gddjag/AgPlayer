@@ -20,6 +20,7 @@ class WindowControllerTest final : public QObject {
 private slots:
     void initTestCase();
     void init();
+    void glassBackdropContractIsAbsent();
     void defaultListSizeMatchesReference();
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesNativePixelSize();
@@ -75,6 +76,14 @@ void WindowControllerTest::init()
     settings.clear();
     settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
     settings.sync();
+}
+
+void WindowControllerTest::glassBackdropContractIsAbsent()
+{
+    QCOMPARE(WindowController::staticMetaObject.indexOfProperty("glassBackdropEnabled"), -1);
+    QCOMPARE(WindowController::staticMetaObject.indexOfMethod(
+                 QMetaObject::normalizedSignature("setGlassBackdropEnabled(bool)")),
+             -1);
 }
 
 void WindowControllerTest::defaultListSizeMatchesReference()

@@ -49,17 +49,6 @@ ApplicationWindow {
         z: -10
     }
 
-    Component.onCompleted: {
-        WindowController.setGlassBackdropEnabled(SettingsController.glassEffect)
-    }
-
-    Connections {
-        target: SettingsController
-        function onGlassEffectChanged() {
-            WindowController.setGlassBackdropEnabled(SettingsController.glassEffect)
-        }
-    }
-
     Connections {
         target: ImportController
         function onFinished() {
