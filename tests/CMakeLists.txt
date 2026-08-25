@@ -810,8 +810,10 @@ set_tests_properties(qml_theme_color_contract_test PROPERTIES TIMEOUT 10)
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog must not terminate that performance test at the old 10-second
-    # generic default.
+    # generic default.  Keep it serial as the decoder/index workload can be
+    # starved by the other CPU-heavy integration tests in a parallel run.
     TIMEOUT 35
+    RUN_SERIAL TRUE
 )
 set_tests_properties(audio_tools_end_to_end_test PROPERTIES
     TIMEOUT 120

@@ -113,8 +113,8 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
-    <message><source>录音</source><translation>การบันทึก</translation></message>
-    <message><source>处理</source><translation>การประมวลผล</translation></message>
+    <message><source>录音</source><translation>บันทึกเสียง</translation></message>
+    <message><source>处理</source><translation>ประมวลผล</translation></message>
     <message><source>导出</source><translation>ส่งออก</translation></message>
     <message><source>选择音频导出目录</source><translation>เลือกโฟลเดอร์ส่งออกเสียง</translation></message>
     <message><source>空格 = 播放 / 暂停       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>Space = เล่น / หยุดชั่วคราว       S = แยกที่หัวเล่น       Delete = ลบคลิป       Ctrl+C / X / V = คัดลอก / ตัด / วาง       Ctrl+Z / Y = เลิกทำ / ทำซ้ำ</translation></message>
