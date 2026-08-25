@@ -37,3 +37,17 @@
 Task 3 exposes the shared conversion defaults and converter interface. Task 2
 remains responsible for consuming those defaults in AudioEditor shared export
 and pitch workflows.
+
+## Repair round 2
+
+- The conversion scheduler honors the persisted 1–10 concurrency value,
+  independently of logical CPU count. Shared Settings are live-wired into
+  AudioEditor export and pitch/formant controls without reverse bindings.
+- Schema-less historical 1024 MB defaults migrate once to 10 GB; an explicit
+  user-modified marker preserves a deliberate 1 GB choice. Opus/OGG no longer
+  advertise cover preservation.
+- Passed: `settings_controller_test`, `transcode_capability_test`, and
+  `qml_audio_editor_test`.
+- Remaining risk: `qml_format_converter_matrix_test` still has one rapid
+  capability refresh failure that replaces a VBR click with CBR; not counted
+  as passing.

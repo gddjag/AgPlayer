@@ -1382,17 +1382,24 @@ void SettingsController::load()
     cleanTempOnExit_ = settings_.value(QStringLiteral("cleanTempOnExit"), cleanTempOnExit_).toBool();
     const bool hasCacheSizeLimit = settings_.contains(QStringLiteral("sizeLimitMB"));
     const int cacheSchemaVersion = settings_.value(QStringLiteral("schemaVersion"), 0).toInt();
+    const bool hasCacheSizeLimitUserModified =
+        settings_.contains(QStringLiteral("sizeLimitUserModified"));
     const bool cacheSizeLimitUserModified =
-        settings_.value(QStringLiteral("sizeLimitUserModified"), true).toBool();
+        settings_.value(QStringLiteral("sizeLimitUserModified"), false).toBool();
     cacheSizeLimitMB_ = settings_.value(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_).toInt();
-    // Only a versioned legacy default may be migrated.  A bare 1024 MB value
-    // is ambiguous and is therefore preserved as a user choice.
-    if (hasCacheSizeLimit && cacheSchemaVersion == 1 && !cacheSizeLimitUserModified
+    // Schema-less releases used 1024 MB as their product default.  The first
+    // post-schema run records the decision; an explicit user marker always
+    // wins, including a deliberate 1024 MB choice.
+    if (hasCacheSizeLimit && !cacheSizeLimitUserModified
+        && (cacheSchemaVersion == 0 || cacheSchemaVersion == 1)
         && cacheSizeLimitMB_ == 1024) {
         cacheSizeLimitMB_ = 10 * 1024;
         settings_.setValue(QStringLiteral("sizeLimitMB"), cacheSizeLimitMB_);
     }
     settings_.setValue(QStringLiteral("schemaVersion"), 2);
+    if (!hasCacheSizeLimitUserModified) {
+        settings_.setValue(QStringLiteral("sizeLimitUserModified"), false);
+    }
     settings_.endGroup();
 
     // Ensure clamped values are stored within valid ranges.

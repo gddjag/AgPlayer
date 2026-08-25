@@ -20,6 +20,15 @@ Rectangle {
         converter.selectedFormat = SettingsController.transcodeFormat.toLowerCase()
     }
 
+    Connections {
+        target: SettingsController
+        function onTranscodeFormatChanged() {
+            const format = SettingsController.transcodeFormat.toLowerCase()
+            if (converter.selectedFormat !== format)
+                converter.selectedFormat = format
+        }
+    }
+
     onOutputDirectoryChanged: {
         if (SettingsController.defaultOutputDirectory !== outputDirectory)
             SettingsController.defaultOutputDirectory = outputDirectory

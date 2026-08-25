@@ -2359,8 +2359,9 @@ void FormatConverter::runTranscode(const QString& outputFormat,
     QVector<int> jobs(totalJobs);
     std::iota(jobs.begin(), jobs.end(), 0);
     QThreadPool pool;
-    pool.setMaxThreadCount(std::clamp(
-        parallelJobs_, 1, std::max(1, QThread::idealThreadCount())));
+    // The persisted/UI contract is explicitly 1–10.  QThreadPool can queue
+    // work above logical-core count; do not silently rewrite the user's limit.
+    pool.setMaxThreadCount(std::clamp(parallelJobs_, 1, 10));
 
     QtConcurrent::blockingMap(&pool, jobs, [&](int i) {
         if (i >= inputPaths.size()) {

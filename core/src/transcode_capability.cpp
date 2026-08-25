@@ -30,8 +30,8 @@ constexpr std::array<FormatDefinition, 8> kFormats{{
     {"flac", "FLAC", "flac", "flac", false, true, true, false},
     {"wav", "WAV", "wav", "pcm_s16le", false, true, false, false},
     {"aac", "AAC", "adts", "aac", true, false, false, true},
-    {"opus", "Opus", "ogg", "libopus", true, true, true, true},
-    {"ogg", "OGG", "ogg", "libvorbis", true, true, true, true},
+    {"opus", "Opus", "ogg", "libopus", true, true, false, true},
+    {"ogg", "OGG", "ogg", "libvorbis", true, true, false, true},
     {"alac", "ALAC", "ipod", "alac", false, true, true, false},
     {"aiff", "AIFF", "aiff", "pcm_s16be", false, false, false, false},
 }};

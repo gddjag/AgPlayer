@@ -681,8 +681,40 @@ TestCase {
             verify(field.text.length > 0)
         }
         compare(findChild(page, "editorExportBitDepth").text, "24-bit")
-        compare(findChild(page, "editorExportDirectory").text, "--")
+        compare(findChild(page, "editorExportDirectory").text,
+                SettingsController.defaultOutputDirectory || "--")
         compare(findChild(page, "audioEditorExportDialog"), null)
         compare(findChild(page, "editorExportButton").enabled, false)
+    }
+
+    function test_exportAndPitchControlsFollowSharedSettings() {
+        const originalFormat = SettingsController.transcodeFormat
+        const originalRate = SettingsController.transcodeSampleRateHz
+        const originalChannels = SettingsController.transcodeChannels
+        const originalBitrate = SettingsController.transcodeBitrateKbps
+        const originalDirectory = SettingsController.defaultOutputDirectory
+        const originalPitch = SettingsController.keepPitchWhileSpeedChange
+        const originalVocal = SettingsController.vocalProtection
+        SettingsController.transcodeFormat = "MP3"
+        SettingsController.transcodeSampleRateHz = 48000
+        SettingsController.transcodeChannels = 1
+        SettingsController.transcodeBitrateKbps = 192
+        SettingsController.defaultOutputDirectory = "C:/shared-export"
+        SettingsController.keepPitchWhileSpeedChange = true
+        SettingsController.vocalProtection = true
+        tryCompare(findChild(page, "editorExportCodec"), "text", "MP3")
+        tryCompare(findChild(page, "editorExportSampleRate"), "text", "48 kHz")
+        tryCompare(findChild(page, "editorExportChannels"), "text", "单声道")
+        tryCompare(findChild(page, "editorExportBitRate"), "text", "192 kbps")
+        tryCompare(findChild(page, "editorExportDirectory"), "text", "C:/shared-export")
+        tryCompare(findChild(page, "inspectorPreservePitchSwitch"), "checked", true)
+        tryCompare(findChild(page, "inspectorFormantSwitch"), "checked", true)
+        SettingsController.transcodeFormat = originalFormat
+        SettingsController.transcodeSampleRateHz = originalRate
+        SettingsController.transcodeChannels = originalChannels
+        SettingsController.transcodeBitrateKbps = originalBitrate
+        SettingsController.defaultOutputDirectory = originalDirectory
+        SettingsController.keepPitchWhileSpeedChange = originalPitch
+        SettingsController.vocalProtection = originalVocal
     }
 }

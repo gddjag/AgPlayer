@@ -23,6 +23,13 @@ Rectangle {
         || discardDialog.visible
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
+    readonly property var sharedExportSettings: ({
+        "codecName": SettingsController.transcodeFormat,
+        "sampleRate": SettingsController.transcodeSampleRateHz,
+        "channels": SettingsController.transcodeChannels,
+        "bitRate": SettingsController.transcodeBitrateKbps * 1000,
+        "outputDirectory": SettingsController.defaultOutputDirectory
+    })
 
     function textInputHasFocus() {
         const active = page.Window.window ? page.Window.window.activeFocusItem : null
@@ -37,10 +44,35 @@ Rectangle {
         AudioEditorController.triggerAction("editor.split")
     }
     function updateExportSetting(name, value) {
-        const settings = Object.assign({}, page.persistedExportSettings)
+        if (name === "codecName") SettingsController.transcodeFormat = value
+        else if (name === "sampleRate") SettingsController.transcodeSampleRateHz = value
+        else if (name === "channels") SettingsController.transcodeChannels = value
+        else if (name === "bitRate") SettingsController.transcodeBitrateKbps = Math.round(value / 1000)
+        else if (name === "outputDirectory") SettingsController.defaultOutputDirectory = value
+        const settings = Object.assign({}, page.persistedExportSettings,
+                                     page.sharedExportSettings)
         settings[name] = value
         AudioEditorController.setProjectExportSettingsMap(settings)
     }
+    function applySharedAudioDefaults() {
+        AudioEditorController.setProjectExportSettingsMap(
+            Object.assign({}, page.persistedExportSettings,
+                          page.sharedExportSettings))
+        AudioEditorController.setKeepPitch(SettingsController.keepPitchWhileSpeedChange)
+        AudioEditorController.setFormantPreservation(SettingsController.vocalProtection)
+    }
+
+    Connections {
+        target: SettingsController
+        function onTranscodeFormatChanged() { page.applySharedAudioDefaults() }
+        function onTranscodeSampleRateHzChanged() { page.applySharedAudioDefaults() }
+        function onTranscodeChannelsChanged() { page.applySharedAudioDefaults() }
+        function onTranscodeBitrateKbpsChanged() { page.applySharedAudioDefaults() }
+        function onDefaultOutputDirectoryChanged() { page.applySharedAudioDefaults() }
+        function onKeepPitchWhileSpeedChangeChanged() { page.applySharedAudioDefaults() }
+        function onVocalProtectionChanged() { page.applySharedAudioDefaults() }
+    }
+    Component.onCompleted: applySharedAudioDefaults()
     function timeTextFromFrames(frames, includeMillis) {
         const sampleRate = Math.max(1, AudioEditorController.sampleRate)
         const totalMilliseconds = Math.max(0,
@@ -1060,10 +1092,10 @@ Rectangle {
                             Label { text: qsTr("变速时保持音调"); color: Theme.secondaryText; Layout.fillWidth: true }
                             Switch {
                                 objectName: "inspectorPreservePitchSwitch"
-                                checked: AudioEditorController.keepPitch
+                                checked: SettingsController.keepPitchWhileSpeedChange
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
-                                onToggled: AudioEditorController.setKeepPitch(checked)
+                                onToggled: SettingsController.keepPitchWhileSpeedChange = checked
                                 Layout.preferredWidth: 44
                                 Layout.preferredHeight: 24
                             }
@@ -1080,11 +1112,10 @@ Rectangle {
                             }
                             Switch {
                                 objectName: "inspectorFormantSwitch"
-                                checked: AudioEditorController.formantPreservation
+                                checked: SettingsController.vocalProtection
                                 enabled: AudioEditorController.formantPreservationSupported
                                     && AudioEditorController.hasDocument
-                                onToggled: AudioEditorController.setFormantPreservation(
-                                    checked)
+                                onToggled: SettingsController.vocalProtection = checked
                                 Layout.preferredWidth: 44
                                 Layout.preferredHeight: 24
                             }
@@ -1128,9 +1159,9 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 32
                                 readonly property string text: displayText
-                                model: ["WAV", "FLAC", "MP3", "AAC"]
+                                model: ["MP3", "FLAC", "WAV", "AAC", "Opus", "OGG", "ALAC", "AIFF"]
                                 currentIndex: Math.max(0, model.indexOf(
-                                    page.persistedExportSettings.codecName || "WAV"))
+                                    page.sharedExportSettings.codecName || "MP3"))
                                 onActivated: page.updateExportSetting(
                                     "codecName", currentText)
                             }
@@ -1141,8 +1172,8 @@ Rectangle {
                                 Layout.preferredHeight: 32
                                 readonly property string text: displayText
                                 model: ["44.1 kHz", "48 kHz", "96 kHz"]
-                                currentIndex: page.persistedExportSettings.sampleRate === 48000
-                                    ? 1 : page.persistedExportSettings.sampleRate === 96000
+                                currentIndex: page.sharedExportSettings.sampleRate === 48000
+                                    ? 1 : page.sharedExportSettings.sampleRate === 96000
                                     ? 2 : 0
                                 onActivated: page.updateExportSetting(
                                     "sampleRate", [44100, 48000, 96000][currentIndex])
@@ -1167,7 +1198,7 @@ Rectangle {
                                 Layout.preferredHeight: 32
                                 readonly property string text: displayText
                                 model: [qsTr("单声道"), qsTr("立体声")]
-                                currentIndex: page.persistedExportSettings.channels === 1
+                                currentIndex: page.sharedExportSettings.channels === 1
                                     ? 0 : 1
                                 onActivated: page.updateExportSetting(
                                     "channels", currentIndex + 1)
@@ -1179,9 +1210,9 @@ Rectangle {
                                 Layout.preferredHeight: 32
                                 readonly property string text: displayText
                                 model: ["128 kbps", "192 kbps", "256 kbps", "320 kbps"]
-                                currentIndex: page.persistedExportSettings.bitRate <= 128000
-                                    ? 0 : page.persistedExportSettings.bitRate <= 192000
-                                    ? 1 : page.persistedExportSettings.bitRate <= 256000
+                                currentIndex: page.sharedExportSettings.bitRate <= 128000
+                                    ? 0 : page.sharedExportSettings.bitRate <= 192000
+                                    ? 1 : page.sharedExportSettings.bitRate <= 256000
                                     ? 2 : 3
                                 onActivated: page.updateExportSetting(
                                     "bitRate", [128000, 192000, 256000, 320000][currentIndex])
@@ -1192,7 +1223,7 @@ Rectangle {
                                 Layout.columnSpan: 2
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 32
-                                text: page.persistedExportSettings.outputDirectory || "--"
+                                text: page.sharedExportSettings.outputDirectory || "--"
                                 readOnly: true
                                 selectByMouse: true
                             }

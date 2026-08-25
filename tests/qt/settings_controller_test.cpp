@@ -362,6 +362,22 @@ void SettingsControllerTest::cacheLimitMigratesOnlyUntouchedLegacyDefault()
     QCOMPARE(persisted.value(QStringLiteral("cache/sizeLimitMB")).toInt(), 10 * 1024);
 
     persisted.clear();
+    // A real pre-schema install wrote the historical default without either
+    // marker.  It is migrated exactly once and recorded as schema 2.
+    persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 1024);
+    SettingsController unmarkedLegacyDefault;
+    QCOMPARE(unmarkedLegacyDefault.cacheSizeLimitMB(), 10 * 1024);
+    QCOMPARE(persisted.value(QStringLiteral("cache/schemaVersion")).toInt(), 2);
+
+    persisted.clear();
+    // Explicit user interaction records the marker even when the selected
+    // value happens to equal the former default.
+    persisted.setValue(QStringLiteral("cache/sizeLimitUserModified"), true);
+    persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 1024);
+    SettingsController explicitlyCustomized;
+    QCOMPARE(explicitlyCustomized.cacheSizeLimitMB(), 1024);
+
+    persisted.clear();
     persisted.setValue(QStringLiteral("cache/schemaVersion"), 1);
     persisted.setValue(QStringLiteral("cache/sizeLimitUserModified"), true);
     persisted.setValue(QStringLiteral("cache/sizeLimitMB"), 1024);

@@ -36,25 +36,25 @@ Rectangle {
     property bool extractAudio: extractAudioCheck.checked
     property bool volumeNormalize: false
     property string selectedBitrateMode: ""
+    property string lastCapabilityKey: ""
+    property string pendingUserBitrateMode: ""
     signal chooseOutputDirectory()
     signal outputDirectoryEdited(string directory)
 
     function resetCapabilityParameters() {
         const modes = capability.bitrateModes || []
-        const previousMode = selectedBitrateMode
         selectedBitrateMode = ""
         for (let index = 0; index < modes.length; ++index) {
-            if (modes[index].key === previousMode) {
-                selectedBitrateMode = modes[index].key
+            if (modes[index].key === pendingUserBitrateMode) {
+                selectedBitrateMode = pendingUserBitrateMode
+                pendingUserBitrateMode = ""
                 break
             }
         }
-        if (selectedBitrateMode === "") {
-            for (let index = 0; index < modes.length; ++index) {
-                if (modes[index].default) {
-                    selectedBitrateMode = modes[index].key
-                    break
-                }
+        for (let index = 0; index < modes.length; ++index) {
+            if (selectedBitrateMode === "" && modes[index].default) {
+                selectedBitrateMode = modes[index].key
+                break
             }
         }
         if (selectedBitrateMode === "" && modes.length > 0)
@@ -84,19 +84,37 @@ Rectangle {
         bitDepthBox.currentIndex = 0
     }
 
+    function syncGlobalNumericDefaults() {
+        if (parameterKind === "bitrate" && bitRateBox.count > 0) {
+            const index = bitRateBox.indexOfValue(SettingsController.transcodeBitrateKbps * 1000)
+            if (index >= 0) bitRateBox.currentIndex = index
+        }
+        const rate = sampleRateBox.indexOfValue(SettingsController.transcodeSampleRateHz)
+        if (rate >= 0) sampleRateBox.currentIndex = rate
+        const channels = channelBox.indexOfValue(SettingsController.transcodeChannels === 1 ? "mono" : "stereo")
+        if (channels >= 0) channelBox.currentIndex = channels
+    }
+
     Connections {
         target: converter
         function onCurrentCapabilityChanged() {
-            root.resetCapabilityParameters()
+            const key = String(root.capability.key || "")
+            if (key !== root.lastCapabilityKey) {
+                root.lastCapabilityKey = key
+                root.resetCapabilityParameters()
+            }
         }
     }
-    Component.onCompleted: resetCapabilityParameters()
+    Component.onCompleted: {
+        lastCapabilityKey = String(capability.key || "")
+        resetCapabilityParameters()
+    }
 
     Connections {
         target: SettingsController
-        function onTranscodeBitrateKbpsChanged() { root.resetCapabilityParameters() }
-        function onTranscodeSampleRateHzChanged() { root.resetCapabilityParameters() }
-        function onTranscodeChannelsChanged() { root.resetCapabilityParameters() }
+        function onTranscodeBitrateKbpsChanged() { root.syncGlobalNumericDefaults() }
+        function onTranscodeSampleRateHzChanged() { root.syncGlobalNumericDefaults() }
+        function onTranscodeChannelsChanged() { root.syncGlobalNumericDefaults() }
     }
 
     ButtonGroup {
@@ -293,7 +311,14 @@ Rectangle {
                             checked: root.selectedBitrateMode === modelData.key
                             Layout.fillWidth: true
                             Layout.preferredHeight: 32
-                            onClicked: root.selectedBitrateMode = modelData.key
+                            onClicked: {
+                                // Capability refresh may be delivered after the
+                                // click; mark this key observed so that late
+                                // notification cannot replace the user's mode.
+                                root.lastCapabilityKey = String(root.capability.key || "")
+                                root.pendingUserBitrateMode = modelData.key
+                                root.selectedBitrateMode = modelData.key
+                            }
                         background: Rectangle { color: parent.checked ? Theme.activeSelection : Theme.elevated; border.color: parent.checked ? Theme.accent : Theme.border; radius: 5 }
                             contentItem: Text { text: parent.text; color: Theme.primaryText; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         }

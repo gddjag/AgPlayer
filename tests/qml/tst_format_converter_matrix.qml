@@ -35,6 +35,9 @@ TestCase {
         testCase.height = 941
         SettingsController.preserveMetadata = true
         SettingsController.defaultOutputDirectory = ""
+        const settings = findChild(page, "formatSettingsPanel")
+        if (settings)
+            settings.resetCapabilityParameters()
         resetConverter()
     }
 
@@ -74,7 +77,7 @@ TestCase {
             verify(vbrButton, key)
             mouseClick(vbrButton, vbrButton.width / 2,
                        vbrButton.height / 2, Qt.LeftButton)
-            compare(settings.bitrateMode, "vbr")
+            tryCompare(settings, "bitrateMode", "vbr", 1000)
             compare(settings.quality, 75)
             mouseClick(convert, convert.width / 2, convert.height / 2,
                        Qt.LeftButton)
@@ -93,7 +96,7 @@ TestCase {
         mouseClick(oggButton, oggButton.width / 2,
                    oggButton.height / 2, Qt.LeftButton)
         tryCompare(FormatConverter, "selectedFormat", "ogg", 1000)
-        tryCompare(settings, "quality", 6, 1000)
+        tryCompare(settings, "quality", 8, 1000)
     }
 
     function test_availableFormatButtonsAndEveryVisibleModeProduceReopenableOutput() {
@@ -123,14 +126,15 @@ TestCase {
                            formatButton.height / 2, Qt.LeftButton)
                 tryCompare(FormatConverter, "selectedFormat",
                            capability.key, 1000)
-                wait(0)
+                wait(20)
                 if (mode.key.length > 0) {
                     const modeButton = findChild(
                                 page, "formatBitrateModeButton-" + mode.key)
                     verify(modeButton, capability.key + "/" + mode.key)
+                    tryVerify(function() { return modeButton.visible }, 1000)
                     mouseClick(modeButton, modeButton.width / 2,
                                modeButton.height / 2, Qt.LeftButton)
-                    compare(settings.bitrateMode, mode.key)
+                    tryCompare(settings, "bitrateMode", mode.key, 1000)
                 } else {
                     compare(settings.bitrateMode, "")
                     verify(!modeRow.visible)

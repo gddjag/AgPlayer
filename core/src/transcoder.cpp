@@ -702,8 +702,9 @@ ag_result open_encoder(const std::string& output_path,
             if (avformat_query_codec(enc.fmt_ctx->oformat,
                                      source->codecpar->codec_id,
                                      FF_COMPLIANCE_NORMAL) <= 0) {
-                error = "Selected container cannot preserve the cover image";
-                return AG_UNSUPPORTED_FORMAT;
+                // Cover media is optional.  Preserve audio when this specific
+                // image codec cannot be muxed by the selected output.
+                break;
             }
             enc.cover_stream = avformat_new_stream(enc.fmt_ctx, nullptr);
             if (enc.cover_stream == nullptr
