@@ -4002,4 +4002,16 @@
     <message><source>自定义</source><translation>Tùy chỉnh</translation></message>
     <message><source>自定义颜色 %1</source><translation>Màu tùy chỉnh %1</translation></message>
 </context>
+<context>
+    <name>AgColorPicker</name>
+    <message><source>十六进制颜色</source><translation>Màu hệ thập lục phân</translation></message>
+    <message><source>关闭颜色选择器</source><translation>Đóng bộ chọn màu</translation></message>
+    <message><source>红色通道</source><translation>Kênh đỏ</translation></message>
+    <message><source>绿色通道</source><translation>Kênh lục</translation></message>
+    <message><source>蓝色通道</source><translation>Kênh lam</translation></message>
+    <message><source>红色通道滑块</source><translation>Thanh trượt kênh đỏ</translation></message>
+    <message><source>绿色通道滑块</source><translation>Thanh trượt kênh lục</translation></message>
+    <message><source>蓝色通道滑块</source><translation>Thanh trượt kênh lam</translation></message>
+    <message><source>候选颜色 %1</source><translation>Màu ứng viên %1</translation></message>
+</context>
 </TS>

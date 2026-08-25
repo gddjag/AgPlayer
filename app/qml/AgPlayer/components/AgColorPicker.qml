@@ -145,9 +145,9 @@ Popup {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 31
                 radius: 8
-                color: Theme.panel
-                border.width: 1
-                border.color: hexInput.activeFocus ? Theme.primaryText
+                    color: Theme.panel
+                    border.width: 1
+                    border.color: hexInput.activeFocus ? Theme.accent
                                                    : Theme.border
 
                 TextInput {
@@ -166,6 +166,8 @@ Popup {
                     selectByMouse: true
                     maximumLength: 7
                     inputMethodHints: Qt.ImhPreferUppercase
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: qsTr("十六进制颜色")
 
                     onEditingFinished: {
                         if (!root.setBaseHex(text))
@@ -180,6 +182,8 @@ Popup {
                 Layout.preferredWidth: 25
                 Layout.preferredHeight: 25
                 hoverEnabled: true
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("关闭颜色选择器")
                 onClicked: root.close()
 
                 contentItem: Text {
@@ -194,6 +198,8 @@ Popup {
                     radius: width / 2
                     color: closeButton.hovered ? Theme.hoverSurface
                                                : "transparent"
+                    border.width: closeButton.activeFocus ? 2 : 0
+                    border.color: Theme.accent
                 }
             }
         }
@@ -213,6 +219,14 @@ Popup {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 4
+                        color: "transparent"
+                        border.width: redInput.activeFocus ? 1 : 0
+                        border.color: Theme.accent
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -232,6 +246,8 @@ Popup {
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
                             validator: IntValidator { bottom: 0; top: 255 }
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("红色通道")
                             onEditingFinished: root.setRgbFromInputs()
                             onActiveFocusChanged: {
                                 if (!activeFocus)
@@ -256,6 +272,14 @@ Popup {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 4
+                        color: "transparent"
+                        border.width: greenInput.activeFocus ? 1 : 0
+                        border.color: Theme.accent
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -275,6 +299,8 @@ Popup {
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
                             validator: IntValidator { bottom: 0; top: 255 }
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("绿色通道")
                             onEditingFinished: root.setRgbFromInputs()
                             onActiveFocusChanged: {
                                 if (!activeFocus)
@@ -299,6 +325,14 @@ Popup {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 4
+                        color: "transparent"
+                        border.width: blueInput.activeFocus ? 1 : 0
+                        border.color: Theme.accent
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -318,6 +352,8 @@ Popup {
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
                             validator: IntValidator { bottom: 0; top: 255 }
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("蓝色通道")
                             onEditingFinished: root.setRgbFromInputs()
                             onActiveFocusChanged: {
                                 if (!activeFocus)
@@ -348,6 +384,8 @@ Popup {
                 to: 255
                 stepSize: 1
                 live: true
+                Accessible.role: Accessible.Slider
+                Accessible.name: qsTr("红色通道滑块")
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("r", value)
 
@@ -384,6 +422,8 @@ Popup {
                 to: 255
                 stepSize: 1
                 live: true
+                Accessible.role: Accessible.Slider
+                Accessible.name: qsTr("绿色通道滑块")
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("g", value)
 
@@ -420,6 +460,8 @@ Popup {
                 to: 255
                 stepSize: 1
                 live: true
+                Accessible.role: Accessible.Slider
+                Accessible.name: qsTr("蓝色通道滑块")
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("b", value)
 
@@ -471,6 +513,8 @@ Popup {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 44
                     hoverEnabled: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("候选颜色 %1").arg(candidateColor)
                     onClicked: {
                         root.selectedColor = candidateColor
                         root.colorAccepted(root.selectedColor)
@@ -484,7 +528,8 @@ Popup {
                         border.color: candidateButton.selected
                                       ? (ColorScale.isLight(candidateButton.candidateColor)
                                          ? "#1B1B1B" : "#FFFFFF")
-                                      : Theme.border
+                                      : (candidateButton.activeFocus
+                                         ? Theme.accent : Theme.border)
 
                         Rectangle {
                             anchors.fill: parent
@@ -516,13 +561,13 @@ Popup {
                             radius: 7
                             color: ColorScale.isLight(candidateButton.candidateColor)
                                    ? "#1B1B1B" : "#FFFFFF"
-                            Text {
+                            ThemedIcon {
                                 anchors.centerIn: parent
-                                text: "✓"
-                                color: ColorScale.isLight(candidateButton.candidateColor)
-                                       ? "#FFFFFF" : "#1B1B1B"
-                                font.pixelSize: 9
-                                font.bold: true
+                                source: Theme.icon("check-line")
+                                tint: ColorScale.isLight(candidateButton.candidateColor)
+                                      ? "#FFFFFF" : "#1B1B1B"
+                                sourceSize.width: 10
+                                sourceSize.height: 10
                             }
                         }
                     }
@@ -564,7 +609,7 @@ Popup {
         radius: height / 2
         color: "#FFFFFF"
         border.width: 1
-        border.color: "#B8B8B8"
+        border.color: slider.activeFocus ? Theme.accent : "#B8B8B8"
 
         Rectangle {
             anchors.centerIn: parent

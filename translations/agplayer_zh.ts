@@ -4059,4 +4059,16 @@
     <message><source>自定义</source><translation>自定义</translation></message>
     <message><source>自定义颜色 %1</source><translation>自定义颜色 %1</translation></message>
 </context>
+<context>
+    <name>AgColorPicker</name>
+    <message><source>十六进制颜色</source><translation>十六进制颜色</translation></message>
+    <message><source>关闭颜色选择器</source><translation>关闭颜色选择器</translation></message>
+    <message><source>红色通道</source><translation>红色通道</translation></message>
+    <message><source>绿色通道</source><translation>绿色通道</translation></message>
+    <message><source>蓝色通道</source><translation>蓝色通道</translation></message>
+    <message><source>红色通道滑块</source><translation>红色通道滑块</translation></message>
+    <message><source>绿色通道滑块</source><translation>绿色通道滑块</translation></message>
+    <message><source>蓝色通道滑块</source><translation>蓝色通道滑块</translation></message>
+    <message><source>候选颜色 %1</source><translation>候选颜色 %1</translation></message>
+</context>
 </TS>

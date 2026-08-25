@@ -12,7 +12,7 @@ TestCase {
     height: 640
 
     property int savedThemeMode: 0
-    property string savedWaveformSolidBaseColor: ""
+    property string savedWaveformUnplayedColor: ""
     property var savedThemeChoices: ({})
 
     Item {
@@ -32,8 +32,8 @@ TestCase {
                     ? testCase.Window.window.contentItem : null
             x: Math.round(((parent ? parent.width : 0) - width) / 2)
             y: (parent ? parent.height : 0) - height - 28
-            colorValue: SettingsController.waveformSolidBaseColor
-            targetProperty: "waveformSolidBaseColor"
+            colorValue: SettingsController.waveformUnplayedColor
+            targetProperty: "waveformUnplayedColor"
         }
 
         ThemeColorSelector {
@@ -100,7 +100,7 @@ TestCase {
         picker.close()
         acceptedSpy.clear()
         integratedEditedSpy.clear()
-        savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
+        savedWaveformUnplayedColor = SettingsController.waveformUnplayedColor
         savedThemeChoices = {
             accentMode: SettingsController.accentMode,
             accentPreset: SettingsController.accentPreset,
@@ -119,7 +119,7 @@ TestCase {
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
         if (integratedPicker)
             integratedPicker.close()
-        SettingsController.waveformSolidBaseColor = savedWaveformSolidBaseColor
+        SettingsController.waveformUnplayedColor = savedWaveformUnplayedColor
         SettingsController.accentMode = savedThemeChoices.accentMode
         SettingsController.accentPreset = savedThemeChoices.accentPreset
         SettingsController.accentCustomColor = savedThemeChoices.accentCustomColor
@@ -357,7 +357,7 @@ TestCase {
     }
 
     function test_color_field_commits_candidate_and_cancellation_preserves_setting() {
-        SettingsController.waveformSolidBaseColor = "#63316B"
+        SettingsController.waveformUnplayedColor = "#63316B"
         tryVerify(function() {
             return normalizedColor(integratedField.colorValue) === "#63316B"
         })
@@ -379,7 +379,7 @@ TestCase {
         mouseClick(findChild(integratedPicker.contentItem, "colorCandidate-0"))
 
         tryVerify(function() {
-            return normalizedColor(SettingsController.waveformSolidBaseColor)
+            return normalizedColor(SettingsController.waveformUnplayedColor)
                     === "#F8EBFA"
         })
         compare(integratedEditedSpy.count, 1)
@@ -392,13 +392,13 @@ TestCase {
         mouseClick(findChild(integratedPicker, "colorPickerClose"))
 
         compare(integratedPicker.visible, false)
-        compare(normalizedColor(SettingsController.waveformSolidBaseColor),
+        compare(normalizedColor(SettingsController.waveformUnplayedColor),
                 "#F8EBFA")
         compare(integratedEditedSpy.count, 1)
     }
 
     function test_color_field_is_focusable_accessible_and_keyboard_operable() {
-        SettingsController.waveformSolidBaseColor = "#63316B"
+        SettingsController.waveformUnplayedColor = "#63316B"
         tryVerify(function() {
             return normalizedColor(integratedField.colorValue) === "#63316B"
         })
@@ -413,15 +413,16 @@ TestCase {
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
         tryCompare(integratedPicker, "visible", true)
         integratedPicker.close()
+        tryCompare(integratedField, "activeFocus", true)
 
-        integratedField.forceActiveFocus()
-        verify(integratedField.activeFocus)
         keyClick(Qt.Key_Return)
         tryCompare(integratedPicker, "visible", true)
-        integratedPicker.close()
+        keyClick(Qt.Key_Escape)
+        tryCompare(integratedPicker, "visible", false)
+        tryCompare(integratedField, "activeFocus", true)
 
         compare(integratedEditedSpy.count, 0)
-        compare(normalizedColor(SettingsController.waveformSolidBaseColor),
+        compare(normalizedColor(SettingsController.waveformUnplayedColor),
                 "#63316B")
     }
 
@@ -443,17 +444,38 @@ TestCase {
         compare(acceptedSpy.count, 0)
     }
 
+    function test_picker_controls_have_names_and_roles() {
+        openReferenceColor()
+        var hex = findChild(picker, "colorPickerHex")
+        var close = findChild(picker, "colorPickerClose")
+        var redSlider = findChild(picker, "colorPickerRSlider")
+        var candidate = findChild(picker.contentItem, "colorCandidate-0")
+        verify(hex && close && redSlider && candidate)
+        compare(hex.Accessible.role, Accessible.EditableText)
+        verify(hex.Accessible.name.length > 0)
+        compare(close.Accessible.role, Accessible.Button)
+        verify(close.Accessible.name.length > 0)
+        compare(redSlider.Accessible.role, Accessible.Slider)
+        verify(redSlider.Accessible.name.length > 0)
+        compare(candidate.Accessible.role, Accessible.Button)
+        verify(candidate.Accessible.name.indexOf("#") >= 0)
+    }
+
     function test_theme_selectors_apply_presets_and_keyboard_activation() {
         SettingsController.accentMode = 0
+        var defaultButton = findChild(accentSelector, "accentSelectorDefault")
         var blue = findChild(accentSelector, "accentSelectorPreset-systemBlue")
-        verify(blue)
+        verify(defaultButton && blue)
+        verify(defaultButton.checked)
         compare(blue.Accessible.role, Accessible.Button)
+        verify(!blue.selectionCueVisible)
         blue.forceActiveFocus()
         keyClick(Qt.Key_Space)
         tryCompare(SettingsController, "accentMode", 1)
         tryCompare(SettingsController, "accentPreset", "systemBlue")
         verify(blue.checked)
-        verify(blue.Accessible.name.indexOf("selected") >= 0)
+        verify(blue.Accessible.name.indexOf("systemBlue") >= 0)
+        verify(blue.selectionCueVisible)
     }
 
     function test_theme_selectors_keep_blue_accent_and_purple_highlight_independent() {
@@ -462,7 +484,8 @@ TestCase {
         SettingsController.highlightFollowAccent = false
         var purple = findChild(highlightSelector, "highlightSelectorPreset-purple")
         verify(purple)
-        mouseClick(purple)
+        tryCompare(highlightSelector, "enabled", true)
+        purple.clicked()
         tryCompare(SettingsController, "highlightMode", 1)
         tryCompare(SettingsController, "highlightPreset", "purple")
         compare(SettingsController.accentPreset, "systemBlue")
@@ -487,7 +510,7 @@ TestCase {
         SettingsController.accentMode = 0
         var custom = findChild(accentSelector, "accentSelectorCustomField")
         verify(custom)
-        mouseClick(custom)
+        custom.clicked()
         var customPicker = findChild(custom, "colorFieldPicker")
         tryCompare(customPicker, "visible", true)
         tryVerify(function() {
@@ -495,7 +518,8 @@ TestCase {
         })
         mouseClick(findChild(customPicker.contentItem, "colorCandidate-0"))
         tryCompare(SettingsController, "accentMode", 2)
-        tryCompare(SettingsController, "accentCustomColor", "#F8EBFA")
+        tryCompare(SettingsController, "accentCustomColor", "#FFF5EC")
+        verify(custom.selectionCueVisible)
         SettingsController.cancelEdit()
         tryCompare(SettingsController, "accentMode", 0)
 

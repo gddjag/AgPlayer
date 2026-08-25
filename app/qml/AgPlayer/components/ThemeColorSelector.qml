@@ -30,13 +30,8 @@ ColumnLayout {
 
     Layout.fillWidth: true
     spacing: Theme.spacingXs
-
-    Label {
-        text: root.title
-        color: root.enabled ? Theme.primaryText : Theme.disabledText
-        font.family: Theme.fontPrimary
-        font.pixelSize: 13
-    }
+    Accessible.role: Accessible.Grouping
+    Accessible.name: root.title
 
     RowLayout {
         Layout.fillWidth: true
@@ -48,6 +43,7 @@ ColumnLayout {
             checkable: true
             checked: root.selectedMode === 0
             text: qsTr("默认")
+            Accessible.role: Accessible.Button
             Accessible.name: text + (checked ? qsTr("，已选择") : "")
             onClicked: root.defaultRequested()
 
@@ -65,7 +61,8 @@ ColumnLayout {
                 radius: Theme.radiusSm
                 color: defaultButton.checked ? Theme.accent : Theme.background
                 border.width: defaultButton.checked ? 2 : 1
-                border.color: defaultButton.checked ? Theme.focus : Theme.border
+                border.color: defaultButton.activeFocus || defaultButton.checked
+                              ? Theme.accent : Theme.border
             }
         }
 
@@ -77,12 +74,14 @@ ColumnLayout {
                 required property var modelData
                 objectName: root.objectNamePrefix + "Preset-" + modelData.id
                 checkable: true
+                property bool selectionCueVisible: swatch.checked
                 checked: root.selectedMode === 1
                          && root.selectedPreset === modelData.id
                 focusPolicy: Qt.StrongFocus
                 implicitWidth: checked ? 26 : 22
                 implicitHeight: checked ? 26 : 22
                 padding: 0
+                Accessible.role: Accessible.Button
                 Accessible.name: root.title + " " + modelData.id
                                  + (checked ? qsTr("，已选择") : "")
                 onClicked: root.presetRequested(modelData.id)
@@ -106,7 +105,7 @@ ColumnLayout {
                     border.color: swatch.checked
                                   ? (swatch.modelData.id === "gold"
                                      ? "#1B1B1B" : "#FFFFFF")
-                                  : Theme.border
+                                  : (swatch.activeFocus ? Theme.accent : Theme.border)
 
                     Rectangle {
                         anchors.fill: parent
@@ -120,14 +119,13 @@ ColumnLayout {
                                       : "transparent"
                     }
 
-                    Text {
+                    ThemedIcon {
                         anchors.centerIn: parent
                         visible: swatch.checked
-                        text: "✓"
-                        color: swatch.modelData.id === "gold"
-                               ? "#1B1B1B" : "#FFFFFF"
-                        font.pixelSize: 11
-                        font.bold: true
+                        source: Theme.icon("check-line")
+                        tint: swatch.modelData.id === "gold" ? "#1B1B1B" : "#FFFFFF"
+                        sourceSize.width: 12
+                        sourceSize.height: 12
                     }
                 }
             }
@@ -141,6 +139,7 @@ ColumnLayout {
                 id: customField
                 anchors.fill: parent
                 objectName: root.objectNamePrefix + "CustomField"
+                property bool selectionCueVisible: root.selectedMode === 2
                 colorValue: root.customColor
                 enabled: root.enabled
                 Accessible.name: qsTr("自定义颜色 %1").arg(root.customColor)
@@ -155,20 +154,20 @@ ColumnLayout {
                 radius: Theme.radiusSm + 2
                 color: "transparent"
                 border.width: root.selectedMode === 2 ? 2 : 0
-                border.color: Theme.focus
+                border.color: Theme.accent
                 visible: root.selectedMode === 2
                 z: 1
             }
 
-            Text {
+            ThemedIcon {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: -4
                 visible: root.selectedMode === 2
-                text: "✓"
-                color: Theme.primaryText
-                font.pixelSize: 11
-                font.bold: true
+                source: Theme.icon("check-line")
+                tint: Theme.primaryText
+                sourceSize.width: 12
+                sourceSize.height: 12
                 z: 2
             }
         }

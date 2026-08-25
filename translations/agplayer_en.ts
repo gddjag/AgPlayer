@@ -4059,4 +4059,16 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>自定义</source><translation>Custom</translation></message>
     <message><source>自定义颜色 %1</source><translation>Custom color %1</translation></message>
 </context>
+<context>
+    <name>AgColorPicker</name>
+    <message><source>十六进制颜色</source><translation>Hex color</translation></message>
+    <message><source>关闭颜色选择器</source><translation>Close color picker</translation></message>
+    <message><source>红色通道</source><translation>Red channel</translation></message>
+    <message><source>绿色通道</source><translation>Green channel</translation></message>
+    <message><source>蓝色通道</source><translation>Blue channel</translation></message>
+    <message><source>红色通道滑块</source><translation>Red channel slider</translation></message>
+    <message><source>绿色通道滑块</source><translation>Green channel slider</translation></message>
+    <message><source>蓝色通道滑块</source><translation>Blue channel slider</translation></message>
+    <message><source>候选颜色 %1</source><translation>Candidate color %1</translation></message>
+</context>
 </TS>
