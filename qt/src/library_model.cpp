@@ -1,4 +1,5 @@
 #include "library_model.hpp"
+#include "metadata_text.hpp"
 
 #include "agplayer/c_api.h"
 
@@ -31,7 +32,7 @@ QString pathKey(const QString& path)
 
 QString copiedMetadata(const char* value)
 {
-    return value == nullptr ? QString{} : QString::fromUtf8(value);
+    return agplayer::qt::decodeMetadataText(value);
 }
 
 QString coverSuffix(const QString& mimeType)

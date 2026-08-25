@@ -483,20 +483,12 @@ Rectangle {
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformMode === 0
-                           ? SettingsController.waveformSolidBaseColor
-                           : SettingsController.waveformMode === 2
-                             ? (SettingsController.spectrumColorMode === 0
-                                ? SettingsController.spectrumSolidColor
-                                : SettingsController.spectrumRgbStartColor)
-                             : SettingsController.waveformRgbBaseColor
-                progressColor: SettingsController.waveformMode === 0
-                               ? SettingsController.waveformSolidProgressColor
-                               : SettingsController.waveformMode === 2
-                                 ? (SettingsController.spectrumColorMode === 0
-                                    ? SettingsController.spectrumSolidColor
-                                    : SettingsController.spectrumRgbMiddleColor)
-                                 : SettingsController.waveformRgbStartColor
+                baseColor: SettingsController.waveformMode === 2
+                           ? SettingsController.spectrumUnplayedColor
+                           : SettingsController.waveformUnplayedColor
+                progressColor: SettingsController.waveformMode === 2
+                               ? SettingsController.spectrumPlayedColor
+                               : SettingsController.waveformPlayedColor
                 gradientStartColor: baseColor
                 gradientMiddleColor: baseColor
                 gradientEndColor: baseColor

@@ -52,7 +52,9 @@ TrackWaveformThumbnailProvider::TrackWaveformThumbnailProvider(
     : QObject(parent)
     , cacheDirectory_(std::move(cacheDirectory))
 {
-    workerPool_.setMaxThreadCount(1);
+    // One canceled cache read may still be inside filesystem code.  Reserve a
+    // second low-priority worker so a newly visible row can start immediately.
+    workerPool_.setMaxThreadCount(2);
     workerPool_.setThreadPriority(QThread::LowPriority);
     connect(&watcher_, &QFutureWatcher<LoadResult>::finished,
             this, &TrackWaveformThumbnailProvider::finishActive);
@@ -120,7 +122,8 @@ QColor TrackWaveformThumbnailProvider::colorForTrackId(const QString& trackId)
 
 void TrackWaveformThumbnailProvider::request(const QString& trackId,
                                              const QString& sourcePath,
-                                             const quint64 generation)
+                                             const quint64 generation,
+                                             const bool visiblePriority)
 {
     auto cached = cache_.find(trackId);
     if (cached != cache_.end() && cached->sourcePath == sourcePath) {
@@ -137,6 +140,7 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
         && activeRequest_->trackId == trackId) {
         activeRequest_->sourcePath = sourcePath;
         activeRequest_->generation = generation;
+        activeRequest_->visiblePriority = visiblePriority;
         activeRequest_->canceled = false;
         return;
     }
@@ -146,7 +150,13 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
         Request& queued = pending_[queuedIndex];
         queued.sourcePath = sourcePath;
         queued.generation = generation;
+        queued.visiblePriority = visiblePriority;
         queued.canceled = false;
+        if (visiblePriority) {
+            const Request promoted = queued;
+            pending_.removeAt(queuedIndex);
+            pending_.prepend(promoted);
+        }
         return;
     }
 
@@ -162,9 +172,13 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
 
     std::optional<Request> dropped;
     if (pending_.size() >= kMaxQueuedJobs) {
-        dropped = pending_.takeFirst();
+        // Front is reserved for visible rows; discard the oldest background
+        // work first so an off-screen burst cannot evict viewport work.
+        dropped = pending_.takeLast();
     }
-    pending_.append(Request{trackId, sourcePath, generation, false});
+    const Request request{trackId, sourcePath, generation, visiblePriority, false};
+    if (visiblePriority) pending_.prepend(request);
+    else pending_.append(request);
     startNext();
     maxInFlightTracks_ = std::max(
         maxInFlightTracks_,
@@ -182,6 +196,13 @@ void TrackWaveformThumbnailProvider::cancel(const QString& trackId,
         && activeRequest_->trackId == trackId
         && activeRequest_->generation == generation) {
         activeRequest_->canceled = true;
+        // QFuture cancellation is cooperative, but detaching the watcher lets
+        // a visible replacement use the second bounded worker immediately.
+        watcher_.future().cancel();
+        activeRequest_.reset();
+        activeWorkers_ = 0;
+        startNext();
+        return;
     }
 
     const int queuedIndex = queuedIndexForTrack(trackId);

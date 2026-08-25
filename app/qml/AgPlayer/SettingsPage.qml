@@ -889,7 +889,7 @@ Item {
         id: thumb
         property int mode: 0
         property bool selected: false
-        property string modeLabel: mode === 0 ? qsTr("纯色波形") : (mode === 1 ? qsTr("RGB波形") : qsTr("频谱波形"))
+        property string modeLabel: mode === 0 ? qsTr("纯色波形") : (mode === 1 ? qsTr("自定义波形") : qsTr("频谱波形"))
         signal clicked()
 
         width: 96
@@ -923,12 +923,7 @@ Item {
                     ctx.stroke()
 
                     if (mode === 1) {
-                        // RGB gradient waveform using project RGBA layers
-                        var rGrad = ctx.createLinearGradient(0, 0, width, 0)
-                        rGrad.addColorStop(0, SettingsController.waveformRgbStartColor)
-                        rGrad.addColorStop(0.5, SettingsController.waveformRgbMiddleColor)
-                        rGrad.addColorStop(1, SettingsController.waveformRgbEndColor)
-                        ctx.strokeStyle = rGrad
+                        ctx.strokeStyle = SettingsController.waveformPlayedColor
                         ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (var x = 0; x <= width; x += 2) {
@@ -956,7 +951,7 @@ Item {
                         }
                     } else {
                         // Solid cyan filled waveform
-                        ctx.fillStyle = SettingsController.waveformSolidBaseColor
+                        ctx.fillStyle = SettingsController.waveformUnplayedColor
                         ctx.beginPath()
                         ctx.moveTo(0, cy)
                         for (var sx = 0; sx <= width; sx += 2) {
@@ -969,7 +964,7 @@ Item {
                         ctx.closePath()
                         ctx.fill()
 
-                        ctx.strokeStyle = SettingsController.waveformSolidProgressColor
+                        ctx.strokeStyle = SettingsController.waveformPlayedColor
                         ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (sx = 0; sx <= width; sx += 2) {
@@ -1016,13 +1011,8 @@ Item {
             target: SettingsController
             function onWaveformHeightChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformThicknessChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformSolidBaseColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformSolidProgressColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformRgbBaseColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformRgbProgressChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformUnplayedColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformPlayedColorChanged() { waveformPreviewCanvas.requestPaint() }
         }
 
         MouseArea {
@@ -1113,6 +1103,7 @@ Item {
                 SettingRow {
                     label: qsTr("语言")
                     SettingCombo {
+                        objectName: "languageCombo"
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
                             { text: "🇨🇳 中文", value: "zh" },
@@ -1567,7 +1558,7 @@ Item {
                 }
 
                 SettingRow {
-                    visible: SettingsController.waveformMode !== 2
+                        visible: SettingsController.waveformMode !== 2
                     label: qsTr("波形高度")
                     SettingStepper {
                         objectName: "waveformHeightStepper"
@@ -1654,33 +1645,12 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
-                    label: SettingsController.waveformMode === 0
-                           ? qsTr("未播放 / 已播放")
-                           : qsTr("自定义未播放 / 已播放")
+                    label: qsTr("未播放 / 已播放")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
-
-                        ColorField {
-                            visible: SettingsController.waveformMode === 0
-                            colorValue: SettingsController.waveformSolidBaseColor
-                            targetProperty: "waveformSolidBaseColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode === 0
-                            colorValue: SettingsController.waveformSolidProgressColor
-                            targetProperty: "waveformSolidProgressColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.waveformRgbBaseColor
-                            targetProperty: "waveformRgbBaseColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.waveformRgbStartColor
-                            targetProperty: "waveformRgbStartColor"
-                        }
+                        ColorField { colorValue: SettingsController.waveformUnplayedColor; targetProperty: "waveformUnplayedColor" }
+                        ColorField { colorValue: SettingsController.waveformPlayedColor; targetProperty: "waveformPlayedColor" }
                     }
                 }
 
@@ -1711,19 +1681,12 @@ Item {
                             onActivated: SettingsController.spectrumColorMode = currentValue
                         }
                         ColorField {
-                            visible: SettingsController.spectrumColorMode === 0
-                            colorValue: SettingsController.spectrumSolidColor
-                            targetProperty: "spectrumSolidColor"
+                            colorValue: SettingsController.spectrumUnplayedColor
+                            targetProperty: "spectrumUnplayedColor"
                         }
                         ColorField {
-                            visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.spectrumRgbStartColor
-                            targetProperty: "spectrumRgbStartColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.spectrumRgbMiddleColor
-                            targetProperty: "spectrumRgbMiddleColor"
+                            colorValue: SettingsController.spectrumPlayedColor
+                            targetProperty: "spectrumPlayedColor"
                         }
                     }
                 }

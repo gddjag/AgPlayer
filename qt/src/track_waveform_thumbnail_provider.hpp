@@ -40,7 +40,8 @@ public:
 
     Q_INVOKABLE void request(const QString& trackId,
                              const QString& sourcePath,
-                             quint64 generation);
+                             quint64 generation,
+                             bool visiblePriority = false);
     Q_INVOKABLE void cancel(const QString& trackId, quint64 generation);
     Q_INVOKABLE [[nodiscard]] QVariantMap diagnostics() const;
     Q_INVOKABLE void refresh();
@@ -59,6 +60,7 @@ private:
         QString trackId;
         QString sourcePath;
         quint64 generation = 0U;
+        bool visiblePriority = false;
         bool canceled = false;
     };
 

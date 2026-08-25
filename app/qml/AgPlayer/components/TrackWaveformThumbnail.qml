@@ -37,7 +37,7 @@ Item {
             return
         requestedTrackId = trackId
         requestedGeneration = delegateGeneration
-        provider.request(requestedTrackId, sourcePath, requestedGeneration)
+        provider.request(requestedTrackId, sourcePath, requestedGeneration, true)
     }
 
     function scheduleRequest() {

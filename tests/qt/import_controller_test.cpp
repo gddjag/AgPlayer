@@ -1,5 +1,6 @@
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "metadata_text.hpp"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -42,6 +43,8 @@ private slots:
     void importsTenThousandLightweightRecordsWithinBudget();
     void alreadyImportedTracksAreSkippedWithoutFalseSuccess();
     void importedTracksAppearFirstInDiscoveryOrder();
+    void metadataDecoderPreservesUtf8AndUsesCp936Fallback();
+    void metadataDecoderRejectsAmbiguousMojibakeRepair();
 };
 
 namespace {
@@ -51,6 +54,25 @@ void createFile(const QString& path)
     QVERIFY(file.open(QIODevice::WriteOnly));
     QCOMPARE(file.write("audio"), 5);
 }
+}
+
+void ImportControllerTest::metadataDecoderPreservesUtf8AndUsesCp936Fallback()
+{
+    const QByteArray utf8 = QStringLiteral("Björk 音乐").toUtf8();
+    QCOMPARE(agplayer::qt::decodeMetadataText(utf8.constData()),
+             QStringLiteral("Björk 音乐"));
+    const QByteArray cp936("\xD6\xD0\xCE\xC4", 4);
+    QCOMPARE(agplayer::qt::decodeMetadataText(cp936.constData()),
+             QStringLiteral("中文"));
+}
+
+void ImportControllerTest::metadataDecoderRejectsAmbiguousMojibakeRepair()
+{
+    // These bytes are valid UTF-8 and can be deliberate literal text.  The
+    // decoder must not guess that they were intended to mean a different word.
+    const QByteArray literal = QString::fromUtf8("Ã©").toUtf8();
+    QCOMPARE(agplayer::qt::decodeMetadataText(literal.constData()),
+             QString::fromUtf8("Ã©"));
 }
 
 void ImportControllerTest::deduplicatesCanonicalPathsAndContinuesAfterFailure()

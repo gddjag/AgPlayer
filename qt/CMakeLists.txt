@@ -69,6 +69,8 @@ add_library(agplayer_qt STATIC
     src/tag_store.hpp
     src/metadata_editor.cpp
     src/metadata_editor.hpp
+    src/metadata_text.cpp
+    src/metadata_text.hpp
     src/native_drop_router.cpp
     src/native_drop_router.hpp
     src/playback_controller.cpp

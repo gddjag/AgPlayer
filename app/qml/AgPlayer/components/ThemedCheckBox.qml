@@ -14,15 +14,17 @@ T.CheckBox {
         x: 0
         y: (control.height - height) / 2
         radius: 4
-        color: control.checked ? Theme.cyan : "transparent"
-        border.color: control.activeFocus ? Theme.cyan
-                      : control.checked ? Theme.cyan : Theme.border
+        color: control.checked ? (control.enabled ? (control.hovered ? Theme.accent : Theme.cyan)
+                                                   : Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.45))
+                               : (control.hovered && control.enabled ? Theme.hoverSurface : "transparent")
+        border.color: control.activeFocus ? Theme.accent
+                      : control.checked ? (control.enabled ? Theme.cyan : Theme.border) : Theme.border
         border.width: control.activeFocus ? 2 : 1
 
         Text {
             anchors.centerIn: parent
             text: "✓"
-            color: Theme.accentText
+            color: control.enabled ? Theme.accentText : Theme.secondaryText
             font.pixelSize: 12
             visible: control.checked
         }

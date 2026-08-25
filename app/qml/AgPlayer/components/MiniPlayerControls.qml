@@ -218,20 +218,12 @@ Rectangle {
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
-                    baseColor: SettingsController.waveformMode === 0
-                               ? SettingsController.waveformSolidBaseColor
-                               : SettingsController.waveformMode === 2
-                                 ? (SettingsController.spectrumColorMode === 0
-                                    ? SettingsController.spectrumSolidColor
-                                    : SettingsController.spectrumRgbStartColor)
-                                 : SettingsController.waveformRgbBaseColor
-                    progressColor: SettingsController.waveformMode === 0
-                                   ? SettingsController.waveformSolidProgressColor
-                                   : SettingsController.waveformMode === 2
-                                     ? (SettingsController.spectrumColorMode === 0
-                                        ? SettingsController.spectrumSolidColor
-                                        : SettingsController.spectrumRgbMiddleColor)
-                                     : SettingsController.waveformRgbStartColor
+                    baseColor: SettingsController.waveformMode === 2
+                               ? SettingsController.spectrumUnplayedColor
+                               : SettingsController.waveformUnplayedColor
+                    progressColor: SettingsController.waveformMode === 2
+                                   ? SettingsController.spectrumPlayedColor
+                                   : SettingsController.waveformPlayedColor
                     gradientStartColor: baseColor
                     gradientMiddleColor: baseColor
                     gradientEndColor: baseColor
@@ -275,7 +267,7 @@ Rectangle {
                     x: waveform.waveformCursorX
                     width: 1
                     height: waveform.height
-                    color: SettingsController.waveformSolidProgressColor
+                    color: SettingsController.waveformPlayedColor
                     z: 10
                 }
                 Text {

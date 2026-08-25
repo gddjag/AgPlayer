@@ -141,11 +141,11 @@ TestCase {
 
     function test_editorWaveformUsesPlayerAppearanceSettings() {
         const originalMode = SettingsController.waveformMode
-        const originalColor = SettingsController.waveformSolidBaseColor
+        const originalColor = SettingsController.waveformUnplayedColor
         const originalDensity = SettingsController.waveformDensity
         const originalThickness = SettingsController.waveformThickness
         SettingsController.waveformMode = 0
-        SettingsController.waveformSolidBaseColor = "#123456"
+        SettingsController.waveformUnplayedColor = "#123456"
         SettingsController.waveformDensity = 3.5
         SettingsController.waveformThickness = 2.5
         const waveform = findChild(page, "editorWaveformGeometry")
@@ -157,7 +157,7 @@ TestCase {
                 AudioEditorController.viewport.visibleFrameCount
                     <= Math.max(2, Math.floor(waveform.width) * 2))
         SettingsController.waveformMode = originalMode
-        SettingsController.waveformSolidBaseColor = originalColor
+        SettingsController.waveformUnplayedColor = originalColor
         SettingsController.waveformDensity = originalDensity
         SettingsController.waveformThickness = originalThickness
     }

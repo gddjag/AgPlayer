@@ -27,6 +27,7 @@ private slots:
     void returnsEmptyForMissCorruptionMismatchAndEmptyMix();
     void coalescesSameTrackAndPublishesOnlyLatestGeneration();
     void cancelSuppressesMatchingGeneration();
+    void canceledOffscreenReadDoesNotBlockVisibleRequest();
     void retainsAtMost256SuccessfulTracks();
     void destructionWaitsSafelyForOutstandingRead();
     void queueFullCallbackReentryPreservesBoundsAndLatestRequest();
@@ -363,6 +364,28 @@ void TrackWaveformThumbnailProviderTest::cancelSuppressesMatchingGeneration()
     QCOMPARE(spy.count(), 0);
     QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
              0);
+}
+
+void TrackWaveformThumbnailProviderTest::canceledOffscreenReadDoesNotBlockVisibleRequest()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    const QString stale = createSource(directory, QStringLiteral("stale.wav"));
+    const QString visible = createSource(directory, QStringLiteral("visible.wav"));
+    QVERIFY(saveCache(cacheDirectory, stale, {0.25F}));
+    QVERIFY(saveCache(cacheDirectory, visible, {0.75F}));
+    TrackWaveformThumbnailProvider provider(cacheDirectory);
+    QSignalSpy spy(&provider, &TrackWaveformThumbnailProvider::thumbnailReady);
+    provider.request(QStringLiteral("offscreen"), stale, 1U);
+    provider.cancel(QStringLiteral("offscreen"), 1U);
+    provider.request(QStringLiteral("visible"), visible, 2U, true);
+    const QList<QVariant> result = waitForResult(spy);
+    QCOMPARE(result.at(0).toString(), QStringLiteral("visible"));
+    QCOMPARE(result.at(1).toULongLong(), 2U);
+    QCOMPARE(result.at(2).toByteArray().size(), kExpectedThumbnailBytes);
+    QTest::qWait(20);
+    QCOMPARE(spy.count(), 0);
 }
 
 void TrackWaveformThumbnailProviderTest::retainsAtMost256SuccessfulTracks()

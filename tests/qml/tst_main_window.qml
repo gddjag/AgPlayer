@@ -565,7 +565,10 @@ TestCase {
         verify(equalizerContent,
                "EQ must lay out at native size instead of shrinking a large canvas")
         compare(equalizerContent.scale, 1)
-        verify(equalizerTitle.font.pixelSize >= 15)
+        verify(equalizerTitle.font.pixelSize >= 14)
+        compare(findChild(window, "equalizerHeaderPanel").height, 38)
+        compare(findChild(window, "equalizerMinimizeButton").width, 30)
+        verify(findChild(window, "equalizerEnabledSwitch"))
         compare(button.contentItem.rotation, 90)
         var previousThemeMode = Theme.mode
         Theme.mode = 0
@@ -1263,6 +1266,33 @@ TestCase {
                                      LibraryModel.TrackIdRole))
         list.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
+    }
+
+    function test_track_favorite_and_rating_cells_receive_real_mouse_clicks() {
+        var ids = nativeDropHelper.ensureSortableTracks()
+        var rowIndex = LibraryModel.indexForTrackId(ids[0])
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        list.positionViewAtIndex(rowIndex, ListView.Center)
+        wait(30)
+        var row = list.itemAtIndex(rowIndex)
+        verify(row)
+        var favorite = findChild(row, "trackFavoriteCell")
+        var rating = findChild(row, "trackRatingCell")
+        verify(favorite && rating)
+        var initialFavorite = LibraryModel.data(LibraryModel.index(rowIndex, 0),
+                                                LibraryModel.FavoriteRole)
+        mouseClick(favorite, favorite.width / 2, favorite.height / 2)
+        tryVerify(function() {
+            return LibraryModel.data(LibraryModel.index(rowIndex, 0),
+                                     LibraryModel.FavoriteRole) === !initialFavorite
+        })
+        mouseClick(rating, rating.width * 0.1, rating.height / 2)
+        tryVerify(function() {
+            return LibraryModel.data(LibraryModel.index(rowIndex, 0),
+                                     LibraryModel.RatingRole) === 1
+        })
+        list.destroy()
     }
 
     function test_selected_tracks_drag_into_playlist_with_real_mouse() {
@@ -2131,9 +2161,9 @@ TestCase {
         })
         compare(waveform.visualMode, 0)
         compare(waveform.baseColor.toString(),
-                SettingsController.waveformSolidBaseColor)
+                SettingsController.waveformUnplayedColor)
         compare(waveform.progressColor.toString(),
-                SettingsController.waveformSolidProgressColor)
+                SettingsController.waveformPlayedColor)
 
         SettingsController.waveformMode = 1
         tryVerify(function() {
@@ -4234,6 +4264,25 @@ TestCase {
         mouseClick(exclusive, exclusive.width / 2, exclusive.height / 2)
         tryCompare(SettingsController, "exclusiveMode", false)
         tryCompare(exclusiveKnob, "x", exclusiveOffX)
+        page.close()
+    }
+
+    function test_settings_language_combo_renders_flag_and_language() {
+        var page = findChild(mainWindow, "settingsPage")
+        verify(page)
+        page.open()
+        page.selectedSection = 0
+        wait(150)
+        var combo = findChild(page, "languageCombo")
+        verify(combo)
+        compare(combo.valueModel.length, 4)
+        compare(combo.valueModel[0].text, "🇨🇳 中文")
+        compare(combo.valueModel[1].text, "🇺🇸 English")
+        compare(combo.valueModel[2].text, "🇹🇭 ภาษาไทย")
+        compare(combo.valueModel[3].text, "🇻🇳 Tiếng Việt")
+        SettingsController.language = "vi"
+        tryVerify(function() { return combo.contentItem.text === "🇻🇳 Tiếng Việt" })
+        SettingsController.language = "zh"
         page.close()
     }
 

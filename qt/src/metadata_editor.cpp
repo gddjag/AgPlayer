@@ -3,6 +3,7 @@
 #include "audio_file_discovery.hpp"
 #include "library_model.hpp"
 #include "metadata_writer.hpp"
+#include "metadata_text.hpp"
 
 #include "agplayer/c_api.h"
 
@@ -435,23 +436,23 @@ void MetadataEditor::startMetadataLoad(QList<QUrl> expandedUrls)
             ag_metadata* md = nullptr;
             if (ag_metadata_open(path.toUtf8().constData(), &md) == AG_OK
                 && md != nullptr) {
-                entry.title = QString::fromUtf8(ag_metadata_title(md));
-                entry.artist = QString::fromUtf8(ag_metadata_artist(md));
-                entry.album = QString::fromUtf8(ag_metadata_album(md));
-                entry.albumArtist = QString::fromUtf8(ag_metadata_album_artist(md));
-                entry.year = QString::fromUtf8(ag_metadata_year(md));
-                entry.customTag = QString::fromUtf8(ag_metadata_custom_tag(md));
-                entry.date = QString::fromUtf8(ag_metadata_date(md));
-                entry.genre = QString::fromUtf8(ag_metadata_genre(md));
-                entry.track = QString::fromUtf8(ag_metadata_track(md));
-                entry.disc = QString::fromUtf8(ag_metadata_disc(md));
-                entry.composer = QString::fromUtf8(ag_metadata_composer(md));
-                entry.comment = QString::fromUtf8(ag_metadata_comment(md));
-                entry.bpm = QString::fromUtf8(ag_metadata_bpm_tag(md));
-                entry.copyright = QString::fromUtf8(ag_metadata_copyright(md));
-                entry.encoder = QString::fromUtf8(ag_metadata_encoder(md));
-                entry.lyrics = QString::fromUtf8(ag_metadata_lyrics(md));
-                entry.format = QString::fromUtf8(ag_metadata_format(md));
+                entry.title = agplayer::qt::decodeMetadataText(ag_metadata_title(md));
+                entry.artist = agplayer::qt::decodeMetadataText(ag_metadata_artist(md));
+                entry.album = agplayer::qt::decodeMetadataText(ag_metadata_album(md));
+                entry.albumArtist = agplayer::qt::decodeMetadataText(ag_metadata_album_artist(md));
+                entry.year = agplayer::qt::decodeMetadataText(ag_metadata_year(md));
+                entry.customTag = agplayer::qt::decodeMetadataText(ag_metadata_custom_tag(md));
+                entry.date = agplayer::qt::decodeMetadataText(ag_metadata_date(md));
+                entry.genre = agplayer::qt::decodeMetadataText(ag_metadata_genre(md));
+                entry.track = agplayer::qt::decodeMetadataText(ag_metadata_track(md));
+                entry.disc = agplayer::qt::decodeMetadataText(ag_metadata_disc(md));
+                entry.composer = agplayer::qt::decodeMetadataText(ag_metadata_composer(md));
+                entry.comment = agplayer::qt::decodeMetadataText(ag_metadata_comment(md));
+                entry.bpm = agplayer::qt::decodeMetadataText(ag_metadata_bpm_tag(md));
+                entry.copyright = agplayer::qt::decodeMetadataText(ag_metadata_copyright(md));
+                entry.encoder = agplayer::qt::decodeMetadataText(ag_metadata_encoder(md));
+                entry.lyrics = agplayer::qt::decodeMetadataText(ag_metadata_lyrics(md));
+                entry.format = agplayer::qt::decodeMetadataText(ag_metadata_format(md));
                 entry.durationMs = ag_metadata_duration_ms(md);
                 size_t coverSize = 0;
                 const char* coverMime = nullptr;
@@ -800,18 +801,16 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                     ag_metadata* refreshed = nullptr;
                     if (ag_metadata_open(e.path.toUtf8().constData(), &refreshed) == AG_OK
                         && refreshed != nullptr) {
-                        e.title = QString::fromUtf8(ag_metadata_title(refreshed));
-                        e.artist = QString::fromUtf8(ag_metadata_artist(refreshed));
-                        e.album = QString::fromUtf8(ag_metadata_album(refreshed));
-                        e.albumArtist = QString::fromUtf8(
-                            ag_metadata_album_artist(refreshed));
-                        e.genre = QString::fromUtf8(ag_metadata_genre(refreshed));
-                        e.year = QString::fromUtf8(ag_metadata_year(refreshed));
-                        e.customTag = QString::fromUtf8(
-                            ag_metadata_custom_tag(refreshed));
-                        e.date = QString::fromUtf8(ag_metadata_date(refreshed));
-                        e.composer = QString::fromUtf8(ag_metadata_composer(refreshed));
-                        e.bpm = QString::fromUtf8(ag_metadata_bpm_tag(refreshed));
+                        e.title = agplayer::qt::decodeMetadataText(ag_metadata_title(refreshed));
+                        e.artist = agplayer::qt::decodeMetadataText(ag_metadata_artist(refreshed));
+                        e.album = agplayer::qt::decodeMetadataText(ag_metadata_album(refreshed));
+                        e.albumArtist = agplayer::qt::decodeMetadataText(ag_metadata_album_artist(refreshed));
+                        e.genre = agplayer::qt::decodeMetadataText(ag_metadata_genre(refreshed));
+                        e.year = agplayer::qt::decodeMetadataText(ag_metadata_year(refreshed));
+                        e.customTag = agplayer::qt::decodeMetadataText(ag_metadata_custom_tag(refreshed));
+                        e.date = agplayer::qt::decodeMetadataText(ag_metadata_date(refreshed));
+                        e.composer = agplayer::qt::decodeMetadataText(ag_metadata_composer(refreshed));
+                        e.bpm = agplayer::qt::decodeMetadataText(ag_metadata_bpm_tag(refreshed));
                         ag_metadata_destroy(refreshed);
                     }
                     if (plan.cover_action == agplayer::CoverAction::Set) {

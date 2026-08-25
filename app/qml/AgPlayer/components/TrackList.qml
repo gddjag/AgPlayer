@@ -27,6 +27,8 @@ ListView {
     readonly property bool showAlbumColumn: true
     readonly property bool compactColumns: width < 900
     readonly property int favoriteAlbumGap: 12
+    readonly property int artistAlbumGap: 8
+    readonly property int albumRatingGap: 10
     readonly property int sequenceWidth: compactColumns ? 34 : 42
     readonly property int favoriteWidth: compactColumns ? 42 : 52
     readonly property int albumWidth: compactColumns ? 92 : 136
@@ -417,7 +419,9 @@ ListView {
             HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
             Item { objectName: "trackHeaderFavoriteAlbumGap"; Layout.minimumWidth: root.favoriteAlbumGap; Layout.preferredWidth: root.favoriteAlbumGap; Layout.maximumWidth: root.favoriteAlbumGap }
             HeaderText { objectName: "trackHeaderArtist"; text: qsTr("艺术家"); Layout.minimumWidth: root.artistWidth; Layout.preferredWidth: root.artistWidth; Layout.maximumWidth: root.artistWidth }
+            Item { objectName: "trackHeaderArtistAlbumGap"; Layout.minimumWidth: root.artistAlbumGap; Layout.preferredWidth: root.artistAlbumGap; Layout.maximumWidth: root.artistAlbumGap }
             HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
+            Item { objectName: "trackHeaderAlbumRatingGap"; visible: root.showAlbumColumn; Layout.minimumWidth: visible ? root.albumRatingGap : 0; Layout.preferredWidth: visible ? root.albumRatingGap : 0; Layout.maximumWidth: visible ? root.albumRatingGap : 0 }
             HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
             HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.bpmWidth; Layout.preferredWidth: root.bpmWidth; Layout.maximumWidth: root.bpmWidth }
             HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); horizontalAlignment: Text.AlignRight; Layout.minimumWidth: root.durationWidth; Layout.preferredWidth: root.durationWidth; Layout.maximumWidth: root.durationWidth }
@@ -828,6 +832,13 @@ ListView {
                 }
             }
             Item {
+                objectName: "trackArtistAlbumGap"
+                visible: root.showAlbumColumn
+                Layout.minimumWidth: visible ? root.artistAlbumGap : 0
+                Layout.preferredWidth: visible ? root.artistAlbumGap : 0
+                Layout.maximumWidth: visible ? root.artistAlbumGap : 0
+            }
+            Item {
                 objectName: "trackAlbumCell"
                 visible: root.showAlbumColumn
                 Layout.minimumWidth: visible ? root.albumWidth : 0
@@ -842,6 +853,13 @@ ListView {
                     highlighted: rowItem.systemHighlighted
                     highlightText: rowItem.systemHighlightText
                 }
+            }
+            Item {
+                objectName: "trackAlbumRatingGap"
+                visible: root.showAlbumColumn
+                Layout.minimumWidth: visible ? root.albumRatingGap : 0
+                Layout.preferredWidth: visible ? root.albumRatingGap : 0
+                Layout.maximumWidth: visible ? root.albumRatingGap : 0
             }
             RowLayout {
                 objectName: "trackRatingCell"

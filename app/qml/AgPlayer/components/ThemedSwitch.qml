@@ -14,7 +14,11 @@ T.Switch {
         x: 0
         y: (control.height - height) / 2
         radius: height / 2
-        color: control.checked ? Theme.cyan : Theme.border
+        color: !control.enabled ? Qt.rgba(Theme.border.r, Theme.border.g, Theme.border.b, 0.55)
+               : control.checked ? (control.hovered ? Theme.accent : Theme.cyan)
+               : (control.hovered ? Theme.hoverSurface : Theme.border)
+        border.color: control.activeFocus ? Theme.accent : "transparent"
+        border.width: control.activeFocus ? 2 : 0
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
@@ -22,7 +26,7 @@ T.Switch {
             width: 16
             height: 16
             radius: width / 2
-            color: "#FFFFFF"
+            color: control.enabled ? "#FFFFFF" : Qt.rgba(Theme.primaryText.r, Theme.primaryText.g, Theme.primaryText.b, 0.55)
 
             Behavior on x {
                 NumberAnimation { duration: 120 }
@@ -33,7 +37,7 @@ T.Switch {
     contentItem: Text {
         text: control.text
         visible: text.length > 0
-        color: Theme.primaryText
+        color: control.enabled ? Theme.primaryText : Theme.secondaryText
         font.family: Theme.fontPrimary
         font.pixelSize: 14
         leftPadding: visible ? control.indicator.width + control.spacing : 0

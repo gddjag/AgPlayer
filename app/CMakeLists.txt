@@ -146,6 +146,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/ThemedCheckBox.qml
+        qml/AgPlayer/components/ThemedRangeSlider.qml
         qml/AgPlayer/components/ThemedComboBox.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/FormatTaskTable.qml

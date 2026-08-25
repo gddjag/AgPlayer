@@ -168,7 +168,7 @@ Rectangle {
                         bpmDebounce.restart()
                     }
                 }
-                RangeSlider {
+                ThemedRangeSlider {
                     id: bpmRange
                     objectName: "bpmRange"
                     Layout.preferredWidth: 104
@@ -179,47 +179,6 @@ Rectangle {
                     second.value: root.pendingMaxBpm
                     first.onMoved: { root.pendingMinBpm = Math.min(first.value, root.pendingMaxBpm); bpmDebounce.restart() }
                     second.onMoved: { root.pendingMaxBpm = Math.max(second.value, root.pendingMinBpm); bpmDebounce.restart() }
-                    background: Rectangle {
-                        x: bpmRange.leftPadding
-                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: bpmRange.availableWidth
-                        height: 4
-                        radius: 2
-                        color: Theme.panel
-                        Rectangle {
-                            x: bpmRange.first.visualPosition * parent.width
-                            width: (bpmRange.second.visualPosition - bpmRange.first.visualPosition) * parent.width
-                            height: parent.height; radius: parent.radius; color: Theme.accent
-                        }
-                    }
-                    first.handle: Rectangle {
-                        x: bpmRange.leftPadding + bpmRange.first.visualPosition * (bpmRange.availableWidth - width)
-                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: 14; height: 14; radius: 7
-                        color: Theme.panel
-                        border.color: Theme.accent
-                        border.width: 2
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 6; height: 6
-                            radius: 3
-                            color: Theme.accent
-                        }
-                    }
-                    second.handle: Rectangle {
-                        x: bpmRange.leftPadding + bpmRange.second.visualPosition * (bpmRange.availableWidth - width)
-                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: 14; height: 14; radius: 7
-                        color: Theme.panel
-                        border.color: Theme.accent
-                        border.width: 2
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 6; height: 6
-                            radius: 3
-                            color: Theme.accent
-                        }
-                    }
                 }
                 TextField {
                     id: maximumBpmField
