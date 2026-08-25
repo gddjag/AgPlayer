@@ -271,6 +271,10 @@ int main(int argc, char* argv[])
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
+    //   --qa-accent <id|#RRGGBB>     set the isolated Accent seed
+    //   --qa-highlight <id|#RRGGBB>  set the isolated Highlight seed
+    //   --qa-highlight-follow <0|1>  make Highlight follow Accent
+    //   --qa-settings-section <0..6> capture one settings section
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
     bool qaTestMode = false;
@@ -287,8 +291,12 @@ int main(int argc, char* argv[])
     QString qaSelectedTag;
     bool qaShowTrackDetails = false;
     QString qaTheme;
+    QString qaAccent;
+    QString qaHighlight;
+    int qaHighlightFollow = -1;
     QString qaLanguage;
     bool qaOpenSettings = false;
+    int qaSettingsSection = -1;
     bool qaOpenEqualizer = false;
     QString qaLibraryPath;
     QString qaImportFolder;
@@ -349,11 +357,34 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-theme")
                        && i + 1 < cliArgs.size()) {
                 qaTheme = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-accent")
+                       && i + 1 < cliArgs.size()) {
+                qaAccent = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-highlight")
+                       && i + 1 < cliArgs.size()) {
+                qaHighlight = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-highlight-follow")
+                       && i + 1 < cliArgs.size()) {
+                const QString value = cliArgs.at(++i).toLower();
+                if (value == QStringLiteral("1")
+                    || value == QStringLiteral("true")) {
+                    qaHighlightFollow = 1;
+                } else if (value == QStringLiteral("0")
+                           || value == QStringLiteral("false")) {
+                    qaHighlightFollow = 0;
+                }
             } else if (arg == QStringLiteral("--qa-language")
                        && i + 1 < cliArgs.size()) {
                 qaLanguage = cliArgs.at(++i).toLower();
             } else if (arg == QStringLiteral("--qa-open-settings")) {
                 qaOpenSettings = true;
+            } else if (arg == QStringLiteral("--qa-settings-section")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int section = cliArgs.at(++i).toInt(&ok);
+                if (ok && section >= 0 && section <= 6) {
+                    qaSettingsSection = section;
+                }
             } else if (arg == QStringLiteral("--qa-open-equalizer")) {
                 qaOpenEqualizer = true;
             } else if (arg == QStringLiteral("--qa-library")
@@ -685,6 +716,47 @@ int main(int argc, char* argv[])
             settings.setThemeMode(1);
         } else if (qaTheme == QStringLiteral("system")) {
             settings.setThemeMode(2);
+        }
+        if (qaTestMode) {
+            const auto applyQaColor = [](const QString& requested,
+                                         const auto& setMode,
+                                         const auto& setPreset,
+                                         const auto& setCustom) {
+                if (requested.isEmpty()) {
+                    return;
+                }
+                if (requested.compare(QStringLiteral("default"),
+                                      Qt::CaseInsensitive) == 0) {
+                    setMode(0);
+                } else if (requested.startsWith(QLatin1Char('#'))) {
+                    setCustom(requested);
+                    setMode(2);
+                } else {
+                    setPreset(requested);
+                    setMode(1);
+                }
+            };
+            applyQaColor(
+                qaAccent,
+                [&settings](int mode) { settings.setAccentMode(mode); },
+                [&settings](const QString& preset) {
+                    settings.setAccentPreset(preset);
+                },
+                [&settings](const QString& color) {
+                    settings.setAccentCustomColor(color);
+                });
+            if (qaHighlightFollow >= 0) {
+                settings.setHighlightFollowAccent(qaHighlightFollow != 0);
+            }
+            applyQaColor(
+                qaHighlight,
+                [&settings](int mode) { settings.setHighlightMode(mode); },
+                [&settings](const QString& preset) {
+                    settings.setHighlightPreset(preset);
+                },
+                [&settings](const QString& color) {
+                    settings.setHighlightCustomColor(color);
+                });
         }
         if (!qaLanguage.isEmpty()) {
             settings.setLanguage(qaLanguage);
@@ -1225,6 +1297,13 @@ int main(int argc, char* argv[])
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
                 settingsWindow = mainWindow->findChild<QObject*>(
                     QStringLiteral("settingsWindow"));
+                if (qaSettingsSection >= 0 && settingsWindow != nullptr) {
+                    if (QObject* settingsPage = settingsWindow->findChild<QObject*>(
+                            QStringLiteral("settingsPage"))) {
+                        settingsPage->setProperty("selectedSection",
+                                                  qaSettingsSection);
+                    }
+                }
             }
             QObject* equalizerWindow = nullptr;
             if (qaOpenEqualizer) {

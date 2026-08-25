@@ -6,6 +6,10 @@ param(
     [string[]]$Languages = @("zh", "en", "th", "vi"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
+    [string]$Accent = "",
+    [string]$Highlight = "",
+    [ValidateSet("", "0", "1")]
+    [string]$HighlightFollow = "",
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
         "details",
@@ -202,7 +206,7 @@ function Invoke-Capture {
         [string[]]$Arguments
     )
 
-    $stem = "{0}-{1}-{2}" -f $Language, $Theme, $Surface
+    $stem = Get-CaptureStem -Language $Language -Theme $Theme -Surface $Surface
     $screenshot = Join-Path $outputPath ($stem + ".png")
     $log = Join-Path $outputPath ($stem + ".log")
     Remove-Item -LiteralPath $screenshot, $log -Force -ErrorAction SilentlyContinue
@@ -212,6 +216,15 @@ function Invoke-Capture {
         "--qa-language", $Language,
         "--qa-theme", $Theme
     )
+    if ($Accent) {
+        $common += @("--qa-accent", $Accent)
+    }
+    if ($Highlight) {
+        $common += @("--qa-highlight", $Highlight)
+    }
+    if ($HighlightFollow) {
+        $common += @("--qa-highlight-follow", $HighlightFollow)
+    }
     $process = Start-Process -FilePath $appPath `
         -ArgumentList ($common + $Arguments + @($screenshot)) `
         -Wait -PassThru
@@ -234,6 +247,9 @@ function Invoke-Capture {
     $results.Add([pscustomobject]@{
         Language = $Language
         Theme = $Theme
+        Accent = $Accent
+        Highlight = $Highlight
+        HighlightFollow = $HighlightFollow
         Surface = $Surface
         Bytes = (Get-Item -LiteralPath $screenshot).Length
         Width = $metrics.Width
@@ -243,6 +259,29 @@ function Invoke-Capture {
         CornerAlpha = $metrics.CornerAlpha
         Result = "PASS"
     })
+}
+
+function Get-CaptureStem {
+    param(
+        [string]$Language,
+        [string]$Theme,
+        [string]$Surface
+    )
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add($Language)
+    $parts.Add($Theme)
+    if ($Accent) {
+        $parts.Add("accent-" + ($Accent -replace "[^A-Za-z0-9]+", "-"))
+    }
+    if ($Highlight) {
+        $parts.Add("highlight-" + ($Highlight -replace "[^A-Za-z0-9]+", "-"))
+    }
+    if ($HighlightFollow) {
+        $parts.Add($(if ($HighlightFollow -eq "1") { "follow" } else { "independent" }))
+    }
+    $parts.Add($Surface)
+    return $parts -join "-"
 }
 
 try {
@@ -280,6 +319,7 @@ try {
                 Invoke-Capture $language $theme "settings" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "settings"),
                     "--qa-open-settings",
+                    "--qa-settings-section", "2",
                     "--qa-screenshot-main"
                 )
             }
@@ -316,9 +356,11 @@ try {
         foreach ($language in $Languages) {
             foreach ($surface in $Surfaces) {
                 $darkPath = Join-Path $outputPath (
-                    "{0}-dark-{1}.png" -f $language, $surface)
+                    (Get-CaptureStem -Language $language -Theme "dark" `
+                        -Surface $surface) + ".png")
                 $lightPath = Join-Path $outputPath (
-                    "{0}-light-{1}.png" -f $language, $surface)
+                    (Get-CaptureStem -Language $language -Theme "light" `
+                        -Surface $surface) + ".png")
                 $difference = Measure-ThemeDifference $darkPath $lightPath
                 if ($difference -lt 12) {
                     throw (("{0}-{1} dark/light difference is only {2}; " +
