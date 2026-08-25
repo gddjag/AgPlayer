@@ -1,9 +1,13 @@
 #include "theme_manager.hpp"
+#include "settings_controller.hpp"
 
 #include <QAbstractEventDispatcher>
+#include <QCoreApplication>
 #include <QEvent>
 #include <QGuiApplication>
 #include <QSignalSpy>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QTest>
 #include <QtMath>
 
@@ -98,6 +102,7 @@ private slots:
     void unknownSystemPaletteDoesNotReadBackAppliedTheme();
     void synchronizesNativePalette();
     void synchronizerOwnsConnectionLifetime();
+    void synchronizerAppliesSkinSettingsAtStartupAndDuringTransactions();
     void ownsNoTimers();
 };
 
@@ -393,6 +398,48 @@ void ThemeManagerTest::synchronizesNativePalette()
 void ThemeManagerTest::synchronizerOwnsConnectionLifetime()
 {
     QVERIFY((std::is_base_of_v<QObject, ThemeSettingsSynchronizer>));
+}
+
+void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransactions()
+{
+    QStandardPaths::setTestModeEnabled(true);
+    QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
+    QCoreApplication::setApplicationName(QStringLiteral("AgPlayer-theme-manager-test"));
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/themeMode"), 0);
+    persisted.setValue(QStringLiteral("appearance/skinColorMode"), 1);
+    persisted.setValue(QStringLiteral("appearance/skinPreset"),
+                       QStringLiteral("purple"));
+    SettingsController settings;
+    ThemeManager manager(*qApp);
+    ThemeSettingsSynchronizer synchronizer(manager, settings);
+    QCOMPARE(manager.preferences().appearanceMode, ThemeManager::AppearanceMode::Dark);
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
+    QCOMPARE(manager.preferences().skinSeed, QColor(QStringLiteral("#AF52DE")));
+
+    settings.beginEdit();
+    settings.setThemeMode(1);
+    settings.setSkinColorMode(2);
+    settings.setSkinCustomColor(QStringLiteral("#123456"));
+    QCOMPARE(manager.preferences().appearanceMode, ThemeManager::AppearanceMode::Light);
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
+    QCOMPARE(manager.preferences().skinSeed, QColor(QStringLiteral("#123456")));
+    settings.resetToDefaults();
+    QCOMPARE(manager.preferences().appearanceMode,
+             ThemeManager::AppearanceMode::System);
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Default);
+    settings.cancelEdit();
+    QCOMPARE(manager.preferences().appearanceMode, ThemeManager::AppearanceMode::Dark);
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
+    QCOMPARE(manager.preferences().skinSeed, QColor(QStringLiteral("#AF52DE")));
+
+    settings.beginEdit();
+    settings.setSkinColorMode(2);
+    settings.setSkinCustomColor(QStringLiteral("#123456"));
+    settings.commitEdit();
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
+    QCOMPARE(manager.preferences().skinSeed, QColor(QStringLiteral("#123456")));
 }
 
 void ThemeManagerTest::ownsNoTimers()

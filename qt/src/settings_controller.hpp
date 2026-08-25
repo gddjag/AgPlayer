@@ -52,19 +52,12 @@ class SettingsController final : public QObject {
 
     // Appearance & Visualizer
     Q_PROPERTY(int themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
-    Q_PROPERTY(int accentMode READ accentMode WRITE setAccentMode NOTIFY accentModeChanged)
-    Q_PROPERTY(QString accentPreset READ accentPreset WRITE setAccentPreset
-                   NOTIFY accentPresetChanged)
-    Q_PROPERTY(QString accentCustomColor READ accentCustomColor WRITE setAccentCustomColor
-                   NOTIFY accentCustomColorChanged)
-    Q_PROPERTY(bool highlightFollowAccent READ highlightFollowAccent
-                   WRITE setHighlightFollowAccent NOTIFY highlightFollowAccentChanged)
-    Q_PROPERTY(int highlightMode READ highlightMode WRITE setHighlightMode
-                   NOTIFY highlightModeChanged)
-    Q_PROPERTY(QString highlightPreset READ highlightPreset WRITE setHighlightPreset
-                   NOTIFY highlightPresetChanged)
-    Q_PROPERTY(QString highlightCustomColor READ highlightCustomColor
-                   WRITE setHighlightCustomColor NOTIFY highlightCustomColorChanged)
+    Q_PROPERTY(int skinColorMode READ skinColorMode WRITE setSkinColorMode
+                   NOTIFY skinColorModeChanged)
+    Q_PROPERTY(QString skinPreset READ skinPreset WRITE setSkinPreset
+                   NOTIFY skinPresetChanged)
+    Q_PROPERTY(QString skinCustomColor READ skinCustomColor WRITE setSkinCustomColor
+                   NOTIFY skinCustomColorChanged)
     Q_PROPERTY(bool glassEffect READ glassEffect WRITE setGlassEffect NOTIFY glassEffectChanged)
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight WRITE setWaveformHeight
@@ -191,13 +184,9 @@ public:
 
     // Appearance & Visualizer getters
     int themeMode() const noexcept;
-    int accentMode() const noexcept;
-    QString accentPreset() const;
-    QString accentCustomColor() const;
-    bool highlightFollowAccent() const noexcept;
-    int highlightMode() const noexcept;
-    QString highlightPreset() const;
-    QString highlightCustomColor() const;
+    int skinColorMode() const noexcept;
+    QString skinPreset() const;
+    QString skinCustomColor() const;
     bool glassEffect() const noexcept;
     int waveformMode() const noexcept;
     double waveformHeight() const noexcept;
@@ -276,13 +265,9 @@ public:
 
     // Appearance & Visualizer setters
     void setThemeMode(int value);
-    void setAccentMode(int value);
-    void setAccentPreset(const QString& value);
-    void setAccentCustomColor(const QString& value);
-    void setHighlightFollowAccent(bool value);
-    void setHighlightMode(int value);
-    void setHighlightPreset(const QString& value);
-    void setHighlightCustomColor(const QString& value);
+    void setSkinColorMode(int value);
+    void setSkinPreset(const QString& value);
+    void setSkinCustomColor(const QString& value);
     void setGlassEffect(bool value);
     void setWaveformMode(int value);
     void setWaveformHeight(double value);
@@ -370,13 +355,9 @@ signals:
     void autoReadRatingChanged();
 
     void themeModeChanged();
-    void accentModeChanged();
-    void accentPresetChanged();
-    void accentCustomColorChanged();
-    void highlightFollowAccentChanged();
-    void highlightModeChanged();
-    void highlightPresetChanged();
-    void highlightCustomColorChanged();
+    void skinColorModeChanged();
+    void skinPresetChanged();
+    void skinCustomColorChanged();
     void glassEffectChanged();
     void waveformModeChanged();
     void waveformHeightChanged();
@@ -476,13 +457,9 @@ private:
 
     // Appearance & Visualizer
     int themeMode_ = 2;
-    int accentMode_ = 0;
-    QString accentPreset_ = QStringLiteral("systemBlue");
-    QString accentCustomColor_ = QStringLiteral("#D27722");
-    bool highlightFollowAccent_ = true;
-    int highlightMode_ = 0;
-    QString highlightPreset_ = QStringLiteral("systemBlue");
-    QString highlightCustomColor_ = QStringLiteral("#D27722");
+    int skinColorMode_ = 0;
+    QString skinPreset_ = QStringLiteral("systemBlue");
+    QString skinCustomColor_ = QStringLiteral("#D27722");
     bool glassEffect_ = false;
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;

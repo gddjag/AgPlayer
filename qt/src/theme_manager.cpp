@@ -124,13 +124,12 @@ QColor resolveColorChoice(const int mode, const QString& presetId,
 ThemeManager::Preferences preferencesFromSettings(
     const SettingsController& settings)
 {
-    const int mode = settings.accentMode();
+    const int mode = settings.skinColorMode();
     return {
         static_cast<ThemeManager::AppearanceMode>(settings.themeMode()),
         mode == 0 ? ThemeManager::SkinMode::Default
                   : ThemeManager::SkinMode::Generated,
-        resolveColorChoice(mode, settings.accentPreset(),
-                           settings.accentCustomColor())};
+        resolveColorChoice(mode, settings.skinPreset(), settings.skinCustomColor())};
 }
 
 QColor stateTone(const QColor& base, const QColor& foreground, const int amount)
@@ -450,19 +449,11 @@ ThemeSettingsSynchronizer::ThemeSettingsSynchronizer(
     const auto apply = [this]() { applyFromCompleteSettings(); };
     QObject::connect(&settings_, &SettingsController::themeModeChanged,
                      this, apply);
-    QObject::connect(&settings_, &SettingsController::accentModeChanged,
+    QObject::connect(&settings_, &SettingsController::skinColorModeChanged,
                      this, apply);
-    QObject::connect(&settings_, &SettingsController::accentPresetChanged,
+    QObject::connect(&settings_, &SettingsController::skinPresetChanged,
                      this, apply);
-    QObject::connect(&settings_, &SettingsController::accentCustomColorChanged,
-                     this, apply);
-    QObject::connect(&settings_, &SettingsController::highlightFollowAccentChanged,
-                     this, apply);
-    QObject::connect(&settings_, &SettingsController::highlightModeChanged,
-                     this, apply);
-    QObject::connect(&settings_, &SettingsController::highlightPresetChanged,
-                     this, apply);
-    QObject::connect(&settings_, &SettingsController::highlightCustomColorChanged,
+    QObject::connect(&settings_, &SettingsController::skinCustomColorChanged,
                      this, apply);
     applyFromCompleteSettings();
 }
