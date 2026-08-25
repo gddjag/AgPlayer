@@ -149,12 +149,52 @@ private slots:
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(controller.bpmDetectionSupported());
         QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QSignalSpy progressChanged(
+            &controller, &AudioEditorController::progressChanged);
         QVERIFY(controller.detectBpm());
         QCOMPARE(controller.state(), EditorSessionState::Processing);
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
                                   15'000);
         QVERIFY2(std::abs(controller.originalBpm() - 120.0) < 1.0,
                  qPrintable(QString::number(controller.originalBpm())));
+        QVERIFY(progressChanged.count() > 0);
+        QCOMPARE(controller.progress(), 1.0);
+    }
+
+    void bpmDetectionUsesSelectionWithoutFallingBackToWholeTimeline()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("click-120.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 8));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.setSelection(0, 1'600));
+        QVERIFY(controller.detectBpm());
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Error,
+                                  15'000);
+        QCOMPARE(controller.originalBpm(), 0.0);
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
+    void cancelledBpmDetectionCannotPublishAStaleResult()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("click-120.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 30));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(controller.detectBpm());
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        controller.cancelOperation();
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
+                                  15'000);
+        QCOMPARE(controller.originalBpm(), 0.0);
+        QVERIFY(controller.errorMessage().contains(QStringLiteral("取消")));
     }
 
     void timePitchAndFormantControlsDriveProcessingParameters()
@@ -813,6 +853,8 @@ private slots:
         QVERIFY(playback.createUntitledDocument(48'000, 2, 4'800));
         QVERIFY(playback.setSelection(1'000, 2'000));
         QVERIFY(playback.seekFrame(3'000));
+        QSignalSpy previewProgress(
+            &playback, &AudioEditorController::progressChanged);
         QSignalSpy playbackStarting(
             &playback, &AudioEditorController::exclusivePreviewStarting);
         QVERIFY(playback.playPause());
@@ -820,6 +862,10 @@ private slots:
         QCOMPARE(playback.playheadFrame(), qint64{1'000});
         QVERIFY(playback.loopEnabled());
         playback.cancelOperation();
+        QTRY_COMPARE_WITH_TIMEOUT(playback.state(), EditorSessionState::Ready,
+                                  5'000);
+        QVERIFY(previewProgress.count() > 0);
+        QVERIFY(playback.errorMessage().contains(QStringLiteral("取消")));
 
         AudioEditorController recording(AG_AUDIO_BACKEND_NULL);
         QSignalSpy recordingStarting(
@@ -1403,6 +1449,8 @@ private slots:
         QCOMPARE(controller.state(), EditorSessionState::Ready);
         const QString exportedPath = temporary.filePath(
             QStringLiteral("source_edited.%1").arg(extension));
+        QCOMPARE(QDir::cleanPath(controller.lastExportPath()),
+                 QDir::cleanPath(exportedPath));
         const auto exported = AudioFileAnalyzer::analyze(
             std::filesystem::path(exportedPath.toStdWString()), 64);
         QVERIFY2(exported.success, exported.message.c_str());

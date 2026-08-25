@@ -100,6 +100,8 @@ class AudioEditorController final : public QObject {
                    NOTIFY playbackChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(QString lastExportPath READ lastExportPath
+                   NOTIFY exportResultChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
     Q_PROPERTY(QVariantList projectIssues READ projectIssues NOTIFY projectChanged)
     Q_PROPERTY(QVariantMap projectExportSettings READ projectExportSettingsMap
@@ -201,6 +203,7 @@ public:
     [[nodiscard]] bool loopEnabled() const noexcept { return loop_enabled_; }
     [[nodiscard]] QString errorMessage() const { return error_message_; }
     [[nodiscard]] double progress() const noexcept { return progress_; }
+    [[nodiscard]] QString lastExportPath() const { return last_export_path_; }
     [[nodiscard]] QString projectPath() const { return project_path_; }
     [[nodiscard]] QVariantList projectIssues() const { return project_issues_; }
     [[nodiscard]] const agplayer::editor::ProjectExportSettings&
@@ -334,6 +337,7 @@ signals:
     void trackMixChanged();
     void errorMessageChanged();
     void progressChanged();
+    void exportResultChanged();
     void projectChanged();
     void timePitchChanged();
     void recordingDevicesChanged();
@@ -351,6 +355,7 @@ signals:
 private:
     struct RecordingFinalizeResult;
     struct PreviewRenderResult;
+    struct BpmDetectionResult;
     struct SelectionDragRenderResult;
     struct PendingRecordingRequest final {
         QUrl target;
@@ -447,6 +452,7 @@ private:
     double track_gain_db_{};
     QString error_message_;
     double progress_{};
+    QString last_export_path_;
     agplayer::editor::ProjectExportSettings project_export_settings_;
     std::vector<agplayer::editor::ProjectSourceRecord> project_sources_;
     QVariantList project_issues_;
@@ -460,7 +466,7 @@ private:
     std::shared_ptr<std::atomic_bool> recording_start_cancel_token_;
     std::uint64_t recording_start_generation_{};
     bool recording_start_cancel_pending_{};
-    QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
+    QFutureWatcher<BpmDetectionResult>* bpm_watcher_{};
     QFutureWatcher<agplayer::editor::NoiseReductionResult>*
         noise_reduction_watcher_{};
     QFutureWatcher<PreviewRenderResult>* preview_watcher_{};
@@ -508,6 +514,7 @@ private:
     EventGesture event_gesture_;
     QString active_tool_{QStringLiteral("select")};
     std::atomic_uint64_t preview_generation_{0};
+    std::atomic_uint64_t bpm_generation_{0};
     QUrl selection_drag_file_;
     bool selection_drag_ready_{};
     std::atomic_uint64_t selection_drag_generation_{0};

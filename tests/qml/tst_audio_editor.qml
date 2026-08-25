@@ -420,6 +420,42 @@ TestCase {
                 originalStart)
     }
 
+    function test_transportTooltipsExposeKeyboardShortcutsAndOperationFeedback() {
+        const names = [
+            "editorPlaybackToStartButton",
+            "editorPlaybackRewindButton",
+            "editorPrimaryPlayButton",
+            "editorPlaybackForwardButton",
+            "editorPlaybackStopButton",
+            "recordingMicrophoneButton",
+            "recordingToggleButton",
+            "recordingStopButton",
+            "editorNarrowPlaybackAccess"
+        ]
+        for (const name of names) {
+            const button = findChild(page, name)
+            verify(button, "missing transport control " + name)
+            verify(button.shortcutText !== undefined
+                && button.shortcutText.length > 0,
+                "missing shortcut tooltip contract for " + name)
+        }
+        const shortcuts = [
+            "editorPlaybackToStartShortcut",
+            "editorPlaybackRewindShortcut",
+            "editorSpaceShortcut",
+            "editorPlaybackToEndShortcut",
+            "editorPlaybackStopShortcut",
+            "editorRecordingDeviceShortcut",
+            "editorRecordingToggleShortcut",
+            "editorRecordingStopShortcut"
+        ]
+        for (const name of shortcuts)
+            verify(findChild(page, name), "missing live shortcut " + name)
+        verify(findChild(page, "editorOperationBanner"))
+        verify(findChild(page, "editorOperationProgress"))
+        verify(findChild(page, "editorOperationCancelButton"))
+    }
+
     function test_selectionTimelineAffordancesAndRightClickCancelAreInteractive() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         verify(AudioEditorController.setSelection(12000, 36000))

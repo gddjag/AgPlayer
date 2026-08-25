@@ -560,6 +560,12 @@ struct AudioEditorController::PreviewRenderResult final {
     QString error;
 };
 
+struct AudioEditorController::BpmDetectionResult final {
+    BpmAnalyzeResult analysis;
+    bool cancelled{};
+    QString error;
+};
+
 struct AudioEditorController::SelectionDragRenderResult final {
     bool success{};
     std::uint64_t generation{};
@@ -1346,6 +1352,10 @@ bool AudioEditorController::exportWithSettings(
         return false;
     }
     if (busy()) return false;
+    if (!last_export_path_.isEmpty()) {
+        last_export_path_.clear();
+        emit exportResultChanged();
+    }
     if (usePersistedDefaults
         && !same_project_export_settings(project_export_settings_, effective)) {
         project_export_settings_ = effective;
@@ -1383,7 +1393,7 @@ bool AudioEditorController::exportWithSettings(
     auto* watcher = new QFutureWatcher<agplayer::editor::WriteResult>(this);
     write_watcher_ = watcher;
     connect(watcher, &QFutureWatcher<agplayer::editor::WriteResult>::finished,
-            this, [this, watcher] {
+            this, [this, watcher, path] {
         write_watcher_ = nullptr;
         const auto result = watcher->result();
         watcher->deleteLater();
@@ -1397,6 +1407,8 @@ bool AudioEditorController::exportWithSettings(
         setProgress(1.0);
         setState(EditorSessionState::Ready);
         setError({});
+        last_export_path_ = path;
+        emit exportResultChanged();
     });
     const QPointer<AudioEditorController> guard(this);
     watcher->setFuture(QtConcurrent::run(
@@ -2003,31 +2015,78 @@ bool AudioEditorController::detectBpm()
         return false;
     }
     const auto snapshot = document_.timelineSnapshot();
+    const auto selection = document_.selection();
     const QString path = preview_directory_.filePath(
         QStringLiteral("bpm-analysis.wav"));
+    const std::uint64_t generation = bpm_generation_.fetch_add(
+        1, std::memory_order_acq_rel) + 1;
+    operation_cancelled_.store(false, std::memory_order_release);
     setState(EditorSessionState::Processing);
+    setProgress(0.0);
     setError({});
-    auto* watcher = new QFutureWatcher<BpmAnalyzeResult>(this);
+    auto* watcher = new QFutureWatcher<BpmDetectionResult>(this);
     bpm_watcher_ = watcher;
-    connect(watcher, &QFutureWatcher<BpmAnalyzeResult>::finished,
-            this, [this, watcher] {
+    connect(watcher, &QFutureWatcher<BpmDetectionResult>::finished,
+            this, [this, watcher, generation] {
         bpm_watcher_ = nullptr;
-        const BpmAnalyzeResult result = watcher->result();
+        const BpmDetectionResult result = watcher->result();
         watcher->deleteLater();
-        setState(EditorSessionState::Ready);
-        if (result.bpm <= 0.0) {
-            setError(tr("BPM 检测失败"));
+        if (generation != bpm_generation_.load(std::memory_order_acquire)) {
             return;
         }
-        time_pitch_.setOriginalBpm(result.bpm);
+        if (result.cancelled) {
+            setProgress(0.0);
+            setState(EditorSessionState::Ready);
+            setError(tr("操作已取消"));
+            return;
+        }
+        if (result.analysis.bpm <= 0.0) {
+            setState(EditorSessionState::Error);
+            setError(result.error.isEmpty() ? tr("BPM 检测失败")
+                                            : result.error);
+            return;
+        }
+        setProgress(1.0);
+        setState(EditorSessionState::Ready);
+        time_pitch_.setOriginalBpm(result.analysis.bpm);
         setError({});
         emit timePitchChanged();
     });
-    watcher->setFuture(QtConcurrent::run([snapshot, path] {
+    const QPointer<AudioEditorController> guard(this);
+    const auto* const cancelled = &operation_cancelled_;
+    watcher->setFuture(QtConcurrent::run(
+        [snapshot, selection, path, generation, guard, cancelled] {
+        BpmDetectionResult result;
+        const auto publishProgress = [guard, generation](const float value) {
+            if (!guard) return;
+            QMetaObject::invokeMethod(guard, [guard, generation, value] {
+                if (guard
+                    && generation == guard->bpm_generation_.load(
+                        std::memory_order_acquire)
+                    && guard->state_ == EditorSessionState::Processing) {
+                    guard->setProgress(value);
+                }
+            }, Qt::QueuedConnection);
+        };
         const auto rendered = DocumentRenderer{}.renderFloatWav(
-            snapshot, std::nullopt,
-            std::filesystem::path(path.toStdWString()));
-        return rendered.success ? analyze_bpm(path) : BpmAnalyzeResult{};
+            snapshot, selection, std::filesystem::path(path.toStdWString()),
+            cancelled, [publishProgress](const float value) {
+                publishProgress(value * 0.8F);
+            });
+        if (!rendered.success) {
+            result.cancelled = cancelled->load(std::memory_order_acquire);
+            result.error = QString::fromStdString(rendered.message);
+            return result;
+        }
+        if (cancelled->load(std::memory_order_acquire)) {
+            result.cancelled = true;
+            return result;
+        }
+        publishProgress(0.9F);
+        result.analysis = analyze_bpm(path);
+        result.cancelled = cancelled->load(std::memory_order_acquire);
+        if (!result.cancelled) publishProgress(1.0F);
+        return result;
     }));
     return true;
 }
@@ -2822,6 +2881,8 @@ bool AudioEditorController::preparePlayback()
         operation_cancelled_.store(false, std::memory_order_release);
         const auto* const cancelled = &operation_cancelled_;
         setState(EditorSessionState::Processing);
+        setProgress(0.01);
+        setError({});
         auto* watcher = new QFutureWatcher<PreviewRenderResult>(this);
         preview_watcher_ = watcher;
         connect(watcher, &QFutureWatcher<PreviewRenderResult>::finished,
@@ -2831,35 +2892,57 @@ bool AudioEditorController::preparePlayback()
             watcher->deleteLater();
             if (result.generation != preview_generation_.load(
                     std::memory_order_acquire)) {
+                if (operation_cancelled_.load(std::memory_order_acquire)) {
+                    setProgress(0.0);
+                    setError(tr("操作已取消"));
+                }
                 setState(EditorSessionState::Ready);
                 return;
             }
             if (!result.success) {
-                setState(EditorSessionState::Error);
-                setError(result.error);
+                const bool cancelled = operation_cancelled_.load(
+                    std::memory_order_acquire);
+                setState(cancelled ? EditorSessionState::Ready
+                                   : EditorSessionState::Error);
+                setError(cancelled ? tr("操作已取消") : result.error);
                 return;
             }
+            setProgress(1.0);
             playback_path_ = result.path;
             time_pitch_preview_active_ = result.processed;
             emit timePitchChanged();
             startPreparedPlayback();
         });
+        const QPointer<AudioEditorController> guard(this);
         watcher->setFuture(QtConcurrent::run(
-            [snapshot, parameters, path, processed, generation, cancelled] {
+            [snapshot, parameters, path, processed, generation, cancelled,
+             guard] {
             PreviewRenderResult result;
             result.generation = generation;
             result.processed = processed;
             result.path = path;
+            const auto publishProgress = [guard, generation](const float value) {
+                if (!guard) return;
+                QMetaObject::invokeMethod(guard, [guard, generation, value] {
+                    if (guard
+                        && generation == guard->preview_generation_.load(
+                            std::memory_order_acquire)
+                        && guard->state_ == EditorSessionState::Processing) {
+                        guard->setProgress(value);
+                    }
+                }, Qt::QueuedConnection);
+            };
             if (processed) {
                 const auto outcome = parameters.process(
                     snapshot, std::filesystem::path(path.toStdWString()),
-                    std::nullopt, cancelled);
+                    std::nullopt, cancelled, publishProgress);
                 result.success = outcome.success;
                 result.error = QString::fromStdString(outcome.message);
             } else {
                 const auto outcome = DocumentRenderer{}.renderFloatWav(
                     snapshot, std::nullopt,
-                    std::filesystem::path(path.toStdWString()), cancelled);
+                    std::filesystem::path(path.toStdWString()), cancelled,
+                    publishProgress);
                 result.success = outcome.success;
                 result.error = QString::fromStdString(outcome.message);
             }

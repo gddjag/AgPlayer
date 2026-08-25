@@ -18,6 +18,9 @@ Rectangle {
     readonly property real responsiveContentHeight: narrowLayout ? 720
         : Math.max(height, 660)
     property bool inspectorExpanded: false
+    property bool showLastExportResult: false
+    readonly property bool editorOperationActive:
+        AudioEditorController.busy && !AudioEditorController.recording
     readonly property bool modalInputActive: openDialog.visible
         || saveProjectDialog.visible || exportDirectoryDialog.visible
         || discardDialog.visible
@@ -100,6 +103,24 @@ Rectangle {
             + String(minutes).padStart(2, "0") + ":"
             + String(seconds).padStart(2, "0")
     }
+    function chooseRecordingDevice() {
+        recordingDeviceCombo.forceActiveFocus()
+        if (recordingDeviceCombo.count > 0)
+            recordingDeviceCombo.popup.open()
+    }
+    function toggleRecording() {
+        if (!AudioEditorController.recording) {
+            AudioEditorController.startRecordingToTemporaryFile(
+                recordingDeviceCombo.currentValue || "",
+                AudioEditorController.recordingSampleRate,
+                AudioEditorController.recordingChannels,
+                recordingMonitorSwitch.checked, false)
+        } else if (AudioEditorController.recordingPaused) {
+            AudioEditorController.resumeRecording()
+        } else {
+            AudioEditorController.pauseRecording()
+        }
+    }
 
     Shortcut {
         objectName: "editorSpaceShortcut"
@@ -109,6 +130,70 @@ Rectangle {
             && AudioEditorController.playbackSupported
             && AudioEditorController.hasDocument
         onActivated: AudioEditorController.playPause()
+    }
+    Shortcut {
+        objectName: "editorPlaybackToStartShortcut"
+        sequence: "Home"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.playbackSupported
+            && AudioEditorController.hasDocument
+        onActivated: AudioEditorController.seekMs(0)
+    }
+    Shortcut {
+        objectName: "editorPlaybackRewindShortcut"
+        sequence: "Left"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.playbackSupported
+            && AudioEditorController.hasDocument
+        onActivated: AudioEditorController.seekMs(
+            Math.max(0, AudioEditorController.positionMs - 5000))
+    }
+    Shortcut {
+        objectName: "editorPlaybackToEndShortcut"
+        sequence: "End"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.playbackSupported
+            && AudioEditorController.hasDocument
+        onActivated: AudioEditorController.seekMs(
+            AudioEditorController.durationMs)
+    }
+    Shortcut {
+        objectName: "editorPlaybackStopShortcut"
+        sequence: "Ctrl+Space"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.playbackSupported
+            && AudioEditorController.playing
+        onActivated: AudioEditorController.stopPlayback()
+    }
+    Shortcut {
+        objectName: "editorRecordingDeviceShortcut"
+        sequence: "Ctrl+R"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.recordingSupported
+            && !AudioEditorController.busy
+        onActivated: page.chooseRecordingDevice()
+    }
+    Shortcut {
+        objectName: "editorRecordingToggleShortcut"
+        sequence: "R"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.recordingSupported
+            && !AudioEditorController.busy
+        onActivated: page.toggleRecording()
+    }
+    Shortcut {
+        objectName: "editorRecordingStopShortcut"
+        sequence: "Shift+R"
+        context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable()
+            && AudioEditorController.recording
+        onActivated: AudioEditorController.stopRecording()
     }
     Shortcut {
         sequence: "Ctrl+1"
@@ -270,6 +355,18 @@ Rectangle {
         function onOpenRequested() { openDialog.open() }
         function onSaveProjectAsRequested() { saveProjectDialog.open() }
         function onDiscardConfirmationRequested() { discardDialog.open() }
+        function onExportResultChanged() {
+            if (AudioEditorController.lastExportPath.length > 0) {
+                page.showLastExportResult = true
+                exportResultTimer.restart()
+            }
+        }
+    }
+    Timer {
+        id: exportResultTimer
+        interval: 6000
+        repeat: false
+        onTriggered: page.showLastExportResult = false
     }
     Flickable {
         id: mainColumn
@@ -513,6 +610,7 @@ Rectangle {
                     spacing: 14
                     RoundButton {
                         objectName: "recordingMicrophoneButton"
+                        property string shortcutText: "Ctrl+R"
                         Layout.preferredWidth: 62
                         Layout.preferredHeight: 62
                         icon.source: Theme.icon("mic-line")
@@ -522,11 +620,10 @@ Rectangle {
                         opacity: 1.0
                         Accessible.name: qsTr("选择录音设备")
                         Accessible.role: Accessible.Button
-                        onClicked: {
-                            recordingDeviceCombo.forceActiveFocus()
-                            if (recordingDeviceCombo.count > 0)
-                                recordingDeviceCombo.popup.open()
-                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("选择录音设备")
+                            + " (" + shortcutText + ")"
+                        onClicked: page.chooseRecordingDevice()
                         background: Rectangle {
                             radius: width / 2
                             color: Theme.elevated
@@ -537,6 +634,7 @@ Rectangle {
                     RoundButton {
                         id: recordingToggle
                         objectName: "recordingToggleButton"
+                        property string shortcutText: "R"
                         Layout.preferredWidth: 62
                         Layout.preferredHeight: 62
                         enabled: AudioEditorController.recordingSupported
@@ -547,6 +645,9 @@ Rectangle {
                             : AudioEditorController.recordingPaused
                             ? qsTr("继续录音") : qsTr("暂停录音")
                         Accessible.role: Accessible.Button
+                        ToolTip.visible: hovered
+                        ToolTip.text: Accessible.name
+                            + " (" + shortcutText + ")"
                         contentItem: Rectangle {
                             objectName: "recordingToggleIndicator"
                             anchors.centerIn: parent
@@ -559,19 +660,7 @@ Rectangle {
                             border.color: Theme.border
                             border.width: 1
                         }
-                        onClicked: {
-                            if (!AudioEditorController.recording) {
-                                AudioEditorController.startRecordingToTemporaryFile(
-                                    recordingDeviceCombo.currentValue || "",
-                                    AudioEditorController.recordingSampleRate,
-                                    AudioEditorController.recordingChannels,
-                                    recordingMonitorSwitch.checked, false)
-                            } else if (AudioEditorController.recordingPaused) {
-                                AudioEditorController.resumeRecording()
-                            } else {
-                                AudioEditorController.pauseRecording()
-                            }
-                        }
+                        onClicked: page.toggleRecording()
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -595,9 +684,14 @@ Rectangle {
                         }
                     }
                     Button {
+                        objectName: "recordingStopButton"
+                        property string shortcutText: "Shift+R"
                         visible: AudioEditorController.recording
                         text: qsTr("停止")
                         enabled: AudioEditorController.recordingSupported
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("停止录音")
+                            + " (" + shortcutText + ")"
                         onClicked: AudioEditorController.stopRecording()
                     }
                 }
@@ -628,12 +722,15 @@ Rectangle {
                     spacing: 18
                     Button {
                         objectName: "editorPlaybackToStartButton"
+                        property string shortcutText: "Home"
                         icon.source: Theme.icon("skip-back-fill")
                         enabled: AudioEditorController.playbackSupported
                             && AudioEditorController.hasDocument
                         opacity: 1.0
                         Accessible.name: qsTr("跳到开头")
                         Accessible.role: Accessible.Button
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("跳到开头") + " (" + shortcutText + ")"
                         Layout.preferredWidth: 74; Layout.preferredHeight: 56
                         background: Rectangle {
                             radius: 6; color: Theme.elevated
@@ -643,12 +740,15 @@ Rectangle {
                     }
                     Button {
                         objectName: "editorPlaybackRewindButton"
+                        property string shortcutText: "Left"
                         icon.source: Theme.icon("arrow-go-back-line")
                         enabled: AudioEditorController.playbackSupported
                             && AudioEditorController.hasDocument
                         opacity: 1.0
                         Accessible.name: qsTr("后退五秒")
                         Accessible.role: Accessible.Button
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("后退五秒") + " (" + shortcutText + ")"
                         Layout.preferredWidth: 74; Layout.preferredHeight: 56
                         background: Rectangle {
                             radius: 6; color: Theme.elevated
@@ -660,6 +760,7 @@ Rectangle {
                     RoundButton {
                         id: primaryPlayButton
                         objectName: "editorPrimaryPlayButton"
+                        property string shortcutText: "Space"
                         icon.source: Theme.icon(AudioEditorController.playing
                             ? "pause-fill" : "play-fill")
                         icon.color: Theme.iconPrimary
@@ -669,6 +770,10 @@ Rectangle {
                         Accessible.name: AudioEditorController.playing
                             ? qsTr("暂停") : qsTr("播放")
                         Accessible.role: Accessible.Button
+                        ToolTip.visible: hovered
+                        ToolTip.text: (AudioEditorController.playing
+                            ? qsTr("暂停") : qsTr("播放"))
+                            + " (" + shortcutText + ")"
                         Layout.preferredWidth: 82; Layout.preferredHeight: 82
                         background: Rectangle {
                             objectName: "editorPrimaryPlayBackground"
@@ -681,12 +786,15 @@ Rectangle {
                     }
                     Button {
                         objectName: "editorPlaybackForwardButton"
+                        property string shortcutText: "End"
                         icon.source: Theme.icon("skip-forward-fill")
                         enabled: AudioEditorController.playbackSupported
                             && AudioEditorController.hasDocument
                         opacity: 1.0
                         Accessible.name: qsTr("跳到末尾")
                         Accessible.role: Accessible.Button
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("跳到末尾") + " (" + shortcutText + ")"
                         Layout.preferredWidth: 74; Layout.preferredHeight: 56
                         background: Rectangle {
                             radius: 6; color: Theme.elevated
@@ -697,12 +805,15 @@ Rectangle {
                     }
                     Button {
                         objectName: "editorPlaybackStopButton"
+                        property string shortcutText: "Ctrl+Space"
                         icon.source: Theme.icon("checkbox-blank-line")
                         enabled: AudioEditorController.playbackSupported
                             && AudioEditorController.playing
                         opacity: 1.0
                         Accessible.name: qsTr("停止")
                         Accessible.role: Accessible.Button
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("停止") + " (" + shortcutText + ")"
                         Layout.preferredWidth: 74; Layout.preferredHeight: 56
                         background: Rectangle {
                             radius: 6; color: Theme.elevated
@@ -1263,9 +1374,64 @@ Rectangle {
         }
     }
 
+    Rectangle {
+        id: operationBanner
+        objectName: "editorOperationBanner"
+        visible: page.editorOperationActive
+            || AudioEditorController.errorMessage.length > 0
+            || page.showLastExportResult
+        z: 60
+        x: 12
+        y: page.height - height - 12
+        width: Math.max(280, page.mainWidth - 24)
+        height: 48
+        radius: 8
+        color: Theme.panel
+        border.color: AudioEditorController.errorMessage.length > 0
+            ? Theme.waveformRed : Theme.accent
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 10
+            spacing: 12
+            Label {
+                Layout.preferredWidth: Math.min(300, implicitWidth)
+                text: AudioEditorController.errorMessage.length > 0
+                    ? AudioEditorController.errorMessage
+                    : page.editorOperationActive ? qsTr("正在处理音频…")
+                    : qsTr("已导出到：") + AudioEditorController.lastExportPath
+                color: AudioEditorController.errorMessage.length > 0
+                    ? Theme.waveformRed : Theme.primaryText
+                elide: Text.ElideMiddle
+            }
+            ProgressBar {
+                objectName: "editorOperationProgress"
+                visible: page.editorOperationActive
+                Layout.fillWidth: true
+                from: 0
+                to: 1
+                value: AudioEditorController.progress
+            }
+            Item {
+                visible: !page.editorOperationActive
+                Layout.fillWidth: true
+            }
+            Button {
+                objectName: "editorOperationCancelButton"
+                visible: page.editorOperationActive
+                text: qsTr("取消")
+                onClicked: {
+                    AudioEditorController.cancelOperation()
+                    AudioEditorController.cancelRecording()
+                }
+            }
+        }
+    }
+
     Button {
         id: narrowPlaybackAccess
         objectName: "editorNarrowPlaybackAccess"
+        property string shortcutText: "Space"
         visible: page.narrowLayout
         z: 40
         x: page.width - inspectorAccess.width - width - 24
@@ -1280,6 +1446,8 @@ Rectangle {
         opacity: 1.0
         Accessible.name: text
         Accessible.role: Accessible.Button
+        ToolTip.visible: hovered
+        ToolTip.text: text + " (" + shortcutText + ")"
         onClicked: AudioEditorController.playPause()
     }
 
