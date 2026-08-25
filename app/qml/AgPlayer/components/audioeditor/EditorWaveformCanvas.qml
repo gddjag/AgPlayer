@@ -515,8 +515,9 @@ Rectangle {
         width: playheadTimeLabel.implicitWidth + 12
         height: 22
         radius: 11
-        color: Theme.elevated
-        border.color: Theme.accent
+        color: Qt.rgba(Theme.waveformGreen.r, Theme.waveformGreen.g,
+                       Theme.waveformGreen.b, 0.18)
+        border.color: Theme.waveformGreen
         z: 9
         Text {
             id: playheadTimeLabel
@@ -532,7 +533,8 @@ Rectangle {
         objectName: "editorSelectionTimeCapsule"
         property alias text: selectionTimeLabel.text
         visible: selectionOverlay.visible
-        x: Math.max(4, Math.min(canvas.width - width - 4, selectionOverlay.x + 6))
+        x: Math.max(4, Math.min(canvas.width - width - 4,
+            selectionOverlay.x + selectionOverlay.width - width - 6))
         y: 31
         width: selectionTimeLabel.implicitWidth + 12
         height: 22
@@ -547,30 +549,6 @@ Rectangle {
                 + " – "
                 + canvas.frameTimeText(AudioEditorController.selectionEnd)
             color: Theme.primaryText
-            font.pixelSize: 10
-        }
-    }
-
-    Rectangle {
-        id: selectionDurationCapsule
-        objectName: "editorSelectionDurationCapsule"
-        property alias text: selectionDurationLabel.text
-        visible: selectionOverlay.visible
-        x: Math.max(4, Math.min(canvas.width - width - 4,
-            selectionOverlay.x + selectionOverlay.width / 2 - width / 2))
-        y: canvas.height - height - 8
-        width: selectionDurationLabel.implicitWidth + 12
-        height: 22
-        radius: 11
-        color: Theme.activeSelection
-        border.color: Theme.accent
-        z: 9
-        Text {
-            id: selectionDurationLabel
-            anchors.centerIn: parent
-            text: qsTr("时长 %1").arg(canvas.frameTimeText(
-                AudioEditorController.selectionFrames))
-            color: Theme.activeSelectionText
             font.pixelSize: 10
         }
     }

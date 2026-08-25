@@ -479,19 +479,26 @@ TestCase {
         const selectionCapsule = findChild(canvas, "editorSelectionTimeCapsule")
         const durationCapsule = findChild(canvas, "editorSelectionDurationCapsule")
         const dragCapsule = findChild(canvas, "editorSelectionDragCapsule")
+        const overlay = findChild(canvas, "editorSelectionOverlay")
         const dragInteraction = findChild(
             canvas, "editorSelectionFileDragInteraction")
-        for (const capsule of [playheadCapsule, selectionCapsule,
-                               durationCapsule, dragCapsule]) {
+        for (const capsule of [playheadCapsule, selectionCapsule, dragCapsule]) {
             verify(capsule, "missing timeline capsule")
             verify(capsule.visible, capsule.objectName + " must be visible")
         }
+        compare(durationCapsule, null,
+                "duplicate duration capsule must not be rendered")
         verify(playheadCapsule.text.length > 0)
+        verify(playheadCapsule.color.a < 1.0,
+               "playhead time capsule must remain translucent")
         verify(selectionCapsule.text.indexOf("–") >= 0)
-        verify(durationCapsule.text.length > 0)
+        verify(selectionCapsule.x + selectionCapsule.width
+            > overlay.x + overlay.width / 2,
+            "selection range capsule must anchor to the top-right")
+        verify(dragCapsule.x < overlay.x + overlay.width / 2,
+            "drag capsule must anchor to the bottom-left")
         verify(dragInteraction, "selection WAV capsule must be interactive")
 
-        const overlay = findChild(canvas, "editorSelectionOverlay")
         verify(overlay)
         mouseClick(overlay, overlay.width / 2, overlay.height / 2,
                    Qt.RightButton)
