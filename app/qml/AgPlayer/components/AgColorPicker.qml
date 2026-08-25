@@ -459,13 +459,14 @@ Popup {
 
                 delegate: AbstractButton {
                     id: candidateButton
+                    readonly property int candidateIndex: index
                     readonly property string candidateColor:
-                        root.candidateColors[index]
+                        root.candidateColors[candidateIndex]
                     readonly property bool selected:
                         ColorScale.normalizeHex(root.selectedColor)
                         === candidateColor
 
-                    objectName: "colorCandidate-" + index
+                    objectName: "colorCandidate-" + candidateIndex
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 44
@@ -532,7 +533,7 @@ Popup {
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: [10, 20, 30, 40, 50,
-                                   100, 120, 140, 160, 180][candidateButton.index]
+                                   100, 120, 140, 160, 180][candidateButton.candidateIndex]
                             color: ColorScale.isLight(candidateButton.candidateColor)
                                    ? "#251028" : "#FFFFFF"
                             font.family: Theme.fontPrimary
