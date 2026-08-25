@@ -71,6 +71,12 @@ private:
         QByteArray peaks;
     };
 
+    struct ActiveLoad final {
+        Request request;
+        QFutureWatcher<LoadResult>* watcher = nullptr;
+        bool sourceInvalidated = false;
+    };
+
     struct CacheEntry final {
         QString sourcePath;
         QByteArray peaks;
@@ -86,7 +92,7 @@ private:
         const QString& cacheDirectory, const QString& sourcePath);
     [[nodiscard]] static unsigned char quantizeSigned(float amplitude);
     void startNext();
-    void finishActive();
+    void finishActive(QFutureWatcher<LoadResult>* watcher);
     void touchLru(const QString& trackId);
     void insertCache(const QString& trackId,
                      const QString& sourcePath,
@@ -100,16 +106,14 @@ private:
     QString cacheDirectory_;
     quint64 cacheEpoch_ = 0U;
     QList<Request> pending_;
-    std::optional<Request> activeRequest_;
+    QList<ActiveLoad> activeLoads_;
     QHash<QString, CacheEntry> cache_;
     std::list<QString> lruOrder_;
     QHash<QString, NegativeEntry> negativeCache_;
     std::list<QString> negativeOrder_;
     QThreadPool workerPool_;
-    QFutureWatcher<LoadResult> watcher_;
     int activeWorkers_ = 0;
     int maxActiveWorkers_ = 0;
     int maxInFlightTracks_ = 0;
     qulonglong cacheReadAttempts_ = 0U;
-    bool activeSourceInvalidated_ = false;
 };

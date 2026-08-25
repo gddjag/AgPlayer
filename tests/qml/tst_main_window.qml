@@ -98,6 +98,14 @@ TestCase {
     }
 
     Component {
+        id: settingsPageComponent
+        SettingsPage {
+            width: 860
+            height: 640
+        }
+    }
+
+    Component {
         id: trackWaveformThumbnailItemComponent
         TrackWaveformThumbnailItem {
             width: 128
@@ -948,6 +956,17 @@ TestCase {
         compare(side.iconForNode("playlist"), "list-unordered")
         compare(side.iconForNode("tags"), "price-tag-3-line")
         compare(side.iconForNode("resourceFolder"), "folder-open-line")
+        side.destroy()
+    }
+
+    function test_sidebar_does_not_resolve_an_empty_supplied_icon() {
+        var side = sideNavigationComponent.createObject(mainWindow.contentItem)
+        verify(side)
+        var favoriteSuppliedIcon = findChild(side,
+                                             "suppliedNodeIcon-favorites")
+        verify(favoriteSuppliedIcon)
+        compare(favoriteSuppliedIcon.visible, false)
+        compare(favoriteSuppliedIcon.source.toString(), "")
         side.destroy()
     }
 
@@ -2117,8 +2136,20 @@ TestCase {
                 "歌曲 · 艺术家 · 专辑 · 标签")
         verify(findChild(filter, "librarySearchIcon"))
         compare(findChild(filter, "bpmModule").width, 216)
-        compare(findChild(filter, "bpmRange").first.handle.width, 14)
-        compare(findChild(filter, "bpmRange").second.handle.width, 14)
+        var bpmRange = findChild(filter, "bpmRange")
+        compare(bpmRange.first.handle.width, 14)
+        compare(bpmRange.second.handle.width, 14)
+        bpmRange.first.value = 72
+        bpmRange.second.value = 155
+        tryVerify(function() {
+            return bpmRange.first.handle.x < bpmRange.second.handle.x
+        })
+        var firstX = bpmRange.first.handle.x
+        bpmRange.second.value = 150
+        tryVerify(function() {
+            return bpmRange.second.handle.x < bpmRange.width
+                    && bpmRange.first.handle.x === firstX
+        })
         var minimum = findChild(filter, "minimumBpmField")
         var maximum = findChild(filter, "maximumBpmField")
         verify(minimum)
@@ -4269,6 +4300,11 @@ TestCase {
 
     function test_settings_language_combo_renders_flag_and_language() {
         var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
         verify(page)
         page.open()
         page.selectedSection = 0
@@ -4281,9 +4317,14 @@ TestCase {
         compare(combo.valueModel[2].text, "🇹🇭 ภาษาไทย")
         compare(combo.valueModel[3].text, "🇻🇳 Tiếng Việt")
         SettingsController.language = "vi"
+        tryCompare(combo, "currentIndex", 3)
         tryVerify(function() { return combo.contentItem.text === "🇻🇳 Tiếng Việt" })
         SettingsController.language = "zh"
-        page.close()
+        if (ownsPage) {
+            page.saveAndClose()
+            page.destroy()
+        } else
+            page.close()
     }
 
     function test_settings_transcode_controls_are_split_and_scroll_tracks_section() {

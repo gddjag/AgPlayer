@@ -74,12 +74,15 @@ void TagFilterModelTest::sortsByTrackCountThenName()
 
     TrackRecord first;
     first.trackId = QStringLiteral("first");
+    first.path = directory.filePath(QStringLiteral("first.wav"));
     first.tags = {QStringLiteral("Beta"), QStringLiteral("Zulu")};
     TrackRecord second;
     second.trackId = QStringLiteral("second");
+    second.path = directory.filePath(QStringLiteral("second.wav"));
     second.tags = {QStringLiteral("Alpha"), QStringLiteral("Beta")};
     TrackRecord third;
     third.trackId = QStringLiteral("third");
+    third.path = directory.filePath(QStringLiteral("third.wav"));
     third.tags = {QStringLiteral("Alpha")};
     library.replaceAll({first, second, third});
 

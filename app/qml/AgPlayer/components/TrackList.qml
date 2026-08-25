@@ -26,7 +26,7 @@ ListView {
     readonly property bool windowActive: root.Window.active
     readonly property bool showAlbumColumn: true
     readonly property bool compactColumns: width < 900
-    readonly property int favoriteAlbumGap: 12
+    readonly property int favoriteAlbumGap: 10
     readonly property int artistAlbumGap: 8
     readonly property int albumRatingGap: 10
     readonly property int sequenceWidth: compactColumns ? 34 : 42

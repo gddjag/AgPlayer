@@ -432,8 +432,11 @@ Item {
                     Layout.preferredHeight: 1
                 }
                 Image {
+                    objectName: "suppliedNodeIcon-" + nodeRow.nodeType
                     visible: root.suppliedIconForNode(nodeRow.nodeType) !== ""
-                    source: Theme.icon(root.suppliedIconForNode(nodeRow.nodeType))
+                    source: visible
+                            ? Theme.icon(root.suppliedIconForNode(nodeRow.nodeType))
+                            : ""
                     sourceSize.width: 17
                     sourceSize.height: 17
                     fillMode: Image.PreserveAspectFit

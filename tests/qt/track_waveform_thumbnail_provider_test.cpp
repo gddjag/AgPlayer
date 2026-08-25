@@ -1040,7 +1040,7 @@ void TrackWaveformThumbnailProviderTest::normalCompletionSourceGuardsPostSignalC
     QVERIFY(source.open(QIODevice::ReadOnly));
     const QByteArray implementation = source.readAll();
     const qsizetype finishBegin = implementation.indexOf(
-        "void TrackWaveformThumbnailProvider::finishActive()");
+        "void TrackWaveformThumbnailProvider::finishActive(");
     const qsizetype finishEnd = implementation.indexOf(
         "void TrackWaveformThumbnailProvider::touchLru", finishBegin);
     QVERIFY(finishBegin >= 0);

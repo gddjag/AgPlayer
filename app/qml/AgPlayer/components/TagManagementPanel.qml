@@ -12,9 +12,9 @@ Item {
     property var filterModel: null
     property alias searchText: tagSearchField.text
     readonly property int visibleTagCount: tagRepeater.count
-    readonly property int pillHorizontalPadding: 10
-    readonly property int pillContentSpacing: 5
-    readonly property int pillMinimumWidth: 64
+    readonly property int pillHorizontalPadding: 4
+    readonly property int pillContentSpacing: 2
+    readonly property int pillMinimumWidth: 48
     property string contextTagKey: ""
     property string contextTagName: ""
     property color contextTagColor: "transparent"
@@ -352,7 +352,7 @@ Item {
                 objectName: "tagFlow"
                 width: tagFlickable.width
                 height: childrenRect.height
-                spacing: 6
+                spacing: 4
 
                 Repeater {
                     id: tagRepeater

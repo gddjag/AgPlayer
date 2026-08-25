@@ -56,13 +56,14 @@ TrackWaveformThumbnailProvider::TrackWaveformThumbnailProvider(
     // second low-priority worker so a newly visible row can start immediately.
     workerPool_.setMaxThreadCount(2);
     workerPool_.setThreadPriority(QThread::LowPriority);
-    connect(&watcher_, &QFutureWatcher<LoadResult>::finished,
-            this, &TrackWaveformThumbnailProvider::finishActive);
 }
 
 TrackWaveformThumbnailProvider::~TrackWaveformThumbnailProvider()
 {
-    watcher_.disconnect(this);
+    for (const ActiveLoad& active : activeLoads_) {
+        active.watcher->disconnect(this);
+    }
+    activeLoads_.clear();
     pending_.clear();
     workerPool_.clear();
     workerPool_.waitForDone();
@@ -136,13 +137,14 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
         cache_.erase(cached);
     }
 
-    if (activeRequest_.has_value()
-        && activeRequest_->trackId == trackId) {
-        activeRequest_->sourcePath = sourcePath;
-        activeRequest_->generation = generation;
-        activeRequest_->visiblePriority = visiblePriority;
-        activeRequest_->canceled = false;
-        return;
+    for (ActiveLoad& active : activeLoads_) {
+        if (active.request.trackId == trackId) {
+            active.request.sourcePath = sourcePath;
+            active.request.generation = generation;
+            active.request.visiblePriority = visiblePriority;
+            active.request.canceled = false;
+            return;
+        }
     }
 
     const int queuedIndex = queuedIndexForTrack(trackId);
@@ -171,7 +173,9 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
     }
 
     std::optional<Request> dropped;
-    if (pending_.size() >= kMaxQueuedJobs) {
+    // Two active watchers require reserving one queue slot to keep the
+    // historical total work bound (256 queued plus one active) intact.
+    if (pending_.size() >= kMaxQueuedJobs - 1) {
         // Front is reserved for visible rows; discard the oldest background
         // work first so an off-screen burst cannot evict viewport work.
         dropped = pending_.takeLast();
@@ -183,7 +187,7 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
     maxInFlightTracks_ = std::max(
         maxInFlightTracks_,
         static_cast<int>(pending_.size())
-            + (activeRequest_.has_value() ? 1 : 0));
+            + static_cast<int>(activeLoads_.size()));
     if (dropped.has_value() && !dropped->canceled) {
         emit thumbnailReady(dropped->trackId, dropped->generation, {});
     }
@@ -192,17 +196,17 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
 void TrackWaveformThumbnailProvider::cancel(const QString& trackId,
                                             const quint64 generation)
 {
-    if (activeRequest_.has_value()
-        && activeRequest_->trackId == trackId
-        && activeRequest_->generation == generation) {
-        activeRequest_->canceled = true;
-        // QFuture cancellation is cooperative, but detaching the watcher lets
-        // a visible replacement use the second bounded worker immediately.
-        watcher_.future().cancel();
-        activeRequest_.reset();
-        activeWorkers_ = 0;
-        startNext();
-        return;
+    for (ActiveLoad& active : activeLoads_) {
+        if (active.request.trackId == trackId
+            && active.request.generation == generation) {
+            active.request.canceled = true;
+            // The cache read has no interruption points, so cancelling its
+            // QFuture would publish a result-less completion. Keep it running
+            // but suppress publication; the second bounded worker can serve
+            // the next visible row immediately.
+            startNext();
+            return;
+        }
     }
 
     const int queuedIndex = queuedIndexForTrack(trackId);
@@ -216,7 +220,7 @@ QVariantMap TrackWaveformThumbnailProvider::diagnostics() const
     return {
         {QStringLiteral("cacheEntries"), cache_.size()},
         {QStringLiteral("inFlightTracks"),
-         pending_.size() + (activeRequest_.has_value() ? 1 : 0)},
+         pending_.size() + activeLoads_.size()},
         {QStringLiteral("queuedJobs"), pending_.size()},
         {QStringLiteral("activeWorkers"), activeWorkers_},
         {QStringLiteral("maxActiveWorkers"), maxActiveWorkers_},
@@ -260,9 +264,10 @@ void TrackWaveformThumbnailProvider::invalidateSourceCache(
         }
     }
     removeNegativeCooldown(sourcePath);
-    if (activeRequest_.has_value()
-        && sourceLookupKey(activeRequest_->sourcePath) == sourceKey) {
-        activeSourceInvalidated_ = true;
+    for (ActiveLoad& active : activeLoads_) {
+        if (sourceLookupKey(active.request.sourcePath) == sourceKey) {
+            active.sourceInvalidated = true;
+        }
     }
     emit sourceCacheInvalidated(sourcePath);
 }
@@ -307,64 +312,63 @@ unsigned char TrackWaveformThumbnailProvider::quantizeSigned(
 
 void TrackWaveformThumbnailProvider::startNext()
 {
-    if (activeRequest_.has_value()) {
-        return;
-    }
-
-    while (!pending_.isEmpty()) {
+    while (activeLoads_.size() < workerPool_.maxThreadCount()
+           && !pending_.isEmpty()) {
         const Request cooled = pending_.takeFirst();
-        if (!hasNegativeCooldown(cooled.sourcePath)) {
-            activeRequest_ = cooled;
-            activeSourceInvalidated_ = false;
-            break;
-        }
-        if (!cooled.canceled) {
-            const QPointer<TrackWaveformThumbnailProvider> guard(this);
-            emit thumbnailReady(cooled.trackId, cooled.generation, {});
-            if (guard.isNull() || activeRequest_.has_value()) {
-                return;
+        if (hasNegativeCooldown(cooled.sourcePath)) {
+            if (!cooled.canceled) {
+                const QPointer<TrackWaveformThumbnailProvider> guard(this);
+                emit thumbnailReady(cooled.trackId, cooled.generation, {});
+                if (guard.isNull()) {
+                    return;
+                }
             }
+            continue;
         }
-    }
-    if (!activeRequest_.has_value()) {
-        return;
-    }
 
-    const Request started = *activeRequest_;
-    const QString cacheDirectory = cacheDirectory_;
-    const quint64 cacheEpoch = cacheEpoch_;
-    activeWorkers_ = 1;
-    maxActiveWorkers_ = std::max(maxActiveWorkers_, activeWorkers_);
-    ++cacheReadAttempts_;
-
-    watcher_.setFuture(QtConcurrent::run(
-        &workerPool_,
-        [cacheDirectory, cacheEpoch, started] {
-            return LoadResult{
-                started.trackId,
-                started.sourcePath,
-                cacheEpoch,
-                loadFromV2CacheOnly(cacheDirectory, started.sourcePath),
-            };
-        }));
+        auto* watcher = new QFutureWatcher<LoadResult>(this);
+        activeLoads_.append(ActiveLoad{cooled, watcher, false});
+        const QString cacheDirectory = cacheDirectory_;
+        const quint64 cacheEpoch = cacheEpoch_;
+        ++cacheReadAttempts_;
+        activeWorkers_ = static_cast<int>(activeLoads_.size());
+        maxActiveWorkers_ = std::max(maxActiveWorkers_, activeWorkers_);
+        connect(watcher, &QFutureWatcher<LoadResult>::finished, this,
+                [this, watcher] { finishActive(watcher); });
+        watcher->setFuture(QtConcurrent::run(
+            &workerPool_,
+            [cacheDirectory, cacheEpoch, cooled] {
+                return LoadResult{
+                    cooled.trackId,
+                    cooled.sourcePath,
+                    cacheEpoch,
+                    loadFromV2CacheOnly(cacheDirectory, cooled.sourcePath),
+                };
+            }));
+    }
 }
 
-void TrackWaveformThumbnailProvider::finishActive()
+void TrackWaveformThumbnailProvider::finishActive(
+    QFutureWatcher<LoadResult>* watcher)
 {
-    const LoadResult loaded = watcher_.result();
-    activeWorkers_ = 0;
-    const bool sourceInvalidated = activeSourceInvalidated_;
-    activeSourceInvalidated_ = false;
-    if (!activeRequest_.has_value()
-        || activeRequest_->trackId != loaded.trackId) {
-        activeRequest_.reset();
-        startNext();
+    const LoadResult loaded = watcher->result();
+    int activeIndex = -1;
+    for (int index = 0; index < activeLoads_.size(); ++index) {
+        if (activeLoads_.at(index).watcher == watcher) {
+            activeIndex = index;
+            break;
+        }
+    }
+    if (activeIndex < 0) {
+        watcher->deleteLater();
         return;
     }
 
-    const Request current = *activeRequest_;
-    activeRequest_.reset();
-    if (sourceInvalidated || loaded.cacheEpoch != cacheEpoch_
+    const ActiveLoad active = activeLoads_.takeAt(activeIndex);
+    watcher->deleteLater();
+    activeWorkers_ = static_cast<int>(activeLoads_.size());
+    const Request current = active.request;
+    if (active.sourceInvalidated || loaded.cacheEpoch != cacheEpoch_
         || loaded.sourcePath != current.sourcePath) {
         if (!current.canceled) {
             pending_.prepend(current);
