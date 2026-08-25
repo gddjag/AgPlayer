@@ -1459,9 +1459,9 @@ Item {
 
                         Repeater {
                             model: [
-                                { text: qsTr("深色"), value: 0 },
+                                { text: qsTr("跟随系统"), value: 2 },
                                 { text: qsTr("浅色"), value: 1 },
-                                { text: qsTr("跟随系统"), value: 2 }
+                                { text: qsTr("深色"), value: 0 }
                             ]
 
                             delegate: Button {
@@ -1488,6 +1488,61 @@ Item {
                                     implicitHeight: 32
                                 }
                             }
+                        }
+                    }
+                }
+
+                SettingRow {
+                    label: qsTr("强调色")
+                    Layout.preferredHeight: 70
+
+                    ThemeColorSelector {
+                        objectName: "accentThemeColorSelector"
+                        anchors.fill: parent
+                        title: qsTr("强调色")
+                        selectedMode: SettingsController.accentMode
+                        selectedPreset: SettingsController.accentPreset
+                        customColor: SettingsController.accentCustomColor
+                        onDefaultRequested: SettingsController.accentMode = 0
+                        onPresetRequested: function(preset) {
+                            SettingsController.accentMode = 1
+                            SettingsController.accentPreset = preset
+                        }
+                        onCustomRequested: function(color) {
+                            SettingsController.accentMode = 2
+                            SettingsController.accentCustomColor = color
+                        }
+                    }
+                }
+
+                SettingSwitch {
+                    objectName: "highlightFollowAccentControl"
+                    text: qsTr("高亮颜色跟随强调色")
+                    checked: SettingsController.highlightFollowAccent
+                    onToggled: SettingsController.highlightFollowAccent = checked
+                }
+
+                SettingRow {
+                    label: qsTr("高亮颜色")
+                    Layout.preferredHeight: 70
+
+                    ThemeColorSelector {
+                        id: highlightThemeColorSelector
+                        objectName: "highlightThemeColorSelector"
+                        anchors.fill: parent
+                        title: qsTr("高亮颜色")
+                        enabled: !SettingsController.highlightFollowAccent
+                        selectedMode: SettingsController.highlightMode
+                        selectedPreset: SettingsController.highlightPreset
+                        customColor: SettingsController.highlightCustomColor
+                        onDefaultRequested: SettingsController.highlightMode = 0
+                        onPresetRequested: function(preset) {
+                            SettingsController.highlightMode = 1
+                            SettingsController.highlightPreset = preset
+                        }
+                        onCustomRequested: function(color) {
+                            SettingsController.highlightMode = 2
+                            SettingsController.highlightCustomColor = color
                         }
                     }
                 }

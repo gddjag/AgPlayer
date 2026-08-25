@@ -611,6 +611,7 @@
 </context>
 <context>
     <name>ColorField</name>
+    <message><source>Color %1</source><translation>สี %1</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/ColorField.qml" line="64"/>
         <source>选择颜色</source>
@@ -3642,6 +3643,9 @@
         <source>打开音频工具</source>
         <translation>เปิดเครื่องมือเสียง</translation>
     </message>
+    <message><source>强调色</source><translation>สีเน้น</translation></message>
+    <message><source>高亮颜色跟随强调色</source><translation>สีไฮไลต์ตามสีเน้น</translation></message>
+    <message><source>高亮颜色</source><translation>สีไฮไลต์</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>
@@ -3990,5 +3994,12 @@
         <source>评分</source>
         <translation>เรตติ้ง</translation>
     </message>
+</context>
+<context>
+    <name>ThemeColorSelector</name>
+    <message><source>默认</source><translation>ค่าเริ่มต้น</translation></message>
+    <message><source>，已选择</source><translation>, เลือกอยู่</translation></message>
+    <message><source>自定义</source><translation>กำหนดเอง</translation></message>
+    <message><source>自定义颜色 %1</source><translation>สีกำหนดเอง %1</translation></message>
 </context>
 </TS>

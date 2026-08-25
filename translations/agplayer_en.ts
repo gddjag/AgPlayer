@@ -611,6 +611,7 @@
 </context>
 <context>
     <name>ColorField</name>
+    <message><source>Color %1</source><translation>Color %1</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/ColorField.qml" line="64"/>
         <source>选择颜色</source>
@@ -3699,6 +3700,9 @@ Clear: Remove all known aliases for this field.</translation>
         <source>打开音频工具</source>
         <translation>Open audio tools</translation>
     </message>
+    <message><source>强调色</source><translation>Accent</translation></message>
+    <message><source>高亮颜色跟随强调色</source><translation>Highlight color follows accent</translation></message>
+    <message><source>高亮颜色</source><translation>Highlight color</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>
@@ -4047,5 +4051,12 @@ Clear: Remove all known aliases for this field.</translation>
         <source>评分</source>
         <translation>Rating</translation>
     </message>
+</context>
+<context>
+    <name>ThemeColorSelector</name>
+    <message><source>默认</source><translation>Default</translation></message>
+    <message><source>，已选择</source><translation>, selected</translation></message>
+    <message><source>自定义</source><translation>Custom</translation></message>
+    <message><source>自定义颜色 %1</source><translation>Custom color %1</translation></message>
 </context>
 </TS>
