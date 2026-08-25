@@ -41,7 +41,7 @@
 - `build/evidence/2026-08-25-ag-color-picker/picker-light-native.jpg` — **462 × 552**，28,220 bytes。
 - `build/evidence/2026-08-25-ag-color-picker/picker-dark-native.jpg` — **462 × 552**，25,839 bytes。
 
-精确来源、命令/方法、源提交关系、尺寸和 SHA-256 见忽略的 `build/evidence/2026-08-25-ag-color-picker/picker-native-provenance.md`：qmlscene 使用忽略的 `picker-visual-harness.qml` 与 `imports/AgPlayer/qmldir` 加载 `2dcc5a5` 的最终生产 `AgColorPicker.qml`；Windows Computer Use 以 `sky.get_window_state(include_screenshot: true)` 的 Windows.Graphics.Capture data URL 原字节写入这两份 JPG。它们**不是** `contentItem.grabToImage()` 的输出（保留 harness 中独立的 diagnostic PNG 路径亦非上述 JPG）。
+精确来源、命令/方法、源提交关系、尺寸和 SHA-256 见忽略的 `build/evidence/2026-08-25-ag-color-picker/picker-native-provenance.md` 与 `picker-native-capture-transcript.md`：qmlscene 使用忽略的 `picker-visual-harness.qml` 与 `imports/AgPlayer/qmldir` 加载 `2dcc5a5` 的最终生产 `AgColorPicker.qml`；`2dcc5a5` 是 `124d14a -> 4570d62 -> ed5cfef` 文档序列的实现祖先。Windows Computer Use 以 `sky.get_window_state(include_screenshot: true)` 的 Windows.Graphics.Capture data URL 原字节写入这两份 JPG。它们**不是** `contentItem.grabToImage()` 的输出（保留 harness 中独立的 diagnostic PNG 路径亦非上述 JPG）。
 
 可见约 360 px 宽紧凑 picker；顶部圆形色样、`#63316B` HEX 和 ×；`R 99 / G 49 / B 107` 统一行；三条 RGB 渐变滑块；`#63316B` 的 5 × 2 色卡（`#F8EBFA` 至 `#251028`）；`#63316B` 上的双层选中环与 ✓。light/dark 图中外框、输入面和文本 chrome 随 `Theme` 改变，而十个色卡保持同一标签/颜色。
 
