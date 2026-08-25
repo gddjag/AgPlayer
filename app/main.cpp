@@ -271,9 +271,7 @@ int main(int argc, char* argv[])
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
-    //   --qa-accent <id|#RRGGBB>     set the isolated Accent seed
-    //   --qa-highlight <id|#RRGGBB>  set the isolated Highlight seed
-    //   --qa-highlight-follow <0|1>  make Highlight follow Accent
+    //   --qa-skin <default|id|#RRGGBB> set the complete theme skin seed
     //   --qa-settings-section <0..6> capture one settings section
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
@@ -291,9 +289,7 @@ int main(int argc, char* argv[])
     QString qaSelectedTag;
     bool qaShowTrackDetails = false;
     QString qaTheme;
-    QString qaAccent;
-    QString qaHighlight;
-    int qaHighlightFollow = -1;
+    QString qaSkin;
     QString qaLanguage;
     bool qaOpenSettings = false;
     int qaSettingsSection = -1;
@@ -357,18 +353,9 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-theme")
                        && i + 1 < cliArgs.size()) {
                 qaTheme = cliArgs.at(++i).toLower();
-            } else if (arg == QStringLiteral("--qa-accent")
+            } else if (arg == QStringLiteral("--qa-skin")
                        && i + 1 < cliArgs.size()) {
-                qaAccent = cliArgs.at(++i);
-            } else if (arg == QStringLiteral("--qa-highlight")
-                       && i + 1 < cliArgs.size()) {
-                qaHighlight = cliArgs.at(++i);
-            } else if (arg == QStringLiteral("--qa-highlight-follow")
-                       && i + 1 < cliArgs.size()) {
-                const QString value = cliArgs.at(++i).toLower();
-                qaHighlightFollow = value == QStringLiteral("1") ? 1
-                    : value == QStringLiteral("0") ? 0
-                    : qaHighlightFollow;
+                qaSkin = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-language")
                        && i + 1 < cliArgs.size()) {
                 qaLanguage = cliArgs.at(++i).toLower();
@@ -733,25 +720,13 @@ int main(int argc, char* argv[])
                 }
             };
             applyQaColor(
-                qaAccent,
-                [&settings](int mode) { settings.setAccentMode(mode); },
+                qaSkin,
+                [&settings](int mode) { settings.setSkinColorMode(mode); },
                 [&settings](const QString& preset) {
-                    settings.setAccentPreset(preset);
+                    settings.setSkinPreset(preset);
                 },
                 [&settings](const QString& color) {
-                    settings.setAccentCustomColor(color);
-                });
-            if (qaHighlightFollow >= 0) {
-                settings.setHighlightFollowAccent(qaHighlightFollow != 0);
-            }
-            applyQaColor(
-                qaHighlight,
-                [&settings](int mode) { settings.setHighlightMode(mode); },
-                [&settings](const QString& preset) {
-                    settings.setHighlightPreset(preset);
-                },
-                [&settings](const QString& color) {
-                    settings.setHighlightCustomColor(color);
+                    settings.setSkinCustomColor(color);
                 });
         }
         if (!qaLanguage.isEmpty()) {

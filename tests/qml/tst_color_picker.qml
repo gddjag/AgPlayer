@@ -37,23 +37,23 @@ TestCase {
         }
 
         ThemeColorSelector {
-            id: accentSelector
+            id: skinSelector
             parent: testHost
             x: 18
             y: 350
-            objectNamePrefix: "accentSelector"
-            title: "Accent"
-            selectedMode: SettingsController.accentMode
-            selectedPreset: SettingsController.accentPreset
-            customColor: SettingsController.accentCustomColor
-            onDefaultRequested: SettingsController.accentMode = 0
+            objectNamePrefix: "skinSelector"
+            title: "Theme skin color"
+            selectedMode: SettingsController.skinColorMode
+            selectedPreset: SettingsController.skinPreset
+            customColor: SettingsController.skinCustomColor
+            onDefaultRequested: SettingsController.skinColorMode = 0
             onPresetRequested: function(preset) {
-                SettingsController.accentMode = 1
-                SettingsController.accentPreset = preset
+                SettingsController.skinColorMode = 1
+                SettingsController.skinPreset = preset
             }
             onCustomRequested: function(color) {
-                SettingsController.accentMode = 2
-                SettingsController.accentCustomColor = color
+                SettingsController.skinColorMode = 2
+                SettingsController.skinCustomColor = color
             }
         }
 
@@ -90,28 +90,6 @@ TestCase {
                 model: ["A", "B"]
             }
         }
-
-        ThemeColorSelector {
-            id: highlightSelector
-            parent: testHost
-            x: 365
-            y: 350
-            objectNamePrefix: "highlightSelector"
-            title: "Highlight"
-            enabled: !SettingsController.highlightFollowAccent
-            selectedMode: SettingsController.highlightMode
-            selectedPreset: SettingsController.highlightPreset
-            customColor: SettingsController.highlightCustomColor
-            onDefaultRequested: SettingsController.highlightMode = 0
-            onPresetRequested: function(preset) {
-                SettingsController.highlightMode = 1
-                SettingsController.highlightPreset = preset
-            }
-            onCustomRequested: function(color) {
-                SettingsController.highlightMode = 2
-                SettingsController.highlightCustomColor = color
-            }
-        }
     }
 
     SignalSpy {
@@ -136,13 +114,9 @@ TestCase {
         integratedEditedSpy.clear()
         savedWaveformUnplayedColor = SettingsController.waveformUnplayedColor
         savedThemeChoices = {
-            accentMode: SettingsController.accentMode,
-            accentPreset: SettingsController.accentPreset,
-            accentCustomColor: SettingsController.accentCustomColor,
-            follow: SettingsController.highlightFollowAccent,
-            highlightMode: SettingsController.highlightMode,
-            highlightPreset: SettingsController.highlightPreset,
-            highlightCustomColor: SettingsController.highlightCustomColor
+            mode: SettingsController.skinColorMode,
+            preset: SettingsController.skinPreset,
+            customColor: SettingsController.skinCustomColor
         }
         SettingsController.themeMode = 0
         wait(0)
@@ -154,13 +128,9 @@ TestCase {
         if (integratedPicker)
             integratedPicker.close()
         SettingsController.waveformUnplayedColor = savedWaveformUnplayedColor
-        SettingsController.accentMode = savedThemeChoices.accentMode
-        SettingsController.accentPreset = savedThemeChoices.accentPreset
-        SettingsController.accentCustomColor = savedThemeChoices.accentCustomColor
-        SettingsController.highlightFollowAccent = savedThemeChoices.follow
-        SettingsController.highlightMode = savedThemeChoices.highlightMode
-        SettingsController.highlightPreset = savedThemeChoices.highlightPreset
-        SettingsController.highlightCustomColor = savedThemeChoices.highlightCustomColor
+        SettingsController.skinColorMode = savedThemeChoices.mode
+        SettingsController.skinPreset = savedThemeChoices.preset
+        SettingsController.skinCustomColor = savedThemeChoices.customColor
         acceptedSpy.clear()
         integratedEditedSpy.clear()
         SettingsController.themeMode = savedThemeMode
@@ -581,40 +551,45 @@ TestCase {
 
     function test_settings_drive_runtime_theme_and_cancel_restores_tokens() {
         SettingsController.themeMode = 1
-        SettingsController.accentMode = 0
-        SettingsController.highlightFollowAccent = true
+        SettingsController.skinColorMode = 0
         wait(0)
 
         var initialAccent = ThemeManager.accent.toString()
         var initialHighlight = ThemeManager.highlight.toString()
+        var initialBackground = ThemeManager.background.toString()
+        var initialCurrentTrackSurface = ThemeManager.currentTrackSurface.toString()
         var initialSemantic = ThemeManager.success.toString()
 
         SettingsController.beginEdit()
-        SettingsController.accentMode = 1
-        SettingsController.accentPreset = "systemBlue"
-        SettingsController.highlightFollowAccent = false
-        SettingsController.highlightMode = 1
-        SettingsController.highlightPreset = "purple"
+        SettingsController.skinColorMode = 2
+        SettingsController.skinCustomColor = "#D27722"
 
         tryVerify(function() {
             return ThemeManager.accent.toString() !== initialAccent
                     && ThemeManager.highlight.toString() !== initialHighlight
+                    && ThemeManager.background.toString() !== initialBackground
+                    && ThemeManager.currentTrackSurface.toString()
+                       !== initialCurrentTrackSurface
         })
         compare(Theme.accent, ThemeManager.accent)
         compare(Theme.activeSelection, ThemeManager.highlight)
+        compare(Theme.currentTrackSurface, ThemeManager.currentTrackSurface)
         compare(ThemeManager.success.toString(), initialSemantic)
 
         SettingsController.cancelEdit()
         tryVerify(function() {
             return ThemeManager.accent.toString() === initialAccent
                     && ThemeManager.highlight.toString() === initialHighlight
+                    && ThemeManager.background.toString() === initialBackground
+                    && ThemeManager.currentTrackSurface.toString()
+                       === initialCurrentTrackSurface
         })
     }
 
     function test_theme_selectors_apply_presets_and_keyboard_activation() {
-        SettingsController.accentMode = 0
-        var defaultButton = findChild(accentSelector, "accentSelectorDefault")
-        var blue = findChild(accentSelector, "accentSelectorPreset-systemBlue")
+        SettingsController.skinColorMode = 0
+        var defaultButton = findChild(skinSelector, "skinSelectorDefault")
+        var blue = findChild(skinSelector, "skinSelectorPreset-systemBlue")
         verify(defaultButton && blue)
         verify(defaultButton.checked)
         compare(blue.Accessible.role, Accessible.Button)
@@ -626,36 +601,19 @@ TestCase {
         blue.forceActiveFocus()
         tryVerify(function() { return blue.focusCueVisible })
         keyClick(Qt.Key_Space)
-        tryCompare(SettingsController, "accentMode", 1)
-        tryCompare(SettingsController, "accentPreset", "systemBlue")
+        tryCompare(SettingsController, "skinColorMode", 1)
+        tryCompare(SettingsController, "skinPreset", "systemBlue")
         verify(blue.checked)
         verify(blue.selectionCueVisible)
         verify(blue.focusCueVisible)
     }
 
-    function test_theme_selectors_keep_blue_accent_and_purple_highlight_independent() {
-        SettingsController.accentMode = 1
-        SettingsController.accentPreset = "systemBlue"
-        SettingsController.highlightFollowAccent = false
-        var purple = findChild(highlightSelector, "highlightSelectorPreset-purple")
-        verify(purple)
-        tryCompare(highlightSelector, "enabled", true)
-        purple.clicked()
-        tryCompare(SettingsController, "highlightMode", 1)
-        tryCompare(SettingsController, "highlightPreset", "purple")
-        compare(SettingsController.accentPreset, "systemBlue")
-    }
-
     function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {
         SettingsController.themeMode = 1
-        SettingsController.accentMode = 1
-        SettingsController.accentPreset = "systemBlue"
-        SettingsController.highlightFollowAccent = false
-        SettingsController.highlightMode = 1
-        SettingsController.highlightPreset = "purple"
+        SettingsController.skinColorMode = 1
+        SettingsController.skinPreset = "purple"
         wait(0)
 
-        verify(Theme.accent.toString() !== Theme.highlight.toString())
         compare(representativeSwitch.indicator.color.toString(),
                 Theme.accent.toString())
         compare(representativeCheckBox.indicator.color.toString(),
@@ -686,24 +644,10 @@ TestCase {
         representativeRangeSlider.enabled = true
     }
 
-    function test_follow_accent_disables_highlight_and_restores_independent_choice() {
-        SettingsController.highlightFollowAccent = false
-        SettingsController.highlightMode = 1
-        SettingsController.highlightPreset = "purple"
-        tryCompare(highlightSelector, "enabled", true)
-        SettingsController.highlightFollowAccent = true
-        tryCompare(highlightSelector, "enabled", false)
-        compare(SettingsController.highlightPreset, "purple")
-        SettingsController.highlightFollowAccent = false
-        tryCompare(highlightSelector, "enabled", true)
-        compare(SettingsController.highlightMode, 1)
-        compare(SettingsController.highlightPreset, "purple")
-    }
-
     function test_theme_selector_custom_candidate_previews_and_transactions_cancel_or_commit() {
         SettingsController.beginEdit()
-        SettingsController.accentMode = 0
-        var custom = findChild(accentSelector, "accentSelectorCustomField")
+        SettingsController.skinColorMode = 0
+        var custom = findChild(skinSelector, "skinSelectorCustomField")
         verify(custom)
         custom.clicked()
         var customPicker = findChild(custom, "colorFieldPicker")
@@ -712,17 +656,17 @@ TestCase {
             return findChild(customPicker.contentItem, "colorCandidate-0") !== null
         })
         mouseClick(findChild(customPicker.contentItem, "colorCandidate-0"))
-        tryCompare(SettingsController, "accentMode", 2)
-        tryCompare(SettingsController, "accentCustomColor", "#FFF5EC")
+        tryCompare(SettingsController, "skinColorMode", 2)
+        tryCompare(SettingsController, "skinCustomColor", "#FFF5EC")
         verify(custom.selectionCueVisible)
         SettingsController.cancelEdit()
-        tryCompare(SettingsController, "accentMode", 0)
+        tryCompare(SettingsController, "skinColorMode", 0)
 
         SettingsController.beginEdit()
-        SettingsController.accentMode = 1
-        SettingsController.accentPreset = "purple"
+        SettingsController.skinColorMode = 1
+        SettingsController.skinPreset = "purple"
         SettingsController.commitEdit()
-        compare(SettingsController.accentMode, 1)
-        compare(SettingsController.accentPreset, "purple")
+        compare(SettingsController.skinColorMode, 1)
+        compare(SettingsController.skinPreset, "purple")
     }
 }

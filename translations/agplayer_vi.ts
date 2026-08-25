@@ -3647,9 +3647,7 @@
         <source>打开音频工具</source>
         <translation>Mở công cụ âm thanh</translation>
     </message>
-    <message><source>强调色</source><translation>Màu nhấn</translation></message>
-    <message><source>高亮颜色跟随强调色</source><translation>Màu tô sáng theo màu nhấn</translation></message>
-    <message><source>高亮颜色</source><translation>Màu tô sáng</translation></message>
+    <message><source>主题皮肤颜色</source><translation>Màu giao diện chủ đề</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

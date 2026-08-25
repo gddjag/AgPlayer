@@ -3647,9 +3647,7 @@
         <source>打开音频工具</source>
         <translation>เปิดเครื่องมือเสียง</translation>
     </message>
-    <message><source>强调色</source><translation>สีเน้น</translation></message>
-    <message><source>高亮颜色跟随强调色</source><translation>สีไฮไลต์ตามสีเน้น</translation></message>
-    <message><source>高亮颜色</source><translation>สีไฮไลต์</translation></message>
+    <message><source>主题皮肤颜色</source><translation>สีสกินธีม</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

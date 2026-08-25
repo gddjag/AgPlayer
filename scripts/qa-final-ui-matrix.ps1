@@ -6,10 +6,7 @@ param(
     [string[]]$Languages = @("zh", "en", "th", "vi"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
-    [string]$Accent = "",
-    [string]$Highlight = "",
-    [ValidateSet("", "0", "1")]
-    [string]$HighlightFollow = "",
+    [string]$Skin = "",
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
         "details",
@@ -216,14 +213,8 @@ function Invoke-Capture {
         "--qa-language", $Language,
         "--qa-theme", $Theme
     )
-    if ($Accent) {
-        $common += @("--qa-accent", $Accent)
-    }
-    if ($Highlight) {
-        $common += @("--qa-highlight", $Highlight)
-    }
-    if ($HighlightFollow) {
-        $common += @("--qa-highlight-follow", $HighlightFollow)
+    if ($Skin) {
+        $common += @("--qa-skin", $Skin)
     }
     $process = Start-Process -FilePath $appPath `
         -ArgumentList ($common + $Arguments + @($screenshot)) `
@@ -247,9 +238,7 @@ function Invoke-Capture {
     $results.Add([pscustomobject]@{
         Language = $Language
         Theme = $Theme
-        Accent = $Accent
-        Highlight = $Highlight
-        HighlightFollow = $HighlightFollow
+        Skin = $Skin
         Surface = $Surface
         Bytes = (Get-Item -LiteralPath $screenshot).Length
         Width = $metrics.Width
@@ -271,16 +260,9 @@ function Get-CaptureStem {
     $parts = [System.Collections.Generic.List[string]]::new()
     $parts.Add($Language)
     $parts.Add($Theme)
-    if ($Accent) {
-        $safeAccent = ($Accent -replace "[^A-Za-z0-9]+", "-").Trim("-")
-        $parts.Add("accent-" + $safeAccent)
-    }
-    if ($Highlight) {
-        $safeHighlight = ($Highlight -replace "[^A-Za-z0-9]+", "-").Trim("-")
-        $parts.Add("highlight-" + $safeHighlight)
-    }
-    if ($HighlightFollow) {
-        $parts.Add($(if ($HighlightFollow -eq "1") { "follow" } else { "independent" }))
+    if ($Skin) {
+        $safeSkin = ($Skin -replace "[^A-Za-z0-9]+", "-").Trim("-")
+        $parts.Add("skin-" + $safeSkin)
     }
     $parts.Add($Surface)
     return $parts -join "-"

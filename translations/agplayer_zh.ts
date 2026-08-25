@@ -3704,9 +3704,7 @@
         <source>打开音频工具</source>
         <translation>打开音频工具</translation>
     </message>
-    <message><source>强调色</source><translation>强调色</translation></message>
-    <message><source>高亮颜色跟随强调色</source><translation>高亮颜色跟随强调色</translation></message>
-    <message><source>高亮颜色</source><translation>高亮颜色</translation></message>
+    <message><source>主题皮肤颜色</source><translation>主题皮肤颜色</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

@@ -60,6 +60,38 @@ foreach(relative_path IN LISTS palette_windows)
     endif()
 endforeach()
 
+file(READ "${ROOT}/app/qml/AgPlayer/SettingsPage.qml" settings_source ENCODING UTF-8)
+foreach(legacy_control IN ITEMS
+        "accentThemeColorSelector"
+        "highlightThemeColorSelector"
+        "highlightFollowAccentControl"
+        "SettingsController.accent"
+        "SettingsController.highlight")
+    if(settings_source MATCHES "${legacy_control}")
+        list(APPEND violations
+            "app/qml/AgPlayer/SettingsPage.qml: legacy Accent/Highlight control remains")
+    endif()
+endforeach()
+if(NOT settings_source MATCHES "ThemeColorSelector"
+   OR NOT settings_source MATCHES "SettingsController\.skinColorMode"
+   OR NOT settings_source MATCHES "SettingsController\.skinPreset"
+   OR NOT settings_source MATCHES "SettingsController\.skinCustomColor")
+    list(APPEND violations
+        "app/qml/AgPlayer/SettingsPage.qml: skin color selector must bind all skin settings")
+endif()
+
+file(READ "${ROOT}/app/qml/AgPlayer/theme/Theme.qml" theme_source ENCODING UTF-8)
+if(NOT theme_source MATCHES
+   "readonly property color currentTrackSurface:[ 	]*ThemeManager\.currentTrackSurface")
+    list(APPEND violations
+        "app/qml/AgPlayer/theme/Theme.qml: current track must use ThemeManager.currentTrackSurface")
+endif()
+if(NOT theme_source MATCHES
+   "readonly property color selectedTrackSelection:[ 	]*highlightSoft")
+    list(APPEND violations
+        "app/qml/AgPlayer/theme/Theme.qml: selected row must remain on the ordinary highlight token")
+endif()
+
 if(violations)
     list(JOIN violations "\n  " violation_text)
     message(FATAL_ERROR
