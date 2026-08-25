@@ -29,8 +29,8 @@ TestCase {
             id: integratedField
             parent: testCase.Window.window
                     ? testCase.Window.window.contentItem : null
-            x: Math.round(((parent ? parent.width : 0) - width) / 2)
-            y: (parent ? parent.height : 0) - height - 28
+            x: (parent ? parent.width : 0) - width - 1
+            y: (parent ? parent.height : 0) - height - 1
             colorValue: SettingsController.waveformSolidBaseColor
             targetProperty: "waveformSolidBaseColor"
         }
@@ -98,6 +98,21 @@ TestCase {
     function openReferenceColor() {
         picker.openForColor("#63316B")
         tryCompare(picker, "visible", true)
+    }
+
+    function verifyMappedInside(item, boundary, margin) {
+        var topLeft = item.mapToItem(boundary, 0, 0)
+        var bottomRight = item.mapToItem(boundary, item.width, item.height)
+        verify(topLeft.x >= margin,
+               "left edge " + topLeft.x + " must be >= " + margin)
+        verify(topLeft.y >= margin,
+               "top edge " + topLeft.y + " must be >= " + margin)
+        verify(bottomRight.x <= boundary.width - margin,
+               "right edge " + bottomRight.x + " must be <= "
+               + (boundary.width - margin))
+        verify(bottomRight.y <= boundary.height - margin,
+               "bottom edge " + bottomRight.y + " must be <= "
+               + (boundary.height - margin))
     }
 
     function test_normalization_and_rgb_round_trip() {
@@ -273,6 +288,112 @@ TestCase {
         compare(picker.visible, false)
         compare(acceptedSpy.count, 0)
         compare(normalizedColor(picker.selectedColor), "#63316B")
+    }
+
+    function test_bottom_right_field_popup_stays_inside_overlay() {
+        mouseClick(integratedField, integratedField.width / 2,
+                   integratedField.height / 2)
+        var integratedPicker = findChild(integratedField, "colorFieldPicker")
+        verify(integratedPicker)
+        tryCompare(integratedPicker, "visible", true)
+        var overlay = integratedPicker.Overlay.overlay
+        verify(overlay)
+
+        verifyMappedInside(integratedPicker.background, overlay, 10)
+        verifyMappedInside(integratedPicker.contentItem, overlay, 10)
+        compare(integratedEditedSpy.count, 0)
+    }
+
+    function test_internal_controls_expose_accessibility_metadata() {
+        openReferenceColor()
+        var hexInput = findChild(picker, "colorPickerHex")
+        var closeButton = findChild(picker, "colorPickerClose")
+        var redInput = findChild(picker, "colorPickerR")
+        var greenInput = findChild(picker, "colorPickerG")
+        var blueInput = findChild(picker, "colorPickerB")
+        var redSlider = findChild(picker, "colorPickerRSlider")
+        var greenSlider = findChild(picker, "colorPickerGSlider")
+        var blueSlider = findChild(picker, "colorPickerBSlider")
+        var candidate0 = findChild(picker.contentItem, "colorCandidate-0")
+        var candidate5 = findChild(picker.contentItem, "colorCandidate-5")
+        verify(hexInput && closeButton)
+        verify(redInput && greenInput && blueInput)
+        verify(redSlider && greenSlider && blueSlider)
+        verify(candidate0 && candidate5)
+
+        compare(hexInput.Accessible.role, Accessible.EditableText)
+        compare(hexInput.Accessible.name, "Hex color")
+        compare(closeButton.Accessible.role, Accessible.Button)
+        compare(closeButton.Accessible.name, "Close color picker")
+        compare(redInput.Accessible.role, Accessible.EditableText)
+        compare(redInput.Accessible.name, "Red channel")
+        compare(greenInput.Accessible.role, Accessible.EditableText)
+        compare(greenInput.Accessible.name, "Green channel")
+        compare(blueInput.Accessible.role, Accessible.EditableText)
+        compare(blueInput.Accessible.name, "Blue channel")
+        compare(redSlider.Accessible.role, Accessible.Slider)
+        compare(redSlider.Accessible.name, "Red channel slider")
+        compare(greenSlider.Accessible.role, Accessible.Slider)
+        compare(greenSlider.Accessible.name, "Green channel slider")
+        compare(blueSlider.Accessible.role, Accessible.Slider)
+        compare(blueSlider.Accessible.name, "Blue channel slider")
+        compare(blueSlider.activeFocusOnTab, true)
+        compare(candidate0.Accessible.role, Accessible.Button)
+        compare(candidate0.Accessible.name, "Color #F8EBFA, scale 10")
+        compare(candidate0.Accessible.selected, false)
+        compare(candidate0.activeFocusOnTab, true)
+        compare(candidate5.Accessible.name, "Color #63316B, scale 100")
+        compare(candidate5.Accessible.selected, true)
+    }
+
+    function test_close_and_candidates_support_tab_and_keyboard_activation() {
+        testCase.Window.window.requestActivate()
+        tryCompare(testCase.Window.window, "active", true)
+        openReferenceColor()
+        var hexInput = findChild(picker, "colorPickerHex")
+        var closeButton = findChild(picker, "colorPickerClose")
+        compare(hexInput.nextItemInFocusChain(true).objectName,
+                closeButton.objectName)
+        hexInput.nextItemInFocusChain(true)
+                .forceActiveFocus(Qt.TabFocusReason)
+        verify(closeButton.activeFocus)
+        verify(closeButton.visualFocus)
+        keyClick(Qt.Key_Space)
+        tryCompare(picker, "visible", false)
+        compare(acceptedSpy.count, 0)
+
+        openReferenceColor()
+        var blueSlider = findChild(picker, "colorPickerBSlider")
+        var candidate0 = findChild(picker.contentItem, "colorCandidate-0")
+        blueSlider.forceActiveFocus(Qt.TabFocusReason)
+        verify(blueSlider.activeFocus)
+        verify(blueSlider.visualFocus)
+        compare(blueSlider.nextItemInFocusChain(true).objectName,
+                candidate0.objectName)
+        blueSlider.nextItemInFocusChain(true)
+                  .forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(candidate0, "activeFocus", true)
+        verify(candidate0.visualFocus)
+        keyClick(Qt.Key_Space)
+        tryCompare(picker, "visible", false)
+        compare(acceptedSpy.count, 1)
+        compare(normalizedColor(acceptedSpy.signalArguments[0][0]), "#F8EBFA")
+
+        acceptedSpy.clear()
+        openReferenceColor()
+        candidate0 = findChild(picker.contentItem, "colorCandidate-0")
+        candidate0.forceActiveFocus()
+        var candidate1 = findChild(picker.contentItem, "colorCandidate-1")
+        compare(candidate0.nextItemInFocusChain(true).objectName,
+                candidate1.objectName)
+        candidate0.nextItemInFocusChain(true)
+                  .forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(candidate1, "activeFocus", true)
+        verify(candidate1.visualFocus)
+        keyClick(Qt.Key_Return)
+        tryCompare(picker, "visible", false)
+        compare(acceptedSpy.count, 1)
+        compare(normalizedColor(acceptedSpy.signalArguments[0][0]), "#E9D2EC")
     }
 
     function test_escape_cancels_without_acceptance() {

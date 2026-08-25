@@ -20,6 +20,7 @@ Popup {
 
     width: Math.max(0, Math.min(360, Overlay.overlay
                                 ? Overlay.overlay.width - 20 : 360))
+    margins: 10
     padding: 13
     modal: false
     focus: true
@@ -150,7 +151,7 @@ Popup {
                 border.color: hexInput.activeFocus ? Theme.primaryText
                                                    : Theme.border
 
-                TextInput {
+                TextField {
                     id: hexInput
                     objectName: "colorPickerHex"
                     anchors.fill: parent
@@ -164,8 +165,16 @@ Popup {
                     font.weight: Font.DemiBold
                     verticalAlignment: TextInput.AlignVCenter
                     selectByMouse: true
+                    activeFocusOnTab: true
+                    topPadding: 0
+                    bottomPadding: 0
+                    background: null
                     maximumLength: 7
                     inputMethodHints: Qt.ImhPreferUppercase
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: qsTr("Hex color")
+                    KeyNavigation.tab: closeButton
+                    KeyNavigation.priority: KeyNavigation.BeforeItem
 
                     onEditingFinished: {
                         if (!root.setBaseHex(text))
@@ -180,7 +189,20 @@ Popup {
                 Layout.preferredWidth: 25
                 Layout.preferredHeight: 25
                 hoverEnabled: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Close color picker")
+                KeyNavigation.tab: redInput
+                KeyNavigation.priority: KeyNavigation.BeforeItem
                 onClicked: root.close()
+                Keys.onReturnPressed: function(event) {
+                    closeButton.clicked()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: function(event) {
+                    closeButton.clicked()
+                    event.accepted = true
+                }
 
                 contentItem: Text {
                     text: "×"
@@ -194,6 +216,8 @@ Popup {
                     radius: width / 2
                     color: closeButton.hovered ? Theme.hoverSurface
                                                : "transparent"
+                    border.width: closeButton.visualFocus ? 2 : 0
+                    border.color: Theme.primaryText
                 }
             }
         }
@@ -222,7 +246,7 @@ Popup {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
-                        TextInput {
+                        TextField {
                             id: redInput
                             objectName: "colorPickerR"
                             width: 34
@@ -231,7 +255,14 @@ Popup {
                             font.pixelSize: 12
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
+                            activeFocusOnTab: true
+                            padding: 0
+                            background: null
                             validator: IntValidator { bottom: 0; top: 255 }
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("Red channel")
+                            KeyNavigation.tab: greenInput
+                            KeyNavigation.priority: KeyNavigation.BeforeItem
                             onEditingFinished: root.setRgbFromInputs()
                             onActiveFocusChanged: {
                                 if (!activeFocus)
@@ -242,6 +273,14 @@ Popup {
                             }
                             Keys.onEnterPressed: function(event) {
                                 event.accepted = root.restoreInvalidRgbInput(redInput)
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 1
+                                visible: redInput.activeFocus
+                                color: Theme.primaryText
                             }
                         }
                     }
@@ -265,7 +304,7 @@ Popup {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
-                        TextInput {
+                        TextField {
                             id: greenInput
                             objectName: "colorPickerG"
                             width: 34
@@ -274,7 +313,14 @@ Popup {
                             font.pixelSize: 12
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
+                            activeFocusOnTab: true
+                            padding: 0
+                            background: null
                             validator: IntValidator { bottom: 0; top: 255 }
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("Green channel")
+                            KeyNavigation.tab: blueInput
+                            KeyNavigation.priority: KeyNavigation.BeforeItem
                             onEditingFinished: root.setRgbFromInputs()
                             onActiveFocusChanged: {
                                 if (!activeFocus)
@@ -285,6 +331,14 @@ Popup {
                             }
                             Keys.onEnterPressed: function(event) {
                                 event.accepted = root.restoreInvalidRgbInput(greenInput)
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 1
+                                visible: greenInput.activeFocus
+                                color: Theme.primaryText
                             }
                         }
                     }
@@ -308,7 +362,7 @@ Popup {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
-                        TextInput {
+                        TextField {
                             id: blueInput
                             objectName: "colorPickerB"
                             width: 34
@@ -317,7 +371,14 @@ Popup {
                             font.pixelSize: 12
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
+                            activeFocusOnTab: true
+                            padding: 0
+                            background: null
                             validator: IntValidator { bottom: 0; top: 255 }
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("Blue channel")
+                            KeyNavigation.tab: redSlider
+                            KeyNavigation.priority: KeyNavigation.BeforeItem
                             onEditingFinished: root.setRgbFromInputs()
                             onActiveFocusChanged: {
                                 if (!activeFocus)
@@ -328,6 +389,14 @@ Popup {
                             }
                             Keys.onEnterPressed: function(event) {
                                 event.accepted = root.restoreInvalidRgbInput(blueInput)
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 1
+                                visible: blueInput.activeFocus
+                                color: Theme.primaryText
                             }
                         }
                     }
@@ -348,6 +417,11 @@ Popup {
                 to: 255
                 stepSize: 1
                 live: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.role: Accessible.Slider
+                Accessible.name: qsTr("Red channel slider")
+                KeyNavigation.tab: greenSlider
+                KeyNavigation.priority: KeyNavigation.BeforeItem
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("r", value)
 
@@ -384,6 +458,11 @@ Popup {
                 to: 255
                 stepSize: 1
                 live: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.role: Accessible.Slider
+                Accessible.name: qsTr("Green channel slider")
+                KeyNavigation.tab: blueSlider
+                KeyNavigation.priority: KeyNavigation.BeforeItem
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("g", value)
 
@@ -420,6 +499,9 @@ Popup {
                 to: 255
                 stepSize: 1
                 live: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.role: Accessible.Slider
+                Accessible.name: qsTr("Blue channel slider")
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("b", value)
 
@@ -460,6 +542,9 @@ Popup {
                 delegate: AbstractButton {
                     id: candidateButton
                     readonly property int candidateIndex: index
+                    readonly property int scaleValue:
+                        [10, 20, 30, 40, 50,
+                         100, 120, 140, 160, 180][candidateIndex]
                     readonly property string candidateColor:
                         root.candidateColors[candidateIndex]
                     readonly property bool selected:
@@ -471,17 +556,35 @@ Popup {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 44
                     hoverEnabled: true
+                    focusPolicy: Qt.StrongFocus
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("Color %1, scale %2")
+                                             .arg(candidateColor)
+                                             .arg(scaleValue)
+                    Accessible.selected: selected
                     onClicked: {
                         root.selectedColor = candidateColor
                         root.colorAccepted(root.selectedColor)
                         root.close()
                     }
+                    Keys.onReturnPressed: function(event) {
+                        candidateButton.clicked()
+                        event.accepted = true
+                    }
+                    Keys.onEnterPressed: function(event) {
+                        candidateButton.clicked()
+                        event.accepted = true
+                    }
 
                     background: Rectangle {
                         radius: 8
                         color: candidateButton.candidateColor
-                        border.width: candidateButton.selected ? 2 : 1
-                        border.color: candidateButton.selected
+                        border.width: candidateButton.visualFocus ? 3
+                                                                  : candidateButton.selected ? 2 : 1
+                        border.color: candidateButton.visualFocus
+                                      ? (ColorScale.isLight(candidateButton.candidateColor)
+                                         ? "#1B1B1B" : "#FFFFFF")
+                                      : candidateButton.selected
                                       ? (ColorScale.isLight(candidateButton.candidateColor)
                                          ? "#1B1B1B" : "#FFFFFF")
                                       : Theme.border
@@ -532,8 +635,7 @@ Popup {
                         spacing: 1
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: [10, 20, 30, 40, 50,
-                                   100, 120, 140, 160, 180][candidateButton.candidateIndex]
+                            text: candidateButton.scaleValue
                             color: ColorScale.isLight(candidateButton.candidateColor)
                                    ? "#251028" : "#FFFFFF"
                             font.family: Theme.fontPrimary
@@ -563,8 +665,8 @@ Popup {
         implicitHeight: 17
         radius: height / 2
         color: "#FFFFFF"
-        border.width: 1
-        border.color: "#B8B8B8"
+        border.width: slider.visualFocus ? 2 : 1
+        border.color: slider.visualFocus ? Theme.primaryText : "#B8B8B8"
 
         Rectangle {
             anchors.centerIn: parent

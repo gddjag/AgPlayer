@@ -817,7 +817,8 @@ set_tests_properties(waveform_provider_test PROPERTIES
 set_tests_properties(window_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
-set_tests_properties(playback_controller_test qml_main_window_test qml_waveform_test
+set_tests_properties(playback_controller_test qml_main_window_test
+    qml_color_picker_test qml_waveform_test
     PROPERTIES
     # Qt/FFmpeg global process state and the shared generated fixtures make
     # these integration tests deterministic only when they do not overlap.
