@@ -762,8 +762,19 @@ void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
     SendMessageW(mainHandle, WM_SYSCOMMAND, SC_RESTORE, 0);
     QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
     QTRY_VERIFY(listWindow.isVisible());
-    QTRY_COMPARE(nativeRect(mainWindow).size(), mainBefore.size());
-    QTRY_COMPARE(nativeRect(listWindow).size(), listBefore.size());
+    QTRY_COMPARE(nativeRect(mainWindow), mainBefore);
+    QTRY_COMPARE(nativeRect(listWindow), listBefore);
+
+    const HWND listHandle = reinterpret_cast<HWND>(listWindow.winId());
+    const auto isAbove = [](HWND candidate, HWND reference) {
+        for (HWND current = GetTopWindow(nullptr); current != nullptr;
+             current = GetWindow(current, GW_HWNDNEXT)) {
+            if (current == candidate) return true;
+            if (current == reference) return false;
+        }
+        return false;
+    };
+    QTRY_VERIFY(isAbove(listHandle, mainHandle));
 }
 
 void WindowControllerTest::taskbarActivationDoesNotCancelMinimize()

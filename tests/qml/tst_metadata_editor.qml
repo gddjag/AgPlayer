@@ -90,6 +90,15 @@ TestCase {
         page.resetEdits()
     }
 
+    function test_resultsSummaryIncludesUnsupportedCount() {
+        const summary = findChild(page, "metadataResultsSummaryLabel")
+        verify(summary)
+        if (!summary)
+            return
+        verify(summary.text.indexOf("不支持") >= 0,
+               "result summary must expose unsupported rows: " + summary.text)
+    }
+
     function test_compactLayoutKeepsBothWorkspacesReachable() {
         const compactPage = createTemporaryObject(compactPageComponent, testCase)
         verify(compactPage)
@@ -306,6 +315,56 @@ TestCase {
         compare(nativeDropHelper.probeMetadataTitle(files[1]),
                 "qml-all-snapshot")
         compare(MetadataEditor.results.length, 2)
+    }
+
+    function test_realChinesePathsRetainOverwriteAndClearFieldsInBatch() {
+        const first = nativeDropHelper.copyForNativeDropWithFileName(
+                          testAudioUrl, "歌曲一号.wav")
+        const second = nativeDropHelper.copyForNativeDropWithFileName(
+                           testAudioUrl, "歌曲二号.wav")
+        verify(first.toString().length > 0)
+        verify(second.toString().length > 0)
+
+        MetadataEditor.clear()
+        MetadataEditor.loadFiles([first, second])
+        tryVerify(function() { return !MetadataEditor.busy }, 5000)
+        compare(MetadataEditor.fileCount, 2)
+        page.selectedIndices = [0, 1]
+        page.selectionAnchor = 0
+        const scope = findChild(page, "metadataScopeBox")
+        const apply = findChild(page, "metadataApplyButton")
+        verify(scope && apply)
+        scope.currentIndex = 2
+        page.refreshFields()
+        page.setFieldMode("title", "set")
+        page.setFieldValue("title", "中文标题")
+        page.setFieldMode("artist", "set")
+        page.setFieldValue("artist", "原艺术家")
+        page.setFieldMode("album", "set")
+        page.setFieldValue("album", "保留专辑")
+        mouseClick(apply)
+        tryVerify(function() { return !MetadataEditor.busy }, 30000)
+        compare(MetadataEditor.successCount, 2)
+
+        MetadataEditor.clear()
+        MetadataEditor.loadFiles([first, second])
+        tryVerify(function() { return !MetadataEditor.busy }, 5000)
+        page.selectedIndices = [0]
+        page.selectionAnchor = 0
+        scope.currentIndex = 0
+        page.refreshFields()
+        page.setFieldMode("title", "clear")
+        page.setFieldMode("artist", "set")
+        page.setFieldValue("artist", "新艺术家")
+        mouseClick(apply)
+        tryVerify(function() { return !MetadataEditor.busy }, 30000)
+        compare(MetadataEditor.successCount, 1)
+        compare(nativeDropHelper.probeMetadataText(first, "title"), "")
+        compare(nativeDropHelper.probeMetadataText(first, "artist"), "新艺术家")
+        compare(nativeDropHelper.probeMetadataText(first, "album"), "保留专辑")
+        compare(nativeDropHelper.probeMetadataText(second, "title"), "中文标题")
+        compare(nativeDropHelper.probeMetadataText(second, "artist"), "原艺术家")
+        compare(nativeDropHelper.probeMetadataText(second, "album"), "保留专辑")
     }
 
 

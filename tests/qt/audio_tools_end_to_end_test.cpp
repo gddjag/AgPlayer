@@ -5,6 +5,8 @@
 #include "library_model.hpp"
 #include "metadata_editor.hpp"
 
+#include "../../core/src/metadata_writer.hpp"
+
 #include "../core/bpm_fixture.hpp"
 
 #include <agplayer/c_api.h>
@@ -120,6 +122,7 @@ private slots:
     void metadataEditorAppendsDeduplicatesAndAggregatesScopeValues();
     void metadataEditorDetectsReplacementCoverFromContent();
     void metadataEditorPreflightIsAsyncAndRequiresDecision();
+    void metadataEditorPreflightSeparatesUnsupportedAndInternalFailures();
     void metadataEditorRejectsTargetChangedAfterPreflight();
     void metadataEditorDoesNotApplyWhenEveryTargetIsUnsupported();
     void metadataEditorAppliesUiPayloadToMixedContainerBatch();
@@ -2699,6 +2702,90 @@ void AudioToolsEndToEndTest::metadataEditorPreflightIsAsyncAndRequiresDecision()
              QStringLiteral("Ready"));
 }
 
+void AudioToolsEndToEndTest::
+    metadataEditorPreflightSeparatesUnsupportedAndInternalFailures()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString valid = temp.filePath(QStringLiteral("valid.wav"));
+    const QString unsupported = temp.filePath(QStringLiteral("broken.mp3"));
+    QVERIFY(agplayer::test::writeClickTrackWav(valid, 120, 2));
+    QFile broken(unsupported);
+    QVERIFY(broken.open(QIODevice::WriteOnly));
+    QCOMPARE(broken.write("not audio"), qint64(9));
+    broken.close();
+
+    MetadataEditor editor;
+    QSignalSpy loaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(valid),
+                      QUrl::fromLocalFile(unsupported)});
+    QVERIFY(loaded.wait(30'000));
+    const QVariantMap fields{{QStringLiteral("title"),
+                              QVariantMap{{QStringLiteral("mode"),
+                                           QStringLiteral("set")},
+                                          {QStringLiteral("value"),
+                                           QStringLiteral("Only supported")}}}};
+    QSignalSpy preflight(&editor, &MetadataEditor::preflightCompleted);
+    QSignalSpy decision(&editor, &MetadataEditor::preflightDecisionRequired);
+    editor.applyMetadata(fields, {0, 1, 99});
+    QVERIFY(preflight.wait(30'000));
+    QCOMPARE(editor.supportedCount(), 1);
+    QCOMPARE(editor.unsupportedCount(), 1);
+    QCOMPARE(editor.failedCount(), 1);
+    QCOMPARE(editor.results().size(), 3);
+    QCOMPARE(decision.count(), 1);
+    QVERIFY(editor.requiresPreflightDecision());
+
+    int supportedRows = 0;
+    int unsupportedRows = 0;
+    int failedRows = 0;
+    for (const QVariant& value : editor.results()) {
+        const QString status = value.toMap()
+                                   .value(QStringLiteral("status")).toString();
+        supportedRows += status == QLatin1String("supported");
+        unsupportedRows += status == QLatin1String("unsupported");
+        failedRows += status == QLatin1String("failed");
+    }
+    QCOMPARE(supportedRows, 1);
+    QCOMPARE(unsupportedRows, 1);
+    QCOMPARE(failedRows, 1);
+
+    QSignalSpy applied(&editor, &MetadataEditor::metadataApplied);
+    editor.applyPreflightDecision(QStringLiteral("supportedOnly"));
+    QVERIFY(applied.wait(30'000));
+    QCOMPARE(applied.constLast().at(0).toInt(), 1);
+    QCOMPARE(applied.constLast().at(1).toInt(), 1);
+    QCOMPARE(editor.successCount(), 1);
+    QCOMPARE(editor.unsupportedCount(), 1);
+    QCOMPARE(editor.failedCount(), 1);
+    QCOMPARE(editor.results().size(), 3);
+    QCOMPARE(editor.entryAt(0).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Only supported"));
+
+    MetadataEditor internalOnly;
+    QSignalSpy internalLoaded(&internalOnly, &MetadataEditor::entriesLoaded);
+    internalOnly.loadFiles({QUrl::fromLocalFile(valid)});
+    QVERIFY(internalLoaded.wait(30'000));
+    QSignalSpy internalPreflight(&internalOnly,
+                                 &MetadataEditor::preflightCompleted);
+    QSignalSpy internalApplied(&internalOnly, &MetadataEditor::metadataApplied);
+    const QVariantMap internalFields{{QStringLiteral("title"),
+                                      QVariantMap{{QStringLiteral("mode"),
+                                                   QStringLiteral("set")},
+                                                  {QStringLiteral("value"),
+                                                   QStringLiteral("Must not expand")}}}};
+    internalOnly.applyMetadata(internalFields, {99});
+    QVERIFY(internalPreflight.wait(30'000));
+    QCOMPARE(internalOnly.supportedCount(), 0);
+    QCOMPARE(internalOnly.unsupportedCount(), 0);
+    QCOMPARE(internalOnly.failedCount(), 1);
+    QVERIFY(!internalOnly.requiresPreflightDecision());
+    QTest::qWait(250);
+    QCOMPARE(internalApplied.count(), 0);
+    QCOMPARE(internalOnly.entryAt(0).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Only supported"));
+}
+
 void AudioToolsEndToEndTest::metadataEditorRejectsTargetChangedAfterPreflight()
 {
     QTemporaryDir temp;
@@ -2734,6 +2821,17 @@ void AudioToolsEndToEndTest::metadataEditorRejectsTargetChangedAfterPreflight()
     QCOMPARE(editor.successCount(), 0);
     QCOMPARE(editor.failedCount(), 1);
     QCOMPARE(editor.entryAt(0).value(QStringLiteral("title")).toString(), QString());
+    QCOMPARE(editor.results().size(), 2);
+    QCOMPARE(editor.unsupportedCount(), 1);
+    QCOMPARE(editor.results().constFirst().toMap()
+                 .value(QStringLiteral("status")).toString(),
+             QStringLiteral("unsupported"));
+    const QVariantMap changedResult = editor.results().constLast().toMap();
+    QCOMPARE(changedResult.value(QStringLiteral("status")).toString(),
+             QStringLiteral("failed"));
+    QCOMPARE(changedResult.value(QStringLiteral("errorCode")).toInt(),
+             static_cast<int>(agplayer::MetadataErrorCode::SourceChanged));
+    QVERIFY(!changedResult.value(QStringLiteral("message")).toString().isEmpty());
 }
 
 void AudioToolsEndToEndTest::formatConverterExportsEveryAdvertisedBitrateMode()

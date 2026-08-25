@@ -354,6 +354,25 @@ public:
             ? QUrl::fromLocalFile(destination) : QUrl{};
     }
 
+    Q_INVOKABLE QUrl copyForNativeDropWithFileName(const QUrl& sourceUrl,
+                                                   const QString& fileName)
+    {
+        const QString source = sourceUrl.toLocalFile();
+        if (source.isEmpty() || !QFile::exists(source) || fileName.isEmpty()) {
+            return {};
+        }
+        const QString directory = QStandardPaths::writableLocation(
+            QStandardPaths::TempLocation)
+            + QStringLiteral("/AgPlayer-元数据-%1-%2")
+                  .arg(QCoreApplication::applicationPid())
+                  .arg(QUuid::createUuid().toString(QUuid::Id128));
+        if (!QDir().mkpath(directory)) return {};
+        const QString destination = QDir(directory).filePath(
+            QFileInfo(fileName).fileName());
+        return QFile::copy(source, destination)
+            ? QUrl::fromLocalFile(destination) : QUrl{};
+    }
+
     Q_INVOKABLE QVariantMap probeMedia(const QString& path) const
     {
         QVariantMap result{{QStringLiteral("readable"), false},
@@ -385,6 +404,26 @@ public:
         const QString title = QString::fromUtf8(ag_metadata_title(metadata));
         ag_metadata_destroy(metadata);
         return title;
+    }
+
+    Q_INVOKABLE QString probeMetadataText(const QUrl& url,
+                                          const QString& field) const
+    {
+        const QString path = url.toLocalFile();
+        ag_metadata* metadata = nullptr;
+        if (path.isEmpty()
+            || ag_metadata_open(path.toUtf8().constData(), &metadata) != AG_OK
+            || metadata == nullptr) {
+            return {};
+        }
+        const char* value = nullptr;
+        if (field == QLatin1String("title")) value = ag_metadata_title(metadata);
+        else if (field == QLatin1String("artist")) value = ag_metadata_artist(metadata);
+        else if (field == QLatin1String("album")) value = ag_metadata_album(metadata);
+        else if (field == QLatin1String("customTag")) value = ag_metadata_custom_tag(metadata);
+        const QString decoded = QString::fromUtf8(value == nullptr ? "" : value);
+        ag_metadata_destroy(metadata);
+        return decoded;
     }
 
     Q_INVOKABLE bool lockFileExclusive(const QUrl& url)
