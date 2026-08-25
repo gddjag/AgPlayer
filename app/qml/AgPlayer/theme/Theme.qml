@@ -59,11 +59,11 @@ QtObject {
     readonly property color activeSelectionText: highlightText
     readonly property color inactiveSelection: highlight
     readonly property color inactiveSelectionText: highlightText
-    readonly property color currentTrackSurface: highlightSoft
-    readonly property color currentTrackInactiveSurface: highlightSoft
-    readonly property color currentTrackSelection: highlightSoft
+    readonly property color currentTrackSurface: ThemeManager.currentTrackSurface
+    readonly property color currentTrackInactiveSurface: currentTrackSurface
+    readonly property color currentTrackSelection: currentTrackSurface
     readonly property color selectedTrackSelection: highlightSoft
-    readonly property color currentTrackSelectionInactive: highlightSoft
+    readonly property color currentTrackSelectionInactive: currentTrackSurface
     readonly property color selectedTrackSelectionInactive: highlightSoft
     readonly property color onCyanText: accentText
     readonly property color onBrandGradientText: "#FFFFFF"

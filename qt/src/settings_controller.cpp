@@ -107,23 +107,6 @@ std::optional<int> storedInteger(const QVariant& value)
     }
 }
 
-std::optional<bool> storedBoolean(const QVariant& value)
-{
-    if (value.metaType().id() == QMetaType::Bool) {
-        return value.toBool();
-    }
-    if (value.metaType().id() == QMetaType::QString) {
-        const QString stored = value.toString();
-        if (stored == QStringLiteral("true")) {
-            return true;
-        }
-        if (stored == QStringLiteral("false")) {
-            return false;
-        }
-    }
-    return std::nullopt;
-}
-
 void retireLegacySmartPlaylists()
 {
     const QDir appData(
@@ -178,13 +161,9 @@ bool SettingsController::autoReadRating() const noexcept { return autoReadRating
 
 // Appearance & Visualizer getters
 int SettingsController::themeMode() const noexcept { return themeMode_; }
-int SettingsController::accentMode() const noexcept { return accentMode_; }
-QString SettingsController::accentPreset() const { return accentPreset_; }
-QString SettingsController::accentCustomColor() const { return accentCustomColor_; }
-bool SettingsController::highlightFollowAccent() const noexcept { return highlightFollowAccent_; }
-int SettingsController::highlightMode() const noexcept { return highlightMode_; }
-QString SettingsController::highlightPreset() const { return highlightPreset_; }
-QString SettingsController::highlightCustomColor() const { return highlightCustomColor_; }
+int SettingsController::skinColorMode() const noexcept { return skinColorMode_; }
+QString SettingsController::skinPreset() const { return skinPreset_; }
+QString SettingsController::skinCustomColor() const { return skinCustomColor_; }
 int SettingsController::waveformMode() const noexcept { return waveformMode_; }
 double SettingsController::waveformHeight() const noexcept { return waveformHeight_; }
 double SettingsController::waveformDensity() const noexcept { return waveformDensity_; }
@@ -451,82 +430,38 @@ void SettingsController::setThemeMode(int value)
     emit themeModeChanged();
 }
 
-void SettingsController::setAccentMode(int value)
+void SettingsController::setSkinColorMode(int value)
 {
     value = normalizedColorChoiceMode(value);
-    if (accentMode_ == value) {
+    if (skinColorMode_ == value) {
         return;
     }
-    accentMode_ = value;
-    persistValue(QStringLiteral("appearance/accentMode"), value);
-    emit accentModeChanged();
+    skinColorMode_ = value;
+    persistValue(QStringLiteral("appearance/skinColorMode"), value);
+    emit skinColorModeChanged();
 }
 
-void SettingsController::setAccentPreset(const QString& value)
+void SettingsController::setSkinPreset(const QString& value)
 {
     const QString normalized = normalizedThemePreset(value);
-    if (accentPreset_ == normalized) {
+    if (skinPreset_ == normalized) {
         return;
     }
-    accentPreset_ = normalized;
-    persistValue(QStringLiteral("appearance/accentPreset"), normalized);
-    emit accentPresetChanged();
+    skinPreset_ = normalized;
+    persistValue(QStringLiteral("appearance/skinPreset"), normalized);
+    emit skinPresetChanged();
 }
 
-void SettingsController::setAccentCustomColor(const QString& value)
+void SettingsController::setSkinCustomColor(const QString& value)
 {
     const QString normalized = normalizedOpaqueThemeColor(value);
     const QString resolved = normalized.isEmpty() ? defaultThemeCustomColor() : normalized;
-    if (accentCustomColor_ == resolved) {
+    if (skinCustomColor_ == resolved) {
         return;
     }
-    accentCustomColor_ = resolved;
-    persistValue(QStringLiteral("appearance/accentCustomColor"), resolved);
-    emit accentCustomColorChanged();
-}
-
-void SettingsController::setHighlightFollowAccent(const bool value)
-{
-    if (highlightFollowAccent_ == value) {
-        return;
-    }
-    highlightFollowAccent_ = value;
-    persistValue(QStringLiteral("appearance/highlightFollowAccent"), value);
-    emit highlightFollowAccentChanged();
-}
-
-void SettingsController::setHighlightMode(int value)
-{
-    value = normalizedColorChoiceMode(value);
-    if (highlightMode_ == value) {
-        return;
-    }
-    highlightMode_ = value;
-    persistValue(QStringLiteral("appearance/highlightMode"), value);
-    emit highlightModeChanged();
-}
-
-void SettingsController::setHighlightPreset(const QString& value)
-{
-    const QString normalized = normalizedThemePreset(value);
-    if (highlightPreset_ == normalized) {
-        return;
-    }
-    highlightPreset_ = normalized;
-    persistValue(QStringLiteral("appearance/highlightPreset"), normalized);
-    emit highlightPresetChanged();
-}
-
-void SettingsController::setHighlightCustomColor(const QString& value)
-{
-    const QString normalized = normalizedOpaqueThemeColor(value);
-    const QString resolved = normalized.isEmpty() ? defaultThemeCustomColor() : normalized;
-    if (highlightCustomColor_ == resolved) {
-        return;
-    }
-    highlightCustomColor_ = resolved;
-    persistValue(QStringLiteral("appearance/highlightCustomColor"), resolved);
-    emit highlightCustomColorChanged();
+    skinCustomColor_ = resolved;
+    persistValue(QStringLiteral("appearance/skinCustomColor"), resolved);
+    emit skinCustomColorChanged();
 }
 
 void SettingsController::setWaveformMode(int value)
@@ -1086,13 +1021,9 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit autoReadRatingChanged();
 
     emit themeModeChanged();
-    emit accentModeChanged();
-    emit accentPresetChanged();
-    emit accentCustomColorChanged();
-    emit highlightFollowAccentChanged();
-    emit highlightModeChanged();
-    emit highlightPresetChanged();
-    emit highlightCustomColorChanged();
+    emit skinColorModeChanged();
+    emit skinPresetChanged();
+    emit skinCustomColorChanged();
     if (includeMediaSettings) {
         emit waveformModeChanged();
         emit waveformHeightChanged();
@@ -1352,23 +1283,11 @@ void SettingsController::load()
             settings_.setValue(QStringLiteral("themeMode"), themeMode_);
         }
     }
-    accentMode_ = settings_.value(QStringLiteral("accentMode"), accentMode_).toInt();
-    accentPreset_ = settings_.value(QStringLiteral("accentPreset"), accentPreset_).toString();
-    accentCustomColor_ = settings_.value(QStringLiteral("accentCustomColor"), accentCustomColor_).toString();
-    if (settings_.contains(QStringLiteral("highlightFollowAccent"))) {
-        const std::optional<bool> storedFollowAccent = storedBoolean(
-            settings_.value(QStringLiteral("highlightFollowAccent")));
-        highlightFollowAccent_ = storedFollowAccent.value_or(true);
-        if (!storedFollowAccent.has_value()) {
-            settings_.setValue(QStringLiteral("highlightFollowAccent"),
-                               highlightFollowAccent_);
-        }
-    }
-    highlightMode_ = settings_.value(QStringLiteral("highlightMode"), highlightMode_).toInt();
-    highlightPreset_ = settings_.value(
-        QStringLiteral("highlightPreset"), highlightPreset_).toString();
-    highlightCustomColor_ = settings_.value(
-        QStringLiteral("highlightCustomColor"), highlightCustomColor_).toString();
+    skinColorMode_ = settings_.value(
+        QStringLiteral("skinColorMode"), skinColorMode_).toInt();
+    skinPreset_ = settings_.value(QStringLiteral("skinPreset"), skinPreset_).toString();
+    skinCustomColor_ = settings_.value(
+        QStringLiteral("skinCustomColor"), skinCustomColor_).toString();
     settings_.remove(QStringLiteral("glassEffect"));
     waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
     waveformHeight_ =
@@ -1602,18 +1521,12 @@ void SettingsController::load()
     closeBehavior_ = clampValue(closeBehavior_, 0, 1);
     defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
     themeMode_ = themeMode_ >= 0 && themeMode_ <= 2 ? themeMode_ : 2;
-    accentMode_ = normalizedColorChoiceMode(accentMode_);
-    accentPreset_ = normalizedThemePreset(accentPreset_);
-    const QString normalizedAccentCustomColor =
-        normalizedOpaqueThemeColor(accentCustomColor_);
-    accentCustomColor_ = normalizedAccentCustomColor.isEmpty()
-        ? defaultThemeCustomColor() : normalizedAccentCustomColor;
-    highlightMode_ = normalizedColorChoiceMode(highlightMode_);
-    highlightPreset_ = normalizedThemePreset(highlightPreset_);
-    const QString normalizedHighlightCustomColor =
-        normalizedOpaqueThemeColor(highlightCustomColor_);
-    highlightCustomColor_ = normalizedHighlightCustomColor.isEmpty()
-        ? defaultThemeCustomColor() : normalizedHighlightCustomColor;
+    skinColorMode_ = normalizedColorChoiceMode(skinColorMode_);
+    skinPreset_ = normalizedThemePreset(skinPreset_);
+    const QString normalizedSkinCustomColor =
+        normalizedOpaqueThemeColor(skinCustomColor_);
+    skinCustomColor_ = normalizedSkinCustomColor.isEmpty()
+        ? defaultThemeCustomColor() : normalizedSkinCustomColor;
     waveformMode_ = clampValue(waveformMode_, 0, 2);
     waveformHeight_ = quantize(waveformHeight_, 0.3, 1.5, 0.1);
     waveformDensity_ = quantize(waveformDensity_, 0.5, 5.0, 0.5);
@@ -1701,13 +1614,9 @@ void SettingsController::saveAll(const bool includeMediaSettings)
 
     settings_.beginGroup(QStringLiteral("appearance"));
     persistValue(QStringLiteral("themeMode"), themeMode_);
-    persistValue(QStringLiteral("accentMode"), accentMode_);
-    persistValue(QStringLiteral("accentPreset"), accentPreset_);
-    persistValue(QStringLiteral("accentCustomColor"), accentCustomColor_);
-    persistValue(QStringLiteral("highlightFollowAccent"), highlightFollowAccent_);
-    persistValue(QStringLiteral("highlightMode"), highlightMode_);
-    persistValue(QStringLiteral("highlightPreset"), highlightPreset_);
-    persistValue(QStringLiteral("highlightCustomColor"), highlightCustomColor_);
+    persistValue(QStringLiteral("skinColorMode"), skinColorMode_);
+    persistValue(QStringLiteral("skinPreset"), skinPreset_);
+    persistValue(QStringLiteral("skinCustomColor"), skinCustomColor_);
     if (includeMediaSettings) {
         persistValue(QStringLiteral("waveformMode"), waveformMode_);
         persistValue(QStringLiteral("waveformHeight"), waveformHeight_);
@@ -1797,13 +1706,9 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     autoReadRating_ = true;
 
     themeMode_ = 2;
-    accentMode_ = kDefaultColorChoiceMode;
-    accentPreset_ = defaultThemePresetId();
-    accentCustomColor_ = defaultThemeCustomColor();
-    highlightFollowAccent_ = true;
-    highlightMode_ = kDefaultColorChoiceMode;
-    highlightPreset_ = defaultThemePresetId();
-    highlightCustomColor_ = defaultThemeCustomColor();
+    skinColorMode_ = kDefaultColorChoiceMode;
+    skinPreset_ = defaultThemePresetId();
+    skinCustomColor_ = defaultThemeCustomColor();
     if (includeMediaSettings) {
         waveformMode_ = 0;
         waveformHeight_ = 0.8;

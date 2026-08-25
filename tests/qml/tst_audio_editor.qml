@@ -141,18 +141,12 @@ TestCase {
 
     function test_editor_media_colors_stay_exact_and_ignore_theme_seeds() {
         const previousMode = SettingsController.themeMode
-        const previousAccentMode = SettingsController.accentMode
-        const previousAccentPreset = SettingsController.accentPreset
-        const previousFollow = SettingsController.highlightFollowAccent
-        const previousHighlightMode = SettingsController.highlightMode
-        const previousHighlightPreset = SettingsController.highlightPreset
+        const previousSkinMode = SettingsController.skinColorMode
+        const previousSkinPreset = SettingsController.skinPreset
 
         SettingsController.themeMode = 1
-        SettingsController.accentMode = 1
-        SettingsController.accentPreset = "systemBlue"
-        SettingsController.highlightFollowAccent = false
-        SettingsController.highlightMode = 1
-        SettingsController.highlightPreset = "purple"
+        SettingsController.skinColorMode = 1
+        SettingsController.skinPreset = "systemBlue"
         wait(0)
         compare(Theme.editorWaveform.toString(), "#169b97")
         compare(Theme.editorOverviewWaveform.toString(), "#2b9692")
@@ -160,8 +154,7 @@ TestCase {
         compare(Theme.editorOverviewSelection.toString(), "#122b9692")
         compare(Theme.listWaveformMono.toString(), "#6b5a70")
 
-        SettingsController.accentPreset = "red"
-        SettingsController.highlightPreset = "green"
+        SettingsController.skinPreset = "red"
         wait(0)
         compare(Theme.editorWaveform.toString(), "#169b97")
         compare(Theme.editorSelection.toString(), "#26169b97")
@@ -175,11 +168,8 @@ TestCase {
         compare(Theme.listWaveformMono.toString(), "#c7b8cb")
 
         SettingsController.themeMode = previousMode
-        SettingsController.accentMode = previousAccentMode
-        SettingsController.accentPreset = previousAccentPreset
-        SettingsController.highlightFollowAccent = previousFollow
-        SettingsController.highlightMode = previousHighlightMode
-        SettingsController.highlightPreset = previousHighlightPreset
+        SettingsController.skinColorMode = previousSkinMode
+        SettingsController.skinPreset = previousSkinPreset
         wait(0)
     }
 

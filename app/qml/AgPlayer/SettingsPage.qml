@@ -1510,56 +1510,24 @@ Item {
                 }
 
                 SettingRow {
-                    label: qsTr("强调色")
+                    label: qsTr("主题皮肤颜色")
                     Layout.preferredHeight: 70
 
                     ThemeColorSelector {
-                        objectName: "accentThemeColorSelector"
+                        objectName: "themeSkinColorSelector"
                         anchors.fill: parent
-                        title: qsTr("强调色")
-                        selectedMode: SettingsController.accentMode
-                        selectedPreset: SettingsController.accentPreset
-                        customColor: SettingsController.accentCustomColor
-                        onDefaultRequested: SettingsController.accentMode = 0
+                        title: qsTr("主题皮肤颜色")
+                        selectedMode: SettingsController.skinColorMode
+                        selectedPreset: SettingsController.skinPreset
+                        customColor: SettingsController.skinCustomColor
+                        onDefaultRequested: SettingsController.skinColorMode = 0
                         onPresetRequested: function(preset) {
-                            SettingsController.accentMode = 1
-                            SettingsController.accentPreset = preset
+                            SettingsController.skinColorMode = 1
+                            SettingsController.skinPreset = preset
                         }
                         onCustomRequested: function(color) {
-                            SettingsController.accentMode = 2
-                            SettingsController.accentCustomColor = color
-                        }
-                    }
-                }
-
-                SettingSwitch {
-                    objectName: "highlightFollowAccentControl"
-                    text: qsTr("高亮颜色跟随强调色")
-                    checked: SettingsController.highlightFollowAccent
-                    onToggled: SettingsController.highlightFollowAccent = checked
-                }
-
-                SettingRow {
-                    label: qsTr("高亮颜色")
-                    Layout.preferredHeight: 70
-
-                    ThemeColorSelector {
-                        id: highlightThemeColorSelector
-                        objectName: "highlightThemeColorSelector"
-                        anchors.fill: parent
-                        title: qsTr("高亮颜色")
-                        enabled: !SettingsController.highlightFollowAccent
-                        selectedMode: SettingsController.highlightMode
-                        selectedPreset: SettingsController.highlightPreset
-                        customColor: SettingsController.highlightCustomColor
-                        onDefaultRequested: SettingsController.highlightMode = 0
-                        onPresetRequested: function(preset) {
-                            SettingsController.highlightMode = 1
-                            SettingsController.highlightPreset = preset
-                        }
-                        onCustomRequested: function(color) {
-                            SettingsController.highlightMode = 2
-                            SettingsController.highlightCustomColor = color
+                            SettingsController.skinColorMode = 2
+                            SettingsController.skinCustomColor = color
                         }
                     }
                 }
