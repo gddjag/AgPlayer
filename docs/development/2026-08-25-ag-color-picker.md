@@ -1,4 +1,4 @@
-# AgColorPicker 开发与验收记录（2026-08-25，复核修订 1）
+# AgColorPicker 开发与验收记录（2026-08-25，复核修订 2）
 
 ## 结论与范围
 
@@ -14,7 +14,11 @@
 - `tests/CMakeLists.txt`
 - `tests/qml/tst_color_picker.qml`
 
-该范围不包含验收文档。文档提交另行记录：`124d14a docs: record color picker acceptance`，本轮复核将产生一个后续 documentation-only 提交。
+该范围不包含验收文档。可复现的提交库存如下：
+
+- `04f4575 docs: plan shared color picker implementation` 是**范围内**的计划文档提交（父提交为 `b9842cd`）。
+- `124d14a docs: record color picker acceptance` 和 `4570d62 docs: refine color picker acceptance evidence` 是**范围外**的 documentation-only 验收记录提交。
+- 本记录的本次修订由其自身的 documentation-only follow-up commit 承载；不改变上述实现范围。
 
 ## 历史基线、当前集成与保护范围
 
@@ -36,6 +40,8 @@
 
 - `build/evidence/2026-08-25-ag-color-picker/picker-light-native.jpg` — **462 × 552**，28,220 bytes。
 - `build/evidence/2026-08-25-ag-color-picker/picker-dark-native.jpg` — **462 × 552**，25,839 bytes。
+
+精确来源、命令/方法、源提交关系、尺寸和 SHA-256 见忽略的 `build/evidence/2026-08-25-ag-color-picker/picker-native-provenance.md`：qmlscene 使用忽略的 `picker-visual-harness.qml` 与 `imports/AgPlayer/qmldir` 加载 `2dcc5a5` 的最终生产 `AgColorPicker.qml`；Windows Computer Use 以 `sky.get_window_state(include_screenshot: true)` 的 Windows.Graphics.Capture data URL 原字节写入这两份 JPG。它们**不是** `contentItem.grabToImage()` 的输出（保留 harness 中独立的 diagnostic PNG 路径亦非上述 JPG）。
 
 可见约 360 px 宽紧凑 picker；顶部圆形色样、`#63316B` HEX 和 ×；`R 99 / G 49 / B 107` 统一行；三条 RGB 渐变滑块；`#63316B` 的 5 × 2 色卡（`#F8EBFA` 至 `#251028`）；`#63316B` 上的双层选中环与 ✓。light/dark 图中外框、输入面和文本 chrome 随 `Theme` 改变，而十个色卡保持同一标签/颜色。
 
@@ -75,6 +81,7 @@
 | `cmake --build --preset windows-msvc-release --target AgPlayer qml_main_window_test qml_mini_player_test settings_controller_test` | PASS，exit 0。 | `round1-build.log` |
 | `ctest --test-dir build/release -C Release -R '^(qml_color_picker_test|qml_main_window_test|qml_mini_player_test|settings_controller_test)$' --output-on-failure` | PASS，**4/4**，13.38 s。 | `round1-ctest.log` |
 | `cmake --build --preset windows-msvc-release --target agplayer_app_qml_qmllint all_qmllint` | PASS，exit 0。 | `round1-qmllint.log` |
+| `ctest --test-dir build/release/tests -C Release -R ^runtime_deployment_test$ --output-on-failure` | PASS，**1/1**，0.35 s；在生成的 `tests/CTestTestfile.cmake` 目录运行。 | `round2-runtime-deployment-test.log` |
 
 fresh configure 在首次真正调用前有两次无副作用的 shell quoting 失败（`VsDevCmd.bat` 未识别）；正确调用随后等待另一工作树的全局 `vcpkg-running.lock`，锁释放后正常完成。该等待不是源代码、测试或依赖失败。
 
