@@ -171,11 +171,14 @@ int main(const int argc, char** argv)
             for (int attempt = 0; attempt < 2'000
                  && duration_engine.snapshot().state != agplayer::EngineState::Stopped;
                  ++attempt) {
-                if (duration_engine.buffered_frames() > 0U) {
-                    duration_engine.render(final_block.data(), 512U);
-                } else {
+                if (duration_engine.buffered_frames() == 0U) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
+                // The manual backend must model the device callback even
+                // after the decoder drains its final exact-size block. A
+                // zero-frame read is what publishes the terminal Stopped
+                // state when EOF and an empty ring buffer coincide.
+                duration_engine.render(final_block.data(), 512U);
             }
             const auto final = duration_engine.snapshot();
             AG_CHECK(final.state == agplayer::EngineState::Stopped);

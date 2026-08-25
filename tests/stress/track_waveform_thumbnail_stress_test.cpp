@@ -91,7 +91,9 @@ void TrackWaveformThumbnailStressTest::keepsTenThousandLogicalRowsBoundedToVisib
     const int maxInFlight =
         rapidScroll.value(QStringLiteral("maxInFlightTracks"), -1).toInt();
     QVERIFY(maxInFlight >= 1);
-    QVERIFY(maxInFlight <= visibleRowCount + 1);
+    // Both bounded workers may still be finishing canceled filesystem reads
+    // while the next viewport's visible rows are queued.
+    QVERIFY(maxInFlight <= visibleRowCount + 2);
     QVERIFY(rapidScroll.value(QStringLiteral("queuedJobs")).toInt()
             <= visibleRowCount);
     QTRY_COMPARE_WITH_TIMEOUT(
@@ -130,7 +132,7 @@ void TrackWaveformThumbnailStressTest::keepsTenThousandLogicalRowsBoundedToVisib
     }
 
     const QVariantMap completed = provider.diagnostics();
-    QCOMPARE(completed.value(QStringLiteral("maxActiveWorkers")).toInt(), 1);
+    QCOMPARE(completed.value(QStringLiteral("maxActiveWorkers")).toInt(), 2);
     QCOMPARE(completed.value(QStringLiteral("activeWorkers")).toInt(), 0);
     QVERIFY(completed.value(QStringLiteral("cacheEntries")).toInt() <= 256);
     QCOMPARE(completed.value(QStringLiteral("cacheEntries")).toInt(), 256);

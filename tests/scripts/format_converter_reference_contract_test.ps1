@@ -69,9 +69,8 @@ if ($page -notmatch 'objectName:\s*"cancelAllButton"[\s\S]{0,1000}?Theme\.icon\(
     $page -match 'objectName:\s*"cancelAllButton"[\s\S]{0,1000}?Theme\.icon\("close-fill"\)') {
     throw 'Cancel all must use the filled stop-square icon instead of a close icon.'
 }
-if ($page -notmatch 'SettingsController\.parallelJobs' -or
-    $settings -notmatch 'SettingsController\.parallelJobs') {
-    throw 'Parallel jobs must synchronize through SettingsController.'
+if ($page -notmatch 'SettingsController\.parallelJobs') {
+    throw 'The progress-row parallel control must synchronize through SettingsController.'
 }
 if ($page -notmatch 'plan\.error\s*\|\|\s*plan\.reason') {
     throw 'Every preflight rejection must surface the backend reason.'
@@ -110,9 +109,9 @@ if ($table -notmatch 'component\s+ReferenceCheckBox\s*:\s*CheckBox' -or
 if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot 'assets/icons/check-line.svg'))) {
     throw 'Missing approved check-line icon asset for the reference checkbox indicator.'
 }
-if ($page -match 'converterParallelJobsBox' -or
+if ($page -notmatch 'objectName:\s*"formatTotalProgress"[\s\S]{0,1200}?objectName:\s*"converterParallelJobsBox"' -or
     $page -match 'formatOutputDirectoryRow') {
-    throw 'The reference footer must not expose parallel-jobs or output-directory controls.'
+    throw 'The reference footer must place parallel jobs beside total progress without duplicating output-directory controls.'
 }
 foreach ($asset in @(
     'arrow-up-s-line.svg', 'checkbox-circle-line.svg',
