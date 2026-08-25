@@ -73,11 +73,25 @@ TestCase {
                        formatButton.height / 2, Qt.LeftButton)
             tryCompare(FormatConverter, "selectedFormat", key, 1000)
             tryCompare(settings, "bitrateMode", "cbr", 1000)
-            const vbrButton = findChild(page,
-                                "formatBitrateModeButton-vbr")
+            const modeRepeater = findChild(page,
+                                           "formatBitrateModeRepeater")
+            verify(modeRepeater, key)
+            let vbrButton = null
+            for (let modeIndex = 0; modeIndex < modeRepeater.count;
+                 ++modeIndex) {
+                const candidate = modeRepeater.itemAt(modeIndex)
+                if (candidate
+                        && candidate.objectName
+                                === "formatBitrateModeButton-vbr") {
+                    vbrButton = candidate
+                    break
+                }
+            }
             verify(vbrButton, key)
-            mouseClick(vbrButton, vbrButton.width / 2,
-                       vbrButton.height / 2, Qt.LeftButton)
+            vbrButton.forceActiveFocus()
+            tryVerify(function() { return vbrButton.activeFocus }, 1000,
+                      key + " VBR button did not accept keyboard focus")
+            keyClick(Qt.Key_Space)
             tryCompare(settings, "bitrateMode", "vbr", 1000)
             compare(settings.quality, 75)
             mouseClick(convert, convert.width / 2, convert.height / 2,

@@ -553,9 +553,8 @@ Popup {
                     hoverEnabled: true
                     focusPolicy: Qt.StrongFocus
                     Accessible.role: Accessible.Button
-                    Accessible.name: qsTr("候选颜色 %1，色阶 %2")
-                                             .arg(candidateColor)
-                                             .arg(scaleValue)
+                    Accessible.name: qsTr("候选颜色 %1")
+                                             .arg(candidateColor) + " " + scaleValue
                     Accessible.selected: selected
                     onClicked: {
                         root.selectedColor = candidateColor

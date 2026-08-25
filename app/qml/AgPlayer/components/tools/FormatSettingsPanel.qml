@@ -325,6 +325,8 @@ Rectangle {
                     objectName: "formatBitrateModeRow"
                     visible: (root.capability.bitrateModes || []).length > 0
                     Repeater {
+                        id: bitrateModeRepeater
+                        objectName: "formatBitrateModeRepeater"
                         model: root.capability.bitrateModes || []
                         Button {
                             required property var modelData

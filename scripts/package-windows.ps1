@@ -23,7 +23,7 @@ if (-not (Test-Path -LiteralPath $cmakeCache)) {
     throw "CMake cache not found: $cmakeCache"
 }
 $qtDirEntry = Select-String -LiteralPath $cmakeCache `
-    -Pattern '^Qt6_DIR:PATH=(.+)$' | Select-Object -First 1
+    -Pattern '^Qt6_DIR:[^=]+=(.+)$' | Select-Object -First 1
 if ($null -eq $qtDirEntry) {
     throw "Qt6_DIR was not found in $cmakeCache"
 }
