@@ -53,7 +53,7 @@ TestCase {
         return ColorScale.normalizeHex(value)
     }
 
-    function replaceText(input, text) {
+    function typeText(input, text) {
         testCase.Window.window.requestActivate()
         tryCompare(testCase.Window.window, "active", true)
         mouseClick(input)
@@ -63,6 +63,10 @@ TestCase {
         keyClick(Qt.Key_Backspace)
         for (var index = 0; index < text.length; ++index)
             keyClick(text.charAt(index))
+    }
+
+    function replaceText(input, text) {
+        typeText(input, text)
         keyClick(Qt.Key_Return)
         wait(0)
     }
@@ -189,6 +193,31 @@ TestCase {
         replaceText(hexInput, "invalid")
 
         compare(hexInput.text, "#63316B")
+        compare(normalizedColor(picker.baseColor), "#63316B")
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
+    }
+
+    function test_invalid_rgb_restores_on_enter_and_focus_loss() {
+        openReferenceColor()
+        var redInput = findChild(picker, "colorPickerR")
+        var greenInput = findChild(picker, "colorPickerG")
+        var hexInput = findChild(picker, "colorPickerHex")
+
+        typeText(redInput, "999")
+        compare(redInput.text, "999")
+        verify(!redInput.acceptableInput)
+        keyClick(Qt.Key_Return)
+        wait(0)
+        compare(redInput.text, "99")
+
+        typeText(greenInput, "999")
+        compare(greenInput.text, "999")
+        verify(!greenInput.acceptableInput)
+        mouseClick(hexInput)
+        tryCompare(greenInput, "activeFocus", false)
+        compare(greenInput.text, "49")
+
         compare(normalizedColor(picker.baseColor), "#63316B")
         compare(normalizedColor(picker.selectedColor), "#63316B")
         compare(acceptedSpy.count, 0)

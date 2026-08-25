@@ -68,6 +68,13 @@ Popup {
         setBaseHex(ColorScale.rgbToHex(red, green, blue))
     }
 
+    function restoreInvalidRgbInput(input) {
+        if (input.acceptableInput)
+            return false
+        synchronizeControls(baseColor)
+        return true
+    }
+
     function setChannel(channel, value) {
         var rgb = ColorScale.hexToRgb(normalizedBaseHex)
         if (!rgb)
@@ -226,6 +233,16 @@ Popup {
                             selectByMouse: true
                             validator: IntValidator { bottom: 0; top: 255 }
                             onEditingFinished: root.setRgbFromInputs()
+                            onActiveFocusChanged: {
+                                if (!activeFocus)
+                                    root.restoreInvalidRgbInput(redInput)
+                            }
+                            Keys.onReturnPressed: function(event) {
+                                event.accepted = root.restoreInvalidRgbInput(redInput)
+                            }
+                            Keys.onEnterPressed: function(event) {
+                                event.accepted = root.restoreInvalidRgbInput(redInput)
+                            }
                         }
                     }
                 }
@@ -259,6 +276,16 @@ Popup {
                             selectByMouse: true
                             validator: IntValidator { bottom: 0; top: 255 }
                             onEditingFinished: root.setRgbFromInputs()
+                            onActiveFocusChanged: {
+                                if (!activeFocus)
+                                    root.restoreInvalidRgbInput(greenInput)
+                            }
+                            Keys.onReturnPressed: function(event) {
+                                event.accepted = root.restoreInvalidRgbInput(greenInput)
+                            }
+                            Keys.onEnterPressed: function(event) {
+                                event.accepted = root.restoreInvalidRgbInput(greenInput)
+                            }
                         }
                     }
                 }
@@ -292,6 +319,16 @@ Popup {
                             selectByMouse: true
                             validator: IntValidator { bottom: 0; top: 255 }
                             onEditingFinished: root.setRgbFromInputs()
+                            onActiveFocusChanged: {
+                                if (!activeFocus)
+                                    root.restoreInvalidRgbInput(blueInput)
+                            }
+                            Keys.onReturnPressed: function(event) {
+                                event.accepted = root.restoreInvalidRgbInput(blueInput)
+                            }
+                            Keys.onEnterPressed: function(event) {
+                                event.accepted = root.restoreInvalidRgbInput(blueInput)
+                            }
                         }
                     }
                 }
