@@ -94,6 +94,14 @@ std::optional<int> storedInteger(const QVariant& value)
         const int parsed = value.toInt(&ok);
         return ok ? std::optional<int>(parsed) : std::nullopt;
     }
+    case QMetaType::QString: {
+        const QString stored = value.toString();
+        bool ok = false;
+        const int parsed = stored.toInt(&ok);
+        return ok && stored == QString::number(parsed)
+            ? std::optional<int>(parsed)
+            : std::nullopt;
+    }
     default:
         return std::nullopt;
     }

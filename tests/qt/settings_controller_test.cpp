@@ -45,6 +45,7 @@ private slots:
     void editSessionCanCommitOrCancel();
     void rebindFileAssociationsEnablesRegistrationDuringEdit();
     void testModeDoesNotTouchStartupRegistry();
+    void iniThemeSettingsPreserveStrictLegacyStrings();
 };
 
 void SettingsControllerTest::initTestCase()
@@ -884,6 +885,42 @@ void SettingsControllerTest::rebindFileAssociationsEnablesRegistrationDuringEdit
 
     SettingsController reloaded;
     QVERIFY(reloaded.setAsDefaultPlayer());
+}
+
+void SettingsControllerTest::iniThemeSettingsPreserveStrictLegacyStrings()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QSettings::Format originalFormat = QSettings::defaultFormat();
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       directory.path());
+
+    QSettings persisted;
+    for (const int legacyMode : {0, 1, 2}) {
+        persisted.clear();
+        persisted.setValue(QStringLiteral("appearance/themeMode"),
+                           QString::number(legacyMode));
+        persisted.setValue(QStringLiteral("appearance/highlightFollowAccent"),
+                           QStringLiteral("false"));
+        persisted.sync();
+        SettingsController settings;
+        QCOMPARE(settings.themeMode(), legacyMode);
+        QCOMPARE(settings.highlightFollowAccent(), false);
+    }
+
+    for (const QString& malformed : {
+             QStringLiteral(" 0"),
+             QStringLiteral("1.0"),
+             QStringLiteral("2extra"),
+             QStringLiteral("3")}) {
+        persisted.clear();
+        persisted.setValue(QStringLiteral("appearance/themeMode"), malformed);
+        persisted.sync();
+        SettingsController settings;
+        QCOMPARE(settings.themeMode(), 2);
+    }
+    QSettings::setDefaultFormat(originalFormat);
 }
 
 QTEST_MAIN(SettingsControllerTest)
