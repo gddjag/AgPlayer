@@ -34,6 +34,10 @@ private slots:
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
     void listGlassBackgroundDefaultsOffAndPersists();
+    void themeColorDefaultsUseSystemDefaultAndFollowAccent();
+    void themeColorSettingsPersistAndNormalize();
+    void themeColorSettingsMigrateLegacyAppearanceAndInvalidValues();
+    void themeColorEditTransactionPreviewsCommitsCancelsAndPreservesMediaSettings();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
@@ -63,6 +67,134 @@ void SettingsControllerTest::listGlassBackgroundDefaultsOffAndPersists()
     QCOMPARE(reloaded.glassEffect(), true);
     QCOMPARE(persisted.value(QStringLiteral("appearance/glassEffect")).toBool(), true);
     persisted.clear();
+}
+
+void SettingsControllerTest::themeColorDefaultsUseSystemDefaultAndFollowAccent()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    SettingsController settings;
+    QCOMPARE(settings.themeMode(), 2);
+    QCOMPARE(settings.accentMode(), 0);
+    QCOMPARE(settings.accentPreset(), QStringLiteral("systemBlue"));
+    QCOMPARE(settings.accentCustomColor(), QStringLiteral("#D27722"));
+    QCOMPARE(settings.highlightFollowAccent(), true);
+    QCOMPARE(settings.highlightMode(), 0);
+    QCOMPARE(settings.highlightPreset(), QStringLiteral("systemBlue"));
+    QCOMPARE(settings.highlightCustomColor(), QStringLiteral("#D27722"));
+}
+
+void SettingsControllerTest::themeColorSettingsPersistAndNormalize()
+{
+    QSettings persisted;
+    persisted.clear();
+    {
+        SettingsController settings;
+        settings.setAccentMode(1);
+        settings.setAccentPreset(QStringLiteral("purple"));
+        settings.setAccentCustomColor(QStringLiteral("#a1b2c3"));
+        settings.setHighlightFollowAccent(false);
+        settings.setHighlightMode(2);
+        settings.setHighlightPreset(QStringLiteral("green"));
+        settings.setHighlightCustomColor(QStringLiteral("#d4e5f6"));
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.accentMode(), 1);
+    QCOMPARE(reloaded.accentPreset(), QStringLiteral("purple"));
+    QCOMPARE(reloaded.accentCustomColor(), QStringLiteral("#A1B2C3"));
+    QCOMPARE(reloaded.highlightFollowAccent(), false);
+    QCOMPARE(reloaded.highlightMode(), 2);
+    QCOMPARE(reloaded.highlightPreset(), QStringLiteral("green"));
+    QCOMPARE(reloaded.highlightCustomColor(), QStringLiteral("#D4E5F6"));
+    QCOMPARE(persisted.value(QStringLiteral("appearance/accentCustomColor")).toString(),
+             QStringLiteral("#A1B2C3"));
+    QCOMPARE(persisted.value(QStringLiteral("appearance/highlightCustomColor")).toString(),
+             QStringLiteral("#D4E5F6"));
+}
+
+void SettingsControllerTest::themeColorSettingsMigrateLegacyAppearanceAndInvalidValues()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/themeMode"), 1);
+    {
+        SettingsController legacy;
+        QCOMPARE(legacy.themeMode(), 1);
+    }
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/themeMode"), 99);
+    persisted.setValue(QStringLiteral("appearance/accentMode"), 99);
+    persisted.setValue(QStringLiteral("appearance/accentPreset"), QStringLiteral("blue"));
+    persisted.setValue(QStringLiteral("appearance/accentCustomColor"),
+                       QStringLiteral("#80112233"));
+    persisted.setValue(QStringLiteral("appearance/highlightMode"), -1);
+    persisted.setValue(QStringLiteral("appearance/highlightPreset"), QStringLiteral("unknown"));
+    persisted.setValue(QStringLiteral("appearance/highlightCustomColor"),
+                       QStringLiteral("not-a-color"));
+    {
+        SettingsController invalid;
+        QCOMPARE(invalid.themeMode(), 2);
+        QCOMPARE(invalid.accentMode(), 0);
+        QCOMPARE(invalid.accentPreset(), QStringLiteral("systemBlue"));
+        QCOMPARE(invalid.accentCustomColor(), QStringLiteral("#D27722"));
+        QCOMPARE(invalid.highlightMode(), 0);
+        QCOMPARE(invalid.highlightPreset(), QStringLiteral("systemBlue"));
+        QCOMPARE(invalid.highlightCustomColor(), QStringLiteral("#D27722"));
+    }
+}
+
+void SettingsControllerTest::themeColorEditTransactionPreviewsCommitsCancelsAndPreservesMediaSettings()
+{
+    QSettings persisted;
+    persisted.clear();
+    SettingsController settings;
+    settings.setWaveformHeight(1.3);
+    settings.setSpectrumPlayedColor(QStringLiteral("#123456"));
+    const double waveformHeight = settings.waveformHeight();
+    const QString spectrumPlayedColor = settings.spectrumPlayedColor();
+
+    settings.beginEdit();
+    QSignalSpy accentChanged(&settings, &SettingsController::accentCustomColorChanged);
+    settings.setAccentMode(2);
+    settings.setAccentCustomColor(QStringLiteral("#abcdef"));
+    settings.setHighlightFollowAccent(false);
+    settings.setHighlightMode(1);
+    settings.setHighlightPreset(QStringLiteral("purple"));
+    QCOMPARE(settings.accentCustomColor(), QStringLiteral("#ABCDEF"));
+    QCOMPARE(accentChanged.count(), 1);
+    QCOMPARE(persisted.value(QStringLiteral("appearance/accentCustomColor")).toString(),
+             QStringLiteral("#D27722"));
+    settings.resetToDefaults();
+    QCOMPARE(settings.themeMode(), 2);
+    QCOMPARE(settings.accentMode(), 0);
+    QCOMPARE(settings.highlightFollowAccent(), true);
+    QCOMPARE(settings.waveformHeight(), waveformHeight);
+    QCOMPARE(settings.spectrumPlayedColor(), spectrumPlayedColor);
+    settings.cancelEdit();
+    QCOMPARE(settings.accentMode(), 0);
+    QCOMPARE(settings.highlightFollowAccent(), true);
+    QCOMPARE(settings.waveformHeight(), waveformHeight);
+    QCOMPARE(settings.spectrumPlayedColor(), spectrumPlayedColor);
+
+    settings.beginEdit();
+    settings.setAccentMode(1);
+    settings.setAccentPreset(QStringLiteral("purple"));
+    settings.setHighlightFollowAccent(false);
+    settings.setHighlightMode(2);
+    settings.setHighlightCustomColor(QStringLiteral("#abcdef"));
+    settings.commitEdit();
+
+    SettingsController committed;
+    QCOMPARE(committed.accentMode(), 1);
+    QCOMPARE(committed.accentPreset(), QStringLiteral("purple"));
+    QCOMPARE(committed.highlightFollowAccent(), false);
+    QCOMPARE(committed.highlightMode(), 2);
+    QCOMPARE(committed.highlightCustomColor(), QStringLiteral("#ABCDEF"));
+    QCOMPARE(committed.waveformHeight(), waveformHeight);
+    QCOMPARE(committed.spectrumPlayedColor(), spectrumPlayedColor);
 }
 
 void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()
@@ -461,8 +593,8 @@ void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndRese
         &reloaded,
         &SettingsController::listWaveformThumbnailModeChanged);
     reloaded.resetToDefaults();
-    QCOMPARE(reloaded.listWaveformThumbnailEnabled(), true);
-    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+    QCOMPARE(reloaded.listWaveformThumbnailEnabled(), false);
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Mono"));
     QVERIFY(enabledReset.count() >= 1);
     QVERIFY(modeReset.count() >= 1);
 
