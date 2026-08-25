@@ -1,14 +1,10 @@
-# AgColorPicker 验收与开发记录（2026-08-25）
+# AgColorPicker 开发与验收记录（2026-08-25，复核修订 1）
 
-## 范围与基线
+## 结论与范围
 
-目标是用唯一的原生 QML `AgColorPicker.qml` 替代原有系统颜色选择入口，并保持十个既有设置属性、默认值、QSettings 键、设置事务、波形渲染、播放和 FFmpeg 行为不变。实现基线为 `b9842cd`，验收时 HEAD 为 `2dcc5a5`。
+**状态：PARTIAL / ACCEPTANCE_BLOCKED。** 实现、离屏 QML 行为、原生 Qt 组件视觉、MSVC Release 构建和 Release smoke 都有证据；但普通 Release 应用窗口不能被 Windows Computer Use 定位。真正的 Settings 页面导航、点击、取消、接受、实时主题切换、接受后重启持久化和恢复原值尚未完成端到端 Windows 验收。本记录不以 QML harness 或脚本 smoke 冒充该验收。
 
-本记录只报告本次实际执行得到的证据；尤其不把 Windows 上的自动测试描述为 macOS 或真实桌面交互验收。
-
-## 变更边界与静态残留扫描
-
-`git diff --name-only b9842cd..HEAD` 的实际变更文件为：
+实现库存严格固定为 `b9842cd..2dcc5a5`：
 
 - `app/CMakeLists.txt`
 - `app/qml/AgPlayer/components/AgColorPicker.qml`
@@ -18,59 +14,72 @@
 - `tests/CMakeLists.txt`
 - `tests/qml/tst_color_picker.qml`
 
-扫描结果：
+该范围不包含验收文档。文档提交另行记录：`124d14a docs: record color picker acceptance`，本轮复核将产生一个后续 documentation-only 提交。
 
-- 共享 picker 定义：1 个，`app/qml/AgPlayer/components/AgColorPicker.qml`。
-- 共享调用器：1 个，`ColorField.qml`；`SettingsPage.qml` 中原有 `targetProperty:` 行为 10 条，因此十个颜色设置仍经同一调用器进入 picker。
-- `app` 与 `qt` 的 `ColorDialog|QColorDialog` 扫描：0 命中。
-- `AgColorPicker.qml` 的 `ShaderEffect|Canvas|Image { |QtQuick.Dialogs` 扫描：0 命中。
-- `git diff --check`：通过（exit 0）。
-- 保护范围 `SettingsPage.qml`、`settings_controller.cpp/.hpp`、`waveform_item.cpp` 的基线 diff：0；另查 `qt/src/playback_controller.cpp` 与 `core/`：0。
+## 历史基线、当前集成与保护范围
 
-## 构建、测试与 lint（Windows / MSVC Release）
+`git show b9842cd` 显示历史基线为 `ColorField.qml` 内 **1 个内联 `ColorDialog`**，以及 `SettingsPage.qml` 中 **10 条** 原始 `targetProperty:` 调用。
 
-使用现存并已核验的 `build/msvc-release` 缓存：Ninja、Release、`cl.exe` 为 `...MSVC/14.38.33130/.../Hostx64/x64/cl.exe`，Qt 为 `D:/Qt/6.7.0/msvc2019_64`。没有编辑 `CMakePresets.json`；命名 preset 的二进制目录是 `build/release`，不作为本次 MSVC 验收目录。
+当前静态结果：
 
-首次构建尝试因当前 PowerShell 未载入 MSVC 标准库环境而失败：`fatal error C1083: 无法打开包括文件: “type_traits”`。随后通过 `vcvars64.bat` 载入相同的已验证 MSVC 环境重跑，结果如下。
+- `AgColorPicker.qml`：**1** 个共享 picker 定义。
+- `ColorField.qml`：**1** 个共享集成点，引用 `AgColorPicker {`；`SettingsPage.qml` 的 **10 条** `targetProperty:` 调用仍存在且未改名。
+- 生产 `app`/`qt` 范围 `ColorDialog|QColorDialog`：0 命中。
+- `b9842cd..2dcc5a5` 对 `SettingsPage.qml`、`settings_controller.cpp/.hpp`、`waveform_item.cpp`、`playback_controller.cpp` 和 `core/` 的 diff：0。
+- `git diff --check b9842cd..2dcc5a5`：exit 0。
 
-| 命令 | 结果 |
-| --- | --- |
-| `cmake --build build/msvc-release --target AgPlayer qml_main_window_test qml_mini_player_test settings_controller_test`（`vcvars64.bat` 后） | PASS，exit 0；构建并部署实际 Release `app/AgPlayer.exe`。 |
-| `ctest --test-dir build/msvc-release -C Release -R '^(qml_color_picker_test|qml_main_window_test|qml_mini_player_test|settings_controller_test)$' --output-on-failure` | PASS，4/4，11.77 s。 |
-| `cmake --build build/msvc-release --target agplayer_app_qml_qmllint`（`vcvars64.bat` 后） | PASS，exit 0。 |
-| `cmake --build build/msvc-release --target all_qmllint`（`vcvars64.bat` 后） | PASS，exit 0。 |
-| `ctest --test-dir build/msvc-release -C Release -R '^runtime_deployment_test$' --output-on-failure` | PASS，1/1，0.42 s。 |
-| `scripts/qa-main-smoke.ps1 -BuildDirectory build/msvc-release` | PASS；实际 Release 加载并播放 fixture、保存截图且日志中没有 WARN/ERROR/FATAL。 |
+因此本次仅替换颜色选择 UI；颜色属性、默认值、QSettings 键、设置事务、波形渲染、播放与 FFmpeg 均不在实现 diff 中。
 
-`qml_color_picker_test` 是 CTest 名称，刻意复用 `qml_main_window_test` 可执行程序而不是独立 CMake build target；因此首次错误地请求 `--target qml_color_picker_test` 返回 `ninja: error: unknown target 'qml_color_picker_test'`。修正为该测试实际依赖的 `qml_main_window_test` 后，上表 4/4 CTest 已覆盖它。
+## 原生 Qt 视觉证据（组件级，不是 Release Settings 级）
 
-两次 qmllint 都仅输出同一条非本任务既有 notice：`app/qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml:3:1: Unused import (QtQuick.Dialogs)`；工具返回 exit 0，未报告 picker lint error。
+以下 Windows.Graphics.Capture 图像实际加载最终 `AgColorPicker.qml` 于隔离的 native Qt 6.7 `qmlscene` 临时 import harness，且已通过图像查看器人工复核：
 
-## 要求到证据的映射
+- `build/evidence/2026-08-25-ag-color-picker/picker-light-native.jpg` — **462 × 552**，28,220 bytes。
+- `build/evidence/2026-08-25-ag-color-picker/picker-dark-native.jpg` — **462 × 552**，25,839 bytes。
 
-| 要求 | 现有自动化 / 静态证据 | Windows 真实 UI 结论 |
+可见约 360 px 宽紧凑 picker；顶部圆形色样、`#63316B` HEX 和 ×；`R 99 / G 49 / B 107` 统一行；三条 RGB 渐变滑块；`#63316B` 的 5 × 2 色卡（`#F8EBFA` 至 `#251028`）；`#63316B` 上的双层选中环与 ✓。light/dark 图中外框、输入面和文本 chrome 随 `Theme` 改变，而十个色卡保持同一标签/颜色。
+
+该 harness 证明共享组件能在原生 Qt 6.7 呈现目标结构和 live Theme-bound chrome；它**不证明** Release Settings 的导航、`ColorField` 写入、鼠标/键盘点击、关闭策略或重启持久化。
+
+实际 Release smoke 图像为 `build/evidence/2026-08-25-ag-color-picker/release-runtime-main-smoke.png`（1104 × 342，45,111 bytes）；它证明受控 QA 路径可播放，但不显示 picker。
+
+## 要求到证据映射
+
+| 要求 | 自动化 / 静态 / 视觉证据 | 实际 Settings 状态 |
 | --- | --- | --- |
-| 唯一原生 QML picker、约 360 px 紧凑弹窗、色样/HEX/关闭行、RGB 容器、三条渐变滑块、5×2 色卡、选中环与 ✓ | `AgColorPicker.qml` 静态结构扫描：`width` 上限 360、`columns: 5`、10 个 `colorCandidate-*`、selected ring/✓；`qml_color_picker_test` 通过。 | 未完成：未取得真实 popup 截图，不能以源代码或离屏测试替代视觉比对。 |
-| `#63316B` 的十个精确候选色 | `test_reference_palette_is_exact` 在通过的 `qml_color_picker_test` 中比较 `#F8EBFA,#E9D2EC,#D6B9DB,#C09CC6,#A76BB0,#63316B,#512C57,#432248,#341938,#251028`。 | 未完成真实视觉确认。 |
-| HEX/RGB/滑块同步与无效输入回退 | `test_normalization_and_rgb_round_trip`、`test_hex_edit_changes_base_and_candidates_only`、`test_rgb_fields_synchronize_hex_and_sliders`、`test_each_slider_synchronizes_rgb_fields_and_hex`、两项 invalid-input 测试均属于通过的 QML 测试。 | 未完成真实窗口输入确认。 |
-| 色卡立即接受；×、Escape、外部点击取消 | `test_candidate_accepts_once_and_closes_immediately`、`test_close_button_cancels_without_acceptance`、`test_escape_cancels_without_acceptance`、`test_outside_press_cancels_without_acceptance` 通过。 | 未完成真实窗口点击确认。 |
-| `ColorField` 接入、键盘可达、十个设置入口 | `test_color_field_commits_candidate_and_cancellation_preserves_setting` 和 keyboard/accessibility 测试通过；静态得到 10 个 `targetProperty:`。 | 未完成真实 Settings 页面导航/点击确认。 |
-| 弹窗打开时主题即时变更、候选色不变 | `test_theme_switch_updates_chrome_not_candidates` 通过。 | 未完成真实 light/dark popup 截图确认。 |
-| 已接受的颜色在重启后存在；设置页取消恢复旧值 | `settings_controller_test` 的波形颜色持久化/重载、设置事务 `beginEdit/cancelEdit/commitEdit` 覆盖底层机制；`qml_color_picker_test` 覆盖 candidate 写入与 picker cancellation。 | 未完成端到端真实 Settings 接受→退出/重启→重新读取→恢复原值；不应把底层测试称为桌面交互验收。 |
+| reopen 初始化；base/selected 初始相同 | `test_open_initializes_both_states_and_candidates`；`openForColor()` 同时赋 `selectedColor` 并 `setBaseHex()`。 | BLOCKED |
+| `#RGB` / `#RRGGBB`、可选 `#`、大写规范化 | `normalizeHex()` 的去可选 `#`、三位扩展和大写逻辑；`test_normalization_and_rgb_round_trip` 实测无 `#` 六位和带 `#` 三位输入。 | BLOCKED |
+| HEX / RGB 0–255、无效回退 | hex/RGB 同步、three-slider、invalid HEX、invalid RGB Enter/focus-loss 测试；`IntValidator` 与 `restoreInvalidRgbInput()` 静态检查。 | BLOCKED |
+| 三条 RGB 渐变公式 | `channelEndpoint(channel, 0/255)` 生成每条滑块两端颜色；`test_each_slider_synchronizes_rgb_fields_and_hex` 断言三条更新结果。 | BLOCKED |
+| HSL 色阶、`#63316B` 精确色表、相对亮度 | `ColorScale.buildPalette()` HSL steps、`isLight()` 线性 sRGB luminance（阈值 0.46）静态检查；`test_reference_palette_is_exact` 比较完整十色。 | BLOCKED |
+| base 编辑不接受，selected 仅候选接受 | hex/RGB/slider tests 都断言 `selectedColor` 不变；candidate test 断言一次 `colorAccepted`、写 selected、关闭。 | BLOCKED |
+| × / Escape / 外部按压取消；候选立即接受 | close button、Escape、outside press、candidate accepts once/closes immediately 四项 QML 测试；`CloseOnEscape | CloseOnPressOutside` 静态检查。 | BLOCKED |
+| light/dark live chrome，候选独立于主题 | `test_theme_switch_updates_chrome_not_candidates`；两张 native 图像显示 chrome 变更和相同色表。 | PARTIAL：组件视觉已证实，实际 Settings 内实时切换未证实。 |
+| 5 × 2、约 360 px、swatch/HEX/×、RGB、sliders、selected ring/✓ | `width` 限制、`columns: 5`、10 candidates 和 ring/✓ 静态结构；两张 native 图像直接可见。 | PARTIAL：组件视觉已证实，实际 Settings 未证实。 |
+| 无 Timer/Web/Shader/thread/cache/deps | `AgColorPicker.qml`、`ColorField.qml`、`ColorScale.js` 对 Timer、XMLHttpRequest、WebSocket、WebEngine、WorkerScript、QtConcurrent、ShaderEffect、Canvas、`Image {`、Thread、cache、setInterval/setTimeout 的扫描均为 0；未增加第三方依赖。 | 静态 PASS |
+| 键盘可达 | `ColorField` 的 `Qt.StrongFocus`、`Accessible.Button`，以及 `test_color_field_is_focusable_accessible_and_keyboard_operable`（Space / Return）。 | BLOCKED：真实 Settings 键盘路径未操作。 |
+| 接受后控制器持久化、默认值/重置、取消事务 | `waveformAppearanceSettingsClampPersistAndReset`（颜色 reloaded、reset defaults）和 `editSessionCanCommitOrCancel`；picker integration test 覆盖 candidate 写入与 picker cancellation。 | BLOCKED：实际 Settings accept → restart → restore original 未完成。 |
+| 十个调用器与保护文件 | 上述 10 条 `targetProperty:`、一共享调用器及保护 diff 0。 | 静态 PASS |
 
-## Windows 运行与视觉证据
+## 构建、测试、lint 和日志
 
-已存的真实 Release runtime screenshot：
+初版 MSVC Release 证据：`build/msvc-release` 在 `vcvars64.bat` 后构建通过；相关 CTest **4/4**（`settings_controller_test`、`qml_main_window_test`、`qml_color_picker_test`、`qml_mini_player_test`）通过；`agplayer_app_qml_qmllint` 与 `all_qmllint` exit 0；`runtime_deployment_test` **1/1** 通过；`qa-main-smoke.ps1 -BuildDirectory build/msvc-release` 通过。
 
-- `build/evidence/2026-08-25-ag-color-picker/release-runtime-main-smoke.png` — 1104 × 342 px，45,111 bytes。它显示正常实际 Release 播放 smoke；它**不**显示颜色 picker，不能作为 picker 外观的替代证据。
-- 同目录日志：`build-msvc.log`、`ctest.log`、`qmllint.log`、`runtime-smoke.log`、`ctest-color-picker-verbose.log`。
+保留日志：`build-msvc.log`、`ctest.log`、`ctest-color-picker-verbose.log`、`qmllint.log`、`all-qmllint.log`、`runtime-smoke.log`。两次 qmllint 都只输出同一条非本任务 notice：`RecordingInspectorSection.qml:3:1: Unused import (QtQuick.Dialogs)`，exit 0。
 
-使用 Computer Use 的 `sky.launch_app` 对 `build/msvc-release/app/AgPlayer.exe` 进行实际窗口启动时，返回精确错误：`launched app did not expose a targetable window: process:D:\\ai\\AgPlayer\\.worktrees\\ag-color-picker\\build\\msvc-release\\app\\AgPlayer.exe`。按恢复规程立即执行 `sky.list_windows()`，其中没有任何 `AgPlayer` 窗口。由于不存在可唯一选择的目标窗口，未再注入点击、键盘或状态修改；原始注册表中 `HKCU\\Software\\AgPlayer\\AgPlayer` 的 `themeMode` 与相关颜色值均为未显式保存状态，因而也没有发生需要恢复的实际设置更改。
+复核轮已在 `VsDevCmd.bat -arch=x64 -host_arch=x64` 下完整执行 fresh gate：
 
-这与项目 runtime smoke 通过并不矛盾：smoke 使用 `--qa-test-mode`，自动截图后退出，只证明受控 QA 路径可运行，不能提供可由 Windows 自动化交互的 Settings/picker 窗口。因此本次没有伪造 light/dark picker 截图，也没有宣称完成 outside/Escape/×、接受、实时主题或重启持久化的 Windows 桌面验收。
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `cmake --preset windows-msvc-release --fresh` | PASS，exit 0；MSVC 19.38.33133.0，配置/生成 727.6 s，输出 `build/release`。 | `round1-configure-msvc-retry.log` |
+| `cmake --build --preset windows-msvc-release --target AgPlayer qml_main_window_test qml_mini_player_test settings_controller_test` | PASS，exit 0。 | `round1-build.log` |
+| `ctest --test-dir build/release -C Release -R '^(qml_color_picker_test|qml_main_window_test|qml_mini_player_test|settings_controller_test)$' --output-on-failure` | PASS，**4/4**，13.38 s。 | `round1-ctest.log` |
+| `cmake --build --preset windows-msvc-release --target agplayer_app_qml_qmllint all_qmllint` | PASS，exit 0。 | `round1-qmllint.log` |
 
-## 平台范围与结论
+fresh configure 在首次真正调用前有两次无副作用的 shell quoting 失败（`VsDevCmd.bat` 未识别）；正确调用随后等待另一工作树的全局 `vcpkg-running.lock`，锁释放后正常完成。该等待不是源代码、测试或依赖失败。
 
-共享 QML 的结构、离屏 QML 测试、MSVC Release 构建和 Windows runtime/deployment smoke 均有证据。macOS 没有在本次 Windows 主机上构建或运行；唯一可报告的 macOS 依据是共享 QML、无平台专属 picker 分支、无 `QColorDialog` 残留的静态事实。macOS 的实际 Popup 尺寸、主题、键盘/外点取消和持久化行为仍有残余运行风险。
+## Windows / macOS 剩余风险
 
-**当前验收状态：DONE_WITH_CONCERNS。** 代码级/自动化证据为通过；真实 Windows Settings/picker 窗口未能由支持的自动化 API 绑定，故视觉、交互与重启端到端接受不能批准。后续需先恢复可目标化的普通 Release 窗口，再在记录原始主题/颜色后采集 light/dark popup 截图，完成取消、接受、主题即时更新、重启与恢复原值的人工/自动化复测。
+Computer Use 对普通 Release `AgPlayer.exe` 的启动返回 `launched app did not expose a targetable window`，紧接着 `sky.list_windows()` 无 AgPlayer 窗口。没有注入任何 picker 状态变更，因此不需要恢复用户颜色或主题。
+
+Windows 验收仍需可定位的普通 Release 窗口以完成实际 Settings UI 的导航、outside/Escape/×、candidate accept、open-popup theme switch、accept 后重启、Settings cancel 和原值恢复。macOS 只具共享 QML / 静态证据，尚无 macOS runtime 结论。
