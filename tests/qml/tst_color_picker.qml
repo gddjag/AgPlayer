@@ -535,14 +535,19 @@ TestCase {
         verify(defaultButton && blue)
         verify(defaultButton.checked)
         compare(blue.Accessible.role, Accessible.Button)
+        verify(blue.width >= 24)
+        verify(blue.height >= 24)
+        verify(blue.Accessible.name.indexOf("systemBlue") < 0)
+        verify(blue.Accessible.name.indexOf("系统蓝") >= 0)
         verify(!blue.selectionCueVisible)
         blue.forceActiveFocus()
+        tryVerify(function() { return blue.focusCueVisible })
         keyClick(Qt.Key_Space)
         tryCompare(SettingsController, "accentMode", 1)
         tryCompare(SettingsController, "accentPreset", "systemBlue")
         verify(blue.checked)
-        verify(blue.Accessible.name.indexOf("systemBlue") >= 0)
         verify(blue.selectionCueVisible)
+        verify(blue.focusCueVisible)
     }
 
     function test_theme_selectors_keep_blue_accent_and_purple_highlight_independent() {

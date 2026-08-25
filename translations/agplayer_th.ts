@@ -4001,6 +4001,16 @@
     <message><source>，已选择</source><translation>, เลือกอยู่</translation></message>
     <message><source>自定义</source><translation>กำหนดเอง</translation></message>
     <message><source>自定义颜色 %1</source><translation>สีกำหนดเอง %1</translation></message>
+    <message><source>系统蓝</source><translation>น้ำเงินระบบ</translation></message>
+    <message><source>靛蓝</source><translation>คราม</translation></message>
+    <message><source>紫色</source><translation>ม่วง</translation></message>
+    <message><source>粉色</source><translation>ชมพู</translation></message>
+    <message><source>红色</source><translation>แดง</translation></message>
+    <message><source>橙色</source><translation>ส้ม</translation></message>
+    <message><source>金色</source><translation>ทอง</translation></message>
+    <message><source>绿色</source><translation>เขียว</translation></message>
+    <message><source>蓝绿色</source><translation>เขียวอมฟ้า</translation></message>
+    <message><source>青色</source><translation>ฟ้า</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>

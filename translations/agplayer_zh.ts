@@ -4058,6 +4058,16 @@
     <message><source>，已选择</source><translation>，已选择</translation></message>
     <message><source>自定义</source><translation>自定义</translation></message>
     <message><source>自定义颜色 %1</source><translation>自定义颜色 %1</translation></message>
+    <message><source>系统蓝</source><translation>系统蓝</translation></message>
+    <message><source>靛蓝</source><translation>靛蓝</translation></message>
+    <message><source>紫色</source><translation>紫色</translation></message>
+    <message><source>粉色</source><translation>粉色</translation></message>
+    <message><source>红色</source><translation>红色</translation></message>
+    <message><source>橙色</source><translation>橙色</translation></message>
+    <message><source>金色</source><translation>金色</translation></message>
+    <message><source>绿色</source><translation>绿色</translation></message>
+    <message><source>蓝绿色</source><translation>蓝绿色</translation></message>
+    <message><source>青色</source><translation>青色</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>

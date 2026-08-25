@@ -272,10 +272,12 @@ function Get-CaptureStem {
     $parts.Add($Language)
     $parts.Add($Theme)
     if ($Accent) {
-        $parts.Add("accent-" + ($Accent -replace "[^A-Za-z0-9]+", "-"))
+        $safeAccent = ($Accent -replace "[^A-Za-z0-9]+", "-").Trim("-")
+        $parts.Add("accent-" + $safeAccent)
     }
     if ($Highlight) {
-        $parts.Add("highlight-" + ($Highlight -replace "[^A-Za-z0-9]+", "-"))
+        $safeHighlight = ($Highlight -replace "[^A-Za-z0-9]+", "-").Trim("-")
+        $parts.Add("highlight-" + $safeHighlight)
     }
     if ($HighlightFollow) {
         $parts.Add($(if ($HighlightFollow -eq "1") { "follow" } else { "independent" }))

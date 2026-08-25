@@ -4058,6 +4058,16 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>，已选择</source><translation>, selected</translation></message>
     <message><source>自定义</source><translation>Custom</translation></message>
     <message><source>自定义颜色 %1</source><translation>Custom color %1</translation></message>
+    <message><source>系统蓝</source><translation>System Blue</translation></message>
+    <message><source>靛蓝</source><translation>Indigo</translation></message>
+    <message><source>紫色</source><translation>Purple</translation></message>
+    <message><source>粉色</source><translation>Pink</translation></message>
+    <message><source>红色</source><translation>Red</translation></message>
+    <message><source>橙色</source><translation>Orange</translation></message>
+    <message><source>金色</source><translation>Gold</translation></message>
+    <message><source>绿色</source><translation>Green</translation></message>
+    <message><source>蓝绿色</source><translation>Teal</translation></message>
+    <message><source>青色</source><translation>Cyan</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>

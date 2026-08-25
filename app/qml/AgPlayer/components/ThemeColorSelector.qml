@@ -15,6 +15,22 @@ ColumnLayout {
     signal presetRequested(string preset)
     signal customRequested(color color)
 
+    function presetName(presetId) {
+        switch (presetId) {
+        case "systemBlue": return qsTr("系统蓝")
+        case "indigo": return qsTr("靛蓝")
+        case "purple": return qsTr("紫色")
+        case "pink": return qsTr("粉色")
+        case "red": return qsTr("红色")
+        case "orange": return qsTr("橙色")
+        case "gold": return qsTr("金色")
+        case "green": return qsTr("绿色")
+        case "teal": return qsTr("蓝绿色")
+        case "cyan": return qsTr("青色")
+        default: return presetId
+        }
+    }
+
     readonly property var presets: [
         { id: "systemBlue", color: "#007AFF" },
         { id: "indigo", color: "#5856D6" },
@@ -75,14 +91,15 @@ ColumnLayout {
                 objectName: root.objectNamePrefix + "Preset-" + modelData.id
                 checkable: true
                 property bool selectionCueVisible: swatch.checked
+                property bool focusCueVisible: swatch.activeFocus
                 checked: root.selectedMode === 1
                          && root.selectedPreset === modelData.id
                 focusPolicy: Qt.StrongFocus
-                implicitWidth: checked ? 24 : 20
-                implicitHeight: checked ? 24 : 20
+                implicitWidth: 24
+                implicitHeight: 24
                 padding: 0
                 Accessible.role: Accessible.Button
-                Accessible.name: root.title + " " + modelData.id
+                Accessible.name: root.title + " " + root.presetName(modelData.id)
                                  + (checked ? qsTr("，已选择") : "")
                 onClicked: root.presetRequested(modelData.id)
                 Keys.onSpacePressed: function(event) {
@@ -98,34 +115,50 @@ ColumnLayout {
                     event.accepted = true
                 }
 
-                background: Rectangle {
-                    radius: width / 2
-                    color: swatch.modelData.color
-                    border.width: swatch.checked ? 2 : 1
-                    border.color: swatch.checked
-                                  ? (swatch.modelData.id === "gold"
-                                     ? "#1B1B1B" : "#FFFFFF")
-                                  : (swatch.activeFocus ? Theme.focus : Theme.border)
-
+                background: Item {
                     Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: swatch.checked ? 3 : 0
+                        id: swatchCircle
+                        anchors.centerIn: parent
+                        width: swatch.checked ? 24 : 20
+                        height: width
                         radius: width / 2
-                        color: "transparent"
-                        border.width: swatch.checked ? 1 : 0
+                        color: swatch.modelData.color
+                        border.width: swatch.checked ? 2 : 1
                         border.color: swatch.checked
                                       ? (swatch.modelData.id === "gold"
-                                         ? "#FFFFFF" : "#1B1B1B")
-                                      : "transparent"
+                                         ? "#1B1B1B" : "#FFFFFF")
+                                      : Theme.border
+
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: swatch.checked ? 3 : 0
+                            radius: width / 2
+                            color: "transparent"
+                            border.width: swatch.checked ? 1 : 0
+                            border.color: swatch.checked
+                                          ? (swatch.modelData.id === "gold"
+                                             ? "#FFFFFF" : "#1B1B1B")
+                                          : "transparent"
+                        }
+
+                        ThemedIcon {
+                            anchors.centerIn: parent
+                            visible: swatch.checked
+                            source: Theme.icon("check-line")
+                            tint: swatch.modelData.id === "gold" ? "#1B1B1B" : "#FFFFFF"
+                            sourceSize.width: 12
+                            sourceSize.height: 12
+                        }
                     }
 
-                    ThemedIcon {
-                        anchors.centerIn: parent
-                        visible: swatch.checked
-                        source: Theme.icon("check-line")
-                        tint: swatch.modelData.id === "gold" ? "#1B1B1B" : "#FFFFFF"
-                        sourceSize.width: 12
-                        sourceSize.height: 12
+                    Rectangle {
+                        anchors.fill: swatchCircle
+                        anchors.margins: -2
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: swatch.focusCueVisible ? 2 : 0
+                        border.color: Theme.focus
+                        visible: swatch.focusCueVisible
                     }
                 }
             }

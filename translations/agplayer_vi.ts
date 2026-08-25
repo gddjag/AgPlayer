@@ -4001,6 +4001,16 @@
     <message><source>，已选择</source><translation>, đã chọn</translation></message>
     <message><source>自定义</source><translation>Tùy chỉnh</translation></message>
     <message><source>自定义颜色 %1</source><translation>Màu tùy chỉnh %1</translation></message>
+    <message><source>系统蓝</source><translation>Xanh hệ thống</translation></message>
+    <message><source>靛蓝</source><translation>Chàm</translation></message>
+    <message><source>紫色</source><translation>Tím</translation></message>
+    <message><source>粉色</source><translation>Hồng</translation></message>
+    <message><source>红色</source><translation>Đỏ</translation></message>
+    <message><source>橙色</source><translation>Cam</translation></message>
+    <message><source>金色</source><translation>Vàng kim</translation></message>
+    <message><source>绿色</source><translation>Xanh lá</translation></message>
+    <message><source>蓝绿色</source><translation>Xanh mòng két</translation></message>
+    <message><source>青色</source><translation>Xanh lơ</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>
