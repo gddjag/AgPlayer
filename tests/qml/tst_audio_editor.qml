@@ -64,7 +64,7 @@ TestCase {
         return item
     }
 
-    function test_referenceGeometryAt1672x941ShellContent() {
+    function test_referenceGeometryAt1672x942ShellContent() {
         host.width = 1672
         host.height = 849
         wait(0)
@@ -405,13 +405,14 @@ TestCase {
         verify(body, "event body must expose the selection interaction seam")
         const fromX = Math.round(body.width * 0.25)
         const toX = Math.round(body.width * 0.75)
-        const fromPoint = body.mapToItem(canvas, fromX, body.height / 2)
-        const toPoint = body.mapToItem(canvas, toX, body.height / 2)
+        const selectionY = Math.round(body.height * 0.75)
+        const fromPoint = body.mapToItem(canvas, fromX, selectionY)
+        const toPoint = body.mapToItem(canvas, toX, selectionY)
         const expectedStart = canvas.frameAtCanvasPixel(fromPoint.x)
         const expectedEnd = canvas.frameAtCanvasPixel(toPoint.x)
         const originalStart = AudioEditorController.timelineEventViews[0].timelineStart
 
-        mouseDrag(body, fromX, body.height / 2,
+        mouseDrag(body, fromX, selectionY,
                   toX - fromX, 0, Qt.LeftButton, Qt.NoModifier, 30)
 
         compare(AudioEditorController.selectionStart, expectedStart)
@@ -516,8 +517,7 @@ TestCase {
         const fadeIn = findChild(canvas, "editorEventFadeInHandle")
         let fade = findChild(canvas, "editorEventFadeOutHandle")
         let volumeLine = findChild(canvas, "editorEventVolumeLine")
-        let body = findChild(canvas, "editorEventBodyInteraction")
-        verify(fadeIn && fade && volumeLine && body)
+        verify(fadeIn && fade && volumeLine)
         tryVerify(function() { return fadeIn.visible && fadeIn.width > 0 })
         tryVerify(function() { return fade.visible && fade.width > 0 })
 
@@ -540,8 +540,7 @@ TestCase {
         wait(0)
         fade = findChild(canvas, "editorEventFadeOutHandle")
         volumeLine = findChild(canvas, "editorEventVolumeLine")
-        body = findChild(canvas, "editorEventBodyInteraction")
-        verify(fade && volumeLine && body)
+        verify(fade && volumeLine)
 
         const dragDelta = -Math.round(canvas.width * 0.2)
         const dragStartX = Math.round(fade.width * 0.8)
@@ -558,16 +557,30 @@ TestCase {
         verify(Math.abs(Number(AudioEditorController.timelineEventViews[0].fadeOut)
             - expectedFade) <= framePerPixel)
 
+        wait(0)
+        volumeLine = findChild(canvas, "editorEventVolumeLine")
+        verify(volumeLine)
+        const gainBefore = Number(AudioEditorController.timelineEventViews[0].gain)
+        const gainStart = volumeLine.mapToItem(
+            canvas, volumeLine.width / 2, volumeLine.height / 2)
+        const gainEnd = Qt.point(
+            gainStart.x, gainStart.y - Math.round(volumeLine.height / 4))
+        mousePress(canvas, gainStart.x, gainStart.y, Qt.LeftButton)
+        mouseMove(canvas, gainEnd.x, gainEnd.y, 30)
+        mouseRelease(canvas, gainEnd.x, gainEnd.y, Qt.LeftButton)
+        verify(Number(AudioEditorController.timelineEventViews[0].gain) > gainBefore)
+        verify(AudioEditorController.undo())
+        compare(Number(AudioEditorController.timelineEventViews[0].gain), gainBefore)
+
+        wait(0)
+        volumeLine = findChild(canvas, "editorEventVolumeLine")
+        verify(volumeLine)
         const clickX = Math.round(volumeLine.width * 0.45)
         const clickY = Math.round(volumeLine.height * 0.25)
         const envelopePoint = volumeLine.mapToItem(canvas, clickX, clickY)
         const expectedOffset = canvas.frameAtCanvasPixel(envelopePoint.x)
             - Number(AudioEditorController.timelineEventViews[0].timelineStart)
-        canvas.addEnvelopePointForEvent(
-            AudioEditorController.timelineEventViews[0].id,
-            Number(AudioEditorController.timelineEventViews[0].timelineStart),
-            Number(AudioEditorController.timelineEventViews[0].timelineEnd),
-            envelopePoint.x, clickY, volumeLine.height)
+        mouseDoubleClickSequence(canvas, envelopePoint.x, envelopePoint.y)
         compare(AudioEditorController.timelineEventViews[0].envelope.length, 1)
         compare(Number(AudioEditorController.timelineEventViews[0]
             .envelope[0].offset), expectedOffset)
@@ -591,12 +604,13 @@ TestCase {
 
     function test_activeRecordingShowsTimelineWaveformAndFallingMeter() {
         const waveform = findChild(page, "editorWaveformGeometry")
+        const recordingOverlay = findChild(page, "editorRecordingOverlayWaveform")
         const playheadCapsule = findChild(page, "editorPlayheadTimeCapsule")
         const recordingTime = findChild(page, "recordingTimeText")
         const meter = findChild(page, "inspectorInputMeter")
         const activeMeterSegment = findChild(
             page, "inspectorInputMeterSegment1")
-        verify(waveform && playheadCapsule && recordingTime && meter
+        verify(waveform && recordingOverlay && playheadCapsule && recordingTime && meter
                && activeMeterSegment)
         const output = RecordingTestDriver.nextOutputUrl()
         verify(output.toString().length > 0)
@@ -615,7 +629,8 @@ TestCase {
             return playheadCapsule.text !== "00:00.000"
         }, 1000)
         tryVerify(function() {
-            return waveform.visible && waveform.channelPeaks.length === 2
+            return recordingOverlay.visible
+                && recordingOverlay.channelPeaks.length === 2
         }, 2000)
         tryVerify(function() { return meter.level > 0.79 }, 1000)
         tryVerify(function() { return activeMeterSegment.opacity > 0.9 }, 1000)
@@ -633,6 +648,24 @@ TestCase {
         compare(AudioEditorController.positionMs, 0)
         compare(AudioEditorController.recordingFrames, 0)
         compare(waveform.visible, true)
+    }
+
+    function test_selectionResizeEdgesExposeVisibleCues() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setSelection(12000, 36000))
+        const startCue = findChild(page, "editorSelectionStartResizeCue")
+        const endCue = findChild(page, "editorSelectionEndResizeCue")
+        verify(startCue && endCue)
+        verify(startCue.visible && endCue.visible)
+        verify(startCue.width >= 2 && endCue.width >= 2)
+        verify(findChild(page, "editorSelectionStartHandle").width >= 24)
+        verify(findChild(page, "editorSelectionEndHandle").width >= 24)
+    }
+
+    function test_recordingDeviceRefreshIsAvailableFromTheInspector() {
+        const refresh = findChild(page, "recordingDeviceRefreshButton")
+        verify(refresh && refresh.visible)
+        mouseClick(refresh)
     }
 
     function test_realWheelEventUsesContractZoomFactors() {

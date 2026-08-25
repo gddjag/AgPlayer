@@ -71,6 +71,8 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(QVariantList channelPeaks READ channelPeaks NOTIFY waveformChanged)
     Q_PROPERTY(QVariantList viewportChannelPeaks READ viewportChannelPeaks
                    NOTIFY waveformChanged)
+    Q_PROPERTY(QVariantList recordingOverlayPeaks READ recordingOverlayPeaks
+                   NOTIFY waveformChanged)
     Q_PROPERTY(double viewportWaveformDensity READ viewportWaveformDensity
                    WRITE setViewportWaveformDensity
                    NOTIFY viewportWaveformDensityChanged)
@@ -174,6 +176,8 @@ public:
     [[nodiscard]] QVariantList channelPeaks() const;
     [[nodiscard]] QVariantList viewportChannelPeaks() const
     { return viewport_channel_peaks_; }
+    [[nodiscard]] QVariantList recordingOverlayPeaks() const
+    { return recording_overlay_peaks_; }
     [[nodiscard]] double viewportWaveformDensity() const noexcept
     { return viewport_waveform_density_; }
     void setViewportWaveformDensity(double density);
@@ -282,6 +286,7 @@ public:
     Q_INVOKABLE bool splitEvent(const QString& id, qint64 frame);
     Q_INVOKABLE bool setEventFadeIn(const QString& id, qint64 frames);
     Q_INVOKABLE bool setEventFadeOut(const QString& id, qint64 frames);
+    Q_INVOKABLE bool setEventGain(const QString& id, double gain);
     Q_INVOKABLE bool addEnvelopePoint(const QString& id, qint64 offset,
                                       double gain);
     Q_INVOKABLE bool beginEventGesture(const QString& id,
@@ -374,6 +379,7 @@ private:
     };
     void refreshActions();
     void requestViewportWaveform();
+    void updateRecordingOverlayWaveform();
     void startViewportWaveformJob(ViewportWaveformJob job);
     void clearViewportWaveformState();
     [[nodiscard]] double effectivePlaybackVolume() const noexcept;
@@ -432,6 +438,7 @@ private:
     qint64 bit_rate_{};
     QVariantList channel_peaks_;
     QVariantList viewport_channel_peaks_;
+    QVariantList recording_overlay_peaks_;
     double viewport_waveform_density_{2.0};
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
@@ -491,6 +498,7 @@ private:
     bool viewport_persisted_dirty_{};
     bool playhead_persisted_dirty_{};
     bool forced_project_dirty_{};
+    bool updating_recording_viewport_{};
     std::optional<std::uint64_t> saved_history_state_;
     std::optional<agplayer::editor::Selection> saved_selection_;
     qint64 saved_playhead_frame_{};
@@ -499,7 +507,7 @@ private:
     agplayer::editor::ProjectExportSettings saved_export_settings_;
     qint64 recording_insert_frame_{};
 
-    enum class EventGestureKind { None, Move, Trim, FadeIn, FadeOut };
+    enum class EventGestureKind { None, Move, Trim, FadeIn, FadeOut, Gain };
     struct EventGesture final {
         EventGestureKind kind{EventGestureKind::None};
         agplayer::editor::EventId id{};
@@ -510,6 +518,7 @@ private:
         qint64 sourceEnd{};
         qint64 fadeIn{};
         qint64 fadeOut{};
+        float gain{1.0F};
     };
     EventGesture event_gesture_;
     QString active_tool_{QStringLiteral("select")};

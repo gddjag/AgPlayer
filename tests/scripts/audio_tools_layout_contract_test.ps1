@@ -61,12 +61,14 @@ foreach ($control in @(
     }
 }
 
+$expectedToolsTitle = ConvertFrom-Utf8Base64 `
+    'QWdQbGF5ZXIgwrcg6Z+z6aKR5bel5YW3'
 if ($toolsWindow -notmatch 'width:\s*1672' -or
-    $toolsWindow -notmatch 'height:\s*941' -or
+    $toolsWindow -notmatch 'height:\s*942' -or
     $toolsWindow -notmatch 'Layout\.preferredHeight:\s*49' -or
     $toolsWindow -notmatch 'Layout\.preferredHeight:\s*43' -or
-    $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
-    throw 'The tools shell must match the 1672x941 title/nav geometry and title.'
+    -not $toolsWindow.Contains(('title: qsTr("' + $expectedToolsTitle + '")'))) {
+    throw 'The tools shell must match the 1672x942 title/nav geometry and title.'
 }
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
@@ -97,11 +99,11 @@ if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
 }
-if ($qaMatrix -notmatch '"1672x941"' -or $qaMatrix -match '"1672x942"') {
-    throw 'The audio-tools QA matrix must capture the exact 1672x941 reference size.'
+if ($qaMatrix -notmatch '"1672x942"' -or $qaMatrix -match '"1672x941"') {
+    throw 'The audio-tools QA matrix must capture the exact 1672x942 reference size.'
 }
-if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
-    throw 'The final UI matrix still expects the obsolete editor height.'
+if ($qaFinalMatrix -notmatch 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
+    throw 'The final UI matrix must include the 1672x942 editor height.'
 }
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'

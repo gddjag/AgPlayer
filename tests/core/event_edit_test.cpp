@@ -3,6 +3,7 @@
 #include <QtTest>
 
 #include <memory>
+#include <limits>
 
 using namespace agplayer::editor;
 
@@ -51,6 +52,24 @@ private slots:
         QCOMPARE(snapshot.events.at(1).sourceEnd, SampleFrame{1'000});
         QCOMPARE(snapshot.events.at(1).timelineStart, SampleFrame{400});
         QCOMPARE(snapshot.revision, std::uint64_t{2});
+    }
+
+    void clipGainIsAnUndoableTimelineEdit()
+    {
+        auto value = document();
+        const auto before = value.historyStateId();
+
+        QVERIFY(value.setEventGain(1, 1.5F));
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 1.5F);
+        QCOMPARE(value.historyStateId(), before + 1);
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 1.0F);
+        QVERIFY(value.redo());
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 1.5F);
+
+        QVERIFY(!value.setEventGain(1,
+            std::numeric_limits<float>::infinity()));
+        QVERIFY(!value.setEventGain(999, 0.5F));
     }
 
     void splitPreservesValidParametersAndRejectsInvalidCopiedParameters()

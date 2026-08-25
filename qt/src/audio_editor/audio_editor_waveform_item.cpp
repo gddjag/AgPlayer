@@ -39,15 +39,23 @@ AudioEditorWaveformItem::AudioEditorWaveformItem(QQuickItem* parent)
     : QQuickItem(parent)
 {
     setFlag(ItemHasContents, true);
+    setAntialiasing(true);
 }
 
 void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
 {
     auto snapshot = std::make_shared<Snapshot>();
     QVariantList normalized;
+    qsizetype pairCount = -1;
     for (const QVariant& channel_value : channels) {
         const QVariantList values = channel_value.toList();
         if (values.empty() || values.size() % 2 != 0) {
+            snapshot->channels.clear();
+            normalized.clear();
+            break;
+        }
+        if (pairCount < 0) pairCount = values.size() / 2;
+        if (values.size() / 2 != pairCount) {
             snapshot->channels.clear();
             normalized.clear();
             break;
@@ -95,6 +103,31 @@ void AudioEditorWaveformItem::setChannelPeaks(const QVariantList& channels)
         }
         snapshot->channels.push_back(std::move(channel));
         normalized.append(QVariant(normalized_channel));
+    }
+    if (!snapshot->channels.empty()) {
+        std::vector<float> mix(static_cast<std::size_t>(pairCount) * 2U,
+                               std::numeric_limits<float>::quiet_NaN());
+        for (qsizetype pair = 0; pair < pairCount; ++pair) {
+            double minimum = 0.0;
+            double maximum = 0.0;
+            std::size_t contributors = 0;
+            for (const auto& channel : snapshot->channels) {
+                const std::size_t index = static_cast<std::size_t>(pair) * 2U;
+                if (!std::isfinite(channel[index])
+                    || !std::isfinite(channel[index + 1U])) {
+                    continue;
+                }
+                minimum += channel[index];
+                maximum += channel[index + 1U];
+                ++contributors;
+            }
+            if (contributors > 0U) {
+                const std::size_t index = static_cast<std::size_t>(pair) * 2U;
+                mix[index] = static_cast<float>(minimum / contributors);
+                mix[index + 1U] = static_cast<float>(maximum / contributors);
+            }
+        }
+        snapshot->channels = {std::move(mix)};
     }
     if (channel_peaks_ == normalized) {
         return;

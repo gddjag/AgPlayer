@@ -47,18 +47,13 @@ Rectangle {
     Component.onCompleted: AudioEditorController.viewport.setViewportWidth(
         Math.max(1, width))
 
-    Repeater {
-        model: Math.max(1, AudioEditorController.channels)
-        Rectangle {
-            required property int index
-            x: 0
-            y: (index + 0.5) * canvas.height
-               / Math.max(1, AudioEditorController.channels)
-            width: canvas.width
-            height: 1
-            color: Theme.border
-            opacity: 0.7
-        }
+    Rectangle {
+        x: 0
+        y: canvas.height / 2
+        width: canvas.width
+        height: 1
+        color: Theme.border
+        opacity: 0.7
     }
 
     AudioEditorWaveformItem {
@@ -79,11 +74,26 @@ Rectangle {
                    ? 3.0 : SettingsController.waveformThickness
         sampleMode: AudioEditorController.viewport.visibleFrameCount
             <= Math.max(2, Math.floor(width) * 2)
+        antialiasing: true
         onDensityChanged: AudioEditorController.viewportWaveformDensity = density
         Component.onCompleted:
             AudioEditorController.viewportWaveformDensity = density
         visible: AudioEditorController.hasDocument
-            || AudioEditorController.recording
+    }
+
+    AudioEditorWaveformItem {
+        objectName: "editorRecordingOverlayWaveform"
+        anchors.fill: parent
+        anchors.topMargin: 12
+        anchors.bottomMargin: 12
+        channelPeaks: AudioEditorController.recordingOverlayPeaks
+        waveformColor: "#ff3d4f"
+        density: SettingsController.waveformDensity
+        lineWidth: SettingsController.waveformThickness
+        sampleMode: AudioEditorController.viewport.visibleFrameCount
+            <= Math.max(2, Math.floor(width) * 2)
+        antialiasing: true
+        visible: AudioEditorController.recording
     }
 
     Rectangle {
@@ -462,12 +472,49 @@ Rectangle {
                 id: volumeLine
                 objectName: "editorEventVolumeLine"
                 x: 10; width: parent.width - 20
-                y: parent.height / 2 - 12; height: 24
-                z: 4
+                readonly property real gainY: (1 - Math.max(0, Math.min(2,
+                    Number(modelData.gain))) / 2) * eventDelegate.height
+                y: Math.max(0, Math.min(eventDelegate.height - height,
+                    gainY - height / 2))
+                height: 24
+                z: 6
                 Rectangle {
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     height: 1; color: Theme.secondaryText; opacity: 0.65
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.SizeVerCursor
+                    acceptedButtons: Qt.LeftButton
+                    property real pressCanvasY: 0
+                    property real originalGain: 1
+                    onPressed: function(mouse) {
+                        pressCanvasY = mapToItem(canvas, mouse.x, mouse.y).y
+                        originalGain = Number(modelData.gain)
+                        AudioEditorController.beginEventGesture(
+                            modelData.id, "gain")
+                        mouse.accepted = true
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        const currentY = mapToItem(canvas, mouse.x, mouse.y).y
+                        AudioEditorController.setEventGain(modelData.id,
+                            Math.max(0, Math.min(2,
+                                originalGain - 2 * (currentY - pressCanvasY)
+                                    / eventDelegate.height)))
+                    }
+                    onReleased: AudioEditorController.endEventGesture()
+                    onCanceled: AudioEditorController.cancelEventGesture()
+                    onDoubleClicked: function(mouse) {
+                        const point = mapToItem(canvas, mouse.x, mouse.y)
+                        canvas.addEnvelopePointForEvent(
+                            modelData.id,
+                            Number(modelData.timelineStart),
+                            Number(modelData.timelineEnd), point.x,
+                            mouse.y, height)
+                        mouse.accepted = true
+                    }
                 }
                 Repeater {
                     model: modelData.envelope || []
@@ -478,7 +525,8 @@ Rectangle {
                             + Number(modelData.offset)) - eventDelegate.x
                             - volumeLine.x - width / 2
                         y: (1 - Math.max(0, Math.min(2,
-                            Number(modelData.gain))) / 2) * volumeLine.height
+                            Number(modelData.gain))) / 2) * eventDelegate.height
+                            - volumeLine.y
                             - height / 2
                         color: Theme.accent
                         border.color: Theme.panel; border.width: 1
@@ -729,6 +777,16 @@ Rectangle {
                 AudioEditorController.selectionEnd)
             event.accepted = true
         }
+        Rectangle {
+            objectName: "editorSelectionStartResizeCue"
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 2
+            height: Math.max(16, parent.height * 0.45)
+            radius: 1
+            color: Theme.accent
+            visible: parent.visible
+        }
     }
 
     MouseArea {
@@ -763,6 +821,16 @@ Rectangle {
                     AudioEditorController.selectionEnd
                         + (event.key === Qt.Key_Left ? -1 : 1))))
             event.accepted = true
+        }
+        Rectangle {
+            objectName: "editorSelectionEndResizeCue"
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: 2
+            height: Math.max(16, parent.height * 0.45)
+            radius: 1
+            color: Theme.accent
+            visible: parent.visible
         }
     }
 

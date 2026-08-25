@@ -600,9 +600,9 @@ AudioEditorController::AudioEditorController(
     playback_timer_.setInterval(17);
     connect(&playback_timer_, &QTimer::timeout,
             this, &AudioEditorController::pollPlayback);
-    connect(&viewport_, &EditorViewport::viewportChanged, this,
-            &AudioEditorController::requestViewportWaveform);
     connect(&viewport_, &EditorViewport::viewportChanged, this, [this] {
+        if (!updating_recording_viewport_) requestViewportWaveform();
+        updateRecordingOverlayWaveform();
         if (suppress_persisted_state_tracking_
             || (!has_document_ && !recording())) return;
         viewport_persisted_dirty_ = viewport_.visibleStartFrame()
@@ -659,6 +659,7 @@ void AudioEditorController::pollRecording()
         && (viewport_.documentFrames() == 0
             || viewport_.visibleEndFrame() == viewport_.documentFrames());
     const qint64 currentTotalFrames = (std::max<qint64>)(1, totalFrames());
+    updating_recording_viewport_ = true;
     setViewportDocumentFrames(currentTotalFrames);
     if (followRecordingOverview
         && (viewport_.visibleStartFrame() != 0
@@ -667,7 +668,8 @@ void AudioEditorController::pollRecording()
         (void)viewport_.setVisibleRange(0, currentTotalFrames);
         suppress_persisted_state_tracking_ = false;
     }
-    requestViewportWaveform();
+    updating_recording_viewport_ = false;
+    updateRecordingOverlayWaveform();
     emit waveformChanged();
     emit playbackChanged();
     emit recordingChanged();
@@ -781,6 +783,9 @@ QVariantList AudioEditorController::timelineEventViews() const
             if (event_gesture_.kind == EventGestureKind::FadeIn) {
                 visible.fadeIn = event_gesture_.fadeIn;
             }
+            if (event_gesture_.kind == EventGestureKind::Gain) {
+                visible.gain = event_gesture_.gain;
+            }
         }
         QVariantList envelope;
         envelope.reserve(static_cast<qsizetype>(visible.envelope.size()));
@@ -801,6 +806,7 @@ QVariantList AudioEditorController::timelineEventViews() const
                 visible.sourceEnd)},
             {QStringLiteral("fadeIn"), QVariant::fromValue<qint64>(visible.fadeIn)},
             {QStringLiteral("fadeOut"), QVariant::fromValue<qint64>(visible.fadeOut)},
+            {QStringLiteral("gain"), visible.gain},
             {QStringLiteral("envelope"), envelope}});
     }
     return result;
@@ -1757,6 +1763,7 @@ bool AudioEditorController::beginEventGesture(const QString& id,
         : operation == QStringLiteral("trim") ? EventGestureKind::Trim
         : operation == QStringLiteral("fadeIn") ? EventGestureKind::FadeIn
         : operation == QStringLiteral("fadeOut") ? EventGestureKind::FadeOut
+        : operation == QStringLiteral("gain") ? EventGestureKind::Gain
                                                : EventGestureKind::None;
     if (kind == EventGestureKind::None
         || (duplicate && kind != EventGestureKind::Move)) {
@@ -1764,7 +1771,7 @@ bool AudioEditorController::beginEventGesture(const QString& id,
     }
     event_gesture_ = EventGesture{kind, *eventId, duplicate, false,
         event->timelineStart, event->sourceStart, event->sourceEnd,
-        event->fadeIn, event->fadeOut};
+        event->fadeIn, event->fadeOut, event->gain};
     return true;
 }
 
@@ -1791,6 +1798,8 @@ bool AudioEditorController::endEventGesture()
         changed = document_.setEventFadeIn(gesture.id, gesture.fadeIn);
     } else if (gesture.kind == EventGestureKind::FadeOut) {
         changed = document_.setEventFadeOut(gesture.id, gesture.fadeOut);
+    } else if (gesture.kind == EventGestureKind::Gain) {
+        changed = document_.setEventGain(gesture.id, gesture.gain);
     }
     if (!changed) {
         emit documentChanged();
@@ -2091,6 +2100,27 @@ bool AudioEditorController::detectBpm()
     return true;
 }
 
+bool AudioEditorController::setEventGain(const QString& id, const double gain)
+{
+    if (!has_document_ || busy() || !std::isfinite(gain)) return false;
+    const auto eventId = parseEventId(id);
+    if (!eventId) return false;
+    if (event_gesture_.kind != EventGestureKind::None) {
+        if (event_gesture_.kind != EventGestureKind::Gain
+            || event_gesture_.id != *eventId) {
+            return false;
+        }
+        event_gesture_.gain = static_cast<float>(gain);
+        event_gesture_.pending = true;
+        return true;
+    }
+    if (!document_.setEventGain(*eventId, static_cast<float>(gain))) {
+        return false;
+    }
+    finishTimelineMutation();
+    return true;
+}
+
 void AudioEditorController::setOriginalBpm(const double value)
 {
     if (!bpmDetectionSupported()) return;
@@ -2168,6 +2198,31 @@ void AudioEditorController::refreshRecordingDevices()
             {QStringLiteral("isDefault"), device.is_default}});
     }
     recording_devices_ = std::move(result);
+    bool selectedDeviceExists = false;
+    QString defaultDeviceId;
+    for (const QVariant& value : std::as_const(recording_devices_)) {
+        const QVariantMap device = value.toMap();
+        const QString id = device.value(QStringLiteral("id")).toString();
+        selectedDeviceExists = selectedDeviceExists
+            || id == recording_device_id_;
+        if (defaultDeviceId.isEmpty()
+            && device.value(QStringLiteral("isDefault")).toBool()) {
+            defaultDeviceId = id;
+        }
+    }
+    if (!selectedDeviceExists) {
+        const QString nextId = !defaultDeviceId.isEmpty() ? defaultDeviceId
+            : recording_devices_.isEmpty() ? QString{}
+            : recording_devices_.front().toMap()
+                  .value(QStringLiteral("id")).toString();
+        if (nextId != recording_device_id_) {
+            recording_device_id_ = nextId;
+            QSettings settings;
+            settings.setValue(QStringLiteral("audioEditor/recordingDeviceId"),
+                              recording_device_id_);
+            emit recordingPreferencesChanged();
+        }
+    }
     emit recordingDevicesChanged();
 }
 
@@ -2304,6 +2359,7 @@ bool AudioEditorController::startRecordingInternal(
             recording_final_path_.clear();
             live_recording_peaks_.clear();
             live_recording_envelopes_.clear();
+            recording_overlay_peaks_.clear();
             input_level_ = 0.0;
             playhead_frame_ = insert_recording_at_cursor_ && has_document_
                 ? recording_insert_frame_ : 0;
@@ -2323,6 +2379,7 @@ bool AudioEditorController::startRecordingInternal(
             recording_final_path_.clear();
             live_recording_peaks_.clear();
             live_recording_envelopes_.clear();
+            recording_overlay_peaks_.clear();
             input_level_ = 0.0;
             setState(has_document_ ? EditorSessionState::Ready
                                    : EditorSessionState::Empty);
@@ -2350,6 +2407,7 @@ bool AudioEditorController::startRecordingInternal(
         emit recordingPreferencesChanged();
         live_recording_peaks_.clear();
         live_recording_envelopes_.clear();
+        recording_overlay_peaks_.clear();
         input_level_ = 0.0;
         playhead_frame_ = insert_recording_at_cursor_ && has_document_
             ? recording_insert_frame_ : 0;
@@ -2358,6 +2416,7 @@ bool AudioEditorController::startRecordingInternal(
         recording_timer_.start();
         setState(EditorSessionState::Recording);
         requestViewportWaveform();
+        updateRecordingOverlayWaveform();
         emit playbackChanged();
         emit recordingChanged();
     });
@@ -2556,6 +2615,7 @@ bool AudioEditorController::stopRecording()
         }
         live_recording_peaks_.clear();
         live_recording_envelopes_.clear();
+        recording_overlay_peaks_.clear();
         input_level_ = 0.0;
         playhead_frame_ = insert_recording_at_cursor_
             ? recording_insert_frame_ : 0;
@@ -2613,6 +2673,7 @@ bool AudioEditorController::cancelRecording()
     recording_final_path_.clear();
     live_recording_peaks_.clear();
     live_recording_envelopes_.clear();
+    recording_overlay_peaks_.clear();
     input_level_ = 0.0;
     playhead_frame_ = insert_recording_at_cursor_ && has_document_
         ? recording_insert_frame_ : 0;
@@ -3058,12 +3119,7 @@ void AudioEditorController::requestViewportWaveform()
         viewport_waveform_cancel_token_->store(true,
                                                std::memory_order_release);
     }
-    const qint64 recordedFrames = recording()
-        ? static_cast<qint64>(recording_capture_->framesCaptured())
-        : 0;
-    const qint64 totalFrames = effectiveDocumentFramesForViewport(
-        has_document_, document_.totalFrames(), recording(), recording_insert_frame_,
-        recordedFrames, insert_recording_at_cursor_);
+    const qint64 totalFrames = has_document_ ? document_.totalFrames() : 0;
     const qreal viewportWidth = viewport_.viewportWidth();
     const qint64 clampedTotal = std::max<qint64>(0, totalFrames);
     qint64 startFrame = std::clamp<qint64>(
@@ -3085,25 +3141,8 @@ void AudioEditorController::requestViewportWaveform()
             ? visibleFrames
             : viewportTargetPoints(visibleFrames, viewportWidth,
                                    viewport_waveform_density_));
-    const bool recordingActive = recording();
-    const int effectiveChannels = recordingActive
-        ? recording_channels_ : channels_;
-    const qint64 recordingStartFrame = insert_recording_at_cursor_ && has_document_
-        ? recording_insert_frame_ : 0;
-    const bool recordingSampleMode = recordingActive && recordedFrames > 0
-        && sampleMode;
-    agplayer::editor::RecordingPcmSnapshot recordingPcm;
-    if (recordingSampleMode) {
-        const qint64 relativeStart = std::clamp<qint64>(
-            startFrame - recordingStartFrame, 0, recordedFrames);
-        const qint64 relativeEnd = std::clamp<qint64>(
-            endFrame - recordingStartFrame, relativeStart, recordedFrames);
-        recordingPcm = recording_capture_->takePcmSnapshot(
-            relativeStart, relativeEnd,
-            static_cast<std::size_t>(targetPoints));
-    }
-    if ((!has_document_ && !recording())
-        || clampedTotal <= 0 || effectiveChannels <= 0 || visibleFrames <= 0
+    if (!has_document_
+        || clampedTotal <= 0 || channels_ <= 0 || visibleFrames <= 0
         || targetPoints <= 0) {
         pending_viewport_waveform_job_.reset();
         viewport_channel_peaks_.clear();
@@ -3111,66 +3150,81 @@ void AudioEditorController::requestViewportWaveform()
         return;
     }
 
-    if (recordingActive && !has_document_) {
-        pending_viewport_waveform_job_.reset();
-        auto recordingPeaks = buildRecordingLivePeaks(
-            live_recording_envelopes_, effectiveChannels, targetPoints,
-            startFrame, endFrame, 0, recordedFrames);
-        applyRecordingPcmSamples(
-            recordingPeaks, recordingPcm, effectiveChannels, targetPoints,
-            startFrame, endFrame, 0);
-        viewport_channel_peaks_ = build_variant_peaks(recordingPeaks);
-        emit waveformChanged();
-        return;
-    }
-
     const auto snapshot = document_.timelineSnapshot();
     const auto primaryPeaks = peaksAsChannels(channel_peaks_);
-    const auto recordingEnvelopes = live_recording_envelopes_;
     const auto cancelToken = std::make_shared<std::atomic_bool>(false);
     ViewportWaveformJob job{
         generation,
         cancelToken,
         [snapshot, primaryPath = source_path_, primaryPeaks,
-         startFrame, endFrame, targetPoints, channels = effectiveChannels,
-         recordingActive, recordedFrames, recordingStartFrame,
-         recordingEnvelopes, recordingPcm, cancelToken]() mutable {
-            auto peaks = composeVisibleTimelinePeaks(
+         startFrame, endFrame, targetPoints, channels = channels_,
+         cancelToken]() mutable {
+            return composeVisibleTimelinePeaks(
                 snapshot, primaryPath, primaryPeaks, startFrame, endFrame,
                 targetPoints, channels, cancelToken);
-            if (cancelToken->load(std::memory_order_acquire)) return peaks;
-            if (recordingActive && recordedFrames > 0) {
-                auto recordingPeaks = buildRecordingLivePeaks(
-                    recordingEnvelopes, channels, targetPoints, startFrame,
-                    endFrame, recordingStartFrame, recordedFrames);
-                applyRecordingPcmSamples(
-                    recordingPeaks, recordingPcm, channels, targetPoints,
-                    startFrame, endFrame, recordingStartFrame);
-                if (peaks.empty()) peaks = recordingPeaks;
-                const std::size_t channelCount = std::min(
-                    peaks.size(), recordingPeaks.size());
-                for (std::size_t channel = 0; channel < channelCount; ++channel) {
-                    for (qint64 point = 0; point < targetPoints; ++point) {
-                        const auto index = static_cast<std::size_t>(point * 2);
-                        if (index + 1U >= peaks[channel].size()
-                            || index + 1U >= recordingPeaks[channel].size()
-                            || !std::isfinite(recordingPeaks[channel][index])
-                            || !std::isfinite(recordingPeaks[channel][index + 1U])) {
-                            continue;
-                        }
-                        includePeak(peaks[channel], point,
-                                    recordingPeaks[channel][index],
-                                    recordingPeaks[channel][index + 1U], 1.0F);
-                    }
-                }
-            }
-            return peaks;
         }};
     if (viewport_waveform_watcher_) {
         pending_viewport_waveform_job_ = std::move(job);
         return;
     }
     startViewportWaveformJob(std::move(job));
+}
+
+void AudioEditorController::updateRecordingOverlayWaveform()
+{
+    if (!recording()) {
+        if (!recording_overlay_peaks_.isEmpty()) {
+            recording_overlay_peaks_.clear();
+            emit waveformChanged();
+        }
+        return;
+    }
+    const qint64 recordedFrames = static_cast<qint64>(
+        recording_capture_->framesCaptured());
+    const qint64 totalFrames = effectiveDocumentFramesForViewport(
+        has_document_, document_.totalFrames(), true, recording_insert_frame_,
+        recordedFrames, insert_recording_at_cursor_);
+    const qint64 startFrame = std::clamp<qint64>(
+        viewport_.visibleStartFrame(), 0, totalFrames);
+    const qint64 endFrame = std::clamp<qint64>(
+        viewport_.visibleEndFrame(), startFrame, totalFrames);
+    const qint64 visibleFrames = endFrame - startFrame;
+    const qreal width = viewport_.viewportWidth();
+    const bool sampleMode = visibleFrames > 0
+        && visibleFrames <= std::max<qint64>(
+            2, static_cast<qint64>(std::floor(std::max<qreal>(1.0, width))) * 2);
+    const qint64 targetPoints = visibleFrames <= 0 || width <= 0.0 ? 0
+        : sampleMode ? visibleFrames
+        : viewportTargetPoints(visibleFrames, width, viewport_waveform_density_);
+    if (recordedFrames <= 0 || targetPoints <= 0
+        || recording_channels_ <= 0) {
+        if (!recording_overlay_peaks_.isEmpty()) {
+            recording_overlay_peaks_.clear();
+            emit waveformChanged();
+        }
+        return;
+    }
+    const qint64 recordingStart = insert_recording_at_cursor_ && has_document_
+        ? recording_insert_frame_ : 0;
+    auto peaks = buildRecordingLivePeaks(
+        live_recording_envelopes_, recording_channels_, targetPoints,
+        startFrame, endFrame, recordingStart, recordedFrames);
+    if (sampleMode) {
+        const qint64 relativeStart = std::clamp<qint64>(
+            startFrame - recordingStart, 0, recordedFrames);
+        const qint64 relativeEnd = std::clamp<qint64>(
+            endFrame - recordingStart, relativeStart, recordedFrames);
+        const auto pcm = recording_capture_->takePcmSnapshot(
+            relativeStart, relativeEnd,
+            static_cast<std::size_t>(targetPoints));
+        applyRecordingPcmSamples(peaks, pcm, recording_channels_, targetPoints,
+                                 startFrame, endFrame, recordingStart);
+    }
+    const QVariantList next = build_variant_peaks(peaks);
+    if (next != recording_overlay_peaks_) {
+        recording_overlay_peaks_ = next;
+        emit waveformChanged();
+    }
 }
 
 void AudioEditorController::startViewportWaveformJob(ViewportWaveformJob job)
@@ -3348,6 +3402,7 @@ void AudioEditorController::finishTimelineMutation()
     playhead_persisted_dirty_ = playhead_frame_ != saved_playhead_frame_;
     (void)syncModifiedFromHistory();
     clearViewportWaveformState();
+    requestViewportWaveform();
     refreshActions();
     emit waveformChanged();
     emit playbackChanged();

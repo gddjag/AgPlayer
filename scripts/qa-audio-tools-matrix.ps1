@@ -8,8 +8,8 @@ param(
     [int[]]$Themes = @(0, 1, 2),
     [ValidateRange(0, 3)]
     [int[]]$Tools = @(0, 1, 2, 3),
-    [ValidateSet("1672x941", "1280x720", "880x560")]
-    [string[]]$Sizes = @("1672x941", "1280x720", "880x560"),
+    [ValidateSet("1672x942", "1280x720", "880x560")]
+    [string[]]$Sizes = @("1672x942", "1280x720", "880x560"),
     [string]$QaImportFile = "",
     [long]$EditorSelectionStartMs = -1,
     [long]$EditorSelectionEndMs = -1,
