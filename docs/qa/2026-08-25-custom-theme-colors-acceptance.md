@@ -1,18 +1,18 @@
 # AgPlayer 自定义主题颜色系统验收记录
 
-日期：2026-08-25  
-状态：主题功能验收通过；最终跨分支集成与桌面 EXE 打包待本会话后续步骤完成。
+日期：2026-08-25（2026-08-26 完成最终集成与打包）
+状态：主题功能、跨分支集成、Windows Release 验证与桌面安装包均已完成。
 
 ## 构建与自动化
 
 | 项目 | 结果 | 边界 |
 |---|---|---|
-| MSVC Release 构建 | 通过 | `build/msvc-release-theme`，AgPlayer 与全部测试目标完成 |
+| MSVC Release 构建 | 通过 | `build/msvc-release-final`，MSVC 19.38 / Qt 6.7.0，AgPlayer 与全部测试目标完成 |
 | MSVC Debug 构建 | 通过 | `build/msvc-debug-qa`，显式 `cl.exe`，复用现有 vcpkg Debug/Release 库 |
-| Release 主题聚焦测试 | 6/6 通过 | ThemeManager、Settings、Picker、静态颜色、Mini、Audio Editor |
-| Debug 主题聚焦测试 | 6/6 通过 | 与 Release 同一组 |
-| Release 全量 CTest | 首轮 101/107 | 主题引入的 `audio_tools_layout_contract_test` 旧语义契约已更新并单独通过；其余失败列于下方，最终集成后重跑 |
-| Debug 全量 CTest | 102/108 | 6 项失败列于下方；主题聚焦测试全部通过 |
+| Release 聚焦测试 | 13/13 通过 | 主题、设置、Picker、静态颜色、Mini、Audio Editor、格式能力/计划/端到端/矩阵/参考契约 |
+| Debug 聚焦测试 | 13/13 通过 | 与 Release 同一组 |
+| Release 全量 CTest | 107/107 通过 | 修复 `Qt6_DIR:UNINITIALIZED` 打包缓存类型后完整复跑 |
+| Debug 全量 CTest | 105/108 通过 | 3 项非主题失败列于下方；Debug 主题聚焦集 13/13 通过 |
 | QML lint | 通过，1 个已知提示 | `Theme.qml` 的 `import AgPlayer` 被 lint 视为未使用，但运行时单例解析需要，移除会使测试失败 |
 | `git diff --check` | 通过 | 无空白错误 |
 
@@ -23,6 +23,7 @@
 - `build/qa/theme-modes/`：Light、Dark、System × 设置/播放，6/6 PASS。
 - `build/qa/theme-independent/`：Blue Accent + Purple Highlight 独立模式，Light/Dark × 设置/播放/迷你/列表，8/8 PASS。
 - `build/qa/theme-focus-fixed/`：设置页紧凑布局无右侧裁切；Hex 制品名已规范化。
+- 最终集成矩阵：中/英/泰/越 × Light/Dark/System × 10 个窗口状态，共 120 个状态均获得合格截图；中文 System 设置页曾在截图生成后的退出阶段出现一次 `0xC0000005`，越南文 System 列表曾出现一次 960×1152 尺寸漂移，两项独立复跑均 PASS。
 - Product Design 复核最终结论：APPROVED。24×24 命中区、独立键盘焦点环、本地化读屏名称三项缺口均关闭。
 
 截图只是视觉证据；Picker 键盘操作、设置事务、控件代表状态和 Palette 一致性另有自动化测试。
@@ -36,17 +37,22 @@
   - Purple Accent + System Blue independent Highlight：CPU 1.172 s，Working Set 154.08 MiB，Private 174.43 MiB。
   - 这是短时同机对照，不外推为长期性能基准；未观察到主题派生造成的常驻内存增长。
 
-## 已知基线 / 非主题失败
+## 最终集成与打包
 
-Release 全量测试中的非主题失败：
+- 已合并 `codex/recover-complete-release@a3ad58c` 与 `codex/revised-ui@af93306` 的最新已提交内容。
+- `codex/audio-editor-20260820@409b1f2` 已经位于最终 HEAD 的祖先链中，其功能又被恢复分支后续提交取代；无调用方的 `stop-fill.svg` 未作为额外死资源引入。
+- `codex/ag-color-picker@6696fc0` 已经位于最终 HEAD 的祖先链中；主题分支另外完成最终键盘/读屏可访问性修正。
+- 最终检查时其余本地 `codex/*` 会话分支最新 tip 也全部是 HEAD 祖先，不存在待合并的已提交代码。
+- `package-windows.ps1` 完成版本、Qt/VC 运行库和 PE 版本守卫；打包后的独立目录再次用真实 WAV 完成加载、播放、截图和有序退出：PASS。
+- 桌面安装包：`C:\Users\Administrator\Desktop\AgPlayer-Setup-1.0.0-x64.exe`，34,497,050 bytes（32.90 MiB），SHA-256 `D19E1D61BF561C33C1E9737885C8B75287AE1F804B5AB1FDE3D2E021B2F5192B`。
 
-- `qml_main_window_test`：设置转码格式模型现有期望 3、实际 8；该失败在主题修改前已存在。
-- `qml_format_converter_matrix_test`：Release 下 VBR 点击后仍为 CBR；Debug 同项通过，未由主题 QML 变更触及。
-- `format_converter_reference_contract_test`：并行任务仍未按旧契约通过 `SettingsController` 同步。
-- `track_waveform_thumbnail_stress_test`：既有压力失败。
-- `phase6_translation_coverage_test`：既有 `AudioEditorPage/停止录音` 中文目录缺失。
+## 已知基线 / 非主题失败与观测
 
-Debug 额外/不同失败：`audio_document_test`、`qml_main_window_test` 35 秒超时、`runtime_deployment_test` 期望 Release DLL；另有上述格式契约、缩略波形压力和 Phase 6 翻译失败。Debug 专用 `debug_runtime_deployment_test` 通过。
+- Release 全量 107/107，无保留失败。
+- Debug `audio_document_test` 进程无诊断直接返回失败；相同 Release 测试通过。
+- Debug `qml_main_window_test` 在 35 秒门限超时；相同 Release 测试通过，Debug 主题/Picker/格式聚焦测试均通过。
+- Debug `runtime_deployment_test` 检查 Release DLL 名称而失败；同一 Debug 构建的 `debug_runtime_deployment_test` 通过。
+- 最终 UI 矩阵出现过一次退出崩溃和一次列表尺寸漂移，均为截图已生成后的间歇事件，独立复跑通过；不据此宣称该退出稳定性风险已不存在。
 
 ## 平台边界
 

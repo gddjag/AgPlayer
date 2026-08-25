@@ -2,7 +2,7 @@
 
 日期：2026-08-25  
 分支：`codex/custom-theme-colors`  
-基线：`codex/recover-complete-release@9868504`
+基线：`codex/recover-complete-release@9868504`；最终集成见下方。
 
 ## 架构边界
 
@@ -31,8 +31,19 @@
 
 实现按 ThemeManager、设置持久化、Picker/设置 UI、运行时集成、QML Token、QA 与可访问性分开提交。主题分支不包含原工作树的未提交音频编辑改动；最终集成只接收其他会话已经提交的分支提交。
 
+## 最终跨会话集成
+
+- 合并 `codex/recover-complete-release@a3ad58c`，对应 merge commit `7853ecf`。
+- 合并 `codex/revised-ui@af93306` 的最新格式参数矩阵和 AIFF 支持，对应 merge commit `32d4539`。
+- `codex/audio-editor-20260820@409b1f2` 已在最终 HEAD 祖先链中，并被恢复分支后续实现取代；无调用方的 `stop-fill.svg` 未额外引入。
+- `codex/ag-color-picker@6696fc0` 已在最终 HEAD 祖先链中；主题分支继续补齐键盘焦点、24px 命中区、读屏选中态和色阶名称。
+- 最终以 `git merge-base --is-ancestor` 检查全部本地 `codex/*` 会话分支最新 tip，均已包含于 HEAD。
+- `scripts/package-windows.ps1` 兼容 CMake 缓存中的 `Qt6_DIR:PATH`、`FILEPATH` 与 `UNINITIALIZED` 类型，同时保留路径存在性和 PE 版本守卫。
+
+最终 Release 全量 CTest 107/107；Debug 全量 105/108，三个剩余失败均有 Release 对照和明确边界，详见 `docs/qa/2026-08-25-custom-theme-colors-acceptance.md`。
+
 ## 明确未扩展范围
 
 - 不实现 OKLCH、全局颜色动画、平台主题适配层、缓存、后台线程或新的主题依赖。
-- 不在此分支推送、自动合并远端或制作非 Windows 安装器。
+- 不在此分支推送、自动合并远端或制作非 Windows 安装器；已按用户补充要求生成 Windows 安装包并复制到桌面。
 - macOS/Linux 仅由同一 Qt 事件路径和自动化测试覆盖；没有对应主机实机证据。
