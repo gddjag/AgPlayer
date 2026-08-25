@@ -526,6 +526,7 @@ Window {
 
                     ColumnLayout {
                         id: centerColumn
+                        objectName: "centerTrackColumn"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         spacing: 0
@@ -593,8 +594,6 @@ Window {
                             id: centerTrackFooter
                             objectName: "centerTrackFooter"
                             Layout.fillWidth: true
-                            Layout.minimumWidth: centerColumn.width
-                            Layout.maximumWidth: centerColumn.width
                             Layout.preferredHeight: listWindow.filterBarHeight
                             visible: !filterModel || filterModel.category !== "library"
 
