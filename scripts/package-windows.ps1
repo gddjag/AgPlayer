@@ -13,6 +13,12 @@ $exe = Join-Path $appDir "AgPlayer.exe"
 $stage = Join-Path $repo "build/package/AgPlayer"
 $installerOutput = Join-Path $repo "build/installer"
 $cmakeCache = Join-Path $build "CMakeCache.txt"
+$versionTool = Join-Path $repo 'scripts/release-version.ps1'
+$versionOutput = (& $versionTool -SourceRoot $repo | Out-String).Trim()
+if ($versionOutput -notmatch '^AgPlayer release version: ([0-9]+\.[0-9]+\.[0-9]+)$') {
+    throw "Release version validation failed: $versionOutput"
+}
+$appVersion = $Matches[1]
 if (-not (Test-Path -LiteralPath $cmakeCache)) {
     throw "CMake cache not found: $cmakeCache"
 }
@@ -166,13 +172,14 @@ foreach ($relativePath in $requiredRuntime) {
     }
 }
 
-& $iscc (Join-Path $repo "installer/AgPlayer.iss")
+& $iscc "/DAppVersion=$appVersion" (Join-Path $repo "installer/AgPlayer.iss")
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
-$installer = Get-ChildItem -LiteralPath $installerOutput -File -Filter "AgPlayer-Setup-*-x64.exe" |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-if ($null -eq $installer) { throw "Installer was not produced" }
+$installer = Get-Item -LiteralPath (Join-Path $installerOutput `
+    "AgPlayer-Setup-$appVersion-x64.exe") -ErrorAction SilentlyContinue
+if ($null -eq $installer) {
+    throw "Versioned installer was not produced for $appVersion"
+}
 
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName
 [pscustomobject]@{

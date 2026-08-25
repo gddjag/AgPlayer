@@ -48,6 +48,7 @@ private slots:
     void dockedWindowsKeepNativeSizeAcrossScreens();
     void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
     void taskbarCommandsToggleDockedGroupWithoutResizing();
+    void taskbarActivationDoesNotCancelMinimize();
 #endif
     void mainMinimizeRestoresOnlyRequestedList();
     void showMainRestoresAndRaisesTheExistingWindowGroup();
@@ -754,6 +755,41 @@ void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
     QTRY_VERIFY(listWindow.isVisible());
     QTRY_COMPARE(nativeRect(mainWindow).size(), mainBefore.size());
     QTRY_COMPARE(nativeRect(listWindow).size(), listBefore.size());
+}
+
+void WindowControllerTest::taskbarActivationDoesNotCancelMinimize()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+
+    const HWND mainHandle = reinterpret_cast<HWND>(mainWindow.winId());
+    SendMessageW(mainHandle, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    // Windows may deliver activation while processing a taskbar minimize.
+    // That activation must never turn into a deferred show/restore request.
+    QVERIFY(PostMessageW(mainHandle, WM_ACTIVATE, WA_ACTIVE, 0));
+    QTest::qWait(100);
+    QCOMPARE(mainWindow.windowState(), Qt::WindowMinimized);
+    QVERIFY(!listWindow.isVisible());
 }
 #endif
 

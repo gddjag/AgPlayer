@@ -1,5 +1,7 @@
 #include "settings_controller.hpp"
 
+#include "agplayer_version.hpp"
+
 #include <QCoreApplication>
 #include <QColor>
 #include <QDebug>
@@ -153,7 +155,11 @@ int SettingsController::cacheSizeLimitMB() const noexcept { return cacheSizeLimi
 int SettingsController::currentCacheSizeMB() const noexcept { return currentCacheSizeMB_; }
 
 // About getters
-QString SettingsController::version() const { return QStringLiteral("v1.0"); }
+QString SettingsController::version() const
+{
+    return QStringLiteral("v")
+        + QString::fromLatin1(agplayer::version::kVersion);
+}
 QString SettingsController::releaseDate() const { return QStringLiteral("2026.10"); }
 // General setters
 void SettingsController::setAutoStartWithWindows(bool value)

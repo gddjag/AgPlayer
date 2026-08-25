@@ -1,5 +1,16 @@
 set(CMAKE_AUTOMOC ON)
 
+set(AGPLAYER_PLATFORM_SOURCES)
+if(WIN32)
+    configure_file(agplayer.manifest.in
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.manifest" @ONLY)
+    configure_file(agplayer.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.rc" @ONLY)
+    list(APPEND AGPLAYER_PLATFORM_SOURCES
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.rc"
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.manifest")
+endif()
+
 set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/add-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
@@ -177,16 +188,16 @@ target_link_libraries(agplayer_app_qml
 
 qt_add_executable(AgPlayer
     main.cpp
-    agplayer.rc
-    agplayer.manifest
+    ${AGPLAYER_PLATFORM_SOURCES}
 )
+target_include_directories(AgPlayer PRIVATE "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(AgPlayer PRIVATE
     Qt6::Widgets
     agplayer_app_qml
     agplayer_app_qmlplugin
 )
 if(WIN32)
-    target_link_libraries(AgPlayer PRIVATE shell32 propsys)
+    target_link_libraries(AgPlayer PRIVATE ole32 shell32 propsys)
 endif()
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)

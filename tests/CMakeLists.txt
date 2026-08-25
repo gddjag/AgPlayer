@@ -1184,10 +1184,31 @@ if (WIN32)
     set_tests_properties(installer_contract_test PROPERTIES
         ENVIRONMENT "AGPLAYER_INSTALLER_SCRIPT=${CMAKE_SOURCE_DIR}/installer/AgPlayer.iss"
     )
+    add_test(
+        NAME release_version_contract_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/release_version_contract_test.ps1
+                -SourceRoot ${CMAKE_SOURCE_DIR}
+    )
 endif()
 if(WIN32)
     add_test(NAME window_icon_contract_test
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
             -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/window_icon_contract_test.ps1
             -SourceRoot ${CMAKE_SOURCE_DIR})
+    add_test(NAME window_taskbar_native_test
+        COMMAND window_controller_test taskbarActivationDoesNotCancelMinimize
+            -o -,txt)
+    set_tests_properties(window_taskbar_native_test PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT "QT_QPA_PLATFORM=windows"
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+    add_test(NAME windows_shell_runtime_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+            -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/windows_shell_runtime_test.ps1
+            -AppPath $<TARGET_FILE:AgPlayer>)
+    set_tests_properties(windows_shell_runtime_test PROPERTIES
+        TIMEOUT 20
+        RUN_SERIAL TRUE)
 endif()

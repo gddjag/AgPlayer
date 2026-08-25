@@ -4,6 +4,61 @@ $repo = Split-Path -Parent (Split-Path -Parent $env:AGPLAYER_INSTALLER_SCRIPT)
 $packageScriptPath = Join-Path $repo 'scripts\package-windows.ps1'
 $packageScript = Get-Content -Raw -Encoding UTF8 -LiteralPath $packageScriptPath
 
+if ($installer -match '#define AppVersion\s+"[0-9]+\.[0-9]+\.[0-9]+"' -or
+    $installer -notmatch '#ifndef AppVersion' -or
+    $packageScript -notmatch 'release-version\.ps1' -or
+    $packageScript -notmatch '/DAppVersion=') {
+    throw "Installer version and output name must derive from the repository release version"
+}
+
+if ($installer -notmatch '(?m)^ShowLanguageDialog=yes\r?$' -or
+    $installer -notmatch '(?m)^LanguageDetectionMethod=none\r?$' -or
+    $installer -notmatch 'Name:\s*"chinesesimplified"' -or
+    $installer -notmatch 'Name:\s*"english"' -or
+    $installer -notmatch 'Name:\s*"thai"' -or
+    $installer -notmatch 'Name:\s*"vietnamese"') {
+    throw "Installer must show a language selector with Simplified Chinese as the default"
+}
+if ($installer.IndexOf('Name: "chinesesimplified"') -gt
+    $installer.IndexOf('Name: "english"')) {
+    throw "Simplified Chinese must be the first/default installer language"
+}
+foreach ($localizedContract in @(
+    'chinesesimplified.UninstallPersonalDataPrompt=',
+    'english.UninstallPersonalDataPrompt=',
+    'thai.UninstallPersonalDataPrompt=',
+    'vietnamese.UninstallPersonalDataPrompt=',
+    'chinesesimplified.AssociateAudioTask=',
+    'english.AssociateAudioTask=',
+    'thai.AssociateAudioTask=',
+    'vietnamese.AssociateAudioTask=',
+    'chinesesimplified.LaunchAgPlayer=',
+    'english.LaunchAgPlayer=',
+    'thai.LaunchAgPlayer=',
+    'vietnamese.LaunchAgPlayer=',
+    "ExpandConstant('{cm:UninstallPersonalDataPrompt}')"
+)) {
+    if (-not $installer.Contains($localizedContract)) {
+        throw "Installer/uninstaller prompts must follow the selected language: $localizedContract"
+    }
+}
+foreach ($languageFile in @(
+    'installer\languages\ChineseSimplified.isl',
+    'installer\languages\Vietnamese.isl'
+)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repo $languageFile))) {
+        throw "Installer language resource is missing: $languageFile"
+    }
+}
+if ($installer -notmatch '(?m)^WizardImageFile=\.\.\\assets\\brand\\logo-lockup\.png\r?$' -or
+    $installer -notmatch '(?m)^WizardSmallImageFile=\.\.\\assets\\brand\\agplayer-icon\.png\r?$') {
+    throw "Installer wizard must use the approved AgPlayer logo artwork"
+}
+if ($installer -match '(?m)^PinToTaskbar=' -or
+    $installer -match 'taskbarpin') {
+    throw "Installer must not pin AgPlayer to the taskbar"
+}
+
 if ($packageScript -match 'Visual Studio\\2022\\Community' -or
     $packageScript -notmatch 'vswhere\.exe' -or
     $packageScript -notmatch 'Microsoft\.VisualStudio\.Product\.BuildTools') {
@@ -40,9 +95,8 @@ if ($installer -notmatch '\[Tasks\]' -or
 if ($installer -match 'InfoBeforeFile=clean-install-warning\.txt') {
     throw "Normal installer must not show the old clean-install test warning"
 }
-$launchText = 'Description: "' + [char]0x542F + [char]0x52A8 + ' {#AppName}"'
-if (-not $installer.Contains($launchText)) {
-    throw "Post-install launch text must remain valid UTF-8 Chinese"
+if ($installer -notmatch 'Description:\s*"\{cm:LaunchAgPlayer\}"') {
+    throw "Post-install launch text must follow the selected installer language"
 }
 if (-not (Test-Path -LiteralPath (Join-Path $repo 'assets\brand\agplayer.ico'))) {
     throw "Windows package must include a multi-size application icon"
@@ -112,7 +166,7 @@ foreach ($identityValue in @(
         throw "Installer must register and refresh the stable taskbar identity: $identityValue"
     }
 }
-$manifestPath = Join-Path $repo 'app\agplayer.manifest'
+$manifestPath = Join-Path $repo 'app\agplayer.manifest.in'
 if (-not (Test-Path -LiteralPath $manifestPath)) {
     throw "Windows executable must declare an explicit DPI/taskbar manifest"
 }

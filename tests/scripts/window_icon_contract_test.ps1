@@ -9,6 +9,11 @@ $required = @(
     'ICON_BIG',
     'ICON_SMALL',
     'WM_GETICON',
+    'IPropertyStore.*GetValue|properties->GetValue',
+    'PropVariantClear',
+    'PKEY_AppUserModel_RelaunchCommand',
+    'PKEY_AppUserModel_RelaunchDisplayNameResource',
+    'PKEY_AppUserModel_RelaunchIconResource',
     'AgPlayer\.Desktop'
 )
 foreach ($pattern in $required) {

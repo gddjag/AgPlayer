@@ -110,6 +110,7 @@ target_include_directories(agplayer_qt
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
     PRIVATE
+        "${CMAKE_BINARY_DIR}/generated"
         "${CMAKE_SOURCE_DIR}/core/src"
 )
 target_link_libraries(agplayer_qt

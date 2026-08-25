@@ -2,7 +2,7 @@
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity
       name="AgPlayer.Desktop"
-      version="1.0.0.0"
+      version="@PROJECT_VERSION@.0"
       processorArchitecture="amd64"
       type="win32" />
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">

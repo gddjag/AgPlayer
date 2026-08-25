@@ -29,7 +29,10 @@
 
 #include <agplayer/c_api.h>
 
+#include "agplayer_version.hpp"
+
 #include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -127,6 +130,21 @@ HRESULT setWindowStringProperty(IPropertyStore* properties,
     return properties->SetValue(key, property);
 }
 
+QString windowStringProperty(IPropertyStore* properties,
+                             const PROPERTYKEY& key)
+{
+    PROPVARIANT property{};
+    if (FAILED(properties->GetValue(key, &property))) {
+        return {};
+    }
+    const QString value = property.vt == VT_LPWSTR
+            && property.pwszVal != nullptr
+        ? QString::fromWCharArray(property.pwszVal)
+        : QString();
+    PropVariantClear(&property);
+    return value;
+}
+
 void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
                                const NativeWindowIcons& nativeIcons)
 {
@@ -165,8 +183,29 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
     const HRESULT iconResult = setWindowStringProperty(
         properties, PKEY_AppUserModel_RelaunchIconResource, iconResource);
     if (SUCCEEDED(identityResult) && SUCCEEDED(commandResult)
-        && SUCCEEDED(displayResult) && SUCCEEDED(iconResult)) {
-        properties->Commit();
+        && SUCCEEDED(displayResult) && SUCCEEDED(iconResult)
+        && SUCCEEDED(properties->Commit())) {
+        const QString identity = windowStringProperty(
+            properties, PKEY_AppUserModel_ID);
+        const QString storedCommand = windowStringProperty(
+            properties, PKEY_AppUserModel_RelaunchCommand);
+        const QString storedDisplay = windowStringProperty(
+            properties, PKEY_AppUserModel_RelaunchDisplayNameResource);
+        const QString storedIcon = windowStringProperty(
+            properties, PKEY_AppUserModel_RelaunchIconResource);
+        if (identity != QString::fromWCharArray(kAgPlayerAppUserModelId)
+            || storedCommand.isEmpty() || storedDisplay.isEmpty()
+            || storedIcon.isEmpty()) {
+            qWarning("AgPlayer native taskbar identity publication failed");
+        } else {
+            if (qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1) {
+                std::fputs("AgPlayer native taskbar identity verified\n",
+                           stderr);
+                std::fflush(stderr);
+            }
+        }
+    } else {
+        qWarning("AgPlayer native taskbar property commit failed");
     }
     properties->Release();
 }
@@ -212,6 +251,8 @@ int main(int argc, char* argv[])
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
+    app.setApplicationVersion(
+        QString::fromLatin1(agplayer::version::kVersion));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
     const QIcon applicationIcon(QStringLiteral(
         ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
