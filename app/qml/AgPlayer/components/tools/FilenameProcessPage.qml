@@ -8,6 +8,7 @@ Control {
     id: page
     objectName: "filenameProcessPage"
     padding: 0
+    clip: true
     font.pixelSize: 14
     focus: true
     background: Rectangle { color: Theme.background }
@@ -15,6 +16,8 @@ Control {
     readonly property color panelColor: Theme.panel
     readonly property color neutralActionColor: Theme.elevated
     readonly property color actionBlue: Theme.accent
+    readonly property bool compactLayout: width < 1000
+    readonly property real desktopWorkspaceWidth: 1012
 
     component AccentCheckBox: CheckBox {
         id: accentCheck
@@ -412,10 +415,23 @@ Control {
             }
         }
 
-        RowLayout {
+        Flickable {
+            id: workspaceScroller
+            objectName: "filenameWorkspaceScroller"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 6
+            contentWidth: Math.max(width, page.desktopWorkspaceWidth)
+            contentHeight: height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.horizontal: ScrollBar {
+                policy: page.compactLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            }
+
+            RowLayout {
+                width: workspaceScroller.contentWidth
+                height: workspaceScroller.height
+                spacing: 6
 
             Rectangle {
                 id: filePanel
@@ -1111,6 +1127,7 @@ Control {
                         Label { text: qsTr("事务提交，失败回滚"); color: Theme.secondaryText; font.pixelSize: 10 }
                     }
                 }
+            }
             }
         }
 

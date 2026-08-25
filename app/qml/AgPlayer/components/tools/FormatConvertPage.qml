@@ -8,6 +8,7 @@ Rectangle {
     id: page
     objectName: "formatConvertPage"
     color: Theme.background
+    clip: true
     focus: true
 
     property var converter: FormatConverter

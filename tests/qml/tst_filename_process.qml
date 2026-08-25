@@ -16,6 +16,61 @@ TestCase {
         FilenameProcessPage { width: 1668; height: 835 }
     }
 
+    Component {
+        id: compactPageComponent
+        FilenameProcessPage { width: 880; height: 468 }
+    }
+
+    function test_compactWorkbenchScrollsInternallyWithoutEscapingPage() {
+        const compactPage = createTemporaryObject(compactPageComponent, testCase)
+        verify(compactPage)
+        wait(0)
+        verify(compactPage.compactLayout)
+        const scroller = findChild(compactPage, "filenameWorkspaceScroller")
+        const commandBar = findChild(compactPage, "filenameCommandBar")
+        const bottomBar = findChild(compactPage, "filenameBottomBar")
+        verify(scroller && commandBar && bottomBar)
+        verify(scroller.width <= compactPage.width)
+        verify(scroller.height > 0)
+        verify(scroller.contentWidth > scroller.width)
+        const commandPosition = commandBar.mapToItem(compactPage, 0, 0)
+        const bottomPosition = bottomBar.mapToItem(compactPage, 0, 0)
+        verify(commandPosition.x >= 0 && commandPosition.y >= 0)
+        verify(commandPosition.x + commandBar.width <= compactPage.width)
+        verify(bottomPosition.x >= 0 && bottomPosition.y >= 0)
+        verify(bottomPosition.x + bottomBar.width <= compactPage.width)
+        verify(bottomPosition.y + bottomBar.height <= compactPage.height)
+    }
+
+    function test_runtimeLayoutMatrix_data() {
+        return [
+            { tag: "minimum", w: 880, h: 560 },
+            { tag: "compact-boundary", w: 1000, h: 720 },
+            { tag: "desktop", w: 1280, h: 720 },
+            { tag: "reference", w: 1672, h: 942 }
+        ]
+    }
+
+    function test_runtimeLayoutMatrix(data) {
+        const candidate = createTemporaryObject(compactPageComponent, testCase,
+                                                { width: data.w, height: data.h })
+        verify(candidate)
+        wait(0)
+        const command = findChild(candidate, "filenameCommandBar")
+        const scroller = findChild(candidate, "filenameWorkspaceScroller")
+        const bottom = findChild(candidate, "filenameBottomBar")
+        verify(command && scroller && bottom)
+        for (const item of [command, scroller, bottom]) {
+            const position = item.mapToItem(candidate, 0, 0)
+            verify(position.x >= 0 && position.y >= 0)
+            verify(position.x + item.width <= candidate.width)
+            verify(position.y + item.height <= candidate.height)
+        }
+        verify(scroller.contentWidth >= scroller.width)
+        if (candidate.compactLayout)
+            verify(scroller.contentWidth > scroller.width)
+    }
+
     function test_referenceLayoutAndInteractiveRules() {
         const page = createTemporaryObject(pageComponent, testCase)
         verify(page)

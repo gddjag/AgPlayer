@@ -56,9 +56,33 @@ foreach ($languageFile in @(
         throw "Installer language resource is missing: $languageFile"
     }
 }
-if ($installer -notmatch '(?m)^WizardImageFile=\.\.\\assets\\brand\\logo-lockup\.png\r?$' -or
-    $installer -notmatch '(?m)^WizardSmallImageFile=\.\.\\assets\\brand\\agplayer-icon\.png\r?$') {
-    throw "Installer wizard must use the approved AgPlayer logo artwork"
+if ($installer -notmatch '(?m)^WizardImageFile=\.\.\\assets\\brand\\installer-wizard\.png\r?$' -or
+    $installer -notmatch '(?m)^WizardSmallImageFile=\.\.\\assets\\brand\\installer-small\.png\r?$') {
+    throw "Installer wizard must use dedicated, correctly proportioned AgPlayer artwork"
+}
+$wizardImagePath = Join-Path $repo 'assets\brand\installer-wizard.png'
+$smallImagePath = Join-Path $repo 'assets\brand\installer-small.png'
+foreach ($requiredArtwork in @($wizardImagePath, $smallImagePath)) {
+    if (-not (Test-Path -LiteralPath $requiredArtwork)) {
+        throw "Missing dedicated installer artwork: $requiredArtwork"
+    }
+}
+Add-Type -AssemblyName System.Drawing
+$wizardImage = [System.Drawing.Bitmap]::FromFile($wizardImagePath)
+$smallImage = [System.Drawing.Bitmap]::FromFile($smallImagePath)
+try {
+    $wizardAspect = $wizardImage.Width / [double]$wizardImage.Height
+    if ($wizardImage.Width -lt 328 -or $wizardImage.Height -lt 628 -or
+        $wizardAspect -lt 0.48 -or $wizardAspect -gt 0.56) {
+        throw "Wizard artwork must use the modern Inno vertical aspect without stretching"
+    }
+    if ($smallImage.Width -ne $smallImage.Height -or $smallImage.Width -lt 110 -or
+        -not [System.Drawing.Image]::IsAlphaPixelFormat($smallImage.PixelFormat)) {
+        throw "Wizard header artwork must be a high-DPI transparent square brand mark"
+    }
+} finally {
+    $wizardImage.Dispose()
+    $smallImage.Dispose()
 }
 if ($installer -match '(?m)^PinToTaskbar=' -or
     $installer -match 'taskbarpin') {
@@ -111,7 +135,6 @@ $iconSource = Join-Path $repo 'assets\brand\agplayer-icon.png'
 if (-not (Test-Path -LiteralPath $iconSource)) {
     throw "Windows icon must retain the approved high-resolution source artwork"
 }
-Add-Type -AssemblyName System.Drawing
 $iconSourceImage = [System.Drawing.Image]::FromFile($iconSource)
 try {
     if ($iconSourceImage.Width -lt 256 -or $iconSourceImage.Height -lt 256) {

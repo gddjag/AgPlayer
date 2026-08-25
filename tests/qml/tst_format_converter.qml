@@ -35,6 +35,35 @@ TestCase {
         nativeDropHelper.unlockFiles()
     }
 
+    function test_runtimeLayoutMatrix_data() {
+        return [
+            { tag: "minimum", w: 880, h: 560 },
+            { tag: "compact-boundary", w: 1000, h: 720 },
+            { tag: "desktop", w: 1280, h: 720 },
+            { tag: "reference", w: 1672, h: 942 }
+        ]
+    }
+
+    function test_runtimeLayoutMatrix(data) {
+        testCase.width = data.w
+        testCase.height = data.h
+        wait(0)
+        const toolbar = findChild(page, "formatToolbar")
+        const tasks = findChild(page, "formatTaskPanel")
+        const settings = findChild(page, "formatSettingsPanel")
+        const bottom = findChild(page, "formatBottomBar")
+        verify(toolbar && tasks && settings && bottom)
+        for (const item of [toolbar, tasks, settings, bottom]) {
+            const position = item.mapToItem(page, 0, 0)
+            verify(position.x >= 0 && position.y >= 0)
+            verify(position.x + item.width <= page.width + 0.5)
+            verify(position.y + item.height <= page.height + 0.5)
+        }
+        verify(tasks.width > 0 && tasks.height > 0)
+        if (page.compactLayout)
+            verify(settings.width <= 40.5)
+    }
+
     function test_referenceGeometryAndControls() {
         const toolbar = findChild(page, "formatToolbar")
         const taskPanel = findChild(page, "formatTaskPanel")

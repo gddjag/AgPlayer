@@ -219,10 +219,40 @@ foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', '
     }
 }
 foreach ($responsiveHook in @('referenceLayout', 'narrowLayout',
-    'editorInspectorScroller', 'editorInspectorAccess')) {
+    'mediumLayout', 'compactInspectorLayout', 'editorInspectorScroller',
+    'editorInspectorAccess', 'editorCompactInspectorTabs')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."
     }
+}
+if ($audioEditor -notmatch 'referenceLayout:\s*width\s*>=\s*1500' -or
+    $audioEditor -notmatch 'mediumLayout:\s*width\s*>=\s*1000\s*&&\s*width\s*<\s*1500' -or
+    $audioEditor -notmatch 'compactInspectorLayout:\s*width\s*<\s*1000') {
+    throw 'The editor must expose the >=1500, 1000-1499, and <1000 responsive states.'
+}
+if ($audioEditor -notmatch 'objectName:\s*"editorCompactInspectorTabs"[\s\S]{0,200}visible:\s*page\.compactInspectorLayout') {
+    throw 'The <1000 editor inspector must expose compact settings pages.'
+}
+
+if ($toolsWindow -notmatch 'objectName:\s*"audioToolsBrandMark"' -or
+    $toolsWindow -match 'objectName:\s*"audioToolsBrandTile"' -or
+    $toolsWindow -notmatch 'source:\s*"qrc:/qt/qml/AgPlayer/assets/brand/logo-mark\.png"') {
+    throw 'The tools title must use the original transparent, untinted brand mark without an accent tile.'
+}
+
+foreach ($responsivePageContract in @(
+    @{ Surface = $formatPage; Name = 'format converter'; Hook = 'compactLayout'; Root = 'clip:\s*true' },
+    @{ Surface = $metadataPage; Name = 'metadata editor'; Hook = 'compactLayout'; Root = 'clip:\s*true' },
+    @{ Surface = $filenamePage; Name = 'filename processor'; Hook = 'compactLayout'; Root = 'clip:\s*true' }
+)) {
+    if ($responsivePageContract.Surface -notmatch $responsivePageContract.Hook -or
+        $responsivePageContract.Surface -notmatch $responsivePageContract.Root) {
+        throw "The $($responsivePageContract.Name) must expose a clipped compact layout at 880x560."
+    }
+}
+if ($filenamePage -notmatch 'objectName:\s*"filenameWorkspaceScroller"' -or
+    $filenamePage -notmatch 'contentWidth:\s*Math\.max\(width,\s*page\.desktopWorkspaceWidth\)') {
+    throw 'The filename workbench must keep wide panels reachable inside an internal scroller.'
 }
 
 foreach ($capability in @('recordingSupported', 'bpmDetectionSupported',
