@@ -484,27 +484,23 @@ Rectangle {
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
                 baseColor: SettingsController.waveformMode === 0
-                           ? (SettingsController.waveformSolidBaseColor
-                              || Theme.waveformMagenta)
-                           : (SettingsController.waveformMode === 2
-                              ? SettingsController.spectrumSolidColor
-                               : (SettingsController.waveformRgbBaseColor
-                                  || Theme.waveformMagenta))
-                progressColor: SettingsController.waveformSolidProgressColor
-                              || Theme.waveformMagenta
-                gradientStartColor: SettingsController.waveformMode === 2
-                                    && SettingsController.spectrumColorMode === 0
+                           ? SettingsController.waveformSolidBaseColor
+                           : SettingsController.waveformMode === 2
+                             ? (SettingsController.spectrumColorMode === 0
+                                ? SettingsController.spectrumSolidColor
+                                : SettingsController.spectrumRgbStartColor)
+                             : SettingsController.waveformRgbBaseColor
+                progressColor: SettingsController.waveformMode === 0
+                               ? SettingsController.waveformSolidProgressColor
+                               : SettingsController.waveformMode === 2
+                                 ? (SettingsController.spectrumColorMode === 0
                                     ? SettingsController.spectrumSolidColor
-                                      : (SettingsController.spectrumRgbStartColor || "#00d4ff")
-                gradientMiddleColor: SettingsController.waveformMode === 2
-                                     && SettingsController.spectrumColorMode === 0
-                                     ? SettingsController.spectrumSolidColor
-                                       : (SettingsController.spectrumRgbMiddleColor || "#7b2ff7")
-                gradientEndColor: SettingsController.waveformMode === 2
-                                  && SettingsController.spectrumColorMode === 0
-                                  ? SettingsController.spectrumSolidColor
-                                    : (SettingsController.spectrumRgbEndColor || "#e4007f")
-                rgbProgress: SettingsController.waveformRgbProgress !== false
+                                    : SettingsController.spectrumRgbMiddleColor)
+                                 : SettingsController.waveformRgbStartColor
+                gradientStartColor: baseColor
+                gradientMiddleColor: baseColor
+                gradientEndColor: baseColor
+                rgbProgress: false
                 amplitudeScale: SettingsController.waveformMode === 2
                                 ? 1.0 : SettingsController.waveformHeight
                 density: SettingsController.waveformMode === 2

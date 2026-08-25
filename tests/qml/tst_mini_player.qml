@@ -195,30 +195,32 @@ TestCase {
         verify(percent)
         var metadataRow = findChild(miniPlayer, "miniMetadataRow")
         var title = findChild(miniPlayer, "miniTrackTitle")
-        var metadata = findChild(miniPlayer, "miniArtistAlbumTags")
+        var artist = findChild(miniPlayer, "miniArtist")
+        var album = findChild(miniPlayer, "miniAlbum")
+        var tags = findChild(miniPlayer, "miniTags")
         var rating = findChild(miniPlayer, "miniRating")
         var favorite = findChild(miniPlayer, "miniFavoriteButton")
-        verify(metadataRow && title && metadata && rating && favorite)
+        verify(metadataRow && title && artist && album && tags && rating && favorite)
         var firstStar = findChild(rating, "miniRatingStar-0")
         verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
                "rating and favorite must follow artist/album instead of the title")
-        verify(rating.x >= metadata.x + metadata.width,
-               "rating must immediately follow artist, album and optional tags")
+        verify(rating.x >= artist.x + artist.width,
+               "rating must follow the separate metadata fields")
         verify(favorite.x >= rating.x + rating.width,
                "favorite must immediately follow rating in the metadata row")
-        verify(metadata.text.indexOf("无标签") < 0,
+        verify(!tags.visible,
                "empty tags must be omitted instead of showing placeholder text")
         compare(rating.spacing, 1)
         compare(firstStar.width, firstStar.sourceSize.width)
         compare(firstStar.height, firstStar.sourceSize.height)
-        compare(favorite.width, favorite.icon.width)
-        compare(favorite.height, favorite.icon.height)
+        compare(favorite.width, 13)
+        compare(favorite.height, 13)
         compare(Math.round(firstStar.mapToItem(metadataRow, 0,
-                                               firstStar.baselineOffset).y),
+                                               firstStar.height / 2).y),
                 Math.round(favorite.mapToItem(metadataRow, 0,
-                                              favorite.baselineOffset).y),
-                "stars and favorite must share one visual baseline")
+                                              favorite.height / 2).y),
+                "stars and favorite must share one visual centerline")
         compare(favorite.icon.width, 13)
         compare(favorite.icon.height, 13)
         compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)
@@ -256,14 +258,18 @@ TestCase {
     }
 
     function test_mini_metadata_refreshes_when_current_track_tags_change() {
-        var metadata = findChild(miniPlayer, "miniArtistAlbumTags")
-        verify(metadata)
+        var artist = findChild(miniPlayer, "miniArtist")
+        var album = findChild(miniPlayer, "miniAlbum")
+        var tags = findChild(miniPlayer, "miniTags")
+        verify(artist && album && tags)
         playbackFake.currentTrackId = miniMetadataTrackId
-        tryCompare(metadata, "text", "Mini Artist · Mini Album")
+        tryCompare(artist, "text", "Mini Artist")
+        tryCompare(album, "text", "Mini Album")
+        verify(!tags.visible)
 
         verify(LibraryModel.setTags(miniMetadataTrackId, ["现场", "测试"]))
         tryVerify(function() {
-            return metadata.text === "Mini Artist · Mini Album · 现场、测试"
+            return tags.visible && tags.text === "现场、测试"
         }, 1000, "mini player must react to tag edits on the playing track")
         LibraryModel.setTags(miniMetadataTrackId, [])
     }

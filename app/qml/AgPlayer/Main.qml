@@ -51,12 +51,16 @@ ApplicationWindow {
 
     Component.onCompleted: {
         Theme.mode = SettingsController.themeMode
+        WindowController.setGlassBackdropEnabled(SettingsController.glassEffect)
     }
 
     Connections {
         target: SettingsController
         function onThemeModeChanged() {
             Theme.mode = SettingsController.themeMode
+        }
+        function onGlassEffectChanged() {
+            WindowController.setGlassBackdropEnabled(SettingsController.glassEffect)
         }
     }
 

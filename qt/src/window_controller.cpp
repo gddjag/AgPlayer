@@ -88,6 +88,7 @@ bool WindowController::mainVisible() const noexcept { return mainVisible_; }
 bool WindowController::miniVisible() const noexcept { return miniVisible_; }
 bool WindowController::audioToolsVisible() const noexcept { return audioToolsVisible_; }
 bool WindowController::alwaysOnTop() const noexcept { return alwaysOnTop_; }
+bool WindowController::glassBackdropEnabled() const noexcept { return glassBackdropEnabled_; }
 bool WindowController::magneticSnapEnabled() const noexcept { return magneticSnapEnabled_; }
 int WindowController::preferredDockEdge() const noexcept { return preferredDockEdge_; }
 QString WindowController::listDockEdge() const { return listDockEdge_; }
@@ -325,6 +326,7 @@ void WindowController::applyPlatformWindowStyle(QWindow* window) const
         return;
     }
     constexpr DWORD kCornerPreferenceAttribute = 33;
+    constexpr DWORD kSystemBackdropTypeAttribute = 38;
     constexpr int kDoNotRound = 1;
     constexpr int kRound = 2;
     const int preference = isMaximized(window) ? kDoNotRound : kRound;
@@ -351,6 +353,15 @@ void WindowController::applyPlatformWindowStyle(QWindow* window) const
             static_cast<DWMWINDOWATTRIBUTE>(kCornerPreferenceAttribute),
             &preference,
             sizeof(preference));
+        // Windows 11 uses a system-managed mica backdrop. Older Windows
+        // versions reject this attribute and continue with QML's safe alpha
+        // fallback, so this is intentionally best-effort.
+        const int backdropType = glassBackdropEnabled_ ? 2 : 1;
+        DwmSetWindowAttribute(
+            hwnd,
+            static_cast<DWMWINDOWATTRIBUTE>(kSystemBackdropTypeAttribute),
+            &backdropType,
+            sizeof(backdropType));
     }
 #else
     Q_UNUSED(window);
@@ -653,6 +664,19 @@ void WindowController::snapListWindow(const QString& direction)
     }
     setListDockEdge(direction);
     repositionDockedListWindow();
+}
+
+void WindowController::setGlassBackdropEnabled(const bool enabled)
+{
+    if (glassBackdropEnabled_ == enabled)
+        return;
+    glassBackdropEnabled_ = enabled;
+    for (QWindow* window : {mainWindow_.data(), miniWindow_.data(),
+                            listWindow_.data(), audioToolsWindow_.data(),
+                            settingsWindow_.data()}) {
+        applyPlatformWindowStyle(window);
+    }
+    emit glassBackdropEnabledChanged();
 }
 
 void WindowController::activateSearch()

@@ -12,6 +12,7 @@ class TagFilterModelTest final : public QObject {
 
 private slots:
     void filtersCaseInsensitivelyAndPropagatesIncrementalChanges();
+    void sortsByTrackCountThenName();
 };
 
 void TagFilterModelTest::filtersCaseInsensitivelyAndPropagatesIncrementalChanges()
@@ -60,6 +61,39 @@ void TagFilterModelTest::filtersCaseInsensitivelyAndPropagatesIncrementalChanges
     QCOMPARE(removed.count(), 2);
     QCOMPARE(sourceReset.count(), 0);
     QCOMPARE(proxyReset.count(), 0);
+}
+
+void TagFilterModelTest::sortsByTrackCountThenName()
+{
+    // Catches the tag panel inheriting creation order instead of exposing the
+    // most-used tags first, with a stable readable tie-breaker.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel library;
+    TagModel tags(&library, directory.filePath(QStringLiteral("tags.json")));
+
+    TrackRecord first;
+    first.trackId = QStringLiteral("first");
+    first.tags = {QStringLiteral("Beta"), QStringLiteral("Zulu")};
+    TrackRecord second;
+    second.trackId = QStringLiteral("second");
+    second.tags = {QStringLiteral("Alpha"), QStringLiteral("Beta")};
+    TrackRecord third;
+    third.trackId = QStringLiteral("third");
+    third.tags = {QStringLiteral("Alpha")};
+    library.replaceAll({first, second, third});
+
+    TagFilterModel filter;
+    filter.setSourceModel(&tags);
+    QCOMPARE(filter.rowCount(), 3);
+    QStringList names;
+    for (int row = 0; row < filter.rowCount(); ++row) {
+        names.append(filter.data(filter.index(row, 0),
+                                 TagModel::DisplayNameRole).toString());
+    }
+    QCOMPARE(names, QStringList({QStringLiteral("Alpha"),
+                                 QStringLiteral("Beta"),
+                                 QStringLiteral("Zulu")}));
 }
 
 QTEST_GUILESS_MAIN(TagFilterModelTest)

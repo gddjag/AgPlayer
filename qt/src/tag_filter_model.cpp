@@ -6,6 +6,20 @@ TagFilterModel::TagFilterModel(QObject* parent)
     : QSortFilterProxyModel(parent)
 {
     setDynamicSortFilter(true);
+    setSortRole(TagModel::TrackCountRole);
+    sort(0, Qt::AscendingOrder);
+}
+
+bool TagFilterModel::lessThan(const QModelIndex& left,
+                              const QModelIndex& right) const
+{
+    const int leftCount = sourceModel()->data(left, TagModel::TrackCountRole).toInt();
+    const int rightCount = sourceModel()->data(right, TagModel::TrackCountRole).toInt();
+    if (leftCount != rightCount)
+        return leftCount > rightCount;
+    const QString leftName = sourceModel()->data(left, TagModel::DisplayNameRole).toString();
+    const QString rightName = sourceModel()->data(right, TagModel::DisplayNameRole).toString();
+    return QString::compare(leftName, rightName, Qt::CaseInsensitive) < 0;
 }
 
 QString TagFilterModel::query() const { return query_; }

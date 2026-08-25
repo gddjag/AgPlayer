@@ -31,6 +31,7 @@ private slots:
     void waveformAppearanceSettingsClampPersistAndReset();
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
+    void listGlassBackgroundDefaultsOffAndPersists();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
@@ -45,6 +46,21 @@ void SettingsControllerTest::initTestCase()
     QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
     QCoreApplication::setApplicationName(QStringLiteral("AgPlayer-settings-controller-test"));
     QSettings().clear();
+}
+
+void SettingsControllerTest::listGlassBackgroundDefaultsOffAndPersists()
+{
+    QSettings persisted;
+    persisted.clear();
+    {
+        SettingsController settings;
+        QCOMPARE(settings.glassEffect(), false);
+        settings.setGlassEffect(true);
+    }
+    SettingsController reloaded;
+    QCOMPARE(reloaded.glassEffect(), true);
+    QCOMPARE(persisted.value(QStringLiteral("appearance/glassEffect")).toBool(), true);
+    persisted.clear();
 }
 
 void SettingsControllerTest::defaultCacheDirectoryUsesStandardPaths()

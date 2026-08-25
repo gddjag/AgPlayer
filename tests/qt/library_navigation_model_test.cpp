@@ -22,6 +22,7 @@ private slots:
     void expandsThreeLevelsIndependentlyFromIndexedTopology();
     void addsAndRemovesTrackOnlyFolderTopology();
     void updatesOnlyAffectedDirectoryCountsForTenThousandTracks();
+    void propagatesPlaylistRenameWithoutRebuildingNavigation();
 };
 
 namespace {
@@ -108,6 +109,34 @@ void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
     QVERIFY(navigation.setExpanded(libraryId, true));
     QVERIFY(rowForNode(navigation, firstId) >= 0);
     QVERIFY(rowForNode(navigation, secondId) >= 0);
+}
+
+void LibraryNavigationModelTest::propagatesPlaylistRenameWithoutRebuildingNavigation()
+{
+    // Catches a navigation model that refreshes only the playlist count, so
+    // the left navigation keeps showing a stale playlist name until reset.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LibraryModel library;
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
+    LibraryManagerController manager;
+    manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
+    const QString playlistId = playlists.createPlaylist(QStringLiteral("Before"));
+    QVERIFY(!playlistId.isEmpty());
+    LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
+
+    const QString nodeId = QStringLiteral("playlist:") + playlistId;
+    const int row = rowForNode(navigation, nodeId);
+    QVERIFY(row >= 0);
+    QSignalSpy changed(&navigation, &QAbstractItemModel::dataChanged);
+    QVERIFY(playlists.renamePlaylist(playlistId, QStringLiteral("After")));
+    QCOMPARE(navigation.data(navigation.index(row, 0),
+                             LibraryNavigationModel::DisplayNameRole).toString(),
+             QStringLiteral("After"));
+    QCOMPARE(changed.count(), 1);
+    const QList<int> roles = changed.takeFirst().at(2).value<QList<int>>();
+    QVERIFY(roles.contains(LibraryNavigationModel::DisplayNameRole));
 }
 
 void LibraryNavigationModelTest::expandsOnlyTheRequestedFolderRange()

@@ -104,7 +104,7 @@ Item {
     }
 
     function iconForNode(nodeType) {
-        if (nodeType === "favorites") return "heart-line"
+        if (nodeType === "favorites") return "heart-fill"
         if (nodeType === "history") return "time-line"
         if (nodeType === "recentAdded") return "add-line"
         if (nodeType === "neverPlayed") return "time-line"
@@ -113,6 +113,15 @@ Item {
             return "folder-open-line"
         if (nodeType === "tags") return "price-tag-3-line"
         return "music-2-line"
+    }
+
+    function suppliedIconForNode(nodeType) {
+        if (nodeType === "library") return "user-library"
+        if (nodeType === "playlist") return "user-playlist"
+        if (nodeType === "resourceRoot") return "user-resource-root-red"
+        if (nodeType === "resourceFolder") return "user-resource-subfolder"
+        if (nodeType === "tags") return "user-tag"
+        return ""
     }
 
     function nodeIsSelected(nodeType, nodeId, resourceFolder) {
@@ -336,6 +345,14 @@ Item {
                     anchors.leftMargin: 8
                     anchors.rightMargin: 4
                     spacing: 4
+                    Image {
+                        source: Theme.icon("user-resource-folder")
+                        sourceSize.width: 16
+                        sourceSize.height: 16
+                        fillMode: Image.PreserveAspectFit
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
+                    }
                     Text {
                         text: qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
@@ -348,10 +365,13 @@ Item {
                                     ? "addResourceFolderButton" : ""
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
-                        icon.source: Theme.icon("add-line")
-                        icon.color: Theme.iconSecondary
-                        icon.width: 16
-                        icon.height: 16
+                        icon.source: Theme.icon("user-add-resource-folder")
+                        contentItem: Image {
+                            source: Theme.icon("user-add-resource-folder")
+                            sourceSize.width: 16
+                            sourceSize.height: 16
+                            fillMode: Image.PreserveAspectFit
+                        }
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("添加资源文件夹")
                         onClicked: addResourceFolderDialog.open()
@@ -380,9 +400,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8 + nodeRow.depth * 18
+                anchors.leftMargin: 8 + nodeRow.depth * 14
                 anchors.rightMargin: 8
-                spacing: 7
+                spacing: 5
                 visible: nodeRow.nodeType !== "resourceSection"
 
                 ToolButton {
@@ -391,7 +411,7 @@ Item {
                               || nodeRow.nodeType === "resourceRoot"
                               || nodeRow.nodeType === "resourceFolder")
                              && nodeRow.hasChildren
-                    Layout.preferredWidth: visible ? 20 : 0
+                    Layout.preferredWidth: visible ? 18 : 0
                     Layout.preferredHeight: 28
                     icon.source: Theme.icon(nodeRow.expanded
                                             ? "arrow-down-s-line"
@@ -408,16 +428,28 @@ Item {
                                 || nodeRow.nodeType === "resourceRoot"
                                 || nodeRow.nodeType === "resourceFolder")
                                && nodeRow.hasChildren)
-                    Layout.preferredWidth: visible ? 20 : 0
+                    Layout.preferredWidth: visible ? 18 : 0
                     Layout.preferredHeight: 1
                 }
-                ThemedIcon {
-                    source: Theme.icon(root.iconForNode(nodeRow.nodeType))
-                    tint: nodeRow.selected ? Theme.iconAccent
-                                           : Theme.iconSecondary
+                Image {
+                    visible: root.suppliedIconForNode(nodeRow.nodeType) !== ""
+                    source: Theme.icon(root.suppliedIconForNode(nodeRow.nodeType))
                     sourceSize.width: 17
                     sourceSize.height: 17
-                    Layout.preferredWidth: 17
+                    fillMode: Image.PreserveAspectFit
+                    Layout.preferredWidth: visible ? 17 : 0
+                    Layout.preferredHeight: 17
+                }
+                ThemedIcon {
+                    visible: root.suppliedIconForNode(nodeRow.nodeType) === ""
+                    source: Theme.icon(root.iconForNode(nodeRow.nodeType))
+                    tint: nodeRow.nodeType === "favorites" ? Theme.favoriteRed
+                                                             : nodeRow.selected
+                                                               ? Theme.iconAccent
+                                                               : Theme.iconSecondary
+                    sourceSize.width: 17
+                    sourceSize.height: 17
+                    Layout.preferredWidth: visible ? 17 : 0
                     Layout.preferredHeight: 17
                 }
                 Text {

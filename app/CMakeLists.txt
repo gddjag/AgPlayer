@@ -77,6 +77,13 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/waveform-switch.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-playlist.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-add-resource-folder.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-resource-folder.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-resource-root-red.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-resource-subfolder.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-tag.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-library.svg
 )
 
 set(BRAND_FILES
@@ -138,6 +145,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedSwitch.qml
+        qml/AgPlayer/components/ThemedCheckBox.qml
         qml/AgPlayer/components/ThemedComboBox.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/FormatTaskTable.qml

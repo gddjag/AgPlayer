@@ -766,10 +766,22 @@ void LibraryNavigationModel::updatePlaylistCounts(const QModelIndex& first,
         const int row = rowForNodeId(
             navigationNodeId(QStringLiteral("playlist"), id));
         if (row >= 0) {
-            updateNodeCount(row,
-                playlists_->data(sourceIndex,
-                                 PlaylistModel::TrackCountRole).toInt(),
-                {CountRole});
+            Node& node = nodes_[row];
+            const QString displayName = playlists_->data(
+                sourceIndex, PlaylistModel::NameRole).toString();
+            const int count = playlists_->data(
+                sourceIndex, PlaylistModel::TrackCountRole).toInt();
+            QList<int> changedRoles;
+            if (node.displayName != displayName) {
+                node.displayName = displayName;
+                changedRoles.append(DisplayNameRole);
+            }
+            if (node.count != count) {
+                node.count = count;
+                changedRoles.append(CountRole);
+            }
+            if (!changedRoles.isEmpty())
+                emit dataChanged(index(row, 0), index(row, 0), changedRoles);
         }
     }
 }

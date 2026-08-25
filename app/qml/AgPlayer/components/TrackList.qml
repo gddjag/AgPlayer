@@ -17,16 +17,16 @@ ListView {
     property var trackModel: LibraryModel
     property var playlistModel: PlaylistModel
     property var thumbnailProvider: TrackWaveformThumbnailProvider
-    property Item dragInputHost: null
     property string selectedCategory: "all"
     property string searchText: ""
+    property bool tagFilterActive: false
     property var selectedTrackIds: []
     property int selectionAnchor: -1
     property var lastTrashResult: ({ successCount: 0, failureCount: 0, failures: [] })
     readonly property bool windowActive: root.Window.active
     readonly property bool showAlbumColumn: true
     readonly property bool compactColumns: width < 900
-    readonly property int favoriteAlbumGap: 10
+    readonly property int favoriteAlbumGap: 12
     readonly property int sequenceWidth: compactColumns ? 34 : 42
     readonly property int favoriteWidth: compactColumns ? 42 : 52
     readonly property int albumWidth: compactColumns ? 92 : 136
@@ -34,7 +34,9 @@ ListView {
     readonly property int ratingWidth: compactColumns ? 82 : 110
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
-    readonly property int titleMinimumWidth: compactColumns ? 150 : 180
+    readonly property int titleMinimumWidth: !tagFilterActive
+                                                ? (compactColumns ? 150 : 180)
+                                                : (compactColumns ? 178 : 212)
     readonly property int rowHeight: SettingsController.listWaveformThumbnailEnabled
                                      ? 62 : 42
     property int thumbnailItemCount: 0
@@ -519,67 +521,6 @@ ListView {
                          JSON.stringify(root.dragTrackIds)})
     }
 
-    Item {
-        id: windowTrackDragHost
-        parent: root.dragInputHost ? root.dragInputHost : root.parent
-        x: root.x
-        y: root.y
-        z: root.z + 1
-        width: root.width
-        height: root.height
-        visible: root.visible
-
-        DragHandler {
-            id: windowTrackDragHandler
-            target: null
-            acceptedButtons: Qt.LeftButton
-            grabPermissions: PointerHandler.CanTakeOverFromAnything
-                             | PointerHandler.ApprovesTakeOverByAnything
-            property bool ownsTrackSession: false
-            property real activeTranslationY: 0
-            property point activeViewportPosition: Qt.point(0, 0)
-            onTranslationChanged: {
-                if (active) {
-                    activeTranslationY = translation.y
-                    activeViewportPosition = centroid.position
-                    var overlayPosition = windowTrackDragHost.mapToItem(
-                                windowDragProxy.parent,
-                                activeViewportPosition.x,
-                                activeViewportPosition.y)
-                    windowDragProxy.x = overlayPosition.x
-                    windowDragProxy.y = overlayPosition.y
-                }
-            }
-            onActiveChanged: {
-                if (active) {
-                    activeTranslationY = 0
-                    var viewportPress = centroid.pressPosition
-                    activeViewportPosition = viewportPress
-                    var row = root.dragRowAtViewportPoint(viewportPress)
-                    if (!row)
-                        return
-                    if (!root.isSelected(row.trackId))
-                        root.selectOnly(row.trackId, row.index)
-                    var pointerOrigin = windowTrackDragHost.mapToItem(
-                                windowDragProxy.parent,
-                                viewportPress.x, viewportPress.y)
-                    windowDragProxy.x = pointerOrigin.x
-                    windowDragProxy.y = pointerOrigin.y
-                    root.beginTrackDrag(row.trackId, row.dragTrackIds,
-                                        row.title, row.dragCoverSource,
-                                        windowDragProxy, row.y, row.height)
-                    windowDragProxy.Drag.active = true
-                    ownsTrackSession = true
-                } else if (ownsTrackSession) {
-                    ownsTrackSession = false
-                    root.completeTrackDrag(windowDragProxy,
-                                           activeTranslationY,
-                                           activeViewportPosition)
-                }
-            }
-        }
-    }
-
     delegate: Rectangle {
         id: rowItem
         required property int index
@@ -719,7 +660,7 @@ ListView {
                 Layout.fillHeight: true
                 RowLayout {
                     anchors.fill: parent
-                    spacing: 6
+                    spacing: 4
                     Image {
                         id: trackCoverImage
                         objectName: "trackCover"
@@ -746,6 +687,7 @@ ListView {
                             trackAvailable: rowItem.available
                             highlighted: rowItem.systemHighlighted
                             highlightText: rowItem.systemHighlightText
+                            fontWeight: Font.DemiBold
                         }
 
                         Loader {
@@ -753,8 +695,8 @@ ListView {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 8
-                            height: 9
+                            anchors.bottomMargin: 6
+                            height: 15
                             active: SettingsController.listWaveformThumbnailEnabled
                                     && root && root.thumbnailHostVisible
                                     && rowItem.inViewport
@@ -799,6 +741,56 @@ ListView {
                         if (rowItem.available) {
                             PlaybackController.playTrackIds(
                                         root.visibleTrackIds(), rowItem.trackId)
+                        }
+                    }
+                }
+                DragHandler {
+                    id: titleTrackDragHandler
+                    target: null
+                    acceptedButtons: Qt.LeftButton
+                    grabPermissions: PointerHandler.CanTakeOverFromAnything
+                                     | PointerHandler.ApprovesTakeOverByAnything
+                    property bool ownsTrackSession: false
+                    property real activeTranslationY: 0
+                    property point activeRootPosition: Qt.point(0, 0)
+                    onTranslationChanged: {
+                        if (!active)
+                            return
+                        activeTranslationY = translation.y
+                        activeRootPosition = titleCell.mapToItem(
+                                    root, centroid.position.x,
+                                    centroid.position.y)
+                        var overlayPosition = titleCell.mapToItem(
+                                    windowDragProxy.parent,
+                                    centroid.position.x, centroid.position.y)
+                        windowDragProxy.x = overlayPosition.x
+                        windowDragProxy.y = overlayPosition.y
+                    }
+                    onActiveChanged: {
+                        if (active) {
+                            activeTranslationY = 0
+                            var press = centroid.pressPosition
+                            activeRootPosition = titleCell.mapToItem(
+                                        root, press.x, press.y)
+                            if (!root.isSelected(rowItem.trackId))
+                                root.selectOnly(rowItem.trackId, rowItem.index)
+                            var pointerOrigin = titleCell.mapToItem(
+                                        windowDragProxy.parent, press.x, press.y)
+                            windowDragProxy.x = pointerOrigin.x
+                            windowDragProxy.y = pointerOrigin.y
+                            root.beginTrackDrag(rowItem.trackId,
+                                                rowItem.dragTrackIds,
+                                                rowItem.title,
+                                                rowItem.dragCoverSource,
+                                                windowDragProxy,
+                                                rowItem.y, rowItem.height)
+                            windowDragProxy.Drag.active = true
+                            ownsTrackSession = true
+                        } else if (ownsTrackSession) {
+                            ownsTrackSession = false
+                            root.completeTrackDrag(windowDragProxy,
+                                                   activeTranslationY,
+                                                   activeRootPosition)
                         }
                     }
                 }
@@ -1070,6 +1062,7 @@ ListView {
         property bool trackAvailable: true
         property bool highlighted: false
         property color highlightText: Theme.activeSelectionText
+        property int fontWeight: Font.Normal
         readonly property bool overflowing: marqueeText.implicitWidth > width
         readonly property real textOffset: marqueeText.x
         implicitHeight: marqueeText.implicitHeight
@@ -1084,6 +1077,7 @@ ListView {
                                                  : Theme.favoriteRed
             font.family: Theme.fontPrimary
             font.pixelSize: 13
+            font.weight: marqueeRoot.fontWeight
             wrapMode: Text.NoWrap
         }
         MouseArea {

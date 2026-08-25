@@ -668,40 +668,7 @@ Item {
         }
     }
 
-    component SettingSwitch: Switch {
-        id: control
-        property alias labelText: label.text
-
-        indicator: Rectangle {
-            implicitWidth: 40
-            implicitHeight: 22
-            radius: 11
-            color: control.checked ? Theme.cyan : Theme.border
-
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                x: control.checked ? parent.width - width - 2 : 2
-                width: 18
-                height: 18
-                radius: 9
-                color: "#FFFFFF"
-
-                Behavior on x {
-                    NumberAnimation { duration: 120 }
-                }
-            }
-        }
-
-        contentItem: Text {
-            id: label
-            text: parent.text
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 14
-            leftPadding: parent.indicator ? parent.indicator.width + parent.spacing : 0
-            verticalAlignment: Text.AlignVCenter
-        }
-    }
+    component SettingSwitch: ThemedSwitch {}
 
     component SettingCombo: ComboBox {
         id: combo
@@ -864,40 +831,12 @@ Item {
         }
     }
 
-    component FileAssociationCheck: CheckBox {
+    component FileAssociationCheck: ThemedCheckBox {
         id: associationCheck
         property string extPrimary
         property string extSecondary: ""
-        implicitWidth: associationLabel.implicitWidth
-        implicitHeight: Math.max(indicator.implicitHeight,
-                                 associationLabel.implicitHeight)
-
-        indicator: Rectangle {
-            implicitWidth: 18
-            implicitHeight: 18
-            radius: 4
-            color: parent.checked ? Theme.cyan : "transparent"
-            border.color: parent.checked ? Theme.cyan : Theme.border
-            border.width: 1
-
-            Text {
-                anchors.centerIn: parent
-                text: "\u2713"
-                color: Theme.accentText
-                font.pixelSize: 11
-                visible: parent.parent.checked
-            }
-        }
-
-        contentItem: Text {
-            id: associationLabel
-            text: parent.text
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 11
-            leftPadding: parent.indicator.width + parent.spacing
-            verticalAlignment: Text.AlignVCenter
-        }
+        implicitWidth: contentItem.implicitWidth
+        implicitHeight: 32
     }
 
     component PathFieldRow: RowLayout {
@@ -1176,10 +1115,10 @@ Item {
                     SettingCombo {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: "中文", value: "zh" },
-                            { text: "English", value: "en" },
-                            { text: "\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", value: "th" },
-                            { text: "Ti\u1EBFng Vi\u1EC7t", value: "vi" }
+                            { text: "🇨🇳 中文", value: "zh" },
+                            { text: "🇺🇸 English", value: "en" },
+                            { text: "🇹🇭 \u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", value: "th" },
+                            { text: "🇻🇳 Ti\u1EBFng Vi\u1EC7t", value: "vi" }
                         ]
                         currentIndex: {
                             const values = ["zh", "en", "th", "vi"]
@@ -1563,7 +1502,7 @@ Item {
                 }
 
                 SettingSwitch {
-                    text: qsTr("毛玻璃 / 悬浮特效：开启迷你播放器与悬浮窗口模糊背景")
+                    text: qsTr("播放器与列表毛玻璃背景（Windows 支持时使用系统背景）")
                     checked: SettingsController.glassEffect
                     onToggled: SettingsController.glassEffect = checked
                 }
@@ -1598,7 +1537,7 @@ Item {
             }
 
             SettingCard {
-                title: qsTr("Waveform RGB 波形设置")
+                title: qsTr("波形与频谱颜色")
 
                 SettingRow {
                     label: qsTr("默认波形模式")
@@ -1716,8 +1655,8 @@ Item {
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
                     label: SettingsController.waveformMode === 0
-                           ? qsTr("底色 / 进度色")
-                           : qsTr("纯色 / RGB渐变")
+                           ? qsTr("未播放 / 已播放")
+                           : qsTr("自定义未播放 / 已播放")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
@@ -1739,33 +1678,9 @@ Item {
                         }
                         ColorField {
                             visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.spectrumRgbStartColor
-                            targetProperty: "spectrumRgbStartColor"
+                            colorValue: SettingsController.waveformRgbStartColor
+                            targetProperty: "waveformRgbStartColor"
                         }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.spectrumRgbMiddleColor
-                            targetProperty: "spectrumRgbMiddleColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.spectrumRgbEndColor
-                            targetProperty: "spectrumRgbEndColor"
-                        }
-                    }
-                }
-
-                SettingRow {
-                    label: qsTr("RGB显示区域")
-                    visible: SettingsController.waveformMode !== 0
-                    SettingCombo {
-                        anchors.verticalCenter: parent.verticalCenter
-                        valueModel: [
-                            { text: qsTr("播放进度为RGB"), value: true },
-                            { text: qsTr("未播放区域为RGB"), value: false }
-                        ]
-                        currentIndex: SettingsController.waveformRgbProgress ? 0 : 1
-                        onActivated: SettingsController.waveformRgbProgress = currentValue
                     }
                 }
 
@@ -1789,8 +1704,8 @@ Item {
                         anchors.fill: parent
                         SettingCombo {
                             valueModel: [
-                                { text: qsTr("单色"), value: 0 },
-                                { text: qsTr("自定义 RGB"), value: 1 }
+                            { text: qsTr("纯色"), value: 0 },
+                            { text: qsTr("自定义"), value: 1 }
                             ]
                             currentIndex: SettingsController.spectrumColorMode
                             onActivated: SettingsController.spectrumColorMode = currentValue
@@ -1802,18 +1717,13 @@ Item {
                         }
                         ColorField {
                             visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.waveformRgbStartColor
-                            targetProperty: "waveformRgbStartColor"
+                            colorValue: SettingsController.spectrumRgbStartColor
+                            targetProperty: "spectrumRgbStartColor"
                         }
                         ColorField {
                             visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.waveformRgbMiddleColor
-                            targetProperty: "waveformRgbMiddleColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.waveformRgbEndColor
-                            targetProperty: "waveformRgbEndColor"
+                            colorValue: SettingsController.spectrumRgbMiddleColor
+                            targetProperty: "spectrumRgbMiddleColor"
                         }
                     }
                 }

@@ -38,7 +38,28 @@ const QUrl kBrandCover(
 
 QString copiedUtf8(const char* value)
 {
-    return value == nullptr ? QString{} : QString::fromUtf8(value);
+    if (value == nullptr) return {};
+    const QString decoded = QString::fromUtf8(value).normalized(QString::NormalizationForm_C);
+    // Some older tag writers serialize UTF-8 after first treating it as a
+    // single-byte string (for example, "é" becomes "Ã©").  Only accept the
+    // reversible repair when it removes one of those tell-tale lead bytes;
+    // valid Unicode remains unchanged.
+    const auto mojibakeScore = [](const QString& text) {
+        int score = 0;
+        for (const QChar character : text) {
+            if (character == QChar(0x00C2) || character == QChar(0x00C3)
+                || character == QChar(0x00E2) || character == QChar(0x00F0)) {
+                ++score;
+            }
+        }
+        return score;
+    };
+    const int originalScore = mojibakeScore(decoded);
+    if (originalScore == 0) return decoded;
+    const QString repaired = QString::fromUtf8(decoded.toLatin1())
+                                 .normalized(QString::NormalizationForm_C);
+    return !repaired.contains(QChar::ReplacementCharacter)
+           && mojibakeScore(repaired) < originalScore ? repaired : decoded;
 }
 
 QString errorFor(ag_result result)

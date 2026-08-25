@@ -460,14 +460,23 @@ Window {
                 readonly property int rightColumnWidth: 248
                 readonly property int dividerWidth: 1
                 readonly property real centerWidth: centerColumn.width
-                color: Theme.listWorkspaceSurface
+                color: SettingsController.glassEffect
+                       ? Qt.rgba(Theme.listWorkspaceSurface.r,
+                                 Theme.listWorkspaceSurface.g,
+                                 Theme.listWorkspaceSurface.b, 0.91)
+                       : Theme.listWorkspaceSurface
                 border.width: 0
                 radius: 0
                 clip: true
 
-                RowLayout {
+                ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 0
 
                     SideNavigation {
                         id: sideNavigation
@@ -541,20 +550,14 @@ Window {
                                     id: sharedTrackList
                                     objectName: "sharedTrackList"
                                     anchors.fill: parent
-                                    dragInputHost: sharedTrackListDragInputHost
                                     trackModel: filterModel
                                     playlistModel: listWindow.playlistModel
                                     selectedCategory: filterModel
                                                       ? filterModel.category : "all"
+                                    tagFilterActive: filterModel
+                                                     && filterModel.tagKey !== ""
                                     searchText: filterModel
                                                 ? filterModel.searchText : ""
-                                }
-
-                                Item {
-                                    id: sharedTrackListDragInputHost
-                                    anchors.fill: sharedTrackList
-                                    z: sharedTrackList.z + 1
-                                    visible: sharedTrackList.visible
                                 }
                             }
                             EmptyLibrary {
@@ -590,25 +593,6 @@ Window {
                             }
                         }
 
-                        SearchFilter {
-                            id: searchFilter
-                            objectName: "librarySearchFilter"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: listWindow.filterBarHeight
-                            visible: !filterModel || filterModel.category !== "library"
-                            searchText: filterModel ? filterModel.searchText : ""
-                            exactRating: filterModel ? filterModel.exactRating : 0
-                            minBpm: filterModel ? filterModel.minBpm : 60
-                            maxBpm: filterModel ? filterModel.maxBpm : 160
-                            onSearchTextChanged: if (filterModel)
-                                                     filterModel.searchText = searchText
-                            onExactRatingChanged: if (filterModel)
-                                                      filterModel.exactRating = exactRating
-                            onMinBpmChanged: if (filterModel)
-                                                 filterModel.minBpm = minBpm
-                            onMaxBpmChanged: if (filterModel)
-                                                 filterModel.maxBpm = maxBpm
-                        }
                     }
 
                     Rectangle {
@@ -628,6 +612,27 @@ Window {
                         visible: listWindow.tagManagementMode
                         tagModel: TagModel
                         filterModel: listWindow.filterModel
+                    }
+                    }
+
+                    SearchFilter {
+                        id: searchFilter
+                        objectName: "librarySearchFilter"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: listWindow.filterBarHeight
+                        visible: !filterModel || filterModel.category !== "library"
+                        searchText: filterModel ? filterModel.searchText : ""
+                        exactRating: filterModel ? filterModel.exactRating : 0
+                        minBpm: filterModel ? filterModel.minBpm : 60
+                        maxBpm: filterModel ? filterModel.maxBpm : 160
+                        onSearchTextChanged: if (filterModel)
+                                                 filterModel.searchText = searchText
+                        onExactRatingChanged: if (filterModel)
+                                                  filterModel.exactRating = exactRating
+                        onMinBpmChanged: if (filterModel)
+                                             filterModel.minBpm = minBpm
+                        onMaxBpmChanged: if (filterModel)
+                                             filterModel.maxBpm = maxBpm
                     }
                 }
             }

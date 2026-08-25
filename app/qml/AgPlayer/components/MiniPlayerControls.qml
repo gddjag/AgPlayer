@@ -36,7 +36,11 @@ Rectangle {
         return playback ? LibraryModel.indexForTrackId(playback.currentTrackId) : -1
     }
     function currentTrackValue(role): variant {
-        var revision = libraryRevision
+        // Keep every metadata binding dependent on the model notification;
+        // QML cannot infer that a value retrieved through LibraryModel.data()
+        // changes when a different role of the same row changes.
+        if (libraryRevision < 0)
+            return ""
         var row = currentRow()
         return row >= 0 ? LibraryModel.data(LibraryModel.index(row, 0), role) : ""
     }
@@ -53,16 +57,6 @@ Rectangle {
         for (var index = 0; index < tags.length; ++index)
             values.push(String(tags[index]))
         return values.join("、")
-    }
-    function currentTrackMetadata(): string {
-        var values = [
-            currentTrackValue(LibraryModel.ArtistRole) || qsTr("未知艺术家"),
-            currentTrackValue(LibraryModel.AlbumRole) || qsTr("未知专辑")
-        ]
-        var tags = currentTrackTags()
-        if (tags)
-            values.push(tags)
-        return values.join(" · ")
     }
     function coverSource(): string {
         var cover = currentTrackValue(LibraryModel.CoverUrlRole)
@@ -139,7 +133,7 @@ Rectangle {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 1
+            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
             Text {
                 objectName: "miniTrackTitle"
                 text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
@@ -150,25 +144,39 @@ Rectangle {
             }
             RowLayout {
                 objectName: "miniMetadataRow"
-                Layout.fillWidth: true; Layout.preferredHeight: 18; spacing: 5
-                Text {
-                    objectName: "miniArtistAlbumTags"
-                    text: root.currentTrackMetadata()
-                    color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 9
-                    elide: Text.ElideRight
-                    Layout.alignment: Qt.AlignBaseline
-                    Layout.minimumWidth: 40
-                    Layout.preferredWidth: Math.min(implicitWidth,
-                                                    Math.max(40, parent.width
-                                                             - miniRating.implicitWidth
-                                                             - favoriteButton.Layout.preferredWidth
-                                                             - 10))
+                Layout.fillWidth: true; Layout.preferredHeight: 42; spacing: 8
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Text {
+                        objectName: "miniArtist"
+                        text: root.currentTrackValue(LibraryModel.ArtistRole)
+                              || qsTr("未知艺术家")
+                        color: Theme.secondaryText; font.family: Theme.fontPrimary
+                        font.pixelSize: 10; elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        objectName: "miniAlbum"
+                        text: root.currentTrackValue(LibraryModel.AlbumRole)
+                              || qsTr("未知专辑")
+                        color: Theme.secondaryText; font.family: Theme.fontPrimary
+                        font.pixelSize: 10; elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        objectName: "miniTags"
+                        text: root.currentTrackTags()
+                        visible: text.length > 0
+                        color: Theme.tagSecondaryText; font.family: Theme.fontPrimary
+                        font.pixelSize: 10; elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
                 }
                 RowLayout {
                     id: miniRating
                     objectName: "miniRating"; spacing: 1
-                    baselineOffset: 10
-                    Layout.alignment: Qt.AlignBaseline
+                    Layout.alignment: Qt.AlignVCenter
                     Repeater {
                         model: 5
                         delegate: ThemedIcon {
@@ -176,21 +184,19 @@ Rectangle {
                             objectName: "miniRatingStar-" + index
                             source: index < root.currentTrackRating() ? Theme.icon("star-fill") : Theme.icon("star-line")
                             tint: index < root.currentTrackRating() ? Theme.ratingColor(index) : Theme.iconSecondary
-                            sourceSize.width: 10; sourceSize.height: 10
+                            sourceSize.width: 13; sourceSize.height: 13
                             Layout.preferredWidth: sourceSize.width
                             Layout.preferredHeight: sourceSize.height
-                            Layout.alignment: Qt.AlignBaseline
-                            baselineOffset: sourceSize.height
+                            Layout.alignment: Qt.AlignVCenter
                         }
                     }
                 }
                 ToolButton {
                     id: favoriteButton
                     objectName: "miniFavoriteButton"
-                    Layout.preferredWidth: icon.width
-                    Layout.preferredHeight: icon.height
-                    Layout.alignment: Qt.AlignBaseline
-                    baselineOffset: icon.height
+                    Layout.preferredWidth: 13
+                    Layout.preferredHeight: 13
+                    Layout.alignment: Qt.AlignVCenter
                     padding: 0
                     icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                     icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
@@ -213,27 +219,23 @@ Rectangle {
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
                     baseColor: SettingsController.waveformMode === 0
-                               ? (SettingsController.waveformSolidBaseColor
-                                  || Theme.waveformMagenta)
-                               : (SettingsController.waveformMode === 2
-                                  ? SettingsController.spectrumSolidColor
-                                  : (SettingsController.waveformRgbBaseColor
-                                     || Theme.waveformMagenta))
-                    progressColor: SettingsController.waveformSolidProgressColor
-                                  || Theme.waveformMagenta
-                    gradientStartColor: SettingsController.waveformMode === 2
-                                        && SettingsController.spectrumColorMode === 0
+                               ? SettingsController.waveformSolidBaseColor
+                               : SettingsController.waveformMode === 2
+                                 ? (SettingsController.spectrumColorMode === 0
+                                    ? SettingsController.spectrumSolidColor
+                                    : SettingsController.spectrumRgbStartColor)
+                                 : SettingsController.waveformRgbBaseColor
+                    progressColor: SettingsController.waveformMode === 0
+                                   ? SettingsController.waveformSolidProgressColor
+                                   : SettingsController.waveformMode === 2
+                                     ? (SettingsController.spectrumColorMode === 0
                                         ? SettingsController.spectrumSolidColor
-                                        : SettingsController.spectrumRgbStartColor
-                    gradientMiddleColor: SettingsController.waveformMode === 2
-                                         && SettingsController.spectrumColorMode === 0
-                                         ? SettingsController.spectrumSolidColor
-                                         : SettingsController.spectrumRgbMiddleColor
-                    gradientEndColor: SettingsController.waveformMode === 2
-                                      && SettingsController.spectrumColorMode === 0
-                                      ? SettingsController.spectrumSolidColor
-                                      : SettingsController.spectrumRgbEndColor
-                    rgbProgress: SettingsController.waveformRgbProgress !== false
+                                        : SettingsController.spectrumRgbMiddleColor)
+                                     : SettingsController.waveformRgbStartColor
+                    gradientStartColor: baseColor
+                    gradientMiddleColor: baseColor
+                    gradientEndColor: baseColor
+                    rgbProgress: false
                     amplitudeScale: SettingsController.waveformMode === 2
                                     ? 1.0 : SettingsController.waveformHeight
                     density: SettingsController.waveformMode === 2

@@ -22,7 +22,9 @@ Rectangle {
     readonly property bool leftBorderVisible: contactEdge !== "left"
     readonly property bool rightBorderVisible: contactEdge !== "right"
 
-    color: showFill ? Theme.background : "transparent"
+    color: !showFill ? "transparent" : SettingsController.glassEffect
+           ? Qt.rgba(Theme.background.r, Theme.background.g,
+                     Theme.background.b, 0.94) : Theme.background
     border.width: showBorders ? 1 : 0
     border.color: Theme.border
     clip: showFill

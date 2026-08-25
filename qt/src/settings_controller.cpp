@@ -1572,7 +1572,7 @@ void SettingsController::restoreDefaults()
     autoReadRating_ = true;
 
     themeMode_ = 0;
-    glassEffect_ = true;
+    glassEffect_ = false;
     waveformMode_ = 0;
     waveformHeight_ = 0.8;
     waveformDensity_ = 2.0;
