@@ -65,6 +65,7 @@ private slots:
     void keepsNeutralAndSemanticTokensIndependent();
     void makesHighlightFollowAccentOnlyWhenRequested();
     void refreshesSystemPaletteOncePerRealChange();
+    void applicationPaletteChangeRefreshesUnknownSystemPalette();
     void ownsNoTimers();
 };
 
@@ -249,6 +250,33 @@ void ThemeManagerTest::refreshesSystemPaletteOncePerRealChange()
     QEvent duplicate(QEvent::ApplicationPaletteChange);
     QCoreApplication::sendEvent(qApp, &duplicate);
     QCOMPARE(changed.count(), 2);
+}
+
+void ThemeManagerTest::applicationPaletteChangeRefreshesUnknownSystemPalette()
+{
+    ThemeManager manager(*qApp);
+    manager.applyPreferences({ThemeManager::AppearanceMode::System,
+                              ThemeManager::defaultSeed(),
+                              ThemeManager::defaultSeed(), true});
+    QVERIFY(QMetaObject::invokeMethod(
+        &manager, "handleSystemColorSchemeChanged", Qt::DirectConnection,
+        Q_ARG(Qt::ColorScheme, Qt::ColorScheme::Dark)));
+    QVERIFY(QMetaObject::invokeMethod(
+        &manager, "handleSystemColorSchemeChanged", Qt::DirectConnection,
+        Q_ARG(Qt::ColorScheme, Qt::ColorScheme::Unknown)));
+    QCOMPARE(manager.palette().background, QColor(QStringLiteral("#101114")));
+
+    QSignalSpy changed(&manager, &ThemeManager::paletteChanged);
+    QPalette systemLight = qApp->palette();
+    systemLight.setColor(QPalette::Window, QColor(QStringLiteral("#F5F5F7")));
+    qApp->setPalette(systemLight);
+
+    QCOMPARE(manager.palette().background, QColor(QStringLiteral("#F5F5F7")));
+    QCOMPARE(changed.count(), 1);
+
+    QEvent duplicate(QEvent::ApplicationPaletteChange);
+    QCoreApplication::sendEvent(qApp, &duplicate);
+    QCOMPARE(changed.count(), 1);
 }
 
 void ThemeManagerTest::ownsNoTimers()
