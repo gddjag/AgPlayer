@@ -633,7 +633,7 @@ TestCase {
         }, 1000)
         tryVerify(function() {
             return recordingOverlay.visible
-                && recordingOverlay.channelPeaks.length === 2
+                && recordingOverlay.channelPeaks.length === 1
         }, 2000)
         tryVerify(function() { return meter.level > 0.79 }, 1000)
         tryVerify(function() { return activeMeterSegment.opacity > 0.9 }, 1000)

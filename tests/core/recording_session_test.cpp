@@ -97,6 +97,9 @@ int main()
             && active.envelopes.front().channel_minima[1] < -0.12F
             && active.envelopes.front().channel_maxima[1] > 0.49F,
             "live snapshot lost per-channel waveform extrema");
+    require(active.envelopes.front().visual_mix_minimum < -0.43F
+            && active.envelopes.front().visual_mix_maximum > 0.37F,
+            "live snapshot did not mix samples before envelope aggregation");
     require(session.pause(), "recording pause failed");
     require(session.pushCapturedFrames(block.data(), 480) == 0,
             "paused recording accepted frames");
@@ -114,6 +117,9 @@ int main()
             && quiet.envelopes.front().channel_minima[1] == 0.0F
             && quiet.envelopes.front().channel_maxima[1] == 0.0F,
             "quiet live snapshot did not publish a falling waveform");
+    require(quiet.envelopes.front().visual_mix_minimum == 0.0F
+            && quiet.envelopes.front().visual_mix_maximum == 0.0F,
+            "quiet live visual mix did not fall to silence");
     require(session.peak() > 0.74F && session.peak() < 0.76F,
             "session peak hold was not retained separately");
     const RecordingResult result = session.stop();

@@ -44,6 +44,8 @@ struct RecordingEnvelopePoint final {
     std::uint32_t channels{};
     std::array<float, 2> channel_minima{};
     std::array<float, 2> channel_maxima{};
+    float visual_mix_minimum{};
+    float visual_mix_maximum{};
 };
 
 struct RecordingLiveSnapshot final {

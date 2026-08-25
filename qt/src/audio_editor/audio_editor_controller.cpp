@@ -86,18 +86,17 @@ qint64 clamped_int64_to_qint64(const std::size_t value)
 
 std::vector<std::vector<float>> buildRecordingLivePeaks(
     const std::vector<agplayer::editor::RecordingEnvelopePoint>& envelopes,
-    const int channels, const qint64 targetPoints,
-    const qint64 startFrame, const qint64 endFrame, const qint64 recStartFrame,
-    const qint64 recordedFrames)
+    const qint64 targetPoints, const qint64 startFrame, const qint64 endFrame,
+    const qint64 recStartFrame, const qint64 recordedFrames)
 {
-    if (targetPoints <= 0 || channels <= 0 || recordedFrames <= 0
+    if (targetPoints <= 0 || recordedFrames <= 0
         || startFrame >= endFrame || envelopes.empty()) {
         return {};
     }
     const float blank = std::numeric_limits<float>::quiet_NaN();
-    std::vector<std::vector<float>> peaks(
-        static_cast<std::size_t>(std::max<qint64>(1, channels)),
+    std::vector<std::vector<float>> peaks(1U,
         std::vector<float>(static_cast<std::size_t>(targetPoints * 2LL), blank));
+    auto& visual = peaks.front();
     const qint64 visibleFrameWindow = std::max<qint64>(1, endFrame - startFrame);
     for (const auto& envelope : envelopes) {
         const qint64 envelopeStart = recStartFrame + envelope.start_frame;
@@ -115,25 +114,18 @@ std::vector<std::vector<float>> buildRecordingLivePeaks(
                 static_cast<long double>(clippedEnd - startFrame)
                 * targetPoints / visibleFrameWindow)), firstPoint + 1,
             targetPoints);
-        const std::size_t availableChannels = (std::min<std::size_t>)(
-            envelope.channels, envelope.channel_minima.size());
         for (qint64 point = firstPoint; point < lastPoint; ++point) {
             const std::size_t outputIndex = static_cast<std::size_t>(point * 2);
-            for (std::size_t channel = 0;
-                 channel < peaks.size() && channel < availableChannels;
-                 ++channel) {
-                const float minimum = envelope.channel_minima[channel];
-                const float maximum = envelope.channel_maxima[channel];
-                if (!std::isfinite(minimum) || !std::isfinite(maximum)) continue;
-                if (!std::isfinite(peaks[channel][outputIndex])) {
-                    peaks[channel][outputIndex] = minimum;
-                    peaks[channel][outputIndex + 1U] = maximum;
-                } else {
-                    peaks[channel][outputIndex] = (std::min)(
-                        peaks[channel][outputIndex], minimum);
-                    peaks[channel][outputIndex + 1U] = (std::max)(
-                        peaks[channel][outputIndex + 1U], maximum);
-                }
+            const float minimum = envelope.visual_mix_minimum;
+            const float maximum = envelope.visual_mix_maximum;
+            if (!std::isfinite(minimum) || !std::isfinite(maximum)) continue;
+            if (!std::isfinite(visual[outputIndex])) {
+                visual[outputIndex] = minimum;
+                visual[outputIndex + 1U] = maximum;
+            } else {
+                visual[outputIndex] = (std::min)(visual[outputIndex], minimum);
+                visual[outputIndex + 1U] = (std::max)(
+                    visual[outputIndex + 1U], maximum);
             }
         }
     }
@@ -143,23 +135,20 @@ std::vector<std::vector<float>> buildRecordingLivePeaks(
 void applyRecordingPcmSamples(
     std::vector<std::vector<float>>& peaks,
     const agplayer::editor::RecordingPcmSnapshot& pcm,
-    const int channels, const qint64 targetPoints,
-    const qint64 startFrame, const qint64 endFrame,
+    const qint64 targetPoints, const qint64 startFrame, const qint64 endFrame,
     const qint64 recordingStartFrame)
 {
     if (pcm.frames <= 0 || pcm.channels == 0 || targetPoints <= 0
-        || channels <= 0 || startFrame >= endFrame) {
+        || startFrame >= endFrame) {
         return;
     }
     const float blank = std::numeric_limits<float>::quiet_NaN();
     if (peaks.empty()) {
-        peaks.assign(static_cast<std::size_t>(channels),
+        peaks.assign(1U,
             std::vector<float>(static_cast<std::size_t>(targetPoints * 2),
                                blank));
     }
-    const std::size_t availableChannels = (std::min<std::size_t>)(
-        {peaks.size(), static_cast<std::size_t>(pcm.channels),
-         static_cast<std::size_t>(channels)});
+    auto& visual = peaks.front();
     const qint64 visibleFrames = endFrame - startFrame;
     for (qint64 offset = 0; offset < pcm.frames; ++offset) {
         const qint64 timelineFrame = recordingStartFrame
@@ -172,13 +161,21 @@ void applyRecordingPcmSamples(
         const std::size_t outputIndex = static_cast<std::size_t>(point * 2);
         const std::size_t inputIndex = static_cast<std::size_t>(offset)
             * pcm.channels;
-        for (std::size_t channel = 0; channel < availableChannels; ++channel) {
+        double mixedSample = 0.0;
+        bool valid = true;
+        for (std::size_t channel = 0; channel < pcm.channels; ++channel) {
             if (inputIndex + channel >= pcm.interleaved_samples.size()) return;
             const float sample = pcm.interleaved_samples[inputIndex + channel];
-            if (!std::isfinite(sample)) continue;
-            peaks[channel][outputIndex] = sample;
-            peaks[channel][outputIndex + 1U] = sample;
+            if (!std::isfinite(sample)) {
+                valid = false;
+                break;
+            }
+            mixedSample += sample;
         }
+        if (!valid) continue;
+        const float visualSample = static_cast<float>(mixedSample / pcm.channels);
+        visual[outputIndex] = visualSample;
+        visual[outputIndex + 1U] = visualSample;
     }
 }
 
@@ -203,6 +200,10 @@ void compactRecordingEnvelopes(
                     merged.channel_maxima[channel] = (std::max)(
                         merged.channel_maxima[channel], next.channel_maxima[channel]);
                 }
+                merged.visual_mix_minimum = (std::min)(
+                    merged.visual_mix_minimum, next.visual_mix_minimum);
+                merged.visual_mix_maximum = (std::max)(
+                    merged.visual_mix_maximum, next.visual_mix_maximum);
             }
             compacted.push_back(std::move(merged));
         }
@@ -3186,8 +3187,8 @@ void AudioEditorController::updateRecordingOverlayWaveform()
     const qint64 recordingStart = insert_recording_at_cursor_ && has_document_
         ? recording_insert_frame_ : 0;
     auto peaks = buildRecordingLivePeaks(
-        live_recording_envelopes_, recording_channels_, targetPoints,
-        startFrame, endFrame, recordingStart, recordedFrames);
+        live_recording_envelopes_, targetPoints, startFrame, endFrame,
+        recordingStart, recordedFrames);
     if (sampleMode) {
         const qint64 relativeStart = std::clamp<qint64>(
             startFrame - recordingStart, 0, recordedFrames);
@@ -3196,8 +3197,8 @@ void AudioEditorController::updateRecordingOverlayWaveform()
         const auto pcm = recording_capture_->takePcmSnapshot(
             relativeStart, relativeEnd,
             static_cast<std::size_t>(targetPoints));
-        applyRecordingPcmSamples(peaks, pcm, recording_channels_, targetPoints,
-                                 startFrame, endFrame, recordingStart);
+        applyRecordingPcmSamples(peaks, pcm, targetPoints, startFrame,
+                                 endFrame, recordingStart);
     }
     const QVariantList next = build_variant_peaks(peaks);
     if (next != recording_overlay_peaks_) {

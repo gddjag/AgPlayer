@@ -495,7 +495,8 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(controller.positionMs(), 1'000, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() > 0.79, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT(
-            controller.recordingOverlayPeaks().size() == 2, 2'000);
+            controller.recordingOverlayPeaks().size() == 1, 2'000);
+        QCOMPARE(controller.channelPeaks().size(), 2);
 
         std::vector<float> quiet(16'000U * 2U, 0.0F);
         QCOMPARE(driver->feed(quiet, 16'000), 16'000U);
@@ -503,14 +504,14 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() < 0.01, 1'000);
         QTRY_VERIFY_WITH_TIMEOUT([&controller] {
             const QVariantList channels = controller.recordingOverlayPeaks();
-            if (channels.size() != 2) return false;
+            if (channels.size() != 1) return false;
             const QVariantList left = channels.front().toList();
             bool sawSignal = false;
             bool sawQuiet = false;
             for (qsizetype index = 0; index + 1 < left.size(); index += 2) {
                 const double minimum = left[index].toDouble();
                 const double maximum = left[index + 1].toDouble();
-                sawSignal = sawSignal || minimum < -0.79 || maximum > 0.29;
+                sawSignal = sawSignal || minimum < -0.49 || maximum > 0.44;
                 sawQuiet = sawQuiet || (std::abs(minimum) < 0.001
                                         && std::abs(maximum) < 0.001);
             }
@@ -2328,6 +2329,39 @@ private slots:
                                  1'000);
         QTest::qWait(120);
         QCOMPARE(controller.viewportWaveformGeneration(), generation);
+        QVERIFY(controller.cancelRecording());
+    }
+
+    void ordinaryZoomRecordingOverlayMixesSamplesBeforeEnvelopeAggregation()
+    {
+        auto capture = std::make_unique<ManualRecordingCapture>();
+        ManualRecordingCapture* const driver = capture.get();
+        AudioEditorController controller(
+            AG_AUDIO_BACKEND_NULL, std::move(capture));
+        controller.viewport()->setViewportWidth(10.0);
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(temporary.filePath(QStringLiteral("opposite.wav"))),
+            {}, 16'000, 2, false, false));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
+                                  EditorSessionState::Recording, 5'000);
+
+        std::vector<float> opposite(1'600U * 2U);
+        for (std::size_t frame = 0; frame < 1'600U; ++frame) {
+            const float left = frame % 2U == 0U ? 0.8F : -0.8F;
+            opposite[frame * 2U] = left;
+            opposite[frame * 2U + 1U] = -left;
+        }
+        QCOMPARE(driver->feed(opposite, 1'600), 1'600U);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingOverlayPeaks().size(), 1,
+                                  1'000);
+        QCOMPARE(controller.channelPeaks().size(), 2);
+        const QVariantList visual =
+            controller.recordingOverlayPeaks().front().toList();
+        QVERIFY(std::all_of(visual.begin(), visual.end(), [](const QVariant& value) {
+            return !value.isValid() || std::abs(value.toFloat()) < 0.0001F;
+        }));
         QVERIFY(controller.cancelRecording());
     }
 
