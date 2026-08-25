@@ -38,6 +38,7 @@ struct ThemePalette final {
     QColor highlightSoft;
     QColor highlightText;
     QColor focus;
+    QColor currentTrackSurface;
 
     QColor success;
     QColor warning;
@@ -77,6 +78,7 @@ class ThemeManager final : public QObject {
     Q_PROPERTY(QColor highlightSoft READ highlightSoft NOTIFY paletteChanged)
     Q_PROPERTY(QColor highlightText READ highlightText NOTIFY paletteChanged)
     Q_PROPERTY(QColor focus READ focus NOTIFY paletteChanged)
+    Q_PROPERTY(QColor currentTrackSurface READ currentTrackSurface NOTIFY paletteChanged)
     Q_PROPERTY(QColor success READ success NOTIFY paletteChanged)
     Q_PROPERTY(QColor warning READ warning NOTIFY paletteChanged)
     Q_PROPERTY(QColor error READ error NOTIFY paletteChanged)
@@ -93,6 +95,12 @@ public:
     };
     Q_ENUM(AppearanceMode)
 
+    enum class SkinMode {
+        Default = 0,
+        Generated = 1,
+    };
+    Q_ENUM(SkinMode)
+
     struct Preset final {
         QString id;
         QColor seed;
@@ -105,9 +113,8 @@ public:
 
     struct Preferences final {
         AppearanceMode appearanceMode = AppearanceMode::System;
-        QColor accentSeed = defaultSeed();
-        QColor highlightSeed = defaultSeed();
-        bool highlightFollowsAccent = true;
+        SkinMode skinMode = SkinMode::Default;
+        QColor skinSeed = defaultSeed();
     };
 
     explicit ThemeManager(QGuiApplication& application, QObject* parent = nullptr);
@@ -143,6 +150,7 @@ public:
     QColor highlightSoft() const { return palette_.highlightSoft; }
     QColor highlightText() const { return palette_.highlightText; }
     QColor focus() const { return palette_.focus; }
+    QColor currentTrackSurface() const { return palette_.currentTrackSurface; }
     QColor success() const { return palette_.success; }
     QColor warning() const { return palette_.warning; }
     QColor error() const { return palette_.error; }
