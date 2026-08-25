@@ -7,6 +7,7 @@
 
 class QGuiApplication;
 class QEvent;
+class SettingsController;
 
 struct ThemePalette final {
     QColor background;
@@ -82,6 +83,7 @@ class ThemeManager final : public QObject {
     Q_PROPERTY(QColor danger READ danger NOTIFY paletteChanged)
     Q_PROPERTY(QColor recording READ recording NOTIFY paletteChanged)
     Q_PROPERTY(QColor critical READ critical NOTIFY paletteChanged)
+    Q_PROPERTY(bool isLight READ isLight NOTIFY paletteChanged)
 
 public:
     enum class AppearanceMode {
@@ -147,6 +149,7 @@ public:
     QColor danger() const { return palette_.danger; }
     QColor recording() const { return palette_.recording; }
     QColor critical() const { return palette_.critical; }
+    bool isLight() const;
 
 signals:
     void paletteChanged();
@@ -167,4 +170,18 @@ private:
     ThemePalette palette_;
     Qt::ColorScheme systemColorScheme_ = Qt::ColorScheme::Unknown;
     bool applyingApplicationPalette_ = false;
+};
+
+// Keeps the complete settings transaction as the only runtime input to the
+// palette.  It deliberately shares one apply callback for every theme field,
+// so previews and cancel restoration take the same path as startup.
+class ThemeSettingsSynchronizer final {
+public:
+    ThemeSettingsSynchronizer(ThemeManager& manager, SettingsController& settings);
+
+private:
+    void applyFromCompleteSettings();
+
+    ThemeManager& manager_;
+    SettingsController& settings_;
 };

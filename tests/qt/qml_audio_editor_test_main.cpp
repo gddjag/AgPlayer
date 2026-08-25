@@ -3,8 +3,10 @@
 #include "audio_tools_controller.hpp"
 #include "manual_recording_capture.hpp"
 #include "settings_controller.hpp"
+#include "theme_manager.hpp"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -95,14 +97,22 @@ public slots:
             [](QQmlEngine*, QJSEngine*) -> QObject* {
                 return new AudioToolsController();
             });
-        qmlRegisterSingletonType<SettingsController>(
-            "AgPlayer", 1, 0, "SettingsController",
-            [](QQmlEngine*, QJSEngine*) -> QObject* {
-                return new SettingsController();
-            });
+        settings_ = std::make_unique<SettingsController>();
+        themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
+        themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
+            *themeManager_, *settings_);
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SettingsController",
+                                     settings_.get());
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ThemeManager",
+                                     themeManager_.get());
         qmlRegisterType<AudioEditorWaveformItem>(
             "AgPlayer", 1, 0, "AudioEditorWaveformItem");
     }
+
+private:
+    std::unique_ptr<SettingsController> settings_;
+    std::unique_ptr<ThemeManager> themeManager_;
+    std::unique_ptr<ThemeSettingsSynchronizer> themeSettings_;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(qml_audio_editor, QmlAudioEditorSetup)

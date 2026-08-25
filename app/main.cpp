@@ -13,7 +13,6 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMenu>
-#include <QPalette>
 #include <QQuickWindow>
 #include <QQuickStyle>
 #include <QSettings>
@@ -64,6 +63,7 @@
 #include "rename_journal_store.hpp"
 #include "settings_controller.hpp"
 #include "tag_model.hpp"
+#include "theme_manager.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
@@ -689,47 +689,8 @@ int main(int argc, char* argv[])
         if (!qaLanguage.isEmpty()) {
             settings.setLanguage(qaLanguage);
         }
-        const auto applyApplicationPalette = [&app, &settings]() {
-            if (settings.themeMode() == 2) {
-                app.setPalette(app.style()->standardPalette());
-                return;
-            }
-            QPalette palette;
-            if (settings.themeMode() == 0) {
-                palette.setColor(QPalette::Window, QColor(QStringLiteral("#07111f")));
-                palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#eef5ff")));
-                palette.setColor(QPalette::Base, QColor(QStringLiteral("#091526")));
-                palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#101d30")));
-                palette.setColor(QPalette::Text, QColor(QStringLiteral("#eef5ff")));
-                palette.setColor(QPalette::Button, QColor(QStringLiteral("#132238")));
-                palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#eef5ff")));
-                palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#0869d8")));
-                palette.setColor(QPalette::HighlightedText, Qt::white);
-                palette.setColor(QPalette::PlaceholderText,
-                                 QColor(QStringLiteral("#7f90a8")));
-                palette.setColor(QPalette::Disabled, QPalette::ButtonText,
-                                 QColor(QStringLiteral("#64748b")));
-                palette.setColor(QPalette::Disabled, QPalette::Text,
-                                 QColor(QStringLiteral("#64748b")));
-            } else {
-                palette.setColor(QPalette::Window, QColor(QStringLiteral("#f5f7fb")));
-                palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#162033")));
-                palette.setColor(QPalette::Base, Qt::white);
-                palette.setColor(QPalette::AlternateBase,
-                                 QColor(QStringLiteral("#edf2f8")));
-                palette.setColor(QPalette::Text, QColor(QStringLiteral("#162033")));
-                palette.setColor(QPalette::Button, QColor(QStringLiteral("#f2f5f9")));
-                palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#162033")));
-                palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#0a67d1")));
-                palette.setColor(QPalette::HighlightedText, Qt::white);
-                palette.setColor(QPalette::PlaceholderText,
-                                 QColor(QStringLiteral("#738096")));
-            }
-            app.setPalette(palette);
-        };
-        applyApplicationPalette();
-        QObject::connect(&settings, &SettingsController::themeModeChanged,
-                         &app, applyApplicationPalette);
+        ThemeManager themeManager(app);
+        ThemeSettingsSynchronizer themeSettings(themeManager, settings);
         if (qaTestMode) {
             settings.setWaveformMode(1);
         }
@@ -868,7 +829,8 @@ int main(int argc, char* argv[])
                                         &tagModel,
                                         &libraryNavigation,
                                         &libraryManager,
-                                        &trackWaveformThumbnailProvider});
+                                        &trackWaveformThumbnailProvider,
+                                        &themeManager});
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

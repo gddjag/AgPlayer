@@ -578,17 +578,17 @@ TestCase {
         compare(findChild(window, "equalizerMinimizeButton").width, 30)
         verify(findChild(window, "equalizerEnabledSwitch"))
         compare(button.contentItem.rotation, 90)
-        var previousThemeMode = Theme.mode
-        Theme.mode = 0
+        var previousThemeMode = SettingsController.themeMode
+        SettingsController.themeMode = 0
         compare(button.icon.color, "#ffffff")
-        Theme.mode = 1
+        SettingsController.themeMode = 1
         compare(button.icon.color, "#000000")
-        Theme.mode = previousThemeMode
+        SettingsController.themeMode = previousThemeMode
         verify(findChild(window, "equalizerResponseCurve"))
         var presetBox = findChild(window, "equalizerPresetBox")
         verify(presetBox)
         for (var themeMode = 0; themeMode <= 1; ++themeMode) {
-            Theme.mode = themeMode
+            SettingsController.themeMode = themeMode
             presetBox.popup.open()
             tryVerify(function() { return presetBox.popup.visible })
             compare(presetBox.popup.background.color.toString(),
@@ -597,7 +597,7 @@ TestCase {
                     Theme.border.toString())
             presetBox.popup.close()
         }
-        Theme.mode = previousThemeMode
+        SettingsController.themeMode = previousThemeMode
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
         compare(bands.count, 10)
@@ -2478,18 +2478,18 @@ TestCase {
         verify(firstPill.resolvedSurface.toString()
                === Theme.tagPillHoverSurface.toString())
 
-        var previousMode = Theme.mode
-        Theme.mode = 1
+        var previousMode = SettingsController.themeMode
+        SettingsController.themeMode = 1
         verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
         verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
         verify(colorContrast(Theme.tagPillText, Theme.tagPillSurface) >= 3)
         verify(colorContrast(Theme.tagPillSecondaryText, Theme.tagPillSurface) >= 3)
-        Theme.mode = 0
+        SettingsController.themeMode = 0
         verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
         verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
         verify(colorContrast(Theme.tagPillText, Theme.tagPillSurface) >= 3)
         verify(colorContrast(Theme.tagPillSecondaryText, Theme.tagPillSurface) >= 3)
-        Theme.mode = previousMode
+        SettingsController.themeMode = previousMode
 
         panel.searchText = names[names.length - 1]
         tryCompare(panel, "visibleTagCount", 1)
@@ -4536,7 +4536,7 @@ TestCase {
         tryCompare(Theme, "isLight", false)
         var darkBackground = Theme.background.toString()
         var darkText = Theme.primaryText.toString()
-        compare(darkBackground, "#071018")
+        compare(darkBackground, "#101114")
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
@@ -4560,7 +4560,7 @@ TestCase {
         compare(Theme.requestedMode, 2)
         compare(Theme.effectiveMode, Theme.systemIsLight ? 1 : 0)
         compare(Theme.background.toString(),
-                Theme.systemIsLight ? "#f3f3f3" : "#071018")
+                Theme.systemIsLight ? "#f5f5f7" : "#101114")
         compare(Theme.cyan.toString(), Theme.accent.toString())
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 

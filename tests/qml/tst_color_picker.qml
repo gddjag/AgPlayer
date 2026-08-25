@@ -93,7 +93,7 @@ TestCase {
     }
 
     function initTestCase() {
-        savedThemeMode = Theme.mode
+        savedThemeMode = SettingsController.themeMode
     }
 
     function init() {
@@ -110,7 +110,7 @@ TestCase {
             highlightPreset: SettingsController.highlightPreset,
             highlightCustomColor: SettingsController.highlightCustomColor
         }
-        Theme.mode = 0
+        SettingsController.themeMode = 0
         wait(0)
     }
 
@@ -129,7 +129,7 @@ TestCase {
         SettingsController.highlightCustomColor = savedThemeChoices.highlightCustomColor
         acceptedSpy.clear()
         integratedEditedSpy.clear()
-        Theme.mode = savedThemeMode
+        SettingsController.themeMode = savedThemeMode
         wait(0)
     }
 
@@ -427,13 +427,13 @@ TestCase {
     }
 
     function test_theme_switch_updates_chrome_not_candidates() {
-        Theme.mode = 0
+        SettingsController.themeMode = 0
         openReferenceColor()
         var candidatesBefore = picker.candidateColors.slice(0)
         var darkChrome = picker.background.color.toString()
         compare(darkChrome, Theme.elevated.toString())
 
-        Theme.mode = 1
+        SettingsController.themeMode = 1
         wait(0)
 
         compare(picker.background.color.toString(), Theme.elevated.toString())
@@ -445,6 +445,7 @@ TestCase {
     }
 
     function test_picker_controls_have_names_and_roles() {
+        SettingsController.themeMode = 0
         openReferenceColor()
         var hex = findChild(picker, "colorPickerHex")
         var close = findChild(picker, "colorPickerClose")
@@ -459,6 +460,38 @@ TestCase {
         verify(redSlider.Accessible.name.length > 0)
         compare(candidate.Accessible.role, Accessible.Button)
         verify(candidate.Accessible.name.indexOf("#") >= 0)
+    }
+
+    function test_settings_drive_runtime_theme_and_cancel_restores_tokens() {
+        SettingsController.themeMode = 1
+        SettingsController.accentMode = 0
+        SettingsController.highlightFollowAccent = true
+        wait(0)
+
+        var initialAccent = ThemeManager.accent.toString()
+        var initialHighlight = ThemeManager.highlight.toString()
+        var initialSemantic = ThemeManager.success.toString()
+
+        SettingsController.beginEdit()
+        SettingsController.accentMode = 1
+        SettingsController.accentPreset = "systemBlue"
+        SettingsController.highlightFollowAccent = false
+        SettingsController.highlightMode = 1
+        SettingsController.highlightPreset = "purple"
+
+        tryVerify(function() {
+            return ThemeManager.accent.toString() !== initialAccent
+                    && ThemeManager.highlight.toString() !== initialHighlight
+        })
+        compare(Theme.accent, ThemeManager.accent)
+        compare(Theme.activeSelection, ThemeManager.highlight)
+        compare(ThemeManager.success.toString(), initialSemantic)
+
+        SettingsController.cancelEdit()
+        tryVerify(function() {
+            return ThemeManager.accent.toString() === initialAccent
+                    && ThemeManager.highlight.toString() === initialHighlight
+        })
     }
 
     function test_theme_selectors_apply_presets_and_keyboard_activation() {

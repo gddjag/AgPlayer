@@ -15,6 +15,7 @@ class PlaybackController;
 class PlaylistModel;
 class SettingsController;
 class TagModel;
+class ThemeManager;
 class TrackWaveformThumbnailProvider;
 class WaveformProvider;
 class WindowController;
@@ -24,6 +25,7 @@ struct AgPlayerQmlRuntimeModels final {
     LibraryNavigationModel* libraryNavigationModel = nullptr;
     LibraryManagerController* libraryManagerController = nullptr;
     TrackWaveformThumbnailProvider* trackWaveformThumbnailProvider = nullptr;
+    ThemeManager* themeManager = nullptr;
 };
 
 // Registers all AgPlayer QML singletons and the WaveformItem type into the

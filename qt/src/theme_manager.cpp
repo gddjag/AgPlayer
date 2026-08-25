@@ -1,5 +1,7 @@
 #include "theme_manager.hpp"
 
+#include "settings_controller.hpp"
+
 #include <QEvent>
 #include <QGuiApplication>
 #include <QStyleHints>
@@ -70,6 +72,38 @@ QColor resolvedSeed(const QColor& requested, const QColor& surface)
         }
     }
     return withHslLightness(seed, step < 0 ? 0 : 255);
+}
+
+QColor resolveColorChoice(const int mode, const QString& presetId,
+                          const QString& customColor)
+{
+    if (mode == 0) {
+        return ThemeManager::defaultSeed();
+    }
+    if (mode == 1) {
+        const QList<ThemeManager::Preset> presets = ThemeManager::presets();
+        for (const ThemeManager::Preset& preset : presets) {
+            if (preset.id == presetId) {
+                return preset.seed;
+            }
+        }
+        return ThemeManager::defaultSeed();
+    }
+
+    const QColor custom(customColor);
+    return custom.isValid() ? custom : ThemeManager::defaultSeed();
+}
+
+ThemeManager::Preferences preferencesFromSettings(
+    const SettingsController& settings)
+{
+    return {
+        static_cast<ThemeManager::AppearanceMode>(settings.themeMode()),
+        resolveColorChoice(settings.accentMode(), settings.accentPreset(),
+                           settings.accentCustomColor()),
+        resolveColorChoice(settings.highlightMode(), settings.highlightPreset(),
+                           settings.highlightCustomColor()),
+        settings.highlightFollowAccent()};
 }
 
 QColor stateTone(const QColor& base, const QColor& surface, const bool dark,
@@ -226,6 +260,11 @@ void ThemeManager::applyPreferences(const Preferences& preferences)
     refreshPalette();
 }
 
+bool ThemeManager::isLight() const
+{
+    return effectiveAppearance() == AppearanceMode::Light;
+}
+
 bool ThemeManager::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == &application_ && event->type() == QEvent::ApplicationPaletteChange
@@ -314,4 +353,34 @@ void ThemeManager::applyApplicationPalette(const ThemePalette& palette)
     applyingApplicationPalette_ = true;
     application_.setPalette(applicationPalette);
     applyingApplicationPalette_ = false;
+}
+
+ThemeSettingsSynchronizer::ThemeSettingsSynchronizer(
+    ThemeManager& manager, SettingsController& settings)
+    : manager_(manager)
+    , settings_(settings)
+{
+    const auto apply = [this]() { applyFromCompleteSettings(); };
+    QObject::connect(&settings_, &SettingsController::themeModeChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::accentModeChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::accentPresetChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::accentCustomColorChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::highlightFollowAccentChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::highlightModeChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::highlightPresetChanged,
+                     &manager_, apply);
+    QObject::connect(&settings_, &SettingsController::highlightCustomColorChanged,
+                     &manager_, apply);
+    applyFromCompleteSettings();
+}
+
+void ThemeSettingsSynchronizer::applyFromCompleteSettings()
+{
+    manager_.applyPreferences(preferencesFromSettings(settings_));
 }

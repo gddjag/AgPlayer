@@ -105,8 +105,8 @@ TestCase {
     }
 
     function test_composedToolsShellUsesReadableLightThemeColors() {
-        const previousMode = Theme.mode
-        Theme.mode = 1
+        const previousMode = SettingsController.themeMode
+        SettingsController.themeMode = 1
         const shell = createTemporaryObject(shellComponent, testCase)
         verify(shell)
         tryVerify(function() { return shell.visible })
@@ -134,7 +134,7 @@ TestCase {
                 Theme.primaryText.toString())
         verify(topNav.activeLabelColor.toString()
                !== titleBar.color.toString())
-        Theme.mode = previousMode
+        SettingsController.themeMode = previousMode
         shell.destroy()
         wait(0)
     }
