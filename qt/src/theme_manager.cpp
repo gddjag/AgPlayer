@@ -219,6 +219,7 @@ bool ThemePalette::operator==(const ThemePalette& other) const
 ThemeManager::ThemeManager(QGuiApplication& application, QObject* parent)
     : QObject(parent)
     , application_(application)
+    , systemWindowColor_(application.palette().color(QPalette::Window))
 {
     application_.installEventFilter(this);
     systemColorScheme_ = application_.styleHints()->colorScheme();
@@ -268,9 +269,11 @@ bool ThemeManager::isLight() const
 bool ThemeManager::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == &application_ && event->type() == QEvent::ApplicationPaletteChange
-        && !applyingApplicationPalette_
-        && preferences_.appearanceMode == AppearanceMode::System) {
-        refreshPalette();
+        && !applyingApplicationPalette_) {
+        systemWindowColor_ = application_.palette().color(QPalette::Window);
+        if (preferences_.appearanceMode == AppearanceMode::System) {
+            refreshPalette();
+        }
     }
     return QObject::eventFilter(watched, event);
 }
@@ -297,8 +300,7 @@ ThemeManager::AppearanceMode ThemeManager::effectiveAppearance() const
     case Qt::ColorScheme::Dark:
         return AppearanceMode::Dark;
     case Qt::ColorScheme::Unknown:
-        return relativeLuminance(application_.palette().color(QPalette::Window))
-                > 0.5
+        return relativeLuminance(systemWindowColor_) > 0.5
             ? AppearanceMode::Light
             : AppearanceMode::Dark;
     }

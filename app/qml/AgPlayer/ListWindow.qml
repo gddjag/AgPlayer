@@ -32,8 +32,8 @@ Window {
     palette.text: Theme.primaryText
     palette.button: Theme.elevated
     palette.buttonText: Theme.primaryText
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.accentText
+    palette.highlight: Theme.highlight
+    palette.highlightedText: Theme.highlightText
     palette.mid: Theme.border
 
     property var windows: WindowController

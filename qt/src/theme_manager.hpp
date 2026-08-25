@@ -169,6 +169,7 @@ private:
     Preferences preferences_;
     ThemePalette palette_;
     Qt::ColorScheme systemColorScheme_ = Qt::ColorScheme::Unknown;
+    QColor systemWindowColor_;
     bool applyingApplicationPalette_ = false;
 };
 

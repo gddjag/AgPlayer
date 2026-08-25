@@ -39,6 +39,27 @@ foreach(qml_file IN LISTS qml_files)
     endforeach()
 endforeach()
 
+set(palette_windows
+    "app/qml/AgPlayer/Main.qml"
+    "app/qml/AgPlayer/ListWindow.qml"
+    "app/qml/AgPlayer/MiniPlayerWindow.qml"
+    "app/qml/AgPlayer/SettingsWindow.qml"
+    "app/qml/AgPlayer/AudioToolsWindow.qml"
+    "app/qml/AgPlayer/EqualizerWindow.qml"
+)
+foreach(relative_path IN LISTS palette_windows)
+    file(READ "${ROOT}/${relative_path}" window_source ENCODING UTF-8)
+    if(NOT window_source MATCHES "palette\\.highlight:[ \t]*Theme\\.highlight")
+        list(APPEND violations
+            "${relative_path}: window selection palette must use Theme.highlight")
+    endif()
+    if(NOT window_source MATCHES
+       "palette\\.highlightedText:[ \t]*Theme\\.highlightText")
+        list(APPEND violations
+            "${relative_path}: window selection text must use Theme.highlightText")
+    endif()
+endforeach()
+
 if(violations)
     list(JOIN violations "\n  " violation_text)
     message(FATAL_ERROR

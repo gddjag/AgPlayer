@@ -366,13 +366,9 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-highlight-follow")
                        && i + 1 < cliArgs.size()) {
                 const QString value = cliArgs.at(++i).toLower();
-                if (value == QStringLiteral("1")
-                    || value == QStringLiteral("true")) {
-                    qaHighlightFollow = 1;
-                } else if (value == QStringLiteral("0")
-                           || value == QStringLiteral("false")) {
-                    qaHighlightFollow = 0;
-                }
+                qaHighlightFollow = value == QStringLiteral("1") ? 1
+                    : value == QStringLiteral("0") ? 0
+                    : qaHighlightFollow;
             } else if (arg == QStringLiteral("--qa-language")
                        && i + 1 < cliArgs.size()) {
                 qaLanguage = cliArgs.at(++i).toLower();

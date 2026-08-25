@@ -31,8 +31,6 @@
 
 #include <QGuiApplication>
 
-#include <memory>
-
 void register_agplayer_qml_types(LibraryModel* library,
                                  PlaybackController* playback,
                                  ImportController* importer,
@@ -52,11 +50,8 @@ void register_agplayer_qml_types(LibraryModel* library,
     static EqualizerController fallbackEqualizer(nullptr);
     ThemeManager* themeManager = runtime.themeManager;
     if (themeManager == nullptr) {
-        static std::unique_ptr<ThemeManager> fallbackThemeManager;
-        if (!fallbackThemeManager) {
-            fallbackThemeManager = std::make_unique<ThemeManager>(*qGuiApp);
-        }
-        themeManager = fallbackThemeManager.get();
+        static ThemeManager fallbackThemeManager(*qGuiApp);
+        themeManager = &fallbackThemeManager;
     }
     PlaylistModel* const playlists = playlistModel != nullptr
         ? playlistModel : &fallbackPlaylistModel;
