@@ -675,6 +675,16 @@ set_tests_properties(qml_main_window_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_test(NAME qml_color_picker_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_color_picker.qml)
+set_tests_properties(qml_color_picker_test PROPERTIES
+    TIMEOUT 20
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(qml_mini_player_test
     qt/qml_mini_player_test_main.cpp
 )

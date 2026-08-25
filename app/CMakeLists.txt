@@ -118,6 +118,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/SearchFilter.qml
         qml/AgPlayer/components/LibraryManagerPage.qml
         qml/AgPlayer/components/ColorField.qml
+        qml/AgPlayer/components/ColorScale.js
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedSwitch.qml
