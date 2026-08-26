@@ -68,6 +68,8 @@ void verifyGenerated(const ThemePalette& palette,
     QVERIFY(contrastRatio(palette.accentText, palette.accent) >= 4.5);
     QVERIFY(contrastRatio(palette.accentText, palette.accentHover) >= 4.5);
     QVERIFY(contrastRatio(palette.accentText, palette.accentPressed) >= 4.5);
+    QVERIFY(contrastRatio(palette.accent, palette.background) >= 4.5);
+    QVERIFY(contrastRatio(palette.accent, palette.surface) >= 4.5);
     QVERIFY(contrastRatio(palette.highlightText, palette.highlight) >= 4.5);
     QVERIFY(contrastRatio(palette.highlightText, palette.highlightHover) >= 4.5);
     QVERIFY(contrastRatio(palette.highlightText, palette.highlightPressed) >= 4.5);

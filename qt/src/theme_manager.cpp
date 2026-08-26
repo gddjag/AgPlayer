@@ -216,9 +216,13 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
                 seed, 0.25, 155, -1, {palette.surface}, 3.0);
             palette.disabled = tone(seed, 218, 0.18);
         }
-        palette.accent = seed;
-        palette.highlight = visibleTone(seed, palette.surface, 3.0);
-        palette.focus = visibleTone(seed, palette.surface, 3.0);
+        const QList<QColor> actionSurfaces = {
+            palette.background, palette.surface};
+        palette.accent = contrastTone(
+            seed, 0.90, seed.toHsl().lightness(), dark ? 1 : -1,
+            actionSurfaces, kButtonContrast);
+        palette.highlight = palette.accent;
+        palette.focus = palette.accent;
         palette.currentTrackSurface = softTone(palette.focus, 0.28);
     } else {
         if (dark) {

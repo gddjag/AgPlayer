@@ -48,12 +48,12 @@ TestCase {
             customColor: SettingsController.skinCustomColor
             onDefaultRequested: SettingsController.skinColorMode = 0
             onPresetRequested: function(preset) {
-                SettingsController.skinColorMode = 1
                 SettingsController.skinPreset = preset
+                SettingsController.skinColorMode = 1
             }
             onCustomRequested: function(color) {
-                SettingsController.skinColorMode = 2
                 SettingsController.skinCustomColor = color
+                SettingsController.skinColorMode = 2
             }
         }
 
@@ -104,6 +104,12 @@ TestCase {
         signalName: "colorEdited"
     }
 
+    SignalSpy {
+        id: paletteChangedSpy
+        target: ThemeManager
+        signalName: "paletteChanged"
+    }
+
     function initTestCase() {
         savedThemeMode = SettingsController.themeMode
     }
@@ -112,6 +118,7 @@ TestCase {
         picker.close()
         acceptedSpy.clear()
         integratedEditedSpy.clear()
+        paletteChangedSpy.clear()
         savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
         savedThemeChoices = {
             mode: SettingsController.skinColorMode,
@@ -133,6 +140,7 @@ TestCase {
         SettingsController.skinCustomColor = savedThemeChoices.customColor
         acceptedSpy.clear()
         integratedEditedSpy.clear()
+        paletteChangedSpy.clear()
         SettingsController.themeMode = savedThemeMode
         wait(0)
     }
@@ -630,24 +638,28 @@ TestCase {
 
     function test_theme_selectors_apply_presets_and_keyboard_activation() {
         SettingsController.skinColorMode = 0
+        SettingsController.skinPreset = "systemBlue"
+        wait(0)
+        paletteChangedSpy.clear()
         var defaultButton = findChild(skinSelector, "skinSelectorDefault")
-        var blue = findChild(skinSelector, "skinSelectorPreset-systemBlue")
-        verify(defaultButton && blue)
+        var purple = findChild(skinSelector, "skinSelectorPreset-purple")
+        verify(defaultButton && purple)
         verify(defaultButton.checked)
-        compare(blue.Accessible.role, Accessible.Button)
-        verify(blue.width >= 24)
-        verify(blue.height >= 24)
-        verify(blue.Accessible.name.indexOf("systemBlue") < 0)
-        verify(blue.Accessible.name.indexOf("系统蓝") >= 0)
-        verify(!blue.selectionCueVisible)
-        blue.forceActiveFocus()
-        tryVerify(function() { return blue.focusCueVisible })
+        compare(purple.Accessible.role, Accessible.Button)
+        verify(purple.width >= 24)
+        verify(purple.height >= 24)
+        verify(purple.Accessible.name.indexOf("purple") < 0)
+        verify(purple.Accessible.name.indexOf("紫色") >= 0)
+        verify(!purple.selectionCueVisible)
+        purple.forceActiveFocus()
+        tryVerify(function() { return purple.focusCueVisible })
         keyClick(Qt.Key_Space)
         tryCompare(SettingsController, "skinColorMode", 1)
-        tryCompare(SettingsController, "skinPreset", "systemBlue")
-        verify(blue.checked)
-        verify(blue.selectionCueVisible)
-        verify(blue.focusCueVisible)
+        tryCompare(SettingsController, "skinPreset", "purple")
+        compare(paletteChangedSpy.count, 1)
+        verify(purple.checked)
+        verify(purple.selectionCueVisible)
+        verify(purple.focusCueVisible)
     }
 
     function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {

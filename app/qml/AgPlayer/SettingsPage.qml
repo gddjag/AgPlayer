@@ -1522,12 +1522,12 @@ Item {
                         customColor: SettingsController.skinCustomColor
                         onDefaultRequested: SettingsController.skinColorMode = 0
                         onPresetRequested: function(preset) {
-                            SettingsController.skinColorMode = 1
                             SettingsController.skinPreset = preset
+                            SettingsController.skinColorMode = 1
                         }
                         onCustomRequested: function(color) {
-                            SettingsController.skinColorMode = 2
                             SettingsController.skinCustomColor = color
+                            SettingsController.skinColorMode = 2
                         }
                     }
                 }
