@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs as Dialogs
 import AgPlayer
 import "ColorScale.js" as ColorScale
 
@@ -104,14 +103,6 @@ Popup {
     onBaseColorChanged: synchronizeControls(baseColor)
     Component.onCompleted: synchronizeControls(baseColor)
 
-    Dialogs.ColorDialog {
-        id: systemColorDialog
-        objectName: "colorPickerSystemDialog"
-        title: qsTr("选择颜色")
-        selectedColor: root.baseColor
-        onAccepted: root.setBaseHex(selectedColor)
-    }
-
     background: Item {
         property color color: Theme.elevated
 
@@ -141,40 +132,6 @@ Popup {
         RowLayout {
             Layout.fillWidth: true
             spacing: 9
-
-            AbstractButton {
-                id: systemSwatch
-                objectName: "colorPickerSystemSwatch"
-                Layout.preferredWidth: 25
-                Layout.preferredHeight: 25
-                focusPolicy: Qt.StrongFocus
-                hoverEnabled: true
-                Accessible.role: Accessible.Button
-                Accessible.name: qsTr("打开系统颜色选择器")
-                onClicked: {
-                    systemColorDialog.selectedColor = root.baseColor
-                    systemColorDialog.open()
-                }
-                Keys.onSpacePressed: function(event) {
-                    systemSwatch.clicked()
-                    event.accepted = true
-                }
-                Keys.onReturnPressed: function(event) {
-                    systemSwatch.clicked()
-                    event.accepted = true
-                }
-                Keys.onEnterPressed: function(event) {
-                    systemSwatch.clicked()
-                    event.accepted = true
-                }
-
-                background: Rectangle {
-                    radius: width / 2
-                    color: root.baseColor
-                    border.width: systemSwatch.visualFocus ? 2 : 1
-                    border.color: systemSwatch.visualFocus ? Theme.focus : Theme.border
-                }
-            }
 
             Rectangle {
                 Layout.fillWidth: true

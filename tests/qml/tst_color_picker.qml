@@ -521,46 +521,10 @@ TestCase {
                 "#63316B")
     }
 
-    function test_system_swatch_is_accessible_and_opens_with_mouse_and_keyboard() {
+    function test_picker_has_no_system_dialog_or_second_picker_entry() {
         openReferenceColor()
-        var swatch = findChild(picker, "colorPickerSystemSwatch")
-        var dialog = findChild(picker, "colorPickerSystemDialog")
-        verify(swatch && dialog)
-        compare(swatch.focusPolicy, Qt.StrongFocus)
-        compare(swatch.Accessible.role, Accessible.Button)
-        verify(swatch.Accessible.name.length > 0)
-
-        mouseClick(swatch)
-        tryCompare(dialog, "visible", true)
-        dialog.close()
-
-        swatch.forceActiveFocus()
-        keyClick(Qt.Key_Space)
-        tryCompare(dialog, "visible", true)
-        dialog.close()
-        swatch.forceActiveFocus()
-        keyClick(Qt.Key_Return)
-        tryCompare(dialog, "visible", true)
-        dialog.close()
-    }
-
-    function test_system_dialog_accept_updates_working_color_but_cancel_does_not_commit() {
-        openReferenceColor()
-        var swatch = findChild(picker, "colorPickerSystemSwatch")
-        var dialog = findChild(picker, "colorPickerSystemDialog")
-        mouseClick(swatch)
-        tryCompare(dialog, "visible", true)
-        dialog.selectedColor = "#123456"
-        dialog.accepted()
-        tryCompare(picker, "baseColor", "#123456")
-        compare(acceptedSpy.count, 0)
-
-        mouseClick(swatch)
-        tryCompare(dialog, "visible", true)
-        dialog.selectedColor = "#abcdef"
-        dialog.rejected()
-        compare(normalizedColor(picker.baseColor), "#123456")
-        compare(acceptedSpy.count, 0)
+        compare(findChild(picker, "colorPickerSystemSwatch"), null)
+        compare(findChild(picker, "colorPickerSystemDialog"), null)
     }
 
     function test_theme_switch_updates_chrome_not_candidates() {

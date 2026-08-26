@@ -2763,13 +2763,13 @@ TestCase {
         tryVerify(function() { return menu.visible }, 500)
         var colorAction = findChild(menu, "tagMenuColor")
         verify(colorAction && colorAction.enabled)
-        var colorDialog = findChild(panel, "tagColorDialog")
-        verify(colorDialog)
-        ignoreWarning("qrc:/qt-project.org/imports/QtQuick/Dialogs/quickimpl/qml/ColorDialog.qml:12:1: QML ColorDialog: Binding loop detected for property \"implicitWidth\"")
+        var colorPicker = findChild(panel, "tagColorPicker")
+        verify(colorPicker)
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
-        colorDialog.selectedColor = "#123456"
-        colorDialog.reject()
+        tryCompare(colorPicker, "visible", true)
+        colorPicker.setBaseHex("#123456")
+        colorPicker.close()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), beforeColor)
         compare(colorRequested.count, 0,
@@ -2780,8 +2780,9 @@ TestCase {
         tryVerify(function() { return menu.visible }, 500)
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
-        colorDialog.selectedColor = "#123456"
-        colorDialog.accept()
+        tryCompare(colorPicker, "visible", true)
+        colorPicker.colorAccepted("#123456")
+        colorPicker.close()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), "#123456")
         compare(colorRequested.count, 1)
