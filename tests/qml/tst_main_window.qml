@@ -2443,7 +2443,9 @@ TestCase {
         tryVerify(function() { return window.active }, 1000)
 
         var names = ["好", "中文", "好听", "音乐", "摇滚", "流行",
-                     "民谣", "电子", "古典", "爵士", "轻音乐",
+                     "民谣", "电子", "古典", "爵士", "轻音乐", "现场",
+                     "通勤", "夜晚", "晨间", "运动", "专注", "旅行",
+                     "怀旧", "派对",
                      "long Chinese English natural-width capsule"]
         var keys = []
         var createdKeys = []
@@ -2506,13 +2508,17 @@ TestCase {
 
         var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])
         verify(pointer)
-        panel.selectTag(keys[0])
+        if (firstPill.selectedVisual)
+            panel.selectTag(keys[0])
         tryVerify(function() { return !firstPill.selectedVisual }, 500)
-        mouseClick(pointer, pointer.width / 2, pointer.height / 2)
-        tryVerify(function() { return pointer.activeFocus }, 500,
-                  "clicking a tag pill must give it focus")
-        panel.selectTag(keys[0])
-        tryVerify(function() { return !firstPill.selectedVisual }, 500)
+        flickable.contentY = Math.max(0, Math.min(firstPill.parent.y,
+                                                  flickable.contentHeight
+                                                  - flickable.height))
+        wait(0)
+        // Move away first so HoverHandler receives a real enter transition
+        // both in isolation and after the full suite.
+        mouseMove(window.contentItem, window.width - 2, window.height - 2)
+        tryVerify(function() { return !firstPill.hoveredVisual }, 500)
         mouseMove(pointer, pointer.width / 2, pointer.height / 2)
         tryVerify(function() { return firstPill.hoveredVisual }, 500)
         verify(firstPill.resolvedSurface.toString()

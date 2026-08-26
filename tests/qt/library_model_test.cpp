@@ -520,15 +520,22 @@ void LibraryModelTest::removesOneTagOnlyFromRequestedTracks()
     second.tags = {QStringLiteral("focus"), QStringLiteral("Road")};
     LibraryModel model;
     model.replaceAll({first, second});
+    QSignalSpy changes(&model, &LibraryModel::tagsChanged);
+    QSignalSpy flushes(&model, &LibraryModel::flushRequested);
+    QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
 
-    QCOMPARE(model.removeTagFromTracks({QStringLiteral("one")},
-                                       QStringLiteral(" FOCUS ")), 1);
+    QCOMPARE(model.removeTagFromTracks({QStringLiteral("one"),
+                                        QStringLiteral("two")},
+                                       QStringLiteral(" FOCUS ")), 2);
+    QCOMPARE(changes.count(), 2);
+    QCOMPARE(flushes.count(), 1);
+    QCOMPARE(resets.count(), 0);
     QCOMPARE(model.trackForId(QStringLiteral("one"))
                  .value(QStringLiteral("tags")).toStringList(),
              QStringList{QStringLiteral("Night")});
     QCOMPARE(model.trackForId(QStringLiteral("two"))
                  .value(QStringLiteral("tags")).toStringList(),
-             QStringList({QStringLiteral("focus"), QStringLiteral("Road")}));
+             QStringList{QStringLiteral("Road")});
 }
 
 void LibraryModelTest::removesTrackWithoutDeletingTheFile()

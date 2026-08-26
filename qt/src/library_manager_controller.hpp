@@ -43,6 +43,8 @@ class LibraryManagerController : public QAbstractListModel {
                    WRITE setImportController NOTIFY importControllerChanged)
     Q_PROPERTY(QString storagePath READ storagePath WRITE setStoragePath
                    NOTIFY storagePathChanged)
+    Q_PROPERTY(QString lastPersistenceError READ lastPersistenceError
+                   NOTIFY persistenceStateChanged)
     Q_PROPERTY(QString libraryDataPath READ libraryDataPath WRITE setLibraryDataPath
                    NOTIFY libraryDataPathChanged)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupStateChanged)
@@ -94,6 +96,7 @@ public:
     void setImportController(ImportController* controller);
     QString storagePath() const;
     void setStoragePath(const QString& path);
+    QString lastPersistenceError() const;
     QString libraryDataPath() const;
     void setLibraryDataPath(const QString& path);
     QString lastBackupPath() const;
@@ -145,6 +148,7 @@ signals:
     void scanFinished();
     void importControllerChanged();
     void storagePathChanged();
+    void persistenceStateChanged();
     void libraryDataPathChanged();
     void backupStateChanged();
     void filterChanged();
@@ -161,7 +165,7 @@ private:
     void rebuildDirectoryWatches();
     void applyDirectoryWatches(const QStringList& directories);
     void loadMonitoredFolders();
-    void saveMonitoredFolders() const;
+    bool saveMonitoredFolders();
     QStringList discoverAudioFiles() const;
     void rebuildVisibleRows();
     bool matchesFilter(const IssueRow& issue) const;
@@ -184,6 +188,7 @@ private:
     QHash<QString, QString> excludedPaths_;
     QStringList resourceDirectories_;
     QString storagePath_;
+    QString lastPersistenceError_;
     QString libraryDataPath_;
     QString lastBackupPath_;
     QString lastBackupError_;

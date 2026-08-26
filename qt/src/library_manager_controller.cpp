@@ -403,10 +403,14 @@ bool LibraryManagerController::removeTrackFromLibrary(const QString& trackId)
     if (track == nullptr) return false;
     const QString path = canonicalLibraryPath(track->path);
     if (path.isEmpty()) return false;
-    excludedPaths_.insert(resourceLookupKey(path), path);
-    saveMonitoredFolders();
+    const QString key = resourceLookupKey(path);
+    excludedPaths_.insert(key, path);
+    if (!saveMonitoredFolders()) {
+        excludedPaths_.remove(key);
+        return false;
+    }
     if (library_->removeTrack(trackId)) return true;
-    excludedPaths_.remove(resourceLookupKey(path));
+    excludedPaths_.remove(key);
     saveMonitoredFolders();
     return false;
 }
@@ -723,14 +727,21 @@ void LibraryManagerController::setImportController(ImportController* controller)
         connect(importer_, &ImportController::importedTrackIdsChanged, this,
                 [this] {
             if (library_ == nullptr || importer_ == nullptr) return;
-            bool changed = false;
+            QHash<QString, QString> removedExclusions;
             for (const QString& trackId : importer_->importedTrackIds()) {
                 const TrackRecord* const track = library_->recordForId(trackId);
                 if (track == nullptr) continue;
-                if (excludedPaths_.remove(resourceLookupKey(track->path)))
-                    changed = true;
+                const QString key = resourceLookupKey(track->path);
+                const auto exclusion = excludedPaths_.constFind(key);
+                if (exclusion == excludedPaths_.cend()) continue;
+                removedExclusions.insert(key, exclusion.value());
+                excludedPaths_.remove(key);
             }
-            if (changed) saveMonitoredFolders();
+            if (!removedExclusions.isEmpty() && !saveMonitoredFolders()) {
+                for (auto it = removedExclusions.cbegin();
+                     it != removedExclusions.cend(); ++it)
+                    excludedPaths_.insert(it.key(), it.value());
+            }
         });
     }
     emit importControllerChanged();
@@ -739,6 +750,11 @@ void LibraryManagerController::setImportController(ImportController* controller)
 QString LibraryManagerController::storagePath() const
 {
     return storagePath_;
+}
+
+QString LibraryManagerController::lastPersistenceError() const
+{
+    return lastPersistenceError_;
 }
 
 QString LibraryManagerController::keyword() const { return keyword_; }
@@ -973,9 +989,17 @@ void LibraryManagerController::loadMonitoredFolders()
     emit resourceTopologyChanged();
 }
 
-void LibraryManagerController::saveMonitoredFolders() const
+bool LibraryManagerController::saveMonitoredFolders()
 {
-    if (storagePath_.isEmpty()) return;
+    const auto setError = [this](const QString& error) {
+        if (lastPersistenceError_ == error) return;
+        lastPersistenceError_ = error;
+        emit persistenceStateChanged();
+    };
+    if (storagePath_.isEmpty()) {
+        setError({});
+        return true;
+    }
     QStringList excluded = excludedPaths_.values();
     std::sort(excluded.begin(), excluded.end(), [](const QString& left,
                                                    const QString& right) {
@@ -987,8 +1011,21 @@ void LibraryManagerController::saveMonitoredFolders() const
         {QStringLiteral("excludedPaths"), QJsonArray::fromStringList(excluded)},
     }).toJson(QJsonDocument::Compact);
     QSaveFile file(storagePath_);
-    if (file.open(QIODevice::WriteOnly) && file.write(data) == data.size())
-        file.commit();
+    if (!file.open(QIODevice::WriteOnly)) {
+        setError(tr("无法保存曲库排除记录：%1").arg(file.errorString()));
+        return false;
+    }
+    if (file.write(data) != data.size()) {
+        file.cancelWriting();
+        setError(tr("无法写入曲库排除记录：%1").arg(file.errorString()));
+        return false;
+    }
+    if (!file.commit()) {
+        setError(tr("无法提交曲库排除记录：%1").arg(file.errorString()));
+        return false;
+    }
+    setError({});
+    return true;
 }
 
 QStringList LibraryManagerController::discoverAudioFiles() const
