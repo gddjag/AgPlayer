@@ -183,8 +183,8 @@ private:
     bool listWindowDetached_ = false;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
-    int listWindowWidth_ = 1228;
-    int listWindowHeight_ = 570;
+    int listWindowWidth_ = 960;
+    int listWindowHeight_ = 568;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;
     bool updatingWindowZOrder_ = false;

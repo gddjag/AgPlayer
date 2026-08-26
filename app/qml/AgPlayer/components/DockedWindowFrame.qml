@@ -22,7 +22,7 @@ Rectangle {
     readonly property bool leftBorderVisible: contactEdge !== "left"
     readonly property bool rightBorderVisible: contactEdge !== "right"
 
-    color: showFill ? Theme.background : "transparent"
+    color: !showFill ? "transparent" : Theme.background
     border.width: showBorders ? 1 : 0
     border.color: Theme.border
     clip: showFill

@@ -1,22 +1,44 @@
 set(CMAKE_AUTOMOC ON)
 
+set(AGPLAYER_PLATFORM_SOURCES)
+if(WIN32)
+    configure_file(agplayer.manifest.in
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.manifest" @ONLY)
+    configure_file(agplayer.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.rc" @ONLY)
+    list(APPEND AGPLAYER_PLATFORM_SOURCES
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.rc"
+        "${CMAKE_CURRENT_BINARY_DIR}/agplayer.manifest")
+endif()
+
 set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/add-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-back-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-go-forward-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-down-s-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/arrow-up-s-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/arrow-right-s-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/bar-chart-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/brush-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-circle-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/check-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/clipboard-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/cursor-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/error-warning-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/file-copy-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/file-music-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/filter-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-add-line.svg
@@ -30,12 +52,14 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/merge-cells-horizontal.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mic-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg
@@ -45,6 +69,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/save-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/search-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
@@ -56,12 +81,20 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/sound-module-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/time-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/waveform-switch.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-playlist.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-add-resource-folder.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-resource-folder.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-resource-root-red.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-resource-subfolder.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-tag.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/user-library.svg
 )
 
 set(BRAND_FILES
@@ -107,6 +140,8 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/EqualizerBandSlider.qml
         qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml
+        qml/AgPlayer/components/TrackWaveformThumbnail.qml
+        qml/AgPlayer/components/TagManagementPanel.qml
         qml/AgPlayer/components/EmptyLibrary.qml
         qml/AgPlayer/components/EmptyStartup.qml
         qml/AgPlayer/components/ImportStatusPanel.qml
@@ -120,9 +155,13 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/AgColorPicker.qml
         qml/AgPlayer/components/ColorScale.js
+        qml/AgPlayer/components/ThemeColorSelector.qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedSwitch.qml
+        qml/AgPlayer/components/ThemedCheckBox.qml
+        qml/AgPlayer/components/ThemedRangeSlider.qml
+        qml/AgPlayer/components/ThemedComboBox.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml
         qml/AgPlayer/components/tools/FormatTaskTable.qml
         qml/AgPlayer/components/tools/FormatSettingsPanel.qml
@@ -135,10 +174,6 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
         qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
         qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml
-        qml/AgPlayer/components/audioeditor/OverviewNavigator.qml
-        qml/AgPlayer/components/audioeditor/RecordingInspectorSection.qml
-        qml/AgPlayer/components/audioeditor/TimePitchInspectorSection.qml
-        qml/AgPlayer/components/audioeditor/EditorTransportBar.qml
         qml/AgPlayer/components/audioeditor/EditorStatusBar.qml
     RESOURCES
         ${BRAND_FILES}
@@ -156,16 +191,16 @@ target_link_libraries(agplayer_app_qml
 
 qt_add_executable(AgPlayer
     main.cpp
-    agplayer.rc
-    agplayer.manifest
+    ${AGPLAYER_PLATFORM_SOURCES}
 )
+target_include_directories(AgPlayer PRIVATE "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(AgPlayer PRIVATE
     Qt6::Widgets
     agplayer_app_qml
     agplayer_app_qmlplugin
 )
 if(WIN32)
-    target_link_libraries(AgPlayer PRIVATE shell32)
+    target_link_libraries(AgPlayer PRIVATE ole32 shell32 propsys)
 endif()
 set_target_properties(AgPlayer PROPERTIES WIN32_EXECUTABLE TRUE)
 agplayer_enable_warnings(AgPlayer)

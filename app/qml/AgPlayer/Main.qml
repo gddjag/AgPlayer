@@ -8,15 +8,15 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 1104
-    height: 342
+    width: 960
+    height: 298
     minimumWidth: 612
     minimumHeight: 228
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
     }
-    flags: Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     background: null
     title: "AgPlayer"
@@ -27,8 +27,8 @@ ApplicationWindow {
     palette.text: Theme.primaryText
     palette.button: Theme.elevated
     palette.buttonText: Theme.primaryText
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.accentText
+    palette.highlight: Theme.highlight
+    palette.highlightedText: Theme.highlightText
     palette.mid: Theme.border
 
     // Shared-state surface so the main window and the mini player can bind to
@@ -47,17 +47,6 @@ ApplicationWindow {
         maximized: mainWindow.visibility === Window.Maximized
         showBorders: false
         z: -10
-    }
-
-    Component.onCompleted: {
-        Theme.mode = SettingsController.themeMode
-    }
-
-    Connections {
-        target: SettingsController
-        function onThemeModeChanged() {
-            Theme.mode = SettingsController.themeMode
-        }
     }
 
     Connections {
@@ -140,7 +129,7 @@ ApplicationWindow {
         id: importDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: ["Audio files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+            nameFilters: [LibraryManagerController.audioFileNameFilter]
             onAccepted: mainWindow.importFiles(selectedFiles)
         }
     }
@@ -187,7 +176,10 @@ ApplicationWindow {
             id: playerControls
             objectName: "playerControls"
             Layout.fillWidth: true
-            Layout.preferredHeight: LibraryModel.count === 0 ? 128 : 64
+            // Empty startup reserves enough room for the responsive action
+            // area.  The controls stay anchored at the bottom instead of
+            // cutting through the format hint on compact windows.
+            Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
             emptyMode: LibraryModel.count === 0
             onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
@@ -244,7 +236,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Space"
         context: Qt.WindowShortcut
-        enabled: !mainWindow.editingText()
+        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
         onActivated: PlaybackController.togglePlayback()
     }
 

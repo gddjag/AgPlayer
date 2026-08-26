@@ -17,6 +17,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <thread>
 
 #ifdef _WIN32
@@ -28,6 +29,42 @@
 
 namespace agplayer::editor {
 namespace {
+
+void store_max(std::atomic<float>& target, const float value) noexcept
+{
+    float current = target.load(std::memory_order_relaxed);
+    while (current < value
+           && !target.compare_exchange_weak(
+               current, value, std::memory_order_release,
+               std::memory_order_relaxed)) {
+    }
+}
+
+const char* backend_error_category(const ma_result result) noexcept
+{
+    switch (result) {
+    case MA_ACCESS_DENIED:
+        return "permission";
+    case MA_FORMAT_NOT_SUPPORTED:
+    case MA_DEVICE_TYPE_NOT_SUPPORTED:
+    case MA_SHARE_MODE_NOT_SUPPORTED:
+    case MA_INVALID_DEVICE_CONFIG:
+        return "format";
+    case MA_NO_DEVICE:
+        return "no-device";
+    case MA_NO_BACKEND:
+    case MA_BACKEND_NOT_ENABLED:
+    case MA_FAILED_TO_INIT_BACKEND:
+    case MA_FAILED_TO_OPEN_BACKEND_DEVICE:
+    case MA_DEVICE_NOT_INITIALIZED:
+        return "initialization";
+    case MA_FAILED_TO_START_BACKEND_DEVICE:
+    case MA_DEVICE_NOT_STARTED:
+        return "start";
+    default:
+        return "backend";
+    }
+}
 
 std::string device_token(const ma_device_id& id)
 {
@@ -131,10 +168,84 @@ bool read_journal(const std::filesystem::path& journal,
 #endif
 }
 
+std::uint64_t pack_recording_samples(const float first,
+                                     const float second) noexcept
+{
+    std::uint32_t first_bits = 0;
+    std::uint32_t second_bits = 0;
+    static_assert(sizeof(first_bits) == sizeof(first));
+    std::memcpy(&first_bits, &first, sizeof(first_bits));
+    std::memcpy(&second_bits, &second, sizeof(second_bits));
+    return static_cast<std::uint64_t>(first_bits)
+        | (static_cast<std::uint64_t>(second_bits) << 32U);
+}
+
+std::array<float, 2> unpack_recording_samples(
+    const std::uint64_t packed) noexcept
+{
+    const std::uint32_t first_bits = static_cast<std::uint32_t>(packed);
+    const std::uint32_t second_bits = static_cast<std::uint32_t>(packed >> 32U);
+    std::array<float, 2> result{};
+    std::memcpy(&result[0], &first_bits, sizeof(first_bits));
+    std::memcpy(&result[1], &second_bits, sizeof(second_bits));
+    return result;
+}
+
 } // namespace
+
+std::string recordingBackendErrorMessage(
+    const std::string_view operation, const int resultCode)
+{
+    const auto result = static_cast<ma_result>(resultCode);
+    std::string message(operation);
+    message += " [category=";
+    message += backend_error_category(result);
+    message += "; miniaudio=";
+    message += std::to_string(resultCode);
+    message += ": ";
+    message += ma_result_description(result);
+    message += ']';
+    return message;
+}
 
 class RecordingSession::Impl final {
 public:
+    static constexpr std::size_t live_envelope_capacity = 2'048;
+    static constexpr std::size_t live_pcm_capacity = 65'536;
+
+    struct LiveEnvelopeSlot final {
+        std::atomic<std::uint64_t> sequence{0};
+        std::atomic<SampleFrame> start_frame{0};
+        std::atomic<SampleFrame> end_frame{0};
+        std::array<std::atomic<float>, 2> minima{};
+        std::array<std::atomic<float>, 2> maxima{};
+        std::atomic<float> visual_mix_minimum{0.0F};
+        std::atomic<float> visual_mix_maximum{0.0F};
+    };
+
+    struct LivePcmSlot final {
+        std::atomic<std::uint64_t> sequence{0};
+        std::atomic<std::uint64_t> packed_samples{0};
+    };
+
+    void clear_last_error()
+    {
+        const std::lock_guard<std::mutex> lock(last_error_mutex);
+        last_error.clear();
+    }
+
+    void set_last_error(std::string message)
+    {
+        const std::lock_guard<std::mutex> lock(last_error_mutex);
+        last_error = std::move(message);
+    }
+
+    [[nodiscard]] std::string last_error_copy() const
+    {
+        const std::lock_guard<std::mutex> lock(last_error_mutex);
+        return last_error;
+    }
+
     ~Impl()
     {
         if (state.load() != RecordingState::Idle) {
@@ -144,15 +255,33 @@ public:
 
     bool start_common(const RecordingConfig& value)
     {
-        if (state.load() != RecordingState::Idle || value.output_path.empty()
-            || value.sample_rate < 8'000 || value.sample_rate > 192'000
-            || value.channels == 0 || value.channels > 2) {
+        clear_last_error();
+        RecordingState expected = RecordingState::Idle;
+        if (!state.compare_exchange_strong(
+                expected, RecordingState::Starting,
+                std::memory_order_acq_rel, std::memory_order_acquire)) {
+            set_last_error("recording session is already active");
             return false;
+        }
+        callback_accepting.store(false, std::memory_order_release);
+        const auto fail_start = [this](std::string message) {
+            set_last_error(std::move(message));
+            state.store(RecordingState::Idle, std::memory_order_release);
+            return false;
+        };
+        if (value.output_path.empty()) {
+            return fail_start("recording output path is empty");
+        }
+        if (value.sample_rate < 8'000 || value.sample_rate > 192'000
+            || value.channels == 0 || value.channels > 2) {
+            return fail_start("unsupported recording format");
         }
         config = value;
         std::error_code error;
         std::filesystem::create_directories(config.output_path.parent_path(), error);
-        if (error) return false;
+        if (error) {
+            return fail_start("cannot create recording output directory");
+        }
         (void)RecordingSession::recoverIncomplete(
             config.output_path.parent_path());
         staged_path = config.output_path;
@@ -160,7 +289,9 @@ public:
         journal_path = config.output_path;
         journal_path += ".agplayer-recording.journal";
         stream.open(staged_path, std::ios::binary | std::ios::trunc);
-        if (!stream) return false;
+        if (!stream) {
+            return fail_start("cannot create recording staging file");
+        }
         write_header(0);
         {
             std::ofstream journal(journal_path, std::ios::trunc);
@@ -172,18 +303,48 @@ public:
             ring = std::make_unique<agplayer::PcmRingBuffer>(
                 config.sample_rate * 2U, config.channels);
         } catch (...) {
+            set_last_error("cannot allocate recording buffer");
             cleanup_files();
+            state.store(RecordingState::Idle, std::memory_order_release);
             return false;
         }
         peak_value.store(0.0F);
-        peak_write_index.store(0, std::memory_order_release);
-        for (auto& peak_sample : recent_peaks) peak_sample.store(0.0F);
+        interval_peak.store(0.0F);
+        envelope_write_index.store(0, std::memory_order_release);
+        envelope_read_index.store(0, std::memory_order_release);
+        for (auto& envelope : live_envelopes) {
+            envelope.sequence.store(0, std::memory_order_relaxed);
+            envelope.start_frame.store(0, std::memory_order_relaxed);
+            envelope.end_frame.store(0, std::memory_order_relaxed);
+            for (auto& peakSample : envelope.minima) {
+                peakSample.store(0.0F, std::memory_order_relaxed);
+            }
+            for (auto& peakSample : envelope.maxima) {
+                peakSample.store(0.0F, std::memory_order_relaxed);
+            }
+            envelope.visual_mix_minimum.store(0.0F,
+                                              std::memory_order_relaxed);
+            envelope.visual_mix_maximum.store(0.0F,
+                                              std::memory_order_relaxed);
+        }
+        for (auto& sample : live_pcm) {
+            sample.sequence.store(0, std::memory_order_relaxed);
+            sample.packed_samples.store(0, std::memory_order_relaxed);
+        }
         captured.store(0);
         written.store(0);
         dropped.store(0);
         writer_exit.store(false);
-        state.store(RecordingState::Recording);
-        writer = std::thread([this] { writer_loop(); });
+        try {
+            writer = std::thread([this] { writer_loop(); });
+        } catch (...) {
+            set_last_error("cannot start recording writer");
+            ring.reset();
+            cleanup_files();
+            state.store(RecordingState::Idle, std::memory_order_release);
+            return false;
+        }
+        callback_accepting.store(true, std::memory_order_release);
         return true;
     }
 
@@ -191,7 +352,11 @@ public:
     {
         if (!start_common(value)) return false;
         ma_backend backend = ma_backend_wasapi;
-        if (ma_context_init(&backend, 1, nullptr, &context) != MA_SUCCESS) {
+        const ma_result context_result = ma_context_init(
+            &backend, 1, nullptr, &context);
+        if (context_result != MA_SUCCESS) {
+            set_last_error(recordingBackendErrorMessage(
+                "WASAPI context initialization failed", context_result));
             abort_start();
             return false;
         }
@@ -201,8 +366,12 @@ public:
         if (!value.device_id.empty()) {
             ma_device_info* capture = nullptr;
             ma_uint32 capture_count = 0;
-            if (ma_context_get_devices(&context, nullptr, nullptr,
-                                       &capture, &capture_count) != MA_SUCCESS) {
+            const ma_result enumeration_result = ma_context_get_devices(
+                &context, nullptr, nullptr, &capture, &capture_count);
+            if (enumeration_result != MA_SUCCESS) {
+                set_last_error(recordingBackendErrorMessage(
+                    "WASAPI capture device enumeration failed",
+                    enumeration_result));
                 abort_start();
                 return false;
             }
@@ -214,6 +383,7 @@ public:
                 }
             }
             if (chosen_ptr == nullptr) {
+                set_last_error("WASAPI capture device was not found");
                 abort_start();
                 return false;
             }
@@ -233,39 +403,107 @@ public:
         device_config.dataCallback = data_callback;
         device_config.notificationCallback = notification_callback;
         device_config.pUserData = this;
-        if (ma_device_init(&context, &device_config, &device) != MA_SUCCESS) {
+        const ma_result initialization_result = ma_device_init(
+            &context, &device_config, &device);
+        if (initialization_result != MA_SUCCESS) {
+            set_last_error(recordingBackendErrorMessage(
+                "WASAPI capture initialization failed", initialization_result));
             abort_start();
             return false;
         }
         device_ready = true;
-        if (ma_device_start(&device) != MA_SUCCESS) {
+        const ma_result start_result = ma_device_start(&device);
+        if (start_result != MA_SUCCESS) {
+            set_last_error(recordingBackendErrorMessage(
+                "WASAPI capture start failed", start_result));
             abort_start();
             return false;
         }
         device_started = true;
+        state.store(RecordingState::Recording, std::memory_order_release);
         return true;
     }
 
     std::size_t push(const float* input, const std::size_t frames) noexcept
     {
+        const RecordingState current = state.load(std::memory_order_acquire);
         if (input == nullptr || frames == 0
-            || state.load(std::memory_order_acquire) != RecordingState::Recording
+            || !callback_accepting.load(std::memory_order_acquire)
+            || (current != RecordingState::Starting
+                && current != RecordingState::Recording)
             || ring == nullptr) {
             return 0;
         }
-        float local_peak = 0.0F;
-        const std::size_t samples = frames * config.channels;
-        for (std::size_t index = 0; index < samples; ++index) {
-            local_peak = (std::max)(local_peak, std::abs(input[index]));
-        }
-        peak_value.store((std::max)(peak_value.load(std::memory_order_relaxed),
-                                    local_peak), std::memory_order_release);
-        const std::uint64_t peak_index = peak_write_index.fetch_add(
-            1, std::memory_order_acq_rel);
-        recent_peaks[peak_index % recent_peaks.size()].store(
-            local_peak, std::memory_order_release);
         const std::size_t accepted = ring->write(input, frames);
-        captured.fetch_add(static_cast<SampleFrame>(accepted));
+        if (accepted > 0) {
+            std::array<float, 2> minima{1.0F, 1.0F};
+            std::array<float, 2> maxima{-1.0F, -1.0F};
+            float visualMixMinimum = 1.0F;
+            float visualMixMaximum = -1.0F;
+            float local_peak = 0.0F;
+            for (std::size_t frame = 0; frame < accepted; ++frame) {
+                double mixedSample = 0.0;
+                for (std::size_t channel = 0; channel < config.channels;
+                     ++channel) {
+                    const float sample = std::clamp(
+                        input[frame * config.channels + channel], -1.0F, 1.0F);
+                    minima[channel] = (std::min)(minima[channel], sample);
+                    maxima[channel] = (std::max)(maxima[channel], sample);
+                    mixedSample += sample;
+                    local_peak = (std::max)(local_peak, std::abs(sample));
+                }
+                const float visualSample = static_cast<float>(
+                    mixedSample / config.channels);
+                visualMixMinimum = (std::min)(visualMixMinimum, visualSample);
+                visualMixMaximum = (std::max)(visualMixMaximum, visualSample);
+            }
+            const SampleFrame start = captured.load(std::memory_order_relaxed);
+            for (std::size_t frame = 0; frame < accepted; ++frame) {
+                const float first = std::clamp(
+                    input[frame * config.channels], -1.0F, 1.0F);
+                const float second = config.channels > 1
+                    ? std::clamp(input[frame * config.channels + 1U],
+                                 -1.0F, 1.0F)
+                    : 0.0F;
+                const auto absoluteFrame = start
+                    + static_cast<SampleFrame>(frame);
+                auto& pcmSlot = live_pcm[static_cast<std::size_t>(
+                    absoluteFrame) % live_pcm.size()];
+                pcmSlot.sequence.store(0, std::memory_order_release);
+                pcmSlot.packed_samples.store(
+                    pack_recording_samples(first, second),
+                    std::memory_order_relaxed);
+                pcmSlot.sequence.store(
+                    static_cast<std::uint64_t>(absoluteFrame) + 1U,
+                    std::memory_order_release);
+            }
+            captured.store(start + static_cast<SampleFrame>(accepted),
+                           std::memory_order_release);
+            const std::uint64_t envelope_index = envelope_write_index.load(
+                std::memory_order_relaxed);
+            auto& slot = live_envelopes[
+                envelope_index % live_envelopes.size()];
+            slot.sequence.store(0, std::memory_order_release);
+            slot.start_frame.store(start, std::memory_order_relaxed);
+            slot.end_frame.store(start + static_cast<SampleFrame>(accepted),
+                                 std::memory_order_relaxed);
+            for (std::size_t channel = 0; channel < config.channels; ++channel) {
+                slot.minima[channel].store(minima[channel],
+                                           std::memory_order_relaxed);
+                slot.maxima[channel].store(maxima[channel],
+                                           std::memory_order_relaxed);
+            }
+            slot.visual_mix_minimum.store(visualMixMinimum,
+                                          std::memory_order_relaxed);
+            slot.visual_mix_maximum.store(visualMixMaximum,
+                                          std::memory_order_relaxed);
+            slot.sequence.store(envelope_index + 1,
+                                std::memory_order_release);
+            envelope_write_index.store(envelope_index + 1,
+                                       std::memory_order_release);
+            store_max(peak_value, local_peak);
+            store_max(interval_peak, local_peak);
+        }
         dropped.fetch_add(frames - accepted);
         return accepted;
     }
@@ -276,6 +514,10 @@ public:
         if (current == RecordingState::Idle) {
             return {false, "recording is not active", {}, 0, 0.0F};
         }
+        if (current == RecordingState::Starting) {
+            return {false, "recording is still starting", {}, 0, 0.0F};
+        }
+        callback_accepting.store(false, std::memory_order_release);
         state.store(RecordingState::Finalizing);
         if (device_started) ma_device_stop(&device);
         device_started = false;
@@ -314,7 +556,12 @@ public:
 
     bool cancel()
     {
-        if (state.load() == RecordingState::Idle) return false;
+        const RecordingState current = state.load(std::memory_order_acquire);
+        if (current == RecordingState::Idle
+            || current == RecordingState::Starting) {
+            return false;
+        }
+        callback_accepting.store(false, std::memory_order_release);
         state.store(RecordingState::Finalizing);
         if (device_started) ma_device_stop(&device);
         device_started = false;
@@ -403,6 +650,7 @@ public:
 
     void abort_start()
     {
+        callback_accepting.store(false, std::memory_order_release);
         if (device_started) ma_device_stop(&device);
         device_started = false;
         if (device_ready) ma_device_uninit(&device);
@@ -424,19 +672,25 @@ public:
     std::unique_ptr<agplayer::PcmRingBuffer> ring;
     std::thread writer;
     std::atomic<RecordingState> state{RecordingState::Idle};
+    std::atomic<bool> callback_accepting{false};
     std::atomic<bool> writer_exit{false};
     std::atomic<float> peak_value{0.0F};
+    std::atomic<float> interval_peak{0.0F};
     std::atomic<SampleFrame> captured{0};
     std::atomic<SampleFrame> written{0};
     std::atomic<std::uint64_t> dropped{0};
     std::atomic<bool> rerouted{false};
-    std::array<std::atomic<float>, 2'048> recent_peaks{};
-    std::atomic<std::uint64_t> peak_write_index{0};
+    std::array<LiveEnvelopeSlot, live_envelope_capacity> live_envelopes{};
+    std::array<LivePcmSlot, live_pcm_capacity> live_pcm{};
+    std::atomic<std::uint64_t> envelope_write_index{0};
+    std::atomic<std::uint64_t> envelope_read_index{0};
     ma_context context{};
     ma_device device{};
     bool context_ready{};
     bool device_ready{};
     bool device_started{};
+    mutable std::mutex last_error_mutex;
+    std::string last_error;
 };
 
 RecordingSession::RecordingSession() : impl_(std::make_unique<Impl>()) {}
@@ -462,6 +716,10 @@ std::vector<RecordingDevice> RecordingSession::inputDevices()
         }
     }
     ma_context_uninit(&context);
+    std::stable_sort(result.begin(), result.end(),
+        [](const RecordingDevice& left, const RecordingDevice& right) {
+            return left.is_default && !right.is_default;
+        });
     return result;
 }
 
@@ -521,7 +779,19 @@ bool RecordingSession::start(const RecordingConfig& config)
 
 bool RecordingSession::startManual(const RecordingConfig& config)
 {
-    return impl_->start_common(config);
+    return startManual(config, nullptr, 0);
+}
+
+bool RecordingSession::startManual(
+    const RecordingConfig& config, const float* startupInterleaved,
+    const std::size_t startupFrames)
+{
+    if (!impl_->start_common(config)) return false;
+    if (startupInterleaved != nullptr && startupFrames > 0) {
+        (void)impl_->push(startupInterleaved, startupFrames);
+    }
+    impl_->state.store(RecordingState::Recording, std::memory_order_release);
+    return true;
 }
 
 bool RecordingSession::pause() noexcept
@@ -546,27 +816,165 @@ std::size_t RecordingSession::pushCapturedFrames(
     return impl_->push(interleaved, frames);
 }
 
-RecordingState RecordingSession::state() const noexcept { return impl_->state.load(); }
+RecordingState RecordingSession::state() const noexcept
+{
+    return impl_->state.load(std::memory_order_acquire);
+}
 float RecordingSession::peak() const noexcept { return impl_->peak_value.load(); }
-SampleFrame RecordingSession::framesCaptured() const noexcept { return impl_->captured.load(); }
+SampleFrame RecordingSession::framesCaptured() const noexcept
+{
+    const RecordingState current = impl_->state.load(std::memory_order_acquire);
+    if (current != RecordingState::Recording
+        && current != RecordingState::Paused
+        && current != RecordingState::Finalizing) {
+        return 0;
+    }
+    return impl_->captured.load(std::memory_order_acquire);
+}
 std::uint64_t RecordingSession::droppedFrames() const noexcept { return impl_->dropped.load(); }
+
+RecordingLiveSnapshot RecordingSession::takeLiveSnapshot(
+    const std::size_t maximum)
+{
+    RecordingLiveSnapshot snapshot;
+    const RecordingState current = impl_->state.load(std::memory_order_acquire);
+    if (current != RecordingState::Recording
+        && current != RecordingState::Paused
+        && current != RecordingState::Finalizing) {
+        return snapshot;
+    }
+    snapshot.frames_captured = impl_->captured.load(std::memory_order_acquire);
+    snapshot.interval_peak = impl_->interval_peak.exchange(
+        0.0F, std::memory_order_acq_rel);
+    const std::uint64_t end = impl_->envelope_write_index.load(
+        std::memory_order_acquire);
+    std::uint64_t start = impl_->envelope_read_index.load(
+        std::memory_order_relaxed);
+    if (start > end) start = end;
+    const std::uint64_t capacity = impl_->live_envelopes.size();
+    if (end - start > capacity) start = end - capacity;
+    if (maximum > 0 && end - start > maximum) start = end - maximum;
+    if (maximum == 0) start = end;
+    snapshot.envelopes.reserve(static_cast<std::size_t>(end - start));
+    for (std::uint64_t index = start; index < end; ++index) {
+        const auto& slot = impl_->live_envelopes[
+            index % impl_->live_envelopes.size()];
+        const std::uint64_t expectedSequence = index + 1;
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        RecordingEnvelopePoint point;
+        point.start_frame = slot.start_frame.load(std::memory_order_relaxed);
+        point.end_frame = slot.end_frame.load(std::memory_order_relaxed);
+        point.channels = impl_->config.channels;
+        for (std::size_t channel = 0; channel < impl_->config.channels;
+             ++channel) {
+            point.channel_minima[channel] = slot.minima[channel].load(
+                std::memory_order_relaxed);
+            point.channel_maxima[channel] = slot.maxima[channel].load(
+                std::memory_order_relaxed);
+        }
+        point.visual_mix_minimum = slot.visual_mix_minimum.load(
+            std::memory_order_relaxed);
+        point.visual_mix_maximum = slot.visual_mix_maximum.load(
+            std::memory_order_relaxed);
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        snapshot.envelopes.push_back(std::move(point));
+    }
+    impl_->envelope_read_index.store(end, std::memory_order_release);
+    return snapshot;
+}
+
+RecordingPcmSnapshot RecordingSession::takePcmSnapshot(
+    SampleFrame startFrame, SampleFrame endFrame,
+    const std::size_t maximumFrames) const
+{
+    RecordingPcmSnapshot snapshot;
+    if (maximumFrames == 0 || startFrame >= endFrame) return snapshot;
+    const RecordingState current = impl_->state.load(std::memory_order_acquire);
+    if (current != RecordingState::Recording
+        && current != RecordingState::Paused
+        && current != RecordingState::Finalizing) {
+        return snapshot;
+    }
+    const SampleFrame captured = impl_->captured.load(
+        std::memory_order_acquire);
+    const SampleFrame capacity = static_cast<SampleFrame>(
+        impl_->live_pcm.size());
+    const SampleFrame oldest = (std::max)(SampleFrame{0}, captured - capacity);
+    startFrame = std::clamp(startFrame, oldest, captured);
+    endFrame = std::clamp(endFrame, startFrame, captured);
+    const SampleFrame maximum = static_cast<SampleFrame>((std::min)(
+        maximumFrames, impl_->live_pcm.size()));
+    if (endFrame - startFrame > maximum) startFrame = endFrame - maximum;
+    if (startFrame >= endFrame) return snapshot;
+
+    snapshot.start_frame = startFrame;
+    snapshot.frames = endFrame - startFrame;
+    snapshot.channels = impl_->config.channels;
+    snapshot.interleaved_samples.assign(
+        static_cast<std::size_t>(snapshot.frames) * snapshot.channels,
+        std::numeric_limits<float>::quiet_NaN());
+    for (SampleFrame frame = startFrame; frame < endFrame; ++frame) {
+        const auto& slot = impl_->live_pcm[static_cast<std::size_t>(frame)
+            % impl_->live_pcm.size()];
+        const std::uint64_t expected = static_cast<std::uint64_t>(frame) + 1U;
+        if (slot.sequence.load(std::memory_order_acquire) != expected) continue;
+        const auto samples = unpack_recording_samples(
+            slot.packed_samples.load(std::memory_order_relaxed));
+        if (slot.sequence.load(std::memory_order_acquire) != expected) continue;
+        const std::size_t outputFrame = static_cast<std::size_t>(
+            frame - startFrame);
+        for (std::size_t channel = 0; channel < snapshot.channels; ++channel) {
+            snapshot.interleaved_samples[
+                outputFrame * snapshot.channels + channel] = samples[channel];
+        }
+    }
+    return snapshot;
+}
 
 std::vector<float> RecordingSession::recentPeaks(const std::size_t maximum) const
 {
     if (maximum == 0) return {};
-    const std::uint64_t end = impl_->peak_write_index.load(
+    const std::uint64_t end = impl_->envelope_write_index.load(
         std::memory_order_acquire);
-    const std::size_t count = (std::min)({maximum, impl_->recent_peaks.size(),
+    const std::size_t count = (std::min)({maximum, impl_->live_envelopes.size(),
         static_cast<std::size_t>((std::min<std::uint64_t>)(
-            end, impl_->recent_peaks.size()))});
+            end, impl_->live_envelopes.size()))});
     std::vector<float> result;
     result.reserve(count);
     for (std::size_t offset = count; offset > 0; --offset) {
-        result.push_back(impl_->recent_peaks[
-            (end - offset) % impl_->recent_peaks.size()].load(
-                std::memory_order_acquire));
+        const std::uint64_t index = end - offset;
+        const auto& slot = impl_->live_envelopes[
+            index % impl_->live_envelopes.size()];
+        const std::uint64_t expectedSequence = index + 1;
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        float peak = 0.0F;
+        for (std::size_t channel = 0; channel < impl_->config.channels;
+             ++channel) {
+            peak = (std::max)({peak,
+                std::abs(slot.minima[channel].load(std::memory_order_relaxed)),
+                std::abs(slot.maxima[channel].load(std::memory_order_relaxed))});
+        }
+        if (slot.sequence.load(std::memory_order_acquire)
+            != expectedSequence) {
+            continue;
+        }
+        result.push_back(peak);
     }
     return result;
+}
+
+std::string RecordingSession::lastError() const
+{
+    return impl_->last_error_copy();
 }
 
 } // namespace agplayer::editor

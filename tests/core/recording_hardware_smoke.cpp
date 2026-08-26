@@ -37,7 +37,8 @@ int main(int argc, char** argv)
     if (!session.start(config)) {
         config.channels = 1;
         if (!session.start(config)) {
-            std::cerr << "failed to start WASAPI capture: " << device.name << '\n';
+            std::cerr << "failed to start WASAPI capture: " << device.name
+                      << " (" << session.lastError() << ")\n";
             return 4;
         }
     }

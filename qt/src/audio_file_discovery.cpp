@@ -1,5 +1,5 @@
 #include "audio_file_discovery.hpp"
-#include "file_association_controller.hpp"
+#include "resource_path.hpp"
 
 #include <QDirIterator>
 #include <QFileInfo>
@@ -10,30 +10,43 @@
 
 namespace {
 
-bool isSupportedAudioFile(const QFileInfo& info)
+const QStringList& supportedExtensionList()
 {
-    static const QSet<QString> suffixes = [] {
-        const QStringList extensions =
-            FileAssociationController::supportedAudioExtensions();
-        return QSet<QString>(extensions.cbegin(), extensions.cend());
-    }();
-    return info.isFile()
-        && suffixes.contains(info.suffix().toLower());
+    static const QStringList extensions{
+        QStringLiteral("mp3"), QStringLiteral("wav"),
+        QStringLiteral("flac"), QStringLiteral("aac"),
+        QStringLiteral("m4a"), QStringLiteral("ogg"),
+        QStringLiteral("wma"), QStringLiteral("ape"),
+        QStringLiteral("opus"), QStringLiteral("aif"),
+        QStringLiteral("aiff")};
+    return extensions;
 }
 
-QString identityFor(const QFileInfo& info)
+const QSet<QString>& supportedExtensionSet()
 {
-    QString identity = info.canonicalFilePath();
-    if (identity.isEmpty()) {
-        identity = info.absoluteFilePath();
-    }
-#ifdef Q_OS_WIN
-    identity = identity.toLower();
-#endif
-    return identity;
+    static const QSet<QString> extensions(
+        supportedExtensionList().cbegin(), supportedExtensionList().cend());
+    return extensions;
 }
 
 } // namespace
+
+QStringList agplayer::qt::supportedAudioExtensions()
+{
+    return supportedExtensionList();
+}
+
+bool agplayer::qt::isSupportedAudioExtension(const QString& extension)
+{
+    QString normalized = extension.trimmed().toCaseFolded();
+    while (normalized.startsWith(QLatin1Char('.'))) normalized.remove(0, 1);
+    return supportedExtensionSet().contains(normalized);
+}
+
+bool agplayer::qt::isSupportedAudioFile(const QFileInfo& info)
+{
+    return info.isFile() && isSupportedAudioExtension(info.suffix());
+}
 
 QList<QUrl> agplayer::qt::expandAudioUrls(
     const QList<QUrl>& urls,
@@ -44,15 +57,18 @@ QList<QUrl> agplayer::qt::expandAudioUrls(
     const auto appendFile =
         [&result, &seen](const QFileInfo& info, const bool requireAudio) {
         if (!info.isFile()
-            || (requireAudio && !isSupportedAudioFile(info))) {
+            || (requireAudio && !agplayer::qt::isSupportedAudioFile(info))) {
             return;
         }
-        const QString identity = identityFor(info);
-        if (identity.isEmpty() || seen.contains(identity)) {
+        const QString identity = agplayer::qt::resourcePathIdentity(
+            info.absoluteFilePath());
+        const QString seenKey = agplayer::qt::resourcePathCaseSensitivity()
+                == Qt::CaseInsensitive ? identity.toCaseFolded() : identity;
+        if (identity.isEmpty() || seen.contains(seenKey)) {
             return;
         }
-        seen.insert(identity);
-        result.append(QUrl::fromLocalFile(info.absoluteFilePath()));
+        seen.insert(seenKey);
+        result.append(QUrl::fromLocalFile(identity));
     };
 
     for (const QUrl& url : urls) {

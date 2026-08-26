@@ -14,14 +14,14 @@ Window {
     minimumHeight: 560
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
-    title: "AgPlayer · " + qsTr("音频工具")
-    readonly property bool metadataWorkbench: AudioToolsController.currentTool === 2
+    title: qsTr("AgPlayer · 音频工具")
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
             unsavedCloseDialog.open()
             return
         }
+        AudioEditorController.deactivate()
         WindowController.hideAudioTools()
     }
     onClosing: function(close) {
@@ -35,15 +35,9 @@ Window {
     palette.text: Theme.primaryText
     palette.button: Theme.elevated
     palette.buttonText: Theme.primaryText
-    palette.highlight: Theme.cyan
-    palette.highlightedText: Theme.accentText
+    palette.highlight: Theme.highlight
+    palette.highlightedText: Theme.highlightText
     palette.mid: Theme.border
-
-    Shortcut {
-        sequence: "Space"
-        context: Qt.ApplicationShortcut
-        onActivated: AudioEditorController.playPause()
-    }
 
     Dialog {
         id: unsavedCloseDialog
@@ -52,7 +46,10 @@ Window {
         title: qsTr("舍弃未保存更改？")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: WindowController.hideAudioTools()
+        onAccepted: {
+            AudioEditorController.deactivate()
+            WindowController.hideAudioTools()
+        }
         Label {
             text: qsTr("当前音频尚未保存。关闭窗口将舍弃这些更改。")
             color: Theme.primaryText
@@ -61,8 +58,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: window.metadataWorkbench ? "#06141e" : Theme.background
-        border.color: window.metadataWorkbench ? "#173040" : Theme.border
+        color: Theme.background
+        border.color: Theme.border
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -74,66 +71,82 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: window.metadataWorkbench ? 54 : 48
-                color: window.metadataWorkbench ? "#06131d" : "transparent"
+                Layout.preferredHeight: 49
+                color: Theme.panel
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: 14
+                    anchors.leftMargin: 16
                     anchors.rightMargin: 8
-                    spacing: 7
+                    spacing: 10
 
                     Image {
+                        objectName: "audioToolsBrandMark"
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
                         source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
                         fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
                     }
                     Text {
-                        text: "AgPlayer"
+                        objectName: "audioToolsWindowTitle"
+                        text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
-                        font.pixelSize: 17
+                        font.pixelSize: 18
                         font.weight: Font.Medium
-                    }
-                    Text {
-                        text: "·"
-                        color: Theme.secondaryText
-                        font.pixelSize: 14
-                    }
-                    Text {
-                        text: qsTr("音频工具")
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 16
                     }
 
                     Item { Layout.fillWidth: true }
 
                     ToolButton {
-                        Layout.preferredWidth: 32
+                        objectName: "audioToolsMinimizeButton"
+                        Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.iconPrimary
+                        Accessible.name: qsTr("最小化")
+                        Accessible.role: Accessible.Button
                         onClicked: window.showMinimized()
+                        background: Rectangle {
+                            color: parent.hovered ? Theme.hoverSurface : "transparent"
+                            radius: 3
+                        }
                     }
                     ToolButton {
-                        Layout.preferredWidth: 32
+                        objectName: "audioToolsMaximizeButton"
+                        Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon(window.visibility === Window.Maximized
                                                 ? "fullscreen-exit-fill"
                                                 : "checkbox-blank-line")
                         icon.color: Theme.iconPrimary
+                        Accessible.name: window.visibility === Window.Maximized
+                            ? qsTr("还原") : qsTr("最大化")
+                        Accessible.role: Accessible.Button
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
+                        background: Rectangle {
+                            color: parent.hovered ? Theme.hoverSurface : "transparent"
+                            radius: 3
+                        }
                     }
                     ToolButton {
-                        Layout.preferredWidth: 32
+                        objectName: "audioToolsCloseButton"
+                        Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
-                        icon.color: Theme.iconPrimary
+                        icon.color: hovered ? Theme.onBrandGradientText
+                                            : Theme.iconPrimary
+                        Accessible.name: qsTr("关闭")
+                        Accessible.role: Accessible.Button
                         onClicked: window.requestHide()
+                        background: Rectangle {
+                            color: parent.hovered ? Theme.danger : "transparent"
+                            radius: 3
+                        }
                     }
                 }
 
@@ -145,7 +158,7 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.rightMargin: 104
+                    anchors.rightMargin: 182
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
@@ -172,22 +185,19 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: window.metadataWorkbench ? 52 : 55
+                Layout.preferredHeight: 43
                 window: window
                 currentTool: AudioToolsController.currentTool
-                referenceWorkbench: window.metadataWorkbench
                 onToolSelected: function(index) {
                     AudioToolsController.selectTool(index)
                 }
             }
 
             Rectangle {
+                objectName: "audioToolsContentStack"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.leftMargin: 2
-                Layout.rightMargin: 2
-                Layout.bottomMargin: 3
-                color: window.metadataWorkbench ? "#06141e" : Theme.background
+                color: Theme.background
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

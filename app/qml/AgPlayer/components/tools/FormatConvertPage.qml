@@ -8,11 +8,32 @@ Rectangle {
     id: page
     objectName: "formatConvertPage"
     color: Theme.background
+    clip: true
     focus: true
-    readonly property bool compactLayout: width < 1100
 
     property var converter: FormatConverter
     property string outputDirectory: SettingsController.defaultOutputDirectory
+    function usesCompactLayout(availableWidth) { return availableWidth <= 1000 }
+    readonly property bool compactLayout: usesCompactLayout(width)
+
+    Component.onCompleted: {
+        converter.parallelJobs = SettingsController.parallelJobs
+        converter.selectedFormat = SettingsController.transcodeFormat.toLowerCase()
+    }
+
+    Connections {
+        target: SettingsController
+        function onTranscodeFormatChanged() {
+            const format = SettingsController.transcodeFormat.toLowerCase()
+            if (converter.selectedFormat !== format)
+                converter.selectedFormat = format
+        }
+    }
+
+    onOutputDirectoryChanged: {
+        if (SettingsController.defaultOutputDirectory !== outputDirectory)
+            SettingsController.defaultOutputDirectory = outputDirectory
+    }
 
     function addCurrentPlayerTrack() {
         const urls = []
@@ -31,13 +52,22 @@ Rectangle {
     function requestPlan() {
         converter.bitrateMode = settingsPanel.bitrateMode
         converter.conflictPolicy = settingsPanel.conflictPolicy
+        const requestedBitRate = Number(settingsPanel.bitRate)
+        const requestedQuality = Number(settingsPanel.quality)
+        const requestedSampleRate = Number(settingsPanel.sampleRate)
+        SettingsController.transcodeFormat = settingsPanel.outputFormat.toUpperCase()
+        if (isFinite(requestedBitRate) && requestedBitRate > 0)
+            SettingsController.transcodeBitrateKbps = Math.round(requestedBitRate / 1000)
+        if (isFinite(requestedSampleRate) && requestedSampleRate > 0)
+            SettingsController.transcodeSampleRateHz = requestedSampleRate
+        if (settingsPanel.channels === 1 || settingsPanel.channels === 2)
+            SettingsController.transcodeChannels = settingsPanel.channels
         const plan = converter.buildPreflight({
             outputFormat: settingsPanel.outputFormat,
-            preset: settingsPanel.preset,
-            bitRate: settingsPanel.bitRate,
+            bitRate: isFinite(requestedBitRate) ? requestedBitRate : 0,
             bitrateMode: settingsPanel.bitrateMode,
-            quality: settingsPanel.quality,
-            sampleRate: settingsPanel.sampleRate,
+            quality: isFinite(requestedQuality) ? requestedQuality : 75,
+            sampleRate: isFinite(requestedSampleRate) ? requestedSampleRate : 0,
             channels: settingsPanel.channels,
             outputDir: outputDirectory,
             keepMetadata: settingsPanel.keepMetadata,
@@ -46,14 +76,16 @@ Rectangle {
             keepCover: settingsPanel.keepCover,
             preserveDirectories: settingsPanel.preserveDirectories,
             sampleFormat: settingsPanel.sampleFormat,
+            bitDepth: settingsPanel.bitDepth,
             channelLayout: settingsPanel.channelLayout,
             audioStreamIndex: -1
         })
         if (plan.ready)
             preflightDialog.open()
-        else if (converter.checkedCount <= 0) {
-            errorDialog.summary = qsTr("请至少选择一个转换任务")
-            errorDialog.detail = qsTr("任务列表中没有已勾选的文件。")
+        else {
+            const reason = plan.error || plan.reason || qsTr("转换预检失败")
+            errorDialog.summary = reason
+            errorDialog.detail = reason
             errorDialog.open()
         }
     }
@@ -62,7 +94,7 @@ Rectangle {
         id: fileDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: [qsTr("音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.mp4 *.mkv *.avi *.mov *.webm)")]
+            nameFilters: [qsTr("音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.aif *.aiff *.mp4 *.mkv *.avi *.mov *.webm)")]
             onAccepted: {
                 converter.addUrls(selectedFiles)
                 destroy()
@@ -87,7 +119,6 @@ Rectangle {
         FolderDialog {
             onAccepted: {
                 page.outputDirectory = selectedFolder.toString().replace(/^file:\/+/, "")
-                SettingsController.defaultOutputDirectory = page.outputDirectory
                 destroy()
             }
             onRejected: destroy()
@@ -96,7 +127,7 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 8
+        spacing: 5
 
         Rectangle {
             id: toolbar
@@ -122,11 +153,14 @@ Rectangle {
                         { text: qsTr("清空列表"), icon: "delete-bin-line", action: "clear" }
                     ]
                     Button {
-                        Layout.preferredWidth: page.compactLayout
-                                               ? (modelData.action === "playlist" ? 142 : 118)
-                                               : modelData.action === "playlist" ? 158
+                        objectName: modelData.action === "file" ? "formatAddFileButton" : ""
+                        visible: !page.compactLayout
+                                 || modelData.action === "file"
+                                 || modelData.action === "folder"
+                        Layout.preferredWidth: modelData.action === "playlist" ? 158
                                                : modelData.action === "file" ? 130
-                                               : modelData.action === "folder" ? 142 : 128
+                                               : modelData.action === "folder" ? 142
+                                               : 128
                         Layout.preferredHeight: 40
                         enabled: !converter.busy
                                  && (modelData.action !== "playlist"
@@ -153,6 +187,7 @@ Rectangle {
                         contentItem: RowLayout {
                             spacing: 8
                             ThemedIcon {
+                                objectName: "formatToolbarIcon-" + modelData.action
                                 source: parent.parent.icon.source
                                 tint: Theme.iconPrimary
                                 sourceSize.width: 18
@@ -184,17 +219,23 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 converter: page.converter
+                settingsPanel: settingsPanel
             }
 
             FormatSettingsPanel {
                 id: settingsPanel
                 objectName: "formatSettingsPanel"
-                Layout.preferredWidth: page.compactLayout ? 360 : 445
-                Layout.minimumWidth: page.compactLayout ? 340 : 420
-                Layout.maximumWidth: page.compactLayout ? 380 : 455
+                Layout.preferredWidth: settingsPanel.expanded
+                                       ? (page.compactLayout ? 360 : 445) : 40
+                Layout.minimumWidth: settingsPanel.isExpanded
+                                     ? (page.compactLayout ? 340 : 420) : 40
+                Layout.maximumWidth: settingsPanel.isExpanded
+                                     ? (page.compactLayout ? 380 : 455) : 40
                 Layout.fillHeight: true
                 converter: page.converter
+                forceCollapsed: page.compactLayout
                 outputDirectory: page.outputDirectory
+                onOutputDirectoryEdited: function(directory) { page.outputDirectory = directory }
                 onChooseOutputDirectory: outputDialogComponent.createObject(page).open()
             }
         }
@@ -203,7 +244,7 @@ Rectangle {
             id: bottomBar
             objectName: "formatBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: page.compactLayout ? 96 : 114
+            Layout.preferredHeight: 114
             color: Theme.panel
             border.color: Theme.border
             radius: 6
@@ -215,16 +256,16 @@ Rectangle {
                 spacing: 16
 
                 ColumnLayout {
-                    Layout.preferredWidth: page.compactLayout ? 280 : 430
+                    Layout.preferredWidth: page.compactLayout ? 220 : 430
                     spacing: 8
                     RowLayout {
                         Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: 14 }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
-                            Layout.preferredWidth: page.compactLayout ? 180 : 320
+                            Layout.preferredWidth: page.compactLayout ? 130 : 320
                             from: 0; to: 1; value: converter.progress
-                            background: Rectangle { implicitHeight: 10; color: Theme.border; radius: 5 }
+                            background: Rectangle { implicitHeight: 10; color: Theme.hoverSurface; radius: 5 }
                             contentItem: Item {
                                 implicitHeight: 10
                                 Rectangle {
@@ -236,6 +277,15 @@ Rectangle {
                             }
                         }
                         Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.primaryText }
+                        Text { text: qsTr("并发"); color: Theme.secondaryText; font.pixelSize: 13 }
+                        ComboBox {
+                            id: converterParallelJobsBox
+                            objectName: "converterParallelJobsBox"
+                            Layout.preferredWidth: 72
+                            model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                            currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
+                            onActivated: SettingsController.parallelJobs = currentValue
+                        }
                     }
                     Text {
                         text: qsTr("%1 个任务 / 预计剩余 %2").arg(converter.fileCount)
@@ -251,7 +301,6 @@ Rectangle {
 
                 Rectangle {
                     objectName: "formatSummaryCard"
-                    visible: !page.compactLayout
                     Layout.preferredWidth: 230
                     Layout.preferredHeight: 46
                     color: Theme.elevated
@@ -260,30 +309,70 @@ Rectangle {
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 18
-                        Text { text: qsTr("✓ 已完成 %1").arg(converter.completedCount); color: Theme.waveformGreen }
-                        Text { text: qsTr("! 失败 %1").arg(converter.failedCount); color: Theme.waveformRed }
+                        ThemedIcon { objectName: "formatSummaryCompleteIcon"; source: Theme.icon("checkbox-circle-line"); tint: Theme.success; sourceSize.width: 18; sourceSize.height: 18 }
+                        Text { text: qsTr("已完成 %1").arg(converter.completedCount); color: Theme.success }
+                        ThemedIcon { objectName: "formatSummaryFailedIcon"; source: Theme.icon("error-warning-line"); tint: Theme.error; sourceSize.width: 18; sourceSize.height: 18 }
+                        Text { text: qsTr("失败 %1").arg(converter.failedCount); color: Theme.error }
+                    }
+                    MouseArea {
+                        objectName: "formatCompletedSummaryFilter"
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width / 2
+                        height: parent.height
+                        onClicked: converter.filteredTaskModel.statusFilter =
+                            converter.filteredTaskModel.statusFilter === "Done" ? "All" : "Done"
+                    }
+                    MouseArea {
+                        objectName: "formatFailedSummaryFilter"
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width / 2
+                        height: parent.height
+                        onClicked: converter.filteredTaskModel.statusFilter =
+                            converter.filteredTaskModel.statusFilter === "Error" ? "All" : "Error"
                     }
                 }
+
+                Item { Layout.preferredWidth: page.compactLayout ? 0 : 159 }
 
                 Button {
                     id: convertAllButton
                     objectName: "convertAllButton"
-                    Layout.preferredWidth: page.compactLayout ? 132 : 174
-                    Layout.preferredHeight: page.compactLayout ? 56 : 68
+                    Layout.preferredWidth: page.compactLayout ? 125 : 174
+                    Layout.preferredHeight: 68
                     enabled: converter.checkedCount > 0 && !converter.busy
-                    text: qsTr("▶  开始处理")
+                    text: qsTr("开始处理")
+                    icon.source: Theme.icon("play-fill")
                     onClicked: page.requestPlan()
                     background: Rectangle { color: parent.enabled ? Theme.accent : Theme.border; radius: 6 }
-                    contentItem: Text { text: parent.text; color: Theme.accentText; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 17 }
+                    contentItem: RowLayout {
+                        spacing: 10
+                        ThemedIcon { source: parent.parent.icon.source; tint: Theme.accentText; sourceSize.width: 22; sourceSize.height: 22 }
+                        Text { text: parent.parent.text; color: Theme.accentText; font.pixelSize: 17 }
+                    }
                 }
 
                 Button {
                     objectName: "cancelAllButton"
-                    Layout.preferredWidth: page.compactLayout ? 128 : 168
-                    Layout.preferredHeight: page.compactLayout ? 56 : 68
+                    Layout.preferredWidth: page.compactLayout ? 115 : 168
+                    Layout.preferredHeight: 68
                     enabled: converter.busy
-                    text: qsTr("■  取消全部")
+                    text: qsTr("取消全部")
+                    icon.source: Theme.icon("checkbox-blank-fill")
                     onClicked: converter.cancelAll()
+                    background: Rectangle { color: parent.enabled ? Theme.elevated : Theme.background; radius: 6 }
+                    contentItem: RowLayout {
+                        spacing: 10
+                        ThemedIcon {
+                            objectName: "cancelAllButtonStopIcon"
+                            source: parent.parent.icon.source
+                            tint: Theme.iconPrimary
+                            sourceSize.width: 22
+                            sourceSize.height: 22
+                        }
+                        Text { text: parent.parent.text; color: Theme.primaryText; font.pixelSize: 17 }
+                    }
                 }
             }
         }
@@ -297,7 +386,7 @@ Rectangle {
         valueRole: "key"
     }
     Button { objectName: "convertSelectedButton"; visible: false; onClicked: page.requestPlan() }
-    Button { objectName: "retryFailedButton"; visible: false; onClicked: converter.retryFailed(settingsPanel.outputFormat, settingsPanel.bitRate, settingsPanel.sampleRate, settingsPanel.channels, page.outputDirectory, settingsPanel.keepMetadata, settingsPanel.volumeNormalize, settingsPanel.extractAudio) }
+    Button { objectName: "retryFailedButton"; visible: false; onClicked: converter.retryFailed() }
 
     DropArea {
         objectName: "formatDropArea"
@@ -322,6 +411,26 @@ Rectangle {
             errorDialog.summary = message
             errorDialog.detail = message
             errorDialog.open()
+        }
+    }
+
+    Connections {
+        target: SettingsController
+        function onDefaultOutputDirectoryChanged() {
+            if (page.outputDirectory !== SettingsController.defaultOutputDirectory)
+                page.outputDirectory = SettingsController.defaultOutputDirectory
+        }
+        function onParallelJobsChanged() {
+            if (converter.parallelJobs !== SettingsController.parallelJobs)
+                converter.parallelJobs = SettingsController.parallelJobs
+        }
+    }
+
+    Connections {
+        target: converter
+        function onParallelJobsChanged() {
+            if (SettingsController.parallelJobs !== converter.parallelJobs)
+                SettingsController.parallelJobs = converter.parallelJobs
         }
     }
 }

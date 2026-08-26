@@ -68,15 +68,15 @@ Rectangle {
                 onClicked: root.openFileRequested()
 
                 background: Rectangle {
-                    color: parent.pressed ? Theme.violet
-                                          : parent.hovered ? Qt.lighter(Theme.violet, 1.08)
-                                                           : Theme.cyan
+                    color: parent.pressed ? Theme.accentPressed
+                                          : parent.hovered ? Theme.accentHover
+                                                           : Theme.accent
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
                         GradientStop { position: 0.0; color: Theme.waveformBlue }
                         GradientStop { position: 1.0; color: Theme.violet }
                     }
-                    border.color: parent.visualFocus ? Theme.primaryText : Theme.cyan
+                    border.color: parent.visualFocus ? Theme.focus : Theme.accentBorder
                     border.width: parent.visualFocus ? 2 : 1
                     radius: Theme.radiusSm
                 }
@@ -102,7 +102,7 @@ Rectangle {
                     color: parent.pressed || parent.hovered
                            ? Theme.hoverSurface
                            : Theme.isLight ? Theme.panel : "transparent"
-                    border.color: parent.visualFocus ? Theme.cyan : Theme.border
+                    border.color: parent.visualFocus ? Theme.focus : Theme.border
                     border.width: parent.visualFocus ? 2 : 1
                     radius: Theme.radiusSm
                 }

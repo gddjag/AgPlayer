@@ -15,10 +15,8 @@ Rectangle {
     property double maxBpm: 160
     property double pendingMinBpm: minBpm
     property double pendingMaxBpm: maxBpm
-    readonly property color moduleColor: Qt.rgba(
-        Theme.elevated.r, Theme.elevated.g, Theme.elevated.b, 0.42)
-    readonly property color moduleBorder: Qt.rgba(
-        Theme.border.r, Theme.border.g, Theme.border.b, 0.34)
+    readonly property color moduleColor: Theme.isLight ? Theme.panel : Theme.elevated
+    readonly property color moduleBorder: Theme.border
 
     Timer {
         id: bpmDebounce
@@ -65,14 +63,27 @@ Rectangle {
             border.color: root.moduleBorder
             border.width: 1
             radius: Theme.radiusSm
+            ThemedIcon {
+                id: searchIcon
+                objectName: "librarySearchIcon"
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                width: 16
+                height: 16
+                source: Theme.icon("search-line")
+                tint: Theme.secondaryText
+                opacity: 0.55
+            }
             TextField {
                 id: searchField
                 objectName: "librarySearchField"
                 anchors.fill: parent
-                placeholderText: qsTr("歌曲/艺术家/专辑/标签/")
+                placeholderText: qsTr("歌曲 · 艺术家 · 专辑 · 标签")
                 text: root.searchText
                 color: Theme.primaryText
-                placeholderTextColor: Theme.secondaryText
+                placeholderTextColor: Theme.textTertiary
+                leftPadding: 34
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
                 onTextChanged: root.searchText = text
@@ -136,7 +147,7 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 2
-                Label { text: "BPM"; color: Theme.secondaryText; font.pixelSize: 11; Layout.preferredWidth: 24 }
+                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: 11; Layout.preferredWidth: 24 }
                 TextField {
                     id: minimumBpmField
                     objectName: "minimumBpmField"
@@ -155,7 +166,7 @@ Rectangle {
                         bpmDebounce.restart()
                     }
                 }
-                RangeSlider {
+                ThemedRangeSlider {
                     id: bpmRange
                     objectName: "bpmRange"
                     Layout.preferredWidth: 104
@@ -166,26 +177,6 @@ Rectangle {
                     second.value: root.pendingMaxBpm
                     first.onMoved: { root.pendingMinBpm = Math.min(first.value, root.pendingMaxBpm); bpmDebounce.restart() }
                     second.onMoved: { root.pendingMaxBpm = Math.max(second.value, root.pendingMinBpm); bpmDebounce.restart() }
-                    background: Rectangle {
-                        x: bpmRange.leftPadding
-                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: bpmRange.availableWidth; height: 3; radius: 1.5; color: Theme.border
-                        Rectangle {
-                            x: bpmRange.first.visualPosition * parent.width
-                            width: (bpmRange.second.visualPosition - bpmRange.first.visualPosition) * parent.width
-                            height: parent.height; radius: parent.radius; color: Theme.accent
-                        }
-                    }
-                    first.handle: Rectangle {
-                        x: bpmRange.leftPadding + bpmRange.first.visualPosition * (bpmRange.availableWidth - width)
-                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: 12; height: 12; radius: 6; color: Theme.primaryText; border.color: Theme.accent
-                    }
-                    second.handle: Rectangle {
-                        x: bpmRange.leftPadding + bpmRange.second.visualPosition * (bpmRange.availableWidth - width)
-                        y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                        width: 12; height: 12; radius: 6; color: Theme.primaryText; border.color: Theme.accent
-                    }
                 }
                 TextField {
                     id: maximumBpmField
@@ -215,8 +206,8 @@ Rectangle {
             onClicked: root.clearFilters()
             palette.buttonText: Theme.primaryText
             background: Rectangle {
-                color: parent.pressed ? Theme.cyan
-                      : parent.hovered ? Theme.border : Theme.panel
+                color: parent.pressed ? Theme.surfacePressed
+                      : parent.hovered ? Theme.surfaceHover : Theme.panel
                 border.color: Theme.border
                 border.width: 1
                 radius: Theme.radiusSm

@@ -22,8 +22,8 @@ Window {
     palette.text: Theme.primaryText
     palette.button: Theme.elevated
     palette.buttonText: Theme.primaryText
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.accentText
+    palette.highlight: Theme.highlight
+    palette.highlightedText: Theme.highlightText
     palette.mid: Theme.border
 
     property var playback: PlaybackController
@@ -47,10 +47,7 @@ Window {
         anchors.fill: parent
         anchors.margins: 2
         radius: Theme.windowRadius
-        color: SettingsController.glassEffect
-               ? Qt.rgba(Theme.background.r, Theme.background.g,
-                         Theme.background.b, 0.94)
-               : Theme.background
+        color: Theme.background
         border.color: Theme.border
         border.width: 1
         clip: true
@@ -94,8 +91,8 @@ Window {
                         icon.source: Theme.icon("pushpin-line")
                         icon.color: windows && windows.alwaysOnTop ? Theme.cyan
                                                                    : Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: windows && windows.alwaysOnTop
                                          ? qsTr("Disable always on top")
                                          : qsTr("Pin on top")
@@ -115,8 +112,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: qsTr("Restore main window")
                         onClicked: windows.showMain()
                         background: Rectangle {
@@ -131,8 +128,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: qsTr("Minimize")
                         onClicked: miniWindow.showMinimized()
                         background: Rectangle {
@@ -147,12 +144,12 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: qsTr("Close")
                         onClicked: windows.requestClose()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.favoriteRed
+                            color: parent.hovered ? Theme.danger
                                                   : "transparent"
                             radius: Theme.radiusSm
                         }

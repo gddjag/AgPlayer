@@ -65,7 +65,7 @@ Item {
 
             Text {
                 text: qsTr("Some files could not be imported")
-                color: Theme.favoriteRed
+                color: Theme.error
                 font.family: Theme.fontPrimary
                 font.pixelSize: 15
                 font.weight: Font.Medium

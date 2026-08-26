@@ -656,7 +656,7 @@ public:
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
-        equalizer_.process(output, frames, channels_);
+        equalizer_.process(output, frames, channels);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
                                : volume_.load(std::memory_order_relaxed)
@@ -1347,7 +1347,24 @@ private:
                         }
                     }
                     decode_eof_.store(true, std::memory_order_release);
-                    return;
+                    // Keep the decoder-owning thread parked at EOF. A later
+                    // seek can then wake it and reuse the open decoder instead
+                    // of paying for a thread join/restart on every scrub near
+                    // the end of a short track. The wait is dormant (zero
+                    // polling CPU) and stop/unload wakes it through seek_cv_.
+                    {
+                        std::unique_lock<std::mutex> lock(seek_mutex_);
+                        seek_cv_.wait(lock, [this] {
+                            return seek_requested_.load(
+                                       std::memory_order_acquire)
+                                   || stop_decode_.load(
+                                          std::memory_order_acquire);
+                        });
+                    }
+                    if (stop_decode_.load(std::memory_order_acquire)) {
+                        return;
+                    }
+                    continue;
                 }
 
                 bool seek_preempted = false;
@@ -1768,6 +1785,7 @@ private:
             settings = equalizer_settings_;
             revision = equalizer_revision_;
         }
+
         equalizer_sample_rate_status_.store(sample_rate,
                                             std::memory_order_release);
         if (!is_graphic_eq_sample_rate_supported(sample_rate)) {
@@ -1782,6 +1800,7 @@ private:
                                                std::memory_order_release);
             return;
         }
+
         const auto program = prepare_graphic_eq(settings, sample_rate, revision);
         if (!program.has_value()) {
             equalizer_active_status_.store(false, std::memory_order_release);

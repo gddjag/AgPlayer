@@ -21,7 +21,7 @@ struct FilenameRuleSet {
     // This keeps batch editing reversible without guessing at file contents.
     bool removePrefixWhenEmpty = true;
     bool removeSuffixWhenEmpty = true;
-    bool removeSequenceWhenEmpty = true;
+    bool removeSequenceWhenEmpty = false;
     bool removeSequenceAtStart = false;
     bool removeSequenceAtEnd = false;
     int numberStart = 1;

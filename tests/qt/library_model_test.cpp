@@ -21,10 +21,67 @@ private slots:
     void updatesRatingAndPlaybackHistory();
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();
+    void batchesTagMutationsWithoutResetOrExtraFlush();
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
+    void stampsNewImportsWithoutOverwritingExistingTimestamps();
+    void exposesLiveRecentAndNeverPlayedCounts();
 };
+
+void LibraryModelTest::exposesLiveRecentAndNeverPlayedCounts()
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    TrackRecord recentUnplayed;
+    recentUnplayed.path = QStringLiteral("C:/music/recent-unplayed.wav");
+    recentUnplayed.addedAtMs = now - 1'000;
+    TrackRecord oldUnplayed;
+    oldUnplayed.path = QStringLiteral("C:/music/old-unplayed.wav");
+    oldUnplayed.addedAtMs = now - 31LL * 24 * 60 * 60 * 1'000;
+    TrackRecord recentPlayed;
+    recentPlayed.path = QStringLiteral("C:/music/recent-played.wav");
+    recentPlayed.addedAtMs = now - 2'000;
+    recentPlayed.playCount = 1;
+
+    LibraryModel model;
+    QSignalSpy recentChanged(&model, &LibraryModel::recentAddedCountChanged);
+    QSignalSpy neverChanged(&model, &LibraryModel::neverPlayedCountChanged);
+    model.replaceAll({recentUnplayed, oldUnplayed, recentPlayed});
+    QCOMPARE(model.recentAddedCount(), 2);
+    QCOMPARE(model.neverPlayedCount(), 2);
+    QCOMPARE(recentChanged.count(), 1);
+    QCOMPARE(neverChanged.count(), 1);
+
+    const QString playedId = model.tracks().front().trackId;
+    QVERIFY(model.markPlayed(playedId, now));
+    QCOMPARE(model.neverPlayedCount(), 1);
+    QCOMPARE(neverChanged.count(), 2);
+    QVERIFY(model.removeTrack(model.tracks().at(0).trackId));
+    QCOMPARE(model.neverPlayedCount(), 1);
+    QVERIFY(model.removeTrack(model.tracks().at(0).trackId));
+    QCOMPARE(model.neverPlayedCount(), 0);
+}
+
+void LibraryModelTest::stampsNewImportsWithoutOverwritingExistingTimestamps()
+{
+    TrackRecord first;
+    first.path = QStringLiteral("C:/music/new-a.wav");
+    TrackRecord second;
+    second.path = QStringLiteral("C:/music/new-b.wav");
+    TrackRecord preserved;
+    preserved.path = QStringLiteral("C:/music/known.wav");
+    preserved.addedAtMs = 123456;
+    const qint64 before = QDateTime::currentMSecsSinceEpoch();
+
+    LibraryModel model;
+    model.appendBatch({first, second, preserved});
+
+    QCOMPARE(model.rowCount(), 3);
+    QVERIFY(model.tracks().at(0).addedAtMs >= before);
+    QCOMPARE(model.tracks().at(1).addedAtMs,
+             model.tracks().at(0).addedAtMs);
+    QCOMPARE(model.tracks().at(2).addedAtMs, Q_INT64_C(123456));
+}
 
 void LibraryModelTest::appliesMaintenanceResultsWithSingleModelNotification()
 {
@@ -418,6 +475,36 @@ void LibraryModelTest::updatesTagsAndManualOrder()
     QCOMPARE(snapshot.value(QStringLiteral("tags")).toStringList(),
              QStringList({QStringLiteral("Workout"), QStringLiteral("Night")}));
     QCOMPARE(snapshot.value(QStringLiteral("title")).toString(), first.title);
+}
+
+void LibraryModelTest::batchesTagMutationsWithoutResetOrExtraFlush()
+{
+    // Catches an accidental per-row disk flush, a model reset, or a tag edit
+    // that fails to expose the exact old/new value needed by incremental users.
+    TrackRecord first;
+    first.trackId = QStringLiteral("one");
+    first.path = QStringLiteral("C:/music/one.wav");
+    first.tags = {QStringLiteral("Rock")};
+    TrackRecord second;
+    second.trackId = QStringLiteral("two");
+    second.path = QStringLiteral("C:/music/two.wav");
+    second.tags = {QStringLiteral("rock"), QStringLiteral("Night")};
+    LibraryModel model;
+    model.replaceAll({first, second});
+    QSignalSpy changes(&model, &LibraryModel::tagsChanged);
+    QSignalSpy flushes(&model, &LibraryModel::flushRequested);
+    QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
+
+    QCOMPARE(model.setTagsForTracks({QStringLiteral("one"), QStringLiteral("two")},
+                                    {QStringLiteral(" Road "), QStringLiteral("road")}), 2);
+    QCOMPARE(changes.count(), 2);
+    QCOMPARE(flushes.count(), 1);
+    QCOMPARE(resets.count(), 0);
+    QCOMPARE(model.data(model.index(0), LibraryModel::TagsRole).toStringList(),
+             QStringList{QStringLiteral("Road")});
+    QCOMPARE(model.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 2);
+    QCOMPARE(model.removeTag(QStringLiteral("DRIVING")), 2);
+    QCOMPARE(model.count(), 2);
 }
 
 void LibraryModelTest::removesTrackWithoutDeletingTheFile()

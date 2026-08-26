@@ -17,6 +17,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QStandardPaths>
+#include <QUuid>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
 
@@ -57,6 +58,16 @@ public slots:
             return;
         }
         library_ = std::make_unique<LibraryModel>();
+        miniMetadataTrackId_ = QStringLiteral("mini-metadata-%1")
+                                   .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        TrackRecord metadataTrack;
+        metadataTrack.trackId = miniMetadataTrackId_;
+        metadataTrack.path = QStringLiteral("C:/virtual/%1.mp3").arg(miniMetadataTrackId_);
+        metadataTrack.title = QStringLiteral("Mini metadata QA");
+        metadataTrack.artist = QStringLiteral("Mini Artist");
+        metadataTrack.album = QStringLiteral("Mini Album");
+        metadataTrack.available = true;
+        library_->appendBatch({metadataTrack});
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
@@ -77,6 +88,8 @@ public slots:
     void qmlEngineAvailable(QQmlEngine* engine)
     {
         engine->addImportPath("qrc:/");
+        engine->rootContext()->setContextProperty("miniMetadataTrackId",
+                                                  miniMetadataTrackId_);
 
         // Main window — same as qml_main_window_test harness.
         mainComponent_ = std::make_unique<QQmlComponent>(engine);
@@ -113,6 +126,7 @@ private:
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
+    QString miniMetadataTrackId_;
     std::unique_ptr<QQmlComponent> mainComponent_;
     std::unique_ptr<QQmlComponent> miniComponent_;
     QObject* mainWindow_ = nullptr;

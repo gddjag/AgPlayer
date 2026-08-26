@@ -50,7 +50,8 @@ AbstractButton {
 
     background: Rectangle {
         color: Theme.background
-        border.color: Theme.border
+        border.width: root.activeFocus ? 2 : 1
+        border.color: root.activeFocus ? Theme.focus : Theme.border
         radius: Theme.radiusSm
     }
 
@@ -72,5 +73,6 @@ AbstractButton {
         id: picker
         objectName: "colorFieldPicker"
         onColorAccepted: color => root.colorEdited(root.normalized(color))
+        onClosed: root.forceActiveFocus()
     }
 }

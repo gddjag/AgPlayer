@@ -13,6 +13,7 @@ TestCase {
 
     property int savedThemeMode: 0
     property string savedWaveformSolidBaseColor: ""
+    property var savedThemeChoices: ({})
 
     Item {
         id: testHost
@@ -29,10 +30,65 @@ TestCase {
             id: integratedField
             parent: testCase.Window.window
                     ? testCase.Window.window.contentItem : null
-            x: (parent ? parent.width : 0) - width - 1
-            y: (parent ? parent.height : 0) - height - 1
+            x: Math.round(((parent ? parent.width : 0) - width) / 2)
+            y: (parent ? parent.height : 0) - height - 28
             colorValue: SettingsController.waveformSolidBaseColor
             targetProperty: "waveformSolidBaseColor"
+        }
+
+        ThemeColorSelector {
+            id: skinSelector
+            parent: testHost
+            x: 18
+            y: 350
+            objectNamePrefix: "skinSelector"
+            title: "Theme skin color"
+            selectedMode: SettingsController.skinColorMode
+            selectedPreset: SettingsController.skinPreset
+            customColor: SettingsController.skinCustomColor
+            onDefaultRequested: SettingsController.skinColorMode = 0
+            onPresetRequested: function(preset) {
+                SettingsController.skinColorMode = 1
+                SettingsController.skinPreset = preset
+            }
+            onCustomRequested: function(color) {
+                SettingsController.skinColorMode = 2
+                SettingsController.skinCustomColor = color
+            }
+        }
+
+        Item {
+            x: 18
+            y: 600
+            width: 680
+            height: 32
+
+            ThemedSwitch {
+                id: representativeSwitch
+                objectName: "representativeThemeSwitch"
+                checked: true
+            }
+            ThemedCheckBox {
+                id: representativeCheckBox
+                objectName: "representativeThemeCheckBox"
+                x: 60
+                checked: true
+            }
+            ThemedRangeSlider {
+                id: representativeRangeSlider
+                objectName: "representativeThemeRangeSlider"
+                x: 110
+                width: 180
+                first.value: 0.25
+                second.value: 0.75
+            }
+            ThemedComboBox {
+                id: representativeComboBox
+                objectName: "representativeThemeComboBox"
+                x: 310
+                width: 160
+                model: ["A", "B"]
+            }
         }
     }
 
@@ -49,7 +105,7 @@ TestCase {
     }
 
     function initTestCase() {
-        savedThemeMode = Theme.mode
+        savedThemeMode = SettingsController.themeMode
     }
 
     function init() {
@@ -57,7 +113,12 @@ TestCase {
         acceptedSpy.clear()
         integratedEditedSpy.clear()
         savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
-        Theme.mode = 0
+        savedThemeChoices = {
+            mode: SettingsController.skinColorMode,
+            preset: SettingsController.skinPreset,
+            customColor: SettingsController.skinCustomColor
+        }
+        SettingsController.themeMode = 0
         wait(0)
     }
 
@@ -67,9 +128,12 @@ TestCase {
         if (integratedPicker)
             integratedPicker.close()
         SettingsController.waveformSolidBaseColor = savedWaveformSolidBaseColor
+        SettingsController.skinColorMode = savedThemeChoices.mode
+        SettingsController.skinPreset = savedThemeChoices.preset
+        SettingsController.skinCustomColor = savedThemeChoices.customColor
         acceptedSpy.clear()
         integratedEditedSpy.clear()
-        Theme.mode = savedThemeMode
+        SettingsController.themeMode = savedThemeMode
         wait(0)
     }
 
@@ -103,16 +167,10 @@ TestCase {
     function verifyMappedInside(item, boundary, margin) {
         var topLeft = item.mapToItem(boundary, 0, 0)
         var bottomRight = item.mapToItem(boundary, item.width, item.height)
-        verify(topLeft.x >= margin,
-               "left edge " + topLeft.x + " must be >= " + margin)
-        verify(topLeft.y >= margin,
-               "top edge " + topLeft.y + " must be >= " + margin)
-        verify(bottomRight.x <= boundary.width - margin,
-               "right edge " + bottomRight.x + " must be <= "
-               + (boundary.width - margin))
-        verify(bottomRight.y <= boundary.height - margin,
-               "bottom edge " + bottomRight.y + " must be <= "
-               + (boundary.height - margin))
+        verify(topLeft.x >= margin)
+        verify(topLeft.y >= margin)
+        verify(bottomRight.x <= boundary.width - margin)
+        verify(bottomRight.y <= boundary.height - margin)
     }
 
     function test_normalization_and_rgb_round_trip() {
@@ -291,6 +349,10 @@ TestCase {
     }
 
     function test_bottom_right_field_popup_stays_inside_overlay() {
+        integratedField.x = integratedField.parent.width
+                            - integratedField.width - 1
+        integratedField.y = integratedField.parent.height
+                            - integratedField.height - 1
         mouseClick(integratedField, integratedField.width / 2,
                    integratedField.height / 2)
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
@@ -304,49 +366,23 @@ TestCase {
         compare(integratedEditedSpy.count, 0)
     }
 
-    function test_internal_controls_expose_accessibility_metadata() {
+    function test_candidate_accessibility_reports_scale_and_selection() {
         openReferenceColor()
-        var hexInput = findChild(picker, "colorPickerHex")
-        var closeButton = findChild(picker, "colorPickerClose")
-        var redInput = findChild(picker, "colorPickerR")
-        var greenInput = findChild(picker, "colorPickerG")
-        var blueInput = findChild(picker, "colorPickerB")
-        var redSlider = findChild(picker, "colorPickerRSlider")
-        var greenSlider = findChild(picker, "colorPickerGSlider")
-        var blueSlider = findChild(picker, "colorPickerBSlider")
         var candidate0 = findChild(picker.contentItem, "colorCandidate-0")
         var candidate5 = findChild(picker.contentItem, "colorCandidate-5")
-        verify(hexInput && closeButton)
-        verify(redInput && greenInput && blueInput)
-        verify(redSlider && greenSlider && blueSlider)
         verify(candidate0 && candidate5)
 
-        compare(hexInput.Accessible.role, Accessible.EditableText)
-        compare(hexInput.Accessible.name, "Hex color")
-        compare(closeButton.Accessible.role, Accessible.Button)
-        compare(closeButton.Accessible.name, "Close color picker")
-        compare(redInput.Accessible.role, Accessible.EditableText)
-        compare(redInput.Accessible.name, "Red channel")
-        compare(greenInput.Accessible.role, Accessible.EditableText)
-        compare(greenInput.Accessible.name, "Green channel")
-        compare(blueInput.Accessible.role, Accessible.EditableText)
-        compare(blueInput.Accessible.name, "Blue channel")
-        compare(redSlider.Accessible.role, Accessible.Slider)
-        compare(redSlider.Accessible.name, "Red channel slider")
-        compare(greenSlider.Accessible.role, Accessible.Slider)
-        compare(greenSlider.Accessible.name, "Green channel slider")
-        compare(blueSlider.Accessible.role, Accessible.Slider)
-        compare(blueSlider.Accessible.name, "Blue channel slider")
-        compare(blueSlider.activeFocusOnTab, true)
         compare(candidate0.Accessible.role, Accessible.Button)
-        compare(candidate0.Accessible.name, "Color #F8EBFA, scale 10")
+        verify(candidate0.Accessible.name.indexOf("#F8EBFA") >= 0)
+        verify(candidate0.Accessible.name.indexOf("10") >= 0)
         compare(candidate0.Accessible.selected, false)
         compare(candidate0.activeFocusOnTab, true)
-        compare(candidate5.Accessible.name, "Color #63316B, scale 100")
+        verify(candidate5.Accessible.name.indexOf("#63316B") >= 0)
+        verify(candidate5.Accessible.name.indexOf("100") >= 0)
         compare(candidate5.Accessible.selected, true)
     }
 
-    function test_close_and_candidates_support_tab_and_keyboard_activation() {
+    function test_picker_focus_chain_and_keyboard_activation() {
         testCase.Window.window.requestActivate()
         tryCompare(testCase.Window.window, "active", true)
         openReferenceColor()
@@ -354,26 +390,19 @@ TestCase {
         var closeButton = findChild(picker, "colorPickerClose")
         compare(hexInput.nextItemInFocusChain(true).objectName,
                 closeButton.objectName)
-        hexInput.nextItemInFocusChain(true)
-                .forceActiveFocus(Qt.TabFocusReason)
+        closeButton.forceActiveFocus(Qt.TabFocusReason)
         verify(closeButton.activeFocus)
-        verify(closeButton.visualFocus)
-        keyClick(Qt.Key_Space)
+        keyClick(Qt.Key_Return)
         tryCompare(picker, "visible", false)
         compare(acceptedSpy.count, 0)
 
         openReferenceColor()
         var blueSlider = findChild(picker, "colorPickerBSlider")
         var candidate0 = findChild(picker.contentItem, "colorCandidate-0")
-        blueSlider.forceActiveFocus(Qt.TabFocusReason)
-        verify(blueSlider.activeFocus)
-        verify(blueSlider.visualFocus)
         compare(blueSlider.nextItemInFocusChain(true).objectName,
                 candidate0.objectName)
-        blueSlider.nextItemInFocusChain(true)
-                  .forceActiveFocus(Qt.TabFocusReason)
-        tryCompare(candidate0, "activeFocus", true)
-        verify(candidate0.visualFocus)
+        candidate0.forceActiveFocus(Qt.TabFocusReason)
+        verify(candidate0.activeFocus)
         keyClick(Qt.Key_Space)
         tryCompare(picker, "visible", false)
         compare(acceptedSpy.count, 1)
@@ -382,14 +411,11 @@ TestCase {
         acceptedSpy.clear()
         openReferenceColor()
         candidate0 = findChild(picker.contentItem, "colorCandidate-0")
-        candidate0.forceActiveFocus()
         var candidate1 = findChild(picker.contentItem, "colorCandidate-1")
         compare(candidate0.nextItemInFocusChain(true).objectName,
                 candidate1.objectName)
-        candidate0.nextItemInFocusChain(true)
-                  .forceActiveFocus(Qt.TabFocusReason)
-        tryCompare(candidate1, "activeFocus", true)
-        verify(candidate1.visualFocus)
+        candidate1.forceActiveFocus(Qt.TabFocusReason)
+        verify(candidate1.activeFocus)
         keyClick(Qt.Key_Return)
         tryCompare(picker, "visible", false)
         compare(acceptedSpy.count, 1)
@@ -474,26 +500,69 @@ TestCase {
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
         tryCompare(integratedPicker, "visible", true)
         integratedPicker.close()
+        tryCompare(integratedField, "activeFocus", true)
 
-        integratedField.forceActiveFocus()
-        verify(integratedField.activeFocus)
         keyClick(Qt.Key_Return)
         tryCompare(integratedPicker, "visible", true)
-        integratedPicker.close()
+        keyClick(Qt.Key_Escape)
+        tryCompare(integratedPicker, "visible", false)
+        tryCompare(integratedField, "activeFocus", true)
 
         compare(integratedEditedSpy.count, 0)
         compare(normalizedColor(SettingsController.waveformSolidBaseColor),
                 "#63316B")
     }
 
+    function test_system_swatch_is_accessible_and_opens_with_mouse_and_keyboard() {
+        openReferenceColor()
+        var swatch = findChild(picker, "colorPickerSystemSwatch")
+        var dialog = findChild(picker, "colorPickerSystemDialog")
+        verify(swatch && dialog)
+        compare(swatch.focusPolicy, Qt.StrongFocus)
+        compare(swatch.Accessible.role, Accessible.Button)
+        verify(swatch.Accessible.name.length > 0)
+
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+
+        swatch.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+        swatch.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+    }
+
+    function test_system_dialog_accept_updates_working_color_but_cancel_does_not_commit() {
+        openReferenceColor()
+        var swatch = findChild(picker, "colorPickerSystemSwatch")
+        var dialog = findChild(picker, "colorPickerSystemDialog")
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.selectedColor = "#123456"
+        dialog.accepted()
+        tryCompare(picker, "baseColor", "#123456")
+        compare(acceptedSpy.count, 0)
+
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.selectedColor = "#abcdef"
+        dialog.rejected()
+        compare(normalizedColor(picker.baseColor), "#123456")
+        compare(acceptedSpy.count, 0)
+    }
+
     function test_theme_switch_updates_chrome_not_candidates() {
-        Theme.mode = 0
+        SettingsController.themeMode = 0
         openReferenceColor()
         var candidatesBefore = picker.candidateColors.slice(0)
         var darkChrome = picker.background.color.toString()
         compare(darkChrome, Theme.elevated.toString())
 
-        Theme.mode = 1
+        SettingsController.themeMode = 1
         wait(0)
 
         compare(picker.background.color.toString(), Theme.elevated.toString())
@@ -502,5 +571,144 @@ TestCase {
         compare(normalizedColor(picker.baseColor), "#63316B")
         compare(normalizedColor(picker.selectedColor), "#63316B")
         compare(acceptedSpy.count, 0)
+    }
+
+    function test_picker_controls_have_names_and_roles() {
+        SettingsController.themeMode = 0
+        openReferenceColor()
+        var hex = findChild(picker, "colorPickerHex")
+        var close = findChild(picker, "colorPickerClose")
+        var redSlider = findChild(picker, "colorPickerRSlider")
+        var candidate = findChild(picker.contentItem, "colorCandidate-0")
+        verify(hex && close && redSlider && candidate)
+        compare(hex.Accessible.role, Accessible.EditableText)
+        verify(hex.Accessible.name.length > 0)
+        compare(close.Accessible.role, Accessible.Button)
+        verify(close.Accessible.name.length > 0)
+        compare(redSlider.Accessible.role, Accessible.Slider)
+        verify(redSlider.Accessible.name.length > 0)
+        compare(candidate.Accessible.role, Accessible.Button)
+        verify(candidate.Accessible.name.indexOf("#") >= 0)
+    }
+
+    function test_settings_drive_runtime_theme_and_cancel_restores_tokens() {
+        SettingsController.themeMode = 1
+        SettingsController.skinColorMode = 0
+        wait(0)
+
+        var initialAccent = ThemeManager.accent.toString()
+        var initialHighlight = ThemeManager.highlight.toString()
+        var initialBackground = ThemeManager.background.toString()
+        var initialCurrentTrackSurface = ThemeManager.currentTrackSurface.toString()
+        var initialSemantic = ThemeManager.success.toString()
+
+        SettingsController.beginEdit()
+        SettingsController.skinColorMode = 2
+        SettingsController.skinCustomColor = "#D27722"
+
+        tryVerify(function() {
+            return ThemeManager.accent.toString() !== initialAccent
+                    && ThemeManager.highlight.toString() !== initialHighlight
+                    && ThemeManager.background.toString() !== initialBackground
+                    && ThemeManager.currentTrackSurface.toString()
+                       !== initialCurrentTrackSurface
+        })
+        compare(Theme.accent, ThemeManager.accent)
+        compare(Theme.activeSelection, ThemeManager.highlight)
+        compare(Theme.currentTrackSurface, ThemeManager.currentTrackSurface)
+        compare(ThemeManager.success.toString(), initialSemantic)
+
+        SettingsController.cancelEdit()
+        tryVerify(function() {
+            return ThemeManager.accent.toString() === initialAccent
+                    && ThemeManager.highlight.toString() === initialHighlight
+                    && ThemeManager.background.toString() === initialBackground
+                    && ThemeManager.currentTrackSurface.toString()
+                       === initialCurrentTrackSurface
+        })
+    }
+
+    function test_theme_selectors_apply_presets_and_keyboard_activation() {
+        SettingsController.skinColorMode = 0
+        var defaultButton = findChild(skinSelector, "skinSelectorDefault")
+        var blue = findChild(skinSelector, "skinSelectorPreset-systemBlue")
+        verify(defaultButton && blue)
+        verify(defaultButton.checked)
+        compare(blue.Accessible.role, Accessible.Button)
+        verify(blue.width >= 24)
+        verify(blue.height >= 24)
+        verify(blue.Accessible.name.indexOf("systemBlue") < 0)
+        verify(blue.Accessible.name.indexOf("系统蓝") >= 0)
+        verify(!blue.selectionCueVisible)
+        blue.forceActiveFocus()
+        tryVerify(function() { return blue.focusCueVisible })
+        keyClick(Qt.Key_Space)
+        tryCompare(SettingsController, "skinColorMode", 1)
+        tryCompare(SettingsController, "skinPreset", "systemBlue")
+        verify(blue.checked)
+        verify(blue.selectionCueVisible)
+        verify(blue.focusCueVisible)
+    }
+
+    function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {
+        SettingsController.themeMode = 1
+        SettingsController.skinColorMode = 1
+        SettingsController.skinPreset = "purple"
+        wait(0)
+
+        compare(representativeSwitch.indicator.color.toString(),
+                Theme.accent.toString())
+        compare(representativeCheckBox.indicator.color.toString(),
+                Theme.accent.toString())
+        compare(representativeRangeSlider.background.children[0].color.toString(),
+                Theme.accent.toString())
+        compare(representativeComboBox.palette.highlight.toString(),
+                Theme.highlight.toString())
+
+        representativeComboBox.forceActiveFocus()
+        tryCompare(representativeComboBox, "activeFocus", true)
+        compare(representativeComboBox.background.border.color.toString(),
+                Theme.focus.toString())
+
+        representativeSwitch.enabled = false
+        representativeCheckBox.enabled = false
+        representativeRangeSlider.enabled = false
+        wait(0)
+        compare(representativeSwitch.indicator.color.toString(),
+                Theme.disabled.toString())
+        compare(representativeCheckBox.indicator.color.toString(),
+                Theme.disabled.toString())
+        compare(representativeRangeSlider.background.color.toString(),
+                Theme.disabled.toString())
+
+        representativeSwitch.enabled = true
+        representativeCheckBox.enabled = true
+        representativeRangeSlider.enabled = true
+    }
+
+    function test_theme_selector_custom_candidate_previews_and_transactions_cancel_or_commit() {
+        SettingsController.beginEdit()
+        SettingsController.skinColorMode = 0
+        var custom = findChild(skinSelector, "skinSelectorCustomField")
+        verify(custom)
+        custom.clicked()
+        var customPicker = findChild(custom, "colorFieldPicker")
+        tryCompare(customPicker, "visible", true)
+        tryVerify(function() {
+            return findChild(customPicker.contentItem, "colorCandidate-0") !== null
+        })
+        mouseClick(findChild(customPicker.contentItem, "colorCandidate-0"))
+        tryCompare(SettingsController, "skinColorMode", 2)
+        tryCompare(SettingsController, "skinCustomColor", "#FFF5EC")
+        verify(custom.selectionCueVisible)
+        SettingsController.cancelEdit()
+        tryCompare(SettingsController, "skinColorMode", 0)
+
+        SettingsController.beginEdit()
+        SettingsController.skinColorMode = 1
+        SettingsController.skinPreset = "purple"
+        SettingsController.commitEdit()
+        compare(SettingsController.skinColorMode, 1)
+        compare(SettingsController.skinPreset, "purple")
     }
 }

@@ -6,11 +6,13 @@
 #include <QFile>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
 
 #include <algorithm>
+#include <filesystem>
 
 class LibraryManagerControllerTest final : public QObject {
     Q_OBJECT
@@ -18,6 +20,10 @@ class LibraryManagerControllerTest final : public QObject {
 private slots:
     void marksMissingFilesAndFindsLayeredDuplicates();
     void monitorsUniqueFolders();
+    void classifiesCanonicalDropPaths();
+    void classifiesEverySupportedAudioExtension_data();
+    void classifiesEverySupportedAudioExtension();
+    void removesPersistedRootWithoutDeletingFiles();
     void persistsRootsAndImportsNewAudioRecursively();
     void exposesNonDestructiveLibrarySummary();
     void scanRunsAsCancelableBackgroundTask();
@@ -99,6 +105,128 @@ void LibraryManagerControllerTest::monitorsUniqueFolders()
     QCOMPARE(manager.monitoredFolders().size(), 1);
     QVERIFY(manager.removeMonitoredFolder(dir.path()));
     QCOMPARE(manager.monitoredFolders().size(), 0);
+}
+
+void LibraryManagerControllerTest::classifiesCanonicalDropPaths()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString musicRoot = directory.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(musicRoot));
+    const QString audioPath = writeFile(
+        QDir(musicRoot).filePath(QStringLiteral("song.mp3")), "audio");
+    const QString textPath = writeFile(
+        QDir(musicRoot).filePath(QStringLiteral("notes.txt")), "notes");
+    QVERIFY(!audioPath.isEmpty() && !textPath.isEmpty());
+
+    const QString aliasPath = directory.filePath(QStringLiteral("music-alias"));
+#ifdef Q_OS_WIN
+    QCOMPARE(QProcess::execute(
+                 QStringLiteral("cmd.exe"),
+                 {QStringLiteral("/d"), QStringLiteral("/c"),
+                  QStringLiteral("mklink"), QStringLiteral("/J"),
+                  QDir::toNativeSeparators(aliasPath),
+                  QDir::toNativeSeparators(musicRoot)}), 0);
+#else
+    std::error_code linkError;
+    std::filesystem::create_directory_symlink(
+        std::filesystem::path(musicRoot.toStdWString()),
+        std::filesystem::path(aliasPath.toStdWString()), linkError);
+    QVERIFY2(!linkError, linkError.message().c_str());
+#endif
+
+    LibraryManagerController manager;
+    const QVariantMap folder = manager.classifyDropUrl(
+        QUrl::fromLocalFile(musicRoot));
+    QCOMPARE(folder.value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Directory);
+    QCOMPARE(folder.value(QStringLiteral("path")).toString(),
+             QFileInfo(musicRoot).canonicalFilePath());
+
+    const QVariantMap alias = manager.classifyDropUrl(
+        QUrl::fromLocalFile(aliasPath));
+    QCOMPARE(alias.value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Directory);
+    QCOMPARE(alias.value(QStringLiteral("path")),
+             folder.value(QStringLiteral("path")));
+
+    QVERIFY(manager.addMonitoredFolder(aliasPath));
+    QVERIFY(!manager.addMonitoredFolder(musicRoot));
+    QCOMPARE(manager.monitoredFolders(),
+             QStringList{folder.value(QStringLiteral("path")).toString()});
+    QVERIFY(manager.removeMonitoredFolder(musicRoot));
+
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(audioPath))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::AudioFile);
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(textPath))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::OtherFile);
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(
+                 directory.filePath(QStringLiteral("missing.mp3"))))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Invalid);
+    QCOMPARE(manager.classifyDropUrl(QUrl(QStringLiteral("https://example.test/song.mp3")))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::Invalid);
+}
+
+void LibraryManagerControllerTest::classifiesEverySupportedAudioExtension_data()
+{
+    QTest::addColumn<QString>("extension");
+    for (const QString& extension : {
+             QStringLiteral("mp3"), QStringLiteral("wav"),
+             QStringLiteral("flac"), QStringLiteral("aac"),
+             QStringLiteral("m4a"), QStringLiteral("ogg"),
+             QStringLiteral("wma"), QStringLiteral("ape"),
+             QStringLiteral("opus"), QStringLiteral("aif"),
+             QStringLiteral("aiff")}) {
+        QTest::newRow(qPrintable(extension)) << extension;
+    }
+}
+
+void LibraryManagerControllerTest::classifiesEverySupportedAudioExtension()
+{
+    QFETCH(QString, extension);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = writeFile(
+        dir.filePath(QStringLiteral("track.") + extension.toUpper()), "audio");
+    LibraryManagerController manager;
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(path))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::AudioFile);
+}
+
+void LibraryManagerControllerTest::removesPersistedRootWithoutDeletingFiles()
+{
+    // Catches root removal accidentally deleting user audio or leaving the
+    // persisted reference/watch contract stale.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString root = dir.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(root));
+    const QString audioPath = writeFile(QDir(root).filePath(QStringLiteral("song.mp3")), "audio");
+    const QString settingsPath = dir.filePath(QStringLiteral("roots.json"));
+    LibraryManagerController manager;
+    manager.setStoragePath(settingsPath);
+    QSignalSpy rootsChanged(&manager, &LibraryManagerController::resourceRootsChanged);
+
+    QVERIFY(manager.addMonitoredFolder(root));
+    QVERIFY(manager.removeMonitoredFolder(root));
+    QVERIFY(QFileInfo::exists(audioPath));
+    QCOMPARE(rootsChanged.count(), 2);
+
+    LibraryManagerController restored;
+    restored.setStoragePath(settingsPath);
+    QVERIFY(restored.monitoredFolders().isEmpty());
 }
 
 void LibraryManagerControllerTest::persistsRootsAndImportsNewAudioRecursively()

@@ -22,7 +22,7 @@ struct NoiseReductionResult final {
 class NoiseReducer final {
 public:
     [[nodiscard]] static NoiseReductionResult reduce(
-        const DocumentSnapshot& snapshot,
+        const TimelineSnapshot& snapshot,
         const std::optional<Selection>& range,
         const std::filesystem::path& output_path,
         const std::atomic_bool* cancelled = nullptr,

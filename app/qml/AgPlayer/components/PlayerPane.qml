@@ -15,24 +15,24 @@ Rectangle {
     readonly property bool minimalHeight: height < 150
     readonly property real requestedWaveformHeight:
         SettingsController.waveformCanvasLocked
-        ? SettingsController.waveformCanvasHeight
+        ? Math.min(SettingsController.waveformCanvasHeight,
+                   Math.max(minimalHeight ? 32 : 48, height * 0.32))
         : Math.max(minimalHeight ? 32 : 48,
                    Math.min(minimalHeight ? 42 : 84, height * 0.22))
     readonly property real headerHeight:
         Math.max(minimalHeight ? 54 : 86,
                  Math.min(136, height - requestedWaveformHeight
                           - (minimalHeight ? 12 : 16)))
-    // The active decoder owns the playback clock.  Waveform analysis is only
-    // a picture of that clock: using its duration for seeking can leave a VBR
-    // tail after the final audible frame.
-    readonly property real effectiveDurationMs: PlaybackController.durationMs > 0
-                                                ? PlaybackController.durationMs
-                                                : waveformDurationMs
+    // Full PCM analysis is the exact waveform clock. Container metadata may
+    // include encoder padding and would stretch beat positions across pixels.
+    readonly property real effectiveDurationMs: waveformDurationMs > 0
+                                                ? waveformDurationMs
+                                                : PlaybackController.durationMs
     readonly property real visualPlaybackPositionMs: {
-        var duration = effectiveDurationMs
-        if (duration <= 0)
+        if (effectiveDurationMs <= 0)
             return 0
-        return Math.max(0, Math.min(duration, PlaybackController.positionMs))
+        return Math.max(0, Math.min(effectiveDurationMs,
+            PlaybackController.positionMs))
     }
     property int libraryRevision: 0
 
@@ -136,17 +136,13 @@ Rectangle {
         if (source.length === 0)
             return []
         var half = 64
-        var sourcePeak = 0
-        for (var sourceOffset = 0; sourceOffset < source.length; ++sourceOffset)
-            sourcePeak = Math.max(sourcePeak, Number(source[sourceOffset]) || 0)
-        var gain = sourcePeak > 0 ? Math.max(1, 1.0 / sourcePeak) : 0
         var result = new Array(half * 2)
         for (var index = 0; index < half; ++index) {
             var sourceIndex = Math.min(
                 source.length - 1,
                 Math.floor(index * source.length / half))
             var target = Math.min(1, Math.max(0,
-                              (Number(source[sourceIndex]) || 0) * gain))
+                              Math.sqrt(Number(source[sourceIndex]) || 0) * 1.35))
             result[index] = target
             result[half * 2 - 1 - index] = target
         }
@@ -158,6 +154,7 @@ Rectangle {
             root.spectrumVisual = root.shapeSpectrum(
                 PlaybackController.spectrum)
             waveform.peaks = root.spectrumVisual
+            playedWaveform.peaks = root.spectrumVisual
             return
         }
         var source = root.rawWaveformLayers || {}
@@ -168,6 +165,7 @@ Rectangle {
             _peakCount: Number(source._peakCount) || 0
         }
         waveform.layers = snapshot
+        playedWaveform.layers = snapshot
     }
 
     function loadWaveform() {
@@ -186,6 +184,8 @@ Rectangle {
         root.waveformDurationMs = 0
         waveform.layers = {}
         waveform.peaks = []
+        playedWaveform.layers = {}
+        playedWaveform.peaks = []
         if (!path || path.length === 0) {
             return
         }
@@ -235,12 +235,14 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                spacing: Theme.spacingSm
+                // At the native minimum height all metadata rows remain in
+                // the layout; only their spacing and font scale contract.
+                spacing: root.minimalHeight ? 1 : Theme.spacingSm
 
                 Item {
                     id: titleRow
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.minimalHeight ? 30 : 36
+                    Layout.preferredHeight: root.minimalHeight ? 24 : 36
 
                     Item {
                         id: titleViewport
@@ -263,11 +265,10 @@ Rectangle {
                                   || qsTr("No track loaded")
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: root.minimalHeight ? 18
+                            font.pixelSize: root.minimalHeight ? 14
                                             : root.compactHeight ? 22 : 26
                             font.weight: Font.DemiBold
                         }
-
                         HoverHandler { id: titleHover }
 
                         SequentialAnimation {
@@ -304,17 +305,17 @@ Rectangle {
                         anchors.left: titleViewport.right
                         anchors.leftMargin: Theme.spacingSm
                         anchors.verticalCenter: parent.verticalCenter
-                        width: root.minimalHeight ? 30 : 36
+                        width: root.minimalHeight ? 24 : 36
                         height: width
                         flat: true
                         icon.source: root.currentTrackFavorite()
                                      ? Theme.icon("heart-fill")
-                                     : Theme.icon("heart-outline")
+                                     : Theme.icon("heart-line")
                         icon.color: root.currentTrackFavorite()
                                     ? Theme.favoriteRed
                                     : Theme.secondaryText
-                        icon.width: root.minimalHeight ? 18 : 22
-                        icon.height: root.minimalHeight ? 18 : 22
+                        icon.width: root.minimalHeight ? 15 : 22
+                        icon.height: root.minimalHeight ? 15 : 22
                         Accessible.name: root.currentTrackFavorite()
                                          ? qsTr("Remove from favorites")
                                          : qsTr("Add to favorites")
@@ -331,7 +332,8 @@ Rectangle {
                     id: artistRatingRow
                     objectName: "trackArtistRatingRow"
                     Layout.fillWidth: true
-                    visible: !root.minimalHeight
+                    Layout.preferredHeight: root.minimalHeight ? 13 : 18
+                    visible: true
 
                     Item {
                         anchors.left: parent.left
@@ -401,8 +403,9 @@ Rectangle {
                     id: metadataBadges
                     objectName: "trackMetadataBadges"
                     Layout.fillWidth: true
-                    spacing: Theme.spacingSm
-                    visible: !root.minimalHeight
+                    Layout.preferredHeight: root.minimalHeight ? 14 : 22
+                    spacing: root.minimalHeight ? 2 : Theme.spacingSm
+                    visible: true
 
                     Repeater {
                         model: {
@@ -461,17 +464,22 @@ Rectangle {
             Layout.preferredHeight: root.requestedWaveformHeight
             Layout.minimumHeight: root.minimalHeight ? 32 : 48
             clip: true
-            property real hoverPreviewMs: -1
-            readonly property real playbackX:
-                root.effectiveDurationMs > 0
-                ? width * root.visualPlaybackPositionMs
-                  / root.effectiveDurationMs : 0
+            readonly property real hoverPreviewMs: waveform.hoverPosition
+            readonly property real playbackX: waveform.waveformCursorX
 
             WaveformItem {
                 id: waveform
                 objectName: "mainWaveform"
                 anchors.fill: parent
-                position: root.visualPlaybackPositionMs
+                // The overlay owns pointer input. Keeping the renderer passive
+                // prevents a click from being converted twice with different
+                // item coordinates.
+                pointerInteractionEnabled: false
+                // Keep this base pass entirely unplayed. The played pass is
+                // clipped below at the exact playback pixel, avoiding the
+                // visible bucket-by-bucket progress jump of peak colouring.
+                position: 0
+                cursorPosition: root.visualPlaybackPositionMs
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
@@ -482,18 +490,22 @@ Rectangle {
                               : SettingsController.waveformRgbBaseColor)
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
-                                    && SettingsController.spectrumColorMode === 0
-                                    ? SettingsController.spectrumSolidColor
-                                     : SettingsController.spectrumRgbStartColor
+                                    ? (SettingsController.spectrumColorMode === 0
+                                       ? SettingsController.spectrumSolidColor
+                                       : SettingsController.spectrumRgbStartColor)
+                                    : SettingsController.waveformRgbStartColor
                 gradientMiddleColor: SettingsController.waveformMode === 2
-                                     && SettingsController.spectrumColorMode === 0
-                                     ? SettingsController.spectrumSolidColor
-                                      : SettingsController.spectrumRgbMiddleColor
+                                     ? (SettingsController.spectrumColorMode === 0
+                                        ? SettingsController.spectrumSolidColor
+                                        : SettingsController.spectrumRgbMiddleColor)
+                                     : SettingsController.waveformRgbMiddleColor
                 gradientEndColor: SettingsController.waveformMode === 2
-                                  && SettingsController.spectrumColorMode === 0
-                                  ? SettingsController.spectrumSolidColor
-                                   : SettingsController.spectrumRgbEndColor
-                rgbProgress: SettingsController.waveformRgbProgress
+                                  ? (SettingsController.spectrumColorMode === 0
+                                     ? SettingsController.spectrumSolidColor
+                                     : SettingsController.spectrumRgbEndColor)
+                                  : SettingsController.waveformRgbEndColor
+                rgbProgress: SettingsController.waveformMode === 1
+                             && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformMode === 2
                                 ? 1.0 : SettingsController.waveformHeight
                 density: SettingsController.waveformMode === 2
@@ -503,36 +515,59 @@ Rectangle {
                 onSeekRequested: positionMs => PlaybackController.seek(positionMs)
             }
 
-            Rectangle {
-                objectName: "waveformProgressFeather"
-                visible: waveformFrame.playbackX > 1
-                         && waveformFrame.playbackX < waveformFrame.width
-                x: Math.max(0, waveformFrame.playbackX - width / 2)
-                anchors.verticalCenter: parent.verticalCenter
-                width: 3
+            Item {
+                id: playedWaveformClip
+                objectName: "waveformPlayedClip"
+                width: waveformFrame.playbackX
                 height: parent.height
-                opacity: 0.38
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: "transparent" }
-                    GradientStop { position: 0.5; color: "#ffffff" }
-                    GradientStop { position: 1; color: "transparent" }
+                clip: true
+                enabled: false
+
+                WaveformItem {
+                    id: playedWaveform
+                    objectName: "playedWaveform"
+                    enabled: false
+                    width: waveformFrame.width
+                    height: waveformFrame.height
+                    duration: root.effectiveDurationMs
+                    position: root.effectiveDurationMs
+                    analysisProgress: WaveformProvider.analysisProgress
+                    visualMode: SettingsController.waveformMode
+                    baseColor: waveform.baseColor
+                    progressColor: waveform.progressColor
+                    gradientStartColor: waveform.gradientStartColor
+                    gradientMiddleColor: waveform.gradientMiddleColor
+                    gradientEndColor: waveform.gradientEndColor
+                    rgbProgress: waveform.rgbProgress
+                    amplitudeScale: waveform.amplitudeScale
+                    density: waveform.density
+                    lineWidth: waveform.lineWidth
                 }
             }
 
-            Rectangle {
-                id: waveformPlaybackGuide
-                objectName: "waveformPlaybackGuide"
-                visible: SettingsController.waveformPlaybackGuide
-                         && root.effectiveDurationMs > 0
-                x: Math.max(0, Math.min(
-                                waveformFrame.width - width,
-                                Math.round(waveformFrame.playbackX - width / 2)))
-                width: 1
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                color: "#002FA7"
-                opacity: 0.96
+            MouseArea {
+                id: waveformInteractionSurface
+                objectName: "waveformInteractionSurface"
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                z: 5
+
+                function updatePreviewAt(x) {
+                    waveform.setHoverPositionForInteraction(
+                                waveform.timeForX(x))
+                }
+
+                function updatePreview(mouse) { updatePreviewAt(mouse.x) }
+
+                onPositionChanged: mouse => updatePreview(mouse)
+                onEntered: updatePreviewAt(mouseX)
+                onPressed: mouse => updatePreview(mouse)
+                onReleased: mouse => {
+                    updatePreview(mouse)
+                    PlaybackController.seek(waveform.timeForX(mouse.x))
+                }
+                onExited: waveform.setHoverPositionForInteraction(-1)
             }
 
             Rectangle {
@@ -540,15 +575,13 @@ Rectangle {
                 objectName: "waveformHoverGuide"
                 visible: SettingsController.waveformHoverTimePreview
                          && waveformFrame.hoverPreviewMs >= 0
-                x: root.effectiveDurationMs > 0
-                   ? Math.round(waveformFrame.hoverPreviewMs
-                                / root.effectiveDurationMs
-                                * waveformFrame.width)
-                   : 0
+                x: Math.max(0, Math.min(parent.width - width,
+                                        waveform.pixelForTime(
+                                            waveformFrame.hoverPreviewMs)))
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: "#54ff84"
+                color: "#54ff84" // theme-color-allow: waveform hover guide
                 opacity: 0.96
             }
 
@@ -557,17 +590,16 @@ Rectangle {
                          && waveformFrame.hoverPreviewMs >= 0
                 x: Math.max(0, Math.min(
                                 waveformFrame.width - width,
-                                (root.effectiveDurationMs > 0
-                                 ? waveformFrame.hoverPreviewMs
-                                   / root.effectiveDurationMs
-                                   * waveformFrame.width
+                                 (root.effectiveDurationMs > 0
+                                  ? waveform.pixelForTime(
+                                        waveformFrame.hoverPreviewMs)
                                  : 0) - width / 2))
                 y: 2
                 width: hoverTime.implicitWidth + 12
                 height: hoverTime.implicitHeight + 6
                 radius: height / 2
                 color: Theme.panel
-                border.color: "#54ff84"
+                border.color: "#54ff84" // theme-color-allow: waveform hover guide
 
                 Text {
                     id: hoverTime
@@ -579,38 +611,18 @@ Rectangle {
                 }
             }
 
-            MouseArea {
-                id: waveformHoverSurface
-                objectName: "waveformHoverSurface"
-                anchors.fill: parent
-                z: 20
-                enabled: true
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.ArrowCursor
-
-                function updatePreview(pointerX) {
-                    if (root.effectiveDurationMs <= 0 || width <= 0) {
-                        waveformFrame.hoverPreviewMs = -1
-                        return
-                    }
-                    var ratio = Math.max(0, Math.min(1, pointerX / width))
-                    waveformFrame.hoverPreviewMs = ratio * root.effectiveDurationMs
-                }
-
-                onPositionChanged: function(mouse) {
-                    updatePreview(mouse.x)
-                    if (pressed) {
-                        PlaybackController.seek(waveformFrame.hoverPreviewMs)
-                    }
-                }
-                onEntered: updatePreview(mouseX)
-                onExited: waveformFrame.hoverPreviewMs = -1
-                onClicked: function(mouse) {
-                    updatePreview(mouse.x)
-                    PlaybackController.seek(waveformFrame.hoverPreviewMs)
-                }
+            Rectangle {
+                id: waveformPlaybackGuide
+                objectName: "waveformPlaybackGuide"
+                visible: SettingsController.waveformPlaybackGuide
+                x: waveform.waveformCursorX
+                width: 1
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                color: "#002fa7" // theme-color-allow: waveform playback guide
+                z: 10
             }
+
         }
 
         RowLayout {

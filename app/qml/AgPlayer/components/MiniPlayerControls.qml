@@ -12,6 +12,7 @@ Rectangle {
     property var windows: WindowController
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
+    property int libraryRevision: 0
     // The complete decoded PCM duration is the waveform clock; metadata is a
     // fallback only until analysis finishes.
     readonly property real effectiveDurationMs: waveformDurationMs > 0
@@ -35,6 +36,11 @@ Rectangle {
         return playback ? LibraryModel.indexForTrackId(playback.currentTrackId) : -1
     }
     function currentTrackValue(role): variant {
+        // Keep every metadata binding dependent on the model notification;
+        // QML cannot infer that a value retrieved through LibraryModel.data()
+        // changes when a different role of the same row changes.
+        if (libraryRevision < 0)
+            return ""
         var row = currentRow()
         return row >= 0 ? LibraryModel.data(LibraryModel.index(row, 0), role) : ""
     }
@@ -42,6 +48,15 @@ Rectangle {
     function currentTrackRating(): int {
         var value = parseInt(currentTrackValue(LibraryModel.RatingRole), 10)
         return isNaN(value) ? 0 : Math.max(0, Math.min(5, value))
+    }
+    function currentTrackTags(): string {
+        var tags = currentTrackValue(LibraryModel.TagsRole)
+        if (!tags || tags.length === 0)
+            return ""
+        var values = []
+        for (var index = 0; index < tags.length; ++index)
+            values.push(String(tags[index]))
+        return values.join("、")
     }
     function coverSource(): string {
         var cover = currentTrackValue(LibraryModel.CoverUrlRole)
@@ -94,6 +109,12 @@ Rectangle {
         }
     }
 
+    Connections {
+        target: LibraryModel
+        function onDataChanged() { ++root.libraryRevision }
+        function onModelReset() { ++root.libraryRevision }
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 14; anchors.rightMargin: 14
@@ -112,7 +133,7 @@ Rectangle {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 1
+            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
             Text {
                 objectName: "miniTrackTitle"
                 text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
@@ -123,34 +144,82 @@ Rectangle {
             }
             RowLayout {
                 objectName: "miniMetadataRow"
-                Layout.fillWidth: true; Layout.preferredHeight: 18; spacing: 5
+                Layout.fillWidth: true; Layout.preferredHeight: 26; spacing: 4
                 Text {
-                    objectName: "miniArtistAlbum"
-                    text: (root.currentTrackValue(LibraryModel.ArtistRole) || qsTr("未知艺术家"))
-                          + " · " + (root.currentTrackValue(LibraryModel.AlbumRole) || qsTr("未知专辑"))
-                    color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 9
-                    elide: Text.ElideRight; Layout.fillWidth: true
+                    id: miniArtist
+                    objectName: "miniArtist"
+                    text: root.currentTrackValue(LibraryModel.ArtistRole)
+                          || qsTr("未知艺术家")
+                    color: Theme.secondaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    Layout.fillWidth: true; Layout.maximumWidth: 120
+                    ToolTip.visible: miniArtistHover.hovered && truncated
+                    ToolTip.text: text
+                    HoverHandler { id: miniArtistHover }
+                }
+                Text {
+                    objectName: "miniArtistAlbumSeparator"
+                    text: "·"; color: Theme.secondaryText; font.pixelSize: 10
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                Text {
+                    id: miniAlbum
+                    objectName: "miniAlbum"
+                    text: root.currentTrackValue(LibraryModel.AlbumRole)
+                          || qsTr("未知专辑")
+                    color: Theme.secondaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    Layout.fillWidth: true; Layout.maximumWidth: 120
+                    ToolTip.visible: miniAlbumHover.hovered && truncated
+                    ToolTip.text: text
+                    HoverHandler { id: miniAlbumHover }
+                }
+                Text {
+                    objectName: "miniTagSeparator"
+                    text: "·"; visible: miniTags.visible
+                    color: Theme.tagSecondaryText; font.pixelSize: 10
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                Text {
+                    id: miniTags
+                    objectName: "miniTags"
+                    text: root.currentTrackTags()
+                    visible: text.length > 0
+                    color: Theme.tagSecondaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    Layout.fillWidth: true; Layout.maximumWidth: 100
+                    ToolTip.visible: miniTagsHover.hovered && truncated
+                    ToolTip.text: text
+                    HoverHandler { id: miniTagsHover }
                 }
                 RowLayout {
+                    id: miniRating
                     objectName: "miniRating"; spacing: 1
+                    Layout.alignment: Qt.AlignVCenter
                     Repeater {
                         model: 5
                         delegate: ThemedIcon {
                             required property int index
+                            objectName: "miniRatingStar-" + index
                             source: index < root.currentTrackRating() ? Theme.icon("star-fill") : Theme.icon("star-line")
                             tint: index < root.currentTrackRating() ? Theme.ratingColor(index) : Theme.iconSecondary
-                            sourceSize.width: 11; sourceSize.height: 11
-                            Layout.preferredWidth: 12; Layout.preferredHeight: 14
+                            sourceSize.width: 16; sourceSize.height: 16
+                            Layout.preferredWidth: sourceSize.width
+                            Layout.preferredHeight: sourceSize.height
+                            Layout.alignment: Qt.AlignVCenter
                         }
                     }
                 }
                 ToolButton {
                     id: favoriteButton
                     objectName: "miniFavoriteButton"
-                    Layout.preferredWidth: 24; Layout.preferredHeight: 24
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
+                    Layout.alignment: Qt.AlignVCenter
+                    padding: 0
                     icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                     icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
-                    icon.width: 15; icon.height: 15; enabled: root.currentRow() >= 0
+                    icon.width: 16; icon.height: 16; enabled: root.currentRow() >= 0
                     onClicked: if (playback) playback.toggleFavorite(); background: null
                 }
             }
@@ -169,27 +238,28 @@ Rectangle {
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
                     baseColor: SettingsController.waveformMode === 0
-                               ? (SettingsController.waveformSolidBaseColor
-                                  || Theme.waveformMagenta)
+                               ? SettingsController.waveformSolidBaseColor
                                : (SettingsController.waveformMode === 2
                                   ? SettingsController.spectrumSolidColor
-                                  : (SettingsController.waveformRgbBaseColor
-                                     || Theme.waveformMagenta))
+                                  : SettingsController.waveformRgbBaseColor)
                     progressColor: SettingsController.waveformSolidProgressColor
-                                  || Theme.waveformMagenta
                     gradientStartColor: SettingsController.waveformMode === 2
-                                        && SettingsController.spectrumColorMode === 0
-                                        ? SettingsController.spectrumSolidColor
-                                        : SettingsController.spectrumRgbStartColor
+                                        ? (SettingsController.spectrumColorMode === 0
+                                           ? SettingsController.spectrumSolidColor
+                                           : SettingsController.spectrumRgbStartColor)
+                                        : SettingsController.waveformRgbStartColor
                     gradientMiddleColor: SettingsController.waveformMode === 2
-                                         && SettingsController.spectrumColorMode === 0
-                                         ? SettingsController.spectrumSolidColor
-                                         : SettingsController.spectrumRgbMiddleColor
+                                         ? (SettingsController.spectrumColorMode === 0
+                                            ? SettingsController.spectrumSolidColor
+                                            : SettingsController.spectrumRgbMiddleColor)
+                                         : SettingsController.waveformRgbMiddleColor
                     gradientEndColor: SettingsController.waveformMode === 2
-                                      && SettingsController.spectrumColorMode === 0
-                                      ? SettingsController.spectrumSolidColor
-                                      : SettingsController.spectrumRgbEndColor
-                    rgbProgress: SettingsController.waveformRgbProgress !== false
+                                      ? (SettingsController.spectrumColorMode === 0
+                                         ? SettingsController.spectrumSolidColor
+                                         : SettingsController.spectrumRgbEndColor)
+                                      : SettingsController.waveformRgbEndColor
+                    rgbProgress: SettingsController.waveformMode === 1
+                                 && SettingsController.waveformRgbProgress
                     amplitudeScale: SettingsController.waveformMode === 2
                                     ? 1.0 : SettingsController.waveformHeight
                     density: SettingsController.waveformMode === 2
@@ -257,10 +327,10 @@ Rectangle {
                     Layout.minimumWidth: Layout.preferredWidth
                     Layout.maximumWidth: Layout.preferredWidth
                     Layout.preferredHeight: 28
-                    icon.source: Theme.icon("pulse-line")
+                    icon.source: Theme.icon("waveform-switch")
                     icon.color: Theme.iconPrimary
-                    icon.width: 17
-                    icon.height: 17
+                    icon.width: 16
+                    icon.height: 16
                     Accessible.name: qsTr("切换波形样式")
                     ToolTip.text: Accessible.name
                     ToolTip.visible: hovered
@@ -275,7 +345,7 @@ Rectangle {
                                : playback.mode === PlaybackController.Shuffle ? Theme.icon("shuffle-arrows-line")
                                : playback.mode === PlaybackController.RepeatOne ? Theme.icon("repeat-one-line-alt")
                                : Theme.icon("repeat-list-line")
-                    icon.color: Theme.iconPrimary; icon.width: 17; icon.height: 17
+                    icon.color: Theme.iconPrimary; icon.width: 16; icon.height: 16
                     Accessible.name: root.modeName(); ToolTip.text: Accessible.name; ToolTip.visible: hovered
                     onClicked: if (playback) playback.cycleMode(); background: null
                 }
@@ -333,7 +403,7 @@ Rectangle {
                         height: parent.height
                         anchors.left: parent.left
                         icon.source: playback && playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
-                        icon.color: Theme.primaryText; icon.width: 17; icon.height: 17
+                        icon.color: Theme.primaryText; icon.width: 16; icon.height: 16
                         onClicked: if (playback) playback.toggleMuted(); background: null
                     }
                     HoverHandler {

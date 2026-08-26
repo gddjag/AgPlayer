@@ -13,18 +13,40 @@ $exe = Join-Path $appDir "AgPlayer.exe"
 $stage = Join-Path $repo "build/package/AgPlayer"
 $installerOutput = Join-Path $repo "build/installer"
 $cmakeCache = Join-Path $build "CMakeCache.txt"
+$versionTool = Join-Path $repo 'scripts/release-version.ps1'
+$versionOutput = (& $versionTool -SourceRoot $repo | Out-String).Trim()
+if ($versionOutput -notmatch '^AgPlayer release version: ([0-9]+\.[0-9]+\.[0-9]+)$') {
+    throw "Release version validation failed: $versionOutput"
+}
+$appVersion = $Matches[1]
 if (-not (Test-Path -LiteralPath $cmakeCache)) {
     throw "CMake cache not found: $cmakeCache"
 }
 $qtDirEntry = Select-String -LiteralPath $cmakeCache `
-    -Pattern '^Qt6_DIR:PATH=(.+)$' | Select-Object -First 1
+    -Pattern '^Qt6_DIR:[^=]+=(.+)$' | Select-Object -First 1
 if ($null -eq $qtDirEntry) {
     throw "Qt6_DIR was not found in $cmakeCache"
 }
 $qtCmakeDir = $qtDirEntry.Matches[0].Groups[1].Value
 $qtRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $qtCmakeDir))
 $windeployqt = Join-Path $qtRoot "bin/windeployqt.exe"
-$vsShell = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1"
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path -LiteralPath $vswhere)) {
+    throw "Visual Studio locator was not found: $vswhere"
+}
+$vsInstall = & $vswhere -latest `
+    -products Microsoft.VisualStudio.Product.BuildTools `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+    -property installationPath
+if (-not $vsInstall) {
+    $vsInstall = & $vswhere -latest -products * `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath
+}
+if (-not $vsInstall) {
+    throw "A complete Visual C++ Build Tools installation was not found"
+}
+$vsShell = Join-Path $vsInstall "Common7\Tools\Launch-VsDevShell.ps1"
 $isccCandidates = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
@@ -47,6 +69,14 @@ if (-not $SkipBuild) {
 }
 if (-not (Test-Path -LiteralPath $exe)) {
     throw "AgPlayer executable not found: $exe"
+}
+$expectedPeVersion = "$appVersion.0"
+$exeVersionInfo = (Get-Item -LiteralPath $exe).VersionInfo
+$actualFileVersion = ([string]$exeVersionInfo.FileVersion).Trim()
+$actualProductVersion = ([string]$exeVersionInfo.ProductVersion).Trim()
+if ($actualFileVersion -ne $expectedPeVersion -or
+    $actualProductVersion -ne $expectedPeVersion) {
+    throw "AgPlayer.exe PE version $actualFileVersion / $actualProductVersion does not match release version $expectedPeVersion"
 }
 
 if (Test-Path -LiteralPath $stage) {
@@ -150,13 +180,14 @@ foreach ($relativePath in $requiredRuntime) {
     }
 }
 
-& $iscc (Join-Path $repo "installer/AgPlayer.iss")
+& $iscc "/DAppVersion=$appVersion" (Join-Path $repo "installer/AgPlayer.iss")
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
-$installer = Get-ChildItem -LiteralPath $installerOutput -File -Filter "AgPlayer-Setup-*-x64.exe" |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-if ($null -eq $installer) { throw "Installer was not produced" }
+$installer = Get-Item -LiteralPath (Join-Path $installerOutput `
+    "AgPlayer-Setup-$appVersion-x64.exe") -ErrorAction SilentlyContinue
+if ($null -eq $installer) {
+    throw "Versioned installer was not produced for $appVersion"
+}
 
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName
 [pscustomobject]@{

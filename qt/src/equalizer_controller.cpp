@@ -377,18 +377,18 @@ QList<EqualizerController::Preset> EqualizerController::builtInPresets() const
     return {
         preset(QStringLiteral("flat"), tr("Flat"), 0.0,
                {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-        preset(QStringLiteral("bass-boost"), tr("Bass Boost"), -1.5,
-               {5, 4, 3, 1.5, 0, 0, 0, 0, 0, 0}),
+        preset(QStringLiteral("bass-boost"), tr("Bass Boost"), -4.5,
+               {4.5, 4, 3, 1.5, 0, 0, 0, 0, 0, 0}),
         preset(QStringLiteral("bass-cut"), tr("Bass Cut"), 0.0,
-               {-5, -4, -3, -1.5, 0, 0, 0, 0, 0, 0}),
-        preset(QStringLiteral("vocal"), tr("Vocal Clarity"), -1.0,
-               {-1, -1, 0, 1, 2, 3, 2, 1, 0, -1}),
-        preset(QStringLiteral("treble-boost"), tr("Treble Boost"), -1.5,
-               {0, 0, 0, 0, 0, 0, 1.5, 3, 4, 5}),
+               {-4.5, -4, -3, -1.5, 0, 0, 0, 0, 0, 0}),
+        preset(QStringLiteral("vocal"), tr("Vocal Clarity"), -2.5,
+               {-2, -1.5, -0.5, 0.5, 1.5, 2.5, 2, 1, 0, -1}),
+        preset(QStringLiteral("treble-boost"), tr("Treble Boost"), -4.5,
+               {0, 0, 0, 0, 0, 0, 1, 2, 3.5, 4.5}),
         preset(QStringLiteral("treble-cut"), tr("Treble Cut"), 0.0,
-               {0, 0, 0, 0, 0, 0, -1.5, -3, -4, -5}),
-        preset(QStringLiteral("rock"), tr("Rock"), -2.0,
-               {4, 3, 1, -1, -2, 1, 2, 3, 4, 3})};
+               {0, 0, 0, 0, 0, 0, -1, -2, -3.5, -4.5}),
+        preset(QStringLiteral("rock"), tr("Rock"), -3.5,
+               {3.5, 3, 1, -1.5, -2, 1, 2.5, 3, 3.5, 2})};
 }
 
 std::optional<EqualizerController::Preset> EqualizerController::findPreset(
@@ -411,7 +411,7 @@ void EqualizerController::load()
 {
     QSettings settings;
     settings.beginGroup(QStringLiteral("equalizer"));
-    enabled_ = settings.value(QStringLiteral("enabled"), true).toBool();
+    enabled_ = settings.value(QStringLiteral("enabled"), false).toBool();
     bypassed_ = settings.value(QStringLiteral("bypassed"), false).toBool();
     autoClipProtection_ =
         settings.value(QStringLiteral("autoClipProtection"), true).toBool();

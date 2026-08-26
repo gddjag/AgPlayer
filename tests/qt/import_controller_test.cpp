@@ -1,5 +1,6 @@
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "metadata_text.hpp"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -42,6 +43,8 @@ private slots:
     void importsTenThousandLightweightRecordsWithinBudget();
     void alreadyImportedTracksAreSkippedWithoutFalseSuccess();
     void importedTracksAppearFirstInDiscoveryOrder();
+    void metadataDecoderPreservesUtf8AndUsesCp936Fallback();
+    void metadataDecoderRejectsAmbiguousMojibakeRepair();
 };
 
 namespace {
@@ -51,6 +54,25 @@ void createFile(const QString& path)
     QVERIFY(file.open(QIODevice::WriteOnly));
     QCOMPARE(file.write("audio"), 5);
 }
+}
+
+void ImportControllerTest::metadataDecoderPreservesUtf8AndUsesCp936Fallback()
+{
+    const QByteArray utf8 = QStringLiteral("Björk 音乐").toUtf8();
+    QCOMPARE(agplayer::qt::decodeMetadataText(utf8.constData()),
+             QStringLiteral("Björk 音乐"));
+    const QByteArray cp936("\xD6\xD0\xCE\xC4", 4);
+    QCOMPARE(agplayer::qt::decodeMetadataText(cp936.constData()),
+             QStringLiteral("中文"));
+}
+
+void ImportControllerTest::metadataDecoderRejectsAmbiguousMojibakeRepair()
+{
+    // These bytes are valid UTF-8 and can be deliberate literal text.  The
+    // decoder must not guess that they were intended to mean a different word.
+    const QByteArray literal = QString::fromUtf8("Ã©").toUtf8();
+    QCOMPARE(agplayer::qt::decodeMetadataText(literal.constData()),
+             QString::fromUtf8("Ã©"));
 }
 
 void ImportControllerTest::deduplicatesCanonicalPathsAndContinuesAfterFailure()
@@ -480,30 +502,6 @@ void ImportControllerTest::writesBpmWhenAutoReadEnabled()
     QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
 }
 
-void ImportControllerTest::productionProbePrefersValidEmbeddedBpm()
-{
-    QTemporaryDir tempDirectory;
-    QVERIFY(tempDirectory.isValid());
-    const QString wavPath = tempDirectory.filePath(QStringLiteral("click-track.wav"));
-    const QString taggedPath = tempDirectory.filePath(QStringLiteral("click-track.flac"));
-    QVERIFY(agplayer::test::writeClickTrackWav(wavPath, 120, 8));
-
-    const QByteArray wavPathUtf8 = wavPath.toUtf8();
-    const QByteArray taggedPathUtf8 = taggedPath.toUtf8();
-    QCOMPARE(ag_transcode(wavPathUtf8.constData(), taggedPathUtf8.constData(),
-                         nullptr, 0, 0, 0, nullptr, nullptr, nullptr),
-             AG_OK);
-    QCOMPARE(ag_metadata_write_extended(
-                 taggedPathUtf8.constData(), nullptr, nullptr, nullptr, nullptr, nullptr,
-                 nullptr, nullptr, nullptr, nullptr, nullptr, "173.25",
-                 nullptr, nullptr, nullptr, nullptr, 0, nullptr),
-             AG_OK);
-
-    const ProbeResult result = probeMetadata(taggedPath, true);
-    QCOMPARE(result.result, AG_OK);
-    QCOMPARE(result.track.bpm, 173.25);
-}
-
 void ImportControllerTest::leavesBpmZeroWhenAutoReadDisabled()
 {
     QTemporaryFile tempFile(QDir::temp().filePath(QStringLiteral("ag_bpm_click_off_XXXXXX.wav")));
@@ -563,6 +561,32 @@ void ImportControllerTest::probeObservesDynamicAnalyzeBpmFlag()
         QCOMPARE(model.rowCount(), 1);
         QVERIFY(std::abs(model.tracks().front().bpm - 120.0) < 1.0);
     }
+}
+
+void ImportControllerTest::productionProbePrefersValidEmbeddedBpm()
+{
+    const QString fixture = QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
+    QVERIFY2(!fixture.isEmpty(), "AGPLAYER_TEST_AUDIO must name the generated WAV fixture");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString tagged = dir.filePath(QStringLiteral("tagged-bpm.mp3"));
+    QCOMPARE(ag_transcode(fixture.toUtf8().constData(), tagged.toUtf8().constData(),
+                         "libmp3lame", 192000, 44100, 2,
+                         nullptr, nullptr, nullptr), AG_OK);
+    QCOMPARE(ag_metadata_write_extended(
+                 tagged.toUtf8().constData(), nullptr, nullptr, nullptr,
+                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                 nullptr, "127.50", nullptr, nullptr, nullptr,
+                 nullptr, 0U, nullptr), AG_OK);
+
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    importer.importUrls({QUrl::fromLocalFile(tagged)});
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(importer.errors().size(), 0);
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(std::abs(model.tracks().front().bpm - 127.5) < 0.01);
 }
 
 void ImportControllerTest::queuesDropsReceivedWhileAnImportIsBusy()

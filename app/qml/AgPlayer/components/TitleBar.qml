@@ -67,11 +67,11 @@ Rectangle {
 
             background: Rectangle {
                 color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
+                      : parent.pressed ? Theme.surfacePressed
+                      : parent.visualFocus ? Theme.surfaceHover
+                      : parent.hovered ? Theme.surfaceHover
                       : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.color: parent.visualFocus ? Theme.focus : "transparent"
                 border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
@@ -95,11 +95,11 @@ Rectangle {
 
             background: Rectangle {
                 color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
+                      : parent.pressed ? Theme.surfacePressed
+                      : parent.visualFocus ? Theme.surfaceHover
+                      : parent.hovered ? Theme.surfaceHover
                       : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.color: parent.visualFocus ? Theme.focus : "transparent"
                 border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
@@ -130,11 +130,11 @@ Rectangle {
 
             background: Rectangle {
                 color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.cyan
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.border
+                      : parent.pressed ? Theme.surfacePressed
+                      : parent.visualFocus ? Theme.surfaceHover
+                      : parent.hovered ? Theme.surfaceHover
                       : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.color: parent.visualFocus ? Theme.focus : "transparent"
                 border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }
@@ -158,11 +158,11 @@ Rectangle {
 
             background: Rectangle {
                 color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.favoriteRed
-                      : parent.visualFocus ? Theme.border
-                      : parent.hovered ? Theme.favoriteRed
+                      : parent.pressed ? Theme.critical
+                      : parent.visualFocus ? Theme.surfaceHover
+                      : parent.hovered ? Theme.danger
                       : "transparent"
-                border.color: parent.visualFocus ? Theme.cyan : "transparent"
+                border.color: parent.visualFocus ? Theme.focus : "transparent"
                 border.width: parent.visualFocus ? 2 : 0
                 radius: Theme.radiusSm
             }

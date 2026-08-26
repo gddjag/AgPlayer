@@ -13,7 +13,6 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMenu>
-#include <QPalette>
 #include <QQuickWindow>
 #include <QQuickStyle>
 #include <QSettings>
@@ -22,35 +21,40 @@
 #include <QStyle>
 #include <QStringList>
 #include <QSystemTrayIcon>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QWindow>
 #include <QtPlugin>
 
 #include <agplayer/c_api.h>
 
+#include "agplayer_version.hpp"
+
 #include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <memory>
 #include <utility>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <shobjidl.h>
-#include <propsys.h>
 #include <propkey.h>
+#include <shobjidl.h>
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
 #include "equalizer_controller.hpp"
+#include "filename_processor.hpp"
 #include "format_converter.hpp"
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
-#include "audio_editor/audio_editor_controller.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
-#include "filename_processor.hpp"
 #include "playback_controller.hpp"
 #include "playback_state_store.hpp"
 #include "playlist_model.hpp"
@@ -58,6 +62,9 @@
 #include "runtime_log.hpp"
 #include "rename_journal_store.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "theme_manager.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
@@ -123,6 +130,21 @@ HRESULT setWindowStringProperty(IPropertyStore* properties,
     return properties->SetValue(key, property);
 }
 
+QString windowStringProperty(IPropertyStore* properties,
+                             const PROPERTYKEY& key)
+{
+    PROPVARIANT property{};
+    if (FAILED(properties->GetValue(key, &property))) {
+        return {};
+    }
+    const QString value = property.vt == VT_LPWSTR
+            && property.pwszVal != nullptr
+        ? QString::fromWCharArray(property.pwszVal)
+        : QString();
+    PropVariantClear(&property);
+    return value;
+}
+
 void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
                                const NativeWindowIcons& nativeIcons)
 {
@@ -161,8 +183,29 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
     const HRESULT iconResult = setWindowStringProperty(
         properties, PKEY_AppUserModel_RelaunchIconResource, iconResource);
     if (SUCCEEDED(identityResult) && SUCCEEDED(commandResult)
-        && SUCCEEDED(displayResult) && SUCCEEDED(iconResult)) {
-        properties->Commit();
+        && SUCCEEDED(displayResult) && SUCCEEDED(iconResult)
+        && SUCCEEDED(properties->Commit())) {
+        const QString identity = windowStringProperty(
+            properties, PKEY_AppUserModel_ID);
+        const QString storedCommand = windowStringProperty(
+            properties, PKEY_AppUserModel_RelaunchCommand);
+        const QString storedDisplay = windowStringProperty(
+            properties, PKEY_AppUserModel_RelaunchDisplayNameResource);
+        const QString storedIcon = windowStringProperty(
+            properties, PKEY_AppUserModel_RelaunchIconResource);
+        if (identity != QString::fromWCharArray(kAgPlayerAppUserModelId)
+            || storedCommand.isEmpty() || storedDisplay.isEmpty()
+            || storedIcon.isEmpty()) {
+            qWarning("AgPlayer native taskbar identity publication failed");
+        } else {
+            if (qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1) {
+                std::fputs("AgPlayer native taskbar identity verified\n",
+                           stderr);
+                std::fflush(stderr);
+            }
+        }
+    } else {
+        qWarning("AgPlayer native taskbar property commit failed");
     }
     properties->Release();
 }
@@ -198,7 +241,8 @@ private:
 int main(int argc, char* argv[])
 {
 #ifdef Q_OS_WIN
-    // Keep taskbar grouping identical to the installed shortcut identity.
+    // Must be set before Qt creates any native window so taskbar grouping and
+    // the installed shortcut resolve to the same stable application identity.
     SetCurrentProcessExplicitAppUserModelID(L"AgPlayer.Desktop");
 #endif
     // The application supplies its own control visuals. A non-native style
@@ -207,9 +251,17 @@ int main(int argc, char* argv[])
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AgPlayer"));
+    app.setApplicationVersion(
+        QString::fromLatin1(agplayer::version::kVersion));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
-    app.setWindowIcon(QIcon(QStringLiteral(
-        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico")));
+    const QIcon applicationIcon(QStringLiteral(
+        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
+    app.setWindowIcon(applicationIcon);
+#ifdef Q_OS_WIN
+    WindowsShellIdentityFilter shellIdentityFilter(
+        applicationIcon, loadNativeWindowIcons(), &app);
+    app.installEventFilter(&shellIdentityFilter);
+#endif
 
     // Development-only QA arguments. Parsed before ag_player_create so the
     // production player instance is reused (controllers are never bypassed).
@@ -219,6 +271,10 @@ int main(int argc, char* argv[])
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
+    //   --qa-skin <default|id|#RRGGBB> set the complete theme skin seed
+    //   --qa-settings-section <0..6> capture one settings section
+    //   --qa-tag <name>              seed a tag in --qa-test-mode only
+    //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
@@ -229,13 +285,21 @@ int main(int argc, char* argv[])
     QSize qaToolsSize;
     QString qaScreenshotList;
     QString qaListCategory;
+    QStringList qaSeedTags;
+    QString qaSelectedTag;
     bool qaShowTrackDetails = false;
     QString qaTheme;
+    QString qaSkin;
     QString qaLanguage;
     bool qaOpenSettings = false;
+    int qaSettingsSection = -1;
     bool qaOpenEqualizer = false;
     QString qaLibraryPath;
     QString qaImportFolder;
+    qint64 qaEditorSelectionStartMs = -1;
+    qint64 qaEditorSelectionEndMs = -1;
+    qint64 qaEditorPlayheadMs = -1;
+    bool qaEditorReferenceState = false;
     QString initialFilePath;
     QString instanceKeySuffix;
     {
@@ -279,16 +343,31 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-list-category")
                        && i + 1 < cliArgs.size()) {
                 qaListCategory = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-tag") && i + 1 < cliArgs.size()) {
+                qaSeedTags.append(cliArgs.at(++i));
+            } else if (arg == QStringLiteral("--qa-selected-tag")
+                       && i + 1 < cliArgs.size()) {
+                qaSelectedTag = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-show-track-details")) {
                 qaShowTrackDetails = true;
             } else if (arg == QStringLiteral("--qa-theme")
                        && i + 1 < cliArgs.size()) {
                 qaTheme = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-skin")
+                       && i + 1 < cliArgs.size()) {
+                qaSkin = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-language")
                        && i + 1 < cliArgs.size()) {
                 qaLanguage = cliArgs.at(++i).toLower();
             } else if (arg == QStringLiteral("--qa-open-settings")) {
                 qaOpenSettings = true;
+            } else if (arg == QStringLiteral("--qa-settings-section")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int section = cliArgs.at(++i).toInt(&ok);
+                if (ok && section >= 0 && section <= 6) {
+                    qaSettingsSection = section;
+                }
             } else if (arg == QStringLiteral("--qa-open-equalizer")) {
                 qaOpenEqualizer = true;
             } else if (arg == QStringLiteral("--qa-library")
@@ -297,6 +376,23 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-import-folder")
                        && i + 1 < cliArgs.size()) {
                 qaImportFolder = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-editor-selection-ms")
+                       && i + 2 < cliArgs.size()) {
+                bool startOk = false;
+                bool endOk = false;
+                const qint64 start = cliArgs.at(++i).toLongLong(&startOk);
+                const qint64 end = cliArgs.at(++i).toLongLong(&endOk);
+                if (startOk && endOk && start >= 0 && end > start) {
+                    qaEditorSelectionStartMs = start;
+                    qaEditorSelectionEndMs = end;
+                }
+            } else if (arg == QStringLiteral("--qa-editor-playhead-ms")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const qint64 value = cliArgs.at(++i).toLongLong(&ok);
+                if (ok && value >= 0) qaEditorPlayheadMs = value;
+            } else if (arg == QStringLiteral("--qa-editor-reference-state")) {
+                qaEditorReferenceState = true;
             } else if (arg == QStringLiteral("--qa-instance-key")
                        && i + 1 < cliArgs.size()) {
                 instanceKeySuffix = cliArgs.at(++i);
@@ -467,6 +563,29 @@ int main(int argc, char* argv[])
         if (!loaded.isEmpty()) {
             library.replaceAll(loaded);
         }
+        const QDir libraryDataDirectory = QFileInfo(libraryPath).dir();
+        QString tagStoragePath =
+            libraryDataDirectory.filePath(QStringLiteral("tags.json"));
+        std::unique_ptr<QTemporaryDir> qaTagStorageDirectory;
+        if (qaTestMode && !qaLibraryPath.isEmpty() && !qaSeedTags.isEmpty()) {
+            qaTagStorageDirectory = std::make_unique<QTemporaryDir>(
+                QDir(QDir::tempPath()).filePath(
+                    QStringLiteral("AgPlayer-qa-tags-XXXXXX")));
+            tagStoragePath = qaTagStorageDirectory->isValid()
+                ? qaTagStorageDirectory->filePath(QStringLiteral("tags.json"))
+                : QString();
+        }
+        TagModel tagModel(
+            &library,
+            tagStoragePath);
+        if (qaTestMode) {
+            for (const QString& tagName : qaSeedTags) {
+                tagModel.createTag(tagName);
+            }
+            if (!qaSelectedTag.isEmpty()) {
+                tagModel.setSelectedKey(qaSelectedTag);
+            }
+        }
 
         PlaybackController playback(core, &library);
         EqualizerController equalizer(core);
@@ -581,53 +700,42 @@ int main(int argc, char* argv[])
         } else if (qaTheme == QStringLiteral("system")) {
             settings.setThemeMode(2);
         }
+        if (qaTestMode) {
+            const auto applyQaColor = [](const QString& requested,
+                                         const auto& setMode,
+                                         const auto& setPreset,
+                                         const auto& setCustom) {
+                if (requested.isEmpty()) {
+                    return;
+                }
+                if (requested.compare(QStringLiteral("default"),
+                                      Qt::CaseInsensitive) == 0) {
+                    setMode(0);
+                } else if (requested.startsWith(QLatin1Char('#'))) {
+                    setCustom(requested);
+                    setMode(2);
+                } else {
+                    setPreset(requested);
+                    setMode(1);
+                }
+            };
+            applyQaColor(
+                qaSkin,
+                [&settings](int mode) { settings.setSkinColorMode(mode); },
+                [&settings](const QString& preset) {
+                    settings.setSkinPreset(preset);
+                },
+                [&settings](const QString& color) {
+                    settings.setSkinCustomColor(color);
+                });
+        }
         if (!qaLanguage.isEmpty()) {
             settings.setLanguage(qaLanguage);
         }
-        const auto applyApplicationPalette = [&app, &settings]() {
-            if (settings.themeMode() == 2) {
-                app.setPalette(app.style()->standardPalette());
-                return;
-            }
-            QPalette palette;
-            if (settings.themeMode() == 0) {
-                palette.setColor(QPalette::Window, QColor(QStringLiteral("#07111f")));
-                palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#eef5ff")));
-                palette.setColor(QPalette::Base, QColor(QStringLiteral("#091526")));
-                palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#101d30")));
-                palette.setColor(QPalette::Text, QColor(QStringLiteral("#eef5ff")));
-                palette.setColor(QPalette::Button, QColor(QStringLiteral("#132238")));
-                palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#eef5ff")));
-                palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#0869d8")));
-                palette.setColor(QPalette::HighlightedText, Qt::white);
-                palette.setColor(QPalette::PlaceholderText,
-                                 QColor(QStringLiteral("#7f90a8")));
-                palette.setColor(QPalette::Disabled, QPalette::ButtonText,
-                                 QColor(QStringLiteral("#64748b")));
-                palette.setColor(QPalette::Disabled, QPalette::Text,
-                                 QColor(QStringLiteral("#64748b")));
-            } else {
-                palette.setColor(QPalette::Window, QColor(QStringLiteral("#f5f7fb")));
-                palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#162033")));
-                palette.setColor(QPalette::Base, Qt::white);
-                palette.setColor(QPalette::AlternateBase,
-                                 QColor(QStringLiteral("#edf2f8")));
-                palette.setColor(QPalette::Text, QColor(QStringLiteral("#162033")));
-                palette.setColor(QPalette::Button, QColor(QStringLiteral("#f2f5f9")));
-                palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#162033")));
-                palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#0a67d1")));
-                palette.setColor(QPalette::HighlightedText, Qt::white);
-                palette.setColor(QPalette::PlaceholderText,
-                                 QColor(QStringLiteral("#738096")));
-            }
-            app.setPalette(palette);
-        };
-        applyApplicationPalette();
-        QObject::connect(&settings, &SettingsController::themeModeChanged,
-                         &app, applyApplicationPalette);
+        ThemeManager themeManager(app);
+        ThemeSettingsSynchronizer themeSettings(themeManager, settings);
         if (qaTestMode) {
             settings.setWaveformMode(1);
-            settings.setWaveformRgbProgress(false);
         }
         TranslationManager translations;
         if (!translations.setLanguage(settings.language())) {
@@ -641,6 +749,19 @@ int main(int argc, char* argv[])
             }
         });
         WaveformProvider waveformProvider(&settings);
+        TrackWaveformThumbnailProvider trackWaveformThumbnailProvider(
+            settings.cacheDirectory());
+        QObject::connect(
+            &settings, &SettingsController::cacheDirectoryChanged,
+            &trackWaveformThumbnailProvider,
+            [&settings, &trackWaveformThumbnailProvider]() {
+                trackWaveformThumbnailProvider.setCacheDirectory(
+                    settings.cacheDirectory());
+            });
+        QObject::connect(
+            &waveformProvider, &WaveformProvider::waveformCacheReady,
+            &trackWaveformThumbnailProvider,
+            &TrackWaveformThumbnailProvider::invalidateSourceCache);
         QObject::connect(&waveformProvider, &WaveformProvider::waveformReady,
                          &playback,
                          [&playback, &library, &settings](
@@ -663,6 +784,14 @@ int main(int argc, char* argv[])
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
         });
+        LibraryManagerController libraryManager;
+        libraryManager.setStoragePath(libraryDataDirectory.filePath(
+            QStringLiteral("resource-roots.json")));
+        libraryManager.setLibraryDataPath(libraryPath);
+        libraryManager.setLibraryModel(&library);
+        libraryManager.setImportController(&importer);
+        LibraryNavigationModel libraryNavigation(
+            &library, &playlists, &tagModel, &libraryManager);
         QObject::connect(&settings, &SettingsController::autoReadBpmChanged, &app,
                          [autoReadBpmFlag, &settings]() {
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
@@ -690,7 +819,9 @@ int main(int argc, char* argv[])
 
         AudioToolsController audioTools;
         AudioEditorController audioEditor;
-        audioEditor.setMainPlaybackController(&playback);
+        QObject::connect(&audioEditor,
+                         &AudioEditorController::exclusivePreviewStarting,
+                         &playback, &PlaybackController::stop);
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(qaTool);
         }
@@ -736,7 +867,13 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &filenameProcessor,
                                     &settings, &waveformProvider, &playlists,
-                                    &equalizer, &audioEditor);
+                                    &equalizer, &audioEditor,
+                                    AgPlayerQmlRuntimeModels{
+                                        &tagModel,
+                                        &libraryNavigation,
+                                        &libraryManager,
+                                        &trackWaveformThumbnailProvider,
+                                        &themeManager});
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
@@ -905,9 +1042,14 @@ int main(int argc, char* argv[])
                 }
             };
         shutdownActions.flushLibrary =
-            [&library, &playlists, &settings, &savePlaybackState]() {
+            [&library, &playlists, &tagModel, &settings, &savePlaybackState]() {
             library.flush();
             playlists.flush();
+            if (!tagModel.flush()) {
+                qWarning().noquote()
+                    << QCoreApplication::translate(
+                           "Main", "Failed to save tag data during shutdown");
+            }
             savePlaybackState(true);
             if (settings.cleanTempOnExit()) {
                 settings.clearTempFiles();
@@ -1006,6 +1148,22 @@ int main(int argc, char* argv[])
                     << listComponent.errorString();
             }
 
+            // The existing screenshot category seam must enter the real
+            // navigation state before docking. This lets page-specific width
+            // constraints participate in the same first-show path as a user
+            // opening Tag Management.
+            if (qaListCategory == QStringLiteral("tags")
+                && listWindow != nullptr) {
+                if (QObject* navigation = listWindow->findChild<QObject*>(
+                        QStringLiteral("referenceSideNavigation"))) {
+                    QMetaObject::invokeMethod(
+                        navigation, "activateNode",
+                        Q_ARG(QVariant, QStringLiteral("tags")),
+                        Q_ARG(QVariant, QStringLiteral("tags:manage")),
+                        Q_ARG(QVariant, QString{}));
+                }
+            }
+
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
             windows.setListWindow(qobject_cast<QWindow*>(listWindow));
@@ -1019,6 +1177,19 @@ int main(int argc, char* argv[])
                                        NativeDropRouter::Target::Main);
             nativeDrops.registerWindow(nativeListWindow,
                                        NativeDropRouter::Target::List);
+            const QPointer<QObject> listDropTarget = listWindow;
+            nativeDrops.registerHitTarget(
+                nativeListWindow, NativeDropRouter::Target::ResourceFolder,
+                [listDropTarget](const QPointF& position) {
+                    if (listDropTarget == nullptr) return false;
+                    QVariant hit;
+                    return QMetaObject::invokeMethod(
+                               listDropTarget, "resourceDropContainsPoint",
+                               Q_RETURN_ARG(QVariant, hit),
+                               Q_ARG(QVariant, position.x()),
+                               Q_ARG(QVariant, position.y()))
+                        && hit.toBool();
+                });
             nativeDrops.registerWindow(nativeAudioToolsWindow,
                                        NativeDropRouter::Target::AudioTools);
             QObject::connect(
@@ -1039,20 +1210,20 @@ int main(int argc, char* argv[])
                         break;
                     case NativeDropRouter::Target::List:
                         {
-                        const QString category = filterModel != nullptr
-                            ? filterModel->property("category").toString()
-                            : QString();
-                        const bool isCustom = category != QStringLiteral("all")
-                            && category != QStringLiteral("favorites")
-                            && category != QStringLiteral("history")
-                            && category != QStringLiteral("recentAdded")
-                            && category != QStringLiteral("neverPlayed");
-                        if (listWindow != nullptr) {
-                            listWindow->setProperty(
-                                "importTargetPlaylistId",
-                                isCustom ? category : QString());
+                        const bool invoked = listWindow != nullptr
+                            && QMetaObject::invokeMethod(
+                                listWindow, "handleListDropUrls",
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        if (!invoked) importer.importPaths(paths);
                         }
-                        importer.importPaths(paths);
+                        break;
+                    case NativeDropRouter::Target::ResourceFolder:
+                        {
+                        if (listWindow != nullptr) {
+                            QMetaObject::invokeMethod(
+                                listWindow, "handleResourceDropUrls",
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        }
                         }
                         break;
                     case NativeDropRouter::Target::AudioTools:
@@ -1097,6 +1268,13 @@ int main(int argc, char* argv[])
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
                 settingsWindow = mainWindow->findChild<QObject*>(
                     QStringLiteral("settingsWindow"));
+                if (qaSettingsSection >= 0 && settingsWindow != nullptr) {
+                    if (QObject* settingsPage = settingsWindow->findChild<QObject*>(
+                            QStringLiteral("settingsPage"))) {
+                        settingsPage->setProperty("selectedSection",
+                                                  qaSettingsSection);
+                    }
+                }
             }
             QObject* equalizerWindow = nullptr;
             if (qaOpenEqualizer) {
@@ -1224,6 +1402,22 @@ int main(int argc, char* argv[])
                 }
                 if (qaTool == 0 && !qaImportFolder.isEmpty()) {
                     audioEditor.openFile(QUrl::fromLocalFile(qaImportFolder));
+                    const qint64 rate = qMax<qint64>(1, audioEditor.sampleRate());
+                    if (qaEditorReferenceState) {
+                        audioEditor.setOriginalBpm(128.0);
+                        audioEditor.setPitch(2, 0);
+                        audioEditor.setKeepPitch(true);
+                        audioEditor.setFormantPreservation(true);
+                    }
+                    if (qaEditorSelectionStartMs >= 0
+                        && qaEditorSelectionEndMs > qaEditorSelectionStartMs) {
+                        audioEditor.setSelection(
+                            qaEditorSelectionStartMs * rate / 1'000,
+                            qaEditorSelectionEndMs * rate / 1'000);
+                    }
+                    if (qaEditorPlayheadMs >= 0) {
+                        audioEditor.seekFrame(qaEditorPlayheadMs * rate / 1'000);
+                    }
                 } else if (qaTool == 1 && !qaImportFolder.isEmpty()) {
                     formatConverter.loadFiles(
                         {QUrl::fromLocalFile(qaImportFolder)});
@@ -1240,7 +1434,8 @@ int main(int argc, char* argv[])
                 }
             }
             if (wantScreenshotList && listWindow != nullptr) {
-                if (filterModel != nullptr && !qaListCategory.isEmpty()) {
+                if (qaListCategory != QStringLiteral("tags")
+                    && filterModel != nullptr && !qaListCategory.isEmpty()) {
                     filterModel->setProperty("category", qaListCategory);
                 }
                 if (auto* listWin = qobject_cast<QWindow*>(listWindow)) {
@@ -1298,10 +1493,17 @@ int main(int argc, char* argv[])
                     } else {
                         qWarning("QA screenshot target is not a QQuickWindow");
                     }
-                    QCoreApplication::quit();
+                    // grabWindow() can leave a Qt Quick render job in flight.
+                    // Hide the captured surface and let the render loop drain
+                    // before QQmlApplicationEngine begins destroying windows.
+                    targetWindow->setVisible(false);
+                    QTimer::singleShot(250, QCoreApplication::quit);
                 };
 
                 if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
+                    QTimer::singleShot(1500, captureWindow);
+                } else if (wantScreenshotList
+                           && qaListCategory == QStringLiteral("tags")) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList) {
                     auto attempts = std::make_shared<int>(0);
@@ -1351,6 +1553,11 @@ int main(int argc, char* argv[])
             }
             result = app.exec();
             savePlaybackState(true);
+            if (!tagModel.flush()) {
+                qWarning().noquote()
+                    << QCoreApplication::translate(
+                           "Main", "Failed to save tag data after event loop exit");
+            }
 
             app.removeNativeEventFilter(&hotkeys);
             hotkeys.unregisterAll();

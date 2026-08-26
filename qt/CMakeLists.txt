@@ -1,4 +1,14 @@
 add_library(agplayer_qt STATIC
+    src/audio_editor/audio_editor_waveform_item.cpp
+    src/audio_editor/audio_editor_waveform_item.hpp
+    src/audio_editor/audio_editor_controller.cpp
+    src/audio_editor/audio_editor_controller.hpp
+    src/audio_editor/editor_action_model.cpp
+    src/audio_editor/editor_action_model.hpp
+    src/audio_editor/editor_viewport.cpp
+    src/audio_editor/editor_viewport.hpp
+    src/audio_editor/project_document.cpp
+    src/audio_editor/project_document.hpp
     src/audio_file_discovery.cpp
     src/audio_file_discovery.hpp
     src/audio_preview_controller.cpp
@@ -23,14 +33,6 @@ add_library(agplayer_qt STATIC
     src/equalizer_controller.hpp
     src/audio_tools_controller.cpp
     src/audio_tools_controller.hpp
-    src/audio_editor/editor_action_model.cpp
-    src/audio_editor/editor_action_model.hpp
-    src/audio_editor/audio_editor_controller.cpp
-    src/audio_editor/audio_editor_controller.hpp
-    src/audio_editor/audio_editor_waveform_item.cpp
-    src/audio_editor/audio_editor_waveform_item.hpp
-    src/audio_editor/editor_viewport.cpp
-    src/audio_editor/editor_viewport.hpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
     src/cache_janitor.cpp
@@ -55,10 +57,22 @@ add_library(agplayer_qt STATIC
     src/library_model.hpp
     src/library_manager_controller.cpp
     src/library_manager_controller.hpp
+    src/library_navigation_model.cpp
+    src/library_navigation_model.hpp
     src/library_store.cpp
     src/library_store.hpp
+    src/tag_model.cpp
+    src/tag_model.hpp
+    src/tag_filter_model.cpp
+    src/tag_filter_model.hpp
+    src/tag_store.cpp
+    src/tag_store.hpp
+    src/theme_manager.cpp
+    src/theme_manager.hpp
     src/metadata_editor.cpp
     src/metadata_editor.hpp
+    src/metadata_text.cpp
+    src/metadata_text.hpp
     src/native_drop_router.cpp
     src/native_drop_router.hpp
     src/playback_controller.cpp
@@ -67,6 +81,8 @@ add_library(agplayer_qt STATIC
     src/playback_state_store.hpp
     src/replay_gain_scanner.cpp
     src/replay_gain_scanner.hpp
+    src/resource_path.cpp
+    src/resource_path.hpp
     src/playlist_model.cpp
     src/playlist_model.hpp
     src/qml_registration.cpp
@@ -76,6 +92,10 @@ add_library(agplayer_qt STATIC
     src/settings_controller.hpp
     src/translation_manager.cpp
     src/translation_manager.hpp
+    src/track_waveform_thumbnail_provider.cpp
+    src/track_waveform_thumbnail_provider.hpp
+    src/track_waveform_thumbnail_item.cpp
+    src/track_waveform_thumbnail_item.hpp
     src/runtime_log.hpp
     src/waveform_provider.cpp
     src/waveform_provider.hpp
@@ -92,6 +112,7 @@ target_include_directories(agplayer_qt
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
     PRIVATE
+        "${CMAKE_BINARY_DIR}/generated"
         "${CMAKE_SOURCE_DIR}/core/src"
 )
 target_link_libraries(agplayer_qt

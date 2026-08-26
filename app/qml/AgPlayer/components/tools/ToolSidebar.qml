@@ -1,99 +1,63 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
     id: navigation
     objectName: "audioToolsTopNav"
-    property bool referenceWorkbench: false
-    color: referenceWorkbench ? "#071925" : Theme.panel
-    border.color: referenceWorkbench ? "#142b3a" : Theme.border
+    color: Theme.panel
+    border.color: Theme.border
     border.width: 1
-    radius: referenceWorkbench ? 0 : Theme.radiusMd
-    implicitHeight: referenceWorkbench ? 52 : 55
+    implicitHeight: 43
 
-    readonly property var toolNames: [
-        qsTr("音频编辑"), qsTr("格式转换"),
-        qsTr("元数据编辑"), qsTr("文件名处理")
-    ]
     property int currentTool: 0
     property Window window
+    readonly property color activeLabelColor: Theme.primaryText
     signal toolSelected(int index)
 
-    RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: referenceWorkbench ? 20 : Theme.spacingLg
-        anchors.rightMargin: referenceWorkbench ? 20 : Theme.spacingLg
-        spacing: referenceWorkbench ? 0 : Theme.spacingSm
-
-        Item { Layout.fillWidth: !navigation.referenceWorkbench }
+    Row {
+        anchors.left: parent.left
+        anchors.leftMargin: 49
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        spacing: 31
 
         Repeater {
-            model: [
-                { name: qsTr("音频编辑"), icon: "equalizer-line" },
-                { name: qsTr("格式转换"), icon: "briefcase-4-line" },
-                { name: qsTr("元数据编辑"), icon: "information-line" },
-                { name: qsTr("文件名处理"), icon: "file-copy-line" }
-            ]
-
-            Button {
-                id: navButton
-                objectName: "audioToolNavButton"
-                Layout.preferredWidth: navigation.referenceWorkbench ? 164 : 154
-                Layout.preferredHeight: navigation.referenceWorkbench ? 52 : 53
-                Layout.maximumHeight: navigation.referenceWorkbench ? 52 : 53
+            model: [qsTr("音频编辑"), qsTr("格式转换"),
+                    qsTr("元数据修改"), qsTr("文件名处理")]
+            delegate: Button {
+                required property int index
+                required property string modelData
+                objectName: "audioToolNav_" + index
+                width: 126
+                height: 42
                 flat: true
+                text: modelData
                 checked: navigation.currentTool === index
                 focusPolicy: Qt.StrongFocus
-
-                contentItem: RowLayout {
-                    spacing: 7
-                    Item { Layout.preferredWidth: 12 }
-                    ThemedIcon {
-                        source: Theme.icon(modelData.icon)
-                        tint: checked ? Theme.cyan : Theme.iconSecondary
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                    }
-                    Text {
-                        text: modelData.name
-                        color: checked && navigation.referenceWorkbench
-                               ? Theme.accent
-                               : checked ? Theme.primaryText : Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 15
-                        font.weight: checked ? Font.DemiBold : Font.Normal
-                    }
-                    Item { Layout.fillWidth: true }
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.checked ? navigation.activeLabelColor
+                                          : Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 16
+                    font.weight: parent.checked ? Font.DemiBold : Font.Normal
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
-
-                background: Rectangle {
-                    color: navigation.referenceWorkbench
-                           ? (checked ? "#0b2638"
-                              : navButton.hovered ? "#0a2130" : "transparent")
-                           : checked ? Qt.rgba(Theme.accent.r,
-                                               Theme.accent.g,
-                                               Theme.accent.b, 0.14)
-                                     : (navButton.hovered ? Theme.hoverSurface : "transparent")
-                    border.width: 0
-                    radius: navigation.referenceWorkbench ? 0 : Theme.radiusMd
+                background: Item {
                     Rectangle {
-                        visible: navigation.referenceWorkbench && navButton.checked
+                        visible: parent.parent.checked
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        height: 2
+                        height: 3
+                        radius: 1
                         color: Theme.accent
                     }
                 }
-
                 onClicked: navigation.toolSelected(index)
             }
         }
-
-        Item { Layout.fillWidth: true }
     }
 }

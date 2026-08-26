@@ -7,18 +7,19 @@ import AgPlayer
 Rectangle {
     id: page
     objectName: "metadataEditPage"
-    color: "#081b29"
+    color: Theme.background
+    clip: true
     focus: true
 
     readonly property real desktopMinimumWidth: 1206
     readonly property bool compactLayout: width < desktopMinimumWidth
     readonly property real inspectorRatio: 0.44
-    readonly property color canvasColor: "#071925"
-    readonly property color panelColor: "#0a1d2b"
-    readonly property color inputColor: "#081622"
-    readonly property color borderColor: "#162b3a"
-    readonly property color lineColor: "#132938"
-    readonly property color mutedColor: "#91a0ad"
+    readonly property color canvasColor: Theme.editorCanvas
+    readonly property color panelColor: Theme.panel
+    readonly property color inputColor: Theme.elevated
+    readonly property color borderColor: Theme.border
+    readonly property color lineColor: Theme.border
+    readonly property color mutedColor: Theme.secondaryText
 
     property var selectedIndices: []
     property int selectionAnchor: -1
@@ -54,8 +55,9 @@ Rectangle {
         palette.buttonText: Theme.primaryText
         background: Rectangle {
             radius: 5
-            color: parent.down ? "#173248"
-                               : parent.hovered ? "#122b3d" : "#0d2231"
+            color: parent.down ? Theme.activeSelection
+                               : parent.hovered ? Theme.hoverSurface
+                                                : Theme.elevated
             border.width: 1
             border.color: page.borderColor
         }
@@ -381,12 +383,12 @@ Rectangle {
 
     function fileAccent(fileName) {
         const suffix = String(fileName || "").split(".").pop().toLowerCase()
-        if (suffix === "mp3") return "#19a56f"
-        if (suffix === "flac") return "#ea5f32"
-        if (suffix === "m4a") return "#805fd0"
-        if (suffix === "opus") return "#2cb3bd"
-        if (suffix === "wav") return "#159ec7"
-        return "#6d7f8c"
+        if (suffix === "mp3") return "#19a56f" // theme-color-allow: file format badge
+        if (suffix === "flac") return "#ea5f32" // theme-color-allow: file format badge
+        if (suffix === "m4a") return "#805fd0" // theme-color-allow: file format badge
+        if (suffix === "opus") return "#2cb3bd" // theme-color-allow: file format badge
+        if (suffix === "wav") return "#159ec7" // theme-color-allow: file format badge
+        return "#6d7f8c" // theme-color-allow: file format badge
     }
 
     Keys.onPressed: function(event) {
@@ -582,7 +584,7 @@ Rectangle {
                     color: page.inputColor
                     radius: 5
                     border.width: 1
-                    border.color: parent.activeFocus ? Theme.accent : page.borderColor
+                    border.color: parent.activeFocus ? Theme.focus : page.borderColor
                 }
                 onTextChanged: page.searchText = text
             }
@@ -672,13 +674,13 @@ Rectangle {
                                 implicitWidth: selectedChipText.implicitWidth + 24
                                 implicitHeight: 28
                                 radius: 5
-                                color: "#103557"
-                                border.color: "#1c4d75"
+                                color: Theme.selectedTrackSelection
+                                border.color: Theme.accent
                                 Label {
                                     id: selectedChipText
                                     anchors.centerIn: parent
                                     text: qsTr("已选 %1").arg(page.selectedIndices.length)
-                                    color: "#cce8ff"
+                                    color: Theme.primaryText
                                     font.pixelSize: 13
                                 }
                             }
@@ -686,7 +688,7 @@ Rectangle {
                                 implicitWidth: totalChipText.implicitWidth + 24
                                 implicitHeight: 28
                                 radius: 5
-                                color: "#0d2130"
+                                color: Theme.elevated
                                 Label {
                                     id: totalChipText
                                     anchors.centerIn: parent
@@ -701,7 +703,7 @@ Rectangle {
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 38
-                            color: "#091b29"
+                            color: Theme.background
                             border.width: 1
                             border.color: page.lineColor
                             RowLayout {
@@ -750,8 +752,10 @@ Rectangle {
                                 readonly property var metadata: page.entry(sourceIndex)
                                 width: fileList.width
                                 height: 52
-                                color: page.isSelected(sourceIndex) ? "#0d2b42"
-                                      : (rowHover.hovered ? "#0c2638" : "transparent")
+                                color: page.isSelected(sourceIndex)
+                                      ? Theme.selectedTrackSelection
+                                      : (rowHover.hovered ? Theme.hoverSurface
+                                                          : "transparent")
                                 border.width: 1
                                 border.color: page.lineColor
                                 HoverHandler { id: rowHover }
@@ -838,7 +842,7 @@ Rectangle {
                                                        ? qsTr("已取消") : qsTr("失败"))
                                                 : qsTr("就绪")
                                         color: metadata.hasError || (applyResult && !applyResult.success)
-                                               ? Theme.favoriteRed : Theme.accent
+                                               ? Theme.error : Theme.accent
                                         Layout.preferredWidth: 52
                                         horizontalAlignment: Text.AlignHCenter
                                     }
@@ -1018,7 +1022,7 @@ Rectangle {
                                 }
                                 Label {
                                     Layout.fillWidth: true
-                                    text: qsTr("直接编辑以下信息，留空表示保持原值不变。")
+                                    text: qsTr("未修改字段保持原值；点击清空会删除字段。")
                                     color: page.mutedColor
                                     font.pixelSize: 12
                                 }
@@ -1066,8 +1070,9 @@ Rectangle {
                                             function reset(summary) {
                                                 sourceValue = String(summary.value || "")
                                                 sourceMultiple = Boolean(summary.multiple)
-                                                selectedMode = !sourceMultiple && sourceValue !== ""
-                                                               ? "set" : "keep"
+                                                // Loading an existing value is not an edit.  A field only
+                                                // becomes set/clear after the user acts on it.
+                                                selectedMode = "keep"
                                                 valueField.text = sourceMultiple ? "" : sourceValue
                                             }
                                             function descriptor() {
@@ -1100,14 +1105,19 @@ Rectangle {
                                                                          : qsTr("保留原值")
                                                     font.pixelSize: 14
                                                     background: Rectangle {
-                                                        color: valueField.enabled ? page.inputColor : "#091825"
+                                                        color: valueField.enabled
+                                                               ? page.inputColor
+                                                               : Theme.background
                                                         radius: 4
                                                         border.width: valueField.activeFocus ? 1.5 : 1
                                                         border.color: valueField.activeFocus
                                                                       ? Theme.accent : page.borderColor
                                                     }
                                                     onTextEdited: fieldRow.selectedMode = text.length > 0
-                                                                                  ? "set" : "keep"
+                                                                                  ? "set"
+                                                                                  : ((!fieldRow.sourceMultiple
+                                                                                      && fieldRow.sourceValue !== "")
+                                                                                     ? "clear" : "keep")
                                                 }
                                                 ThemedIcon {
                                                     visible: fieldRow.fieldKey === "date"
@@ -1119,6 +1129,13 @@ Rectangle {
                                                     sourceSize.width: 17
                                                     sourceSize.height: 17
                                                 }
+                                            }
+                                            ToolButton {
+                                                objectName: "metadataClearButton_" + fieldRow.fieldKey
+                                                text: qsTr("清空")
+                                                Accessible.name: qsTr("清空") + fieldRow.fieldLabel
+                                                Layout.preferredWidth: 46
+                                                onClicked: fieldRow.selectMode("clear")
                                             }
                                             Item {
                                                 visible: false
@@ -1166,7 +1183,7 @@ Rectangle {
                                         Layout.preferredHeight: 210
                                         color: page.inputColor
                                         border.width: 1
-                                        border.color: "#314254"
+                                        border.color: Theme.border
                                         radius: 5
                                         clip: true
                                         Image {
@@ -1234,15 +1251,25 @@ Rectangle {
                                 objectName: "metadataChangePreview"
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 223
-                                color: "#081b28"
+                                color: Theme.background
                                 border.width: 1
                                 border.color: page.borderColor
                                 radius: 6
+                                clip: true
 
-                                ColumnLayout {
+                                ScrollView {
+                                    id: metadataChangePreviewScroll
+                                    objectName: "metadataChangePreviewScroll"
                                     anchors.fill: parent
                                     anchors.margins: 14
-                                    spacing: 4
+                                    clip: true
+                                    contentWidth: availableWidth
+                                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                                    ColumnLayout {
+                                        width: metadataChangePreviewScroll.availableWidth
+                                        spacing: 4
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Label {
@@ -1277,7 +1304,7 @@ Rectangle {
                                             spacing: 8
                                             ThemedIcon {
                                                 source: Theme.icon("checkbox-blank-circle-fill")
-                                                tint: "#39bd72"
+                                                tint: Theme.success
                                                 sourceSize.width: 16
                                                 sourceSize.height: 16
                                             }
@@ -1291,11 +1318,13 @@ Rectangle {
                                         }
                                     }
                                     Label {
+                                        objectName: "metadataResultsSummaryLabel"
                                         Layout.fillWidth: true
                                         visible: MetadataEditor.results.length > 0
-                                        text: qsTr("成功 %1 · 失败 %2 · 取消 %3")
+                                        text: qsTr("成功 %1 · 失败 %2 · 不支持 %3 · 取消 %4")
                                               .arg(MetadataEditor.successCount)
                                               .arg(MetadataEditor.failedCount)
+                                              .arg(MetadataEditor.unsupportedCount)
                                               .arg(MetadataEditor.cancelledCount)
                                         color: Theme.accent
                                         font.pixelSize: 12
@@ -1310,12 +1339,13 @@ Rectangle {
                                                      ? (modelData.message || modelData.stage || qsTr("完成"))
                                                      : (modelData.preflightReason || modelData.message
                                                         || modelData.errorCode || qsTr("失败")))
-                                            color: modelData.success ? "#39bd72" : Theme.favoriteRed
+                                            color: modelData.success ? Theme.success : Theme.error
                                             font.pixelSize: 11
                                             elide: Text.ElideMiddle
                                         }
                                     }
                                     Item { Layout.fillHeight: true }
+                                    }
                                 }
                             }
 
@@ -1341,18 +1371,21 @@ Rectangle {
                                     enabled: page.targetCount() > 0
                                              && page.configuredEditCount() > 0
                                              && !MetadataEditor.busy
-                                    palette.buttonText: "white"
+                                    palette.buttonText: Theme.accentText
                                     background: Rectangle {
                                         radius: 5
-                                        color: !applyButton.enabled ? "#28465e"
-                                             : applyButton.down ? "#0055d8"
-                                             : applyButton.hovered ? "#087cff" : "#086bf2"
+                                        color: !applyButton.enabled ? Theme.disabled
+                                             : applyButton.down ? Theme.accentPressed
+                                             : applyButton.hovered ? Theme.accentHover
+                                                                   : Theme.accent
                                     }
                                     onClicked: page.applyEdits()
                                 }
                                 Button {
                                     id: cancelButton
                                     objectName: "metadataCancelButton"
+                                    visible: true
+                                    enabled: MetadataEditor.busy
                                     Layout.preferredWidth: 198
                                     Layout.preferredHeight: 42
                                     text: qsTr("取消")
@@ -1360,17 +1393,13 @@ Rectangle {
                                     palette.buttonText: Theme.primaryText
                                     background: Rectangle {
                                         radius: 5
-                                        color: cancelButton.down ? "#173248"
-                                             : cancelButton.hovered ? "#122b3d" : "#0d2231"
+                                        color: cancelButton.down ? Theme.surfacePressed
+                                             : cancelButton.hovered ? Theme.hoverSurface
+                                                                    : Theme.elevated
                                         border.width: 1
                                         border.color: page.borderColor
                                     }
-                                    onClicked: {
-                                        if (MetadataEditor.busy)
-                                            MetadataEditor.cancel()
-                                        else
-                                            page.resetEdits()
-                                    }
+                                    onClicked: MetadataEditor.cancel()
                                 }
                             }
                         }

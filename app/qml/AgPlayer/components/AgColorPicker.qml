@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs as Dialogs
 import AgPlayer
 import "ColorScale.js" as ColorScale
 
@@ -103,6 +104,14 @@ Popup {
     onBaseColorChanged: synchronizeControls(baseColor)
     Component.onCompleted: synchronizeControls(baseColor)
 
+    Dialogs.ColorDialog {
+        id: systemColorDialog
+        objectName: "colorPickerSystemDialog"
+        title: qsTr("选择颜色")
+        selectedColor: root.baseColor
+        onAccepted: root.setBaseHex(selectedColor)
+    }
+
     background: Item {
         property color color: Theme.elevated
 
@@ -133,25 +142,50 @@ Popup {
             Layout.fillWidth: true
             spacing: 9
 
-            Rectangle {
+            AbstractButton {
+                id: systemSwatch
+                objectName: "colorPickerSystemSwatch"
                 Layout.preferredWidth: 25
                 Layout.preferredHeight: 25
-                radius: width / 2
-                color: root.baseColor
-                border.width: 1
-                border.color: Theme.border
+                focusPolicy: Qt.StrongFocus
+                hoverEnabled: true
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("打开系统颜色选择器")
+                onClicked: {
+                    systemColorDialog.selectedColor = root.baseColor
+                    systemColorDialog.open()
+                }
+                Keys.onSpacePressed: function(event) {
+                    systemSwatch.clicked()
+                    event.accepted = true
+                }
+                Keys.onReturnPressed: function(event) {
+                    systemSwatch.clicked()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: function(event) {
+                    systemSwatch.clicked()
+                    event.accepted = true
+                }
+
+                background: Rectangle {
+                    radius: width / 2
+                    color: root.baseColor
+                    border.width: systemSwatch.visualFocus ? 2 : 1
+                    border.color: systemSwatch.visualFocus ? Theme.focus : Theme.border
+                }
             }
 
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 31
                 radius: 8
-                color: Theme.panel
-                border.width: 1
-                border.color: hexInput.activeFocus ? Theme.primaryText
+                    color: Theme.panel
+                    border.width: 1
+                    border.color: hexInput.activeFocus ? Theme.focus
                                                    : Theme.border
 
-                TextField {
+                TextInput {
                     id: hexInput
                     objectName: "colorPickerHex"
                     anchors.fill: parent
@@ -166,13 +200,10 @@ Popup {
                     verticalAlignment: TextInput.AlignVCenter
                     selectByMouse: true
                     activeFocusOnTab: true
-                    topPadding: 0
-                    bottomPadding: 0
-                    background: null
                     maximumLength: 7
                     inputMethodHints: Qt.ImhPreferUppercase
                     Accessible.role: Accessible.EditableText
-                    Accessible.name: qsTr("Hex color")
+                    Accessible.name: qsTr("十六进制颜色")
                     KeyNavigation.tab: closeButton
                     KeyNavigation.priority: KeyNavigation.BeforeItem
 
@@ -191,10 +222,14 @@ Popup {
                 hoverEnabled: true
                 focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.Button
-                Accessible.name: qsTr("Close color picker")
+                Accessible.name: qsTr("关闭颜色选择器")
                 KeyNavigation.tab: redInput
                 KeyNavigation.priority: KeyNavigation.BeforeItem
                 onClicked: root.close()
+                Keys.onSpacePressed: function(event) {
+                    closeButton.clicked()
+                    event.accepted = true
+                }
                 Keys.onReturnPressed: function(event) {
                     closeButton.clicked()
                     event.accepted = true
@@ -217,7 +252,7 @@ Popup {
                     color: closeButton.hovered ? Theme.hoverSurface
                                                : "transparent"
                     border.width: closeButton.visualFocus ? 2 : 0
-                    border.color: Theme.primaryText
+                    border.color: Theme.focus
                 }
             }
         }
@@ -237,6 +272,14 @@ Popup {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 4
+                        color: "transparent"
+                        border.width: redInput.activeFocus ? 1 : 0
+                        border.color: Theme.accent
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -246,7 +289,7 @@ Popup {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
-                        TextField {
+                        TextInput {
                             id: redInput
                             objectName: "colorPickerR"
                             width: 34
@@ -256,11 +299,9 @@ Popup {
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
                             activeFocusOnTab: true
-                            padding: 0
-                            background: null
                             validator: IntValidator { bottom: 0; top: 255 }
                             Accessible.role: Accessible.EditableText
-                            Accessible.name: qsTr("Red channel")
+                            Accessible.name: qsTr("红色通道")
                             KeyNavigation.tab: greenInput
                             KeyNavigation.priority: KeyNavigation.BeforeItem
                             onEditingFinished: root.setRgbFromInputs()
@@ -274,14 +315,6 @@ Popup {
                             Keys.onEnterPressed: function(event) {
                                 event.accepted = root.restoreInvalidRgbInput(redInput)
                             }
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: 1
-                                visible: redInput.activeFocus
-                                color: Theme.primaryText
-                            }
                         }
                     }
                 }
@@ -295,6 +328,14 @@ Popup {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 4
+                        color: "transparent"
+                        border.width: greenInput.activeFocus ? 1 : 0
+                        border.color: Theme.accent
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -304,7 +345,7 @@ Popup {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
-                        TextField {
+                        TextInput {
                             id: greenInput
                             objectName: "colorPickerG"
                             width: 34
@@ -314,11 +355,9 @@ Popup {
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
                             activeFocusOnTab: true
-                            padding: 0
-                            background: null
                             validator: IntValidator { bottom: 0; top: 255 }
                             Accessible.role: Accessible.EditableText
-                            Accessible.name: qsTr("Green channel")
+                            Accessible.name: qsTr("绿色通道")
                             KeyNavigation.tab: blueInput
                             KeyNavigation.priority: KeyNavigation.BeforeItem
                             onEditingFinished: root.setRgbFromInputs()
@@ -332,14 +371,6 @@ Popup {
                             Keys.onEnterPressed: function(event) {
                                 event.accepted = root.restoreInvalidRgbInput(greenInput)
                             }
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: 1
-                                visible: greenInput.activeFocus
-                                color: Theme.primaryText
-                            }
                         }
                     }
                 }
@@ -353,6 +384,14 @@ Popup {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 4
+                        color: "transparent"
+                        border.width: blueInput.activeFocus ? 1 : 0
+                        border.color: Theme.accent
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -362,7 +401,7 @@ Popup {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 11
                         }
-                        TextField {
+                        TextInput {
                             id: blueInput
                             objectName: "colorPickerB"
                             width: 34
@@ -372,11 +411,9 @@ Popup {
                             horizontalAlignment: TextInput.AlignHCenter
                             selectByMouse: true
                             activeFocusOnTab: true
-                            padding: 0
-                            background: null
                             validator: IntValidator { bottom: 0; top: 255 }
                             Accessible.role: Accessible.EditableText
-                            Accessible.name: qsTr("Blue channel")
+                            Accessible.name: qsTr("蓝色通道")
                             KeyNavigation.tab: redSlider
                             KeyNavigation.priority: KeyNavigation.BeforeItem
                             onEditingFinished: root.setRgbFromInputs()
@@ -389,14 +426,6 @@ Popup {
                             }
                             Keys.onEnterPressed: function(event) {
                                 event.accepted = root.restoreInvalidRgbInput(blueInput)
-                            }
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: 1
-                                visible: blueInput.activeFocus
-                                color: Theme.primaryText
                             }
                         }
                     }
@@ -419,7 +448,7 @@ Popup {
                 live: true
                 focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.Slider
-                Accessible.name: qsTr("Red channel slider")
+                Accessible.name: qsTr("红色通道滑块")
                 KeyNavigation.tab: greenSlider
                 KeyNavigation.priority: KeyNavigation.BeforeItem
                 onMoved: if (!root.synchronizingControls)
@@ -460,7 +489,7 @@ Popup {
                 live: true
                 focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.Slider
-                Accessible.name: qsTr("Green channel slider")
+                Accessible.name: qsTr("绿色通道滑块")
                 KeyNavigation.tab: blueSlider
                 KeyNavigation.priority: KeyNavigation.BeforeItem
                 onMoved: if (!root.synchronizingControls)
@@ -501,7 +530,7 @@ Popup {
                 live: true
                 focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.Slider
-                Accessible.name: qsTr("Blue channel slider")
+                Accessible.name: qsTr("蓝色通道滑块")
                 onMoved: if (!root.synchronizingControls)
                              root.setChannel("b", value)
 
@@ -558,14 +587,17 @@ Popup {
                     hoverEnabled: true
                     focusPolicy: Qt.StrongFocus
                     Accessible.role: Accessible.Button
-                    Accessible.name: qsTr("Color %1, scale %2")
-                                             .arg(candidateColor)
-                                             .arg(scaleValue)
+                    Accessible.name: qsTr("候选颜色 %1")
+                                             .arg(candidateColor) + " " + scaleValue
                     Accessible.selected: selected
                     onClicked: {
                         root.selectedColor = candidateColor
                         root.colorAccepted(root.selectedColor)
                         root.close()
+                    }
+                    Keys.onSpacePressed: function(event) {
+                        candidateButton.clicked()
+                        event.accepted = true
                     }
                     Keys.onReturnPressed: function(event) {
                         candidateButton.clicked()
@@ -619,13 +651,13 @@ Popup {
                             radius: 7
                             color: ColorScale.isLight(candidateButton.candidateColor)
                                    ? "#1B1B1B" : "#FFFFFF"
-                            Text {
+                            ThemedIcon {
                                 anchors.centerIn: parent
-                                text: "✓"
-                                color: ColorScale.isLight(candidateButton.candidateColor)
-                                       ? "#FFFFFF" : "#1B1B1B"
-                                font.pixelSize: 9
-                                font.bold: true
+                                source: Theme.icon("check-line")
+                                tint: ColorScale.isLight(candidateButton.candidateColor)
+                                      ? "#FFFFFF" : "#1B1B1B"
+                                sourceSize.width: 10
+                                sourceSize.height: 10
                             }
                         }
                     }
@@ -666,7 +698,7 @@ Popup {
         radius: height / 2
         color: "#FFFFFF"
         border.width: slider.visualFocus ? 2 : 1
-        border.color: slider.visualFocus ? Theme.primaryText : "#B8B8B8"
+        border.color: slider.visualFocus ? Theme.focus : "#B8B8B8"
 
         Rectangle {
             anchors.centerIn: parent

@@ -153,7 +153,7 @@ WriteResult DocumentWriter::write(
     const std::atomic_bool* cancelled,
     std::function<void(float)> progress) const
 {
-    if (request.output_path.empty() || request.snapshot.spans.empty()
+    if (request.output_path.empty() || request.snapshot.events.empty()
         || (request.range && !request.range->valid())) {
         return {WriteError::InvalidRequest, "invalid write request", 0};
     }
@@ -202,6 +202,10 @@ WriteResult DocumentWriter::write(
     config.keep_metadata = request.keep_metadata;
     config.variable_bit_rate = request.variable_bit_rate;
     config.quality = std::clamp(request.quality, 0, 100);
+    if (request.output_path.extension() == ".aif"
+        || request.output_path.extension() == ".aiff") {
+        config.container_name = "aiff";
+    }
     std::string encode_error;
     const ag_result encoded = agplayer::transcode(
         render_path.u8string(), config, cancelled,

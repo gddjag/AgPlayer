@@ -20,6 +20,7 @@ struct AudioStreamProbe {
     std::string channel_layout;
     std::int64_t bit_rate = 0;
     std::int64_t duration_ms = 0;
+    int bits_per_sample = 0;
 };
 
 struct MediaProbe {

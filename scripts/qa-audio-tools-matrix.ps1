@@ -10,7 +10,11 @@ param(
     [int[]]$Tools = @(0, 1, 2, 3),
     [ValidateSet("1672x942", "1280x720", "880x560")]
     [string[]]$Sizes = @("1672x942", "1280x720", "880x560"),
-    [string]$QaImportFile = ""
+    [string]$QaImportFile = "",
+    [long]$EditorSelectionStartMs = -1,
+    [long]$EditorSelectionEndMs = -1,
+    [long]$EditorPlayheadMs = -1,
+    [switch]$ReferenceEditorState
 )
 
 $ErrorActionPreference = "Stop"
@@ -117,8 +121,27 @@ try {
                 if ($qaFixture) {
                     $arguments += @("--qa-import-folder", $qaFixture)
                 }
+                if ($tool -eq 0 -and $EditorSelectionStartMs -ge 0 -and
+                    $EditorSelectionEndMs -gt $EditorSelectionStartMs) {
+                    $arguments += @("--qa-editor-selection-ms",
+                        $EditorSelectionStartMs, $EditorSelectionEndMs)
+                }
+                if ($tool -eq 0 -and $EditorPlayheadMs -ge 0) {
+                    $arguments += @("--qa-editor-playhead-ms", $EditorPlayheadMs)
+                }
+                if ($tool -eq 0 -and $ReferenceEditorState) {
+                    $arguments += "--qa-editor-reference-state"
+                }
+                $quotedArguments = $arguments | ForEach-Object {
+                    $value = [string]$_
+                    if ($value -match '[\s"]') {
+                        '"' + ($value -replace '"', '\"') + '"'
+                    } else {
+                        $value
+                    }
+                }
                 $process = Start-Process -FilePath $appPath `
-                    -ArgumentList $arguments `
+                    -ArgumentList $quotedArguments `
                     -Wait -PassThru
                 if ($process.ExitCode -ne 0) {
                     throw "Screenshot failed for $language theme $theme " +

@@ -64,9 +64,17 @@ agplayer::qt::FilenameRuleSet typedRules(const QVariantMap& rules)
     typed.preserveExtension = rules.value(QStringLiteral("preserveExtension"), true).toBool();
     typed.removePrefixWhenEmpty = rules.value(QStringLiteral("removePrefixWhenEmpty"), true).toBool();
     typed.removeSuffixWhenEmpty = rules.value(QStringLiteral("removeSuffixWhenEmpty"), true).toBool();
-    typed.removeSequenceWhenEmpty = rules.value(QStringLiteral("removeSequenceWhenEmpty"), true).toBool();
+    typed.removeSequenceWhenEmpty = rules.value(QStringLiteral("removeSequenceWhenEmpty"), false).toBool();
     typed.removeSequenceAtStart = rules.value(QStringLiteral("removeSequenceAtStart"), false).toBool();
     typed.removeSequenceAtEnd = rules.value(QStringLiteral("removeSequenceAtEnd"), false).toBool();
+    // Adding a sequence and deleting one are contradictory operations.  Keep
+    // the explicitly requested new number and normalize removal away before
+    // preview and execution share the same rule snapshot.
+    if (typed.autoNumber) {
+        typed.removeSequenceWhenEmpty = false;
+        typed.removeSequenceAtStart = false;
+        typed.removeSequenceAtEnd = false;
+    }
     const QString mode = rules.value(QStringLiteral("caseMode"), QStringLiteral("keep")).toString();
     typed.caseRule = mode == QLatin1String("lower") ? agplayer::qt::CaseRule::Lower
         : mode == QLatin1String("upper") ? agplayer::qt::CaseRule::Upper

@@ -20,7 +20,9 @@ class WindowControllerTest final : public QObject {
 private slots:
     void initTestCase();
     void init();
+    void glassBackdropContractIsAbsent();
     void defaultListSizeMatchesReference();
+    void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesNativePixelSize();
     void switchingWindowsDoesNotRecreatePlayback();
     void updatesExistingWindowObjectsAndFlags();
@@ -40,10 +42,14 @@ private slots:
     void auxiliaryWindowRemainsAboveDockedPlayerGroup();
 #endif
     void dockedListFollowsMainWindow();
+    void firstAttachedListAlignsWithMainWindow();
     void dockedGroupDoesNotClampMainMoveAtScreenEdge();
-    void horizontalDockPreservesSizesAndKeepsWindowsAdjacent();
+    void dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent();
 #ifdef Q_OS_WIN
     void dockedWindowsKeepNativeSizeAcrossScreens();
+    void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
+    void taskbarCommandsToggleDockedGroupWithoutResizing();
+    void taskbarActivationDoesNotCancelMinimize();
 #endif
     void mainMinimizeRestoresOnlyRequestedList();
     void showMainRestoresAndRaisesTheExistingWindowGroup();
@@ -72,11 +78,60 @@ void WindowControllerTest::init()
     settings.sync();
 }
 
+void WindowControllerTest::glassBackdropContractIsAbsent()
+{
+    QCOMPARE(WindowController::staticMetaObject.indexOfProperty("glassBackdropEnabled"), -1);
+    QCOMPARE(WindowController::staticMetaObject.indexOfMethod(
+                 QMetaObject::normalizedSignature("setGlassBackdropEnabled(bool)")),
+             -1);
+}
+
 void WindowControllerTest::defaultListSizeMatchesReference()
 {
     WindowController windows;
-    QCOMPARE(windows.listWindowWidth(), 1228);
-    QCOMPARE(windows.listWindowHeight(), 570);
+    QCOMPARE(windows.listWindowWidth(), 960);
+    QCOMPARE(windows.listWindowHeight(), 568);
+}
+
+void WindowControllerTest::legacyListWidthsMigrateWithoutOverwritingIndependentSize()
+{
+    // Catches broad migrations that overwrite a genuinely independent window,
+    // as well as missing migrations for exact historical defaults/tag widths.
+    const QList<int> legacyWidths{1104, 1228, 1284, 1447};
+    for (const int legacyWidth : legacyWidths) {
+        QSettings settings;
+        settings.clear();
+        settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
+        settings.setValue(QStringLiteral("windows/listDockEdge"),
+                          QStringLiteral("none"));
+        settings.setValue(QStringLiteral("windows/listGeometry"),
+                          QRect(20, 30, legacyWidth, 568));
+        settings.sync();
+        QWindow listWindow;
+        listWindow.setGeometry(20, 30, 960, 568);
+        WindowController windows;
+        windows.setListWindow(&listWindow);
+        const int boundedAlignedWidth = qMin(
+            960, listWindow.screen()->availableGeometry().width());
+        QCOMPARE(listWindow.width(), boundedAlignedWidth);
+        QCOMPARE(listWindow.height(), 568);
+        QCOMPARE(QSettings().value(QStringLiteral("windows/listGeometryVersion"))
+                     .toInt(),
+                 1);
+    }
+
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
+    settings.setValue(QStringLiteral("windows/listDockEdge"),
+                      QStringLiteral("none"));
+    settings.setValue(QStringLiteral("windows/listGeometry"),
+                      QRect(20, 30, 733, 611));
+    settings.sync();
+    QWindow independentList;
+    WindowController windows;
+    windows.setListWindow(&independentList);
+    QCOMPARE(independentList.size(), QSize(733, 611));
 }
 
 void WindowControllerTest::dpiChangePreservesNativePixelSize()
@@ -487,6 +542,24 @@ void WindowControllerTest::dockedListFollowsMainWindow()
     QCOMPARE(listWindow.width(), mainGeo.width());
 }
 
+void WindowControllerTest::firstAttachedListAlignsWithMainWindow()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(200, 150, 960, 298);
+    QWindow listWindow;
+    listWindow.setGeometry(50, 500, 1655, 570);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("bottom"));
+    QCOMPARE(listWindow.x(), mainWindow.x());
+    QCOMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
+    QCOMPARE(listWindow.width(), mainWindow.width());
+    QCOMPARE(listWindow.height(), 570);
+}
+
 void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
 {
     QWindow mainWindow;
@@ -512,7 +585,7 @@ void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()
     QCOMPARE(listWindow.y(), mainWindow.y());
 }
 
-void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
+void WindowControllerTest::dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent()
 {
     QWindow mainWindow;
     mainWindow.setFlags(Qt::FramelessWindowHint);
@@ -521,9 +594,8 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
     QWindow listWindow;
     listWindow.setFlags(Qt::FramelessWindowHint);
     listWindow.setMinimumSize(QSize(300, 180));
-    listWindow.setGeometry(0, 0, 450, 220);
+    listWindow.setGeometry(0, 0, 370, 220);
     const QSize mainSize = mainWindow.size();
-    const QSize listSize = listWindow.size();
 
     WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
@@ -533,7 +605,12 @@ void WindowControllerTest::horizontalDockPreservesSizesAndKeepsWindowsAdjacent()
     QCOMPARE(listWindow.x(), mainWindow.geometry().right() - 1);
     QCOMPARE(listWindow.y(), mainWindow.y());
     QCOMPARE(mainWindow.size(), mainSize);
-    QCOMPARE(listWindow.size(), listSize);
+    QCOMPARE(listWindow.size(), QSize(mainWindow.width(), 220));
+
+    listWindow.resize(610, 220);
+    QCoreApplication::processEvents();
+    windows.finishListWindowInteraction();
+    QCOMPARE(listWindow.width(), mainWindow.width());
     // A docked player/list pair can straddle a monitor seam.  Keeping both
     // windows at the user-selected size is more important than squeezing the
     // group back into one screen while it is being moved.
@@ -578,6 +655,7 @@ void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
                                initialMain.bottom - initialMain.top);
     const QSize listNativeSize(initialList.right - initialList.left,
                                initialList.bottom - initialList.top);
+    QCOMPARE(listNativeSize.width(), mainNativeSize.width());
 
     mainWindow.setPosition(screens.at(1)->availableGeometry().topLeft()
                            + QPoint(80, 80));
@@ -602,6 +680,136 @@ void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
     QTRY_COMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
     QTRY_COMPARE(nativeSize(mainWindow), mainNativeSize);
     QTRY_COMPARE(nativeSize(listWindow), listNativeSize);
+}
+
+void WindowControllerTest::nativeTaskbarGroupUsesMainAsOnlyAppWindow()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    QWindow toolsWindow;
+    toolsWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    QWindow settingsWindow;
+    settingsWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.registerSettingsWindow(&settingsWindow);
+    windows.setListWindowDetached(true);
+
+    const auto exStyle = [](QWindow& window) {
+        return static_cast<DWORD>(GetWindowLongPtrW(
+            reinterpret_cast<HWND>(window.winId()), GWL_EXSTYLE));
+    };
+    const DWORD mainStyle = exStyle(mainWindow);
+    QVERIFY(mainStyle & WS_EX_APPWINDOW);
+    QVERIFY(!(mainStyle & WS_EX_TOOLWINDOW));
+    for (QWindow* auxiliary : {&listWindow, &toolsWindow, &settingsWindow}) {
+        const DWORD style = exStyle(*auxiliary);
+        QVERIFY2(style & WS_EX_TOOLWINDOW,
+                 "auxiliary windows must not create taskbar entries");
+        QVERIFY2(!(style & WS_EX_APPWINDOW),
+                 "only the main player may be the taskbar group entry");
+    }
+}
+
+void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+
+    const auto nativeRect = [](QWindow& window) {
+        RECT rect{};
+        if (!GetWindowRect(reinterpret_cast<HWND>(window.winId()), &rect)) {
+            return QRect();
+        }
+        return QRect(rect.left, rect.top, rect.right - rect.left,
+                     rect.bottom - rect.top);
+    };
+    const QRect mainBefore = nativeRect(mainWindow);
+    const QRect listBefore = nativeRect(listWindow);
+    const HWND mainHandle = reinterpret_cast<HWND>(mainWindow.winId());
+
+    SendMessageW(mainHandle, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    SendMessageW(mainHandle, WM_SYSCOMMAND, SC_RESTORE, 0);
+    QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+    QTRY_VERIFY(listWindow.isVisible());
+    QTRY_COMPARE(nativeRect(mainWindow), mainBefore);
+    QTRY_COMPARE(nativeRect(listWindow), listBefore);
+
+    const HWND listHandle = reinterpret_cast<HWND>(listWindow.winId());
+    const auto isAbove = [](HWND candidate, HWND reference) {
+        for (HWND current = GetTopWindow(nullptr); current != nullptr;
+             current = GetWindow(current, GW_HWNDNEXT)) {
+            if (current == candidate) return true;
+            if (current == reference) return false;
+        }
+        return false;
+    };
+    QTRY_VERIFY(isAbove(listHandle, mainHandle));
+}
+
+void WindowControllerTest::taskbarActivationDoesNotCancelMinimize()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+
+    const HWND mainHandle = reinterpret_cast<HWND>(mainWindow.winId());
+    SendMessageW(mainHandle, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    // Windows may deliver activation while processing a taskbar minimize.
+    // That activation must never turn into a deferred show/restore request.
+    QVERIFY(PostMessageW(mainHandle, WM_ACTIVATE, WA_ACTIVE, 0));
+    QTest::qWait(100);
+    QCOMPARE(mainWindow.windowState(), Qt::WindowMinimized);
+    QVERIFY(!listWindow.isVisible());
 }
 #endif
 

@@ -107,14 +107,13 @@ VertexColor mixColor(double normalizedX,
         return {{baseColor.red(), baseColor.green(), baseColor.blue()}, 255U};
     }
     if (visualMode == 2) {
-        // The spectrum is rendered twice: the complete, unplayed canvas and
-        // the clipped played canvas.  Preserve that distinction so a seek
-        // immediately moves the played colour with the real playback clock.
-        const Rgb color = played
-            == rgbProgress
-                ? gradientColor(normalizedX, gradientStart, gradientMiddle, gradientEnd)
-                : Rgb{baseColor.red(), baseColor.green(), baseColor.blue()};
-        return {color, 255U};
+        // Spectrum colour represents frequency, not playback progress.  A
+        // solid preset supplies three identical stops; custom RGB supplies
+        // the configured start/middle/end stops.  Seeking must not recolour
+        // bars or their peak-hold caps.
+        return {gradientColor(normalizedX, gradientStart, gradientMiddle,
+                              gradientEnd),
+                255U};
     }
     if (legacyColor.isValid()) {
         return {{legacyColor.red(), legacyColor.green(), legacyColor.blue()},
@@ -834,22 +833,14 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             std::ceil(std::max(
                 0.0, width() * devicePixelRatio * density_ / 2.0))));
 
-    // Use the mix layer for geometry sizing when available; otherwise use the
-    // first present frequency layer so all layers share the same point count.
-    const std::vector<float>* sizeReference = nullptr;
-    if (hasMix) {
-        sizeReference = &snapshot->mix->values;
-    } else if (hasBass) {
-        sizeReference = &snapshot->bass->values;
-    } else if (hasMid) {
-        sizeReference = &snapshot->mid->values;
-    } else {
-        sizeReference = &snapshot->high->values;
-    }
-    const std::size_t rawPeakCount = sizeReference->size();
     const std::size_t peakCount = visualMode_ == 2
         ? renderedSpectrumBarCount(width(), devicePixelRatio)
-        : std::min(rawPeakCount, maxPoints);
+        // The analysed waveform stays immutable at its compact source
+        // resolution.  Map it onto the complete display budget here so a
+        // wider player gains visual detail instead of stretching a sparse
+        // set of vertical lines.  resampleValues() interpolates on expansion
+        // and preserves extrema when several source buckets share a pixel.
+        : maxPoints;
 
     const unsigned char layerMask =
         (hasMix ? 1U : 0U)

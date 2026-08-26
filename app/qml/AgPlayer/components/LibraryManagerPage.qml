@@ -7,6 +7,7 @@ import AgPlayer
 Item {
     id: root
     objectName: "libraryManagerPage"
+    readonly property var manager: LibraryManagerController
 
     property string selectedTrackId: ""
     property var selectedTrackIds: []
@@ -83,14 +84,21 @@ Item {
         }
     }
 
-    LibraryManagerController {
-        id: manager
+    Binding {
         objectName: "libraryManagerController"
-        libraryModel: LibraryModel
-        importController: ImportController
-        keyword: root.searchText
-        formatFilter: root.formatFilter
-        exactRating: root.exactRating
+        target: root.manager
+        property: "keyword"
+        value: root.searchText
+    }
+    Binding {
+        target: root.manager
+        property: "formatFilter"
+        value: root.formatFilter
+    }
+    Binding {
+        target: root.manager
+        property: "exactRating"
+        value: root.exactRating
     }
 
     LibraryFileOperations { id: fileOps; libraryModel: LibraryModel }
@@ -185,7 +193,7 @@ Item {
         id: relocateTrackDialog
         title: qsTr("重新定位文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Audio (*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
+        nameFilters: [LibraryManagerController.audioFileNameFilter]
         onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId,
                                                selectedFile)
     }
@@ -228,8 +236,7 @@ Item {
         onAccepted: {
             var values = tagTrackField.text.split(/[,，]/).map(
                         function(value) { return value.trim() })
-            for (var index = 0; index < trackMenu.targetTrackIds.length; ++index)
-                LibraryModel.setTags(trackMenu.targetTrackIds[index], values)
+            LibraryModel.setTagsForTracks(trackMenu.targetTrackIds, values)
         }
         contentItem: TextField {
             id: tagTrackField
@@ -453,15 +460,15 @@ Item {
                 model: [
                     {id: "all", t: qsTr("总歌曲量"), v: manager.totalCount, icon: "music-2-fill", c: Theme.violet},
                     {id: "storage", t: qsTr("占用大小"), v: root.formatBytes(manager.totalBytes), icon: "folder-open-line", c: Theme.waveformBlue},
-                    {id: "missing", t: qsTr("丢失文件"), v: manager.missingCount, icon: "information-line", c: Theme.favoriteRed},
-                    {id: "duplicates", t: qsTr("重复歌曲"), v: manager.duplicateCount, icon: "file-copy-line", c: Theme.ratingGold},
+                    {id: "missing", t: qsTr("丢失文件"), v: manager.missingCount, icon: "information-line", c: Theme.error},
+                    {id: "duplicates", t: qsTr("重复歌曲"), v: manager.duplicateCount, icon: "file-copy-line", c: Theme.warning},
                     {id: "uncovered", t: qsTr("无封面"), v: manager.uncoveredCount, icon: "picture-in-picture-2-line", c: Theme.secondaryText},
-                    {id: "untagged", t: qsTr("无标签"), v: manager.untaggedCount, icon: "checkbox-blank-line", c: "#36d56a"},
+                    {id: "untagged", t: qsTr("无标签"), v: manager.untaggedCount, icon: "checkbox-blank-line", c: Theme.success},
                     {id: "recentAdded", t: qsTr("最近添加"), v: manager.recentAddedCount, icon: "add-line", c: Theme.violet},
                     {id: "recentPlayed", t: qsTr("最近播放"), v: manager.recentPlayedCount, icon: "play-fill", c: Theme.waveformBlue},
-                    {id: "highFrequency", t: qsTr("高频播放"), v: manager.highFrequencyCount, icon: "equalizer-line", c: "#19cbd1"},
-                    {id: "lowFrequency", t: qsTr("低频播放"), v: manager.lowFrequencyCount, icon: "equalizer-line", c: "#19cbd1"},
-                    {id: "neverPlayed", t: qsTr("从未播放"), v: manager.neverPlayedCount, icon: "time-line", c: Theme.ratingGold},
+                    {id: "highFrequency", t: qsTr("高频播放"), v: manager.highFrequencyCount, icon: "equalizer-line", c: Theme.waveformCyan},
+                    {id: "lowFrequency", t: qsTr("低频播放"), v: manager.lowFrequencyCount, icon: "equalizer-line", c: Theme.waveformCyan},
+                    {id: "neverPlayed", t: qsTr("从未播放"), v: manager.neverPlayedCount, icon: "time-line", c: Theme.textTertiary},
                     {id: "unrated", t: qsTr("未评分"), v: manager.unratedCount, icon: "star-line", c: Theme.violet}
                 ]
                 delegate: Surface {
@@ -481,7 +488,7 @@ Item {
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 28
                             radius: 8
-                            color: Qt.rgba(modelData.c.r, modelData.c.g, modelData.c.b, 0.14)
+                            color: Theme.surfaceHover
                             ThemedIcon {
                                 anchors.centerIn: parent
                                 width: 16
@@ -692,7 +699,7 @@ Item {
                             width: ListView.view.width
                             height: root.trackRowHeight
                             color: root.selectedTrackIds.indexOf(trackId) >= 0
-                                   ? Qt.rgba(0.45, 0.2, 0.85, 0.32)
+                                   ? Theme.highlightSoft
                                    : rowHover.hovered ? Theme.hoverSurface : "transparent"
                             RowLayout {
                                 anchors.fill: parent
@@ -754,8 +761,8 @@ Item {
                                 Text {
                                     text: status === "missing" ? qsTr("丢失文件")
                                         : duplicateGroup.length > 0 ? qsTr("重复歌曲") : qsTr("正常")
-                                    color: status === "missing" ? Theme.favoriteRed
-                                        : duplicateGroup.length > 0 ? Theme.ratingGold : "#39d66d"
+                                    color: status === "missing" ? Theme.error
+                                        : duplicateGroup.length > 0 ? Theme.warning : Theme.success
                                     Layout.preferredWidth: 70
                                 }
                             }
