@@ -14,7 +14,7 @@ Window {
     minimumHeight: 560
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
-    title: qsTr("AgPlayer 音频编辑")
+    title: qsTr("AgPlayer · 音频工具")
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -108,7 +108,7 @@ Window {
                         }
                     }
                     Text {
-                        text: qsTr("AgPlayer 音频编辑")
+                        text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
                         font.pixelSize: 18

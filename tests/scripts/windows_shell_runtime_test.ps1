@@ -20,6 +20,9 @@ public static class AgPlayerShellProbe
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_APPWINDOW = 0x00040000L;
     public const uint WM_GETICON = 0x007F;
+    public const uint WM_SYSCOMMAND = 0x0112;
+    public static readonly UIntPtr SC_MINIMIZE = new UIntPtr(0xF020);
+    public static readonly UIntPtr SC_RESTORE = new UIntPtr(0xF120);
     public static readonly UIntPtr ICON_SMALL = UIntPtr.Zero;
     public static readonly UIntPtr ICON_BIG = new UIntPtr(1);
 
@@ -32,6 +35,15 @@ public static class AgPlayerShellProbe
     private static extern bool IsWindowVisible(IntPtr hwnd);
 
     [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
@@ -40,6 +52,20 @@ public static class AgPlayerShellProbe
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr SendMessage(IntPtr hwnd, uint message,
                                             UIntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+
+    public static bool WindowVisible(IntPtr hwnd) { return IsWindowVisible(hwnd); }
 
     public static IntPtr[] VisibleWindowsForProcess(uint processId)
     {
@@ -115,6 +141,58 @@ try {
     if ($version.FileVersion -ne $expectedPeVersion -or
         $version.ProductVersion -ne $expectedPeVersion) {
         throw "PE version is not synchronized: $($version.FileVersion) / $($version.ProductVersion)"
+    }
+
+    $before = [AgPlayerShellProbe+Rect]::new()
+    if (-not [AgPlayerShellProbe]::GetWindowRect($mainWindow, [ref]$before)) {
+        throw 'Unable to read the taskbar window geometry before activation checks'
+    }
+    $auxiliaryBefore = @(
+        [AgPlayerShellProbe]::VisibleWindowsForProcess([uint32]$process.Id) |
+            Where-Object { $_ -ne $mainWindow }
+    )
+
+    [void][AgPlayerShellProbe]::SendMessage(
+        $mainWindow, [AgPlayerShellProbe]::WM_SYSCOMMAND,
+        [AgPlayerShellProbe]::SC_MINIMIZE, [IntPtr]::Zero)
+    $minimizeDeadline = [DateTime]::UtcNow.AddSeconds(3)
+    while (-not [AgPlayerShellProbe]::IsIconic($mainWindow) -and
+           [DateTime]::UtcNow -lt $minimizeDeadline) {
+        Start-Sleep -Milliseconds 25
+    }
+    if (-not [AgPlayerShellProbe]::IsIconic($mainWindow)) {
+        throw 'A second taskbar activation did not minimize the foreground player'
+    }
+    foreach ($auxiliary in $auxiliaryBefore) {
+        if ([AgPlayerShellProbe]::WindowVisible($auxiliary)) {
+            throw 'A docked/auxiliary window remained visible after taskbar minimize'
+        }
+    }
+
+    [void][AgPlayerShellProbe]::SendMessage(
+        $mainWindow, [AgPlayerShellProbe]::WM_SYSCOMMAND,
+        [AgPlayerShellProbe]::SC_RESTORE, [IntPtr]::Zero)
+    [void][AgPlayerShellProbe]::SetForegroundWindow($mainWindow)
+    $restoreDeadline = [DateTime]::UtcNow.AddSeconds(3)
+    while (([AgPlayerShellProbe]::IsIconic($mainWindow) -or
+            [AgPlayerShellProbe]::GetForegroundWindow() -ne $mainWindow) -and
+           [DateTime]::UtcNow -lt $restoreDeadline) {
+        Start-Sleep -Milliseconds 25
+    }
+    if ([AgPlayerShellProbe]::IsIconic($mainWindow) -or
+        [AgPlayerShellProbe]::GetForegroundWindow() -ne $mainWindow) {
+        throw 'Taskbar restore did not reactivate the existing player window'
+    }
+    $after = [AgPlayerShellProbe+Rect]::new()
+    if (-not [AgPlayerShellProbe]::GetWindowRect($mainWindow, [ref]$after) -or
+        $after.Left -ne $before.Left -or $after.Top -ne $before.Top -or
+        $after.Right -ne $before.Right -or $after.Bottom -ne $before.Bottom) {
+        throw 'Taskbar minimize/restore changed the player native-pixel geometry'
+    }
+    foreach ($auxiliary in $auxiliaryBefore) {
+        if (-not [AgPlayerShellProbe]::WindowVisible($auxiliary)) {
+            throw 'A previously visible docked/auxiliary window did not restore with the player'
+        }
     }
 } finally {
     if ($null -ne $process -and -not $process.HasExited) {

@@ -85,6 +85,12 @@ if ($toolsWindow -notmatch 'objectName:\s*"audioToolsLogo"' -or
     $toolsWindow -match 'color:\s*"#0867ed"') {
     throw 'The latest reference uses the transparent waveform brand mark.'
 }
+$audioToolsTitle = [regex]::Escape((ConvertFrom-Utf8Base64 `
+    'QWdQbGF5ZXIgwrcg6Z+z6aKR5bel5YW3'))
+if ($toolsWindow -notmatch ('title:\s*qsTr\("' + $audioToolsTitle + '"\)') -or
+    $toolsWindow -notmatch ('text:\s*qsTr\("' + $audioToolsTitle + '"\)')) {
+    throw 'The native and custom title bars must use AgPlayer · 音频工具.'
+}
 if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
     $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
     throw 'The composed tools shell is missing its real Space playback shortcut.'

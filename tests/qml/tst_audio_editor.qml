@@ -835,6 +835,7 @@ TestCase {
 
     function test_responsivePlaybackAndInspectorAccess_data() {
         return [
+            { tag: "reference", w: 1672, h: 849, access: "editorInspectorScroller" },
             { tag: "desktop", w: 1280, h: 628, access: "editorInspectorScroller" },
             { tag: "narrow", w: 880, h: 468, access: "editorInspectorAccess" }
         ]

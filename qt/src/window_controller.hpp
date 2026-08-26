@@ -4,6 +4,7 @@
 #include <QAbstractNativeEventFilter>
 #include <QPointer>
 #include <QRect>
+#include <QSet>
 #include <QSettings>
 #include <QSize>
 #include <QTimer>
@@ -139,7 +140,7 @@ private:
     void setListDockEdge(const QString& edge);
     QString snapEdgeForPosition(int x, int y) const;
     void loadPersistedWindowState();
-    void restoreGeometry(QWindow* window, const QString& key);
+    bool restoreGeometry(QWindow* window, const QString& key);
     void persistGeometry(QWindow* window, const QString& key);
     void scheduleWindowStateSync();
     void flushWindowState();
@@ -161,8 +162,15 @@ private:
     QSize listNativePixelSize_;
     qreal listTrackedDpr_ = 1.0;
     QPointer<QWindow> audioToolsWindow_;
+    quintptr audioToolsWindowHandle_ = 0;
+    QSize audioToolsNativePixelSize_;
+    qreal audioToolsTrackedDpr_ = 1.0;
     QPointer<QWindow> settingsWindow_;
+    quintptr settingsWindowHandle_ = 0;
+    QSize settingsNativePixelSize_;
+    qreal settingsTrackedDpr_ = 1.0;
     QPointer<QWindow> lastAuxiliaryWindow_;
+    QSet<QWindow*> positionedAuxiliaryWindows_;
     ShutdownActions shutdownActions_;
     QSettings settings_;
     QTimer windowStateSyncTimer_;
