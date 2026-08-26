@@ -27,10 +27,13 @@ TestCase {
         AudioToolsWindow { visible: true }
     }
 
+    Component { id: signalSpyComponent; SignalSpy {} }
+
     property var host
     property var page
 
     function init() {
+        AudioToolsController.selectTool(0)
         if (AudioEditorController.hasDocument && !AudioEditorController.busy) {
             if (!AudioEditorController.clearDocument())
                 verify(AudioEditorController.confirmDiscardAndOpen(),
@@ -42,6 +45,25 @@ TestCase {
         page = host.editorPage
         verify(page)
         tryVerify(function() { return page.width > 0 && page.height > 0 })
+    }
+
+    function test_switchingAwayDeactivatesAndReturningActivatesEditor() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const shell = createTemporaryObject(shellComponent, testCase)
+        verify(shell)
+        const deactivated = createTemporaryObject(signalSpyComponent, testCase,
+            { target: AudioEditorController, signalName: "deactivated" })
+        const activated = createTemporaryObject(signalSpyComponent, testCase,
+            { target: AudioEditorController, signalName: "activated" })
+        verify(deactivated.valid)
+        verify(activated.valid)
+
+        AudioToolsController.selectTool(1)
+        tryCompare(deactivated, "count", 1)
+        compare(AudioEditorController.hasDocument, true)
+        AudioToolsController.selectTool(0)
+        tryCompare(activated, "count", 1)
+        verify(AudioEditorController.setSelection(100, 200))
     }
 
     function verifyGeometry(name, x, y, width, height) {
@@ -91,7 +113,8 @@ TestCase {
         verify(shellPage)
         verify(findChild(shell, "editorSpaceShortcut"))
         compare(findChild(shell, "audioToolsSpaceShortcut"), null)
-        const shortcutText = findChild(shellPage, "editorShortcutText").text
+        const shortcutText = findChild(shellPage,
+                                       "editorShortcutFirstGroup_0").text
         verify(shortcutText.indexOf("空格 = 播放 / 暂停") >= 0)
         compare(shortcutText.indexOf("Phase"), -1)
     }
@@ -123,6 +146,40 @@ TestCase {
         compare(AudioEditorController.hasDocument, true)
         compare(AudioEditorController.selectionStart, -1)
         compare(AudioEditorController.activeTool, "select")
+    }
+
+    function test_toolbarReferenceButtonWidthsAt1672() {
+        host.width = 1672
+        host.height = 849
+        wait(0)
+        const expectedWidths = [132, 140, 80, 80, 86, 83, 81,
+                                91, 77, 75, 95, 73, 82]
+        const names = ["importAudio", "saveProject", "select", "split",
+                       "delete", "crop", "copy", "paste", "fadeIn",
+                       "fadeOut", "mute", "noiseReduction", "clear"]
+        for (let index = 0; index < names.length; ++index) {
+            const button = findChild(page, "editorCommand_" + names[index])
+            verify(button)
+            verify(Math.abs(button.width - expectedWidths[index]) <= 2,
+                   names[index] + " width=" + button.width)
+        }
+    }
+
+    function test_toolbarNeverOverflowsItsAvailableWidth() {
+        for (const dimensions of [{ width: 1280, height: 720 },
+                                  { width: 880, height: 560 }]) {
+            host.width = dimensions.width
+            host.height = dimensions.height
+            wait(0)
+            const bar = findChild(page, "editorCommandBar")
+            const clear = findChild(page, "editorCommand_clear")
+            const first = findChild(page, "editorCommand_importAudio")
+            verify(bar && clear && first)
+            verify(clear.x + clear.width <= bar.width + 0.5,
+                   dimensions.width + " toolbar clips clear x=" + clear.x
+                   + " width=" + clear.width + " first=" + first.x
+                   + " bar=" + bar.width)
+        }
     }
 
     function test_inspectorAThroughEMatchesReferenceControls() {
@@ -251,21 +308,87 @@ TestCase {
         const recordingState = findChild(page, "recordingStateText")
         const recordingTime = findChild(page, "recordingTimeText")
         const playBackground = findChild(page, "editorPrimaryPlayBackground")
-        const shortcutFirst = findChild(page, "editorShortcutText")
-        const shortcutSecond = findChild(page, "editorShortcutTextSecondRow")
+        const shortcutFirst = findChild(page, "editorShortcutFirstGroup_0")
+        const shortcutFade = findChild(page, "editorShortcutSecondGroup_4")
+        const shortcutEnvelope = findChild(page, "editorShortcutSecondGroup_5")
         verify(recordingState && recordingTime && playBackground
-               && shortcutFirst && shortcutSecond)
+               && shortcutFirst && shortcutFade && shortcutEnvelope)
         compare(recordingState.text, "准备录音")
         compare(recordingTime.text, "00:00:00")
         verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
-        verify(shortcutFirst.text.indexOf("R = 开始录音") >= 0)
-        verify(shortcutFirst.text.indexOf("Shift+R = 暂停 / 继续录音") >= 0)
-        verify(shortcutFirst.text.indexOf("Ctrl+R = 停止并保存") >= 0)
-        verify(shortcutSecond.text.indexOf("拖拽右上角 = 调整淡出") >= 0)
-        verify(shortcutSecond.text.indexOf("双击音量线 = 添加控制点") >= 0)
+        compare(shortcutFirst.text.indexOf("R = 开始录音"), -1)
+        compare(shortcutFirst.text.indexOf("Shift+R"), -1)
+        compare(shortcutFirst.text.indexOf("Ctrl+R = 停止并保存"), -1)
+        compare(shortcutFade.text, "拖拽右上角 = 调整淡出")
+        compare(shortcutEnvelope.text, "双击音量线 = 添加控制点")
         compare(shortcutFirst.text.indexOf("Phase"), -1)
-        compare(shortcutSecond.text.indexOf("Phase"), -1)
+        compare(shortcutFade.text.indexOf("Phase"), -1)
         compare(findChild(page, "editorStatusBar").visible, false)
+    }
+
+    function test_shortcutCardUsesKeyboardIconAndRealDividers() {
+        const keyboard = findChild(page, "editorShortcutKeyboardIcon")
+        const divider = findChild(page, "editorShortcutDivider")
+        const secondDivider = findChild(page, "editorShortcutSecondDivider")
+        verify(keyboard && divider && secondDivider)
+        verify(keyboard.source.toString().indexOf("keyboard-box-line.svg") >= 0)
+        compare(divider.width, 1)
+        compare(secondDivider.width, 1)
+        verify(divider.height >= 18)
+        verify(secondDivider.height >= 18)
+    }
+
+    function test_shortcutCardUsesStructuredReferenceGroups() {
+        const firstRow = findChild(page, "editorShortcutFirstRow")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(firstRow && secondRow)
+        compare(firstRow.groupCount, 5)
+        compare(firstRow.dividerCount, 4)
+        compare(secondRow.groupCount, 6)
+        compare(secondRow.dividerCount, 5)
+        compare(findChild(page, "editorShortcutFirstGroup_0").text,
+                "空格 = 播放 / 暂停")
+        compare(findChild(page, "editorShortcutFirstGroup_4").text,
+                "Ctrl+Z / Y = 撤销 / 重做")
+        compare(findChild(page, "editorShortcutSecondGroup_5").text,
+                "双击音量线 = 添加控制点")
+    }
+
+    function test_shortcutReferenceRowsFillTheCardWithoutClippingLabels() {
+        host.width = 1672
+        host.height = 849
+        wait(0)
+        const card = findChild(page, "editorShortcutCard")
+        const firstRow = findChild(page, "editorShortcutFirstRow")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(card && firstRow && secondRow)
+
+        for (const row of [firstRow, secondRow]) {
+            compare(row.x, 22)
+            compare(row.width, card.width - 44)
+            compare(row.x + row.width, card.width - 22)
+        }
+
+        const lastFirstDivider = findChild(page, "editorShortcutFirstDivider_3")
+        const lastSecondDivider = findChild(page, "editorShortcutSecondRowDivider_4")
+        verify(lastFirstDivider && lastSecondDivider)
+        const firstDividerPosition = lastFirstDivider.mapToItem(firstRow, 0, 0)
+        const secondDividerPosition = lastSecondDivider.mapToItem(secondRow, 0, 0)
+        verify(firstDividerPosition.x > firstRow.width * 0.70)
+        verify(secondDividerPosition.x > secondRow.width * 0.70)
+
+        for (let index = 0; index < firstRow.groupCount; ++index) {
+            const label = findChild(page, "editorShortcutFirstGroup_" + index)
+            verify(label)
+            verify(label.width >= label.implicitWidth,
+                   "first row label " + index + " is clipped")
+        }
+        for (let index = 0; index < secondRow.groupCount; ++index) {
+            const label = findChild(page, "editorShortcutSecondGroup_" + index)
+            verify(label)
+            verify(label.width >= label.implicitWidth,
+                   "second row label " + index + " is clipped")
+        }
     }
 
     function test_recordingButtonsMatchReferenceRolesFromIdle() {
@@ -293,9 +416,13 @@ TestCase {
             verify(Math.abs(control.width - 74) <= 2)
             verify(Math.abs(control.height - 74) <= 2)
         }
-        mouseClick(microphone)
-        verify(device.activeFocus,
-               "microphone button must prepare the recording device selector")
+        if (AudioEditorController.recordingSupported) {
+            mouseClick(microphone)
+            tryCompare(device.popup, "visible", true)
+        } else {
+            compare(microphone.enabled, false)
+            compare(device.enabled, false)
+        }
     }
 
     function test_recordingShortcutsMatchReferenceRoles() {
@@ -306,6 +433,129 @@ TestCase {
         compare(record.sequence.toString(), "R")
         compare(pause.sequence.toString(), "Shift+R")
         compare(stop.sequence.toString(), "Ctrl+R")
+    }
+
+    function test_referenceTransportUsesFineControlsAndHoverShortcuts() {
+        const microphone = findChild(page, "recordingMicrophoneButton")
+        const pause = findChild(page, "recordingPauseButton")
+        const record = findChild(page, "recordingRecordButton")
+        const recordStop = findChild(page, "recordingStopButton")
+        const toStart = findChild(page, "editorPlaybackToStartButton")
+        const rewind = findChild(page, "editorPlaybackRewindButton")
+        const play = findChild(page, "editorPrimaryPlayButton")
+        const forward = findChild(page, "editorPlaybackForwardButton")
+        const stop = findChild(page, "editorPlaybackStopButton")
+        const deviceShortcut = findChild(page, "editorDeviceShortcut")
+        const startShortcut = findChild(page, "editorToStartShortcut")
+        const rewindShortcut = findChild(page, "editorRewindShortcut")
+        const forwardShortcut = findChild(page, "editorForwardShortcut")
+        const stopShortcut = findChild(page, "editorStopPlaybackShortcut")
+
+        for (const control of [microphone, pause, record, recordStop,
+                               toStart, rewind, play, forward, stop]) {
+            verify(control, "missing reference transport control")
+            compare(control.toolTipDelay, 500)
+            verify(control.toolTipText.length > 0)
+        }
+        compare(microphone.toolTipText, "选择录音设备（Alt+R）")
+        compare(pause.toolTipText, "暂停 / 继续录音（Shift+R）")
+        compare(record.toolTipText, "开始 / 继续录音（R）")
+        compare(recordStop.toolTipText, "停止并保存录音（Ctrl+R）")
+        compare(toStart.toolTipText, "跳到开头（Home）")
+        compare(rewind.toolTipText, "后退 5 秒（←）")
+        compare(play.toolTipText, "播放 / 暂停（Space）")
+        compare(forward.toolTipText, "前进 5 秒（→）")
+        compare(stop.toolTipText, "停止（Ctrl+Space）")
+
+        compare(deviceShortcut.sequence.toString(), "Alt+R")
+        compare(startShortcut.sequence.toString(), "Home")
+        compare(rewindShortcut.sequence.toString(), "Left")
+        compare(forwardShortcut.sequence.toString(), "Right")
+        compare(stopShortcut.sequence.toString(), "Ctrl+Space")
+        verify(rewind.icon.source.toString().indexOf("rewind-fill.svg") >= 0)
+        verify(forward.icon.source.toString().indexOf("speed-fill.svg") >= 0)
+        verify(stop.icon.source.toString().indexOf("stop-fill.svg") >= 0)
+        compare(toStart.icon.width, 32)
+        compare(rewind.icon.width, 32)
+        compare(play.icon.width, 42)
+        compare(forward.icon.width, 32)
+        compare(stop.icon.width, 32)
+
+        for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",
+                                  "inspectorPitchSlider"]) {
+            const slider = findChild(page, sliderName)
+            verify(slider, "missing editor slider " + sliderName)
+            compare(slider.visibleGrooveThickness, 4)
+            compare(slider.thumbDiameter, 14)
+            verify(slider.pointerHitExtent >= 28)
+            const groove = findChild(slider, "editorSliderGroove")
+            verify(groove)
+            if (slider.orientation === Qt.Horizontal)
+                verify(Math.abs(groove.height - 4) <= 1)
+            else
+                verify(Math.abs(groove.width - 4) <= 1)
+        }
+        for (const switchName of ["inspectorMonitorSwitch",
+                                  "inspectorPreservePitchSwitch",
+                                  "inspectorFormantSwitch"]) {
+            const control = findChild(page, switchName)
+            verify(control)
+            compare(control.width, 40)
+            compare(control.height, 22)
+        }
+    }
+
+    function test_editorSlidersCenterTracksAndHandlesInTheirHitArea() {
+        for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",
+                                  "inspectorPitchSlider"]) {
+            const slider = findChild(page, sliderName)
+            verify(slider)
+            const groove = findChild(slider, "editorSliderGroove")
+            const handle = slider.handle
+            verify(groove && handle)
+            if (slider.orientation === Qt.Horizontal) {
+                verify(Math.abs(groove.y + groove.height / 2
+                                - slider.height / 2) <= 0.5,
+                       sliderName + " horizontal groove is not centered")
+                verify(Math.abs(handle.y + handle.height / 2
+                                - slider.height / 2) <= 0.5,
+                       sliderName + " horizontal thumb is not centered")
+            } else {
+                verify(Math.abs(groove.x + groove.width / 2
+                                - slider.width / 2) <= 0.5,
+                       sliderName + " vertical groove is not centered")
+                verify(Math.abs(handle.x + handle.width / 2
+                                - slider.width / 2) <= 0.5,
+                       sliderName + " vertical thumb is not centered")
+            }
+            verify(handle.x >= 0 && handle.y >= 0)
+            verify(handle.x + handle.width <= slider.width + 0.5)
+            verify(handle.y + handle.height <= slider.height + 0.5)
+        }
+    }
+
+    function test_editorSliderActiveSegmentStaysInsideFineGroove() {
+        for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",
+                                  "inspectorPitchSlider"]) {
+            const slider = findChild(page, sliderName)
+            const groove = findChild(slider, "editorSliderGroove")
+            const active = findChild(slider, "editorSliderActiveSegment")
+            verify(slider && groove && active)
+            verify(groove.clip)
+            const activePosition = active.mapToItem(slider, 0, 0)
+            const groovePosition = groove.mapToItem(slider, 0, 0)
+            if (slider.orientation === Qt.Horizontal) {
+                compare(active.height, 4)
+                verify(activePosition.y >= groovePosition.y)
+                verify(activePosition.y + active.height
+                       <= groovePosition.y + groove.height + 0.5)
+            } else {
+                compare(active.width, 4)
+                verify(activePosition.x >= groovePosition.x)
+                verify(activePosition.x + active.width
+                       <= groovePosition.x + groove.width + 0.5)
+            }
+        }
     }
 
     function test_recordingButtonsDoNotOverlapAtMinimumWindowWidth() {
@@ -333,15 +583,14 @@ TestCase {
         }
     }
 
-    function test_fourthPlaybackButtonJumpsToDocumentEnd() {
+    function test_fourthPlaybackButtonAdvancesFiveSeconds() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         verify(AudioEditorController.seekMs(100))
         const toEnd = findChild(page, "editorPlaybackForwardButton")
         verify(toEnd)
-        compare(toEnd.Accessible.name, "跳到末尾")
+        compare(toEnd.Accessible.name, "快进 5 秒")
         mouseClick(toEnd)
-        compare(AudioEditorController.positionMs,
-                AudioEditorController.durationMs)
+        compare(AudioEditorController.positionMs, 5100)
     }
 
     function test_splitToolbarOnlySelectsScissorsMode() {
@@ -373,13 +622,106 @@ TestCase {
         const expectedEnd = canvas.frameAtCanvasPixel(toPoint.x)
         const originalStart = AudioEditorController.timelineEventViews[0].timelineStart
 
-        mouseDrag(body, fromX, body.height / 2,
+        mouseDrag(body, fromX, body.height * 0.7,
                   toX - fromX, 0, Qt.LeftButton, Qt.NoModifier, 30)
 
         compare(AudioEditorController.selectionStart, expectedStart)
         compare(AudioEditorController.selectionEnd, expectedEnd)
         compare(AudioEditorController.timelineEventViews[0].timelineStart,
                 originalStart)
+    }
+
+    function test_selectionDragIsTransientUntilRelease() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        const body = findChild(canvas, "editorEventBodyInteraction")
+        verify(body)
+        const fromX = Math.round(body.width * 0.2)
+        const toX = Math.round(body.width * 0.7)
+
+        mousePress(body, fromX, body.height * 0.7, Qt.LeftButton)
+        mouseMove(body, toX, body.height * 0.7, 0)
+        compare(AudioEditorController.selectionStart, -1)
+        verify(findChild(canvas, "editorSelectionDashedBorder").visible)
+        mouseRelease(body, toX, body.height * 0.7, Qt.LeftButton)
+        verify(AudioEditorController.selectionStart >= 0)
+        verify(AudioEditorController.selectionEnd
+               > AudioEditorController.selectionStart)
+    }
+
+    function test_selectionUsesOneDashedBorderAndShowsExactLabels() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setSelection(12000, 36000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        const border = findChild(canvas, "editorSelectionDashedBorder")
+        const eventBoundary = findChild(canvas, "editorEventVisualBoundary")
+        const capsule = findChild(canvas, "editorSelectionHandoffCapsule")
+        const label = findChild(canvas, "editorSelectionHandoffLabel")
+        const duration = findChild(canvas, "editorSelectionDuration")
+        const durationCapsule = findChild(canvas,
+                                          "editorSelectionDurationCapsule")
+        verify(border && eventBoundary && capsule && label && duration
+               && durationCapsule)
+        compare(eventBoundary.border.width, 0)
+        compare(label.text, "拖出片段")
+        compare(duration.text, "00:00.50")
+        verify(capsule.border.color.toString().indexOf("ff8a00") >= 0)
+        verify(label.color.toString().indexOf("ff8a00") >= 0)
+        verify(durationCapsule.border.color.toString().indexOf("ff8a00") >= 0)
+        verify(duration.color.toString().indexOf("ff8a00") >= 0)
+        verify(Math.abs(capsule.x - 6) <= 1)
+        verify(Math.abs(capsule.y + capsule.height
+                        - capsule.parent.height + 6) <= 1)
+        verify(Math.abs(duration.x + duration.width
+                        - duration.parent.width + 6) <= 1)
+    }
+
+    function test_selectionDurationUsesReferenceCentisecondTimecode() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setSelection(0, 48000))
+        const duration = findChild(findChild(page, "editorWaveformCanvas"),
+                                   "editorSelectionDuration")
+        verify(duration)
+        compare(duration.text, "00:01.00")
+    }
+
+    function test_gainAndEnvelopeControlsUseSampleAndGainMapping() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        const event = AudioEditorController.timelineEventViews[0]
+        verify(AudioEditorController.addEnvelopePoint(event.id, 48000, 0.5))
+        wait(0)
+        const line = findChild(canvas, "editorEnvelopeLine")
+        const point = findChild(canvas, "editorEnvelopePoint")
+        const gain = findChild(canvas, "editorEventGainInteraction")
+        const gainLine = findChild(canvas, "editorEventGainLine")
+        verify(line && point && gain && gainLine)
+        compare(line.implicitStartGain, 1)
+        compare(canvas.envelopeGainAtOffset(
+            AudioEditorController.timelineEventViews[0].envelope, 0), 1)
+        verify(Math.abs(canvas.envelopeGainAtOffset(
+            AudioEditorController.timelineEventViews[0].envelope, 24000)
+            - 0.75) < 0.000001)
+        compare(canvas.envelopeGainAtOffset(
+            AudioEditorController.timelineEventViews[0].envelope, 48000), 0.5)
+        const pointOnCanvas = point.mapToItem(canvas,
+            point.width / 2, point.height / 2)
+        const expectedPoint = gain.parent.mapToItem(canvas, 0,
+            gain.parent.height * 0.75)
+        verify(Math.abs(pointOnCanvas.x - canvas.pixelAtFrame(48000)) <= 2)
+        verify(Math.abs(pointOnCanvas.y - expectedPoint.y) <= 2)
+
+        verify(AudioEditorController.setEventGain(event.id, 1.5))
+        wait(0)
+        const updatedGain = findChild(canvas, "editorEventGainInteraction")
+        const updatedGainLine = findChild(canvas, "editorEventGainLine")
+        verify(updatedGain && updatedGainLine)
+        verify(Math.abs(updatedGainLine.y
+            - updatedGain.parent.height * 0.25) <= 1)
     }
 
     function test_fadeHandleAndVolumeLinePersistSampleExactEdits() {
@@ -439,6 +781,24 @@ TestCase {
         verify(AudioEditorController.playheadFrame > 24000)
     }
 
+    function test_playheadIncludesReferenceTimeCapsuleAndRulerCircle() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.seekFrame(24000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        const line = findChild(canvas, "editorPlayheadLine")
+        const capsule = findChild(page, "editorPlayheadTimeCapsule")
+        const circle = findChild(page, "editorPlayheadRulerCircle")
+        verify(canvas && line && capsule && circle)
+        verify(line.color.toString().indexOf("ffaf00") >= 0)
+        compare(circle.width, 14)
+        compare(circle.height, 14)
+        verify(capsule.text.indexOf(":") >= 0)
+        const circleCenter = circle.mapToItem(page,
+            circle.width / 2, circle.height / 2)
+        const lineCenter = line.mapToItem(page, line.width / 2, 0)
+        verify(Math.abs(circleCenter.x - lineCenter.x) <= 1)
+    }
+
     function test_realWheelEventUsesContractZoomFactors() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const interaction = findChild(page, "editorWaveformInteraction")
@@ -493,6 +853,7 @@ TestCase {
         verify(findChild(page, "editorCommand_importAudio").visible)
         if (data.w === 880) {
             const commandBar = findChild(page, "editorCommandBar")
+            const summary = findChild(page, "fileSummaryBar")
             verify(access.y >= commandBar.y + commandBar.height,
                    "narrow inspector access overlaps the command toolbar")
             const playAccess = findChild(page, "editorNarrowPlaybackAccess")
@@ -502,6 +863,15 @@ TestCase {
             verify(playAccess.y + playAccess.height <= page.height)
             verify(playAccess.x + playAccess.width + 8 <= access.x,
                    "narrow playback and inspector access overlap")
+            const accessPosition = access.mapToItem(page, 0, 0)
+            const playPosition = playAccess.mapToItem(page, 0, 0)
+            const summaryPosition = summary.mapToItem(page, 0, 0)
+            verify(accessPosition.y >= summaryPosition.y + summary.height
+                   || summaryPosition.y >= accessPosition.y + access.height,
+                   "narrow inspector access overlaps the file summary")
+            verify(playPosition.y >= summaryPosition.y + summary.height
+                   || summaryPosition.y >= playPosition.y + playAccess.height,
+                   "narrow playback access overlaps the file summary")
 
             mouseClick(access)
             const inspector = findChild(page, "editorInspector")

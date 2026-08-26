@@ -24,7 +24,7 @@ public slots:
         qmlRegisterSingletonType<AudioEditorController>(
             "AgPlayer", 1, 0, "AudioEditorController",
             [](QQmlEngine*, QJSEngine*) -> QObject* {
-                return new AudioEditorController();
+                return new AudioEditorController(AG_AUDIO_BACKEND_NULL);
             });
         qmlRegisterSingletonType<AudioToolsController>(
             "AgPlayer", 1, 0, "AudioToolsController",

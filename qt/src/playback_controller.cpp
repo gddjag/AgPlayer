@@ -139,22 +139,127 @@ void PlaybackController::setLibraryModel(LibraryModel* library)
 
 void PlaybackController::setPlayer(ag_player* player)
 {
+    editorOutputOwned_ = false;
+    editorSessionSnapshot_.reset();
     player_ = player;
     refreshOutputDevices();
 }
 
+bool PlaybackController::acquireEditorOutput() noexcept
+{
+    if (player_ == nullptr) return false;
+    if (editorOutputOwned_) return editorSessionSnapshot_.has_value();
+    try {
+        ag_playback_snapshot snapshot{};
+        if (ag_player_snapshot(player_, &snapshot) != AG_OK) return false;
+        PlaybackSessionSnapshot saved;
+        saved.queueTrackIds = queueTrackIds_;
+        if (snapshot.track_index
+            < static_cast<std::size_t>(queueTrackIds_.size())) {
+            saved.currentTrackId = queueTrackIds_.at(
+                static_cast<qsizetype>(snapshot.track_index));
+        } else {
+            saved.currentTrackId = currentTrackId_;
+        }
+        saved.positionMs = snapshot.position_ms;
+        saved.state = toState(snapshot.state);
+        saved.mode = toMode(snapshot.mode);
+        saved.scopeSize = activeScopeSize_ > 0
+            ? activeScopeSize_ : queueTrackIds_.size();
+        saved.allowFallback = activeScopeAllowsFallback_;
+        if (ag_player_stop(player_) != AG_OK) return false;
+        editorSessionSnapshot_ = std::move(saved);
+        editorOutputOwned_ = true;
+        if (state_ != Stopped) {
+            state_ = Stopped;
+            emit stateChanged();
+        }
+        if (positionMs_ != 0) {
+            positionMs_ = 0;
+            emit positionMsChanged();
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void PlaybackController::releaseEditorOutput() noexcept
+{
+    if (!editorOutputOwned_) return;
+    (void)ag_player_stop(player_);
+    editorOutputOwned_ = false;
+    if (!editorSessionSnapshot_ || editorSessionSnapshot_->queueTrackIds.isEmpty()
+        || library_ == nullptr) {
+        editorSessionSnapshot_.reset();
+        return;
+    }
+    try {
+        const PlaybackSessionSnapshot saved = std::move(*editorSessionSnapshot_);
+        editorSessionSnapshot_.reset();
+        std::vector<QByteArray> utf8Paths;
+        std::vector<const char*> paths;
+        utf8Paths.reserve(static_cast<std::size_t>(saved.queueTrackIds.size()));
+        paths.reserve(static_cast<std::size_t>(saved.queueTrackIds.size()));
+        for (const QString& trackId : saved.queueTrackIds) {
+            const int row = library_->indexForTrackId(trackId);
+            if (row < 0 || !library_->tracks().at(row).available
+                || library_->tracks().at(row).path.isEmpty()) {
+                setErrorMessage(QStringLiteral(
+                    "Unable to restore the playback session"));
+                return;
+            }
+            utf8Paths.push_back(library_->tracks().at(row).path.toUtf8());
+            paths.push_back(utf8Paths.back().constData());
+        }
+        const qsizetype current = saved.queueTrackIds.indexOf(saved.currentTrackId);
+        const std::size_t startIndex = current >= 0
+            ? static_cast<std::size_t>(current) : 0U;
+        const std::size_t scopeSize = static_cast<std::size_t>(std::clamp<qsizetype>(
+            saved.scopeSize, 1, saved.queueTrackIds.size()));
+        ag_result result = ag_player_set_scoped_queue(
+            player_, paths.data(), paths.size(), startIndex, scopeSize,
+            saved.allowFallback ? 1 : 0);
+        if (result == AG_OK) result = ag_player_set_mode(player_, toCoreMode(saved.mode));
+        if (result == AG_OK && saved.positionMs > 0) {
+            result = ag_player_seek(player_, saved.positionMs);
+        }
+        if (result == AG_OK && (saved.state == Playing || saved.state == Paused)) {
+            result = ag_player_play(player_);
+        }
+        if (result == AG_OK && saved.state == Paused) {
+            result = ag_player_pause(player_);
+        }
+        if (result != AG_OK) {
+            runCommand(result);
+            return;
+        }
+        queueTrackIds_ = saved.queueTrackIds;
+        activeScopeSize_ = saved.scopeSize;
+        activeScopeAllowsFallback_ = saved.allowFallback;
+        emit queueTrackIdsChanged();
+        pollSnapshot();
+    } catch (...) {
+        editorSessionSnapshot_.reset();
+        setErrorMessage(QStringLiteral("Unable to restore the playback session"));
+    }
+}
+
 void PlaybackController::play()
 {
+    if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_play(player_) : AG_INVALID_ARGUMENT);
 }
 
 void PlaybackController::pause()
 {
+    if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_pause(player_) : AG_INVALID_ARGUMENT);
 }
 
 void PlaybackController::stop()
 {
+    if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_stop(player_) : AG_INVALID_ARGUMENT);
 }
 
@@ -169,6 +274,7 @@ void PlaybackController::togglePlayback()
 
 void PlaybackController::seek(qint64 positionMs)
 {
+    if (editorOutputOwned_) return;
     if (player_ == nullptr) {
         runCommand(AG_INVALID_ARGUMENT);
         return;
@@ -232,11 +338,13 @@ bool PlaybackController::applyWaveformDuration(const QString& trackId,
 
 void PlaybackController::next()
 {
+    if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_next(player_) : AG_INVALID_ARGUMENT);
 }
 
 void PlaybackController::previous()
 {
+    if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_previous(player_) : AG_INVALID_ARGUMENT);
 }
 
@@ -262,9 +370,15 @@ bool PlaybackController::queueNext(const QString& trackId)
     const int existing = queueTrackIds_.indexOf(trackId);
     if (existing >= 0) {
         queueTrackIds_.removeAt(existing);
+        if (activeScopeSize_ > 0 && existing < activeScopeSize_) {
+            --activeScopeSize_;
+        }
         if (existing < current) {
             --current;
         }
+    }
+    if (activeScopeSize_ > 0 && current >= 0 && current < activeScopeSize_) {
+        ++activeScopeSize_;
     }
     queueTrackIds_.insert(
         std::min(current + 1, static_cast<int>(queueTrackIds_.size())),
@@ -317,6 +431,8 @@ bool PlaybackController::restoreQueue(const QStringList& trackIds,
         return false;
     }
     queueTrackIds_ = std::move(validIds);
+    activeScopeSize_ = queueTrackIds_.size();
+    activeScopeAllowsFallback_ = false;
     emit queueTrackIdsChanged();
     pollSnapshot();
     return true;
@@ -379,6 +495,8 @@ bool PlaybackController::playTrackIds(const QStringList& trackIds,
         return false;
     }
     queueTrackIds_ = std::move(queueIds);
+    activeScopeSize_ = scopeIds.size();
+    activeScopeAllowsFallback_ = allowFallback;
     emit queueTrackIdsChanged();
 
     const ag_result playResult = ag_player_play(player_);
@@ -436,6 +554,7 @@ bool PlaybackController::prepareRow(int row)
         return false;
     }
 
+    if (editorOutputOwned_) releaseEditorOutput();
     std::vector<QByteArray> utf8Paths;
     std::vector<const char*> paths;
     QStringList trackIds;
@@ -465,6 +584,8 @@ bool PlaybackController::prepareRow(int row)
         return false;
     }
     queueTrackIds_ = std::move(trackIds);
+    activeScopeSize_ = queueTrackIds_.size();
+    activeScopeAllowsFallback_ = false;
     emit queueTrackIdsChanged();
     return true;
 }
@@ -668,7 +789,7 @@ bool PlaybackController::setMatchTrackSampleRate(const bool enabled)
 
 void PlaybackController::pollSnapshot()
 {
-    if (player_ == nullptr) {
+    if (player_ == nullptr || editorOutputOwned_) {
         return;
     }
     ag_playback_snapshot snapshot{};

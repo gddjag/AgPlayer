@@ -1,6 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "pitch_shifter.hpp"
 #include "ffmpeg_codec_support.hpp"
+#include "formant_preserver.hpp"
 #include "time_pitch_engine.hpp"
 
 extern "C" {
@@ -25,53 +26,6 @@ bool is_cancelled(const std::atomic_bool* cancelled) noexcept
     return cancelled != nullptr
            && cancelled->load(std::memory_order_relaxed);
 }
-
-// Simple second-order biquad low-pass or high-pass filter for vocal formant compensation.
-class SecondOrderFilter {
-public:
-    enum class Type { LowPass, HighPass };
-
-    SecondOrderFilter(Type type, double cutoff_hz, double sample_rate) noexcept
-    {
-        const double omega = 2.0 * M_PI * cutoff_hz / sample_rate;
-        const double cos_omega = std::cos(omega);
-        const double sin_omega = std::sin(omega);
-        const double alpha = sin_omega / (2.0 * 0.707); // Q = 0.707 for gentle slope
-
-        if (type == Type::LowPass) {
-            b0_ = (1.0 - cos_omega) / 2.0;
-            b1_ = 1.0 - cos_omega;
-            b2_ = (1.0 - cos_omega) / 2.0;
-        } else {
-            b0_ = (1.0 + cos_omega) / 2.0;
-            b1_ = -(1.0 + cos_omega);
-            b2_ = (1.0 + cos_omega) / 2.0;
-        }
-        a0_ = 1.0 + alpha;
-        a1_ = -2.0 * cos_omega;
-        a2_ = 1.0 - alpha;
-
-        b0_ /= a0_; b1_ /= a0_; b2_ /= a0_;
-        a1_ /= a0_; a2_ /= a0_; a0_ = 1.0;
-    }
-
-    float process(float input) noexcept
-    {
-        const double output = b0_ * input + b1_ * x1_ + b2_ * x2_
-                              - a1_ * y1_ - a2_ * y2_;
-        x2_ = x1_;
-        x1_ = input;
-        y2_ = y1_;
-        y1_ = output;
-        return static_cast<float>(output);
-    }
-
-private:
-    double b0_ = 0.0, b1_ = 0.0, b2_ = 0.0;
-    double a1_ = 0.0, a2_ = 0.0, a0_ = 1.0;
-    double x1_ = 0.0, x2_ = 0.0;
-    double y1_ = 0.0, y2_ = 0.0;
-};
 
 struct DecoderState {
     AVFormatContext* fmt_ctx = nullptr;
@@ -441,34 +395,14 @@ ag_result pitch_shift(const std::string& input_path,
 
     const int enc_sample_rate = out_sample_rate;
 
-    if (config.vocal_protection) {
-        if (pitch_ratio > 1.0) {
-            // Pitch up: reduce excessive brightness with gentle low-pass.
-            const double cutoff = 8000.0 / pitch_ratio;
-            std::vector<SecondOrderFilter> lp_filters;
-            lp_filters.reserve(channels);
+    if (config.vocal_protection && std::abs(pitch_ratio - 1.0) > 0.000001) {
+        FormantPreserver preserver(enc_sample_rate, channels, pitch_ratio);
+        preserver.process(processed.data(), processed_frames);
+        for (std::size_t frame = 0; frame < processed_frames; ++frame) {
             for (int ch = 0; ch < channels; ++ch) {
-                lp_filters.emplace_back(SecondOrderFilter::Type::LowPass,
-                                        cutoff, enc_sample_rate);
-            }
-            for (int ch = 0; ch < channels; ++ch) {
-                for (float& sample : stretched[ch]) {
-                    sample = lp_filters[ch].process(sample);
-                }
-            }
-        } else if (pitch_ratio < 1.0) {
-            // Pitch down: reduce muffled sound with gentle high-pass.
-            const double cutoff = 80.0 * pitch_ratio;
-            std::vector<SecondOrderFilter> hp_filters;
-            hp_filters.reserve(channels);
-            for (int ch = 0; ch < channels; ++ch) {
-                hp_filters.emplace_back(SecondOrderFilter::Type::HighPass,
-                                        cutoff, enc_sample_rate);
-            }
-            for (int ch = 0; ch < channels; ++ch) {
-                for (float& sample : stretched[ch]) {
-                    sample = hp_filters[ch].process(sample);
-                }
+                stretched[static_cast<std::size_t>(ch)][frame] =
+                    processed[frame * static_cast<std::size_t>(channels)
+                              + static_cast<std::size_t>(ch)];
             }
         }
     }

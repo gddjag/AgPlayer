@@ -1,6 +1,9 @@
 #include "audio_editor/audio_editor_waveform_item.hpp"
 
 #include <QGuiApplication>
+#include <QImage>
+#include <QQuickRenderTarget>
+#include <QQuickWindow>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QtTest>
@@ -26,9 +29,43 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 8);
+        QCOMPARE(geometry_node->geometry()->drawingMode(),
+                 QSGGeometry::DrawTriangles);
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 72);
         QCOMPARE(node->childCount(), 0);
-        QCOMPARE(item.generatedPointCount(), 8);
+        QCOMPARE(item.generatedPointCount(), 16);
+        delete node;
+    }
+
+    void filledEnvelopeAndCenterLineShareOnePixelAlignedBuffer()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(3.0);
+        item.setHeight(20.0);
+        item.setLineWidth(1.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -1.0, 1.0, -0.5, 0.5, -0.25, 0.25})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(node->childCount(), 0);
+        QCOMPARE(geometryNode->geometry()->drawingMode(),
+                 QSGGeometry::DrawTriangles);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 24);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        bool hasCenterTop = false;
+        bool hasCenterBottom = false;
+        for (int index = 0; index < geometryNode->geometry()->vertexCount(); ++index) {
+            QVERIFY(std::abs(vertices[index].x * 2.0F
+                             - std::round(vertices[index].x * 2.0F)) < 0.001F);
+            hasCenterTop = hasCenterTop
+                || std::abs(vertices[index].y - 9.5F) < 0.001F;
+            hasCenterBottom = hasCenterBottom
+                || std::abs(vertices[index].y - 10.5F) < 0.001F;
+        }
+        QVERIFY(hasCenterTop);
+        QVERIFY(hasCenterBottom);
         delete node;
     }
 
@@ -66,7 +103,7 @@ private slots:
         delete node;
     }
 
-    void highDensityStereoUsesOneTotalTwoPointsPerPixelBudget()
+    void stereoUsesTheFullLogicalPixelBudgetPerChannel()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(10.0);
@@ -80,14 +117,22 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QVERIFY(item.generatedPointCount() <= 20);
+        QCOMPARE(item.generatedPointCount(), 40);
         delete node;
     }
 
-    void stereoBudgetSkipsChannelsThatDoNotOwnALogicalPixel()
+    void devicePixelRatioScalesEachChannelBudget()
     {
+        QQuickWindow window;
+        QImage image(40, 160, QImage::Format_RGBA8888_Premultiplied);
+        QQuickRenderTarget renderTarget = QQuickRenderTarget::fromPaintDevice(
+            &image);
+        renderTarget.setDevicePixelRatio(2.0);
+        window.setRenderTarget(renderTarget);
+
         TestableAudioEditorWaveformItem item;
-        item.setWidth(1.0);
+        item.setParentItem(window.contentItem());
+        item.setWidth(10.0);
         item.setHeight(80.0);
         QVariantList dense;
         for (int index = 0; index < 100; ++index) {
@@ -98,7 +143,8 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QVERIFY(item.generatedPointCount() <= 2);
+        QCOMPARE(window.effectiveDevicePixelRatio(), 2.0);
+        QCOMPARE(item.generatedPointCount(), 80);
         delete node;
     }
 

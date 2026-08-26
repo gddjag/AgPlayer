@@ -114,6 +114,31 @@
 <context>
     <name>AudioEditorPage</name>
     <message><source>选择音频导出目录</source><translation>Chọn thư mục xuất âm thanh</translation></message>
+    <message><source>音频源不可用：</source><translation>Nguồn âm thanh không khả dụng: </translation></message>
+    <message><source>重新定位文件</source><translation>Liên kết lại tệp</translation></message>
+    <message><source>（单声道）</source><translation>(Mono)</translation></message>
+    <message><source>（立体声）</source><translation>(Stereo)</translation></message>
+    <message><source>选择录音设备（Alt+R）</source><translation>Chọn thiết bị ghi âm (Alt+R)</translation></message>
+    <message><source>暂停 / 继续录音（Shift+R）</source><translation>Tạm dừng / Tiếp tục ghi âm (Shift+R)</translation></message>
+    <message><source>开始 / 继续录音（R）</source><translation>Bắt đầu / Tiếp tục ghi âm (R)</translation></message>
+    <message><source>停止并保存录音（Ctrl+R）</source><translation>Dừng và lưu bản ghi (Ctrl+R)</translation></message>
+    <message><source>跳到开头（Home）</source><translation>Về đầu (Home)</translation></message>
+    <message><source>后退 5 秒（←）</source><translation>Lùi 5 giây (←)</translation></message>
+    <message><source>播放 / 暂停（Space）</source><translation>Phát / Tạm dừng (Space)</translation></message>
+    <message><source>前进 5 秒（→）</source><translation>Tiến 5 giây (→)</translation></message>
+    <message><source>快进 5 秒</source><translation>Tiến 5 giây</translation></message>
+    <message><source>停止（Ctrl+Space）</source><translation>Dừng (Ctrl+Space)</translation></message>
+    <message><source>空格 = 播放 / 暂停</source><translation>Space = Phát / Tạm dừng</translation></message>
+    <message><source>S = 在播放头处分割</source><translation>S = Tách tại đầu phát</translation></message>
+    <message><source>Delete = 删除片段</source><translation>Delete = Xóa đoạn</translation></message>
+    <message><source>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</source><translation>Ctrl+C / X / V = Sao chép / Cắt / Dán</translation></message>
+    <message><source>Ctrl+Z / Y = 撤销 / 重做</source><translation>Ctrl+Z / Y = Hoàn tác / Làm lại</translation></message>
+    <message><source>Ctrl+拖动 = 快速复制片段</source><translation>Ctrl+kéo = Nhân bản đoạn</translation></message>
+    <message><source>Ctrl+鼠标滚轮 = 放大 / 缩小时间线</source><translation>Ctrl+con lăn = Thu phóng dòng thời gian</translation></message>
+    <message><source>Shift+鼠标滚轮 = 横向滚动</source><translation>Shift+con lăn = Cuộn ngang</translation></message>
+    <message><source>拖拽片段边缘 = 修剪</source><translation>Kéo cạnh đoạn = Cắt gọn</translation></message>
+    <message><source>拖拽右上角 = 调整淡出</source><translation>Kéo góc trên phải = Chỉnh mờ dần</translation></message>
+    <message><source>双击音量线 = 添加控制点</source><translation>Nhấp đúp đường âm lượng = Thêm điểm điều khiển</translation></message>
     <message><source>空格 = 播放 / 暂停       R = 开始录音       Shift+R = 暂停 / 继续录音       Ctrl+R = 停止并保存       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>Space = Phát / Tạm dừng       R = Bắt đầu ghi âm       Shift+R = Tạm dừng / Tiếp tục ghi âm       Ctrl+R = Dừng và lưu       S = Tách tại đầu phát       Delete = Xóa đoạn       Ctrl+C / X / V = Sao chép / Cắt / Dán       Ctrl+Z / Y = Hoàn tác / Làm lại</translation></message>
     <message><source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪       拖拽右上角 = 调整淡出       双击音量线 = 添加控制点</source><translation>Ctrl+kéo = Nhân bản đoạn       Ctrl+con lăn = Thu phóng dòng thời gian       Shift+con lăn = Cuộn ngang       Kéo cạnh đoạn = Cắt gọn       Kéo góc trên phải = Chỉnh mờ dần       Nhấp đúp đường âm lượng = Thêm điểm điều khiển</translation></message>
     <message><source>未检测到输入设备</source><translation>Không phát hiện thiết bị đầu vào</translation></message>
@@ -123,7 +148,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="16"/>
         <source>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</source>
-        <translation>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
+        <translation>Tệp âm thanh (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="23"/>
@@ -766,6 +791,7 @@
 </context>
 <context>
     <name>EditorWaveformCanvas</name>
+    <message><source>拖出片段</source><translation>Kéo đoạn ra</translation></message>
     <message><source>淡出控制点</source><translation>Điểm điều khiển mờ dần</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="173"/>

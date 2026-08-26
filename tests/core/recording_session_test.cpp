@@ -4,11 +4,15 @@
 #include <agplayer/c_api.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -56,6 +60,39 @@ int main()
     std::vector<float> block(480U * 2U, 0.25F);
     require(session.pushCapturedFrames(block.data(), 480) == 480,
             "captured frames not accepted");
+    std::vector<float> asymmetric(64U * 2U, 0.0F);
+    for (std::size_t frame = 0; frame < 64U; ++frame) {
+        asymmetric[frame * 2U] = 0.125F;
+        asymmetric[frame * 2U + 1U] = -0.5F;
+    }
+    require(session.pushCapturedFrames(asymmetric.data(), 64) == 64,
+            "asymmetric captured frames not accepted");
+    const auto meterDeadline = std::chrono::steady_clock::now()
+        + std::chrono::seconds(2);
+    while (session.framesMetered() < 544
+           && std::chrono::steady_clock::now() < meterDeadline) {
+        std::this_thread::yield();
+    }
+    require(session.framesMetered() >= 544,
+            "writer-side meter aggregation did not consume captured frames");
+    require(session.recordingChannels() == 2
+                && session.recordingSampleRate() == 48'000,
+            "actual recording format was not published");
+    const auto channel_peaks = session.recentChannelPeaks(32);
+    require(channel_peaks.size() == 2 && !channel_peaks[0].empty()
+                && channel_peaks[0].size() <= 32
+                && channel_peaks[1].size() == channel_peaks[0].size(),
+            "bounded channel peak history was not published");
+    require(channel_peaks[0].back() > 0.12F
+                && channel_peaks[0].back() < 0.13F
+                && channel_peaks[1].back() > 0.49F,
+            "channel peak history did not preserve real channel levels");
+    const auto peak_levels = session.livePeakLevels();
+    const auto rms_levels = session.liveRmsLevels();
+    require(peak_levels.size() == 2 && rms_levels.size() == 2
+                && peak_levels[1] > peak_levels[0]
+                && rms_levels[1] > rms_levels[0],
+            "real per-channel peak/RMS meter data was not published");
     require(session.pause(), "recording pause failed");
     require(session.pushCapturedFrames(block.data(), 480) == 0,
             "paused recording accepted frames");
@@ -69,9 +106,50 @@ int main()
             "live recording peak snapshot lost the captured signal");
     const RecordingResult result = session.stop();
     require(result.success, "recording stop failed");
-    require(result.frames == 960, "recorded frame count mismatch");
-    require(result.peak > 0.24F && result.peak < 0.26F,
+    require(result.frames == 1'024, "recorded frame count mismatch");
+    require(result.peak > 0.49F && result.peak <= 0.5F,
             "input peak mismatch");
+
+    const fs::path concurrent_output = fs::temp_directory_path()
+        / "agplayer-recording-concurrent-meter-test.wav";
+    fs::remove(concurrent_output, ignored);
+    RecordingConfig concurrent_config = config;
+    concurrent_config.output_path = concurrent_output;
+    concurrent_config.sample_rate = 8'000;
+    RecordingSession concurrent_session;
+    require(concurrent_session.startManual(concurrent_config),
+            "concurrent recording start failed");
+    std::atomic<bool> producing{true};
+    std::atomic<bool> coherent{true};
+    std::thread producer([&] {
+        for (std::size_t index = 0; index < 50'000U; ++index) {
+            const float left = 0.1F + static_cast<float>(index % 8U) * 0.1F;
+            const std::array<float, 2> sample{left, left * 0.5F};
+            (void)concurrent_session.pushCapturedFrames(sample.data(), 1U);
+        }
+        producing.store(false, std::memory_order_release);
+    });
+    while (producing.load(std::memory_order_acquire)) {
+        const auto peaks = concurrent_session.recentChannelPeaks(64U);
+        if (peaks.size() != 2U || peaks[0].size() != peaks[1].size()) {
+            coherent.store(false, std::memory_order_relaxed);
+            break;
+        }
+        for (std::size_t index = 0; index < peaks[0].size(); ++index) {
+            if (peaks[0][index] <= 0.0F
+                || std::abs(peaks[1][index] * 2.0F - peaks[0][index])
+                       > 0.0001F) {
+                coherent.store(false, std::memory_order_relaxed);
+                break;
+            }
+        }
+    }
+    producer.join();
+    require(coherent.load(std::memory_order_relaxed),
+            "concurrent peak snapshot observed a partially published slot");
+    require(concurrent_session.stop().success,
+            "concurrent recording stop failed");
+    fs::remove(concurrent_output, ignored);
 
     agplayer::Decoder decoder;
     require(decoder.open(output.u8string(), 48'000, 2) == AG_OK,
@@ -82,7 +160,7 @@ int main()
         require(decoder.read(decoded) == AG_OK, "recording decode failed");
         frames += static_cast<std::int64_t>(decoded.frames);
     } while (!decoded.end_of_stream);
-    require(frames == 960, "decoded recording frame count mismatch");
+    require(frames == 1'024, "decoded recording frame count mismatch");
     const fs::path recovered = fs::temp_directory_path()
         / "agplayer-recording-recovered.wav";
     const fs::path staged = fs::path(recovered.u8string()

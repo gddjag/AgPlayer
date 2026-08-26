@@ -21,8 +21,13 @@ Window {
             unsavedCloseDialog.open()
             return
         }
-        AudioEditorController.deactivate()
         WindowController.hideAudioTools()
+    }
+    onVisibleChanged: {
+        if (visible && AudioToolsController.currentTool === 0)
+            AudioEditorController.activate()
+        else if (!visible)
+            AudioEditorController.deactivate()
     }
     onClosing: function(close) {
         close.accepted = false
@@ -39,6 +44,16 @@ Window {
     palette.highlightedText: Theme.accentText
     palette.mid: Theme.border
 
+    Connections {
+        target: AudioToolsController
+        function onCurrentToolChanged() {
+            if (AudioToolsController.currentTool === 0)
+                AudioEditorController.activate()
+            else
+                AudioEditorController.deactivate()
+        }
+    }
+
     Dialog {
         id: unsavedCloseDialog
         parent: window.contentItem
@@ -47,7 +62,6 @@ Window {
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
-            AudioEditorController.deactivate()
             WindowController.hideAudioTools()
         }
         Label {
@@ -207,10 +221,32 @@ Window {
                     anchors.fill: parent
                     currentIndex: AudioToolsController.currentTool
 
-                    AudioEditorPage { objectName: "audioEditorPage" }
-                    FormatConvertPage { objectName: "formatConvertPage" }
-                    MetadataEditPage {}
-                    FilenameProcessPage {}
+                    Loader {
+                        objectName: "audioEditorPageLoader"
+                        active: AudioToolsController.currentTool === 0
+                        sourceComponent: Component {
+                            AudioEditorPage { objectName: "audioEditorPage" }
+                        }
+                    }
+                    Loader {
+                        objectName: "formatConvertPageLoader"
+                        active: AudioToolsController.currentTool === 1
+                        sourceComponent: Component {
+                            FormatConvertPage { objectName: "formatConvertPage" }
+                        }
+                    }
+                    Loader {
+                        objectName: "metadataEditPageLoader"
+                        active: AudioToolsController.currentTool === 2
+                        sourceComponent: Component { MetadataEditPage {} }
+                    }
+                    Loader {
+                        objectName: "filenameProcessPageLoader"
+                        active: AudioToolsController.currentTool === 3
+                        sourceComponent: Component {
+                            FilenameProcessPage { objectName: "filenameProcessPage" }
+                        }
+                    }
                 }
             }
         }

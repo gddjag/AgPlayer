@@ -8,6 +8,15 @@ Rectangle {
     border.width: 1
     clip: true
     property double playheadCandidateFrame: -1
+    property double selectionCandidateStart: -1
+    property double selectionCandidateEnd: -1
+    readonly property bool hasSelectionCandidate:
+        selectionCandidateStart >= 0
+        && selectionCandidateEnd > selectionCandidateStart
+    readonly property double displayedSelectionStart: hasSelectionCandidate
+        ? selectionCandidateStart : AudioEditorController.selectionStart
+    readonly property double displayedSelectionEnd: hasSelectionCandidate
+        ? selectionCandidateEnd : AudioEditorController.selectionEnd
     readonly property double displayedPlayheadFrame:
         playheadCandidateFrame >= 0 ? playheadCandidateFrame
                                     : AudioEditorController.playheadFrame
@@ -20,6 +29,56 @@ Rectangle {
     }
     function pixelAtFrame(frame) {
         return AudioEditorController.viewport.pixelAtFrame(frame)
+    }
+    function previewSelection(first, second) {
+        selectionCandidateStart = Math.min(first, second)
+        selectionCandidateEnd = Math.max(first, second)
+    }
+    function commitSelection() {
+        if (hasSelectionCandidate) {
+            AudioEditorController.setSelection(
+                selectionCandidateStart, selectionCandidateEnd)
+        }
+        selectionCandidateStart = -1
+        selectionCandidateEnd = -1
+    }
+    function cancelSelectionPreview() {
+        selectionCandidateStart = -1
+        selectionCandidateEnd = -1
+    }
+    function gainFromY(y, height) {
+        return Math.max(0, Math.min(2, 2 * (1 - y / height)))
+    }
+    function envelopeGainAtOffset(points, offset) {
+        let previousOffset = 0
+        let previousGain = 1
+        for (let index = 0; index < points.length; ++index) {
+            const pointOffset = Number(points[index].offset)
+            const pointGain = Number(points[index].gain)
+            if (offset <= pointOffset) {
+                if (pointOffset === previousOffset)
+                    return pointGain
+                const fraction = (offset - previousOffset)
+                    / (pointOffset - previousOffset)
+                return previousGain
+                    + (pointGain - previousGain) * fraction
+            }
+            previousOffset = pointOffset
+            previousGain = pointGain
+        }
+        return previousGain
+    }
+    function selectionDurationText() {
+        const frames = Math.max(0,
+            displayedSelectionEnd - displayedSelectionStart)
+        const centiseconds = AudioEditorController.sampleRate > 0
+            ? Math.round(frames * 100 / AudioEditorController.sampleRate) : 0
+        const minutes = Math.floor(centiseconds / 6000)
+        const seconds = Math.floor(centiseconds % 6000 / 100)
+        const hundredths = centiseconds % 100
+        return String(minutes).padStart(2, "0") + ":"
+            + String(seconds).padStart(2, "0") + "."
+            + String(hundredths).padStart(2, "0")
     }
     function addEnvelopePointForEvent(eventId, timelineStart, timelineEnd,
                                       canvasX, lineY, lineHeight) {
@@ -72,27 +131,120 @@ Rectangle {
 
     Rectangle {
         id: selectionOverlay
-        visible: AudioEditorController.selectionStart >= 0
-            && AudioEditorController.selectionEnd
+        visible: canvas.displayedSelectionStart >= 0
+            && canvas.displayedSelectionEnd
                 > AudioEditorController.viewport.visibleStartFrame
-            && AudioEditorController.selectionStart
+            && canvas.displayedSelectionStart
                 < AudioEditorController.viewport.visibleEndFrame
         x: Math.max(0, canvas.pixelAtFrame(
-            AudioEditorController.selectionStart))
+            canvas.displayedSelectionStart))
         width: Math.max(0, Math.min(canvas.width,
-            canvas.pixelAtFrame(AudioEditorController.selectionEnd)) - x)
+            canvas.pixelAtFrame(canvas.displayedSelectionEnd)) - x)
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.margins: 8
         color: "#224b7d99"
-        border.color: "#5da8ff"
-        border.width: 1
+        border.width: 0
+        z: 3
+
+        Canvas {
+            id: selectionDashedBorder
+            objectName: "editorSelectionDashedBorder"
+            anchors.fill: parent
+            property color borderColor: "#78baff"
+            onPaint: {
+                const context = getContext("2d")
+                context.clearRect(0, 0, width, height)
+                context.strokeStyle = borderColor
+                context.lineWidth = 1
+                context.setLineDash([5, 4])
+                context.strokeRect(0.5, 0.5,
+                    Math.max(0, width - 1), Math.max(0, height - 1))
+            }
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onVisibleChanged: requestPaint()
+            Component.onCompleted: requestPaint()
+        }
+        onVisibleChanged: selectionDashedBorder.requestPaint()
+        onXChanged: selectionDashedBorder.requestPaint()
+        onWidthChanged: selectionDashedBorder.requestPaint()
+        onHeightChanged: selectionDashedBorder.requestPaint()
+        Connections {
+            target: canvas
+            function onDisplayedSelectionStartChanged() {
+                selectionDashedBorder.requestPaint()
+            }
+            function onDisplayedSelectionEndChanged() {
+                selectionDashedBorder.requestPaint()
+            }
+        }
+
+        Rectangle {
+            id: handoffCapsule
+            objectName: "editorSelectionHandoffCapsule"
+            x: 6
+            y: parent.height - height - 6
+            width: handoffLabel.implicitWidth + 20
+            height: 28
+            radius: 14
+            color: "#241b0e"
+            border.color: "#ff8a00"
+            border.width: 1
+            Text {
+                id: handoffLabel
+                objectName: "editorSelectionHandoffLabel"
+                anchors.centerIn: parent
+                text: qsTr("拖出片段")
+                color: "#ff8a00"
+                font.pixelSize: 12
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.DragCopyCursor
+                onPressed: function(mouse) {
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    mouse.accepted = AudioEditorController
+                        .beginSelectionHandoff(point.x, point.y)
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    const point = mapToItem(canvas, mouse.x, mouse.y)
+                    AudioEditorController.updateSelectionHandoff(
+                        point.x, point.y)
+                }
+                onCanceled: AudioEditorController.cancelSelectionHandoff()
+                onReleased: AudioEditorController.cancelSelectionHandoff()
+            }
+        }
+
+        Rectangle {
+            id: selectionDurationCapsule
+            objectName: "editorSelectionDurationCapsule"
+            x: parent.width - width - 6
+            y: 6
+            width: selectionDuration.implicitWidth + 12
+            height: 22
+            radius: 4
+            color: "#241b0e"
+            border.color: "#ff8a00"
+            border.width: 1
+            Text {
+                id: selectionDuration
+                objectName: "editorSelectionDuration"
+                anchors.centerIn: parent
+                text: canvas.selectionDurationText()
+                color: "#ff8a00"
+                font.pixelSize: 12
+            }
+        }
     }
 
     Repeater {
         model: AudioEditorController.timelineEventViews
         delegate: Rectangle {
             id: eventDelegate
+            objectName: "editorEventVisualBoundary"
             required property var modelData
             readonly property real rawStart: canvas.pixelAtFrame(
                 Number(modelData.timelineStart))
@@ -104,8 +256,8 @@ Rectangle {
             height: canvas.height - 16
             visible: width > 0 && rawEnd > 0 && rawStart < canvas.width
             color: "transparent"
-            border.color: "#247fe0"
-            border.width: 1
+            border.color: "transparent"
+            border.width: 0
             z: 2
 
             MouseArea {
@@ -123,11 +275,9 @@ Rectangle {
                 property double originalTimelineStart: 0
                 property bool duplicateMove: false
                 property bool movedDuringPress: false
-                property double lastEnvelopeClickMs: 0
-                property real lastEnvelopeClickX: 0
-                property real lastEnvelopeClickY: 0
                 onPressed: function(mouse) {
                     movedDuringPress = false
+                    canvas.cancelSelectionPreview()
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     pressCanvasX = point.x
                     originalTimelineStart = Number(modelData.timelineStart)
@@ -158,38 +308,18 @@ Rectangle {
                             modelData.id, Math.max(0, Math.round(
                                 originalTimelineStart + frame - pressFrame)))
                     } else if (frame !== pressFrame) {
-                        AudioEditorController.setSelection(
-                            Math.min(pressFrame, frame),
-                            Math.max(pressFrame, frame))
+                        canvas.previewSelection(pressFrame, frame)
                     }
                 }
                 onReleased: function(mouse) {
                     if (duplicateMove) AudioEditorController.endEventGesture()
-                    if (!duplicateMove && !movedDuringPress
-                            && AudioEditorController.activeTool !== "scissors"
-                            && mouse.y >= volumeLine.y
-                            && mouse.y <= volumeLine.y + volumeLine.height) {
-                        const now = Date.now()
-                        if (now - lastEnvelopeClickMs <= 500
-                                && Math.abs(mouse.x - lastEnvelopeClickX) <= 6
-                                && Math.abs(mouse.y - lastEnvelopeClickY) <= 6) {
-                            const point = mapToItem(canvas, mouse.x, mouse.y)
-                            canvas.addEnvelopePointForEvent(
-                                modelData.id,
-                                Number(modelData.timelineStart),
-                                Number(modelData.timelineEnd), point.x,
-                                mouse.y - volumeLine.y, volumeLine.height)
-                            lastEnvelopeClickMs = 0
-                        } else {
-                            lastEnvelopeClickMs = now
-                            lastEnvelopeClickX = mouse.x
-                            lastEnvelopeClickY = mouse.y
-                        }
-                    }
+                    if (!duplicateMove && movedDuringPress)
+                        canvas.commitSelection()
                     duplicateMove = false
                 }
                 onCanceled: {
                     if (duplicateMove) AudioEditorController.cancelEventGesture()
+                    else canvas.cancelSelectionPreview()
                     duplicateMove = false
                 }
             }
@@ -363,26 +493,169 @@ Rectangle {
                 id: volumeLine
                 objectName: "editorEventVolumeLine"
                 x: 10; width: parent.width - 20
-                y: parent.height / 2 - 12; height: 24
-                z: 4
+                y: 10; height: parent.height - 20
+                z: 9
+                property real gainCandidate: Number(eventDelegate.modelData.gain)
+                readonly property real displayedGain: gainInteraction.pressed
+                    ? gainCandidate : Number(eventDelegate.modelData.gain)
+
                 Rectangle {
-                    anchors.left: parent.left; anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
+                    objectName: "editorEventGainLine"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    y: (1 - Math.max(0, Math.min(2,
+                        volumeLine.displayedGain)) / 2) * volumeLine.height
                     height: 1; color: "#d8e6f2"; opacity: 0.65
                 }
+
+                Canvas {
+                    id: envelopeLine
+                    objectName: "editorEnvelopeLine"
+                    anchors.fill: parent
+                    readonly property real implicitStartGain:
+                        canvas.envelopeGainAtOffset(
+                            eventDelegate.modelData.envelope || [], 0)
+                    onPaint: {
+                        const context = getContext("2d")
+                        context.clearRect(0, 0, width, height)
+                        const points = eventDelegate.modelData.envelope || []
+                        if (points.length === 0) return
+                        function pointY(gain) {
+                            return (1 - Math.max(0, Math.min(2,
+                                Number(gain))) / 2) * height
+                        }
+                        context.strokeStyle = "#78baff"
+                        context.lineWidth = 1.5
+                        context.beginPath()
+                        context.moveTo(0, pointY(implicitStartGain))
+                        for (let index = 0; index < points.length; ++index) {
+                            const point = points[index]
+                            const x = canvas.pixelAtFrame(
+                                Number(eventDelegate.modelData.timelineStart)
+                                + Number(point.offset))
+                                - eventDelegate.x - volumeLine.x
+                            context.lineTo(x, pointY(point.gain))
+                        }
+                        context.lineTo(width,
+                            pointY(points[points.length - 1].gain))
+                        context.stroke()
+                    }
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    Connections {
+                        target: AudioEditorController
+                        function onDocumentChanged() {
+                            envelopeLine.requestPaint()
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: gainInteraction
+                    objectName: "editorEventGainInteraction"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    y: (1 - Math.max(0, Math.min(2,
+                        volumeLine.displayedGain)) / 2) * volumeLine.height
+                        - height / 2
+                    height: 24
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.SizeVerCursor
+                    onPressed: function(mouse) {
+                        volumeLine.gainCandidate = Number(
+                            eventDelegate.modelData.gain)
+                        AudioEditorController.beginEventGainGesture(
+                            eventDelegate.modelData.id)
+                        mouse.accepted = true
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        const point = mapToItem(volumeLine, mouse.x, mouse.y)
+                        volumeLine.gainCandidate = canvas.gainFromY(
+                            point.y, volumeLine.height)
+                        AudioEditorController.updateEventGainGesture(
+                            volumeLine.gainCandidate)
+                    }
+                    onReleased: AudioEditorController.endEventGainGesture()
+                    onCanceled: {
+                        AudioEditorController.cancelEventGainGesture()
+                        volumeLine.gainCandidate = Number(
+                            eventDelegate.modelData.gain)
+                    }
+                    onDoubleClicked: function(mouse) {
+                        const point = mapToItem(canvas, mouse.x, mouse.y)
+                        const linePoint = mapToItem(
+                            volumeLine, mouse.x, mouse.y)
+                        canvas.addEnvelopePointForEvent(
+                            eventDelegate.modelData.id,
+                            Number(eventDelegate.modelData.timelineStart),
+                            Number(eventDelegate.modelData.timelineEnd),
+                            point.x, linePoint.y, volumeLine.height)
+                        mouse.accepted = true
+                    }
+                }
+
                 Repeater {
                     model: modelData.envelope || []
-                    Rectangle {
+                    Item {
                         required property var modelData
-                        width: 8; height: 8; radius: 4
+                        objectName: "editorEnvelopePoint"
+                        width: 18; height: 18
                         x: canvas.pixelAtFrame(Number(eventDelegate.modelData.timelineStart)
                             + Number(modelData.offset)) - eventDelegate.x
                             - volumeLine.x - width / 2
                         y: (1 - Math.max(0, Math.min(2,
                             Number(modelData.gain))) / 2) * volumeLine.height
                             - height / 2
-                        color: "#1d7fff"
-                        border.color: "#e7f1ff"; border.width: 1
+                        z: 2
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 8; height: 8; radius: 4
+                            color: "#1d7fff"
+                            border.color: "#e7f1ff"; border.width: 1
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            cursorShape: Qt.PointingHandCursor
+                            property double originalOffset: 0
+                            onPressed: function(mouse) {
+                                originalOffset = Number(parent.modelData.offset)
+                                if (mouse.button === Qt.RightButton) {
+                                    AudioEditorController.removeEnvelopePoint(
+                                        eventDelegate.modelData.id,
+                                        originalOffset)
+                                } else {
+                                    AudioEditorController.beginEnvelopePointGesture(
+                                        eventDelegate.modelData.id,
+                                        originalOffset)
+                                }
+                                mouse.accepted = true
+                            }
+                            onPositionChanged: function(mouse) {
+                                if (!pressed
+                                        || (pressedButtons & Qt.LeftButton) === 0)
+                                    return
+                                const point = mapToItem(
+                                    volumeLine, mouse.x, mouse.y)
+                                const canvasPoint = mapToItem(
+                                    canvas, mouse.x, mouse.y)
+                                const offset = Math.max(0, Math.min(
+                                    Number(eventDelegate.modelData.timelineEnd)
+                                        - Number(eventDelegate.modelData.timelineStart) - 1,
+                                    canvas.frameAtCanvasPixel(canvasPoint.x)
+                                        - Number(eventDelegate.modelData.timelineStart)))
+                                AudioEditorController.updateEnvelopePointGesture(
+                                    Math.round(offset),
+                                    canvas.gainFromY(point.y, volumeLine.height))
+                            }
+                            onReleased: function(mouse) {
+                                if (mouse.button === Qt.LeftButton)
+                                    AudioEditorController.endEnvelopePointGesture()
+                            }
+                            onCanceled: AudioEditorController
+                                .cancelEnvelopePointGesture()
+                        }
                     }
                 }
             }
@@ -391,6 +664,7 @@ Rectangle {
 
     Rectangle {
         id: playheadLine
+        objectName: "editorPlayheadLine"
         x: canvas.pixelAtFrame(canvas.displayedPlayheadFrame)
         y: 0
         width: 2
@@ -423,6 +697,7 @@ Rectangle {
             }
             pressFrame = canvas.frameAtCanvasPixel(mouse.x)
             selecting = false
+            canvas.cancelSelectionPreview()
             AudioEditorController.seekFrame(pressFrame)
         }
         onPositionChanged: function(mouse) {
@@ -435,8 +710,15 @@ Rectangle {
             const frame = canvas.frameAtCanvasPixel(mouse.x)
             if (frame === pressFrame) return
             selecting = true
-            AudioEditorController.setSelection(
-                Math.min(pressFrame, frame), Math.max(pressFrame, frame))
+            canvas.previewSelection(pressFrame, frame)
+        }
+        onReleased: {
+            if (selecting) canvas.commitSelection()
+            selecting = false
+        }
+        onCanceled: {
+            canvas.cancelSelectionPreview()
+            selecting = false
         }
         onWheel: function(wheel) {
             if ((wheel.modifiers & Qt.ControlModifier) !== 0) {
@@ -503,14 +785,19 @@ Rectangle {
         activeFocusOnTab: true
         Accessible.name: qsTr("选区起点")
         Accessible.role: Accessible.Slider
+        onPressed: {
+            canvas.previewSelection(AudioEditorController.selectionStart,
+                                    AudioEditorController.selectionEnd)
+        }
         onPositionChanged: function(mouse) {
             if (!pressed) return
             const point = mapToItem(canvas, mouse.x, mouse.y)
             const frame = Math.min(canvas.frameAtCanvasPixel(point.x),
-                                   AudioEditorController.selectionEnd - 1)
-            AudioEditorController.setSelection(
-                frame, AudioEditorController.selectionEnd)
+                                   canvas.selectionCandidateEnd - 1)
+            canvas.previewSelection(frame, canvas.selectionCandidateEnd)
         }
+        onReleased: canvas.commitSelection()
+        onCanceled: canvas.cancelSelectionPreview()
         Keys.onPressed: function(event) {
             if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
                 return
@@ -537,14 +824,19 @@ Rectangle {
         activeFocusOnTab: true
         Accessible.name: qsTr("选区终点")
         Accessible.role: Accessible.Slider
+        onPressed: {
+            canvas.previewSelection(AudioEditorController.selectionStart,
+                                    AudioEditorController.selectionEnd)
+        }
         onPositionChanged: function(mouse) {
             if (!pressed) return
             const point = mapToItem(canvas, mouse.x, mouse.y)
             const frame = Math.max(canvas.frameAtCanvasPixel(point.x),
-                                   AudioEditorController.selectionStart + 1)
-            AudioEditorController.setSelection(
-                AudioEditorController.selectionStart, frame)
+                                   canvas.selectionCandidateStart + 1)
+            canvas.previewSelection(canvas.selectionCandidateStart, frame)
         }
+        onReleased: canvas.commitSelection()
+        onCanceled: canvas.cancelSelectionPreview()
         Keys.onPressed: function(event) {
             if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
                 return

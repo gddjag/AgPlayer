@@ -12,6 +12,12 @@ struct PeakBucket final {
     float maximum{};
 };
 
+struct PeakReadWindow final {
+    std::vector<PeakBucket> buckets;
+    SampleFrame start{};
+    SampleFrame bucketFrames{};
+};
+
 class PeakPyramid final {
 public:
     static PeakPyramid fromBaseBuckets(
@@ -20,6 +26,11 @@ public:
         SampleFrame document_frames);
 
     [[nodiscard]] std::vector<PeakBucket> read(
+        std::size_t channel,
+        SampleFrame start,
+        SampleFrame frame_count,
+        std::size_t pixel_width) const;
+    [[nodiscard]] PeakReadWindow readWindow(
         std::size_t channel,
         SampleFrame start,
         SampleFrame frame_count,

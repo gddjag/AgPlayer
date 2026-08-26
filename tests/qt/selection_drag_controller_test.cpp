@@ -1,0 +1,290 @@
+#include "audio_editor/selection_drag_controller.hpp"
+#include "audio_editor/audio_file_analyzer.hpp"
+#include "audio_editor/audio_document.hpp"
+
+#include <QApplication>
+#include <QFile>
+#include <QFileInfo>
+#include <QScopeGuard>
+#include <QSemaphore>
+#include <QTemporaryDir>
+#include <QTest>
+#include <QThread>
+
+#include <atomic>
+#include <filesystem>
+
+using agplayer::editor::AudioDocument;
+using agplayer::editor::AudioFileAnalyzer;
+using agplayer::editor::Selection;
+
+class SelectionDragControllerTest final : public QObject {
+    Q_OBJECT
+
+private slots:
+    void thresholdDefersRenderAndLaunchesExactlyOnce()
+    {
+        std::atomic_int prepares{0};
+        std::atomic_int drags{0};
+        SelectionDragController controller(
+            [&prepares](const HandoffRequest&, const std::atomic_bool*) {
+                ++prepares;
+                return HandoffAssetResult{
+                    true, QStringLiteral("C:/handoff.wav"),
+                    QUrl::fromLocalFile(QStringLiteral("C:/handoff.wav")), {}};
+            },
+            [&drags](const QUrl& url) {
+                QVERIFY(url.isLocalFile());
+                ++drags;
+            });
+        HandoffRequest request;
+        request.snapshot.revision = 1;
+        request.selection = Selection{10, 20};
+        request.sourceIdentity = QStringLiteral("fixture:1");
+        request.timelineRevision = 1;
+        request.renderState = {48'000, 1, 1.0F, false};
+
+        const int threshold = QApplication::startDragDistance();
+        controller.begin(QPointF(10, 10), request);
+        controller.update(QPointF(10 + std::max(0, threshold - 1), 10));
+        QTest::qWait(20);
+        QCOMPARE(prepares.load(), 0);
+        QCOMPARE(drags.load(), 0);
+
+        controller.update(QPointF(10 + threshold, 10));
+        QTRY_COMPARE_WITH_TIMEOUT(prepares.load(), 1, 3'000);
+        QTRY_COMPARE_WITH_TIMEOUT(drags.load(), 1, 3'000);
+        controller.update(QPointF(10 + threshold * 2, 10));
+        QTest::qWait(20);
+        QCOMPARE(prepares.load(), 1);
+        QCOMPARE(drags.load(), 1);
+    }
+
+    void assetManagerCachesIdentityAndProducesVerifiedWavUri()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        const auto analysis = AudioFileAnalyzer::analyze(
+            std::filesystem::u8path(fixture.constData()), 256);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        HandoffAssetManager manager(directory.path());
+        HandoffRequest request;
+        request.snapshot = AudioDocument::fromSource(analysis.source)
+            .timelineSnapshot();
+        request.selection = Selection{0, std::min<qint64>(
+            analysis.source.total_frames, 2'048)};
+        request.sourceIdentity = QString::fromUtf8(fixture)
+            + QStringLiteral(":")
+            + QString::number(QFileInfo(QString::fromUtf8(fixture)).size());
+        request.timelineRevision = request.snapshot.revision;
+        request.renderState = {
+            static_cast<int>(analysis.source.sample_rate),
+            static_cast<int>(analysis.source.channels), 1.0F, false};
+
+        const auto first = manager.prepare(request);
+        QVERIFY2(first.success, qPrintable(first.error));
+        QVERIFY(first.url.isValid());
+        QVERIFY(first.url.isLocalFile());
+        QCOMPARE(first.url.toLocalFile(), first.path);
+        QFile output(first.path);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        QCOMPARE(output.read(4), QByteArray("RIFF", 4));
+
+        const auto cached = manager.prepare(request);
+        QVERIFY(cached.success);
+        QCOMPARE(cached.path, first.path);
+        ++request.timelineRevision;
+        const auto revised = manager.prepare(request);
+        QVERIFY2(revised.success, qPrintable(revised.error));
+        QVERIFY(revised.path != first.path);
+        QVERIFY(QFileInfo(revised.path).isFile());
+    }
+
+    void assetManagerUsesTimePitchPipelineAndKeysEveryRenderParameter()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        const auto analysis = AudioFileAnalyzer::analyze(
+            std::filesystem::u8path(fixture.constData()), 256);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        HandoffAssetManager manager(directory.path());
+        HandoffRequest request;
+        request.snapshot = AudioDocument::fromSource(analysis.source)
+            .timelineSnapshot();
+        request.selection = Selection{0, std::min<qint64>(
+            analysis.source.total_frames, analysis.source.sample_rate)};
+        request.sourceIdentity = QString::fromUtf8(fixture)
+            + QStringLiteral(":")
+            + QString::number(QFileInfo(QString::fromUtf8(fixture)).size());
+        request.timelineRevision = request.snapshot.revision;
+        request.renderState = {
+            static_cast<int>(analysis.source.sample_rate),
+            static_cast<int>(analysis.source.channels), 1.0F, false};
+
+        const auto normal = manager.prepare(request);
+        QVERIFY2(normal.success, qPrintable(normal.error));
+        const auto normalAnalysis = AudioFileAnalyzer::analyze(
+            std::filesystem::path(normal.path.toStdWString()), 64);
+        QVERIFY2(normalAnalysis.success, normalAnalysis.message.c_str());
+
+        request.renderState.speedPercent = 200.0;
+        const auto fast = manager.prepare(request);
+        QVERIFY2(fast.success, qPrintable(fast.error));
+        QVERIFY(fast.path != normal.path);
+        const auto fastAnalysis = AudioFileAnalyzer::analyze(
+            std::filesystem::path(fast.path.toStdWString()), 64);
+        QVERIFY2(fastAnalysis.success, fastAnalysis.message.c_str());
+        QVERIFY2(fastAnalysis.source.total_frames
+                     < normalAnalysis.source.total_frames * 3 / 4,
+                 "handoff speed must affect rendered duration");
+
+        request.renderState.pitchCents = 100;
+        const auto pitched = manager.prepare(request);
+        QVERIFY2(pitched.success, qPrintable(pitched.error));
+        QVERIFY(pitched.path != fast.path);
+
+        request.renderState.keepPitch = false;
+        const auto coupled = manager.prepare(request);
+        QVERIFY2(coupled.success, qPrintable(coupled.error));
+        QVERIFY(coupled.path != pitched.path);
+
+        request.renderState.formantPreservation = true;
+        const auto formant = manager.prepare(request);
+        QVERIFY2(formant.success, qPrintable(formant.error));
+        QVERIFY(formant.path != coupled.path);
+    }
+
+    void cacheKeyUsesStableDocumentContentAcrossReopenedEdits()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        const auto analysis = AudioFileAnalyzer::analyze(
+            std::filesystem::u8path(fixture.constData()), 256);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        AudioDocument gainDocument = AudioDocument::fromSource(analysis.source);
+        AudioDocument fadeDocument = AudioDocument::fromSource(analysis.source);
+        const auto gainId = gainDocument.timelineSnapshot().events.front().id;
+        const auto fadeId = fadeDocument.timelineSnapshot().events.front().id;
+        QVERIFY(gainDocument.setEventGain(gainId, 0.25F));
+        QVERIFY(fadeDocument.setEventFadeOut(fadeId, 16));
+        const auto gainSnapshot = gainDocument.timelineSnapshot();
+        const auto fadeSnapshot = fadeDocument.timelineSnapshot();
+        QCOMPARE(gainSnapshot.revision, fadeSnapshot.revision);
+
+        HandoffRequest request;
+        request.selection = Selection{0, std::min<qint64>(
+            analysis.source.total_frames, 2'048)};
+        request.sourceIdentity = QString::fromUtf8(fixture)
+            + QStringLiteral(":")
+            + QString::number(QFileInfo(QString::fromUtf8(fixture)).size());
+        request.timelineRevision = gainSnapshot.revision;
+        request.renderState = {
+            static_cast<int>(analysis.source.sample_rate),
+            static_cast<int>(analysis.source.channels), 1.0F, false};
+        HandoffAssetManager manager(directory.path());
+
+        request.snapshot = gainSnapshot;
+        const auto gain = manager.prepare(request);
+        QVERIFY2(gain.success, qPrintable(gain.error));
+        request.snapshot = fadeSnapshot;
+        const auto fade = manager.prepare(request);
+        QVERIFY2(fade.success, qPrintable(fade.error));
+        QVERIFY2(gain.path != fade.path,
+                 "same-revision reopened edits collided in the handoff cache");
+        QFile gainFile(gain.path);
+        QFile fadeFile(fade.path);
+        QVERIFY(gainFile.open(QIODevice::ReadOnly));
+        QVERIFY(fadeFile.open(QIODevice::ReadOnly));
+        QVERIFY(gainFile.readAll() != fadeFile.readAll());
+    }
+
+    void rebeginWhileOldPrepareFinishesKeepsNewestGesture()
+    {
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        QSemaphore secondStarted;
+        QSemaphore releaseSecond;
+        std::atomic_int prepares{0};
+        QList<QUrl> drags;
+        SelectionDragController controller(
+            [&](const HandoffRequest& request, const std::atomic_bool*) {
+                const int prepare = ++prepares;
+                if (prepare == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                } else {
+                    secondStarted.release();
+                    releaseSecond.acquire();
+                }
+                const QString path = QStringLiteral("C:/handoff-%1.wav")
+                    .arg(request.selection.start);
+                return HandoffAssetResult{
+                    true, path, QUrl::fromLocalFile(path), {}};
+            },
+            [&](const QUrl& url) { drags.append(url); });
+        const auto cleanup = qScopeGuard([&] {
+            releaseFirst.release();
+            releaseSecond.release();
+            controller.cancel();
+        });
+        HandoffRequest first;
+        first.selection = Selection{10, 20};
+        HandoffRequest second = first;
+        second.selection = Selection{200, 220};
+        const int threshold = QApplication::startDragDistance();
+
+        controller.begin(QPointF(0, 0), first);
+        controller.update(QPointF(threshold, 0));
+        QVERIFY(firstStarted.tryAcquire(1, 3'000));
+        controller.begin(QPointF(0, 0), second);
+        controller.update(QPointF(threshold, 0));
+        QCOMPARE(prepares.load(), 1);
+
+        releaseFirst.release();
+        QTRY_COMPARE_WITH_TIMEOUT(prepares.load(), 2, 3'000);
+        QVERIFY(secondStarted.tryAcquire(1));
+        QCOMPARE(drags.size(), 0);
+        releaseSecond.release();
+        QTRY_COMPARE_WITH_TIMEOUT(drags.size(), 1, 3'000);
+        QCOMPARE(drags.front(),
+                 QUrl::fromLocalFile(QStringLiteral("C:/handoff-200.wav")));
+    }
+
+    void pointerReleaseCancelsPendingPrepareBeforeLateDrag()
+    {
+        QSemaphore started;
+        QSemaphore release;
+        std::atomic_int drags{0};
+        SelectionDragController controller(
+            [&](const HandoffRequest&, const std::atomic_bool*) {
+                started.release();
+                release.acquire();
+                return HandoffAssetResult{
+                    true, QStringLiteral("C:/late.wav"),
+                    QUrl::fromLocalFile(QStringLiteral("C:/late.wav")), {}};
+            },
+            [&](const QUrl&) { ++drags; });
+        HandoffRequest request;
+        request.selection = Selection{10, 20};
+        controller.begin(QPointF(0, 0), request);
+        controller.update(QPointF(QApplication::startDragDistance(), 0));
+        QVERIFY(started.tryAcquire(1, 3'000));
+
+        controller.cancel(); // QML MouseArea.onReleased contract
+        release.release();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.preparing(), 3'000);
+        QCOMPARE(drags.load(), 0);
+    }
+};
+
+QTEST_MAIN(SelectionDragControllerTest)
+#include "selection_drag_controller_test.moc"

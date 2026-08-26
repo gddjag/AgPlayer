@@ -72,24 +72,29 @@ private slots:
         for (const AudioEvent& event : split.events) {
             QCOMPARE(event.source, source);
             QCOMPARE(event.gain, valid.gain);
-            QCOMPARE(event.fadeIn, valid.fadeIn);
-            QCOMPARE(event.fadeOut, valid.fadeOut);
             QCOMPARE(event.speedRatio, valid.speedRatio);
             QCOMPARE(event.pitchSemitone, valid.pitchSemitone);
             QCOMPARE(event.mute, valid.mute);
-            QCOMPARE(event.envelope.size(), valid.envelope.size());
+            QVERIFY(isValid(event));
         }
+        QCOMPARE(split.events[0].fadeIn, valid.fadeIn);
+        QCOMPARE(split.events[0].fadeOut, SampleFrame{0});
+        QCOMPARE(split.events[1].fadeIn, SampleFrame{0});
+        QCOMPARE(split.events[1].fadeOut, valid.fadeOut);
+        QCOMPARE(split.events[0].envelope.size(), std::size_t{2});
+        QCOMPARE(split.events[1].envelope.size(), std::size_t{1});
 
-        AudioEvent invalid = valid;
-        invalid.id = 8;
-        invalid.fadeIn = 600;
-        auto rejected = AudioDocument::fromEvents({invalid});
-        const TimelineSnapshot before = rejected.timelineSnapshot();
-        QVERIFY(!rejected.splitEventAt(8, 500));
-        const TimelineSnapshot after = rejected.timelineSnapshot();
-        QCOMPARE(after.revision, before.revision);
-        QCOMPARE(after.events.front().sourceEnd, before.events.front().sourceEnd);
-        QCOMPARE(after.events.front().fadeIn, before.events.front().fadeIn);
+        AudioEvent longFade = valid;
+        longFade.id = 8;
+        longFade.fadeIn = 600;
+        auto reframed = AudioDocument::fromEvents({longFade});
+        QVERIFY(reframed.splitEventAt(8, 500));
+        const TimelineSnapshot after = reframed.timelineSnapshot();
+        QCOMPARE(after.events.size(), std::size_t{2});
+        QVERIFY(isValid(after.events[0]));
+        QVERIFY(isValid(after.events[1]));
+        QCOMPARE(after.events[0].fadeIn, SampleFrame{500});
+        QCOMPARE(after.events[1].fadeIn, SampleFrame{100});
     }
 
     void deleteSelectionRetainsTheLaterEventTimelineStart()

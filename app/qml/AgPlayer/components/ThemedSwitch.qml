@@ -5,6 +5,8 @@ import AgPlayer
 T.Switch {
     id: control
 
+    property color checkedColor: Theme.cyan
+
     implicitWidth: Math.max(40, contentItem.implicitWidth)
     implicitHeight: 22
 
@@ -14,7 +16,7 @@ T.Switch {
         x: 0
         y: (control.height - height) / 2
         radius: height / 2
-        color: control.checked ? Theme.cyan : Theme.border
+        color: control.checked ? control.checkedColor : Theme.border
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter

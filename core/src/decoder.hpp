@@ -38,6 +38,7 @@ struct MediaMetadata final {
 struct DecodedAudioBlock final {
     std::vector<float> samples;
     std::size_t frames = 0U;
+    std::int64_t timestamp_frame = 0;
     std::int64_t timestamp_ms = 0;
     bool end_of_stream = false;
 };
@@ -62,6 +63,7 @@ public:
     [[nodiscard]] bool is_open() const noexcept;
     [[nodiscard]] ag_result read(DecodedAudioBlock& block) noexcept;
     [[nodiscard]] ag_result seek(std::int64_t target_ms) noexcept;
+    [[nodiscard]] ag_result seekFrame(std::int64_t target_frame) noexcept;
     [[nodiscard]] const MediaMetadata& metadata() const noexcept;
 
 private:

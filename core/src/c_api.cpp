@@ -1,6 +1,7 @@
 #include <agplayer/c_api.h>
 
 #include "core_context.hpp"
+#include "audio_editor/editor_player_bridge.hpp"
 #include "decoder.hpp"
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
@@ -101,6 +102,17 @@ struct ag_waveform {
 struct ag_cancel_token {
     std::atomic_bool cancelled{false};
 };
+
+ag_result agplayer::editor::load_editor_playback_stream(
+    ag_player* const player,
+    std::shared_ptr<agplayer::IAudioStreamSource> stream) noexcept
+{
+    return player == nullptr || !stream
+        ? AG_INVALID_ARGUMENT
+        : guard_result([&] {
+            return player->context.load_stream(std::move(stream));
+        });
+}
 
 ag_result ag_player_create(ag_player** out_player)
 {

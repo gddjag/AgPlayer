@@ -27,12 +27,16 @@ add_library(agplayer_qt STATIC
     src/audio_editor/editor_action_model.hpp
     src/audio_editor/audio_editor_controller.cpp
     src/audio_editor/audio_editor_controller.hpp
+    src/audio_editor/editor_playback_adapter.cpp
+    src/audio_editor/editor_playback_adapter.hpp
     src/audio_editor/audio_editor_waveform_item.cpp
     src/audio_editor/audio_editor_waveform_item.hpp
     src/audio_editor/editor_viewport.cpp
     src/audio_editor/editor_viewport.hpp
     src/audio_editor/project_document.cpp
     src/audio_editor/project_document.hpp
+    src/audio_editor/selection_drag_controller.cpp
+    src/audio_editor/selection_drag_controller.hpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
     src/cache_janitor.cpp
@@ -102,6 +106,7 @@ target_link_libraries(agplayer_qt
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
+        Qt6::Widgets
         agplayer_core
     PRIVATE
         Qt6::Concurrent

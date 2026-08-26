@@ -49,13 +49,18 @@ void register_agplayer_qml_types(LibraryModel* library,
                 AG_AUDIO_BACKEND_DEFAULT, playback);
         });
     if (audioEditor != nullptr) {
+        if (playback != nullptr) audioEditor->setPlaybackController(playback);
         qmlRegisterSingletonInstance(
             "AgPlayer", 1, 0, "AudioEditorController", audioEditor);
     } else {
         qmlRegisterSingletonType<AudioEditorController>(
             "AgPlayer", 1, 0, "AudioEditorController",
-            [](QQmlEngine*, QJSEngine*) -> QObject* {
-                return new AudioEditorController();
+            [playback](QQmlEngine*, QJSEngine*) -> QObject* {
+                auto* controller = new AudioEditorController();
+                if (playback != nullptr) {
+                    controller->setPlaybackController(playback);
+                }
+                return controller;
             });
     }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LibraryModel", library);

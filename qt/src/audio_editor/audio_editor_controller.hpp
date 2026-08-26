@@ -1,13 +1,17 @@
 #pragma once
 
 #include "../../../core/src/audio_editor/audio_document.hpp"
+#include "../../../core/src/audio_editor/audio_file_analyzer.hpp"
 #include "editor_action_model.hpp"
 #include "editor_viewport.hpp"
+#include "editor_playback_adapter.hpp"
 #include "project_document.hpp"
+#include "selection_drag_controller.hpp"
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
 #include "../../../core/src/audio_editor/recording_session.hpp"
 #include "../../../core/src/audio_editor/document_writer.hpp"
 #include "../../../core/src/audio_editor/noise_reducer.hpp"
+#include "../../../core/src/audio_editor/peak_pyramid.hpp"
 #include "../bpm_analyzer.hpp"
 
 #include <agplayer/c_api.h>
@@ -15,7 +19,6 @@
 #include <QObject>
 #include <QFutureWatcher>
 #include <QPointer>
-#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -26,6 +29,8 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -43,6 +48,8 @@ enum class EditorSessionState {
     Error
 };
 Q_DECLARE_METATYPE(EditorSessionState)
+
+class PlaybackController;
 
 class AudioEditorController final : public QObject {
     Q_OBJECT
@@ -72,7 +79,8 @@ class AudioEditorController final : public QObject {
                    READ formantPreservationSupported CONSTANT)
     Q_PROPERTY(bool formantPreservation READ formantPreservation
                    WRITE setFormantPreservation NOTIFY timePitchChanged)
-    Q_PROPERTY(bool recordingSupported READ recordingSupported CONSTANT)
+    Q_PROPERTY(bool recordingSupported READ recordingSupported
+                   NOTIFY recordingDevicesChanged)
     Q_PROPERTY(bool bpmDetectionSupported READ bpmDetectionSupported CONSTANT)
     Q_PROPERTY(bool timePitchSupported READ timePitchSupported CONSTANT)
     Q_PROPERTY(bool playbackSupported READ playbackSupported CONSTANT)
@@ -91,6 +99,8 @@ class AudioEditorController final : public QObject {
                    NOTIFY playbackChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(QString lastExportPath READ lastExportPath
+                   NOTIFY exportResultChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
     Q_PROPERTY(QVariantList projectIssues READ projectIssues NOTIFY projectChanged)
     Q_PROPERTY(QVariantMap projectExportSettings READ projectExportSettingsMap
@@ -98,6 +108,9 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(qint64 playheadFrame READ playheadFrame NOTIFY playbackChanged)
     Q_PROPERTY(double originalBpm READ originalBpm NOTIFY timePitchChanged)
     Q_PROPERTY(double targetBpm READ targetBpm NOTIFY timePitchChanged)
+    Q_PROPERTY(bool bpmBusy READ bpmBusy NOTIFY bpmChanged)
+    Q_PROPERTY(double bpmResult READ bpmResult NOTIFY bpmChanged)
+    Q_PROPERTY(QString bpmError READ bpmError NOTIFY bpmChanged)
     Q_PROPERTY(double speedPercent READ speedPercent NOTIFY timePitchChanged)
     Q_PROPERTY(bool keepPitch READ keepPitch WRITE setKeepPitch NOTIFY timePitchChanged)
     Q_PROPERTY(int pitchCents READ pitchCents NOTIFY timePitchChanged)
@@ -117,16 +130,27 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(bool recordingPaused READ recordingPaused NOTIFY recordingChanged)
     Q_PROPERTY(double inputLevel READ inputLevel NOTIFY recordingChanged)
+    Q_PROPERTY(QVariantList inputPeakLevels READ inputPeakLevels
+                   NOTIFY recordingChanged)
+    Q_PROPERTY(QVariantList inputRmsLevels READ inputRmsLevels
+                   NOTIFY recordingChanged)
     Q_PROPERTY(qint64 recordingFrames READ recordingFrames NOTIFY recordingChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(bool noiseReductionActive READ noiseReductionActive
                    NOTIFY stateChanged)
 
 public:
-    explicit AudioEditorController(
-        ag_audio_backend backend = AG_AUDIO_BACKEND_DEFAULT,
-        QObject* parent = nullptr);
+    explicit AudioEditorController(QObject* parent = nullptr);
+    explicit AudioEditorController(ag_audio_backend backend,
+                                   QObject* parent = nullptr);
     ~AudioEditorController() override;
+    void setPlaybackController(PlaybackController* controller);
+    [[nodiscard]] ag_player* playerHandleForTesting() const noexcept
+    { return player_; }
+    [[nodiscard]] agplayer::editor::RecordingSession&
+    recordingSessionForTesting() noexcept { return recording_session_; }
+    void publishRecordingTickForTesting() { publishRecordingTick(); }
 
     [[nodiscard]] EditorActionModel* actions() noexcept { return &actions_; }
     [[nodiscard]] EditorViewport* viewport() noexcept { return &viewport_; }
@@ -156,8 +180,8 @@ public:
     { return true; }
     [[nodiscard]] bool formantPreservation() const noexcept
     { return time_pitch_.formantPreservation(); }
-    [[nodiscard]] constexpr bool recordingSupported() const noexcept
-    { return true; }
+    [[nodiscard]] bool recordingSupported() const noexcept
+    { return !recording_devices_.isEmpty(); }
     [[nodiscard]] constexpr bool bpmDetectionSupported() const noexcept
     { return true; }
     [[nodiscard]] constexpr bool timePitchSupported() const noexcept
@@ -176,6 +200,7 @@ public:
     [[nodiscard]] bool loopEnabled() const noexcept { return loop_enabled_; }
     [[nodiscard]] QString errorMessage() const { return error_message_; }
     [[nodiscard]] double progress() const noexcept { return progress_; }
+    [[nodiscard]] QString lastExportPath() const { return last_export_path_; }
     [[nodiscard]] QString projectPath() const { return project_path_; }
     [[nodiscard]] QVariantList projectIssues() const { return project_issues_; }
     [[nodiscard]] const agplayer::editor::ProjectExportSettings&
@@ -184,6 +209,9 @@ public:
     [[nodiscard]] qint64 playheadFrame() const noexcept { return playhead_frame_; }
     [[nodiscard]] double originalBpm() const noexcept { return time_pitch_.originalBpm(); }
     [[nodiscard]] double targetBpm() const noexcept { return time_pitch_.targetBpm(); }
+    [[nodiscard]] bool bpmBusy() const noexcept { return bpm_busy_; }
+    [[nodiscard]] double bpmResult() const noexcept { return bpm_result_; }
+    [[nodiscard]] QString bpmError() const { return bpm_error_; }
     [[nodiscard]] double speedPercent() const noexcept { return time_pitch_.speedPercent(); }
     [[nodiscard]] bool keepPitch() const noexcept { return time_pitch_.keepPitch(); }
     [[nodiscard]] int pitchCents() const noexcept { return time_pitch_.pitchCents(); }
@@ -198,19 +226,42 @@ public:
     [[nodiscard]] bool recording() const noexcept;
     [[nodiscard]] bool recordingPaused() const noexcept;
     [[nodiscard]] double inputLevel() const noexcept;
+    [[nodiscard]] QVariantList inputPeakLevels() const
+    { return input_peak_levels_; }
+    [[nodiscard]] QVariantList inputRmsLevels() const
+    { return input_rms_levels_; }
     [[nodiscard]] qint64 recordingFrames() const noexcept;
     [[nodiscard]] bool busy() const noexcept;
+    [[nodiscard]] bool loading() const noexcept { return document_loading_; }
     [[nodiscard]] bool noiseReductionActive() const noexcept
     { return noise_reduction_watcher_ != nullptr; }
     [[nodiscard]] quint64 viewportWaveformGeneration() const noexcept
     { return viewport_waveform_generation_; }
+    [[nodiscard]] bool sourcePeakCacheActiveForTesting() const noexcept
+    {
+        return source_peak_cache_cancel_token_
+            && !source_peak_cache_cancel_token_->load(
+                std::memory_order_acquire);
+    }
+    [[nodiscard]] quint64 sourcePeakCacheGenerationForTesting() const noexcept
+    { return source_peak_cache_generation_; }
+    [[nodiscard]] quint64 documentLoadGenerationForTesting() const noexcept
+    { return document_load_generation_; }
     [[nodiscard]] quint64 timelineRevisionForTesting() const noexcept
     { return document_.timelineSnapshot().revision; }
     [[nodiscard]] std::uint64_t historyStateIdForTesting() const noexcept
     { return document_.historyStateId(); }
+    [[nodiscard]] bool handoffServicesCreatedForTesting() const noexcept
+    { return handoff_assets_ && selection_drag_controller_; }
     void setViewportWaveformTaskObserverForTesting(
         std::function<void(bool)> observer)
     { viewport_waveform_task_observer_ = std::move(observer); }
+    void setSourcePeakCacheTaskObserverForTesting(
+        std::function<void(bool)> observer)
+    { source_peak_cache_task_observer_ = std::move(observer); }
+    void setDocumentLoadTaskObserverForTesting(
+        std::function<void(bool)> observer)
+    { document_load_task_observer_ = std::move(observer); }
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
@@ -220,6 +271,8 @@ public:
     Q_INVOKABLE bool createRecordingDocument(quint32 sampleRate, quint32 channels);
     Q_INVOKABLE bool clearDocument();
     Q_INVOKABLE bool openFile(const QUrl& source);
+    bool openFileWhenReady(const QUrl& source, QObject* context,
+                           std::function<void()> onLoaded);
     Q_INVOKABLE bool confirmDiscardAndOpen();
     Q_INVOKABLE void cancelDiscardAndOpen();
     Q_INVOKABLE bool save();
@@ -227,7 +280,9 @@ public:
     Q_INVOKABLE bool saveProject(const QUrl& target);
     Q_INVOKABLE bool saveProjectAs(const QUrl& target);
     Q_INVOKABLE bool openProject(const QUrl& source);
-    Q_INVOKABLE bool relinkProjectSource(quint64 sourceId, const QUrl& replacement);
+    Q_INVOKABLE bool relinkProjectSource(const QString& sourceId,
+                                         const QUrl& replacement);
+    bool relinkProjectSource(quint64 sourceId, const QUrl& replacement);
     bool setProjectExportSettings(
         const agplayer::editor::ProjectExportSettings& settings);
     Q_INVOKABLE void setProjectExportSettingsMap(const QVariantMap& settings);
@@ -241,6 +296,9 @@ public:
     Q_INVOKABLE bool exportToConfiguredDirectory();
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
+    Q_INVOKABLE bool beginSelectionHandoff(double sceneX, double sceneY);
+    Q_INVOKABLE void updateSelectionHandoff(double sceneX, double sceneY);
+    Q_INVOKABLE void cancelSelectionHandoff();
     bool moveEvent(quint64 id, qint64 timelineStart);
     bool trimEvent(quint64 id, qint64 sourceStart,
                    qint64 sourceEnd, qint64 timelineStart);
@@ -251,8 +309,22 @@ public:
                                qint64 sourceEnd, qint64 timelineStart);
     Q_INVOKABLE bool splitEvent(const QString& id, qint64 frame);
     Q_INVOKABLE bool setEventFadeOut(const QString& id, qint64 frames);
+    Q_INVOKABLE bool setEventGain(const QString& id, double gain);
     Q_INVOKABLE bool addEnvelopePoint(const QString& id, qint64 offset,
                                       double gain);
+    Q_INVOKABLE bool moveEnvelopePoint(const QString& id,
+                                       qint64 originalOffset,
+                                       qint64 offset, double gain);
+    Q_INVOKABLE bool removeEnvelopePoint(const QString& id, qint64 offset);
+    Q_INVOKABLE bool beginEventGainGesture(const QString& id);
+    Q_INVOKABLE bool updateEventGainGesture(double gain);
+    Q_INVOKABLE bool endEventGainGesture();
+    Q_INVOKABLE bool cancelEventGainGesture();
+    Q_INVOKABLE bool beginEnvelopePointGesture(const QString& id,
+                                               qint64 offset);
+    Q_INVOKABLE bool updateEnvelopePointGesture(qint64 offset, double gain);
+    Q_INVOKABLE bool endEnvelopePointGesture();
+    Q_INVOKABLE bool cancelEnvelopePointGesture();
     Q_INVOKABLE bool beginEventGesture(const QString& id,
                                        const QString& operation,
                                        bool duplicate = false);
@@ -265,6 +337,7 @@ public:
     Q_INVOKABLE bool playPause();
     Q_INVOKABLE bool stopPlayback();
     Q_INVOKABLE bool seekMs(qint64 value);
+    Q_INVOKABLE bool seekPlayback(qint64 value) { return seekMs(value); }
     Q_INVOKABLE bool seekFrame(qint64 frame);
     Q_INVOKABLE void setVolume(double value);
     Q_INVOKABLE void setTrackMuted(bool value);
@@ -294,12 +367,15 @@ public:
     Q_INVOKABLE bool cancelRecording();
     Q_INVOKABLE void cancelOperation();
     Q_INVOKABLE void deactivate();
+    Q_INVOKABLE void activate();
     Q_INVOKABLE bool reduceNoise();
 
 signals:
     void stateChanged();
     void documentChanged();
     void waveformChanged();
+    void activated();
+    void deactivated();
     void toolChanged();
     void playbackChanged();
     void trackMixChanged();
@@ -307,6 +383,7 @@ signals:
     void progressChanged();
     void projectChanged();
     void timePitchChanged();
+    void bpmChanged();
     void recordingDevicesChanged();
     void recordingPreferencesChanged();
     void recordingChanged();
@@ -314,12 +391,18 @@ signals:
     void saveAsRequested();
     void saveProjectAsRequested();
     void exportRequested();
+    void exportDirectoryRequested();
+    void exportSucceeded(const QString& path);
+    void exportResultChanged();
     void newRecordingRequested();
     void discardConfirmationRequested();
+    void loadingChanged();
 
 private:
+    explicit AudioEditorController(std::optional<ag_audio_backend> backend,
+                                   QObject* parent);
     struct RecordingFinalizeResult;
-    struct PreviewRenderResult;
+    struct NoiseReductionFinalizeResult;
     struct PendingRecordingRequest final {
         QUrl target;
         QString finalPath;
@@ -330,21 +413,63 @@ private:
         bool insertAtCursor{};
     };
     using ViewportWaveformPeaks = std::vector<std::vector<float>>;
+    using SourcePeakPyramids = std::unordered_map<std::string,
+        std::shared_ptr<const agplayer::editor::PeakPyramid>>;
     struct ViewportWaveformJob final {
         quint64 generation{};
         std::shared_ptr<std::atomic_bool> cancelToken;
         std::function<ViewportWaveformPeaks()> work;
     };
+    struct SourcePeakCacheResult final {
+        SourcePeakPyramids pyramids;
+    };
+    struct SourcePeakCacheJob final {
+        quint64 generation{};
+        std::shared_ptr<std::atomic_bool> cancelToken;
+        std::vector<agplayer::editor::AudioSource> sources;
+    };
+    enum class DocumentLoadKind { OpenFile, OpenProject, Relink };
+    struct DocumentLoadJob final {
+        quint64 generation{};
+        std::shared_ptr<std::atomic_bool> cancelToken;
+        DocumentLoadKind kind{DocumentLoadKind::OpenFile};
+        QString path;
+        quint64 sourceId{};
+        agplayer::editor::TimelineSnapshot relinkSnapshot;
+        std::vector<agplayer::editor::Marker> relinkMarkers;
+        std::optional<agplayer::editor::Selection> relinkSelection;
+        std::vector<agplayer::editor::ProjectSourceRecord> relinkSources;
+    };
+    struct DocumentLoadOutcome final {
+        DocumentLoadKind kind{DocumentLoadKind::OpenFile};
+        QString path;
+        quint64 sourceId{};
+        bool success{};
+        QString message;
+        agplayer::editor::AudioFileAnalysis analysis;
+        std::shared_ptr<agplayer::editor::ProjectLoadResult> project;
+        std::shared_ptr<agplayer::editor::AudioDocument> relinkDocument;
+        std::vector<agplayer::editor::ProjectSourceRecord> relinkSources;
+    };
     void refreshActions();
     void requestViewportWaveform();
     void startViewportWaveformJob(ViewportWaveformJob job);
-    void clearViewportWaveformState();
+    void clearViewportWaveformState(bool clearPublished = true);
+    void refreshSourcePeakCachesAsync();
+    void startSourcePeakCacheJob(SourcePeakCacheJob job);
+    void cancelSourcePeakCacheJob();
+    bool enqueueDocumentLoad(DocumentLoadJob job);
+    void startDocumentLoadJob(DocumentLoadJob job);
+    void cancelDocumentLoad();
+    void applyDocumentLoadOutcome(DocumentLoadOutcome outcome);
+    void setDocumentLoading(bool loading);
     [[nodiscard]] double effectivePlaybackVolume() const noexcept;
     void updatePlaybackMix() noexcept;
     void applyTrackMix(agplayer::editor::TimelineSnapshot& snapshot) const noexcept;
     bool preparePlayback();
-    void startPreparedPlayback();
+    void ensureSelectionHandoffServices();
     void pollPlayback();
+    void publishRecordingTick();
     void setState(EditorSessionState value);
     void setError(QString message);
     void setProgress(double value);
@@ -358,6 +483,8 @@ private:
     [[nodiscard]] std::optional<quint64> nextProjectSourceId() const;
     [[nodiscard]] static std::optional<agplayer::editor::EventId>
     parseEventId(const QString& id) noexcept;
+    [[nodiscard]] agplayer::editor::TimelineSnapshot
+    timelineSnapshotForView() const;
     void setViewportDocumentFrames(qint64 frames) noexcept;
     [[nodiscard]] bool projectSourcesOnline() const noexcept;
     bool requireOnlineProjectSources();
@@ -376,11 +503,14 @@ private:
     EditorViewport viewport_;
     agplayer::editor::AudioDocument document_;
     ag_player* player_{};
+    bool owns_player_{};
+    std::unique_ptr<EditorPlaybackAdapter> playback_adapter_;
+    std::unique_ptr<HandoffAssetManager> handoff_assets_;
+    std::unique_ptr<SelectionDragController> selection_drag_controller_;
+    bool playback_prepared_{};
     QTimer playback_timer_;
-    QTemporaryDir preview_directory_;
     QString source_path_;
     QString project_path_;
-    QString playback_path_;
     QUrl pending_open_url_;
     bool pending_open_is_project_{};
     bool pending_clear_document_{};
@@ -391,12 +521,25 @@ private:
     int bits_per_sample_{};
     qint64 bit_rate_{};
     QVariantList channel_peaks_;
+    std::shared_ptr<const agplayer::editor::PeakPyramid> primary_peak_pyramid_;
+    SourcePeakPyramids source_peak_pyramids_;
     QVariantList viewport_channel_peaks_;
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
     std::optional<ViewportWaveformJob> pending_viewport_waveform_job_;
     std::function<void(bool)> viewport_waveform_task_observer_;
+    QFutureWatcher<SourcePeakCacheResult>* source_peak_cache_watcher_{};
+    quint64 source_peak_cache_generation_{};
+    std::shared_ptr<std::atomic_bool> source_peak_cache_cancel_token_;
+    std::optional<SourcePeakCacheJob> pending_source_peak_cache_job_;
+    std::function<void(bool)> source_peak_cache_task_observer_;
+    QFutureWatcher<DocumentLoadOutcome>* document_load_watcher_{};
+    quint64 document_load_generation_{};
+    std::shared_ptr<std::atomic_bool> document_load_cancel_token_;
+    std::optional<DocumentLoadJob> pending_document_load_job_;
+    std::function<void(bool)> document_load_task_observer_;
+    bool document_loading_{};
 
     EditorSessionState state_{EditorSessionState::Empty};
     bool has_document_{};
@@ -411,6 +554,7 @@ private:
     double track_gain_db_{};
     QString error_message_;
     double progress_{};
+    QString last_export_path_;
     agplayer::editor::ProjectExportSettings project_export_settings_;
     std::vector<agplayer::editor::ProjectSourceRecord> project_sources_;
     QVariantList project_issues_;
@@ -422,9 +566,11 @@ private:
     QFutureWatcher<bool>* recording_start_watcher_{};
     QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
-    QFutureWatcher<agplayer::editor::NoiseReductionResult>*
+    bool bpm_busy_{};
+    double bpm_result_{};
+    QString bpm_error_;
+    QFutureWatcher<NoiseReductionFinalizeResult>*
         noise_reduction_watcher_{};
-    QFutureWatcher<PreviewRenderResult>* preview_watcher_{};
     std::atomic_bool operation_cancelled_{false};
     QVariantList recording_devices_;
     QString recording_device_id_;
@@ -433,7 +579,8 @@ private:
     int recording_channels_{2};
     bool recording_monitor_{};
     QTimer recording_timer_;
-    QVariantList live_recording_peaks_;
+    QVariantList input_peak_levels_;
+    QVariantList input_rms_levels_;
     bool insert_recording_at_cursor_{};
     QString recording_final_path_;
     bool time_pitch_preview_active_{};
@@ -450,7 +597,14 @@ private:
     agplayer::editor::ProjectExportSettings saved_export_settings_;
     qint64 recording_insert_frame_{};
 
-    enum class EventGestureKind { None, Move, Trim, FadeOut };
+    enum class EventGestureKind {
+        None,
+        Move,
+        Trim,
+        FadeOut,
+        Gain,
+        EnvelopePoint
+    };
     struct EventGesture final {
         EventGestureKind kind{EventGestureKind::None};
         agplayer::editor::EventId id{};
@@ -460,8 +614,13 @@ private:
         qint64 sourceStart{};
         qint64 sourceEnd{};
         qint64 fadeOut{};
+        double originalGain{1.0};
+        double gain{1.0};
+        qint64 originalEnvelopeOffset{};
+        qint64 envelopeOffset{};
+        double originalEnvelopeGain{1.0};
+        double envelopeGain{1.0};
     };
     EventGesture event_gesture_;
     QString active_tool_{QStringLiteral("select")};
-    std::atomic_uint64_t preview_generation_{0};
 };

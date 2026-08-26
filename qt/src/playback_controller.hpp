@@ -8,6 +8,8 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <optional>
+
 struct ag_player;
 class LibraryModel;
 
@@ -71,6 +73,9 @@ public:
 
     void setLibraryModel(LibraryModel* library);
     void setPlayer(ag_player* player);
+    [[nodiscard]] ag_player* playerHandle() const noexcept { return player_; }
+    [[nodiscard]] bool acquireEditorOutput() noexcept;
+    void releaseEditorOutput() noexcept;
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -126,6 +131,16 @@ signals:
     void replayGainClippingWarningChanged();
 
 private:
+    struct PlaybackSessionSnapshot final {
+        QStringList queueTrackIds;
+        QString currentTrackId;
+        qint64 positionMs{};
+        State state{Stopped};
+        Mode mode{Sequential};
+        qsizetype scopeSize{};
+        bool allowFallback{};
+    };
+
     void pollSnapshot();
     void pollSpectrum();
     bool prepareRow(int row);
@@ -158,4 +173,8 @@ private:
     int replayGainMode_ = 0;
     bool replayGainClipProtection_ = true;
     bool replayGainClippingWarning_ = false;
+    bool editorOutputOwned_ = false;
+    qsizetype activeScopeSize_{};
+    bool activeScopeAllowsFallback_{};
+    std::optional<PlaybackSessionSnapshot> editorSessionSnapshot_;
 };

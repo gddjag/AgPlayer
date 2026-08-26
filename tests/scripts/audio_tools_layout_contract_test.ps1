@@ -16,6 +16,7 @@ $toolsWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 $toolsNavigation = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/CMakeLists.txt')
+$appMain = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/main.cpp')
 $controllerHeader = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'qt/src/audio_editor/audio_editor_controller.hpp')
 $controllerSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (
@@ -26,6 +27,38 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'scripts/qa-final-ui-matrix.ps1')
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
+
+if ($appMain -notmatch 'audioEditor\.setPlaybackController\(&playback\)') {
+    throw 'The production audio editor is not wired to the shared playback controller.'
+}
+if ($controllerHeader -notmatch 'Q_INVOKABLE\s+bool\s+relinkProjectSource\(const QString&amp;|Q_INVOKABLE\s+bool\s+relinkProjectSource\(const QString&') {
+    throw 'Relink must expose a decimal string Source ID to QML.'
+}
+foreach ($control in @('editorOfflineSourceBanner', 'editorRelinkSourceButton')) {
+    if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The offline project recovery flow is missing $control."
+    }
+}
+if ($appMain -notmatch 'ensureAudioToolsWindow' -or
+    $appMain -notmatch 'audioToolsVisibleChanged') {
+    throw 'The audio tools window must be created on first use, not during application startup.'
+}
+$ensureToolsPosition = $appMain.IndexOf('ensureAudioToolsWindow')
+$loadToolsPosition = $appMain.IndexOf(
+    'audioToolsComponent.loadFromModule("AgPlayer", "AudioToolsWindow")')
+if ($loadToolsPosition -lt $ensureToolsPosition) {
+    throw 'AudioToolsWindow is still loaded before the first-use factory.'
+}
+foreach ($toolIndex in 0..3) {
+    if ($toolsWindow -notmatch (
+            'active:\s*AudioToolsController\.currentTool\s*===\s*' + $toolIndex)) {
+        throw "Audio tool page $toolIndex must be instantiated only while selected."
+    }
+}
+if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\.activate\(\)' -or
+    $toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,300}AudioEditorController\.deactivate\(\)') {
+    throw 'Showing or hiding the lazy tools window must activate or release editor resources.'
+}
 
 foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
@@ -172,6 +205,9 @@ if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'visibleStartRatio|visibleEndRatio|renderMode' -or
     $waveformCanvas -match 'positionMs\s*\*\s*AudioEditorController\.sampleRate') {
     throw 'Waveform QML must consume visible peaks and exact playheadFrame without a second crop/time path.'
+}
+if ($waveformCanvas -notmatch 'onReleased:\s*AudioEditorController\.cancelSelectionHandoff\(\)') {
+    throw 'Selection handoff release must cancel an unfinished WAV before QDrag can fire.'
 }
 if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
     $waveformCanvas -notmatch 'SettingsController\.waveformThickness' -or

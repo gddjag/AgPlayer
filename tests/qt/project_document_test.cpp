@@ -1,6 +1,7 @@
 #include "audio_editor/project_document.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -113,16 +114,12 @@ class ProjectDocumentTest final : public QObject {
         first.gain = 0.75F;
         first.fadeIn = 320;
         first.fadeOut = 640;
-        first.speedRatio = 1.25;
-        first.pitchSemitone = -3;
         first.mute = true;
         first.envelope = {{100, 0.5F}, {10'000, 0.9F}};
         AudioEvent second{9, shared, 20'000, 30'000, 30'000};
         second.gain = 1.1F;
         second.fadeIn = 120;
         second.fadeOut = 240;
-        second.speedRatio = 0.8;
-        second.pitchSemitone = 4;
         second.envelope = {{500, 0.8F}};
         AudioDocument document = AudioDocument::fromEvents({first, second});
         document.addMarker({u8"前奏", 1'000});
@@ -245,6 +242,39 @@ private slots:
         const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
         QVERIFY2(loaded.ok(), qPrintable(loaded.message));
         QCOMPARE(loaded.exportSettings.bitDepth, 24);
+    }
+
+    void rejectsUnsupportedPerEventTimePitchBeforePersistingOrLoading()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(!project.projectPath.isEmpty());
+
+        const AudioEvent original = project.document.timelineSnapshot().events[0];
+        AudioEvent unsupported = original;
+        unsupported.speedRatio = 1.25;
+        AudioDocument unsupportedDocument = AudioDocument::fromEvents(
+            {unsupported});
+        ProjectSaveRequest unsupportedRequest = request(project);
+        unsupportedRequest.document = &unsupportedDocument;
+        const ProjectSaveResult rejectedSave = ProjectDocument::save(
+            project.projectPath, unsupportedRequest);
+        QVERIFY(!rejectedSave.ok());
+        QVERIFY(rejectedSave.message.contains(QStringLiteral("not supported")));
+
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QJsonObject event = events[0].toObject();
+        event.insert(QStringLiteral("pitchSemitone"), 3);
+        events[0] = event;
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(writeObject(project.projectPath, root));
+        const ProjectLoadResult rejectedLoad = ProjectDocument::load(
+            project.projectPath);
+        QVERIFY(!rejectedLoad.ok());
+        QVERIFY(rejectedLoad.message.contains(QStringLiteral("not supported")));
     }
 
     void rejectsSchemaMalformedDuplicateInvalidOverlapAndTraversal()
@@ -971,7 +1001,7 @@ private slots:
         QCOMPARE(relinked.message, QStringLiteral("invalid source id"));
     }
 
-    void projectProbeBudgetExhaustionOpensOfflineForRelink()
+    void duplicateProjectSourcesReuseOneBoundedProbe()
     {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -995,12 +1025,64 @@ private slots:
         root.insert(QStringLiteral("markers"), QJsonArray{});
         QVERIFY(writeObject(project.projectPath, root));
 
+        QElapsedTimer elapsed;
+        elapsed.start();
         const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
 
         QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QVERIFY2(elapsed.elapsed() < 3'000,
+                 qPrintable(QStringLiteral("duplicate project source load took %1 ms")
+                                .arg(elapsed.elapsed())));
+        QVERIFY(loaded.issues.empty());
+        QVERIFY(loaded.document != nullptr);
+    }
+
+    void uniqueProjectSourceProbeLimitOpensRemainderOfflineForRelink()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+
+        QJsonObject root = readObject(project.projectPath);
+        const QJsonObject templateSource = root.value(QStringLiteral("sources"))
+            .toArray().first().toObject();
+        QJsonObject referencedEvent = root.value(QStringLiteral("events"))
+            .toArray().first().toObject();
+        const QDir projectDirectory = QFileInfo(project.projectPath).dir();
+        QJsonArray sources;
+        for (int index = 0; index < 129; ++index) {
+            const QString linkPath = temporary.filePath(
+                QStringLiteral("source-link-%1.wav").arg(index + 1));
+            std::error_code linkError;
+            std::filesystem::create_hard_link(
+                nativePath(project.sourcePath), nativePath(linkPath), linkError);
+            QVERIFY2(!linkError, linkError.message().c_str());
+
+            QJsonObject source = templateSource;
+            source.insert(QStringLiteral("sourceId"), QString::number(index + 1));
+            source.insert(QStringLiteral("pathKind"), QStringLiteral("relative"));
+            source.insert(QStringLiteral("path"), QDir::fromNativeSeparators(
+                projectDirectory.relativeFilePath(linkPath)));
+            sources.append(source);
+        }
+        referencedEvent.insert(QStringLiteral("sourceId"), QStringLiteral("129"));
+        root.insert(QStringLiteral("sources"), sources);
+        root.insert(QStringLiteral("events"), QJsonArray{referencedEvent});
+        root.insert(QStringLiteral("markers"), QJsonArray{});
+        QVERIFY(writeObject(project.projectPath, root));
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QVERIFY2(elapsed.elapsed() < 7'000,
+                 qPrintable(QStringLiteral("unique project source load took %1 ms")
+                                .arg(elapsed.elapsed())));
         QVERIFY(!loaded.issues.empty());
         QCOMPARE(loaded.issues.back().kind, ProjectSourceIssueKind::Unavailable);
-        QCOMPARE(loaded.issues.back().sourceId, quint64{4'096});
+        QCOMPARE(loaded.issues.back().sourceId, quint64{129});
         QCOMPARE(loaded.issues.back().message,
                  QStringLiteral("project source probe budget exceeded"));
         QVERIFY(loaded.document != nullptr);

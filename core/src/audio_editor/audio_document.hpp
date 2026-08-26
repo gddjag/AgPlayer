@@ -50,7 +50,11 @@ public:
     bool fadeIn();
     bool fadeOut();
     bool setEventFadeOut(EventId id, SampleFrame frames);
+    bool setEventGain(EventId id, float gain);
     bool addEnvelopePoint(EventId id, SampleFrame offset, float gain);
+    bool moveEnvelopePoint(EventId id, SampleFrame originalOffset,
+                           SampleFrame offset, float gain);
+    bool removeEnvelopePoint(EventId id, SampleFrame offset);
     bool copySelection();
     bool cutSelection();
     bool pasteAt(SampleFrame playhead);

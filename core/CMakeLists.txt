@@ -6,6 +6,7 @@ add_library(agplayer_core STATIC
     src/audio_editor/audio_document.cpp
     src/audio_editor/audio_document.hpp
     src/audio_editor/audio_event.hpp
+    src/audio_editor/automation_time_mapper.hpp
     src/audio_editor/event_timeline.cpp
     src/audio_editor/event_timeline.hpp
     src/audio_editor/timeline_edit_command.cpp
@@ -14,6 +15,11 @@ add_library(agplayer_core STATIC
     src/audio_editor/timeline_undo_stack.hpp
     src/audio_editor/document_renderer.cpp
     src/audio_editor/document_renderer.hpp
+    src/audio_editor/document_render_pipeline.cpp
+    src/audio_editor/document_render_pipeline.hpp
+    src/audio_editor/editor_playback_stream.cpp
+    src/audio_editor/editor_playback_stream.hpp
+    src/audio_editor/editor_player_bridge.hpp
     src/audio_editor/document_writer.cpp
     src/audio_editor/document_writer.hpp
     src/audio_editor/noise_reducer.cpp
@@ -26,8 +32,11 @@ add_library(agplayer_core STATIC
     src/audio_editor/time_pitch_session.cpp
     src/audio_editor/time_pitch_session.hpp
     src/audio_engine.cpp
+    src/audio_stream_source.hpp
     src/c_api.cpp
     src/core_context.cpp
+    src/formant_preserver.cpp
+    src/formant_preserver.hpp
     src/decoder.cpp
     src/graphic_equalizer.cpp
     src/graphic_equalizer.hpp

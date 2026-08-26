@@ -55,8 +55,15 @@ public:
     [[nodiscard]] RecordingState state() const noexcept;
     [[nodiscard]] float peak() const noexcept;
     [[nodiscard]] SampleFrame framesCaptured() const noexcept;
+    [[nodiscard]] SampleFrame framesMetered() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] std::vector<float> recentPeaks(std::size_t maximum) const;
+    [[nodiscard]] std::vector<std::vector<float>> recentChannelPeaks(
+        std::size_t maximum) const;
+    [[nodiscard]] std::vector<float> livePeakLevels() const;
+    [[nodiscard]] std::vector<float> liveRmsLevels() const;
+    [[nodiscard]] std::uint32_t recordingSampleRate() const noexcept;
+    [[nodiscard]] std::uint32_t recordingChannels() const noexcept;
 
 private:
     class Impl;

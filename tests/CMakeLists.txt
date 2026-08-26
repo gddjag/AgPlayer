@@ -107,6 +107,24 @@ set_tests_properties(document_renderer_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(editor_playback_stream_test
+    core/editor_playback_stream_test.cpp
+)
+add_dependencies(editor_playback_stream_test decoder_fixture)
+target_include_directories(editor_playback_stream_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(editor_playback_stream_test PRIVATE agplayer_core)
+agplayer_enable_warnings(editor_playback_stream_test)
+add_test(NAME editor_playback_stream_test
+    COMMAND editor_playback_stream_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(editor_playback_stream_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(audio_source_probe_test
     core/audio_source_probe_test.cpp
 )
@@ -682,6 +700,27 @@ add_executable(audio_editor_waveform_item_test
 
 add_executable(audio_editor_controller_test
     qt/audio_editor_controller_test.cpp
+)
+
+add_executable(selection_drag_controller_test
+    qt/selection_drag_controller_test.cpp
+)
+set_target_properties(selection_drag_controller_test PROPERTIES AUTOMOC ON)
+target_include_directories(selection_drag_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(selection_drag_controller_test PRIVATE
+    agplayer_qt Qt6::Test Qt6::Widgets
+)
+agplayer_enable_warnings(selection_drag_controller_test)
+add_dependencies(selection_drag_controller_test decoder_fixture)
+add_test(NAME selection_drag_controller_test COMMAND selection_drag_controller_test)
+set_tests_properties(selection_drag_controller_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE};QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
 add_executable(project_document_test
