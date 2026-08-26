@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QAbstractNativeEventFilter>
+#include <QList>
 #include <QPointer>
 #include <QRect>
 #include <QSet>
@@ -68,6 +69,9 @@ public:
     int listWindowHeight() const noexcept;
     static QRect geometryForDpiChange(const QRect& currentGeometry,
                                       const QRect& suggestedGeometry);
+    static QRect geometryForAvailableScreens(
+        const QRect& savedGeometry, const QSize& minimumSize,
+        const QList<QRect>& availableScreens, int primaryScreenIndex);
 
     void setWindows(QWindow* mainWindow, QWindow* miniWindow);
     void setListWindow(QWindow* listWindow);

@@ -1275,8 +1275,14 @@ int main(int argc, char* argv[])
                 windows.setListWindowPanelAllowed(
                     library.count() > 0 && settings.showListWindowPanel());
             });
+            const bool qaShellProbe =
+                qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1;
+            if (qaShellProbe) {
+                windows.showAudioTools();
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
+            }
             QObject* settingsWindow = nullptr;
-            if (qaOpenSettings) {
+            if (qaOpenSettings || qaShellProbe) {
                 QMetaObject::invokeMethod(mainWindow, "openSettingsPage");
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
                 settingsWindow = mainWindow->findChild<QObject*>(

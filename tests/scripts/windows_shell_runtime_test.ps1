@@ -18,6 +18,7 @@ using System.Runtime.InteropServices;
 public static class AgPlayerShellProbe
 {
     public const int GWL_EXSTYLE = -20;
+    public const uint GW_OWNER = 4;
     public const long WS_EX_APPWINDOW = 0x00040000L;
     public const uint WM_GETICON = 0x007F;
     public const uint WM_SYSCOMMAND = 0x0112;
@@ -42,6 +43,9 @@ public static class AgPlayerShellProbe
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindow(IntPtr hwnd, uint command);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
@@ -93,7 +97,7 @@ try {
     try {
         $env:AGPLAYER_QA_SHELL_PROBE = '1'
         $process = Start-Process -FilePath $app -ArgumentList @(
-            '--qa-test-mode', '--qa-log', $logPath) -PassThru `
+            '--qa-test-mode', '--qa-open-settings', '--qa-log', $logPath) -PassThru `
             -RedirectStandardError $stderrPath
     } finally {
         $env:AGPLAYER_QA_SHELL_PROBE = $priorShellProbe
@@ -149,8 +153,15 @@ try {
     }
     $auxiliaryBefore = @(
         [AgPlayerShellProbe]::VisibleWindowsForProcess([uint32]$process.Id) |
-            Where-Object { $_ -ne $mainWindow }
+            Where-Object {
+                $_ -ne $mainWindow -and
+                [AgPlayerShellProbe]::GetWindow(
+                    $_, [AgPlayerShellProbe]::GW_OWNER) -eq $mainWindow
+            }
     )
+    if ($auxiliaryBefore.Count -lt 2) {
+        throw "Shell probe did not open both tools/settings owner windows (found $($auxiliaryBefore.Count))"
+    }
 
     [void][AgPlayerShellProbe]::SendMessage(
         $mainWindow, [AgPlayerShellProbe]::WM_SYSCOMMAND,

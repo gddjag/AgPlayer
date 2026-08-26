@@ -7,6 +7,7 @@
 #include <QSettings>
 #include <QWindow>
 
+#include <limits>
 #include <utility>
 
 #ifdef Q_OS_WIN
@@ -248,6 +249,7 @@ void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
 {
     if (audioToolsWindow_ != nullptr) {
         audioToolsWindow_->removeEventFilter(this);
+        disconnect(audioToolsWindow_, nullptr, this, nullptr);
         positionedAuxiliaryWindows_.remove(audioToolsWindow_);
     }
     audioToolsWindowHandle_ = 0;
@@ -264,6 +266,16 @@ void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
                 QStringLiteral("windows"), Qt::CaseInsensitive) == 0;
         audioToolsWindowHandle_ = usesWindowsPlatform
             ? static_cast<quintptr>(audioToolsWindow_->winId()) : 0;
+        QWindow* const trackedWindow = audioToolsWindow_;
+        connect(trackedWindow, &QObject::destroyed, this,
+                [this, trackedWindow] {
+            positionedAuxiliaryWindows_.remove(trackedWindow);
+            if (audioToolsWindow_.isNull()) {
+                audioToolsWindowHandle_ = 0;
+                audioToolsNativePixelSize_ = {};
+                audioToolsTrackedDpr_ = 1.0;
+            }
+        });
         rememberNativePixelSize(audioToolsWindow_);
         audioToolsWindow_->installEventFilter(this);
         applyPlatformWindowStyle(audioToolsWindow_);
@@ -280,6 +292,7 @@ void WindowController::registerSettingsWindow(QWindow* window)
 {
     if (settingsWindow_ != nullptr) {
         settingsWindow_->removeEventFilter(this);
+        disconnect(settingsWindow_, nullptr, this, nullptr);
         positionedAuxiliaryWindows_.remove(settingsWindow_);
     }
     settingsWindowHandle_ = 0;
@@ -296,6 +309,16 @@ void WindowController::registerSettingsWindow(QWindow* window)
                 QStringLiteral("windows"), Qt::CaseInsensitive) == 0;
         settingsWindowHandle_ = usesWindowsPlatform
             ? static_cast<quintptr>(settingsWindow_->winId()) : 0;
+        QWindow* const trackedWindow = settingsWindow_;
+        connect(trackedWindow, &QObject::destroyed, this,
+                [this, trackedWindow] {
+            positionedAuxiliaryWindows_.remove(trackedWindow);
+            if (settingsWindow_.isNull()) {
+                settingsWindowHandle_ = 0;
+                settingsNativePixelSize_ = {};
+                settingsTrackedDpr_ = 1.0;
+            }
+        });
         rememberNativePixelSize(settingsWindow_);
         settingsWindow_->installEventFilter(this);
         applyPlatformWindowStyle(settingsWindow_);
@@ -958,16 +981,38 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
                                         : settingsNativePixelSize_;
                 if (preservedSize.isValid()) adjusted.setSize(preservedSize);
                 const HWND changedWindow = msg->hwnd;
+                const quintptr capturedHandle = reinterpret_cast<quintptr>(changedWindow);
+                const QPointer<QWindow> changedQtWindow = mainChanged ? mainWindow_
+                    : listChanged ? listWindow_
+                    : audioToolsChanged ? audioToolsWindow_ : settingsWindow_;
                 const qreal newDpr = qreal(LOWORD(msg->wParam)) / 96.0;
                 // Let Qt consume WM_DPICHANGED first so its screen/DPR state is
                 // current, then restore the user's native-pixel rectangle. Qt
                 // otherwise preserves logical size and enlarges the window on
                 // a higher-DPI monitor.
                 QTimer::singleShot(0, this,
-                                   [this, changedWindow, adjusted,
+                                   [this, changedWindow, capturedHandle,
+                                     changedQtWindow, adjusted,
                                      mainChanged, listChanged,
                                      audioToolsChanged, newDpr]() {
-                    if (!IsWindow(changedWindow)) return;
+                    const bool stillTracked = changedQtWindow != nullptr
+                        && (mainChanged
+                                ? changedQtWindow == mainWindow_
+                                    && capturedHandle == mainWindowHandle_
+                            : listChanged
+                                ? changedQtWindow == listWindow_
+                                    && capturedHandle == listWindowHandle_
+                            : audioToolsChanged
+                                ? changedQtWindow == audioToolsWindow_
+                                    && capturedHandle == audioToolsWindowHandle_
+                                : changedQtWindow == settingsWindow_
+                                    && capturedHandle == settingsWindowHandle_);
+                    if (!stillTracked
+                        || reinterpret_cast<HWND>(changedQtWindow->winId())
+                            != changedWindow
+                        || !IsWindow(changedWindow)) {
+                        return;
+                    }
                     if (mainChanged) {
                         mainTrackedDpr_ = newDpr;
                     } else if (listChanged) {
@@ -1121,50 +1166,20 @@ bool WindowController::restoreGeometry(QWindow* window, const QString& key)
         window->setGeometry(centered);
         return false;
     }
-    geometry.setWidth(qMax(geometry.width(), window->minimumWidth()));
-    geometry.setHeight(qMax(geometry.height(), window->minimumHeight()));
     const auto screens = QGuiApplication::screens();
-    QScreen* bestScreen = nullptr;
-    qint64 bestArea = -1;
+    QList<QRect> availableScreens;
+    availableScreens.reserve(screens.size());
+    int primaryScreenIndex = -1;
+    QScreen* const primary = QGuiApplication::primaryScreen();
     for (QScreen* screen : screens) {
-        if (screen == nullptr) {
-            continue;
+        if (screen == primary) {
+            primaryScreenIndex = availableScreens.size();
         }
-        const QRect intersection = screen->availableGeometry().intersected(geometry);
-        const qint64 area =
-            static_cast<qint64>(intersection.width()) * intersection.height();
-        if (area > bestArea) {
-            bestArea = area;
-            bestScreen = screen;
-        }
+        availableScreens.append(
+            screen != nullptr ? screen->availableGeometry() : QRect());
     }
-    if (bestScreen == nullptr) {
-        bestScreen = QGuiApplication::primaryScreen();
-    }
-    if (bestScreen == nullptr) {
-        window->setGeometry(geometry);
-        return true;
-    }
-
-    // A restored docked group may deliberately span two monitors.  Constraining
-    // it to the single screen with the largest overlap used to shrink the list
-    // (and break its shared edge with the player) whenever it crossed a monitor
-    // boundary.  Bound only against the full virtual work area instead.
-    QRect virtualAvailable;
-    for (QScreen* screen : screens) {
-        if (screen != nullptr) {
-            virtualAvailable = virtualAvailable.united(screen->availableGeometry());
-        }
-    }
-    if (!virtualAvailable.isValid()) {
-        virtualAvailable = bestScreen->availableGeometry();
-    }
-    geometry.setWidth(qMin(geometry.width(), virtualAvailable.width()));
-    geometry.setHeight(qMin(geometry.height(), virtualAvailable.height()));
-    const int maxX = virtualAvailable.right() - geometry.width() + 1;
-    const int maxY = virtualAvailable.bottom() - geometry.height() + 1;
-    geometry.moveLeft(qBound(virtualAvailable.left(), geometry.left(), maxX));
-    geometry.moveTop(qBound(virtualAvailable.top(), geometry.top(), maxY));
+    geometry = geometryForAvailableScreens(
+        geometry, window->minimumSize(), availableScreens, primaryScreenIndex);
     window->setGeometry(geometry);
     return true;
 }
@@ -1188,8 +1203,12 @@ void WindowController::flushWindowState()
     persistGeometry(mainWindow_, QStringLiteral("windows/mainGeometry"));
     persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
     persistGeometry(listWindow_, QStringLiteral("windows/listGeometry"));
-    persistGeometry(audioToolsWindow_, QStringLiteral("windows/audioToolsGeometry"));
-    persistGeometry(settingsWindow_, QStringLiteral("windows/settingsGeometry"));
+    if (!isMinimized(audioToolsWindow_) && !isMaximized(audioToolsWindow_)) {
+        persistGeometry(audioToolsWindow_, QStringLiteral("windows/audioToolsGeometry"));
+    }
+    if (!isMinimized(settingsWindow_) && !isMaximized(settingsWindow_)) {
+        persistGeometry(settingsWindow_, QStringLiteral("windows/settingsGeometry"));
+    }
     settings_.sync();
 }
 
@@ -1216,6 +1235,74 @@ QRect WindowController::geometryForDpiChange(
     QRect adjusted = suggestedGeometry;
     adjusted.setSize(currentGeometry.size());
     return adjusted;
+}
+
+QRect WindowController::geometryForAvailableScreens(
+    const QRect& savedGeometry, const QSize& minimumSize,
+    const QList<QRect>& availableScreens, int primaryScreenIndex)
+{
+    QRect geometry = savedGeometry;
+    geometry.setWidth(qMax(geometry.width(), minimumSize.width()));
+    geometry.setHeight(qMax(geometry.height(), minimumSize.height()));
+
+    QRect virtualAvailable;
+    int bestOverlapIndex = -1;
+    qint64 bestOverlapArea = 0;
+    int nearestIndex = -1;
+    qint64 nearestDistance = (std::numeric_limits<qint64>::max)();
+    for (int index = 0; index < availableScreens.size(); ++index) {
+        const QRect screen = availableScreens.at(index);
+        if (!screen.isValid()) continue;
+        virtualAvailable = virtualAvailable.united(screen);
+        const QRect intersection = screen.intersected(geometry);
+        const qint64 area = static_cast<qint64>(intersection.width())
+            * intersection.height();
+        if (area > bestOverlapArea) {
+            bestOverlapArea = area;
+            bestOverlapIndex = index;
+        }
+        const qint64 dx = geometry.right() < screen.left()
+            ? static_cast<qint64>(screen.left()) - geometry.right()
+            : screen.right() < geometry.left()
+                ? static_cast<qint64>(geometry.left()) - screen.right() : 0;
+        const qint64 dy = geometry.bottom() < screen.top()
+            ? static_cast<qint64>(screen.top()) - geometry.bottom()
+            : screen.bottom() < geometry.top()
+                ? static_cast<qint64>(geometry.top()) - screen.bottom() : 0;
+        const qint64 distance = dx * dx + dy * dy;
+        if (distance < nearestDistance
+            || (distance == nearestDistance && index == primaryScreenIndex)) {
+            nearestDistance = distance;
+            nearestIndex = index;
+        }
+    }
+    if (!virtualAvailable.isValid()) return geometry;
+
+    geometry.setWidth(qMin(geometry.width(), virtualAvailable.width()));
+    geometry.setHeight(qMin(geometry.height(), virtualAvailable.height()));
+    const int virtualMaxX = virtualAvailable.right() - geometry.width() + 1;
+    const int virtualMaxY = virtualAvailable.bottom() - geometry.height() + 1;
+    geometry.moveLeft(qBound(virtualAvailable.left(), geometry.left(), virtualMaxX));
+    geometry.moveTop(qBound(virtualAvailable.top(), geometry.top(), virtualMaxY));
+    for (const QRect& screen : availableScreens) {
+        if (screen.isValid() && screen.intersects(geometry)) return geometry;
+    }
+
+    int targetIndex = bestOverlapIndex >= 0 ? bestOverlapIndex : nearestIndex;
+    if (targetIndex < 0 && primaryScreenIndex >= 0
+        && primaryScreenIndex < availableScreens.size()
+        && availableScreens.at(primaryScreenIndex).isValid()) {
+        targetIndex = primaryScreenIndex;
+    }
+    if (targetIndex < 0) return geometry;
+    const QRect target = availableScreens.at(targetIndex);
+    geometry.setWidth(qMin(geometry.width(), target.width()));
+    geometry.setHeight(qMin(geometry.height(), target.height()));
+    geometry.moveLeft(qBound(target.left(), geometry.left(),
+                             target.right() - geometry.width() + 1));
+    geometry.moveTop(qBound(target.top(), geometry.top(),
+                            target.bottom() - geometry.height() + 1));
+    return geometry;
 }
 
 QPoint WindowController::computeSnappedPosition(int x, int y) const
