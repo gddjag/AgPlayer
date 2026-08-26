@@ -1,4 +1,10 @@
 #include "audio_editor/document_renderer.hpp"
+#include "audio_editor/document_render_pipeline.hpp"
+#include "audio_editor/audio_file_analyzer.hpp"
+#include "audio_editor/automation_time_mapper.hpp"
+#include "audio_editor/editor_playback_stream.hpp"
+#include "audio_editor/time_pitch_session.hpp"
+#include "decoder.hpp"
 
 #include <QTemporaryDir>
 #include <QtTest>
@@ -59,6 +65,35 @@ std::vector<float> readFloatWav(const std::filesystem::path& path)
                             std::istreambuf_iterator<char>()};
     std::vector<float> samples(bytes.size() / sizeof(float));
     std::memcpy(samples.data(), bytes.data(), samples.size() * sizeof(float));
+    return samples;
+}
+
+std::vector<float> readRealtime(
+    const TimelineSnapshot& snapshot,
+    const EditorPlaybackParameters& parameters)
+{
+    std::string error;
+    auto stream = EditorPlaybackStream::create(snapshot, parameters, error);
+    if (!stream) return {};
+    std::vector<float> samples;
+    agplayer::DecodedAudioBlock block;
+    do {
+        if (stream->read(block) != AG_OK) return {};
+        samples.insert(samples.end(), block.samples.begin(), block.samples.end());
+    } while (!block.end_of_stream);
+    return samples;
+}
+
+std::vector<float> decodeWav(const std::filesystem::path& path)
+{
+    agplayer::Decoder decoder;
+    if (decoder.open(path.u8string()) != AG_OK) return {};
+    std::vector<float> samples;
+    agplayer::DecodedAudioBlock block;
+    do {
+        if (decoder.read(block) != AG_OK) return {};
+        samples.insert(samples.end(), block.samples.begin(), block.samples.end());
+    } while (!block.end_of_stream);
     return samples;
 }
 
@@ -180,6 +215,173 @@ private slots:
         QVERIFY(!result.success);
         QCOMPARE(result.message, std::string{"cancelled"});
         QVERIFY(!std::filesystem::exists(output));
+    }
+
+    void sharedPipelineAppliesAutomationAfterTimePitch()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto input = std::filesystem::path(
+            directory.filePath(QStringLiteral("input.wav")).toStdWString());
+        const auto output = std::filesystem::path(
+            directory.filePath(QStringLiteral("output.wav")).toStdWString());
+        constexpr SampleFrame frames = 8'000;
+        QVERIFY(writeFloatWav(input,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        const auto analysis = AudioFileAnalyzer::analyze(input, 64);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        auto event = AudioDocument::fromSource(analysis.source)
+            .timelineSnapshot().events.front();
+        event.envelope = {{0, 1.0F}, {3'999, 1.0F}, {4'000, 0.0F},
+                          {4'001, 1.0F}};
+        WriteRequest request;
+        request.snapshot = TimelineSnapshot{{event}, frames, 9};
+        request.output_path = output;
+        request.codec_name = "pcm_f32le";
+        request.sample_rate = 8'000;
+        request.channels = 1;
+        request.keep_metadata = false;
+        TimePitchSession timePitch;
+        QVERIFY(timePitch.setSpeedPercent(200.0));
+
+        const auto result = DocumentRenderPipeline{}.write(request, timePitch);
+        QVERIFY2(result.ok(), result.message.c_str());
+        agplayer::Decoder decoder;
+        QCOMPARE(decoder.open(output.u8string()), AG_OK);
+        std::vector<float> samples;
+        agplayer::DecodedAudioBlock block;
+        do {
+            QCOMPARE(decoder.read(block), AG_OK);
+            samples.insert(samples.end(), block.samples.begin(),
+                           block.samples.end());
+        } while (!block.end_of_stream);
+        QVERIFY(samples.size() > 3'500U && samples.size() < 4'500U);
+        const std::size_t mapped = samples.size() / 2U;
+        float localMinimum = 1.0F;
+        for (std::size_t index = mapped - 8U; index < mapped + 9U; ++index) {
+            localMinimum = std::min(localMinimum, std::abs(samples[index]));
+        }
+        QVERIFY2(localMinimum < 0.05F,
+                 "export pipeline applied gain before time/pitch");
+        QVERIFY(std::abs(samples[mapped - 32U]) > 0.25F);
+        QVERIFY(std::abs(samples[mapped + 32U]) > 0.25F);
+    }
+
+    void realtimeAndOfflineUseTheSameAutomationClockThroughFlush()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto input = std::filesystem::path(
+            directory.filePath(QStringLiteral("mapping-input.wav")).toStdWString());
+        constexpr SampleFrame frames = 8'003;
+        QVERIFY(writeFloatWav(input,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        const auto analysis = AudioFileAnalyzer::analyze(input, 64);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        auto event = AudioDocument::fromSource(analysis.source)
+            .timelineSnapshot().events.front();
+        for (SampleFrame frame = 0; frame < frames; frame += 257) {
+            event.envelope.push_back({frame,
+                (frame / 257) % 2 == 0 ? 0.2F : 1.8F});
+        }
+        const TimelineSnapshot snapshot{{event}, frames, 10};
+        AudioEvent neutralEvent = event;
+        neutralEvent.envelope.clear();
+        const TimelineSnapshot neutral{{neutralEvent}, frames, 11};
+        const auto renderOffline = [&](const TimelineSnapshot& value,
+                                       const QString& name) {
+            TimePitchSession timePitch;
+            if (!timePitch.setSpeedPercent(137.0)) return std::vector<float>{};
+            WriteRequest request;
+            request.snapshot = value;
+            request.output_path = std::filesystem::path(
+                directory.filePath(name).toStdWString());
+            request.codec_name = "pcm_f32le";
+            request.sample_rate = 8'000;
+            request.channels = 1;
+            request.keep_metadata = false;
+            const auto written = DocumentRenderPipeline{}.write(request, timePitch);
+            return written.ok() ? decodeWav(request.output_path)
+                                : std::vector<float>{};
+        };
+        const std::vector<float> offline = renderOffline(
+            snapshot, QStringLiteral("mapping-automated.wav"));
+        const std::vector<float> offlineNeutral = renderOffline(
+            neutral, QStringLiteral("mapping-neutral.wav"));
+        EditorPlaybackParameters parameters;
+        parameters.speed_ratio = 1.37;
+        parameters.keep_pitch = true;
+        const std::vector<float> realtime = readRealtime(snapshot, parameters);
+        const std::vector<float> realtimeNeutral = readRealtime(
+            neutral, parameters);
+        QVERIFY(!offline.empty());
+        QCOMPARE(offline.size(), offlineNeutral.size());
+        QCOMPARE(realtime.size(), realtimeNeutral.size());
+        QCOMPARE(offline.size(), realtime.size());
+        for (std::size_t frame = 0; frame < realtime.size(); ++frame) {
+            if (std::abs(offlineNeutral[frame]) < 0.05F
+                || std::abs(realtimeNeutral[frame]) < 0.05F) {
+                continue;
+            }
+            const float offlineGain = offline[frame] / offlineNeutral[frame];
+            const float realtimeGain = realtime[frame] / realtimeNeutral[frame];
+            QVERIFY2(std::abs(realtimeGain - offlineGain) < 0.001F,
+                     qPrintable(QStringLiteral(
+                         "automation clocks diverged at output frame %1")
+                         .arg(frame)));
+        }
+        const AutomationTimeMapper automationTime(0, frames, 1.37);
+        QCOMPARE(automationTime.map(
+            static_cast<SampleFrame>(offline.size() + 12U)), frames - 1);
+    }
+
+    void mutedInputCannotLeakAcrossTimePitchIntoAudibleEvent()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto input = std::filesystem::path(
+            directory.filePath(QStringLiteral("mute-input.wav")).toStdWString());
+        const auto output = std::filesystem::path(
+            directory.filePath(QStringLiteral("mute-output.wav")).toStdWString());
+        constexpr SampleFrame half = 4'000;
+        std::vector<float> samples(static_cast<std::size_t>(half * 2), 0.0F);
+        for (SampleFrame frame = half - 1'000; frame < half; ++frame) {
+            samples[static_cast<std::size_t>(frame)] = 0.9F;
+        }
+        QVERIFY(writeFloatWav(input, samples));
+        const auto source = sourceFor(input, half * 2);
+        AudioEvent muted{1, source, 0, half, 0};
+        muted.mute = true;
+        const AudioEvent audible{2, source, half, half * 2, half};
+        const TimelineSnapshot snapshot{{muted, audible}, half * 2, 11};
+
+        TimePitchSession timePitch;
+        QVERIFY(timePitch.setSpeedPercent(137.0));
+        WriteRequest request;
+        request.snapshot = snapshot;
+        request.output_path = output;
+        request.codec_name = "pcm_f32le";
+        request.sample_rate = 8'000;
+        request.channels = 1;
+        request.keep_metadata = false;
+        const auto written = DocumentRenderPipeline{}.write(request, timePitch);
+        QVERIFY2(written.ok(), written.message.c_str());
+        const std::vector<float> offline = decodeWav(output);
+
+        EditorPlaybackParameters parameters;
+        parameters.speed_ratio = 1.37;
+        parameters.keep_pitch = true;
+        const std::vector<float> realtime = readRealtime(snapshot, parameters);
+        QVERIFY(!offline.empty());
+        QVERIFY(!realtime.empty());
+        const auto silent = [](const std::vector<float>& rendered) {
+            return std::all_of(rendered.begin(), rendered.end(),
+                [](const float sample) { return std::abs(sample) < 0.00001F; });
+        };
+        QVERIFY2(silent(offline),
+                 "offline Time/Pitch leaked muted input into audible output");
+        QVERIFY2(silent(realtime),
+                 "realtime Time/Pitch leaked muted input into audible output");
     }
 
     void rejectsInvalidFirstEventWithoutCreatingOutput()

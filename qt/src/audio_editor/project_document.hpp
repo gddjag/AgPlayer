@@ -5,6 +5,7 @@
 #include <QString>
 #include <QtGlobal>
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -80,10 +81,12 @@ public:
     [[nodiscard]] static constexpr int schemaVersion() noexcept { return 1; }
     [[nodiscard]] static ProjectSaveResult save(
         const QString& path, const ProjectSaveRequest& request);
-    [[nodiscard]] static ProjectLoadResult load(const QString& path);
+    [[nodiscard]] static ProjectLoadResult load(
+        const QString& path, const std::atomic_bool* cancelled = nullptr);
     [[nodiscard]] static ProjectRelinkResult relink(
         AudioDocument& document, std::vector<ProjectSourceRecord>& sources,
-        quint64 sourceId, const QString& replacementPath);
+        quint64 sourceId, const QString& replacementPath,
+        const std::atomic_bool* cancelled = nullptr);
 };
 
 } // namespace agplayer::editor

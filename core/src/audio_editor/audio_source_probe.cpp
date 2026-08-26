@@ -13,17 +13,23 @@ namespace {
 
 struct ProbeDeadline final {
     std::chrono::steady_clock::time_point expires;
+    const std::atomic_bool* cancelled{};
 };
 
 int interruptProbe(void* opaque)
 {
     const auto* deadline = static_cast<const ProbeDeadline*>(opaque);
-    return deadline != nullptr && std::chrono::steady_clock::now() >= deadline->expires;
+    return deadline != nullptr
+        && ((deadline->cancelled
+             && deadline->cancelled->load(std::memory_order_acquire))
+            || std::chrono::steady_clock::now() >= deadline->expires);
 }
 
 bool deadlineExpired(const ProbeDeadline& deadline) noexcept
 {
-    return std::chrono::steady_clock::now() >= deadline.expires;
+    return (deadline.cancelled
+            && deadline.cancelled->load(std::memory_order_acquire))
+        || std::chrono::steady_clock::now() >= deadline.expires;
 }
 
 } // namespace
@@ -47,10 +53,11 @@ AudioSourceProbeResult AudioSourceProbe::probe(const std::filesystem::path& path
 
 AudioSourceProbeResult AudioSourceProbe::probe(
     const std::filesystem::path& path,
-    const std::chrono::steady_clock::time_point deadline) noexcept
+    const std::chrono::steady_clock::time_point deadline,
+    const std::atomic_bool* cancelled) noexcept
 {
     AudioSourceProbeResult result;
-    ProbeDeadline probeDeadline{deadline};
+    ProbeDeadline probeDeadline{deadline, cancelled};
     if (deadlineExpired(probeDeadline)) {
         result.timed_out = true;
         result.message = "audio source probe timed out";

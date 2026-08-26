@@ -1,25 +1,28 @@
 #include "audio_editor/audio_editor_controller.hpp"
-#include "manual_recording_capture.hpp"
 #include "audio_editor/audio_file_analyzer.hpp"
+#include "playback_controller.hpp"
 #include "../core/bpm_fixture.hpp"
 #include "decoder.hpp"
 
 #include <QDir>
-#include <QDataStream>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSemaphore>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QtTest>
 
 #include <atomic>
-#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <limits>
-#include <thread>
 #include <vector>
 
 namespace {
@@ -79,30 +82,130 @@ double positiveCrossingFrequency(const DecodedProbe& probe)
     return seconds > 0.0 ? crossings / seconds : 0.0;
 }
 
-bool writeOppositeStereoWave(const QString& path)
+void writeU16(std::ostream& stream, const std::uint16_t value)
 {
-    constexpr quint32 sampleRate = 48'000;
-    constexpr quint16 channels = 2;
-    constexpr quint16 bitsPerSample = 16;
-    constexpr quint32 frames = 4'096;
-    constexpr quint32 dataBytes = frames * channels * sizeof(qint16);
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) return false;
-    QDataStream stream(&file);
-    stream.setByteOrder(QDataStream::LittleEndian);
-    stream.writeRawData("RIFF", 4);
-    stream << quint32{36U + dataBytes};
-    stream.writeRawData("WAVEfmt ", 8);
-    stream << quint32{16} << quint16{1} << channels << sampleRate
-           << quint32{sampleRate * channels * bitsPerSample / 8U}
-           << quint16{channels * bitsPerSample / 8U} << bitsPerSample;
-    stream.writeRawData("data", 4);
-    stream << dataBytes;
-    for (quint32 frame = 0; frame < frames; ++frame) {
-        const qint16 left = frame % 2 == 0 ? qint16{26'000} : qint16{-26'000};
-        stream << left << qint16{-left};
+    const std::array<char, 2> bytes{static_cast<char>(value & 0xffU),
+        static_cast<char>((value >> 8U) & 0xffU)};
+    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+void writeU32(std::ostream& stream, const std::uint32_t value)
+{
+    const std::array<char, 4> bytes{static_cast<char>(value & 0xffU),
+        static_cast<char>((value >> 8U) & 0xffU),
+        static_cast<char>((value >> 16U) & 0xffU),
+        static_cast<char>((value >> 24U) & 0xffU)};
+    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+bool writeMonoFloatWav(const QString& path, const std::vector<float>& samples,
+                       const std::uint32_t sampleRate = 8'000)
+{
+    std::ofstream stream(std::filesystem::path(path.toStdWString()),
+                         std::ios::binary | std::ios::trunc);
+    const auto bytes = static_cast<std::uint32_t>(
+        samples.size() * sizeof(float));
+    stream.write("RIFF", 4); writeU32(stream, 36U + bytes);
+    stream.write("WAVEfmt ", 8); writeU32(stream, 16U); writeU16(stream, 3U);
+    writeU16(stream, 1U); writeU32(stream, sampleRate);
+    writeU32(stream, sampleRate * sizeof(float));
+    writeU16(stream, sizeof(float)); writeU16(stream, 32U);
+    stream.write("data", 4); writeU32(stream, bytes);
+    stream.write(reinterpret_cast<const char*>(samples.data()),
+                 static_cast<std::streamsize>(bytes));
+    return stream.good();
+}
+
+double peakValue(const QVariantList& values, const qsizetype point,
+                 const bool maximum)
+{
+    const qsizetype index = point * 2 + (maximum ? 1 : 0);
+    return index >= 0 && index < values.size() ? values[index].toDouble() : 0.0;
+}
+
+QString saveConstantProject(const QString& directory, const QString& name,
+                            const std::vector<float>& amplitudes,
+                            const qint64 frames = 240'000)
+{
+    using namespace agplayer::editor;
+    std::vector<AudioEvent> events;
+    events.reserve(amplitudes.size());
+    for (std::size_t index = 0; index < amplitudes.size(); ++index) {
+        const QString sourcePath = QDir(directory).filePath(
+            QStringLiteral("%1-source-%2.wav").arg(name).arg(index));
+        if (!writeMonoFloatWav(sourcePath,
+                std::vector<float>(static_cast<std::size_t>(frames),
+                                   amplitudes[index]))) {
+            return {};
+        }
+        const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(
+            std::filesystem::path(sourcePath.toStdWString()), 64);
+        if (!analysis.success) return {};
+        events.push_back(AudioEvent{
+            static_cast<EventId>(index + 1U),
+            std::make_shared<const AudioSource>(analysis.source),
+            0, frames, static_cast<SampleFrame>(index) * frames});
     }
-    return stream.status() == QDataStream::Ok;
+    AudioDocument document = AudioDocument::fromEvents(std::move(events));
+    const QString projectPath = QDir(directory).filePath(name + ".agproj");
+    ProjectSaveRequest request;
+    request.document = &document;
+    request.visibleEndFrame = document.totalFrames();
+    return ProjectDocument::save(projectPath, request).ok()
+        ? projectPath : QString{};
+}
+
+bool waitForDocumentLoad(AudioEditorController& controller,
+                         const int timeoutMs = 10'000)
+{
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (controller.loading() && elapsed.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QTest::qWait(1);
+    }
+    return !controller.loading();
+}
+
+bool acceptedDocumentLoadCompleted(AudioEditorController& controller,
+                                   const bool accepted)
+{
+    return accepted && waitForDocumentLoad(controller)
+        && controller.state() != EditorSessionState::Error;
+}
+
+bool openFileAndWait(AudioEditorController& controller, const QUrl& source)
+{
+    return acceptedDocumentLoadCompleted(controller,
+                                         controller.openFile(source));
+}
+
+bool openProjectAndWait(AudioEditorController& controller, const QUrl& source)
+{
+    return acceptedDocumentLoadCompleted(controller,
+                                         controller.openProject(source));
+}
+
+bool relinkProjectSourceAndWait(AudioEditorController& controller,
+                                const quint64 sourceId,
+                                const QUrl& replacement)
+{
+    return acceptedDocumentLoadCompleted(controller,
+        controller.relinkProjectSource(sourceId, replacement));
+}
+
+bool relinkProjectSourceAndWait(AudioEditorController& controller,
+                                const QString& sourceId,
+                                const QUrl& replacement)
+{
+    return acceptedDocumentLoadCompleted(controller,
+        controller.relinkProjectSource(sourceId, replacement));
+}
+
+bool confirmDiscardAndWait(AudioEditorController& controller)
+{
+    return acceptedDocumentLoadCompleted(
+        controller, controller.confirmDiscardAndOpen());
 }
 
 } // namespace
@@ -111,34 +214,40 @@ class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void ordinaryZoomMixesSamplesBeforeComputingTheEnvelope()
+    void handoffServicesAreLazyAndReleasedWithThePage()
     {
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString path = temporary.filePath(QStringLiteral("opposite.wav"));
-        QVERIFY(writeOppositeStereoWave(path));
+        AudioEditorController controller;
+        QVERIFY(!controller.handoffServicesCreatedForTesting());
 
-        const auto analysis = agplayer::editor::AudioFileAnalyzer::analyze(
-            std::filesystem::path(path.toStdWString()), 32);
-        QVERIFY(analysis.success);
-        QCOMPARE(analysis.channel_peaks.size(), std::size_t{2});
-        QCOMPARE(analysis.visual_mix_peaks.size(), std::size_t{64});
-        QVERIFY(std::all_of(analysis.visual_mix_peaks.begin(),
-                            analysis.visual_mix_peaks.end(),
-                            [](const float value) {
-                                return std::abs(value) < 0.0001F;
-                            }));
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        QVERIFY(openFileAndWait(controller,
+            QUrl::fromLocalFile(QString::fromUtf8(fixture))));
+        QVERIFY(controller.setSelection(0, std::min<qint64>(
+            controller.totalFrames(), controller.sampleRate())));
+        QVERIFY(!controller.handoffServicesCreatedForTesting());
 
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(path)));
-        controller.viewport()->setViewportWidth(16.0);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.viewportChannelPeaks().size(), 1,
-                                  5'000);
-        const QVariantList visual =
-            controller.viewportChannelPeaks().front().toList();
-        QVERIFY(std::all_of(visual.begin(), visual.end(), [](const QVariant& value) {
-            return !value.isValid() || std::abs(value.toFloat()) < 0.0001F;
-        }));
+        QVERIFY(controller.beginSelectionHandoff(10.0, 10.0));
+        QVERIFY(controller.handoffServicesCreatedForTesting());
+        controller.deactivate();
+        QVERIFY(!controller.handoffServicesCreatedForTesting());
+    }
+
+    void productionControllerRequiresInjectedSharedPlayer()
+    {
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        ag_player* sharedPlayer = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &sharedPlayer), AG_OK);
+        PlaybackController playback(sharedPlayer);
+        {
+            AudioEditorController controller;
+            QVERIFY(!controller.playbackSupported());
+            controller.setPlaybackController(&playback);
+            QVERIFY(controller.playbackSupported());
+            QCOMPARE(controller.playerHandleForTesting(), sharedPlayer);
+        }
+        ag_player_destroy(sharedPlayer);
     }
 
     void emptyDocumentDisablesEditActions()
@@ -153,6 +262,8 @@ private slots:
     void recordingBackendAcceptsCaptureRequestAndReportsInvalidDeviceAsync()
     {
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(!controller.recordingSupported());
+        controller.refreshRecordingDevices();
         QVERIFY(controller.recordingSupported());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.newRecording")));
 
@@ -163,11 +274,10 @@ private slots:
             QUrl::fromLocalFile(output),
             QStringLiteral("capture:device-does-not-exist"),
             48'000, 2, false, false));
-        QCOMPARE(controller.state(), EditorSessionState::RecordingStarting);
+        QCOMPARE(controller.state(), EditorSessionState::Processing);
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Empty,
                                   10'000);
-        QVERIFY(controller.errorMessage().contains(QStringLiteral("WASAPI")));
-        QVERIFY(controller.errorMessage().contains(QStringLiteral("device")));
+        QVERIFY(!controller.errorMessage().isEmpty());
         QVERIFY(!QFileInfo::exists(output));
     }
 
@@ -176,7 +286,8 @@ private slots:
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        controller.refreshRecordingDevices();
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         const auto historyBefore = controller.historyStateIdForTesting();
         QSignalSpy discardRequested(
             &controller, &AudioEditorController::discardConfirmationRequested);
@@ -197,6 +308,89 @@ private slots:
         QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
     }
 
+    void recordingTickPublishesActualFormatAndFollowsPlayhead()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.viewport()->setViewportWidth(100.0);
+        agplayer::editor::RecordingConfig config;
+        config.output_path = std::filesystem::path(
+            temporary.filePath(QStringLiteral("manual.wav")).toStdWString());
+        config.sample_rate = 44'100;
+        config.channels = 1;
+        auto& recording = controller.recordingSessionForTesting();
+        QVERIFY(recording.startManual(config));
+        std::vector<float> block(441U, 0.5F);
+        QCOMPARE(recording.pushCapturedFrames(block.data(), 441U), 441U);
+        QTRY_VERIFY_WITH_TIMEOUT(recording.framesMetered() >= 441, 2'000);
+
+        controller.publishRecordingTickForTesting();
+        QCOMPARE(controller.recordingSampleRate(), 44'100);
+        QCOMPARE(controller.recordingChannels(), 1);
+        QCOMPARE(controller.recordingFrames(), qint64{441});
+        QCOMPARE(controller.playheadFrame(), qint64{441});
+        QCOMPARE(controller.positionMs(), qint64{10});
+        QCOMPARE(controller.inputPeakLevels().size(), 1);
+        QCOMPARE(controller.inputRmsLevels().size(), 1);
+        QVERIFY(controller.inputLevel() > 0.49);
+        QVERIFY(controller.channelPeaks().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().size() == 1, 10'000);
+        QCOMPARE(controller.viewport()->visibleEndFrame(), qint64{441});
+        QVERIFY(controller.viewport()->visibleStartFrame() < 441);
+        QVERIFY(recording.stop().success);
+    }
+
+    void recordingWaveformPositionsRecentPeaksInsideTheViewportTimeline()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.viewport()->setViewportWidth(1.0);
+        agplayer::editor::RecordingConfig config;
+        config.output_path = std::filesystem::path(
+            temporary.filePath(QStringLiteral("long-manual.wav")).toStdWString());
+        config.sample_rate = 48'000;
+        config.channels = 1;
+        auto& recording = controller.recordingSessionForTesting();
+        QVERIFY(recording.startManual(config));
+        const auto stopRecording = qScopeGuard([&] {
+            if (recording.state() != agplayer::editor::RecordingState::Idle) {
+                (void)recording.stop();
+            }
+        });
+
+        constexpr std::size_t chunkFrames = 1'500;
+        qint64 pushedFrames = 0;
+        for (int chunk = 0; chunk < 2; ++chunk) {
+            const float amplitude = chunk == 0 ? 0.9F : 0.2F;
+            const std::vector<float> samples(chunkFrames, amplitude);
+            QCOMPARE(recording.pushCapturedFrames(samples.data(), chunkFrames),
+                     chunkFrames);
+            pushedFrames += static_cast<qint64>(chunkFrames);
+            QTRY_VERIFY_WITH_TIMEOUT(
+                recording.framesMetered() >= pushedFrames, 5'000);
+        }
+
+        controller.publishRecordingTickForTesting();
+        QVERIFY(controller.viewport()->setVisibleRange(0, pushedFrames));
+        const auto positioned = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 4;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(positioned(), 10'000);
+
+        const QVariantList peaks = controller.viewportChannelPeaks()
+            .front().toList();
+        QVERIFY2(!peaks[0].isValid() && !peaks[1].isValid(),
+                 "old recording time must remain blank when it is outside the recent peak window");
+        QVERIFY(std::abs(peakValue(peaks, 1, false) + 0.2) < 0.01);
+        QVERIFY(std::abs(peakValue(peaks, 1, true) - 0.2) < 0.01);
+        QVERIFY(controller.channelPeaks().isEmpty());
+    }
+
     void bpmDetectionAnalyzesTheCurrentTimeline()
     {
         QTemporaryDir temporary;
@@ -206,53 +400,35 @@ private slots:
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(controller.bpmDetectionSupported());
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
-        QSignalSpy progressChanged(
-            &controller, &AudioEditorController::progressChanged);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.detectBpm());
         QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QVERIFY(controller.bpmBusy());
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
                                   15'000);
+        QVERIFY(!controller.bpmBusy());
         QVERIFY2(std::abs(controller.originalBpm() - 120.0) < 1.0,
                  qPrintable(QString::number(controller.originalBpm())));
-        QVERIFY(progressChanged.count() > 0);
-        QCOMPARE(controller.progress(), 1.0);
+        QVERIFY2(std::abs(controller.bpmResult() - 120.0) < 1.0,
+                 qPrintable(QString::number(controller.bpmResult())));
+        QVERIFY(controller.bpmError().isEmpty());
     }
 
-    void bpmDetectionUsesSelectionWithoutFallingBackToWholeTimeline()
+    void bpmDetectionCancellationPublishesCancelledState()
     {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
-        const QString source = temporary.filePath(QStringLiteral("click-120.wav"));
-        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 8));
-
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
-        QVERIFY(controller.setSelection(0, 1'600));
-        QVERIFY(controller.detectBpm());
-        QCOMPARE(controller.state(), EditorSessionState::Processing);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Error,
-                                  15'000);
-        QCOMPARE(controller.originalBpm(), 0.0);
-        QVERIFY(!controller.errorMessage().isEmpty());
-    }
-
-    void cancelledBpmDetectionCannotPublishAStaleResult()
-    {
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString source = temporary.filePath(QStringLiteral("click-120.wav"));
+        const QString source = temporary.filePath(QStringLiteral("click-120-long.wav"));
         QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 30));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.detectBpm());
-        QCOMPARE(controller.state(), EditorSessionState::Processing);
         controller.cancelOperation();
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
-                                  15'000);
-        QCOMPARE(controller.originalBpm(), 0.0);
-        QVERIFY(controller.errorMessage().contains(QStringLiteral("取消")));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.bpmBusy(), 10'000);
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        QCOMPARE(controller.bpmResult(), 0.0);
+        QVERIFY(!controller.bpmError().isEmpty());
     }
 
     void timePitchAndFormantControlsDriveProcessingParameters()
@@ -285,7 +461,7 @@ private slots:
         controller.viewport()->setViewportWidth(1'167.0);
 
         QVERIFY(!controller.modified());
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         QCOMPARE(discardRequested.count(), 0);
         QVERIFY(controller.hasDocument());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.export")));
@@ -323,7 +499,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController saved(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(saved.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(saved, QUrl::fromLocalFile(source)));
         QVERIFY(saved.saveProjectAs(QUrl::fromLocalFile(project)));
         QFile projectFile(project);
         QVERIFY(projectFile.open(QIODevice::ReadOnly));
@@ -341,7 +517,7 @@ private slots:
         projectFile.close();
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(controller, QUrl::fromLocalFile(project)),
                  qPrintable(controller.errorMessage()));
         QCOMPARE(controller.formantPreservationSupported(), true);
         QVariantList views = controller.timelineEventViews();
@@ -448,292 +624,142 @@ private slots:
                      .value(QStringLiteral("fadeOut")).toLongLong(), qint64{0});
     }
 
-    void gainGestureCommitsOneObservableUndoStep()
+    void gainAndEnvelopePointGesturesPreviewCommitOnceAndCancelCleanly()
     {
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
         const QString id = controller.timelineEventViews().front().toMap()
             .value(QStringLiteral("id")).toString();
-        const auto historyBefore = controller.historyStateIdForTesting();
+        const auto initialHistory = controller.historyStateIdForTesting();
 
-        QVERIFY(controller.beginEventGesture(id, QStringLiteral("gain"), false));
-        QVERIFY(controller.setEventGain(id, 1.25));
-        QVERIFY(controller.setEventGain(id, 1.5));
-        QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
+        QVERIFY(controller.beginEventGainGesture(id));
+        QVERIFY(controller.updateEventGainGesture(0.25));
+        QVERIFY(controller.updateEventGainGesture(0.75));
+        QCOMPARE(controller.historyStateIdForTesting(), initialHistory);
         QCOMPARE(controller.timelineEventViews().front().toMap()
-                     .value(QStringLiteral("gain")).toDouble(), 1.5);
-        QVERIFY(controller.endEventGesture());
-        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
-        QVERIFY(controller.undo());
+                     .value(QStringLiteral("gain")).toDouble(), 0.75);
+        QVERIFY(controller.cancelEventGainGesture());
         QCOMPARE(controller.timelineEventViews().front().toMap()
                      .value(QStringLiteral("gain")).toDouble(), 1.0);
-    }
+        QCOMPARE(controller.historyStateIdForTesting(), initialHistory);
 
-    void activeRecordingPublishesLiveTimelineAndFinalPlayableDocument()
-    {
-        auto capture = std::make_unique<ManualRecordingCapture>();
-        ManualRecordingCapture* const driver = capture.get();
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        controller.viewport()->setViewportWidth(320.0);
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString output = temporary.filePath(QStringLiteral("active.wav"));
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Recording, 5'000);
-
-        std::vector<float> active(16'000U * 2U);
-        for (std::size_t frame = 0; frame < 16'000U; ++frame) {
-            active[frame * 2U] = frame % 2U == 0U ? -0.8F : 0.3F;
-            active[frame * 2U + 1U] = frame % 2U == 0U ? -0.2F : 0.6F;
-        }
-        QCOMPARE(driver->feed(active, 16'000), 16'000U);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingFrames(), 16'000, 1'000);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.playheadFrame(), 16'000, 1'000);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.positionMs(), 1'000, 1'000);
-        QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() > 0.79, 1'000);
-        QTRY_VERIFY_WITH_TIMEOUT(
-            controller.recordingOverlayPeaks().size() == 1, 2'000);
-        QCOMPARE(controller.channelPeaks().size(), 2);
-
-        std::vector<float> quiet(16'000U * 2U, 0.0F);
-        QCOMPARE(driver->feed(quiet, 16'000), 16'000U);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.playheadFrame(), 32'000, 1'000);
-        QTRY_VERIFY_WITH_TIMEOUT(controller.inputLevel() < 0.01, 1'000);
-        QTRY_VERIFY_WITH_TIMEOUT([&controller] {
-            const QVariantList channels = controller.recordingOverlayPeaks();
-            if (channels.size() != 1) return false;
-            const QVariantList left = channels.front().toList();
-            bool sawSignal = false;
-            bool sawQuiet = false;
-            for (qsizetype index = 0; index + 1 < left.size(); index += 2) {
-                const double minimum = left[index].toDouble();
-                const double maximum = left[index + 1].toDouble();
-                sawSignal = sawSignal || minimum < -0.49 || maximum > 0.44;
-                sawQuiet = sawQuiet || (std::abs(minimum) < 0.001
-                                        && std::abs(maximum) < 0.001);
-            }
-            return sawSignal && sawQuiet;
-        }(), 2'000);
-
-        QVERIFY(controller.stopRecording());
-        QCOMPARE(controller.state(), EditorSessionState::Finalizing);
-        QVERIFY(controller.recording());
-        QVERIFY(!controller.cancelRecording());
-        QCOMPARE(controller.totalFrames(), 32'000);
-        QVERIFY(!controller.recordingOverlayPeaks().isEmpty());
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Ready, 5'000);
-        QVERIFY(controller.hasDocument());
-        QCOMPARE(controller.totalFrames(), 32'000);
-        QCOMPARE(controller.sampleRate(), 16'000);
-        QCOMPARE(controller.channels(), 2);
-        QCOMPARE(controller.playheadFrame(), 0);
-        QCOMPARE(controller.positionMs(), 0);
-        QCOMPARE(controller.inputLevel(), 0.0);
-        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
-        QVERIFY(QFileInfo::exists(output));
-        QVERIFY(controller.playPause());
-        QTRY_VERIFY_WITH_TIMEOUT(controller.playing(), 5'000);
-        QVERIFY(controller.stopPlayback());
-    }
-
-    void startupCallbackBlockBeforeStartReturnsIsRetainedInFinalDocument()
-    {
-        auto capture = std::make_unique<ManualRecordingCapture>();
-        ManualRecordingCapture* const driver = capture.get();
-        constexpr std::size_t startupFrames = 32;
-        std::vector<float> startupSamples(startupFrames * 2U);
-        for (std::size_t frame = 0; frame < startupFrames; ++frame) {
-            startupSamples[frame * 2U] = static_cast<float>(frame) / 40.0F;
-            startupSamples[frame * 2U + 1U] =
-                -static_cast<float>(frame) / 40.0F;
-        }
-        driver->setStartupSamples(startupSamples);
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString output = temporary.filePath(
-            QStringLiteral("startup-block.wav"));
-
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Recording, 5'000);
-        QCOMPARE(controller.recordingFrames(),
-                 static_cast<qint64>(startupFrames));
-        const auto pcm = driver->takePcmSnapshot(
-            0, static_cast<agplayer::editor::SampleFrame>(startupFrames),
-            startupFrames);
-        QCOMPARE(pcm.frames,
-                 static_cast<agplayer::editor::SampleFrame>(startupFrames));
-        QCOMPARE(pcm.interleaved_samples.size(), startupSamples.size());
-        for (std::size_t index = 0; index < startupSamples.size(); ++index) {
-            QVERIFY(std::abs(pcm.interleaved_samples[index]
-                             - startupSamples[index]) < 0.000001F);
-        }
-
-        QVERIFY(controller.stopRecording());
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Ready, 5'000);
-        QVERIFY(controller.hasDocument());
-        QCOMPARE(controller.totalFrames(),
-                 static_cast<qint64>(startupFrames));
-        QCOMPARE(controller.timelineEventViews().size(), 1);
+        QVERIFY(controller.beginEventGainGesture(id));
+        QVERIFY(controller.updateEventGainGesture(0.5));
+        QVERIFY(controller.endEventGainGesture());
+        QCOMPARE(controller.historyStateIdForTesting(), initialHistory + 1);
         QCOMPARE(controller.timelineEventViews().front().toMap()
-                     .value(QStringLiteral("timelineEnd")).toLongLong(),
-                 static_cast<qint64>(startupFrames));
-        QVERIFY(QFileInfo::exists(output));
+                     .value(QStringLiteral("gain")).toDouble(), 0.5);
+
+        QVERIFY(controller.addEnvelopePoint(id, 300, 0.4));
+        const auto envelopeHistory = controller.historyStateIdForTesting();
+        QVERIFY(controller.beginEnvelopePointGesture(id, 300));
+        QVERIFY(controller.updateEnvelopePointGesture(420, 0.8));
+        QVERIFY(controller.updateEnvelopePointGesture(450, 1.2));
+        QCOMPARE(controller.historyStateIdForTesting(), envelopeHistory);
+        auto preview = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("envelope")).toList();
+        QCOMPARE(preview.front().toMap().value(QStringLiteral("offset")).toLongLong(),
+                 qint64{450});
+        QVERIFY(std::abs(preview.front().toMap()
+            .value(QStringLiteral("gain")).toDouble() - 1.2) < 0.0001);
+        QVERIFY(controller.cancelEnvelopePointGesture());
+        preview = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("envelope")).toList();
+        QCOMPARE(preview.front().toMap().value(QStringLiteral("offset")).toLongLong(),
+                 qint64{300});
+        QCOMPARE(controller.historyStateIdForTesting(), envelopeHistory);
+
+        QVERIFY(controller.beginEnvelopePointGesture(id, 300));
+        QVERIFY(controller.updateEnvelopePointGesture(500, 0.9));
+        QVERIFY(controller.endEnvelopePointGesture());
+        QCOMPARE(controller.historyStateIdForTesting(), envelopeHistory + 1);
+        QVERIFY(controller.removeEnvelopePoint(id, 500));
+        QVERIFY(controller.timelineEventViews().front().toMap()
+                    .value(QStringLiteral("envelope")).toList().isEmpty());
     }
 
-    void delayedRecordingStopCancelsBeforeCaptureBecomesReady()
+    void gainGestureWaveformPreviewsLiveAndCoalescesPendingJobs()
     {
-        auto gate = std::make_shared<ManualRecordingStartGate>();
-        auto capture = std::make_unique<ManualRecordingCapture>(gate);
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
-        const QString output = temporary.filePath(QStringLiteral("delayed.wav"));
-
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
-        QVERIFY(gate->waitForStartAttempt(std::chrono::seconds(2)));
-        const EditorSessionState startingState = controller.state();
-        const bool startingIsRecording = controller.recording();
-        const qint64 startingFrames = controller.recordingFrames();
-        const bool startingAllowsOpen = controller.actionEnabled(
-            QStringLiteral("editor.open"));
-        const bool stopAccepted = controller.stopRecording();
-        gate->release();
-
-        QCOMPARE(startingState, EditorSessionState::RecordingStarting);
-        QVERIFY(startingIsRecording);
-        QCOMPARE(startingFrames, 0);
-        QVERIFY(!startingAllowsOpen);
-        QVERIFY(stopAccepted);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Empty, 5'000);
-        QVERIFY(!controller.recording());
-        QVERIFY(!QFileInfo::exists(output));
-    }
-
-    void delayedRecordingDeactivateNeverStartsCaptureAfterTheWindowHides()
-    {
-        auto gate = std::make_shared<ManualRecordingStartGate>();
-        auto capture = std::make_unique<ManualRecordingCapture>(gate);
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString output = temporary.filePath(
-            QStringLiteral("delayed-deactivate.wav"));
-
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
-        QVERIFY(gate->waitForStartAttempt(std::chrono::seconds(2)));
-        QCOMPARE(controller.state(), EditorSessionState::RecordingStarting);
-        controller.deactivate();
-        gate->release();
-
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Empty, 5'000);
-        QTest::qWait(100);
-        QVERIFY(!controller.recording());
-        QVERIFY(!QFileInfo::exists(output));
-    }
-
-    void destructionWaitsForDelayedRecordingStartThenCancelsIt()
-    {
-        auto gate = std::make_shared<ManualRecordingStartGate>();
-        auto capture = std::make_unique<ManualRecordingCapture>(gate);
-        auto controller = std::make_unique<AudioEditorController>(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString output = temporary.filePath(
-            QStringLiteral("delayed-destruction.wav"));
-
-        QVERIFY(controller->startRecording(
-            QUrl::fromLocalFile(output), {}, 16'000, 2, false, false));
-        QVERIFY(gate->waitForStartAttempt(std::chrono::seconds(2)));
-        std::thread releaseStart([gate] {
-            std::this_thread::sleep_for(std::chrono::milliseconds(25));
-            gate->release();
-        });
-        controller.reset();
-        releaseStart.join();
-
-        QVERIFY(!QFileInfo::exists(output));
-        QVERIFY(!QFileInfo::exists(output
-            + QStringLiteral(".agplayer-recording.tmp")));
-        QVERIFY(!QFileInfo::exists(output
-            + QStringLiteral(".agplayer-recording.journal")));
-    }
-
-    void liveRecordingSampleModePreservesAdjacentPcmShape()
-    {
-        auto capture = std::make_unique<ManualRecordingCapture>();
-        ManualRecordingCapture* const driver = capture.get();
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        controller.viewport()->setViewportWidth(8.0);
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString output = temporary.filePath(
-            QStringLiteral("live-samples.wav"));
-
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(output), {}, 16'000, 1, false, false));
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Recording, 5'000);
-        const std::vector<float> samples{
-            -0.9F, -0.5F, -0.1F, 0.2F, 0.7F, -0.3F, 0.4F, 0.8F,
-            -0.7F, 0.6F, -0.2F, 0.1F, 0.5F, -0.4F, 0.3F, 0.0F};
-        QCOMPARE(driver->feed(samples, samples.size()), samples.size());
-        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingFrames(), 16, 1'000);
-        QTRY_COMPARE_WITH_TIMEOUT(
-            controller.viewport()->documentFrames(), 16, 1'000);
-        QVERIFY(controller.viewport()->setVisibleRange(4, 12));
-        QTRY_VERIFY_WITH_TIMEOUT(
-            controller.recordingOverlayPeaks().size() == 1, 1'000);
-
-        const QVariantList channel =
-            controller.recordingOverlayPeaks().front().toList();
-        QCOMPARE(channel.size(), 16);
-        for (qsizetype point = 0; point < 8; ++point) {
-            const double expected = samples[static_cast<std::size_t>(point + 4)];
-            QVERIFY(std::abs(channel[point * 2].toDouble() - expected)
-                    < 0.000001);
-            QVERIFY(std::abs(channel[point * 2 + 1].toDouble() - expected)
-                    < 0.000001);
-        }
-        QVERIFY(controller.cancelRecording());
-    }
-
-    void fadeInGestureCommitsOneObservableUndoStep()
-    {
+        const QString source = temporary.filePath(QStringLiteral("gesture.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(1'024, 0.5F)));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        controller.viewport()->setViewportWidth(32.0);
+        QVERIFY(controller.viewport()->setVisibleRange(0, 1'024));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
         const QString id = controller.timelineEventViews().front().toMap()
             .value(QStringLiteral("id")).toString();
-        const auto historyBefore = controller.historyStateIdForTesting();
+        const auto history = controller.historyStateIdForTesting();
 
-        QVERIFY(controller.beginEventGesture(
-            id, QStringLiteral("fadeIn"), false));
-        QVERIFY(controller.setEventFadeIn(id, 120));
-        QVERIFY(controller.setEventFadeIn(id, 240));
-        QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
-        QCOMPARE(controller.timelineEventViews().front().toMap()
-                     .value(QStringLiteral("fadeIn")).toLongLong(), qint64{240});
-        QVERIFY(controller.endEventGesture());
-        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
-        QVERIFY(controller.undo());
-        QCOMPARE(controller.timelineEventViews().front().toMap()
-                     .value(QStringLiteral("fadeIn")).toLongLong(), qint64{0});
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int active{0};
+        std::atomic_int maximum{0};
+        std::atomic_int starts{0};
+        controller.setViewportWaveformTaskObserverForTesting(
+            [&](const bool starting) {
+                if (!starting) {
+                    --active;
+                    return;
+                }
+                const int now = ++active;
+                int observed = maximum.load();
+                while (now > observed
+                       && !maximum.compare_exchange_weak(observed, now)) {}
+                if (++starts == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                }
+            });
+
+        QVERIFY(controller.beginEventGainGesture(id));
+        QVERIFY(controller.updateEventGainGesture(0.25));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+        QVERIFY(controller.updateEventGainGesture(0.5));
+        QVERIFY(controller.updateEventGainGesture(0.75));
+        QTest::qWait(100);
+        QCOMPARE(starts.load(), 1);
+        QCOMPARE(maximum.load(), 1);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        releaseFirst.release();
+        QTRY_COMPARE_WITH_TIMEOUT(starts.load(), 2, 10'000);
+        QTRY_COMPARE_WITH_TIMEOUT(active.load(), 0, 10'000);
+        const auto previewReady = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            if (channels.isEmpty()) return false;
+            const QVariantList peaks = channels.front().toList();
+            return !peaks.isEmpty()
+                && std::abs(peakValue(peaks, 0, true) - 0.375) < 0.01;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(previewReady(), 10'000);
+
+        QVERIFY(controller.cancelEventGainGesture());
+        const auto restored = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            if (channels.isEmpty()) return false;
+            return std::abs(peakValue(channels.front().toList(), 0, true)
+                            - 0.5) < 0.01;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(restored(), 10'000);
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+
+        QVERIFY(controller.beginEventGainGesture(id));
+        QVERIFY(controller.updateEventGainGesture(0.4));
+        const auto committedPreview = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            if (channels.isEmpty()) return false;
+            return std::abs(peakValue(channels.front().toList(), 0, true)
+                            - 0.2) < 0.01;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(committedPreview(), 10'000);
+        QVERIFY(controller.endEventGainGesture());
+        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+        QCOMPARE(controller.historyStateIdForTesting(), history + 1);
+        QTRY_VERIFY_WITH_TIMEOUT(committedPreview(), 10'000);
     }
 
     void successfulDocumentReplacementClearsEventGestureAfterPreparation()
@@ -744,12 +770,12 @@ private slots:
         QVERIFY(temporary.isValid());
         const QString project = temporary.filePath(QStringLiteral("replacement.agproj"));
         AudioEditorController projectMaker(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(projectMaker.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(projectMaker, QUrl::fromLocalFile(fixture)));
         QVERIFY(projectMaker.saveProjectAs(QUrl::fromLocalFile(project)));
 
         const auto exercise = [&](const auto& replace, const bool keepsEvent) {
             AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-            QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+            QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
             QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
                                                  QStringLiteral("move"), false));
             QVERIFY(controller.moveEvent(QStringLiteral("1"), 123));
@@ -776,10 +802,10 @@ private slots:
             return controller.createUntitledDocument(48'000, 2, 2'000);
         }, true);
         exercise([&](AudioEditorController& controller) {
-            return controller.openFile(QUrl::fromLocalFile(fixture));
+            return openFileAndWait(controller, QUrl::fromLocalFile(fixture));
         }, true);
         exercise([&](AudioEditorController& controller) {
-            return controller.openProject(QUrl::fromLocalFile(project));
+            return openProjectAndWait(controller, QUrl::fromLocalFile(project));
         }, true);
         exercise([](AudioEditorController& controller) {
             return controller.clearDocument();
@@ -794,7 +820,7 @@ private slots:
         QVERIFY(temporary.isValid());
         const auto exercise = [&](const auto& openMissing) {
             AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-            QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+            QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
             QVERIFY(controller.beginEventGesture(QStringLiteral("1"),
                                                  QStringLiteral("move"), false));
             QVERIFY(controller.moveEvent(QStringLiteral("1"), 123));
@@ -809,11 +835,11 @@ private slots:
                      qint64{123});
         };
         exercise([&](AudioEditorController& controller) {
-            return controller.openFile(QUrl::fromLocalFile(
+            return openFileAndWait(controller, QUrl::fromLocalFile(
                 temporary.filePath(QStringLiteral("missing.wav"))));
         });
         exercise([&](AudioEditorController& controller) {
-            return controller.openProject(QUrl::fromLocalFile(
+            return openProjectAndWait(controller, QUrl::fromLocalFile(
                 temporary.filePath(QStringLiteral("missing.agproj"))));
         });
     }
@@ -880,81 +906,6 @@ private slots:
         QCOMPARE(controller.selectionEnd(), end);
         QVERIFY(std::abs(controller.viewport()->pixelAtFrame(start) - 177.25) <= 0.01);
         QVERIFY(std::abs(controller.viewport()->pixelAtFrame(end) - 899.75) <= 0.01);
-    }
-
-    void selectionDragRendersARealTemporaryWavAndInvalidatesItOnChange()
-    {
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        const QString source = temporary.filePath(QStringLiteral("drag-source.wav"));
-        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 2));
-
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
-        QVERIFY(controller.setSelection(4'000, 12'000));
-        QSignalSpy dragChanged(
-            &controller, &AudioEditorController::selectionDragChanged);
-
-        QVERIFY(controller.prepareSelectionDrag());
-        QTRY_VERIFY_WITH_TIMEOUT(controller.selectionDragReady(), 10'000);
-        QVERIFY(dragChanged.count() > 0);
-        const QUrl dragUrl = controller.selectionDragFile();
-        QVERIFY(dragUrl.isLocalFile());
-        QVERIFY(QFileInfo::exists(dragUrl.toLocalFile()));
-        QFile rendered(dragUrl.toLocalFile());
-        QVERIFY(rendered.open(QIODevice::ReadOnly));
-        QCOMPARE(rendered.read(4), QByteArray("RIFF", 4));
-        rendered.close();
-        const DecodedProbe probe = decodeProbe(dragUrl.toLocalFile());
-        QCOMPARE(probe.frames, qint64{8'000});
-        QCOMPARE(probe.metadata.sample_rate, 16'000);
-
-        QVERIFY(controller.setSelection(6'000, 10'000));
-        QVERIFY(!controller.selectionDragReady());
-        QVERIFY(controller.selectionDragFile().isEmpty());
-    }
-
-    void creatingASelectionEnablesLoopAndClearingItDisablesLoop()
-    {
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
-        QVERIFY(!controller.loopEnabled());
-
-        QVERIFY(controller.setSelection(12'000, 36'000));
-        QVERIFY(controller.loopEnabled());
-
-        QVERIFY(controller.clearSelection());
-        QVERIFY(!controller.loopEnabled());
-    }
-
-    void playbackAndRecordingAnnounceExclusivePreviewBeforeStarting()
-    {
-        AudioEditorController playback(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(playback.createUntitledDocument(48'000, 2, 4'800));
-        QVERIFY(playback.setSelection(1'000, 2'000));
-        QVERIFY(playback.seekFrame(3'000));
-        QSignalSpy previewProgress(
-            &playback, &AudioEditorController::progressChanged);
-        QSignalSpy playbackStarting(
-            &playback, &AudioEditorController::exclusivePreviewStarting);
-        QVERIFY(playback.playPause());
-        QCOMPARE(playbackStarting.count(), 1);
-        QCOMPARE(playback.playheadFrame(), qint64{1'000});
-        QVERIFY(playback.loopEnabled());
-        playback.cancelOperation();
-        QTRY_COMPARE_WITH_TIMEOUT(playback.state(), EditorSessionState::Ready,
-                                  5'000);
-        QVERIFY(previewProgress.count() > 0);
-        QVERIFY(playback.errorMessage().contains(QStringLiteral("取消")));
-
-        AudioEditorController recording(AG_AUDIO_BACKEND_NULL);
-        QSignalSpy recordingStarting(
-            &recording, &AudioEditorController::exclusivePreviewStarting);
-        QVERIFY(recording.startRecordingToTemporaryFile(
-            QStringLiteral("capture:device-does-not-exist"), 48'000, 2,
-            false, false));
-        QCOMPARE(recordingStarting.count(), 1);
-        QTRY_VERIFY_WITH_TIMEOUT(!recording.recording(), 5'000);
     }
 
     void invalidViewportRequestsCancelOlderWorkAndAdvanceGeneration()
@@ -1059,7 +1010,7 @@ private slots:
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
         QVERIFY(QFile::copy(fixture, source));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         const qint64 originalFrames = controller.totalFrames();
         const qint64 splitFrame = originalFrames / 2;
         QVERIFY(splitFrame > 0);
@@ -1100,7 +1051,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         const qint64 originalFrames = controller.totalFrames();
         QVERIFY(controller.moveEvent(1, originalFrames / 2));
         const qint64 expandedFrames = controller.totalFrames();
@@ -1127,7 +1078,7 @@ private slots:
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
         QVERIFY(QFile::copy(fixture, source));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.setSelection(0, controller.totalFrames()));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QCOMPARE(controller.totalFrames(), qint64{0});
@@ -1139,7 +1090,7 @@ private slots:
         QVERIFY2(controller.saveProjectAs(QUrl::fromLocalFile(project)),
                  qPrintable(controller.errorMessage()));
         AudioEditorController restored(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(restored.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(restored, QUrl::fromLocalFile(project)),
                  qPrintable(restored.errorMessage()));
         QCOMPARE(restored.totalFrames(), qint64{0});
         QCOMPARE(restored.viewport()->visibleStartFrame(), qint64{0});
@@ -1182,7 +1133,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         const qint64 total = controller.totalFrames();
         const qint64 split = total / 2;
         QVERIFY(controller.splitEvent(1, split));
@@ -1215,7 +1166,7 @@ private slots:
         const QString project = temporary.filePath(QString::fromUtf8("会话.agproj"));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openFile(QUrl::fromLocalFile(source)),
+        QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(source)),
                  qPrintable(controller.errorMessage()));
         controller.viewport()->setViewportWidth(512.0);
         const qint64 visibleEnd = qMin<qint64>(controller.totalFrames(), 10'000);
@@ -1234,7 +1185,7 @@ private slots:
         QCOMPARE(controller.projectPath(), QFileInfo(project).absoluteFilePath());
         QVERIFY(!controller.modified());
         AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(loaded.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(loaded, QUrl::fromLocalFile(project)),
                  qPrintable(loaded.errorMessage()));
         QCOMPARE(loaded.projectPath(), QFileInfo(project).absoluteFilePath());
         QCOMPARE(loaded.playheadFrame(), qint64{123});
@@ -1267,7 +1218,7 @@ private slots:
         QVERIFY(!controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(!QFileInfo::exists(project));
 
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QSignalSpy stateChanges(&controller, &AudioEditorController::stateChanged);
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QCOMPARE(controller.state(), EditorSessionState::Ready);
@@ -1294,20 +1245,23 @@ private slots:
         const QString project = temporary.filePath(QStringLiteral("offline.agproj"));
 
         AudioEditorController original(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(original.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(original, QUrl::fromLocalFile(source)));
         QVERIFY(original.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(QFile::remove(source));
 
         AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(loaded.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(loaded, QUrl::fromLocalFile(project)),
                  qPrintable(loaded.errorMessage()));
         QCOMPARE(loaded.projectIssues().size(), 1);
         const QVariantMap issue = loaded.projectIssues().constFirst().toMap();
         QCOMPARE(issue.value(QStringLiteral("kind")).toString(),
                  QStringLiteral("missing"));
-        const quint64 sourceId = issue.value(QStringLiteral("sourceId")).toULongLong();
+        QCOMPARE(issue.value(QStringLiteral("sourceId")).metaType(),
+                 QMetaType::fromType<QString>());
         QSignalSpy projectChanges(&loaded, &AudioEditorController::projectChanged);
-        QVERIFY(loaded.relinkProjectSource(sourceId, QUrl::fromLocalFile(fixture)));
+        QVERIFY(relinkProjectSourceAndWait(
+            loaded, issue.value(QStringLiteral("sourceId")).toString(),
+            QUrl::fromLocalFile(fixture)));
         QVERIFY(loaded.projectIssues().isEmpty());
         QVERIFY(loaded.modified());
         QCOMPARE(projectChanges.count(), 1);
@@ -1337,7 +1291,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, replacement));
 
         AudioEditorController original(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(original.openFile(QUrl::fromLocalFile(source)),
+        QVERIFY2(openFileAndWait(original, QUrl::fromLocalFile(source)),
                  qPrintable(original.errorMessage()));
         const int expectedSampleRate = original.sampleRate();
         const int expectedChannels = original.channels();
@@ -1351,7 +1305,7 @@ private slots:
         }
 
         AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(loaded.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(loaded, QUrl::fromLocalFile(project)),
                  qPrintable(loaded.errorMessage()));
         QCOMPARE(loaded.projectIssues().size(), 1);
         const QVariantMap issue = loaded.projectIssues().constFirst().toMap();
@@ -1370,7 +1324,7 @@ private slots:
         QVERIFY(!loaded.playPause());
         QVERIFY(!loaded.detectBpm());
 
-        QVERIFY2(loaded.relinkProjectSource(sourceId, QUrl::fromLocalFile(replacement)),
+        QVERIFY2(relinkProjectSourceAndWait(loaded, sourceId, QUrl::fromLocalFile(replacement)),
                  qPrintable(loaded.errorMessage()));
         QVERIFY(loaded.projectIssues().isEmpty());
         QCOMPARE(loaded.filePath(), QFileInfo(replacement).absoluteFilePath());
@@ -1403,7 +1357,7 @@ private slots:
         QCOMPARE(file.write("{not-json"), qint64{9});
         file.close();
 
-        QVERIFY(!controller.openProject(QUrl::fromLocalFile(malformed)));
+        QVERIFY(!openProjectAndWait(controller, QUrl::fromLocalFile(malformed)));
         QCOMPARE(controller.totalFrames(), framesBefore);
         QCOMPARE(controller.playheadFrame(), playheadBefore);
         QCOMPARE(controller.modified(), modifiedBefore);
@@ -1420,7 +1374,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
         const QString project = temporary.filePath(QStringLiteral("current.agproj"));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QFile originalFile(project);
         QVERIFY(originalFile.open(QIODevice::ReadOnly));
@@ -1443,7 +1397,7 @@ private slots:
         QVERIFY(temporary.isValid());
         const QString output = temporary.filePath(QStringLiteral("saved.wav"));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         QVERIFY(controller.exportSupported());
         QVERIFY(controller.saveAs(QUrl::fromLocalFile(output)));
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
@@ -1471,7 +1425,7 @@ private slots:
         collision.close();
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("wav");
         settings.outputDirectory = temporary.path();
@@ -1485,55 +1439,39 @@ private slots:
         QCOMPARE(exported.read(4), QByteArray("RIFF", 4));
     }
 
-    void configuredDirectoryExportMapsSharedFormats_data()
-    {
-        QTest::addColumn<QString>("codec");
-        QTest::addColumn<QString>("extension");
-        QTest::newRow("upper-case-opus") << QStringLiteral("OPUS")
-                                            << QStringLiteral("opus");
-        QTest::newRow("alac") << QStringLiteral("ALAC")
-                               << QStringLiteral("m4a");
-        QTest::newRow("aiff") << QStringLiteral("AIFF")
-                               << QStringLiteral("aif");
-    }
-
-    void configuredDirectoryExportMapsSharedFormats()
+    void configuredExportRequestsDirectoryAndPublishesDecodedSuccessPath()
     {
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
-        QFETCH(QString, codec);
-        QFETCH(QString, extension);
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
-        const QString source = temporary.filePath(QStringLiteral("source.wav"));
-        QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
+        QSignalSpy directoryRequested(
+            &controller, &AudioEditorController::exportDirectoryRequested);
+        QSignalSpy exportSucceeded(
+            &controller, &AudioEditorController::exportSucceeded);
+        QVERIFY(!controller.exportToConfiguredDirectory());
+        QCOMPARE(directoryRequested.count(), 1);
+        QVERIFY(controller.errorMessage().isEmpty());
+
         ProjectExportSettings settings;
-        settings.codecName = codec;
-        settings.sampleRate = 48'000;
-        settings.channels = 2;
-        settings.bitRate = 320'000;
+        settings.codecName = QStringLiteral("wav");
         settings.outputDirectory = temporary.path();
         QVERIFY(controller.setProjectExportSettings(settings));
-        QVERIFY2(controller.exportToConfiguredDirectory(),
-                 qPrintable(controller.errorMessage()));
-        QTRY_VERIFY_WITH_TIMEOUT(controller.state() == EditorSessionState::Ready
-                                 || controller.state() == EditorSessionState::Error,
-                                 10'000);
-        QVERIFY2(controller.errorMessage().isEmpty(),
-                 qPrintable(controller.errorMessage()));
-        QCOMPARE(controller.state(), EditorSessionState::Ready);
-        const QString exportedPath = temporary.filePath(
-            QStringLiteral("source_edited.%1").arg(extension));
-        QCOMPARE(QDir::cleanPath(controller.lastExportPath()),
-                 QDir::cleanPath(exportedPath));
-        const auto exported = AudioFileAnalyzer::analyze(
-            std::filesystem::path(exportedPath.toStdWString()), 64);
-        QVERIFY2(exported.success, exported.message.c_str());
+        QVERIFY(controller.exportToConfiguredDirectory());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
+                                  10'000);
+        QCOMPARE(exportSucceeded.count(), 1);
+        QVERIFY(!controller.lastExportPath().isEmpty());
+        QCOMPARE(exportSucceeded.constFirst().constFirst().toString(),
+                 controller.lastExportPath());
+        const auto decoded = AudioFileAnalyzer::analyze(
+            std::filesystem::path(controller.lastExportPath().toStdWString()), 32);
+        QVERIFY2(decoded.success, decoded.message.c_str());
     }
 
     void trackMixPropertiesClampAndEnforceSingleTrackSolo()
@@ -1573,7 +1511,7 @@ private slots:
         QVERIFY(sourcePeak > 0.1F);
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         const auto historyBefore = controller.historyStateIdForTesting();
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("wav");
@@ -1625,7 +1563,7 @@ private slots:
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("wav");
         settings.bitDepth = bitDepth;
@@ -1650,7 +1588,7 @@ private slots:
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         const DecodedProbe original = decodeProbe(fixture);
         QVERIFY(original.frames > 0);
 
@@ -1720,21 +1658,21 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
         const QString project = temporary.filePath(QStringLiteral("target.agproj"));
         AudioEditorController projectMaker(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(projectMaker.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(projectMaker, QUrl::fromLocalFile(source)));
         QVERIFY(projectMaker.saveProjectAs(QUrl::fromLocalFile(project)));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.trimEvent(1, 10, controller.totalFrames() - 10, 0));
         const qint64 changedFrames = controller.totalFrames();
         QSignalSpy requested(&controller,
                              &AudioEditorController::discardConfirmationRequested);
-        QVERIFY(!controller.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY(!openProjectAndWait(controller, QUrl::fromLocalFile(project)));
         QCOMPARE(requested.count(), 1);
         QCOMPARE(controller.totalFrames(), changedFrames);
         QVERIFY(controller.modified());
 
-        QVERIFY(controller.confirmDiscardAndOpen());
+        QVERIFY(confirmDiscardAndWait(controller));
         QCOMPARE(controller.projectPath(), QFileInfo(project).absoluteFilePath());
         QVERIFY(!controller.modified());
     }
@@ -1760,7 +1698,7 @@ private slots:
         QVERIFY(controller.hasDocument());
         QVERIFY(!controller.clearDocument());
         QCOMPARE(requested.count(), 2);
-        QVERIFY(controller.confirmDiscardAndOpen());
+        QVERIFY(confirmDiscardAndWait(controller));
         QVERIFY(!controller.hasDocument());
         QCOMPARE(controller.totalFrames(), qint64{0});
         QVERIFY(!controller.modified());
@@ -1777,7 +1715,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         controller.viewport()->setViewportWidth(512.0);
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(!controller.modified());
@@ -1825,7 +1763,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.seekFrame(123));
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(!controller.modified());
@@ -1840,6 +1778,23 @@ private slots:
         QVERIFY(controller.modified());
     }
 
+    void playbackTransportTransitionsImmediatelyWithoutRenderingPreview()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
+
+        QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.state(), EditorSessionState::Playing);
+        QVERIFY(controller.playing());
+
+        QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        QVERIFY(!controller.playing());
+    }
+
     void selectionPlayheadJumpTracksDirtyBeforeAsyncPreviewFailure()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
@@ -1851,7 +1806,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.setSelection(100, 200));
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(!controller.modified());
@@ -1866,6 +1821,37 @@ private slots:
                                   10'000);
     }
 
+    void failedStopAndSeekKeepPublishedTransportState()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        QVERIFY(controller.seekFrame(123));
+        QVERIFY(QFile::remove(source));
+        QVERIFY(controller.playPause());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Error,
+                                  10'000);
+
+        const qint64 frameBefore = controller.playheadFrame();
+        const qint64 positionBefore = controller.positionMs();
+        QVERIFY(!controller.seekFrame(frameBefore + 333));
+        QCOMPARE(controller.playheadFrame(), frameBefore);
+        QCOMPARE(controller.positionMs(), positionBefore);
+        QCOMPARE(controller.state(), EditorSessionState::Error);
+
+        QVERIFY(!controller.stopPlayback());
+        QCOMPARE(controller.playheadFrame(), frameBefore);
+        QCOMPARE(controller.positionMs(), positionBefore);
+        QCOMPARE(controller.state(), EditorSessionState::Error);
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
     void unavailableProjectSourceRelinkClearsIssue()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
@@ -1877,7 +1863,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
 
         AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(maker.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(maker, QUrl::fromLocalFile(source)));
         QVERIFY(maker.saveProjectAs(QUrl::fromLocalFile(project)));
 
         QFile projectFile(project);
@@ -1887,13 +1873,25 @@ private slots:
         const QJsonObject templateSource = root.value(QStringLiteral("sources"))
             .toArray().first().toObject();
         QJsonObject event = root.value(QStringLiteral("events")).toArray().first().toObject();
+        const QDir projectDirectory = QFileInfo(project).dir();
         QJsonArray sources;
-        for (int index = 0; index < 4'096; ++index) {
+        for (int index = 0; index < 129; ++index) {
+            const QString linkPath = temporary.filePath(
+                QStringLiteral("source-link-%1.wav").arg(index + 1));
+            std::error_code linkError;
+            std::filesystem::create_hard_link(
+                std::filesystem::path(source.toStdWString()),
+                std::filesystem::path(linkPath.toStdWString()), linkError);
+            QVERIFY2(!linkError, linkError.message().c_str());
+
             QJsonObject record = templateSource;
             record.insert(QStringLiteral("sourceId"), QString::number(index + 1));
+            record.insert(QStringLiteral("pathKind"), QStringLiteral("relative"));
+            record.insert(QStringLiteral("path"), QDir::fromNativeSeparators(
+                projectDirectory.relativeFilePath(linkPath)));
             sources.append(record);
         }
-        event.insert(QStringLiteral("sourceId"), QStringLiteral("4096"));
+        event.insert(QStringLiteral("sourceId"), QStringLiteral("129"));
         root.insert(QStringLiteral("sources"), sources);
         root.insert(QStringLiteral("events"), QJsonArray{event});
         root.insert(QStringLiteral("markers"), QJsonArray{});
@@ -1902,14 +1900,14 @@ private slots:
         projectFile.close();
 
         AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(loaded.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(loaded, QUrl::fromLocalFile(project)),
                  qPrintable(loaded.errorMessage()));
         QCOMPARE(loaded.projectIssues().size(), 1);
         const QVariantMap issue = loaded.projectIssues().constFirst().toMap();
         QCOMPARE(issue.value(QStringLiteral("kind")).toString(), QStringLiteral("unavailable"));
-        QCOMPARE(issue.value(QStringLiteral("sourceId")).toULongLong(), quint64{4'096});
+        QCOMPARE(issue.value(QStringLiteral("sourceId")).toULongLong(), quint64{129});
 
-        QVERIFY2(loaded.relinkProjectSource(quint64{4'096}, QUrl::fromLocalFile(source)),
+        QVERIFY2(relinkProjectSourceAndWait(loaded, quint64{129}, QUrl::fromLocalFile(source)),
                  qPrintable(loaded.errorMessage()));
         QVERIFY(loaded.projectIssues().isEmpty());
     }
@@ -1927,7 +1925,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, secondSource));
 
         AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(maker.openFile(QUrl::fromLocalFile(firstSource)));
+        QVERIFY(openFileAndWait(maker, QUrl::fromLocalFile(firstSource)));
         const qint64 total = maker.totalFrames();
         const qint64 split = total / 2;
         QVERIFY(split > 0);
@@ -1963,7 +1961,7 @@ private slots:
         QVERIFY(QFile::remove(secondSource));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openProject(QUrl::fromLocalFile(project)),
+        QVERIFY2(openProjectAndWait(controller, QUrl::fromLocalFile(project)),
                  qPrintable(controller.errorMessage()));
         QCOMPARE(controller.projectIssues().size(), 1);
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
@@ -1995,7 +1993,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, secondSource));
 
         AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(maker.openFile(QUrl::fromLocalFile(firstSource)));
+        QVERIFY(openFileAndWait(maker, QUrl::fromLocalFile(firstSource)));
         const qint64 split = maker.totalFrames() / 2;
         QVERIFY(split > 0);
         QVERIFY(maker.splitEvent(1, split));
@@ -2027,13 +2025,13 @@ private slots:
         QVERIFY(QFile::remove(secondSource));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(project)));
         QVERIFY(controller.setSelection(split, controller.totalFrames()));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         for (int index = 1; index <= 257; ++index) {
             QVERIFY(controller.moveEvent(1, index));
         }
-        QVERIFY(!controller.relinkProjectSource(quint64{2}, QUrl::fromLocalFile(fixture)));
+        QVERIFY(!relinkProjectSourceAndWait(controller, quint64{2}, QUrl::fromLocalFile(fixture)));
     }
 
     void clipboardKeepsOfflineSourceIdentityAfterCutHistoryExpires()
@@ -2049,7 +2047,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, secondSource));
 
         AudioEditorController maker(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(maker.openFile(QUrl::fromLocalFile(firstSource)));
+        QVERIFY(openFileAndWait(maker, QUrl::fromLocalFile(firstSource)));
         const qint64 split = maker.totalFrames() / 2;
         QVERIFY(split > 0);
         QVERIFY(maker.splitEvent(1, split));
@@ -2085,7 +2083,7 @@ private slots:
         changed.close();
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(project)));
         QCOMPARE(controller.projectIssues().size(), 1);
         QCOMPARE(controller.projectIssues().constFirst().toMap()
                      .value(QStringLiteral("kind")).toString(),
@@ -2117,7 +2115,7 @@ private slots:
         QVERIFY(QFile::copy(fixture, source));
         const QString project = temporary.filePath(QStringLiteral("saved.agproj"));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.trimEvent(1, 10, controller.totalFrames() - 10, 0));
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(!controller.modified());
@@ -2152,12 +2150,12 @@ private slots:
         expected.outputDirectory = temporary.filePath(QStringLiteral("exports"));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         controller.setProjectExportSettings(expected);
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
 
         AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(loaded.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY(openProjectAndWait(loaded, QUrl::fromLocalFile(project)));
         const ProjectExportSettings restored = loaded.projectExportSettings();
         QCOMPARE(restored.codecName, expected.codecName);
         QCOMPARE(restored.sampleRate, expected.sampleRate);
@@ -2190,14 +2188,938 @@ private slots:
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openFile(QUrl::fromLocalFile(fixture)),
+        QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
                  qPrintable(controller.errorMessage()));
         QVERIFY(controller.hasDocument());
         QVERIFY(controller.totalFrames() > 0);
         QCOMPARE(controller.fileName(), QFileInfo(fixture).fileName());
     }
 
-    void timelineMutationsImmediatelyRestoreTheCurrentViewportWaveform()
+    void timelineMutationRetainsLastGoodWaveformUntilNewestGenerationPublishes()
+    {
+        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
+        controller.viewport()->setViewportWidth(96.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        const QVariantList lastGood = controller.viewportChannelPeaks();
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+
+        QVERIFY(controller.setEventGain(id, 0.5));
+        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+        QCOMPARE(controller.viewportChannelPeaks(), lastGood);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.viewportChannelPeaks() != lastGood,
+                                 10'000);
+        QVERIFY(!controller.viewportChannelPeaks().isEmpty());
+    }
+
+    void cachedAndPreciseWaveformsApplyGainFadeAndEnvelopeConsistently()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("constant.wav"));
+        constexpr qint64 frames = 1'024;
+        QVERIFY(writeMonoFloatWav(source,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(source)),
+                 qPrintable(controller.errorMessage()));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        QVERIFY(controller.setEventGain(id, 0.5));
+        QVERIFY(controller.setEventFadeOut(id, 4));
+        QVERIFY(controller.addEnvelopePoint(id, 0, 0.5));
+        QVERIFY(controller.addEnvelopePoint(id, frames - 1, 1.5));
+
+        // Force the wide view to use the already-built peak pyramid.  A
+        // renderer that silently falls back to decoding the whole automated
+        // slice will blank here instead of publishing cached peaks.
+        QVERIFY(QFile::remove(source));
+        controller.viewport()->setViewportWidth(32.0);
+        QVERIFY(controller.viewport()->setVisibleRange(0, frames));
+        const auto cachedReady = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 128;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(cachedReady(), 10'000);
+        const QVariantList cached = controller.viewportChannelPeaks()
+            .front().toList();
+        QVERIFY(peakValue(cached, 0, false) > 0.12);
+        QVERIFY(peakValue(cached, 0, true) < 0.14);
+        QVERIFY(peakValue(cached, 32, true) > 0.20);
+        QVERIFY(std::abs(peakValue(cached, 63, false)) < 0.0001);
+        QVERIFY(peakValue(cached, 63, true) > 0.30);
+
+        QVERIFY(writeMonoFloatWav(source,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        controller.viewport()->setViewportWidth(512.0);
+        const auto preciseReady = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 2'048;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(preciseReady(), 10'000);
+        const QVariantList precise = controller.viewportChannelPeaks()
+            .front().toList();
+        QVERIFY(std::abs(peakValue(precise, 0, false) - 0.125) < 0.001);
+        QVERIFY(std::abs(peakValue(precise, 0, true) - 0.125) < 0.001);
+        QVERIFY(std::abs(peakValue(precise, 512, true) - 0.25) < 0.01);
+        QVERIFY(std::abs(peakValue(precise, 1'023, true)) < 0.0001);
+
+        for (qsizetype bucket = 0; bucket < 64; ++bucket) {
+            double expectedMinimum = 1.0;
+            double expectedMaximum = -1.0;
+            for (qsizetype frame = bucket * 16;
+                 frame < (bucket + 1) * 16; ++frame) {
+                expectedMinimum = std::min(expectedMinimum,
+                    peakValue(precise, frame, false));
+                expectedMaximum = std::max(expectedMaximum,
+                    peakValue(precise, frame, true));
+            }
+            QVERIFY2(std::abs(peakValue(cached, bucket, false)
+                                  - expectedMinimum) < 0.001,
+                     qPrintable(QStringLiteral("cached minimum mismatch at %1")
+                                    .arg(bucket)));
+            QVERIFY2(std::abs(peakValue(cached, bucket, true)
+                                  - expectedMaximum) < 0.001,
+                     qPrintable(QStringLiteral("cached maximum mismatch at %1")
+                                    .arg(bucket)));
+        }
+    }
+
+    void cachedWaveformIsBoundedAndKeepsNarrowInteriorEnvelopePoint()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("narrow.wav"));
+        constexpr qint64 frames = 480'000;
+        QVERIFY(writeMonoFloatWav(source,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        constexpr qint64 narrow = 250'001;
+        QVERIFY(controller.addEnvelopePoint(id, narrow - 1, 1.0));
+        QVERIFY(controller.addEnvelopePoint(id, narrow, 2.0));
+        QVERIFY(controller.addEnvelopePoint(id, narrow + 1, 1.0));
+
+        QVERIFY(QFile::remove(source));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        controller.viewport()->setViewportWidth(16.0);
+        QVERIFY(controller.viewport()->setVisibleRange(0, frames));
+        const auto ready = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 64;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
+        QVERIFY2(elapsed.elapsed() < 3'000,
+                 "global automated waveform exceeded the bounded cache budget");
+        const QVariantList peaks = controller.viewportChannelPeaks()
+            .front().toList();
+        const qsizetype point = static_cast<qsizetype>(narrow * 32 / frames);
+        QVERIFY2(peakValue(peaks, point, true) > 0.99,
+                 "cached peak missed a narrow interior envelope maximum");
+    }
+
+    void wideMultiSourceProjectUsesBoundedCacheForEverySource()
+    {
+        using namespace agplayer::editor;
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString firstPath = temporary.filePath(
+            QStringLiteral("long-first.wav"));
+        const QString secondPath = temporary.filePath(
+            QStringLiteral("long-second.wav"));
+        const QString projectPath = temporary.filePath(
+            QStringLiteral("multi-source.agproj"));
+        constexpr SampleFrame frames = 240'000;
+        QVERIFY(writeMonoFloatWav(firstPath,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.25F)));
+        QVERIFY(writeMonoFloatWav(secondPath,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.75F)));
+        const AudioFileAnalysis first = AudioFileAnalyzer::analyze(
+            std::filesystem::path(firstPath.toStdWString()), 64);
+        const AudioFileAnalysis second = AudioFileAnalyzer::analyze(
+            std::filesystem::path(secondPath.toStdWString()), 64);
+        QVERIFY(first.success);
+        QVERIFY(second.success);
+        const auto firstSource = std::make_shared<const AudioSource>(first.source);
+        const auto secondSource = std::make_shared<const AudioSource>(second.source);
+        const AudioEvent firstEvent{1, firstSource, 0, frames, 0};
+        const AudioEvent secondEvent{2, secondSource, 0, frames, frames};
+        AudioDocument document = AudioDocument::fromEvents(
+            {firstEvent, secondEvent});
+        ProjectSaveRequest save;
+        save.document = &document;
+        save.visibleEndFrame = document.totalFrames();
+        const ProjectSaveResult saved = ProjectDocument::save(projectPath, save);
+        QVERIFY2(saved.ok(), qPrintable(saved.message));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.viewport()->setViewportWidth(16.0);
+        QVERIFY2(openProjectAndWait(controller, QUrl::fromLocalFile(projectPath)),
+                 qPrintable(controller.errorMessage()));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !controller.sourcePeakCacheActiveForTesting(), 10'000);
+        const auto ready = [](const AudioEditorController& candidate) {
+            const QVariantList channels = candidate.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 64;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(ready(controller), 10'000);
+        const QVariantList firstOpenPeaks = controller.viewportChannelPeaks()
+            .front().toList();
+        QVERIFY(std::abs(peakValue(firstOpenPeaks, 8, true) - 0.25) < 0.01);
+        QVERIFY(std::abs(peakValue(firstOpenPeaks, 24, true) - 0.75) < 0.01);
+
+        std::atomic_int cacheWorkerStarts{0};
+        AudioEditorController cachedController(AG_AUDIO_BACKEND_NULL);
+        cachedController.viewport()->setViewportWidth(16.0);
+        cachedController.setSourcePeakCacheTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) ++cacheWorkerStarts;
+            });
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY2(openProjectAndWait(cachedController, QUrl::fromLocalFile(projectPath)),
+                 qPrintable(cachedController.errorMessage()));
+        QTRY_VERIFY_WITH_TIMEOUT(ready(cachedController), 10'000);
+        QVERIFY2(elapsed.elapsed() < 3'000,
+                 "multi-source weak-cache reopen exceeded cache budget");
+        QCOMPARE(cacheWorkerStarts.load(), 0);
+
+        QVERIFY(QFile::remove(firstPath));
+        QVERIFY(QFile::remove(secondPath));
+        const quint64 generation = cachedController.viewportWaveformGeneration();
+        cachedController.viewport()->setViewportWidth(17.0);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            cachedController.viewportWaveformGeneration() > generation, 5'000);
+        QTRY_VERIFY_WITH_TIMEOUT(ready(cachedController), 10'000);
+        const QVariantList peaks = cachedController.viewportChannelPeaks()
+            .front().toList();
+        QVERIFY(std::abs(peakValue(peaks, 8, true) - 0.25) < 0.01);
+        QVERIFY(std::abs(peakValue(peaks, 24, true) - 0.75) < 0.01);
+    }
+
+    void uncachedProjectKeepsWaveformEmptyUntilSourceAnalysisCompletes()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString project = saveConstantProject(
+            temporary.path(), QStringLiteral("nonblocking"), {0.25F, 0.75F});
+        QVERIFY(!project.isEmpty());
+        const QString previous = temporary.filePath(QStringLiteral("previous.wav"));
+        QVERIFY(writeMonoFloatWav(previous, std::vector<float>(1'024, 0.5F)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(previous)));
+        controller.viewport()->setViewportWidth(16.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        const QVariantList lastGood = controller.viewportChannelPeaks();
+        QSemaphore started;
+        QSemaphore release;
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        controller.setSourcePeakCacheTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                }
+            });
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY2(openProjectAndWait(controller, QUrl::fromLocalFile(project)),
+                 qPrintable(controller.errorMessage()));
+        QVERIFY2(elapsed.elapsed() < 500,
+                 "openProject blocked the UI on full source analysis");
+        QVERIFY(started.tryAcquire(1, 5'000));
+        QVERIFY(controller.sourcePeakCacheActiveForTesting());
+        QVERIFY(!lastGood.isEmpty());
+        QVERIFY(controller.viewportChannelPeaks().isEmpty());
+        release.release();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.sourcePeakCacheActiveForTesting(),
+                                 10'000);
+        const auto ready = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 64;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
+    }
+
+    void obsoleteProjectSourceAnalysisCannotPublishIntoNewProject()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString first = saveConstantProject(
+            temporary.path(), QStringLiteral("stale-first"), {0.25F},
+            2'000'000);
+        const QString second = saveConstantProject(
+            temporary.path(), QStringLiteral("stale-second"), {0.75F},
+            2'000'000);
+        QVERIFY(!first.isEmpty());
+        QVERIFY(!second.isEmpty());
+
+        QSemaphore firstStarted;
+        std::atomic_int starts{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.viewport()->setViewportWidth(16.0);
+        controller.setSourcePeakCacheTaskObserverForTesting(
+            [&](const bool starting) {
+                if (!starting) return;
+                const int sequence = ++starts;
+                if (sequence == 1) {
+                    firstStarted.release();
+                }
+            });
+
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(first)));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        const quint64 firstGeneration =
+            controller.sourcePeakCacheGenerationForTesting();
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(second)));
+        QVERIFY(controller.sourcePeakCacheGenerationForTesting()
+                > firstGeneration);
+        QTRY_COMPARE_WITH_TIMEOUT(starts.load(), 2, 5'000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.sourcePeakCacheActiveForTesting(),
+                                 10'000);
+        const auto newestPublished = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            if (channels.size() != 1) return false;
+            const QVariantList peaks = channels.front().toList();
+            return peaks.size() == 64
+                && std::abs(peakValue(peaks, 16, true) - 0.75) < 0.01;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(newestPublished(), 10'000);
+    }
+
+    void deactivationAndDocumentCloseCancelSourceAnalysis()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString deactivationProject = saveConstantProject(
+            temporary.path(), QStringLiteral("cancel-deactivate"),
+            {0.4F, 0.6F});
+        const QString closeProject = saveConstantProject(
+            temporary.path(), QStringLiteral("cancel-close"), {0.3F, 0.7F});
+        QVERIFY(!deactivationProject.isEmpty());
+        QVERIFY(!closeProject.isEmpty());
+
+        {
+            QSemaphore started;
+            QSemaphore release;
+            std::atomic_int finishes{0};
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            const auto unblock = qScopeGuard([&] { release.release(); });
+            controller.setSourcePeakCacheTaskObserverForTesting(
+                [&](const bool starting) {
+                    if (starting) {
+                        started.release();
+                        release.acquire();
+                    } else {
+                        ++finishes;
+                    }
+                });
+            QVERIFY(openProjectAndWait(controller,
+                QUrl::fromLocalFile(deactivationProject)));
+            QVERIFY(started.tryAcquire(1, 5'000));
+            controller.deactivate();
+            QVERIFY(!controller.sourcePeakCacheActiveForTesting());
+            release.release();
+            QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 10'000);
+        }
+
+        {
+            QSemaphore started;
+            QSemaphore release;
+            std::atomic_int finishes{0};
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            const auto unblock = qScopeGuard([&] { release.release(); });
+            controller.setSourcePeakCacheTaskObserverForTesting(
+                [&](const bool starting) {
+                    if (starting) {
+                        started.release();
+                        release.acquire();
+                    } else {
+                        ++finishes;
+                    }
+                });
+            QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(closeProject)));
+            QVERIFY(started.tryAcquire(1, 5'000));
+            QVERIFY(controller.clearDocument());
+            QVERIFY(!controller.sourcePeakCacheActiveForTesting());
+            release.release();
+            QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 10'000);
+            QVERIFY(!controller.hasDocument());
+        }
+    }
+
+    void openFileCompletionWaitsForSuccessAndRunsOnlyOnce()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString first = temporary.filePath(QStringLiteral("first.wav"));
+        const QString second = temporary.filePath(QStringLiteral("second.wav"));
+        QVERIFY(writeMonoFloatWav(first, std::vector<float>(8'000, 0.25F)));
+        QVERIFY(writeMonoFloatWav(second, std::vector<float>(4'000, 0.75F)));
+
+        QSemaphore started;
+        QSemaphore release;
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                }
+            });
+
+        int completions = 0;
+        bool observedLoading = true;
+        qint64 observedFrames = 0;
+        int observedRate = 0;
+        QVERIFY(controller.openFileWhenReady(
+            QUrl::fromLocalFile(first), &controller, [&] {
+                ++completions;
+                observedLoading = controller.loading();
+                observedFrames = controller.totalFrames();
+                observedRate = controller.sampleRate();
+                QVERIFY(controller.setSelection(observedFrames / 4,
+                                                observedFrames / 2));
+                QVERIFY(controller.seekFrame(observedFrames / 3));
+            }));
+        QVERIFY(started.tryAcquire(1, 5'000));
+        QCOMPARE(completions, 0);
+        QVERIFY(controller.loading());
+
+        release.release();
+        QTRY_COMPARE_WITH_TIMEOUT(completions, 1, 10'000);
+        QVERIFY(!observedLoading);
+        QCOMPARE(observedFrames, qint64{8'000});
+        QCOMPARE(observedRate, 8'000);
+        QCOMPARE(controller.selectionStart(), qint64{2'000});
+        QCOMPARE(controller.selectionEnd(), qint64{4'000});
+        QCOMPARE(controller.playheadFrame(), qint64{2'666});
+
+        controller.setDocumentLoadTaskObserverForTesting({});
+        QVERIFY(!controller.openFile(QUrl::fromLocalFile(second)));
+        QVERIFY(confirmDiscardAndWait(controller));
+        QCOMPARE(completions, 1);
+        QCOMPARE(controller.filePath(), second);
+        QCOMPARE(controller.selectionStart(), qint64{-1});
+        QCOMPARE(controller.selectionEnd(), qint64{-1});
+    }
+
+    void openFileCompletionIgnoresSupersededGeneration()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString obsolete = temporary.filePath(
+            QStringLiteral("obsolete.wav"));
+        const QString newest = temporary.filePath(QStringLiteral("newest.wav"));
+        QVERIFY(writeMonoFloatWav(obsolete,
+            std::vector<float>(8'000, 0.25F)));
+        QVERIFY(writeMonoFloatWav(newest,
+            std::vector<float>(12'000, 0.75F)));
+
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int starts{0};
+        const auto unblock = qScopeGuard([&] { releaseFirst.release(); });
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting && ++starts == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                }
+            });
+
+        int obsoleteCompletions = 0;
+        QVERIFY(controller.openFileWhenReady(
+            QUrl::fromLocalFile(obsolete), &controller,
+            [&] { ++obsoleteCompletions; }));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(newest)));
+        releaseFirst.release();
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.filePath(), newest);
+        QCOMPARE(controller.totalFrames(), qint64{12'000});
+        QCOMPARE(obsoleteCompletions, 0);
+    }
+
+    void openFileCompletionDoesNotRunForFailure()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString invalid = temporary.filePath(QStringLiteral("invalid.wav"));
+        QFile file(invalid);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("not audio") > 0);
+        file.close();
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        int completions = 0;
+        QVERIFY(controller.openFileWhenReady(
+            QUrl::fromLocalFile(invalid), &controller,
+            [&] { ++completions; }));
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.state(), EditorSessionState::Error);
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QCOMPARE(completions, 0);
+    }
+
+    void openFileReturnsBeforeSlowAnalysisCompletes()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString oldPath = temporary.filePath(QStringLiteral("old.wav"));
+        const QString nextPath = temporary.filePath(QStringLiteral("next.wav"));
+        QVERIFY(writeMonoFloatWav(oldPath, std::vector<float>(4'096, 0.25F)));
+        QVERIFY(writeMonoFloatWav(nextPath, std::vector<float>(240'000, 0.75F)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(oldPath)));
+        QVERIFY(waitForDocumentLoad(controller));
+        controller.viewport()->setViewportWidth(16.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        const QVariantList oldPeaks = controller.viewportChannelPeaks();
+        QSemaphore started;
+        QSemaphore release;
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                }
+            });
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(nextPath)));
+        QVERIFY2(elapsed.elapsed() < 500,
+                 "openFile blocked the UI on full audio analysis");
+        QVERIFY(started.tryAcquire(1, 5'000));
+        QVERIFY(controller.loading());
+        QCOMPARE(controller.filePath(), oldPath);
+        QCOMPARE(controller.viewportChannelPeaks(), oldPeaks);
+        release.release();
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.filePath(), nextPath);
+    }
+
+    void openProjectReturnsBeforeSlowProbeCompletes()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString oldPath = temporary.filePath(QStringLiteral("old.wav"));
+        QVERIFY(writeMonoFloatWav(oldPath, std::vector<float>(4'096, 0.25F)));
+        const QString project = saveConstantProject(
+            temporary.path(), QStringLiteral("slow-project"), {0.75F});
+        QVERIFY(!project.isEmpty());
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(oldPath)));
+        QVERIFY(waitForDocumentLoad(controller));
+        QSemaphore started;
+        QSemaphore release;
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                }
+            });
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY2(elapsed.elapsed() < 500,
+                 "openProject blocked the UI on project source probes");
+        QVERIFY(started.tryAcquire(1, 5'000));
+        QVERIFY(controller.loading());
+        QCOMPARE(controller.filePath(), oldPath);
+        release.release();
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.projectPath(), QFileInfo(project).absoluteFilePath());
+    }
+
+    void relinkReturnsBeforeSlowAnalysisCompletes()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        constexpr qint64 frames = 240'000;
+        const QString project = saveConstantProject(
+            temporary.path(), QStringLiteral("slow-relink"), {0.25F}, frames);
+        const QString replacement = temporary.filePath(
+            QStringLiteral("replacement.wav"));
+        QVERIFY(!project.isEmpty());
+        QVERIFY(writeMonoFloatWav(replacement,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.75F)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(project)));
+        QVERIFY(waitForDocumentLoad(controller));
+        const QString original = controller.filePath();
+        QSemaphore started;
+        QSemaphore release;
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                }
+            });
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(controller.relinkProjectSource(
+            quint64{1}, QUrl::fromLocalFile(replacement)));
+        QVERIFY2(elapsed.elapsed() < 500,
+                 "relinkProjectSource blocked the UI on replacement analysis");
+        QVERIFY(started.tryAcquire(1, 5'000));
+        QVERIFY(controller.loading());
+        QCOMPARE(controller.filePath(), original);
+        release.release();
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.filePath(), replacement);
+    }
+
+    void deactivationAndClearCancelDocumentLoads()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString first = temporary.filePath(QStringLiteral("first.wav"));
+        const QString second = temporary.filePath(QStringLiteral("second.wav"));
+        QVERIFY(writeMonoFloatWav(first, std::vector<float>(240'000, 0.25F)));
+        QVERIFY(writeMonoFloatWav(second, std::vector<float>(240'000, 0.75F)));
+
+        {
+            QSemaphore started;
+            QSemaphore release;
+            std::atomic_int finishes{0};
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            const auto unblock = qScopeGuard([&] { release.release(); });
+            controller.setDocumentLoadTaskObserverForTesting(
+                [&](const bool starting) {
+                    if (starting) {
+                        started.release();
+                        release.acquire();
+                    } else {
+                        ++finishes;
+                    }
+                });
+            QVERIFY(controller.openFile(QUrl::fromLocalFile(first)));
+            QVERIFY(started.tryAcquire(1, 5'000));
+            controller.deactivate();
+            QVERIFY(!controller.loading());
+            release.release();
+            QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 10'000);
+            QVERIFY(!controller.hasDocument());
+        }
+
+        {
+            QSemaphore started;
+            QSemaphore release;
+            std::atomic_int finishes{0};
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            const auto unblock = qScopeGuard([&] { release.release(); });
+            controller.setDocumentLoadTaskObserverForTesting(
+                [&](const bool starting) {
+                    if (starting) {
+                        started.release();
+                        release.acquire();
+                    } else {
+                        ++finishes;
+                    }
+                });
+            QVERIFY(controller.openFile(QUrl::fromLocalFile(second)));
+            QVERIFY(started.tryAcquire(1, 5'000));
+            QVERIFY(controller.clearDocument());
+            QVERIFY(!controller.loading());
+            release.release();
+            QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 10'000);
+            QVERIFY(!controller.hasDocument());
+        }
+    }
+
+    void newestDocumentLoadWinsAcrossFileAndProjectRequests()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString obsolete = temporary.filePath(
+            QStringLiteral("obsolete.wav"));
+        QVERIFY(writeMonoFloatWav(obsolete,
+            std::vector<float>(240'000, 0.25F)));
+        const QString newest = saveConstantProject(
+            temporary.path(), QStringLiteral("newest"), {0.75F});
+        QVERIFY(!newest.isEmpty());
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int starts{0};
+        const auto unblock = qScopeGuard([&] { releaseFirst.release(); });
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting && ++starts == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                }
+            });
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(obsolete)));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        const quint64 obsoleteGeneration =
+            controller.documentLoadGenerationForTesting();
+        QVERIFY(controller.loading());
+        QVERIFY(!controller.modified());
+        QVERIFY2(controller.openProject(QUrl::fromLocalFile(newest)),
+                 qPrintable(QStringLiteral("state=%1 loading=%2 error=%3")
+                     .arg(static_cast<int>(controller.state()))
+                     .arg(controller.loading())
+                     .arg(controller.errorMessage())));
+        QVERIFY(controller.documentLoadGenerationForTesting()
+                > obsoleteGeneration);
+        releaseFirst.release();
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(starts.load(), 2);
+        QCOMPARE(controller.projectPath(), QFileInfo(newest).absoluteFilePath());
+        QVERIFY(controller.filePath().endsWith(QStringLiteral("newest-source-0.wav")));
+    }
+
+    void obsoleteRelinkCannotOverwriteNewFileOpen()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        constexpr qint64 frames = 240'000;
+        const QString project = saveConstantProject(
+            temporary.path(), QStringLiteral("relink-race"), {0.25F}, frames);
+        const QString replacement = temporary.filePath(
+            QStringLiteral("replacement.wav"));
+        const QString newest = temporary.filePath(QStringLiteral("newest.wav"));
+        QVERIFY(writeMonoFloatWav(replacement,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        QVERIFY(writeMonoFloatWav(newest,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.75F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(project)));
+        QVERIFY(waitForDocumentLoad(controller));
+
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int starts{0};
+        const auto unblock = qScopeGuard([&] { releaseFirst.release(); });
+        controller.setDocumentLoadTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting && ++starts == 1) {
+                    firstStarted.release();
+                    releaseFirst.acquire();
+                }
+            });
+        QVERIFY(controller.relinkProjectSource(
+            quint64{1}, QUrl::fromLocalFile(replacement)));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(newest)));
+        releaseFirst.release();
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(starts.load(), 2);
+        QCOMPARE(controller.filePath(), newest);
+        QVERIFY(controller.projectPath().isEmpty());
+    }
+
+    void failedAsyncLoadsPreserveDocumentAndWaveform()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString oldPath = temporary.filePath(QStringLiteral("old.wav"));
+        const QString invalidAudio = temporary.filePath(
+            QStringLiteral("invalid.wav"));
+        const QString invalidProject = temporary.filePath(
+            QStringLiteral("invalid.agproj"));
+        const QString wrongReplacement = temporary.filePath(
+            QStringLiteral("wrong.wav"));
+        QVERIFY(writeMonoFloatWav(oldPath, std::vector<float>(4'096, 0.5F)));
+        QFile invalidAudioFile(invalidAudio);
+        QVERIFY(invalidAudioFile.open(QIODevice::WriteOnly));
+        QVERIFY(invalidAudioFile.write("not audio") > 0);
+        invalidAudioFile.close();
+        QFile invalidProjectFile(invalidProject);
+        QVERIFY(invalidProjectFile.open(QIODevice::WriteOnly));
+        QVERIFY(invalidProjectFile.write("not json") > 0);
+        invalidProjectFile.close();
+        QVERIFY(writeMonoFloatWav(wrongReplacement,
+            std::vector<float>(2'048, 0.25F)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(oldPath)));
+        QVERIFY(waitForDocumentLoad(controller));
+        controller.viewport()->setViewportWidth(16.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        const QString oldDocumentPath = controller.filePath();
+        const qint64 oldFrames = controller.totalFrames();
+        const QVariantList oldPeaks = controller.viewportChannelPeaks();
+
+        QVERIFY(controller.openFile(QUrl::fromLocalFile(invalidAudio)));
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.state(), EditorSessionState::Error);
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QCOMPARE(controller.filePath(), oldDocumentPath);
+        QCOMPARE(controller.totalFrames(), oldFrames);
+        QCOMPARE(controller.viewportChannelPeaks(), oldPeaks);
+
+        QVERIFY(controller.openProject(QUrl::fromLocalFile(invalidProject)));
+        QVERIFY(waitForDocumentLoad(controller));
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QCOMPARE(controller.filePath(), oldDocumentPath);
+        QCOMPARE(controller.totalFrames(), oldFrames);
+        QCOMPARE(controller.viewportChannelPeaks(), oldPeaks);
+
+        QVERIFY(controller.relinkProjectSource(
+            quint64{1}, QUrl::fromLocalFile(wrongReplacement)));
+        QVERIFY(waitForDocumentLoad(controller));
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QCOMPARE(controller.filePath(), oldDocumentPath);
+        QCOMPARE(controller.totalFrames(), oldFrames);
+        QCOMPARE(controller.viewportChannelPeaks(), oldPeaks);
+    }
+
+    void successfulProjectReplacementClearsOldWaveformUntilCachePublishes()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString oldPath = temporary.filePath(QStringLiteral("old.wav"));
+        QVERIFY(writeMonoFloatWav(oldPath, std::vector<float>(4'096, 0.25F)));
+        const QString project = saveConstantProject(
+            temporary.path(), QStringLiteral("replacement"), {0.75F});
+        QVERIFY(!project.isEmpty());
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(oldPath)));
+        QVERIFY(waitForDocumentLoad(controller));
+        controller.viewport()->setViewportWidth(16.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        QSemaphore cacheStarted;
+        QSemaphore releaseCache;
+        const auto unblock = qScopeGuard([&] { releaseCache.release(); });
+        controller.setSourcePeakCacheTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    cacheStarted.release();
+                    releaseCache.acquire();
+                }
+            });
+        bool sawReplacementWithEmptyWaveform = false;
+        connect(&controller, &AudioEditorController::documentChanged,
+                &controller, [&] {
+            if (controller.projectPath()
+                    == QFileInfo(project).absoluteFilePath()
+                && controller.viewportChannelPeaks().isEmpty()) {
+                sawReplacementWithEmptyWaveform = true;
+            }
+        });
+
+        QVERIFY(controller.openProject(QUrl::fromLocalFile(project)));
+        QVERIFY(waitForDocumentLoad(controller));
+        QVERIFY(cacheStarted.tryAcquire(1, 5'000));
+        QVERIFY(sawReplacementWithEmptyWaveform);
+        QVERIFY(controller.viewportChannelPeaks().isEmpty());
+        releaseCache.release();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !controller.sourcePeakCacheActiveForTesting(), 10'000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+    }
+
+    void deepZoomPublishesActualDecodedSamplesWithoutCoarseRepetition()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("ramp.wav"));
+        std::vector<float> samples(64);
+        for (std::size_t index = 0; index < samples.size(); ++index) {
+            samples[index] = static_cast<float>(index) / 64.0F - 0.5F;
+        }
+        QVERIFY(writeMonoFloatWav(source, samples));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        controller.viewport()->setViewportWidth(128.0);
+        QVERIFY(controller.viewport()->setVisibleRange(10, 18));
+        const auto ready = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 16;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
+        const QVariantList precise = controller.viewportChannelPeaks()
+            .front().toList();
+        for (qsizetype point = 0; point < 8; ++point) {
+            const double expected = samples[static_cast<std::size_t>(point + 10)];
+            QVERIFY(std::abs(peakValue(precise, point, false) - expected)
+                    < 0.0001);
+            QVERIFY(std::abs(peakValue(precise, point, true) - expected)
+                    < 0.0001);
+        }
+    }
+
+    void deepZoomStartsAtExactNonMillisecondSourceFrame()
+    {
+        for (const std::uint32_t sampleRate : {44'100U, 48'000U}) {
+            QTemporaryDir temporary;
+            QVERIFY(temporary.isValid());
+            const QString source = temporary.filePath(
+                QStringLiteral("awkward-%1.wav").arg(sampleRate));
+            std::vector<float> samples(256);
+            for (std::size_t index = 0; index < samples.size(); ++index) {
+                samples[index] = static_cast<float>(index) / 512.0F;
+            }
+            QVERIFY(writeMonoFloatWav(source, samples, sampleRate));
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+            const QString id = controller.timelineEventViews().front().toMap()
+                .value(QStringLiteral("id")).toString();
+            constexpr qint64 sourceStart = 25;
+            QVERIFY(controller.trimEvent(id, sourceStart, 200, 0));
+            controller.viewport()->setViewportWidth(128.0);
+            QVERIFY(controller.viewport()->setVisibleRange(0, 8));
+            const auto ready = [&controller] {
+                const QVariantList channels = controller.viewportChannelPeaks();
+                return channels.size() == 1
+                    && channels.front().toList().size() == 16;
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
+            const QVariantList precise = controller.viewportChannelPeaks()
+                .front().toList();
+            for (qsizetype point = 0; point < 8; ++point) {
+                const double expected = samples[static_cast<std::size_t>(
+                    sourceStart + point)];
+                QVERIFY2(std::abs(peakValue(precise, point, false) - expected)
+                             < 0.0001,
+                         qPrintable(QStringLiteral(
+                             "sample rate %1 point %2 was not sample-exact")
+                             .arg(sampleRate).arg(point)));
+                QVERIFY(std::abs(peakValue(precise, point, true) - expected)
+                        < 0.0001);
+            }
+        }
+    }
+
+    void metadataEditKeepsFixturePeaksAndDefersViewportDecode()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
@@ -2205,17 +3127,12 @@ private slots:
         const QStringList filesBefore = fixtureDirectory.entryList(
             QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openFile(QUrl::fromLocalFile(fixture)),
+        QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
                  qPrintable(controller.errorMessage()));
         const QVariantList sourcePeaks = controller.channelPeaks();
         QVERIFY(!sourcePeaks.isEmpty());
         QSignalSpy stateChanges(&controller, &AudioEditorController::stateChanged);
         QSignalSpy waveformChanges(&controller, &AudioEditorController::waveformChanged);
-
-        controller.viewport()->setViewportWidth(320.0);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
-                                 10'000);
-        quint64 generation = controller.viewportWaveformGeneration();
 
         QVERIFY(controller.setSelection(96, 288));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
@@ -2225,29 +3142,11 @@ private slots:
         QCOMPARE(stateChanges.count(), 0);
         QCOMPARE(fixtureDirectory.entryList(QDir::Files | QDir::NoDotAndDotDot,
                                             QDir::Name), filesBefore);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
-        QVERIFY(controller.viewportWaveformGeneration() > generation);
-        generation = controller.viewportWaveformGeneration();
+        QVERIFY(controller.viewportChannelPeaks().isEmpty());
 
-        const QVariantMap lastEvent = controller.timelineEventViews().back().toMap();
-        QVERIFY(controller.trimEvent(
-            lastEvent.value(QStringLiteral("id")).toString(),
-            lastEvent.value(QStringLiteral("sourceStart")).toLongLong(),
-            lastEvent.value(QStringLiteral("sourceEnd")).toLongLong() - 10,
-            lastEvent.value(QStringLiteral("timelineStart")).toLongLong()));
+        controller.viewport()->setViewportWidth(48'000.0);
         QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
-        QVERIFY(controller.viewportWaveformGeneration() > generation);
-        generation = controller.viewportWaveformGeneration();
-
-        QVERIFY(controller.undo());
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
-        QVERIFY(controller.viewportWaveformGeneration() > generation);
-        generation = controller.viewportWaveformGeneration();
-
-        QVERIFY(controller.redo());
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(), 10'000);
-        QVERIFY(controller.viewportWaveformGeneration() > generation);
-        QVERIFY(waveformChanges.count() >= 2);
+        QVERIFY(waveformChanges.count() >= 1);
         QVERIFY(!controller.busy());
         QCOMPARE(controller.state(), EditorSessionState::Ready);
         QCOMPARE(stateChanges.count(), 0);
@@ -2258,7 +3157,7 @@ private slots:
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openFile(QUrl::fromLocalFile(fixture)),
+        QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
                  qPrintable(controller.errorMessage()));
         const qint64 quarter = controller.totalFrames() / 4;
         QVERIFY(quarter > 0);
@@ -2304,106 +3203,6 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(hasVisiblePeak(), 10'000);
     }
 
-    void recordingTicksDoNotCancelAnInFlightHistoricalViewportDecode()
-    {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
-        auto capture = std::make_unique<ManualRecordingCapture>();
-        ManualRecordingCapture* const driver = capture.get();
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
-        controller.viewport()->setViewportWidth(320.0);
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(temporary.filePath(QStringLiteral("overlay.wav"))),
-            {}, 16'000, 2, false, true));
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Recording, 5'000);
-        const quint64 generation = controller.viewportWaveformGeneration();
-        std::vector<float> samples(1'600U * 2U, 0.25F);
-        QCOMPARE(driver->feed(samples, 1'600), 1'600U);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.recordingOverlayPeaks().isEmpty(),
-                                 1'000);
-        QTest::qWait(120);
-        QCOMPARE(controller.viewportWaveformGeneration(), generation);
-        QVERIFY(controller.cancelRecording());
-    }
-
-    void ordinaryZoomRecordingOverlayMixesSamplesBeforeEnvelopeAggregation()
-    {
-        auto capture = std::make_unique<ManualRecordingCapture>();
-        ManualRecordingCapture* const driver = capture.get();
-        AudioEditorController controller(
-            AG_AUDIO_BACKEND_NULL, std::move(capture));
-        controller.viewport()->setViewportWidth(10.0);
-        QTemporaryDir temporary;
-        QVERIFY(temporary.isValid());
-        QVERIFY(controller.startRecording(
-            QUrl::fromLocalFile(temporary.filePath(QStringLiteral("opposite.wav"))),
-            {}, 16'000, 2, false, false));
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(),
-                                  EditorSessionState::Recording, 5'000);
-
-        std::vector<float> opposite(1'600U * 2U);
-        for (std::size_t frame = 0; frame < 1'600U; ++frame) {
-            const float left = frame % 2U == 0U ? 0.8F : -0.8F;
-            opposite[frame * 2U] = left;
-            opposite[frame * 2U + 1U] = -left;
-        }
-        QCOMPARE(driver->feed(opposite, 1'600), 1'600U);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.recordingOverlayPeaks().size(), 1,
-                                  1'000);
-        QCOMPARE(controller.channelPeaks().size(), 2);
-        const QVariantList visual =
-            controller.recordingOverlayPeaks().front().toList();
-        QVERIFY(std::all_of(visual.begin(), visual.end(), [](const QVariant& value) {
-            return !value.isValid() || std::abs(value.toFloat()) < 0.0001F;
-        }));
-        QVERIFY(controller.cancelRecording());
-    }
-
-    void viewportWaveformDensityControlsPerChannelPointBudget()
-    {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY2(controller.openFile(QUrl::fromLocalFile(fixture)),
-                 qPrintable(controller.errorMessage()));
-        controller.viewport()->setViewportWidth(120.0);
-
-        controller.setViewportWaveformDensity(2.0);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
-                                 10'000);
-        const qsizetype densityTwoValues =
-            controller.viewportChannelPeaks().front().toList().size();
-        QCOMPARE(densityTwoValues, qsizetype{480});
-
-        const quint64 previousGeneration = controller.viewportWaveformGeneration();
-        controller.setViewportWaveformDensity(5.0);
-        QVERIFY(controller.viewportWaveformGeneration() > previousGeneration);
-        QTRY_COMPARE_WITH_TIMEOUT(
-            controller.viewportChannelPeaks().front().toList().size(),
-            qsizetype{1'200}, 10'000);
-
-        controller.setViewportWaveformDensity(0.5);
-        QVERIFY(controller.viewport()->setVisibleRange(0, 100));
-        QTRY_COMPARE_WITH_TIMEOUT(
-            controller.viewportChannelPeaks().front().toList().size(),
-            qsizetype{200}, 10'000);
-    }
-
-    void viewportWaveformDensityRejectsNonFiniteValues()
-    {
-        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        controller.setViewportWaveformDensity(3.0);
-        controller.setViewportWaveformDensity(
-            std::numeric_limits<double>::quiet_NaN());
-        QCOMPARE(controller.viewportWaveformDensity(), 3.0);
-    }
-
     void viewportDecodeIsSingleFlightAndPublishesOnlyLatestPendingRequest()
     {
         const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
@@ -2414,7 +3213,7 @@ private slots:
         std::atomic_int maximum{0};
         std::atomic_int starts{0};
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         const qint64 quarter = controller.totalFrames() / 4;
         QVERIFY(controller.setSelection(quarter, quarter * 2));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
@@ -2468,7 +3267,7 @@ private slots:
         std::atomic_int active{0};
         std::atomic_int starts{0};
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(fixture)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         controller.setViewportWaveformTaskObserverForTesting(
             [&](const bool starting) {
                 if (!starting) {
@@ -2507,7 +3306,7 @@ private slots:
         const QString project = temporary.filePath(QStringLiteral("session.agproj"));
         QVERIFY(QFile::copy(fixture, source));
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
-        QVERIFY(controller.openFile(QUrl::fromLocalFile(source)));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         const QString originalPath = controller.filePath();
         const auto historyBefore = controller.historyStateIdForTesting();

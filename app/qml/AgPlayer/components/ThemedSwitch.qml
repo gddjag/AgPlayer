@@ -5,6 +5,8 @@ import AgPlayer
 T.Switch {
     id: control
 
+    property color checkedColor: Theme.accent
+
     implicitWidth: Math.max(44, contentItem.implicitWidth)
     implicitHeight: 32
 
@@ -15,7 +17,7 @@ T.Switch {
         y: (control.height - height) / 2
         radius: height / 2
         color: !control.enabled ? Theme.disabled
-               : control.checked ? (control.hovered ? Theme.accentHover : Theme.accent)
+               : control.checked ? (control.hovered ? Theme.accentHover : control.checkedColor)
                : (control.hovered ? Theme.hoverSurface : Theme.border)
         border.color: control.activeFocus ? Theme.focus : "transparent"
         border.width: control.activeFocus ? 2 : 0

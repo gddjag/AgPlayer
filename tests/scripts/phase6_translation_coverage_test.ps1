@@ -14,6 +14,7 @@ $phase6Qml = @(
     'app/qml/AgPlayer/components/tools/ToolSidebar.qml'
 )
 $expected = @{}
+$extractedSourceCount = 0
 foreach ($relativePath in $phase6Qml) {
     $path = Join-Path $SourceRoot $relativePath
     $context = [IO.Path]::GetFileNameWithoutExtension($path)
@@ -26,6 +27,10 @@ foreach ($relativePath in $phase6Qml) {
         throw "No qsTr sources extracted from $relativePath."
     }
     $expected[$context] = $sources
+    $extractedSourceCount += $sources.Count
+}
+if ($extractedSourceCount -ne 134) {
+    throw "Expected exactly 134 context-scoped Phase 6 sources, got $extractedSourceCount."
 }
 
 foreach ($locale in @('zh', 'en', 'th', 'vi')) {

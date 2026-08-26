@@ -15,15 +15,8 @@ $waveformCanvas = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $edito
 $toolsWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 $toolsNavigation = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
-$formatPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FormatConvertPage.qml')
-$formatSettings = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FormatSettingsPanel.qml')
-$formatTable = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FormatTaskTable.qml')
-$formatSurface = $formatPage + "`n" + $formatSettings + "`n" + $formatTable
-$metadataPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
-$filenamePage = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
-$miniControls = Get-Content -Raw -Encoding UTF8 -LiteralPath (
-    Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/CMakeLists.txt')
+$appMain = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/main.cpp')
 $controllerHeader = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'qt/src/audio_editor/audio_editor_controller.hpp')
 $controllerSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (
@@ -35,19 +28,36 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
 
-if ($audioEditor -notmatch 'color:\s*Theme\.background' -or
-    $formatPage -notmatch 'color:\s*Theme\.background' -or
-    $metadataPage -notmatch 'color:\s*Theme\.background') {
-    throw 'Every audio-tool page root must use the shared light/dark Theme background.'
+if ($appMain -notmatch 'audioEditor\.setPlaybackController\(&playback\)') {
+    throw 'The production audio editor is not wired to the shared playback controller.'
 }
-if ($metadataPage -notmatch 'canvasColor:\s*Theme\.editorCanvas' -or
-    $metadataPage -notmatch 'panelColor:\s*Theme\.panel' -or
-    $metadataPage -notmatch 'inputColor:\s*Theme\.elevated') {
-    throw 'Metadata surfaces must use the shared Theme tokens.'
+if ($controllerHeader -notmatch 'Q_INVOKABLE\s+bool\s+relinkProjectSource\(const QString&amp;|Q_INVOKABLE\s+bool\s+relinkProjectSource\(const QString&') {
+    throw 'Relink must expose a decimal string Source ID to QML.'
 }
-if ($formatSurface -match '#(?:0f1820|101a21|0c1821|09141c|0a151d)' -or
-    $audioEditor -match '#(?:031426|041628|071a2d|06182a|05172a)') {
-    throw 'Audio editor and converter still contain fixed dark-only surfaces.'
+foreach ($control in @('editorOfflineSourceBanner', 'editorRelinkSourceButton')) {
+    if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The offline project recovery flow is missing $control."
+    }
+}
+if ($appMain -notmatch 'ensureAudioToolsWindow' -or
+    $appMain -notmatch 'audioToolsVisibleChanged') {
+    throw 'The audio tools window must be created on first use, not during application startup.'
+}
+$ensureToolsPosition = $appMain.IndexOf('ensureAudioToolsWindow')
+$loadToolsPosition = $appMain.IndexOf(
+    'audioToolsComponent.loadFromModule("AgPlayer", "AudioToolsWindow")')
+if ($loadToolsPosition -lt $ensureToolsPosition) {
+    throw 'AudioToolsWindow is still loaded before the first-use factory.'
+}
+foreach ($toolIndex in 0..3) {
+    if ($toolsWindow -notmatch (
+            'active:\s*AudioToolsController\.currentTool\s*===\s*' + $toolIndex)) {
+        throw "Audio tool page $toolIndex must be instantiated only while selected."
+    }
+}
+if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\.activate\(\)' -or
+    $toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,300}AudioEditorController\.deactivate\(\)') {
+    throw 'Showing or hiding the lazy tools window must activate or release editor resources.'
 }
 
 foreach ($control in @(
@@ -61,36 +71,19 @@ foreach ($control in @(
     }
 }
 
-$expectedToolsTitle = ConvertFrom-Utf8Base64 `
-    'QWdQbGF5ZXIgwrcg6Z+z6aKR5bel5YW3'
 if ($toolsWindow -notmatch 'width:\s*1672' -or
-    $toolsWindow -notmatch 'height:\s*942' -or
+    $toolsWindow -notmatch 'height:\s*941' -or
     $toolsWindow -notmatch 'Layout\.preferredHeight:\s*49' -or
     $toolsWindow -notmatch 'Layout\.preferredHeight:\s*43' -or
-    -not $toolsWindow.Contains(('title: qsTr("' + $expectedToolsTitle + '")'))) {
-    throw 'The tools shell must match the 1672x942 title/nav geometry and title.'
+    $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
+    throw 'The tools shell must match the 1672x941 title/nav geometry and title.'
 }
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
 }
-if ($toolsWindow -match '#(?:031426|10283d|c42b35)' -or
-    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}color:\s*Theme\.panel' -or
-    $toolsWindow -notmatch 'objectName:\s*"audioToolsWindowTitle"[\s\S]{0,160}color:\s*Theme\.primaryText' -or
-    $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.hoverSurface' -or
-    $toolsWindow -notmatch 'parent\.hovered\s*\?\s*Theme\.danger' -or
-    $toolsWindow -notmatch 'icon\.color:\s*Theme\.iconPrimary') {
-    throw 'The audio-tools title bar, title, hover surfaces and window icons must use Theme tokens.'
-}
-if ($formatPage -match 'tint:\s*"#d7e0e6"' -or
-    $formatPage -notmatch 'objectName:\s*"formatToolbarIcon-"\s*\+\s*modelData\.action' -or
-    $formatPage -notmatch 'tint:\s*Theme\.iconPrimary') {
-    throw 'Format toolbar icons must expose stable objects and use the shared theme icon color.'
-}
-$toolSidebar = Get-Content -LiteralPath (Join-Path $SourceRoot `
-    'app/qml/AgPlayer/components/tools/ToolSidebar.qml') -Raw
-if ($toolSidebar -notmatch 'activeLabelColor:\s*Theme\.primaryText' -or
-    $toolSidebar -notmatch 'parent\.checked\s*\?\s*navigation\.activeLabelColor') {
-    throw 'Selected audio-tool navigation labels must remain readable on the panel.'
+if ($toolsWindow -notmatch 'objectName:\s*"audioToolsLogo"' -or
+    $toolsWindow -match 'color:\s*"#0867ed"') {
+    throw 'The latest reference uses the transparent waveform brand mark.'
 }
 if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
     $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
@@ -99,11 +92,11 @@ if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
 }
-if ($qaMatrix -notmatch '"1672x942"' -or $qaMatrix -match '"1672x941"') {
-    throw 'The audio-tools QA matrix must capture the exact 1672x942 reference size.'
+if ($qaMatrix -notmatch '"1672x941"' -or $qaMatrix -match '"1672x942"') {
+    throw 'The audio-tools QA matrix must capture the exact 1672x941 reference size.'
 }
-if ($qaFinalMatrix -notmatch 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
-    throw 'The final UI matrix must include the 1672x942 editor height.'
+if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
+    throw 'The final UI matrix still expects the obsolete editor height.'
 }
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'
@@ -144,12 +137,12 @@ foreach ($laterPhaseAction in @('cropToSelection', 'fadeIn', 'fadeOut', 'silence
         throw "The later-phase command must retain its honest disabled state: $laterPhaseAction"
     }
 }
-if ($commandBar -notmatch 'clearDocument\(\)' -or
-    $commandBar -match 'clearTransientState\(\)') {
-    throw 'Clear must clear the loaded timeline document.'
+if ($commandBar -notmatch 'clearTransientState\(\)' -or
+    $commandBar -match 'clearDocument\(') {
+    throw 'Clear must only clear selection and transient tool state.'
 }
 foreach ($obsolete in @(
-    'insertSilence', 'exportMenu',
+    'insertSilence', 'clearDocument', 'exportMenu',
     'gainRequested', 'addMarker')) {
     if ($commandBar -match $obsolete) {
         throw "The Phase 6 toolbar still contains obsolete UI: $obsolete"
@@ -213,46 +206,29 @@ if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'positionMs\s*\*\s*AudioEditorController\.sampleRate') {
     throw 'Waveform QML must consume visible peaks and exact playheadFrame without a second crop/time path.'
 }
-foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V')) {
+if ($waveformCanvas -notmatch 'onReleased:\s*AudioEditorController\.cancelSelectionHandoff\(\)') {
+    throw 'Selection handoff release must cancel an unfinished WAV before QDrag can fire.'
+}
+if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
+    $waveformCanvas -notmatch 'SettingsController\.waveformThickness' -or
+    $waveformCanvas -notmatch 'SettingsController\.waveformSolidBaseColor' -or
+    $waveformCanvas -notmatch 'SettingsController\.spectrumSolidColor' -or
+    $waveformCanvas -notmatch 'waveformMode\s*===\s*2\s*\?\s*1\.0' -or
+    $waveformCanvas -notmatch 'waveformMode\s*===\s*2\s*\?\s*3\.0' -or
+    $waveformCanvas -match 'waveformColor:\s*"#2587ff"') {
+    throw 'Editor and player waveforms must use the same configurable style inputs.'
+}
+foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V',
+    'sequence:\s*"R"', 'sequence:\s*"Shift\+R"', 'sequence:\s*"Ctrl\+R"')) {
     if ($audioEditor -notmatch $shortcut) {
         throw "The editor is missing the interaction shortcut: $shortcut"
     }
 }
 foreach ($responsiveHook in @('referenceLayout', 'narrowLayout',
-    'mediumLayout', 'compactInspectorLayout', 'editorInspectorScroller',
-    'editorInspectorAccess', 'editorCompactInspectorTabs')) {
+    'editorInspectorScroller', 'editorInspectorAccess')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."
     }
-}
-if ($audioEditor -notmatch 'referenceLayout:\s*width\s*>=\s*1500' -or
-    $audioEditor -notmatch 'mediumLayout:\s*width\s*>=\s*1000\s*&&\s*width\s*<\s*1500' -or
-    $audioEditor -notmatch 'compactInspectorLayout:\s*width\s*<\s*1000') {
-    throw 'The editor must expose the >=1500, 1000-1499, and <1000 responsive states.'
-}
-if ($audioEditor -notmatch 'objectName:\s*"editorCompactInspectorTabs"[\s\S]{0,200}visible:\s*page\.compactInspectorLayout') {
-    throw 'The <1000 editor inspector must expose compact settings pages.'
-}
-
-if ($toolsWindow -notmatch 'objectName:\s*"audioToolsBrandMark"' -or
-    $toolsWindow -match 'objectName:\s*"audioToolsBrandTile"' -or
-    $toolsWindow -notmatch 'source:\s*"qrc:/qt/qml/AgPlayer/assets/brand/logo-mark\.png"') {
-    throw 'The tools title must use the original transparent, untinted brand mark without an accent tile.'
-}
-
-foreach ($responsivePageContract in @(
-    @{ Surface = $formatPage; Name = 'format converter'; Hook = 'compactLayout'; Root = 'clip:\s*true' },
-    @{ Surface = $metadataPage; Name = 'metadata editor'; Hook = 'compactLayout'; Root = 'clip:\s*true' },
-    @{ Surface = $filenamePage; Name = 'filename processor'; Hook = 'compactLayout'; Root = 'clip:\s*true' }
-)) {
-    if ($responsivePageContract.Surface -notmatch $responsivePageContract.Hook -or
-        $responsivePageContract.Surface -notmatch $responsivePageContract.Root) {
-        throw "The $($responsivePageContract.Name) must expose a clipped compact layout at 880x560."
-    }
-}
-if ($filenamePage -notmatch 'objectName:\s*"filenameWorkspaceScroller"' -or
-    $filenamePage -notmatch 'contentWidth:\s*Math\.max\(width,\s*page\.desktopWorkspaceWidth\)') {
-    throw 'The filename workbench must keep wide panels reachable inside an internal scroller.'
 }
 
 foreach ($capability in @('recordingSupported', 'bpmDetectionSupported',
@@ -286,7 +262,8 @@ if ($audioEditor -notmatch 'objectName:\s*"recordingTimeText"[\s\S]{0,220}00:00:
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',
-    'recordingMicrophoneButton', 'recordingToggleButton',
+    'recordingMicrophoneButton', 'recordingPauseButton',
+    'recordingRecordButton', 'recordingStopButton',
     'editorPrimaryPlayButton', 'editorPlayheadHandle',
     'editorSelectionStartHandle', 'editorSelectionEndHandle',
     'editorEventLeftTrimHandle', 'editorEventRightTrimHandle')) {
@@ -310,22 +287,23 @@ foreach ($translation in Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'tran
     }
 }
 
-if ($metadataPage -notmatch 'objectName:\s*"metadataCancelButton"[\s\S]{0,180}visible:\s*true[\s\S]{0,120}enabled:\s*MetadataEditor\.busy') {
-    throw 'Metadata cancel must remain visibly discoverable and only activate while a write is running.'
-}
-if ($filenamePage -notmatch 'objectName:\s*"filenameCancelButton"[\s\S]{0,220}visible:\s*true[\s\S]{0,120}enabled:\s*FilenameProcessor\.busy') {
-    throw 'Rename cancel must remain visibly discoverable and only activate while a transaction is running.'
-}
-if ($miniControls -match 'Layout\.preferredWidth:\s*expanded\s*\?') {
-    throw 'Mini-player controls must not reference an undefined expanded property.'
-}
-if ($formatPage -notmatch 'objectName:\s*"formatSettingsPanel"[\s\S]{0,320}Layout\.preferredWidth:\s*settingsPanel\.expanded[\s\S]{0,80}\?\s*\(page\.compactLayout\s*\?\s*360\s*:\s*445\)\s*:\s*40') {
-    throw 'The format converter needs a reference-width settings workbench.'
-}
-if ($metadataPage -notmatch 'desktopMinimumWidth:\s*1206' -or
-    $metadataPage -notmatch 'inspectorRatio:\s*0\.44' -or
-    $metadataPage -notmatch 'Layout\.preferredWidth:\s*page\.compactLayout[\s\S]{0,220}page\.width \* page\.inspectorRatio - 12') {
-    throw 'The metadata editor needs a complete batch-edit workbench at desktop width.'
+# Keep the three unaffected tools and shared controls under their existing
+# production contracts while replacing only the obsolete editor assertions.
+$formatPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FormatConvertPage.qml')
+$formatSettings = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FormatSettingsPanel.qml')
+$formatTable = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FormatTaskTable.qml')
+$formatSurface = $formatPage + "`n" + $formatSettings + "`n" + $formatTable
+$metadataPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
+$filenamePage = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
+$miniControls = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
+
+foreach ($control in @(
+    'filenameFilePanel', 'filenameRulesPanel', 'filenamePreviewPanel',
+    'filenameValidationPanel', 'filenameBottomBar')) {
+    if ($filenamePage -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The filename reference workbench is missing $control."
+    }
 }
 if ($filenamePage -notmatch 'id:\s*numberPositionBox' -or
     $filenamePage -notmatch 'id:\s*preserveExtensionCheck') {

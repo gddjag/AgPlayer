@@ -483,6 +483,7 @@ public:
     {
         block.samples.clear();
         block.frames = 0U;
+        block.timestamp_frame = 0;
         block.timestamp_ms = 0;
         block.end_of_stream = false;
         if (codec_context_ == nullptr || frame_ == nullptr || packet_ == nullptr) {
@@ -570,34 +571,28 @@ public:
             stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
         const std::int64_t target_timestamp = stream_origin + av_rescale_q(
             target_ms, AVRational{1, 1'000}, stream->time_base);
-        const int result = avformat_seek_file(format_context_,
-                                              audio_stream_index_,
-                                              std::numeric_limits<std::int64_t>::min(),
-                                              target_timestamp,
-                                              target_timestamp,
-                                              AVSEEK_FLAG_BACKWARD);
-        if (result < 0) {
-            return AG_DECODE_ERROR;
-        }
+        const std::int64_t target_frame = av_rescale_rnd(
+            target_ms, output_sample_rate_, 1'000, AV_ROUND_UP);
+        return seek_to(target_timestamp, target_frame, target_ms);
+    }
 
-        avcodec_flush_buffers(codec_context_);
-        av_packet_unref(packet_);
-        av_frame_unref(frame_);
-        swr_close(swr_context_);
-        if (swr_init(swr_context_) < 0) {
-            return AG_DECODE_ERROR;
+    ag_result seek_frame(const std::int64_t target_frame)
+    {
+        if (target_frame < 0 || format_context_ == nullptr
+            || codec_context_ == nullptr || swr_context_ == nullptr
+            || output_sample_rate_ <= 0) {
+            return AG_INVALID_ARGUMENT;
         }
-
-        input_eof_ = false;
-        drain_sent_ = false;
-        resampler_drained_ = false;
-        seek_target_ms_ = target_ms;
-        seek_target_frame_ = av_rescale_rnd(target_ms,
-                                            output_sample_rate_,
-                                            1'000,
-                                            AV_ROUND_UP);
-        fallback_frame_valid_ = false;
-        return AG_OK;
+        const AVStream* const stream = format_context_->streams[audio_stream_index_];
+        const std::int64_t stream_origin =
+            stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
+        const std::int64_t target_timestamp = stream_origin + av_rescale_q_rnd(
+            target_frame, AVRational{1, output_sample_rate_},
+            stream->time_base, AV_ROUND_DOWN);
+        const std::int64_t target_ms = av_rescale_q(
+            target_frame, AVRational{1, output_sample_rate_},
+            AVRational{1, 1'000});
+        return seek_to(target_timestamp, target_frame, target_ms);
     }
 
     [[nodiscard]] const MediaMetadata& metadata() const noexcept
@@ -629,6 +624,33 @@ public:
     }
 
 private:
+    ag_result seek_to(const std::int64_t target_timestamp,
+                      const std::int64_t target_frame,
+                      const std::int64_t target_ms)
+    {
+        const int result = avformat_seek_file(format_context_,
+                                              audio_stream_index_,
+                                              std::numeric_limits<std::int64_t>::min(),
+                                              target_timestamp,
+                                              target_timestamp,
+                                              AVSEEK_FLAG_BACKWARD);
+        if (result < 0) return AG_DECODE_ERROR;
+
+        avcodec_flush_buffers(codec_context_);
+        av_packet_unref(packet_);
+        av_frame_unref(frame_);
+        swr_close(swr_context_);
+        if (swr_init(swr_context_) < 0) return AG_DECODE_ERROR;
+
+        input_eof_ = false;
+        drain_sent_ = false;
+        resampler_drained_ = false;
+        seek_target_ms_ = target_ms;
+        seek_target_frame_ = target_frame;
+        fallback_frame_valid_ = false;
+        return AG_OK;
+    }
+
     int initialize_resampler()
     {
         av_channel_layout_uninit(&input_layout_);
@@ -824,6 +846,7 @@ private:
         } else {
             return AG_DECODE_ERROR;
         }
+        block.timestamp_frame = block_start_frame_;
         block.timestamp_ms = av_rescale_q(block_start_frame_,
                                           AVRational{1, output_sample_rate_},
                                           AVRational{1, 1'000});
@@ -866,6 +889,7 @@ private:
 
         block.frames = static_cast<std::size_t>(converted);
         block.samples.resize(block.frames * channels);
+        block.timestamp_frame = fallback_frame_;
         block.timestamp_ms = av_rescale_q(fallback_frame_,
                                           AVRational{1, output_sample_rate_},
                                           AVRational{1, 1'000});
@@ -897,7 +921,7 @@ private:
 
     bool trim_to_seek_target(DecodedAudioBlock& block)
     {
-        if (seek_target_ms_ < 0) {
+        if (seek_target_frame_ < 0) {
             return true;
         }
 
@@ -922,6 +946,7 @@ private:
                 block.samples.begin(),
                 block.samples.begin() + static_cast<std::ptrdiff_t>(samples_to_skip));
             block.frames -= static_cast<std::size_t>(frames_to_skip);
+            block.timestamp_frame = seek_target_frame_;
             block.timestamp_ms = seek_target_ms_;
             block_start_frame_ = seek_target_frame_;
         }
@@ -999,6 +1024,11 @@ ag_result Decoder::read(DecodedAudioBlock& block) noexcept
 ag_result Decoder::seek(const std::int64_t target_ms) noexcept
 {
     return impl_->seek(target_ms);
+}
+
+ag_result Decoder::seekFrame(const std::int64_t target_frame) noexcept
+{
+    return impl_->seek_frame(target_frame);
 }
 
 const MediaMetadata& Decoder::metadata() const noexcept

@@ -1,7 +1,7 @@
 # AgPlayer 自定义主题颜色系统开发追踪
 
-日期：2026-08-25  
-分支：`codex/custom-theme-colors`  
+日期：2026-08-25
+分支：`codex/custom-theme-colors`
 基线：`codex/recover-complete-release@9868504`；最终集成见下方。
 
 ## 架构边界

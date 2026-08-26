@@ -819,9 +819,7 @@ int main(int argc, char* argv[])
 
         AudioToolsController audioTools;
         AudioEditorController audioEditor;
-        QObject::connect(&audioEditor,
-                         &AudioEditorController::exclusivePreviewStarting,
-                         &playback, &PlaybackController::stop);
+        audioEditor.setPlaybackController(&playback);
         if (!qaScreenshotTools.isEmpty()) {
             audioTools.selectTool(qaTool);
         }
@@ -835,12 +833,15 @@ int main(int argc, char* argv[])
             const QList<QUrl> qaToolUrls{QUrl::fromLocalFile(qaPlayPath)};
             switch (qaTool) {
             case 0:
-                audioEditor.openFile(qaToolUrls.constFirst());
-                if (audioEditor.totalFrames() > 2'000) {
-                    audioEditor.setSelection(audioEditor.totalFrames() / 4,
-                                             audioEditor.totalFrames() / 2);
-                    audioEditor.seekMs(audioEditor.durationMs() / 3);
-                }
+                audioEditor.openFileWhenReady(
+                    qaToolUrls.constFirst(), &app, [&audioEditor] {
+                        if (audioEditor.totalFrames() > 2'000) {
+                            audioEditor.setSelection(
+                                audioEditor.totalFrames() / 4,
+                                audioEditor.totalFrames() / 2);
+                            audioEditor.seekMs(audioEditor.durationMs() / 3);
+                        }
+                    });
                 break;
             case 1:
                 formatConverter.loadFiles(qaToolUrls);
@@ -1113,19 +1114,11 @@ int main(int argc, char* argv[])
                     << miniComponent.errorString();
             }
 
-            // Audio tools window: separate frameless window toggled from the
-            // TitleBar. Loaded from the same module so it shares singletons.
+            // The audio-tools window is loaded on first use.  Keeping only the
+            // component here avoids constructing its four comparatively heavy
+            // tool pages during ordinary player startup.
             QQmlComponent audioToolsComponent(&engine);
-            audioToolsComponent.loadFromModule("AgPlayer", "AudioToolsWindow");
             QObject* audioToolsWindow = nullptr;
-            if (!audioToolsComponent.isError()) {
-                audioToolsWindow = audioToolsComponent.create();
-            }
-            if (audioToolsWindow == nullptr) {
-                qWarning().noquote()
-                    << "Audio tools QML failed:"
-                    << audioToolsComponent.errorString();
-            }
 
             // Stand-alone playlist window. Reuses the LibraryFilterModel
             // instance owned by Main.qml so filtering state stays in sync.
@@ -1167,12 +1160,9 @@ int main(int argc, char* argv[])
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
             windows.setListWindow(qobject_cast<QWindow*>(listWindow));
-            windows.setAudioToolsWindow(qobject_cast<QWindow*>(audioToolsWindow));
 
             QWindow* const nativeMainWindow = qobject_cast<QWindow*>(mainWindow);
             QWindow* const nativeListWindow = qobject_cast<QWindow*>(listWindow);
-            QWindow* const nativeAudioToolsWindow =
-                qobject_cast<QWindow*>(audioToolsWindow);
             nativeDrops.registerWindow(nativeMainWindow,
                                        NativeDropRouter::Target::Main);
             nativeDrops.registerWindow(nativeListWindow,
@@ -1190,8 +1180,31 @@ int main(int argc, char* argv[])
                                Q_ARG(QVariant, position.y()))
                         && hit.toBool();
                 });
-            nativeDrops.registerWindow(nativeAudioToolsWindow,
-                                       NativeDropRouter::Target::AudioTools);
+            const auto ensureAudioToolsWindow = [&]() -> QObject* {
+                if (audioToolsWindow != nullptr) return audioToolsWindow;
+                audioToolsComponent.loadFromModule("AgPlayer", "AudioToolsWindow");
+                if (!audioToolsComponent.isError()) {
+                    audioToolsWindow = audioToolsComponent.create();
+                }
+                if (audioToolsWindow == nullptr) {
+                    qWarning().noquote()
+                        << "Audio tools QML failed:"
+                        << audioToolsComponent.errorString();
+                    return nullptr;
+                }
+                auto* const toolsWindow = qobject_cast<QWindow*>(audioToolsWindow);
+                windows.setAudioToolsWindow(toolsWindow);
+                nativeDrops.registerWindow(
+                    toolsWindow, NativeDropRouter::Target::AudioTools);
+                return audioToolsWindow;
+            };
+            const QMetaObject::Connection audioToolsVisibleConnection = QObject::connect(
+                &windows, &WindowController::audioToolsVisibleChanged, &app,
+                [&windows, &ensureAudioToolsWindow]() {
+                    if (windows.audioToolsVisible()) {
+                        (void)ensureAudioToolsWindow();
+                    }
+                });
             QObject::connect(
                 &nativeDrops, &NativeDropRouter::pathsDropped, &app,
                 [&](NativeDropRouter::Target target, const QStringList& paths) {
@@ -1387,6 +1400,9 @@ int main(int argc, char* argv[])
             const bool wantScreenshotMini = !qaScreenshotMini.isEmpty();
             const bool wantScreenshotTools = !qaScreenshotTools.isEmpty();
             const bool wantScreenshotList = !qaScreenshotList.isEmpty();
+            if (wantScreenshotTools) {
+                (void)ensureAudioToolsWindow();
+            }
             if (wantScreenshotMini && miniWindow != nullptr) {
                 auto* miniWin = qobject_cast<QWindow*>(miniWindow);
                 if (miniWin) {
@@ -1401,23 +1417,31 @@ int main(int argc, char* argv[])
                     toolsWin->show();
                 }
                 if (qaTool == 0 && !qaImportFolder.isEmpty()) {
-                    audioEditor.openFile(QUrl::fromLocalFile(qaImportFolder));
-                    const qint64 rate = qMax<qint64>(1, audioEditor.sampleRate());
-                    if (qaEditorReferenceState) {
-                        audioEditor.setOriginalBpm(128.0);
-                        audioEditor.setPitch(2, 0);
-                        audioEditor.setKeepPitch(true);
-                        audioEditor.setFormantPreservation(true);
-                    }
-                    if (qaEditorSelectionStartMs >= 0
-                        && qaEditorSelectionEndMs > qaEditorSelectionStartMs) {
-                        audioEditor.setSelection(
-                            qaEditorSelectionStartMs * rate / 1'000,
-                            qaEditorSelectionEndMs * rate / 1'000);
-                    }
-                    if (qaEditorPlayheadMs >= 0) {
-                        audioEditor.seekFrame(qaEditorPlayheadMs * rate / 1'000);
-                    }
+                    audioEditor.openFileWhenReady(
+                        QUrl::fromLocalFile(qaImportFolder), &app,
+                        [&audioEditor, qaEditorReferenceState,
+                         qaEditorSelectionStartMs, qaEditorSelectionEndMs,
+                         qaEditorPlayheadMs] {
+                            const qint64 rate = qMax<qint64>(
+                                1, audioEditor.sampleRate());
+                            if (qaEditorReferenceState) {
+                                audioEditor.setOriginalBpm(128.0);
+                                audioEditor.setPitch(2, 0);
+                                audioEditor.setKeepPitch(true);
+                                audioEditor.setFormantPreservation(true);
+                            }
+                            if (qaEditorSelectionStartMs >= 0
+                                && qaEditorSelectionEndMs
+                                    > qaEditorSelectionStartMs) {
+                                audioEditor.setSelection(
+                                    qaEditorSelectionStartMs * rate / 1'000,
+                                    qaEditorSelectionEndMs * rate / 1'000);
+                            }
+                            if (qaEditorPlayheadMs >= 0) {
+                                audioEditor.seekFrame(
+                                    qaEditorPlayheadMs * rate / 1'000);
+                            }
+                        });
                 } else if (qaTool == 1 && !qaImportFolder.isEmpty()) {
                     formatConverter.loadFiles(
                         {QUrl::fromLocalFile(qaImportFolder)});
@@ -1559,6 +1583,7 @@ int main(int argc, char* argv[])
                            "Main", "Failed to save tag data after event loop exit");
             }
 
+            QObject::disconnect(audioToolsVisibleConnection);
             app.removeNativeEventFilter(&hotkeys);
             hotkeys.unregisterAll();
             windows.setShutdownActions({});

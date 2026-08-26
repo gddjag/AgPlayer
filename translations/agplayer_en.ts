@@ -117,7 +117,32 @@
     <message><source>处理</source><translation>Processing</translation></message>
     <message><source>导出</source><translation>Export</translation></message>
     <message><source>选择音频导出目录</source><translation>Choose audio export folder</translation></message>
-    <message><source>空格 = 播放 / 暂停       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>Space = Play / Pause       S = Split at playhead       Delete = Delete clip       Ctrl+C / X / V = Copy / Cut / Paste       Ctrl+Z / Y = Undo / Redo</translation></message>
+    <message><source>音频源不可用：</source><translation>Audio source unavailable: </translation></message>
+    <message><source>重新定位文件</source><translation>Relink file</translation></message>
+    <message><source>（单声道）</source><translation>(Mono)</translation></message>
+    <message><source>（立体声）</source><translation>(Stereo)</translation></message>
+    <message><source>选择录音设备（Alt+R）</source><translation>Select recording device (Alt+R)</translation></message>
+    <message><source>暂停 / 继续录音（Shift+R）</source><translation>Pause / Resume recording (Shift+R)</translation></message>
+    <message><source>开始 / 继续录音（R）</source><translation>Start / Resume recording (R)</translation></message>
+    <message><source>停止并保存录音（Ctrl+R）</source><translation>Stop and save recording (Ctrl+R)</translation></message>
+    <message><source>跳到开头（Home）</source><translation>Go to start (Home)</translation></message>
+    <message><source>后退 5 秒（←）</source><translation>Back 5 seconds (←)</translation></message>
+    <message><source>播放 / 暂停（Space）</source><translation>Play / Pause (Space)</translation></message>
+    <message><source>前进 5 秒（→）</source><translation>Forward 5 seconds (→)</translation></message>
+    <message><source>快进 5 秒</source><translation>Forward 5 seconds</translation></message>
+    <message><source>停止（Ctrl+Space）</source><translation>Stop (Ctrl+Space)</translation></message>
+    <message><source>空格 = 播放 / 暂停</source><translation>Space = Play / Pause</translation></message>
+    <message><source>S = 在播放头处分割</source><translation>S = Split at playhead</translation></message>
+    <message><source>Delete = 删除片段</source><translation>Delete = Delete clip</translation></message>
+    <message><source>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</source><translation>Ctrl+C / X / V = Copy / Cut / Paste</translation></message>
+    <message><source>Ctrl+Z / Y = 撤销 / 重做</source><translation>Ctrl+Z / Y = Undo / Redo</translation></message>
+    <message><source>Ctrl+拖动 = 快速复制片段</source><translation>Ctrl+drag = Duplicate clip</translation></message>
+    <message><source>Ctrl+鼠标滚轮 = 放大 / 缩小时间线</source><translation>Ctrl+wheel = Zoom timeline</translation></message>
+    <message><source>Shift+鼠标滚轮 = 横向滚动</source><translation>Shift+wheel = Scroll horizontally</translation></message>
+    <message><source>拖拽片段边缘 = 修剪</source><translation>Drag clip edge = Trim</translation></message>
+    <message><source>拖拽右上角 = 调整淡出</source><translation>Drag top-right = Adjust fade-out</translation></message>
+    <message><source>双击音量线 = 添加控制点</source><translation>Double-click volume line = Add control point</translation></message>
+    <message><source>空格 = 播放 / 暂停       R = 开始录音       Shift+R = 暂停 / 继续录音       Ctrl+R = 停止并保存       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>Space = Play / Pause       R = Start recording       Shift+R = Pause / Resume recording       Ctrl+R = Stop and save       S = Split at playhead       Delete = Delete clip       Ctrl+C / X / V = Copy / Cut / Paste       Ctrl+Z / Y = Undo / Redo</translation></message>
     <message><source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪       拖拽右上角 = 调整淡出       双击音量线 = 添加控制点</source><translation>Ctrl+drag = Duplicate clip       Ctrl+wheel = Zoom timeline       Shift+wheel = Scroll horizontally       Drag clip edge = Trim       Drag top-right = Adjust fade-out       Double-click volume line = Add control point</translation></message>
     <message><source>未检测到输入设备</source><translation>No input device detected</translation></message>
     <message><source>BPM</source><translation>BPM</translation></message>
@@ -126,7 +151,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="16"/>
         <source>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</source>
-        <translation>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
+        <translation>Audio files (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="23"/>
@@ -522,7 +547,7 @@
         <source>编辑设置</source>
         <translation>Edit settings</translation>
     </message>
-    <message><source>继续录音</source><translation>Resume recording</translation></message><message><source>跳到末尾</source><translation>Jump to end</translation></message><message><source>选择录音设备</source><translation>Choose recording device</translation></message><message><source>暂停录音</source><translation>Pause recording</translation></message>
+    <message><source>继续录音</source><translation>Resume recording</translation></message><message><source>跳到末尾</source><translation>Jump to end</translation></message><message><source>选择录音设备</source><translation>Choose recording device</translation></message><message><source>暂停录音</source><translation>Pause recording</translation></message><message><source>停止并保存录音</source><translation>Stop and save recording</translation></message>
     <message><source>展开导出设置</source><translation>Expand export settings</translation></message><message><source>展开录音设置</source><translation>Expand recording settings</translation></message><message><source>展开升降调设置</source><translation>Expand pitch settings</translation></message><message><source>展开速度设置</source><translation>Expand speed settings</translation></message><message><source>展开音调保护设置</source><translation>Expand pitch preservation settings</translation></message>
     <message><source>折叠导出设置</source><translation>Collapse export settings</translation></message><message><source>折叠录音设置</source><translation>Collapse recording settings</translation></message><message><source>折叠升降调设置</source><translation>Collapse pitch settings</translation></message><message><source>折叠速度设置</source><translation>Collapse speed settings</translation></message><message><source>折叠音调保护设置</source><translation>Collapse pitch preservation settings</translation></message>
     <message><source>停止录音</source><translation>Stop recording</translation></message>
@@ -576,8 +601,8 @@
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="99"/>
-        <source>音频工具</source>
-        <translation>Audio Tools</translation>
+        <source>AgPlayer 音频编辑</source>
+        <translation>AgPlayer Audio Editor</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="45"/>
@@ -775,6 +800,7 @@
 </context>
 <context>
     <name>EditorWaveformCanvas</name>
+    <message><source>拖出片段</source><translation>Drag clip out</translation></message>
     <message><source>淡出控制点</source><translation>Fade-out control point</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="173"/>

@@ -48,6 +48,51 @@ struct AudioEvent final {
     return event.sourceEnd - event.sourceStart;
 }
 
+[[nodiscard]] inline float envelopeGainAt(
+    const AudioEvent& event, const SampleFrame offset) noexcept
+{
+    if (event.envelope.empty()) return 1.0F;
+    EnvelopePoint previous{0, 1.0F};
+    for (const EnvelopePoint& point : event.envelope) {
+        if (offset <= point.offset) {
+            if (point.offset == previous.offset) return point.gain;
+            const double fraction = static_cast<double>(offset - previous.offset)
+                / static_cast<double>(point.offset - previous.offset);
+            return static_cast<float>(previous.gain
+                + (point.gain - previous.gain) * fraction);
+        }
+        previous = point;
+    }
+    return previous.gain;
+}
+
+[[nodiscard]] inline float fadeGainAt(
+    const AudioEvent& event, const SampleFrame offset) noexcept
+{
+    const SampleFrame frames = audibleFrames(event);
+    double result = 1.0;
+    if (event.fadeIn > 0 && offset < event.fadeIn) {
+        result *= event.fadeIn == 1 ? 0.0
+            : static_cast<double>(offset)
+                / static_cast<double>(event.fadeIn - 1);
+    }
+    const SampleFrame fadeOutStart = frames - event.fadeOut;
+    if (event.fadeOut > 0 && offset >= fadeOutStart) {
+        result *= event.fadeOut == 1 ? 0.0
+            : static_cast<double>(frames - 1 - offset)
+                / static_cast<double>(event.fadeOut - 1);
+    }
+    return static_cast<float>(result);
+}
+
+[[nodiscard]] inline float eventAmplitudeGainAt(
+    const AudioEvent& event, const SampleFrame offset) noexcept
+{
+    return event.mute ? 0.0F
+        : event.gain * fadeGainAt(event, offset)
+            * envelopeGainAt(event, offset);
+}
+
 [[nodiscard]] inline bool isValid(const AudioEvent& event) noexcept
 {
     if (!event.source || event.source->total_frames <= 0

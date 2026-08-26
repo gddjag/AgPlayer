@@ -9,20 +9,25 @@ Window {
     visible: false
     // Reference workbench baseline. Layouts still contract below this size.
     width: 1672
-    height: 942
+    height: 941
     minimumWidth: 880
     minimumHeight: 560
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
-    title: qsTr("AgPlayer · 音频工具")
+    title: qsTr("AgPlayer 音频编辑")
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
             unsavedCloseDialog.open()
             return
         }
-        AudioEditorController.deactivate()
         WindowController.hideAudioTools()
+    }
+    onVisibleChanged: {
+        if (visible && AudioToolsController.currentTool === 0)
+            AudioEditorController.activate()
+        else if (!visible)
+            AudioEditorController.deactivate()
     }
     onClosing: function(close) {
         close.accepted = false
@@ -39,6 +44,16 @@ Window {
     palette.highlightedText: Theme.highlightText
     palette.mid: Theme.border
 
+    Connections {
+        target: AudioToolsController
+        function onCurrentToolChanged() {
+            if (AudioToolsController.currentTool === 0)
+                AudioEditorController.activate()
+            else
+                AudioEditorController.deactivate()
+        }
+    }
+
     Dialog {
         id: unsavedCloseDialog
         parent: window.contentItem
@@ -47,7 +62,6 @@ Window {
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
-            AudioEditorController.deactivate()
             WindowController.hideAudioTools()
         }
         Label {
@@ -72,7 +86,7 @@ Window {
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 49
-                color: Theme.panel
+                color: Theme.background
 
                 RowLayout {
                     z: 1
@@ -81,18 +95,20 @@ Window {
                     anchors.rightMargin: 8
                     spacing: 10
 
-                    Image {
-                        objectName: "audioToolsBrandMark"
+                    Item {
+                        objectName: "audioToolsLogo"
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
-                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        mipmap: true
+                        Image {
+                            anchors.centerIn: parent
+                            width: 28
+                            height: 28
+                            source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                            fillMode: Image.PreserveAspectFit
+                        }
                     }
                     Text {
-                        objectName: "audioToolsWindowTitle"
-                        text: qsTr("AgPlayer · 音频工具")
+                        text: qsTr("AgPlayer 音频编辑")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
                         font.pixelSize: 18
@@ -111,7 +127,7 @@ Window {
                         Accessible.role: Accessible.Button
                         onClicked: window.showMinimized()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.hoverSurface : "transparent"
+                            color: parent.hovered ? Theme.surfaceHover : "transparent"
                             radius: 3
                         }
                     }
@@ -129,7 +145,7 @@ Window {
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.hoverSurface : "transparent"
+                            color: parent.hovered ? Theme.surfaceHover : "transparent"
                             radius: 3
                         }
                     }
@@ -138,8 +154,7 @@ Window {
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
-                        icon.color: hovered ? Theme.onBrandGradientText
-                                            : Theme.iconPrimary
+                        icon.color: Theme.iconPrimary
                         Accessible.name: qsTr("关闭")
                         Accessible.role: Accessible.Button
                         onClicked: window.requestHide()
@@ -206,10 +221,32 @@ Window {
                     anchors.fill: parent
                     currentIndex: AudioToolsController.currentTool
 
-                    AudioEditorPage { objectName: "audioEditorPage" }
-                    FormatConvertPage { objectName: "formatConvertPage" }
-                    MetadataEditPage {}
-                    FilenameProcessPage {}
+                    Loader {
+                        objectName: "audioEditorPageLoader"
+                        active: AudioToolsController.currentTool === 0
+                        sourceComponent: Component {
+                            AudioEditorPage { objectName: "audioEditorPage" }
+                        }
+                    }
+                    Loader {
+                        objectName: "formatConvertPageLoader"
+                        active: AudioToolsController.currentTool === 1
+                        sourceComponent: Component {
+                            FormatConvertPage { objectName: "formatConvertPage" }
+                        }
+                    }
+                    Loader {
+                        objectName: "metadataEditPageLoader"
+                        active: AudioToolsController.currentTool === 2
+                        sourceComponent: Component { MetadataEditPage {} }
+                    }
+                    Loader {
+                        objectName: "filenameProcessPageLoader"
+                        active: AudioToolsController.currentTool === 3
+                        sourceComponent: Component {
+                            FilenameProcessPage { objectName: "filenameProcessPage" }
+                        }
+                    }
                 }
             }
         }

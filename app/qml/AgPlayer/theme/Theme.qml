@@ -87,6 +87,8 @@ QtObject {
     readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
     readonly property color editorSelection: isLight ? "#26169B97" : "#2639C7C0"
     readonly property color editorOverviewSelection: isLight ? "#122B9692" : "#12297E7B"
+    readonly property color editorSelectionLabel: "#FF8A00"
+    readonly property color editorPlayhead: "#FFAF00"
     readonly property color playRingPlaying: waveformGreen
     readonly property color playRingPaused: "#FFB020"
 

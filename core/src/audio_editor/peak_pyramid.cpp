@@ -74,6 +74,15 @@ std::vector<PeakBucket> PeakPyramid::read(
     const SampleFrame frame_count,
     const std::size_t pixel_width) const
 {
+    return readWindow(channel, start, frame_count, pixel_width).buckets;
+}
+
+PeakReadWindow PeakPyramid::readWindow(
+    const std::size_t channel,
+    const SampleFrame start,
+    const SampleFrame frame_count,
+    const std::size_t pixel_width) const
+{
     if (channel >= channels_.size() || start < 0 || frame_count <= 0
         || pixel_width == 0 || start >= document_frames_) {
         return {};
@@ -87,36 +96,26 @@ std::vector<PeakBucket> PeakPyramid::read(
     const std::size_t target = pixel_width > std::numeric_limits<std::size_t>::max() / 2U
         ? std::numeric_limits<std::size_t>::max() : pixel_width * 2U;
     while (level + 1U < levels.size()) {
-        const SampleFrame next_bucket_frames = saturatedMultiply(bucket_frames, 2);
-        const auto first = static_cast<std::size_t>(start / next_bucket_frames);
-        const auto last = static_cast<std::size_t>(
-            (end + next_bucket_frames - 1) / next_bucket_frames);
-        if (last - first > target) {
-            level += 1U;
-            bucket_frames = next_bucket_frames;
-            continue;
-        }
-        level += 1U;
-        bucket_frames = next_bucket_frames;
-        break;
-    }
-    while (level > 0U) {
         const auto first = static_cast<std::size_t>(start / bucket_frames);
         const auto last = static_cast<std::size_t>(
             (end + bucket_frames - 1) / bucket_frames);
-        if (last - first <= target) {
-            break;
-        }
-        --level;
-        bucket_frames /= 2;
+        if (last - first <= target) break;
+        level += 1U;
+        bucket_frames = saturatedMultiply(bucket_frames, 2);
     }
     const auto& buckets = levels[level];
     const std::size_t first = std::min<std::size_t>(
         buckets.size(), static_cast<std::size_t>(start / bucket_frames));
     const std::size_t last = std::min<std::size_t>(buckets.size(),
         static_cast<std::size_t>((end + bucket_frames - 1) / bucket_frames));
-    return {buckets.begin() + static_cast<std::ptrdiff_t>(first),
-            buckets.begin() + static_cast<std::ptrdiff_t>(last)};
+    PeakReadWindow result;
+    result.buckets.assign(
+        buckets.begin() + static_cast<std::ptrdiff_t>(first),
+        buckets.begin() + static_cast<std::ptrdiff_t>(last));
+    result.start = saturatedMultiply(
+        static_cast<SampleFrame>(first), bucket_frames);
+    result.bucketFrames = bucket_frames;
+    return result;
 }
 
 std::size_t PeakPyramid::levelCount() const noexcept
