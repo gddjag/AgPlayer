@@ -504,8 +504,8 @@ private:
     bool waveformCanvasLocked_ = true;
     bool listWaveformThumbnailEnabled_ = true;
     QString listWaveformThumbnailMode_ = QStringLiteral("Color36");
-    int spectrumColorMode_ = 0;
-    QString spectrumSolidColor_ = QStringLiteral("#0078d4");
+    int spectrumColorMode_ = 1;
+    QString spectrumSolidColor_ = QStringLiteral("#8b5cf6");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
     QString spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString spectrumRgbEndColor_ = QStringLiteral("#e62e9b");

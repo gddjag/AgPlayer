@@ -1476,16 +1476,33 @@ Item {
 
                         Repeater {
                             model: [
-                                { text: qsTr("跟随系统"), value: 2 },
-                                { text: qsTr("浅色"), value: 1 },
-                                { text: qsTr("深色"), value: 0 }
+                                { text: qsTr("跟随系统"), value: 2,
+                                  objectName: "themeModeSystem" },
+                                { text: qsTr("浅色"), value: 1,
+                                  objectName: "themeModeLight" },
+                                { text: qsTr("深色"), value: 0,
+                                  objectName: "themeModeDark" },
+                                { text: qsTr("自定义"), value: -1,
+                                  objectName: "themeModeCustom" }
                             ]
 
                             delegate: Button {
+                                objectName: modelData.objectName
                                 text: modelData.text
-                                checked: SettingsController.themeMode === modelData.value
+                                checked: modelData.value < 0
+                                         ? SettingsController.skinColorMode === 2
+                                         : SettingsController.skinColorMode !== 2
+                                           && SettingsController.themeMode === modelData.value
                                 checkable: true
-                                onClicked: SettingsController.themeMode = modelData.value
+                                onClicked: {
+                                    if (modelData.value < 0) {
+                                        SettingsController.themeMode = 2
+                                        SettingsController.skinColorMode = 2
+                                    } else {
+                                        SettingsController.skinColorMode = 0
+                                        SettingsController.themeMode = modelData.value
+                                    }
+                                }
 
                                 contentItem: Text {
                                     text: parent.text
@@ -1510,13 +1527,15 @@ Item {
                 }
 
                 SettingRow {
-                    label: qsTr("主题皮肤颜色")
-                    Layout.preferredHeight: 70
+                    objectName: "themeRecommendedColorsRow"
+                    visible: SettingsController.skinColorMode === 2
+                    label: qsTr("推荐颜色")
+                    Layout.preferredHeight: 42
 
                     ThemeColorSelector {
                         objectName: "themeSkinColorSelector"
                         anchors.fill: parent
-                        title: qsTr("主题皮肤颜色")
+                        title: qsTr("推荐颜色")
                         selectedMode: SettingsController.skinColorMode
                         selectedPreset: SettingsController.skinPreset
                         customColor: SettingsController.skinCustomColor

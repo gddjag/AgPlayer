@@ -79,6 +79,26 @@ if(NOT settings_source MATCHES "ThemeColorSelector"
     list(APPEND violations
         "app/qml/AgPlayer/SettingsPage.qml: skin color selector must bind all skin settings")
 endif()
+foreach(required_object IN ITEMS
+        "themeModeSystem"
+        "themeModeLight"
+        "themeModeDark"
+        "themeModeCustom"
+        "themeRecommendedColorsRow")
+    if(NOT settings_source MATCHES "${required_object}")
+        list(APPEND violations
+            "app/qml/AgPlayer/SettingsPage.qml: missing ${required_object}")
+    endif()
+endforeach()
+
+file(READ
+    "${ROOT}/app/qml/AgPlayer/components/ThemeColorSelector.qml"
+    selector_source ENCODING UTF-8)
+if(NOT selector_source MATCHES "recommendedColors"
+   OR NOT selector_source MATCHES "model:[ \t]*root\.recommendedColors")
+    list(APPEND violations
+        "ThemeColorSelector.qml: custom theme must expose the five recommended colors")
+endif()
 
 file(READ "${ROOT}/app/qml/AgPlayer/theme/Theme.qml" theme_source ENCODING UTF-8)
 if(NOT theme_source MATCHES

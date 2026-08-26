@@ -521,10 +521,50 @@ TestCase {
                 "#63316B")
     }
 
-    function test_picker_has_no_system_dialog_or_second_picker_entry() {
+    function test_system_swatch_is_accessible_and_opens_with_mouse_and_keyboard() {
         openReferenceColor()
-        compare(findChild(picker, "colorPickerSystemSwatch"), null)
-        compare(findChild(picker, "colorPickerSystemDialog"), null)
+        var swatch = findChild(picker, "colorPickerSystemSwatch")
+        var dialog = findChild(picker, "colorPickerSystemDialog")
+        verify(swatch && dialog)
+        compare(swatch.focusPolicy, Qt.StrongFocus)
+        compare(swatch.Accessible.role, Accessible.Button)
+        verify(swatch.Accessible.name.length > 0)
+
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+
+        swatch.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+        swatch.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        tryCompare(dialog, "visible", true)
+        dialog.close()
+    }
+
+    function test_system_dialog_accept_updates_working_palette_but_cancel_does_not_commit() {
+        openReferenceColor()
+        var swatch = findChild(picker, "colorPickerSystemSwatch")
+        var dialog = findChild(picker, "colorPickerSystemDialog")
+        var originalCandidates = picker.candidateColors.join(",")
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.selectedColor = "#123456"
+        dialog.accepted()
+        tryCompare(picker, "baseColor", "#123456")
+        verify(picker.candidateColors.join(",") !== originalCandidates)
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
+
+        mouseClick(swatch)
+        tryCompare(dialog, "visible", true)
+        dialog.selectedColor = "#abcdef"
+        dialog.rejected()
+        compare(normalizedColor(picker.baseColor), "#123456")
+        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(acceptedSpy.count, 0)
     }
 
     function test_theme_switch_updates_chrome_not_candidates() {
@@ -600,30 +640,28 @@ TestCase {
         })
     }
 
-    function test_theme_selectors_apply_presets_and_keyboard_activation() {
-        SettingsController.skinColorMode = 0
-        SettingsController.skinPreset = "systemBlue"
+    function test_theme_selector_exposes_five_keyboard_recommended_colors() {
+        SettingsController.skinColorMode = 2
+        SettingsController.skinCustomColor = "#D27722"
         wait(0)
         paletteChangedSpy.clear()
-        var defaultButton = findChild(skinSelector, "skinSelectorDefault")
-        var purple = findChild(skinSelector, "skinSelectorPreset-purple")
-        verify(defaultButton && purple)
-        verify(defaultButton.checked)
-        compare(purple.Accessible.role, Accessible.Button)
-        verify(purple.width >= 24)
-        verify(purple.height >= 24)
-        verify(purple.Accessible.name.indexOf("purple") < 0)
-        verify(purple.Accessible.name.indexOf("紫色") >= 0)
-        verify(!purple.selectionCueVisible)
-        purple.forceActiveFocus()
-        tryVerify(function() { return purple.focusCueVisible })
+        compare(skinSelector.recommendedColors.length, 5)
+        for (var index = 0; index < 5; ++index)
+            verify(findChild(skinSelector,
+                             "skinSelectorRecommended-" + index))
+        var recommended = findChild(skinSelector, "skinSelectorRecommended-0")
+        compare(recommended.Accessible.role, Accessible.Button)
+        verify(recommended.width >= 24)
+        verify(recommended.height >= 24)
+        recommended.forceActiveFocus()
+        tryVerify(function() { return recommended.focusCueVisible })
         keyClick(Qt.Key_Space)
-        tryCompare(SettingsController, "skinColorMode", 1)
-        tryCompare(SettingsController, "skinPreset", "purple")
+        tryCompare(SettingsController, "skinCustomColor",
+                   skinSelector.recommendedColors[0])
+        tryCompare(SettingsController, "skinColorMode", 2)
         compare(paletteChangedSpy.count, 1)
-        verify(purple.checked)
-        verify(purple.selectionCueVisible)
-        verify(purple.focusCueVisible)
+        verify(recommended.selectionCueVisible)
+        verify(recommended.focusCueVisible)
     }
 
     function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {
@@ -681,10 +719,11 @@ TestCase {
         tryCompare(SettingsController, "skinColorMode", 0)
 
         SettingsController.beginEdit()
-        SettingsController.skinColorMode = 1
-        SettingsController.skinPreset = "purple"
+        SettingsController.skinColorMode = 2
+        SettingsController.skinCustomColor = skinSelector.recommendedColors[1]
         SettingsController.commitEdit()
-        compare(SettingsController.skinColorMode, 1)
-        compare(SettingsController.skinPreset, "purple")
+        compare(SettingsController.skinColorMode, 2)
+        compare(normalizedColor(SettingsController.skinCustomColor),
+                normalizedColor(skinSelector.recommendedColors[1]))
     }
 }
