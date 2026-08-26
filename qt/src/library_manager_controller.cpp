@@ -396,6 +396,21 @@ bool LibraryManagerController::removeMonitoredFolder(const QString& folder)
     return true;
 }
 
+bool LibraryManagerController::removeTrackFromLibrary(const QString& trackId)
+{
+    if (library_ == nullptr) return false;
+    const TrackRecord* const track = library_->recordForId(trackId);
+    if (track == nullptr) return false;
+    const QString path = canonicalLibraryPath(track->path);
+    if (path.isEmpty()) return false;
+    excludedPaths_.insert(resourceLookupKey(path), path);
+    saveMonitoredFolders();
+    if (library_->removeTrack(trackId)) return true;
+    excludedPaths_.remove(resourceLookupKey(path));
+    saveMonitoredFolders();
+    return false;
+}
+
 void LibraryManagerController::rescan()
 {
     debounce_.stop();
@@ -468,7 +483,8 @@ void LibraryManagerController::rescan()
             const QStringList discovered =
                 result.value(QStringLiteral("discovered")).toStringList();
             for (const QString& path : discovered) {
-                if (library_ == nullptr || !library_->containsPath(path))
+                if (!excludedPaths_.contains(resourceLookupKey(path))
+                    && (library_ == nullptr || !library_->containsPath(path)))
                     newFiles.append(path);
             }
             if (!newFiles.isEmpty()) importer_->importPaths(newFiles);
@@ -701,7 +717,22 @@ ImportController* LibraryManagerController::importController() const noexcept
 void LibraryManagerController::setImportController(ImportController* controller)
 {
     if (importer_ == controller) return;
+    if (importer_ != nullptr) importer_->disconnect(this);
     importer_ = controller;
+    if (importer_ != nullptr) {
+        connect(importer_, &ImportController::importedTrackIdsChanged, this,
+                [this] {
+            if (library_ == nullptr || importer_ == nullptr) return;
+            bool changed = false;
+            for (const QString& trackId : importer_->importedTrackIds()) {
+                const TrackRecord* const track = library_->recordForId(trackId);
+                if (track == nullptr) continue;
+                if (excludedPaths_.remove(resourceLookupKey(track->path)))
+                    changed = true;
+            }
+            if (changed) saveMonitoredFolders();
+        });
+    }
     emit importControllerChanged();
 }
 
@@ -905,6 +936,7 @@ void LibraryManagerController::applyDirectoryWatches(
 void LibraryManagerController::loadMonitoredFolders()
 {
     monitoredRoots_.clear();
+    excludedPaths_.clear();
     QFile file(storagePath_);
     if (file.open(QIODevice::ReadOnly)) {
         const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
@@ -924,6 +956,13 @@ void LibraryManagerController::loadMonitoredFolders()
                     monitoredRoots_.append(path);
                 }
             }
+            const QJsonArray excluded = document.object()
+                .value(QStringLiteral("excludedPaths")).toArray();
+            for (const QJsonValue& value : excluded) {
+                const QString path = canonicalLibraryPath(value.toString());
+                if (!path.isEmpty())
+                    excludedPaths_.insert(resourceLookupKey(path), path);
+            }
         }
     }
     const QStringList nextDirectories = normalizedResourcePaths(monitoredRoots_);
@@ -937,9 +976,15 @@ void LibraryManagerController::loadMonitoredFolders()
 void LibraryManagerController::saveMonitoredFolders() const
 {
     if (storagePath_.isEmpty()) return;
+    QStringList excluded = excludedPaths_.values();
+    std::sort(excluded.begin(), excluded.end(), [](const QString& left,
+                                                   const QString& right) {
+        return left.compare(right, agplayer::qt::resourcePathCaseSensitivity()) < 0;
+    });
     const QByteArray data = QJsonDocument(QJsonObject{
         {QStringLiteral("version"), 1},
         {QStringLiteral("folders"), QJsonArray::fromStringList(monitoredRoots_)},
+        {QStringLiteral("excludedPaths"), QJsonArray::fromStringList(excluded)},
     }).toJson(QJsonDocument::Compact);
     QSaveFile file(storagePath_);
     if (file.open(QIODevice::WriteOnly) && file.write(data) == data.size())

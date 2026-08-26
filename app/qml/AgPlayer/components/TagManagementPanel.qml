@@ -400,18 +400,31 @@ Item {
                                                              + tagCount.implicitWidth
                                                              + root.pillHorizontalPadding * 2
                                                              + root.pillContentSpacing))
-                            implicitHeight: 26
+                            implicitHeight: 24
                             width: implicitWidth
                             height: implicitHeight
-                            radius: 13
+                            radius: 12
                             clip: true
-                            color: resolvedSurface
+                            color: Qt.rgba(resolvedSurface.r,
+                                           resolvedSurface.g,
+                                           resolvedSurface.b, 0.78)
                             border.color: dropVisual || selectedVisual
                                           || focusedVisual
                                           ? Theme.tagPillHighlightBorder
                                           : tagCell.color.a > 0
                                             ? tagCell.color : Theme.tagPillBorder
                             border.width: 1
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.leftMargin: 7
+                                anchors.rightMargin: 7
+                                height: 1
+                                radius: 0.5
+                                color: Qt.rgba(1, 1, 1, 0.16)
+                            }
 
                             Text {
                                 id: tagNameMeasure

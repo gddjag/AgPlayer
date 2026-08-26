@@ -210,6 +210,13 @@ TestCase {
         compare(artist.wrapMode, Text.NoWrap)
         compare(album.wrapMode, Text.NoWrap)
         compare(tags.wrapMode, Text.NoWrap)
+        verify(artist.width <= artist.implicitWidth + 1,
+               "artist must not stretch and push later metadata right")
+        verify(album.width <= album.implicitWidth + 1,
+               "album must not stretch and push later metadata right")
+        if (tags.visible)
+            verify(tags.width <= tags.implicitWidth + 1,
+                   "tags must not stretch and push rating/favorite right")
         verify(Math.abs(artist.mapToItem(metadataRow, 0, artist.height / 2).y
                         - album.mapToItem(metadataRow, 0, album.height / 2).y) <= 1,
                "artist and album must share one baseline")

@@ -152,7 +152,8 @@ Rectangle {
                           || qsTr("未知艺术家")
                     color: Theme.secondaryText; font.family: Theme.fontPrimary
                     font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
-                    Layout.fillWidth: true; Layout.maximumWidth: 120
+                    Layout.preferredWidth: Math.min(implicitWidth, 90)
+                    Layout.maximumWidth: 90
                     ToolTip.visible: miniArtistHover.hovered && truncated
                     ToolTip.text: text
                     HoverHandler { id: miniArtistHover }
@@ -169,7 +170,8 @@ Rectangle {
                           || qsTr("未知专辑")
                     color: Theme.secondaryText; font.family: Theme.fontPrimary
                     font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
-                    Layout.fillWidth: true; Layout.maximumWidth: 120
+                    Layout.preferredWidth: Math.min(implicitWidth, 90)
+                    Layout.maximumWidth: 90
                     ToolTip.visible: miniAlbumHover.hovered && truncated
                     ToolTip.text: text
                     HoverHandler { id: miniAlbumHover }
@@ -187,7 +189,8 @@ Rectangle {
                     visible: text.length > 0
                     color: Theme.tagSecondaryText; font.family: Theme.fontPrimary
                     font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
-                    Layout.fillWidth: true; Layout.maximumWidth: 100
+                    Layout.preferredWidth: Math.min(implicitWidth, 70)
+                    Layout.maximumWidth: 70
                     ToolTip.visible: miniTagsHover.hovered && truncated
                     ToolTip.text: text
                     HoverHandler { id: miniTagsHover }
@@ -222,6 +225,7 @@ Rectangle {
                     icon.width: 16; icon.height: 16; enabled: root.currentRow() >= 0
                     onClicked: if (playback) playback.toggleFavorite(); background: null
                 }
+                Item { Layout.fillWidth: true }
             }
             Item {
                 Layout.fillWidth: true

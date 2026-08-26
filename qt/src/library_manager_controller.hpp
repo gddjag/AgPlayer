@@ -6,6 +6,7 @@
 #include <QFileSystemWatcher>
 #include <QFutureWatcher>
 #include <QPointer>
+#include <QHash>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -85,6 +86,7 @@ public:
     Q_INVOKABLE bool pathIsWithin(const QString& candidate,
                                   const QString& root) const;
     Q_INVOKABLE bool removeMonitoredFolder(const QString& folder);
+    Q_INVOKABLE bool removeTrackFromLibrary(const QString& trackId);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void cancelScan();
     Q_INVOKABLE QVariantList duplicateGroups() const;
@@ -179,6 +181,7 @@ private:
     int untaggedCount_ = 0;
     int damagedCount_ = 0;
     QStringList monitoredRoots_;
+    QHash<QString, QString> excludedPaths_;
     QStringList resourceDirectories_;
     QString storagePath_;
     QString libraryDataPath_;

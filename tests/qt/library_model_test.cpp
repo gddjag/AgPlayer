@@ -22,6 +22,7 @@ private slots:
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();
     void batchesTagMutationsWithoutResetOrExtraFlush();
+    void removesOneTagOnlyFromRequestedTracks();
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
@@ -505,6 +506,29 @@ void LibraryModelTest::batchesTagMutationsWithoutResetOrExtraFlush()
     QCOMPARE(model.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 2);
     QCOMPARE(model.removeTag(QStringLiteral("DRIVING")), 2);
     QCOMPARE(model.count(), 2);
+}
+
+void LibraryModelTest::removesOneTagOnlyFromRequestedTracks()
+{
+    TrackRecord first;
+    first.trackId = QStringLiteral("one");
+    first.path = QStringLiteral("C:/music/one.wav");
+    first.tags = {QStringLiteral("Focus"), QStringLiteral("Night")};
+    TrackRecord second;
+    second.trackId = QStringLiteral("two");
+    second.path = QStringLiteral("C:/music/two.wav");
+    second.tags = {QStringLiteral("focus"), QStringLiteral("Road")};
+    LibraryModel model;
+    model.replaceAll({first, second});
+
+    QCOMPARE(model.removeTagFromTracks({QStringLiteral("one")},
+                                       QStringLiteral(" FOCUS ")), 1);
+    QCOMPARE(model.trackForId(QStringLiteral("one"))
+                 .value(QStringLiteral("tags")).toStringList(),
+             QStringList{QStringLiteral("Night")});
+    QCOMPARE(model.trackForId(QStringLiteral("two"))
+                 .value(QStringLiteral("tags")).toStringList(),
+             QStringList({QStringLiteral("focus"), QStringLiteral("Road")}));
 }
 
 void LibraryModelTest::removesTrackWithoutDeletingTheFile()

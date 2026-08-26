@@ -20,6 +20,7 @@ ListView {
     property string selectedCategory: "all"
     property string searchText: ""
     property bool tagFilterActive: false
+    property string activeTagKey: ""
     property var selectedTrackIds: []
     property int selectionAnchor: -1
     property var lastTrashResult: ({ successCount: 0, failureCount: 0, failures: [] })
@@ -42,7 +43,7 @@ ListView {
     readonly property bool showBpmColumn: !tagFilterActive
     readonly property bool showDurationColumn: !tagFilterActive
     readonly property int rowHeight: SettingsController.listWaveformThumbnailEnabled
-                                     ? 62 : 42
+                                     ? 50 : 42
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
     property int dragPreviewCreationCount: 0
@@ -70,6 +71,12 @@ ListView {
         selectedCategory !== "all" && selectedCategory !== "favorites"
         && selectedCategory !== "history" && selectedCategory !== "recentAdded"
         && selectedCategory !== "neverPlayed"
+    readonly property bool canRemoveFromCurrentView:
+        tagFilterActive ? activeTagKey.length > 0
+                        : selectedCategory === "all"
+                          || selectedCategory === "favorites"
+                          || selectedCategory === "history"
+                          || customPlaylistSelected
 
     LibraryFileOperations { id: fileOps; libraryModel: LibraryModel }
 
@@ -223,8 +230,10 @@ ListView {
     }
     function removeSelectedFromCurrentView() {
         var ids = selectedTrackIds.slice()
-        if (ids.length === 0) return
-        if (customPlaylistSelected) {
+        if (ids.length === 0 || !canRemoveFromCurrentView) return
+        if (tagFilterActive) {
+            LibraryModel.removeTagFromTracks(ids, activeTagKey)
+        } else if (customPlaylistSelected) {
             playlistModel.removeTracks(selectedCategory, ids)
         } else if (selectedCategory === "favorites") {
             for (var favoriteIndex = 0; favoriteIndex < ids.length; ++favoriteIndex) {
@@ -236,7 +245,7 @@ ListView {
                 LibraryModel.removeFromHistory(ids[historyIndex])
         } else if (selectedCategory === "all") {
             for (var libraryIndex = 0; libraryIndex < ids.length; ++libraryIndex)
-                LibraryModel.removeTrack(ids[libraryIndex])
+                LibraryManagerController.removeTrackFromLibrary(ids[libraryIndex])
         }
         selectedTrackIds = []
         selectionAnchor = -1
@@ -310,7 +319,7 @@ ListView {
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_A && (event.modifiers & Qt.ControlModifier)) {
             selectAllVisible(); event.accepted = true
-        } else if (event.key === Qt.Key_Delete) {
+        } else if (event.key === Qt.Key_Delete && root.canRemoveFromCurrentView) {
             removeSelectedFromCurrentView(); event.accepted = true
         }
     }
@@ -688,7 +697,7 @@ ListView {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             y: SettingsController.listWaveformThumbnailEnabled
-                               ? 9 : (parent.height - height) / 2
+                               ? 8 : (parent.height - height) / 2
                             height: implicitHeight
                             text: rowItem.title || qsTr("未知歌曲")
                             trackAvailable: rowItem.available
@@ -810,7 +819,7 @@ ListView {
                 Layout.maximumWidth: root.favoriteWidth
                 icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                 icon.color: rowItem.favorite ? Theme.favoriteRed : Theme.secondaryText
-                icon.width: 23; icon.height: 23
+                icon.width: 18; icon.height: 18
                 onClicked: { var row = LibraryModel.indexForTrackId(rowItem.trackId); if (row >= 0) LibraryModel.setFavorite(row, !rowItem.favorite) }
                 background: HoverBackground {}
             }
@@ -1003,17 +1012,23 @@ ListView {
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }
         SystemMenuItem { objectName: "trackMenuCopyPath"; text: qsTr("复制文件路径"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.copyPath(trackMenu.targetTrackId) }
         SystemMenuItem { objectName: "trackMenuTag"; text: qsTr("打标签"); onTriggered: tagDialog.open() }
-        SystemMenuItem { objectName: "trackMenuRename"; text: qsTr("重命名"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: root.beginRename() }
         SystemMenuItem { objectName: "trackMenuMoveFile"; text: qsTr("移动到指定文件夹"); onTriggered: moveFolderDialog.open() }
         SystemMenuItem { objectName: "trackMenuCopyFile"; text: qsTr("复制到指定文件夹"); onTriggered: copyFolderDialog.open() }
         MenuSeparator {}
         SystemMenuItem {
             objectName: "trackMenuRemove"
             text: qsTr("从列表删除")
+            enabled: root.canRemoveFromCurrentView
             onTriggered: root.removeSelectedFromCurrentView()
         }
         SystemMenuItem { objectName: "trackMenuTrash"; text: qsTr("彻底删除至回收站"); onTriggered: trashConfirm.open() }
-        SystemMenuItem { objectName: "trackMenuRelocate"; text: qsTr("重新定位文件"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: relocateDialog.open() }
+        MenuSeparator {}
+        SystemMenuItem {
+            objectName: "trackMenuDetails"
+            text: qsTr("查看音频文件信息")
+            enabled: trackMenu.targetTrackIds.length === 1
+            onTriggered: root.openDetails()
+        }
     }
 
     component SystemMenuItem: ThemedMenuItem { width: 230 }
@@ -1044,9 +1059,18 @@ ListView {
             }
             Repeater {
                 model: [
-                    [qsTr("文件名"), detailsPanel.details.fileName], [qsTr("格式"), detailsPanel.details.format],
-                    [qsTr("采样率"), detailsPanel.details.sampleRate], [qsTr("比特率"), detailsPanel.details.bitRate],
-                    [qsTr("时长"), root.formatTime(detailsPanel.details.durationMs || 0)], ["BPM", detailsPanel.details.bpm],
+                    [qsTr("格式"), detailsPanel.details.format],
+                    [qsTr("采样率"), detailsPanel.details.sampleRate
+                                      ? detailsPanel.details.sampleRate + " Hz" : ""],
+                    [qsTr("比特率"), detailsPanel.details.bitRate
+                                      ? Math.round(detailsPanel.details.bitRate / 1000) + " kbps" : ""],
+                    [qsTr("时长"), root.formatTime(detailsPanel.details.durationMs || 0)],
+                    [qsTr("大小"), detailsPanel.details.fileSize
+                                    ? (detailsPanel.details.fileSize / 1048576).toFixed(2) + " MB" : ""],
+                    ["BPM", root.formatBpm(detailsPanel.details.bpm)],
+                    [qsTr("修改时间"), detailsPanel.details.modifiedAt
+                                        ? Qt.formatDateTime(detailsPanel.details.modifiedAt,
+                                                            "yyyy-MM-dd HH:mm:ss") : ""],
                     [qsTr("目录"), detailsPanel.details.directory], [qsTr("完整路径"), detailsPanel.details.path],
                     [qsTr("标签"), (detailsPanel.details.tags || []).join(", ")]
                 ]

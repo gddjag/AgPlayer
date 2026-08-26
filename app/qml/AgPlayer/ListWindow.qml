@@ -13,7 +13,7 @@ Window {
     readonly property int defaultVisibleTrackCount: 10
     readonly property int filterBarHeight: 54
     readonly property int defaultTrackRowHeight:
-        SettingsController.listWaveformThumbnailEnabled ? 62 : 42
+        SettingsController.listWaveformThumbnailEnabled ? 50 : 42
     readonly property int defaultListHeight:
         titleBarHeight + trackHeaderHeight
         + defaultVisibleTrackCount * defaultTrackRowHeight + filterBarHeight
@@ -553,6 +553,8 @@ Window {
                                                       ? filterModel.category : "all"
                                     tagFilterActive: filterModel
                                                      && filterModel.tagKey !== ""
+                                    activeTagKey: filterModel
+                                                  ? filterModel.tagKey : ""
                                     searchText: filterModel
                                                 ? filterModel.searchText : ""
                                 }

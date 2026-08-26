@@ -875,12 +875,11 @@ TestCase {
             ["trackMenuShowFolder", "在文件夹中显示"],
             ["trackMenuCopyPath", "复制文件路径"],
             ["trackMenuTag", "打标签"],
-            ["trackMenuRename", "重命名"],
             ["trackMenuMoveFile", "移动到指定文件夹"],
             ["trackMenuCopyFile", "复制到指定文件夹"],
             ["trackMenuRemove", "从列表删除"],
             ["trackMenuTrash", "彻底删除至回收站"],
-            ["trackMenuRelocate", "重新定位文件"]
+            ["trackMenuDetails", "查看音频文件信息"]
         ]
         for (var index = 0; index < expected.length; ++index) {
             var action = findChild(menu, expected[index][0])
@@ -888,6 +887,8 @@ TestCase {
             compare(action.text !== undefined ? action.text : action.title,
                     expected[index][1])
         }
+        verify(!findChild(menu, "trackMenuRename"))
+        verify(!findChild(menu, "trackMenuRelocate"))
         menu.close()
         list.destroy()
     }
@@ -939,7 +940,7 @@ TestCase {
             var trackList = findChild(listWindow, "sharedTrackList")
             var filter = findChild(listWindow, "librarySearchFilter")
             verify(trackList && filter)
-            var expectedRowHeight = enabled ? 62 : 42
+            var expectedRowHeight = enabled ? 50 : 42
             var expectedHeight = 38 + 56 + 10 * expectedRowHeight + 54
             compare(listWindow.height, expectedHeight)
             compare(filter.height, 54)
@@ -1820,6 +1821,25 @@ TestCase {
             return row >= 0 && !LibraryModel.data(
                         LibraryModel.index(row, 0), LibraryModel.FavoriteRole)
         }, 500)
+
+        verify(LibraryModel.setTags(ids[0], ["Focus", "Night"]))
+        list.selectedCategory = "all"
+        list.tagFilterActive = true
+        list.activeTagKey = ""
+        compare(list.canRemoveFromCurrentView, false,
+                "an incomplete tag filter must never fall through to library deletion")
+        list.activeTagKey = "focus"
+        list.selectOnly(ids[0], LibraryModel.indexForTrackId(ids[0]))
+        list.removeSelectedFromCurrentView()
+        verify(LibraryModel.indexForTrackId(ids[0]) >= 0,
+               "tag-filter removal must keep the library record")
+        compare(LibraryModel.trackForId(ids[0]).tags, ["Night"])
+
+        list.tagFilterActive = false
+        list.activeTagKey = ""
+        list.selectedCategory = "recentAdded"
+        compare(list.canRemoveFromCurrentView, false,
+                "read-only virtual views must disable list removal")
 
         var thirdIndex = LibraryModel.indexForTrackId(ids[2])
         list.selectedCategory = "all"
@@ -3641,7 +3661,7 @@ TestCase {
         TrackWaveformThumbnailProvider.refresh()
         var readsBefore = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
         SettingsController.listWaveformThumbnailEnabled = true
-        tryCompare(list, "rowHeight", 62)
+        tryCompare(list, "rowHeight", 50)
         tryVerify(function() { return list.thumbnailItemCount > 0 })
         verify(findChild(list.itemAtIndex(0), "trackWaveformThumbnail"))
         compare(findChild(list.itemAtIndex(0), "trackCover").width, 34)
@@ -3965,7 +3985,7 @@ TestCase {
                 tagPill = findChild(tagPanel, "tagPill-" + tagKey)
                 return tagPill !== null
             }, 1000)
-            compare(tagPill.height, 26)
+            compare(tagPill.height, 24)
 
             emptyNavigation = emptyLibraryNavigationComponent.createObject(
                         mainWindow.contentItem)
