@@ -898,8 +898,12 @@ TestCase {
             verify(field, "missing read-only export field " + name)
             verify(field.text.length > 0)
         }
+        compare(findChild(page, "editorExportCodec").text, "MP3")
+        compare(findChild(page, "editorExportSampleRate").text, "44.1 kHz")
         compare(findChild(page, "editorExportBitDepth").text, "24-bit")
-        compare(findChild(page, "editorExportDirectory").text, "--")
+        compare(findChild(page, "editorExportChannels").text, "立体声")
+        compare(findChild(page, "editorExportBitRate").text, "320 kbps")
+        verify(findChild(page, "editorExportDirectory").text !== "--")
         compare(findChild(page, "audioEditorExportDialog"), null)
         compare(findChild(page, "editorExportButton").enabled, false)
     }

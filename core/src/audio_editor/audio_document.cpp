@@ -136,7 +136,8 @@ AudioDocument AudioDocument::fromSource(AudioSource source)
         return document;
     }
     auto shared = std::make_shared<const AudioSource>(std::move(source));
-    if (!document.timeline_.insert(AudioEvent{1, shared, 0, shared->total_frames, 0})) {
+    if (!document.timeline_.insert(AudioEvent{1, shared, 0, shared->total_frames, 0,
+                                               1.0F, 0, 0, 1.0, 0, false, {}})) {
         return {};
     }
     document.next_event_id_ = 2;
@@ -638,7 +639,8 @@ bool AudioDocument::replaceSelectionWithSource(AudioSource source)
         }), candidate.end());
     auto shared = std::make_shared<const AudioSource>(std::move(source));
     candidate.push_back(AudioEvent{candidateId, shared, 0,
-                                   shared->total_frames, replacement.start});
+                                   shared->total_frames, replacement.start,
+                                   1.0F, 0, 0, 1.0, 0, false, {}});
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId + 1;
     selection_.reset();
@@ -662,7 +664,8 @@ bool AudioDocument::insertSourceAtCursor(AudioSource source,
     auto shared = std::make_shared<const AudioSource>(std::move(source));
     std::vector<AudioEvent> candidate = current.events;
     candidate.push_back(AudioEvent{next_event_id_, shared, 0,
-                                   shared->total_frames, cursor});
+                                   shared->total_frames, cursor,
+                                   1.0F, 0, 0, 1.0, 0, false, {}});
     if (!applyCandidate(std::move(candidate))) return false;
     ++next_event_id_;
     return true;

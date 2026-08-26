@@ -13,6 +13,7 @@
 #include <QJsonObject>
 #include <QSemaphore>
 #include <QScopeGuard>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -116,6 +117,28 @@ bool writeMonoFloatWav(const QString& path, const std::vector<float>& samples,
     return stream.good();
 }
 
+bool writeStereoFloatWav(const QString& path,
+                         const std::vector<float>& interleavedSamples,
+                         const std::uint32_t sampleRate = 8'000)
+{
+    if (interleavedSamples.empty() || interleavedSamples.size() % 2U != 0U) {
+        return false;
+    }
+    std::ofstream stream(std::filesystem::path(path.toStdWString()),
+                         std::ios::binary | std::ios::trunc);
+    const auto bytes = static_cast<std::uint32_t>(
+        interleavedSamples.size() * sizeof(float));
+    stream.write("RIFF", 4); writeU32(stream, 36U + bytes);
+    stream.write("WAVEfmt ", 8); writeU32(stream, 16U); writeU16(stream, 3U);
+    writeU16(stream, 2U); writeU32(stream, sampleRate);
+    writeU32(stream, sampleRate * 2U * sizeof(float));
+    writeU16(stream, 2U * sizeof(float)); writeU16(stream, 32U);
+    stream.write("data", 4); writeU32(stream, bytes);
+    stream.write(reinterpret_cast<const char*>(interleavedSamples.data()),
+                 static_cast<std::streamsize>(bytes));
+    return stream.good();
+}
+
 double peakValue(const QVariantList& values, const qsizetype point,
                  const bool maximum)
 {
@@ -214,6 +237,22 @@ class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void defaultExportSettingsAreImmediatelyUsable()
+    {
+        AudioEditorController controller;
+        const auto settings = controller.projectExportSettings();
+
+        QCOMPARE(settings.codecName, QStringLiteral("MP3"));
+        QCOMPARE(settings.sampleRate, 44'100);
+        QCOMPARE(settings.bitDepth, 24);
+        QCOMPARE(settings.channels, 2);
+        QCOMPARE(settings.bitRate, qint64{320'000});
+        QCOMPARE(QDir::cleanPath(settings.outputDirectory),
+                 QDir::cleanPath(QStandardPaths::writableLocation(
+                     QStandardPaths::DesktopLocation)));
+        QVERIFY(agplayer::editor::isValidProjectExportSettings(settings));
+    }
+
     void handoffServicesAreLazyAndReleasedWithThePage()
     {
         AudioEditorController controller;
@@ -248,6 +287,36 @@ private slots:
             QCOMPARE(controller.playerHandleForTesting(), sharedPlayer);
         }
         ag_player_destroy(sharedPlayer);
+    }
+
+    void recordingStopsTheSharedMainPlayerBeforeOpeningCapture()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        ag_player* sharedPlayer = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &sharedPlayer), AG_OK);
+        const auto destroyPlayer = qScopeGuard([&] { ag_player_destroy(sharedPlayer); });
+        QCOMPARE(ag_player_load(sharedPlayer, fixture.constData()), AG_OK);
+        QCOMPARE(ag_player_play(sharedPlayer), AG_OK);
+
+        PlaybackController playback(sharedPlayer);
+        AudioEditorController controller;
+        controller.setPlaybackController(&playback);
+        controller.refreshRecordingDevices();
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        QVERIFY(controller.startRecording(
+            QUrl::fromLocalFile(temporary.filePath(QStringLiteral("capture.wav"))),
+            QStringLiteral("capture:device-does-not-exist"),
+            48'000, 2, false, false));
+
+        ag_playback_snapshot snapshot{};
+        QCOMPARE(ag_player_snapshot(sharedPlayer, &snapshot), AG_OK);
+        QCOMPARE(snapshot.state, AG_STOPPED);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Empty,
+                                  10'000);
     }
 
     void emptyDocumentDisablesEditActions()
@@ -1439,7 +1508,7 @@ private slots:
         QCOMPARE(exported.read(4), QByteArray("RIFF", 4));
     }
 
-    void configuredExportRequestsDirectoryAndPublishesDecodedSuccessPath()
+    void configuredExportDefaultsToAUsableDirectoryAndPublishesDecodedSuccessPath()
     {
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
@@ -1454,9 +1523,8 @@ private slots:
             &controller, &AudioEditorController::exportDirectoryRequested);
         QSignalSpy exportSucceeded(
             &controller, &AudioEditorController::exportSucceeded);
-        QVERIFY(!controller.exportToConfiguredDirectory());
-        QCOMPARE(directoryRequested.count(), 1);
-        QVERIFY(controller.errorMessage().isEmpty());
+        QVERIFY(!controller.projectExportSettings().outputDirectory.isEmpty());
+        QCOMPARE(directoryRequested.count(), 0);
 
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("wav");
@@ -2288,6 +2356,34 @@ private slots:
                                   - expectedMaximum) < 0.001,
                      qPrintable(QStringLiteral("cached maximum mismatch at %1")
                                     .arg(bucket)));
+        }
+    }
+
+    void stereoWaveformPublishesOneCenteredMixEnvelope()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("stereo.wav"));
+        std::vector<float> samples;
+        samples.reserve(2'048);
+        for (int frame = 0; frame < 1'024; ++frame) {
+            samples.push_back(0.5F);
+            samples.push_back(-0.5F);
+        }
+        QVERIFY(writeStereoFloatWav(source, samples));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        controller.viewport()->setViewportWidth(512.0);
+        const auto ready = [&controller] {
+            const QVariantList channels = controller.viewportChannelPeaks();
+            return channels.size() == 1
+                && channels.front().toList().size() == 2'048;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
+        const QVariantList mix = controller.viewportChannelPeaks().front().toList();
+        for (qsizetype index = 0; index < mix.size(); ++index) {
+            QVERIFY(std::abs(mix[index].toDouble()) < 0.001);
         }
     }
 

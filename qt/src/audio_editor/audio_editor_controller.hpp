@@ -503,6 +503,7 @@ private:
     EditorViewport viewport_;
     agplayer::editor::AudioDocument document_;
     ag_player* player_{};
+    PlaybackController* playback_controller_{};
     bool owns_player_{};
     std::unique_ptr<EditorPlaybackAdapter> playback_adapter_;
     std::unique_ptr<HandoffAssetManager> handoff_assets_;

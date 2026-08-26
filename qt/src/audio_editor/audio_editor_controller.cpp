@@ -123,7 +123,7 @@ std::vector<std::vector<float>> buildRecordingRecentPeaks(
     const qint64 recEndFrame = recStartFrame + meteredFrames;
     const float blank = std::numeric_limits<float>::quiet_NaN();
     std::vector<std::vector<float>> peaks(
-        static_cast<std::size_t>(std::max<qint64>(1, channels)),
+        1U,
         std::vector<float>(static_cast<std::size_t>(targetPoints * 2LL), blank));
     const qint64 visibleFrameWindow = std::max<qint64>(1, endFrame - startFrame);
     for (std::size_t sourcePoint = 0; sourcePoint < peakCount; ++sourcePoint) {
@@ -142,22 +142,23 @@ std::vector<std::vector<float>> buildRecordingRecentPeaks(
         const qint64 lastTarget = std::clamp<qint64>(
             (overlapEnd - 1 - startFrame) * targetPoints / visibleFrameWindow,
             0, targetPoints - 1);
-        for (std::size_t channel = 0; channel < peaks.size(); ++channel) {
-            const auto& source = recentChannelPeaks[std::min(
-                channel, recentChannelPeaks.size() - 1U)];
-            const float amplitude = std::clamp(
-                std::abs(source[sourcePoint]), 0.0F, 1.0F);
-            for (qint64 target = firstTarget; target <= lastTarget; ++target) {
-                const auto index = static_cast<std::size_t>(target * 2);
-                if (!std::isfinite(peaks[channel][index])) {
-                    peaks[channel][index] = -amplitude;
-                    peaks[channel][index + 1U] = amplitude;
-                } else {
-                    peaks[channel][index] = std::min(
-                        peaks[channel][index], -amplitude);
-                    peaks[channel][index + 1U] = std::max(
-                        peaks[channel][index + 1U], amplitude);
-                }
+        float mixedAmplitude = 0.0F;
+        for (const auto& source : recentChannelPeaks) {
+            mixedAmplitude += std::abs(source[sourcePoint]);
+        }
+        const float amplitude = std::clamp(
+            mixedAmplitude / static_cast<float>(recentChannelPeaks.size()),
+            0.0F, 1.0F);
+        for (qint64 target = firstTarget; target <= lastTarget; ++target) {
+            const auto index = static_cast<std::size_t>(target * 2);
+            if (!std::isfinite(peaks.front()[index])) {
+                peaks.front()[index] = -amplitude;
+                peaks.front()[index + 1U] = amplitude;
+            } else {
+                peaks.front()[index] = std::min(
+                    peaks.front()[index], -amplitude);
+                peaks.front()[index + 1U] = std::max(
+                    peaks.front()[index + 1U], amplitude);
             }
         }
     }
@@ -440,17 +441,20 @@ bool mergeEventFromDecodedSlice(
             const std::size_t sampleBase = static_cast<std::size_t>(
                 sourceFrame - blockStart) * static_cast<std::size_t>(sourceChannels);
             if (sampleBase >= block.samples.size()) break;
-            for (std::size_t outputChannel = 0;
-                 outputChannel < output.size(); ++outputChannel) {
-                const std::size_t sourceChannel = std::min<std::size_t>(
-                    outputChannel, static_cast<std::size_t>(sourceChannels - 1));
-                if (sampleBase + sourceChannel >= block.samples.size()) break;
-                const float value = event.mute ? 0.0F
-                    : block.samples[sampleBase + sourceChannel];
-                const qint64 localOffset = timelineFrame - event.timelineStart;
-                includePeak(output[outputChannel], point, value, value,
-                    agplayer::editor::eventAmplitudeGainAt(
-                        event, localOffset));
+            float mixed = 0.0F;
+            for (int sourceChannel = 0; sourceChannel < sourceChannels;
+                 ++sourceChannel) {
+                if (sampleBase + static_cast<std::size_t>(sourceChannel)
+                    >= block.samples.size()) break;
+                mixed += block.samples[sampleBase
+                    + static_cast<std::size_t>(sourceChannel)];
+            }
+            mixed /= static_cast<float>(sourceChannels);
+            const float value = event.mute ? 0.0F : mixed;
+            const qint64 localOffset = timelineFrame - event.timelineStart;
+            for (auto& channel : output) {
+                includePeak(channel, point, value, value,
+                    agplayer::editor::eventAmplitudeGainAt(event, localOffset));
             }
             wrote = true;
         }
@@ -625,8 +629,10 @@ std::shared_ptr<const agplayer::editor::PeakPyramid> cachedPeakPyramid(
 {
     if (auto cached = lookupPeakPyramid(analysis.source)) return cached;
     const std::string identity = peakPyramidIdentity(analysis.source);
-    auto pyramid = buildPeakPyramid(
-        analysis.channel_peaks, analysis.source.total_frames);
+    const std::vector<std::vector<float>> mix = analysis.visual_mix_peaks.empty()
+        ? analysis.channel_peaks
+        : std::vector<std::vector<float>>{analysis.visual_mix_peaks};
+    auto pyramid = buildPeakPyramid(mix, analysis.source.total_frames);
     if (!pyramid) return {};
     auto& registry = peakPyramidRegistry();
     {
@@ -682,6 +688,27 @@ bool same_project_export_settings(const ProjectExportSettings& left,
         && left.variableBitRate == right.variableBitRate
         && left.quality == right.quality
         && left.outputDirectory == right.outputDirectory;
+}
+
+ProjectExportSettings defaultProjectExportSettings(
+    const int sourceSampleRate = 44'100, const int sourceChannels = 2)
+{
+    ProjectExportSettings settings;
+    settings.codecName = QStringLiteral("MP3");
+    settings.sampleRate = sourceSampleRate == 48'000 || sourceSampleRate == 96'000
+        ? sourceSampleRate : 44'100;
+    settings.bitDepth = 24;
+    settings.channels = std::clamp(sourceChannels, 1, 2);
+    settings.bitRate = 320'000;
+    settings.keepMetadata = true;
+    settings.variableBitRate = false;
+    settings.quality = 100;
+    settings.outputDirectory = QStandardPaths::writableLocation(
+        QStandardPaths::DesktopLocation);
+    if (settings.outputDirectory.isEmpty()) {
+        settings.outputDirectory = QDir::home().filePath(QStringLiteral("Desktop"));
+    }
+    return settings;
 }
 
 bool same_selection(const std::optional<Selection>& left,
@@ -768,6 +795,7 @@ AudioEditorController::AudioEditorController(
     const std::optional<ag_audio_backend> backend, QObject* parent)
     : QObject(parent), actions_(this), viewport_(this)
 {
+    project_export_settings_ = defaultProjectExportSettings();
     if (backend.has_value()) {
         ag_player_config config{};
         config.backend = *backend;
@@ -882,6 +910,7 @@ AudioEditorController::~AudioEditorController()
 void AudioEditorController::setPlaybackController(
     PlaybackController* const controller)
 {
+    playback_controller_ = controller;
     if (controller == nullptr || controller->playerHandle() == player_) return;
     if (playback_adapter_) {
         (void)playback_adapter_->stop();
@@ -1157,7 +1186,8 @@ bool AudioEditorController::createUntitledDocument(
     project_sources_.clear();
     project_issues_.clear();
     known_project_issues_.clear();
-    project_export_settings_ = {};
+    project_export_settings_ = defaultProjectExportSettings(
+        static_cast<int>(sampleRate), static_cast<int>(channels));
     format_name_ = QStringLiteral("WAV");
     sample_rate_ = static_cast<int>(sampleRate);
     channels_ = static_cast<int>(channels);
@@ -1171,9 +1201,7 @@ bool AudioEditorController::createUntitledDocument(
         flat.append(0.0F);
     }
     channel_peaks_.clear();
-    for (quint32 channel = 0; channel < channels; ++channel) {
-        channel_peaks_.append(QVariant::fromValue(flat));
-    }
+    channel_peaks_.append(QVariant::fromValue(flat));
     primary_peak_pyramid_ = buildPeakPyramid(
         peaksAsChannels(channel_peaks_), frames);
     source_peak_pyramids_.clear();
@@ -2455,6 +2483,7 @@ bool AudioEditorController::startRecordingInternal(
         recording_directory_ = outputDir.absolutePath();
     }
     if (recording() || recording_start_watcher_ || recording_stop_watcher_) return false;
+    if (playback_controller_ != nullptr) playback_controller_->stop();
     stopPlayback();
     agplayer::editor::RecordingConfig config;
     config.output_path = std::filesystem::path(path.toStdWString());
@@ -2564,7 +2593,7 @@ bool AudioEditorController::clearDocument()
     project_sources_.clear();
     project_issues_.clear();
     known_project_issues_.clear();
-    project_export_settings_ = {};
+    project_export_settings_ = defaultProjectExportSettings();
     format_name_.clear();
     sample_rate_ = 0;
     channels_ = 0;
@@ -2667,7 +2696,8 @@ bool AudioEditorController::stopRecording()
             channels_ = static_cast<int>(analysis.source.channels);
             bits_per_sample_ = 24;
             bit_rate_ = sample_rate_ * channels_ * bits_per_sample_;
-            channel_peaks_ = build_variant_peaks(analysis.channel_peaks);
+            channel_peaks_ = build_variant_peaks(
+                {analysis.visual_mix_peaks});
             primary_peak_pyramid_ = cachedPeakPyramid(analysis);
             source_peak_pyramids_.clear();
             if (primary_peak_pyramid_) {
@@ -2680,7 +2710,8 @@ bool AudioEditorController::stopRecording()
                 document_.timelineSnapshot().events.front().source)};
             project_issues_.clear();
             known_project_issues_.clear();
-            project_export_settings_ = {};
+            project_export_settings_ = defaultProjectExportSettings(
+                sample_rate_, channels_);
             setViewportDocumentFrames(document_.totalFrames());
             markProjectClean();
         }
@@ -3281,13 +3312,16 @@ void AudioEditorController::applyDocumentLoadOutcome(
             document_.timelineSnapshot().events.front().source)};
         project_issues_.clear();
         known_project_issues_.clear();
-        project_export_settings_ = {};
+        project_export_settings_ = defaultProjectExportSettings(
+            static_cast<int>(outcome.analysis.source.sample_rate),
+            static_cast<int>(outcome.analysis.source.channels));
         format_name_ = QString::fromStdString(outcome.analysis.format).toUpper();
         sample_rate_ = static_cast<int>(outcome.analysis.source.sample_rate);
         channels_ = static_cast<int>(outcome.analysis.source.channels);
         bits_per_sample_ = outcome.analysis.bits_per_sample;
         bit_rate_ = outcome.analysis.bit_rate;
-        channel_peaks_ = build_variant_peaks(outcome.analysis.channel_peaks);
+        channel_peaks_ = build_variant_peaks(
+            {outcome.analysis.visual_mix_peaks});
         primary_peak_pyramid_ = cachedPeakPyramid(outcome.analysis);
         source_peak_pyramids_.clear();
         if (primary_peak_pyramid_) {
@@ -3509,8 +3543,7 @@ void AudioEditorController::requestViewportWaveform()
         ? static_cast<qint64>(recording_session_.framesCaptured())
         : 0;
     const bool recordingActive = recording();
-    const int renderChannels = recordingActive
-        ? std::max(1, recording_channels_) : channels_;
+    const int renderChannels = 1;
     const qint64 totalFrames = effectiveDocumentFramesForViewport(
         has_document_, document_.totalFrames(), recording(), recording_insert_frame_,
         recordedFrames, insert_recording_at_cursor_);
