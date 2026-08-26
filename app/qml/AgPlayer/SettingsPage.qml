@@ -1490,18 +1490,15 @@ Item {
                                 objectName: modelData.objectName
                                 text: modelData.text
                                 checked: modelData.value < 0
-                                         ? SettingsController.skinColorMode === 2
-                                         : SettingsController.skinColorMode !== 2
+                                         ? SettingsController.skinColorMode === 3
+                                         : SettingsController.skinColorMode !== 3
                                            && SettingsController.themeMode === modelData.value
                                 checkable: true
                                 onClicked: {
-                                    if (modelData.value < 0) {
-                                        SettingsController.themeMode = 2
-                                        SettingsController.skinColorMode = 2
-                                    } else {
-                                        SettingsController.skinColorMode = 0
-                                        SettingsController.themeMode = modelData.value
-                                    }
+                                    SettingsController.setAppearanceSelection(
+                                        modelData.value < 0 ? 3
+                                            : modelData.value === 2 ? 0
+                                            : modelData.value === 1 ? 1 : 2)
                                 }
 
                                 contentItem: Text {
@@ -1528,7 +1525,7 @@ Item {
 
                 SettingRow {
                     objectName: "themeRecommendedColorsRow"
-                    visible: SettingsController.skinColorMode === 2
+                    visible: SettingsController.skinColorMode === 3
                     label: qsTr("推荐颜色")
                     Layout.preferredHeight: 42
 
@@ -1542,11 +1539,11 @@ Item {
                         onDefaultRequested: SettingsController.skinColorMode = 0
                         onPresetRequested: function(preset) {
                             SettingsController.skinPreset = preset
-                            SettingsController.skinColorMode = 1
+                            SettingsController.skinColorMode = 3
                         }
                         onCustomRequested: function(color) {
                             SettingsController.skinCustomColor = color
-                            SettingsController.skinColorMode = 2
+                            SettingsController.skinColorMode = 3
                         }
                     }
                 }

@@ -31,7 +31,7 @@ RowLayout {
             required property int index
             required property string modelData
             readonly property bool selectionCueVisible:
-                root.selectedMode === 2
+                root.selectedMode === 3
                 && root.customColor.toString().toUpperCase() === modelData
             readonly property bool focusCueVisible: activeFocus
 
@@ -98,7 +98,7 @@ RowLayout {
     ColorField {
         id: customField
         objectName: root.objectNamePrefix + "CustomField"
-        property bool selectionCueVisible: root.selectedMode === 2
+        property bool selectionCueVisible: root.selectedMode === 3
         Layout.preferredWidth: 112
         colorValue: root.customColor
         enabled: root.enabled

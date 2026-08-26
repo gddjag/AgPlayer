@@ -422,7 +422,7 @@ void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransact
 
     settings.beginEdit();
     settings.setThemeMode(1);
-    settings.setSkinColorMode(2);
+    settings.setSkinColorMode(3);
     settings.setSkinCustomColor(QStringLiteral("#123456"));
     QCOMPARE(manager.preferences().appearanceMode, ThemeManager::AppearanceMode::Light);
     QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
@@ -437,7 +437,7 @@ void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransact
     QCOMPARE(manager.preferences().skinSeed, QColor(QStringLiteral("#AF52DE")));
 
     settings.beginEdit();
-    settings.setSkinColorMode(2);
+    settings.setSkinColorMode(3);
     settings.setSkinCustomColor(QStringLiteral("#123456"));
     settings.commitEdit();
     QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);

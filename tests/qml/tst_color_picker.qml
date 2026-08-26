@@ -49,11 +49,11 @@ TestCase {
             onDefaultRequested: SettingsController.skinColorMode = 0
             onPresetRequested: function(preset) {
                 SettingsController.skinPreset = preset
-                SettingsController.skinColorMode = 1
+                SettingsController.skinColorMode = 3
             }
             onCustomRequested: function(color) {
                 SettingsController.skinCustomColor = color
-                SettingsController.skinColorMode = 2
+                SettingsController.skinColorMode = 3
             }
         }
 
@@ -615,7 +615,7 @@ TestCase {
         var initialSemantic = ThemeManager.success.toString()
 
         SettingsController.beginEdit()
-        SettingsController.skinColorMode = 2
+        SettingsController.skinColorMode = 3
         SettingsController.skinCustomColor = "#D27722"
 
         tryVerify(function() {
@@ -641,7 +641,7 @@ TestCase {
     }
 
     function test_theme_selector_exposes_five_keyboard_recommended_colors() {
-        SettingsController.skinColorMode = 2
+        SettingsController.skinColorMode = 3
         SettingsController.skinCustomColor = "#D27722"
         wait(0)
         paletteChangedSpy.clear()
@@ -658,7 +658,7 @@ TestCase {
         keyClick(Qt.Key_Space)
         tryCompare(SettingsController, "skinCustomColor",
                    skinSelector.recommendedColors[0])
-        tryCompare(SettingsController, "skinColorMode", 2)
+        tryCompare(SettingsController, "skinColorMode", 3)
         compare(paletteChangedSpy.count, 1)
         verify(recommended.selectionCueVisible)
         verify(recommended.focusCueVisible)
@@ -666,8 +666,8 @@ TestCase {
 
     function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {
         SettingsController.themeMode = 1
-        SettingsController.skinColorMode = 1
-        SettingsController.skinPreset = "purple"
+        SettingsController.skinColorMode = 3
+        SettingsController.skinCustomColor = "#AF52DE"
         wait(0)
 
         compare(representativeSwitch.indicator.color.toString(),
@@ -712,17 +712,17 @@ TestCase {
             return findChild(customPicker.contentItem, "colorCandidate-0") !== null
         })
         mouseClick(findChild(customPicker.contentItem, "colorCandidate-0"))
-        tryCompare(SettingsController, "skinColorMode", 2)
+        tryCompare(SettingsController, "skinColorMode", 3)
         tryCompare(SettingsController, "skinCustomColor", "#FFF5EC")
         verify(custom.selectionCueVisible)
         SettingsController.cancelEdit()
         tryCompare(SettingsController, "skinColorMode", 0)
 
         SettingsController.beginEdit()
-        SettingsController.skinColorMode = 2
+        SettingsController.skinColorMode = 3
         SettingsController.skinCustomColor = skinSelector.recommendedColors[1]
         SettingsController.commitEdit()
-        compare(SettingsController.skinColorMode, 2)
+        compare(SettingsController.skinColorMode, 3)
         compare(normalizedColor(SettingsController.skinCustomColor),
                 normalizedColor(skinSelector.recommendedColors[1]))
     }

@@ -46,13 +46,11 @@ QString normalizedColor(const QString& value)
 }
 
 constexpr int kDefaultColorChoiceMode = 0;
-constexpr int kCustomColorChoiceMode = 2;
+constexpr int kCustomColorChoiceMode = 3;
 
 int normalizedColorChoiceMode(const int value)
 {
-    return value >= kDefaultColorChoiceMode && value <= kCustomColorChoiceMode
-        ? value
-        : kDefaultColorChoiceMode;
+    return value == kCustomColorChoiceMode ? value : kDefaultColorChoiceMode;
 }
 
 QString defaultThemePresetId()
@@ -68,6 +66,17 @@ QString normalizedThemePreset(const QString& value)
                                         return preset.id == value;
                                     });
     return match == presets.cend() ? defaultThemePresetId() : match->id;
+}
+
+QString themePresetColor(const QString& value)
+{
+    const QList<ThemeManager::Preset> presets = ThemeManager::presets();
+    const auto match = std::find_if(presets.cbegin(), presets.cend(),
+                                    [&value](const ThemeManager::Preset& preset) {
+                                        return preset.id == value;
+                                    });
+    return (match == presets.cend() ? presets.constFirst().seed : match->seed)
+        .name(QColor::HexRgb).toUpper();
 }
 
 QString defaultThemeCustomColor()
@@ -462,6 +471,31 @@ void SettingsController::setSkinCustomColor(const QString& value)
     skinCustomColor_ = resolved;
     persistValue(QStringLiteral("appearance/skinCustomColor"), resolved);
     emit skinCustomColorChanged();
+}
+
+void SettingsController::setAppearanceSelection(int value)
+{
+    value = clampValue(value, 0, 3);
+    const int nextThemeMode = value == 0 ? 2 : value == 1 ? 1
+        : value == 2 ? 0 : 2;
+    const int nextSkinColorMode = value == 3
+        ? kCustomColorChoiceMode : kDefaultColorChoiceMode;
+    const bool themeChanged = themeMode_ != nextThemeMode;
+    const bool skinChanged = skinColorMode_ != nextSkinColorMode;
+    if (!themeChanged && !skinChanged) {
+        return;
+    }
+
+    themeMode_ = nextThemeMode;
+    skinColorMode_ = nextSkinColorMode;
+    persistValue(QStringLiteral("appearance/themeMode"), themeMode_);
+    persistValue(QStringLiteral("appearance/skinColorMode"), skinColorMode_);
+    if (themeChanged) {
+        emit themeModeChanged();
+    }
+    if (skinChanged) {
+        emit skinColorModeChanged();
+    }
 }
 
 void SettingsController::setWaveformMode(int value)
@@ -1288,6 +1322,23 @@ void SettingsController::load()
     skinPreset_ = settings_.value(QStringLiteral("skinPreset"), skinPreset_).toString();
     skinCustomColor_ = settings_.value(
         QStringLiteral("skinCustomColor"), skinCustomColor_).toString();
+    const int themeSelectionSchemaVersion = settings_.value(
+        QStringLiteral("themeSelectionSchemaVersion"), 1).toInt();
+    if (themeSelectionSchemaVersion < 2) {
+        if (skinColorMode_ == 1) {
+            skinCustomColor_ = themePresetColor(skinPreset_);
+            skinColorMode_ = kCustomColorChoiceMode;
+            settings_.setValue(QStringLiteral("skinCustomColor"),
+                               skinCustomColor_);
+            settings_.setValue(QStringLiteral("skinColorMode"),
+                               skinColorMode_);
+        } else if (skinColorMode_ == 2) {
+            skinColorMode_ = kCustomColorChoiceMode;
+            settings_.setValue(QStringLiteral("skinColorMode"),
+                               skinColorMode_);
+        }
+        settings_.setValue(QStringLiteral("themeSelectionSchemaVersion"), 2);
+    }
     settings_.remove(QStringLiteral("glassEffect"));
     waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
     waveformHeight_ =
@@ -1336,6 +1387,23 @@ void SettingsController::load()
         QStringLiteral("spectrumPlayedColor"), spectrumRgbMiddleColor_);
     spectrumRgbEndColor_ = settings_.value(
         QStringLiteral("spectrumRgbEndColor"), spectrumRgbEndColor_).toString();
+    if (!settings_.value(QStringLiteral("spectrumDefaultMigrated"), false).toBool()) {
+        const bool hasLegacyDefault =
+            settings_.contains(QStringLiteral("spectrumColorMode"))
+            && settings_.contains(QStringLiteral("spectrumSolidColor"))
+            && spectrumColorMode_ == 0
+            && spectrumSolidColor_.compare(QStringLiteral("#0078D4"),
+                                           Qt::CaseInsensitive) == 0;
+        if (hasLegacyDefault) {
+            spectrumColorMode_ = 1;
+            spectrumSolidColor_ = QStringLiteral("#8b5cf6");
+            settings_.setValue(QStringLiteral("spectrumColorMode"),
+                               spectrumColorMode_);
+            settings_.setValue(QStringLiteral("spectrumSolidColor"),
+                               spectrumSolidColor_);
+        }
+        settings_.setValue(QStringLiteral("spectrumDefaultMigrated"), true);
+    }
     waveformHoverTimePreview_ = settings_.value(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_).toBool();
     waveformPlaybackGuide_ = settings_.value(
         QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_).toBool();

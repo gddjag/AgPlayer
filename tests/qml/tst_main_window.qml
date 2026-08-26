@@ -4627,6 +4627,63 @@ TestCase {
         page.close()
     }
 
+    function test_settings_theme_buttons_apply_only_the_final_palette_once() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        SettingsController.themeMode = 0
+        SettingsController.skinColorMode = 0
+        SettingsController.skinCustomColor = "#D27722"
+        page.open()
+        page.selectedSection = 2
+        wait(250)
+
+        var systemButton = findChild(page, "themeModeSystem")
+        var lightButton = findChild(page, "themeModeLight")
+        var darkButton = findChild(page, "themeModeDark")
+        var customButton = findChild(page, "themeModeCustom")
+        verify(systemButton && lightButton && darkButton && customButton)
+        var paletteSpy = signalSpyComponent.createObject(page, {
+            "target": ThemeManager,
+            "signalName": "paletteChanged"
+        })
+        verify(paletteSpy)
+
+        var cases = [
+            { "button": systemButton, "beforeTheme": 0, "beforeSkin": 3,
+              "theme": 2, "skin": 0 },
+            { "button": lightButton, "beforeTheme": 0, "beforeSkin": 3,
+              "theme": 1, "skin": 0 },
+            { "button": darkButton, "beforeTheme": 1, "beforeSkin": 3,
+              "theme": 0, "skin": 0 },
+            { "button": customButton, "beforeTheme": 0, "beforeSkin": 0,
+              "theme": 2, "skin": 3 }
+        ]
+        for (var index = 0; index < cases.length; ++index) {
+            SettingsController.themeMode = cases[index].beforeTheme
+            SettingsController.skinColorMode = cases[index].beforeSkin
+            wait(0)
+            paletteSpy.clear()
+            mouseClick(cases[index].button,
+                       cases[index].button.width / 2,
+                       cases[index].button.height / 2)
+            tryCompare(SettingsController, "themeMode", cases[index].theme)
+            tryCompare(SettingsController, "skinColorMode", cases[index].skin)
+            compare(paletteSpy.count, 1,
+                    "one click must publish only the final palette")
+            verify(cases[index].button.checked)
+        }
+
+        paletteSpy.destroy()
+        page.cancelAndClose()
+        if (ownsPage)
+            page.destroy()
+    }
+
     function test_settings_y_feedback_entry_is_removed() {
         var page = findChild(mainWindow, "settingsPage")
         verify(page)

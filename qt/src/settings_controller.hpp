@@ -284,6 +284,7 @@ public:
     void setSkinColorMode(int value);
     void setSkinPreset(const QString& value);
     void setSkinCustomColor(const QString& value);
+    Q_INVOKABLE void setAppearanceSelection(int value);
     void setWaveformMode(int value);
     void setWaveformHeight(double value);
     void setWaveformDensity(double value);
