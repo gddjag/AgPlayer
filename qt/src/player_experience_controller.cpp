@@ -3,9 +3,11 @@
 #include "settings_controller.hpp"
 
 #include <QColor>
+#include <QMetaType>
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace {
 
@@ -15,6 +17,78 @@ int enumOrDefault(const int value, const int first, const int last,
                   const int fallback) noexcept
 {
     return value >= first && value <= last ? value : fallback;
+}
+
+std::optional<int> storedInteger(const QVariant& value)
+{
+    switch (value.metaType().id()) {
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong: {
+        bool ok = false;
+        const int parsed = value.toInt(&ok);
+        return ok ? std::optional<int>(parsed) : std::nullopt;
+    }
+    case QMetaType::QString: {
+        const QString stored = value.toString();
+        bool ok = false;
+        const int parsed = stored.toInt(&ok);
+        return ok && stored == QString::number(parsed)
+            ? std::optional<int>(parsed) : std::nullopt;
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+std::optional<double> storedDouble(const QVariant& value)
+{
+    double parsed = 0.0;
+    switch (value.metaType().id()) {
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong:
+    case QMetaType::Float:
+    case QMetaType::Double: {
+        bool ok = false;
+        parsed = value.toDouble(&ok);
+        if (!ok) return std::nullopt;
+        break;
+    }
+    case QMetaType::QString: {
+        const QString stored = value.toString();
+        bool ok = false;
+        parsed = stored.toDouble(&ok);
+        if (!ok || stored != QString::number(parsed, 'g', 15)) {
+            return std::nullopt;
+        }
+        break;
+    }
+    default:
+        return std::nullopt;
+    }
+    return std::isfinite(parsed) ? std::optional<double>(parsed) : std::nullopt;
+}
+
+std::optional<bool> storedBoolean(const QVariant& value)
+{
+    if (value.metaType().id() == QMetaType::Bool) {
+        return value.toBool();
+    }
+    if (value.metaType().id() == QMetaType::QString) {
+        const QString stored = value.toString();
+        if (stored == QStringLiteral("true")) return true;
+        if (stored == QStringLiteral("false")) return false;
+    }
+    return std::nullopt;
+}
+
+QString storedColor(const QVariant& value, const QString& fallback)
+{
+    return value.metaType().id() == QMetaType::QString
+        ? value.toString() : fallback;
 }
 
 } // namespace
@@ -307,47 +381,86 @@ void PlayerExperienceController::togglePlayerShellMode()
 void PlayerExperienceController::load()
 {
     settings_.beginGroup(QLatin1String(kSettingsGroup));
-    immersiveMode_ = enumOrDefault(settings_.value(QStringLiteral("mode"), Off).toInt(),
+    const auto integer = [this](const QString& key, const int fallback) {
+        return storedInteger(settings_.value(key)).value_or(fallback);
+    };
+    const auto boolean = [this](const QString& key, const bool fallback) {
+        return storedBoolean(settings_.value(key)).value_or(fallback);
+    };
+    const auto decimal = [this](const QString& key, const double fallback) {
+        return storedDouble(settings_.value(key)).value_or(fallback);
+    };
+
+    immersiveMode_ = enumOrDefault(integer(QStringLiteral("mode"), Off),
                                    Off, TerrainReactor, Off);
-    hostMode_ = enumOrDefault(settings_.value(QStringLiteral("hostMode"), Windowed).toInt(),
+    hostMode_ = enumOrDefault(integer(QStringLiteral("hostMode"), Windowed),
                               Windowed, Desktop, Windowed);
-    lyricsVisible_ = settings_.value(QStringLiteral("lyricsVisible"), false).toBool();
-    panelVisible_ = settings_.value(QStringLiteral("panelVisible"), true).toBool();
-    desktopMousePassthrough_ = settings_.value(
-        QStringLiteral("desktopMousePassthrough"), false).toBool();
-    qualityPreset_ = enumOrDefault(settings_.value(QStringLiteral("qualityPreset"), Auto).toInt(),
+    lyricsVisible_ = boolean(QStringLiteral("lyricsVisible"), false);
+    panelVisible_ = boolean(QStringLiteral("panelVisible"), true);
+    desktopMousePassthrough_ = boolean(
+        QStringLiteral("desktopMousePassthrough"), false);
+    qualityPreset_ = enumOrDefault(integer(QStringLiteral("qualityPreset"), Auto),
                                    Auto, Ultra, Auto);
-    colorMode_ = enumOrDefault(settings_.value(QStringLiteral("colorMode"), MultiRegion).toInt(),
+    colorMode_ = enumOrDefault(integer(QStringLiteral("colorMode"), MultiRegion),
                                MultiRegion, RgbSweep, MultiRegion);
-    coolColor_ = normalizedColor(settings_.value(QStringLiteral("coolColor"), coolColor_).toString(),
+    coolColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("coolColor")),
+                                             QStringLiteral("#4F6FFF")),
                                  QStringLiteral("#4F6FFF"));
-    warmColor_ = normalizedColor(settings_.value(QStringLiteral("warmColor"), warmColor_).toString(),
+    warmColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("warmColor")),
+                                             QStringLiteral("#FF4778")),
                                  QStringLiteral("#FF4778"));
-    accentColor_ = normalizedColor(settings_.value(QStringLiteral("accentColor"), accentColor_).toString(),
+    accentColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("accentColor")),
+                                               QStringLiteral("#77EAFF")),
                                    QStringLiteral("#77EAFF"));
-    peakColor_ = normalizedColor(settings_.value(QStringLiteral("peakColor"), peakColor_).toString(),
+    peakColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("peakColor")),
+                                             QStringLiteral("#D7FF58")),
                                  QStringLiteral("#D7FF58"));
-    baseColor_ = normalizedColor(settings_.value(QStringLiteral("baseColor"), baseColor_).toString(),
+    baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
+                                             QStringLiteral("#080616")),
                                  QStringLiteral("#080616"));
-    terrainAmplitude_ = clampPercent(settings_.value(
-        QStringLiteral("terrainAmplitude"), terrainAmplitude_).toInt());
-    motionResponse_ = clampPercent(settings_.value(
-        QStringLiteral("motionResponse"), motionResponse_).toInt());
-    gradientLayers_ = clampPercent(settings_.value(
-        QStringLiteral("gradientLayers"), gradientLayers_).toInt());
-    glowIntensity_ = clampPercent(settings_.value(
-        QStringLiteral("glowIntensity"), glowIntensity_).toInt());
-    cinemaShake_ = std::clamp(settings_.value(
-        QStringLiteral("cinemaShake"), cinemaShake_).toDouble(), 0.0, 1.8);
-    autoRotate_ = clampPercent(settings_.value(QStringLiteral("autoRotate"), autoRotate_).toInt());
-    peakBoost_ = clampPercent(settings_.value(QStringLiteral("peakBoost"), peakBoost_).toInt());
-    ripplesEnabled_ = settings_.value(QStringLiteral("ripplesEnabled"), true).toBool();
-    floatingCubesEnabled_ = settings_.value(QStringLiteral("floatingCubesEnabled"), true).toBool();
-    meteorsEnabled_ = settings_.value(QStringLiteral("meteorsEnabled"), true).toBool();
-    idleBreathingEnabled_ = settings_.value(QStringLiteral("idleBreathingEnabled"), true).toBool();
-    themeCycleEnabled_ = settings_.value(QStringLiteral("themeCycleEnabled"), false).toBool();
-    visualEqGains_ = normalizedVisualEqGains(settings_.value(
-        QStringLiteral("visualEqGains"), defaultVisualEqGains()).toList());
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 62));
+    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
+    gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
+    glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 38));
+    cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.40), 0.0, 1.8);
+    autoRotate_ = clampPercent(integer(QStringLiteral("autoRotate"), 54));
+    peakBoost_ = clampPercent(integer(QStringLiteral("peakBoost"), 58));
+    ripplesEnabled_ = boolean(QStringLiteral("ripplesEnabled"), true);
+    floatingCubesEnabled_ = boolean(QStringLiteral("floatingCubesEnabled"), true);
+    meteorsEnabled_ = boolean(QStringLiteral("meteorsEnabled"), true);
+    idleBreathingEnabled_ = boolean(QStringLiteral("idleBreathingEnabled"), true);
+    themeCycleEnabled_ = boolean(QStringLiteral("themeCycleEnabled"), false);
+    const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
+    const int persistedGainsType = persistedGains.metaType().id();
+    visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
+                       || persistedGainsType == QMetaType::QStringList)
+        ? normalizedVisualEqGains(persistedGains.toList()) : defaultVisualEqGains();
+
+    settings_.setValue(QStringLiteral("mode"), immersiveMode_);
+    settings_.setValue(QStringLiteral("hostMode"), hostMode_);
+    settings_.setValue(QStringLiteral("lyricsVisible"), lyricsVisible_);
+    settings_.setValue(QStringLiteral("panelVisible"), panelVisible_);
+    settings_.setValue(QStringLiteral("desktopMousePassthrough"), desktopMousePassthrough_);
+    settings_.setValue(QStringLiteral("qualityPreset"), qualityPreset_);
+    settings_.setValue(QStringLiteral("colorMode"), colorMode_);
+    settings_.setValue(QStringLiteral("coolColor"), coolColor_);
+    settings_.setValue(QStringLiteral("warmColor"), warmColor_);
+    settings_.setValue(QStringLiteral("accentColor"), accentColor_);
+    settings_.setValue(QStringLiteral("peakColor"), peakColor_);
+    settings_.setValue(QStringLiteral("baseColor"), baseColor_);
+    settings_.setValue(QStringLiteral("terrainAmplitude"), terrainAmplitude_);
+    settings_.setValue(QStringLiteral("motionResponse"), motionResponse_);
+    settings_.setValue(QStringLiteral("gradientLayers"), gradientLayers_);
+    settings_.setValue(QStringLiteral("glowIntensity"), glowIntensity_);
+    settings_.setValue(QStringLiteral("cinemaShake"), cinemaShake_);
+    settings_.setValue(QStringLiteral("autoRotate"), autoRotate_);
+    settings_.setValue(QStringLiteral("peakBoost"), peakBoost_);
+    settings_.setValue(QStringLiteral("ripplesEnabled"), ripplesEnabled_);
+    settings_.setValue(QStringLiteral("floatingCubesEnabled"), floatingCubesEnabled_);
+    settings_.setValue(QStringLiteral("meteorsEnabled"), meteorsEnabled_);
+    settings_.setValue(QStringLiteral("idleBreathingEnabled"), idleBreathingEnabled_);
+    settings_.setValue(QStringLiteral("themeCycleEnabled"), themeCycleEnabled_);
+    settings_.setValue(QStringLiteral("visualEqGains"), visualEqGains_);
     settings_.endGroup();
 }
 
@@ -382,10 +495,9 @@ QVariantList PlayerExperienceController::normalizedVisualEqGains(
     QVariantList normalized;
     normalized.reserve(8);
     for (const QVariant& value : values) {
-        bool ok = false;
-        const int parsed = value.toInt(&ok);
-        if (!ok) return defaultVisualEqGains();
-        normalized.append(clampPercent(parsed));
+        const auto parsed = storedInteger(value);
+        if (!parsed.has_value()) return defaultVisualEqGains();
+        normalized.append(clampPercent(*parsed));
     }
     return normalized;
 }

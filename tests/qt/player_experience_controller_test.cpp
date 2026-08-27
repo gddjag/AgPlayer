@@ -1,9 +1,13 @@
 #include "audio_visual_feature_controller.hpp"
+#include "playback_controller.hpp"
 #include "player_experience_controller.hpp"
 #include "settings_controller.hpp"
 
+#include <agplayer/c_api.h>
+
 #include <QCoreApplication>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -14,9 +18,11 @@ private slots:
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
+    void strictlyParsesPersistedScalarTypes();
     void togglesOnlyTheLayoutShellSetting();
     void derivesBandsAndEvents();
-    void doesNoSpectrumWorkWhileInactive();
+    void followsPlaybackSpectrumOnlyWhileActive();
+    void eventThresholdsIncludeBoundaries();
 };
 
 void PlayerExperienceControllerTest::initTestCase()
@@ -96,6 +102,48 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
              QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
 }
 
+void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
+{
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/terrainAmplitude"),
+                      QStringLiteral(" 72"));
+    settings.setValue(QStringLiteral("immersiveVisual/qualityPreset"),
+                      QStringLiteral("3.0"));
+    settings.setValue(QStringLiteral("immersiveVisual/cinemaShake"), true);
+    settings.setValue(QStringLiteral("immersiveVisual/panelVisible"), 0);
+
+    PlayerExperienceController malformed;
+    QCOMPARE(malformed.terrainAmplitude(), 62);
+    QCOMPARE(malformed.qualityPreset(), 0);
+    QCOMPARE(malformed.cinemaShake(), 0.40);
+    QVERIFY(malformed.panelVisible());
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/terrainAmplitude")),
+             QVariant(62));
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
+             QVariant(0));
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")),
+             QVariant(0.40));
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/panelVisible")),
+             QVariant(true));
+
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/terrainAmplitude"),
+                      QStringLiteral("72"));
+    settings.setValue(QStringLiteral("immersiveVisual/qualityPreset"),
+                      QStringLiteral("3"));
+    settings.setValue(QStringLiteral("immersiveVisual/cinemaShake"),
+                      QStringLiteral("0.5"));
+    settings.setValue(QStringLiteral("immersiveVisual/panelVisible"),
+                      QStringLiteral("false"));
+
+    PlayerExperienceController canonicalStrings;
+    QCOMPARE(canonicalStrings.terrainAmplitude(), 72);
+    QCOMPARE(canonicalStrings.qualityPreset(), 3);
+    QCOMPARE(canonicalStrings.cinemaShake(), 0.5);
+    QVERIFY(!canonicalStrings.panelVisible());
+}
+
 void PlayerExperienceControllerTest::togglesOnlyTheLayoutShellSetting()
 {
     QSettings().clear();
@@ -136,23 +184,75 @@ void PlayerExperienceControllerTest::derivesBandsAndEvents()
     QVERIFY(features.snarePulse());
 }
 
-void PlayerExperienceControllerTest::doesNoSpectrumWorkWhileInactive()
+void PlayerExperienceControllerTest::followsPlaybackSpectrumOnlyWhileActive()
 {
-    AudioVisualFeatureController features;
-    const QVariantList spectrum(128, 0.5);
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController playback(core);
+        AudioVisualFeatureController features(&playback);
+        QSignalSpy spectrumChanged(&playback, &PlaybackController::spectrumChanged);
 
-    features.processSpectrum(spectrum);
-    QCOMPARE(features.derivedUpdateCount(), 0);
-    QVERIFY(!features.active());
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        playback.play();
+        QTRY_VERIFY(spectrumChanged.count() > 0);
+        QCOMPARE(features.derivedUpdateCount(), quint64{0});
 
-    features.setActive(true);
-    features.processSpectrum(spectrum);
-    QCOMPARE(features.derivedUpdateCount(), 1);
+        features.setActive(true);
+        const int beforeActivePublication = spectrumChanged.count();
+        QCOMPARE(ag_player_stop(core), AG_OK);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        playback.play();
+        QTRY_VERIFY(spectrumChanged.count() > beforeActivePublication);
+        QTRY_VERIFY(features.derivedUpdateCount() > 0);
 
-    features.setActive(false);
-    features.processSpectrum(spectrum);
-    QCOMPARE(features.derivedUpdateCount(), 1);
-    QVERIFY(!features.active());
+        features.setActive(false);
+        const quint64 derivedBeforeInactivePublication =
+            features.derivedUpdateCount();
+        const int beforeInactivePublication = spectrumChanged.count();
+        QCOMPARE(ag_player_stop(core), AG_OK);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        playback.play();
+        QTRY_VERIFY(spectrumChanged.count() > beforeInactivePublication);
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(features.derivedUpdateCount(), derivedBeforeInactivePublication);
+        QVERIFY(!features.active());
+    }
+    ag_player_destroy(core);
+}
+
+void PlayerExperienceControllerTest::eventThresholdsIncludeBoundaries()
+{
+    const auto hasKick = [](double baseline) {
+        AudioVisualFeatureController features;
+        QVariantList spectrum(128, 0.0);
+        features.setActive(true);
+        for (int index = 0; index < 32; ++index) spectrum[index] = baseline;
+        features.processSpectrum(spectrum);
+        for (int index = 0; index < 32; ++index) spectrum[index] = 0.1;
+        features.processSpectrum(spectrum);
+        return features.kickPulse();
+    };
+    QVERIFY(!hasKick(0.051)); // Positive delta is just below 0.05.
+    QVERIFY(hasKick(0.05));   // Positive delta is exactly 0.05.
+    QVERIFY(hasKick(0.049));  // Positive delta is just above 0.05.
+
+    const auto hasSnare = [](double baseline) {
+        AudioVisualFeatureController features;
+        QVariantList spectrum(128, 0.0);
+        features.setActive(true);
+        for (int index = 64; index < 96; ++index) spectrum[index] = baseline;
+        features.processSpectrum(spectrum);
+        for (int index = 64; index < 96; ++index) spectrum[index] = 0.1;
+        features.processSpectrum(spectrum);
+        return features.snarePulse();
+    };
+    QVERIFY(!hasSnare(0.061)); // Positive delta is just below 0.04.
+    QVERIFY(hasSnare(0.06));   // Positive delta is exactly 0.04.
+    QVERIFY(hasSnare(0.059));  // Positive delta is just above 0.04.
 }
 
 QTEST_MAIN(PlayerExperienceControllerTest)

@@ -1088,11 +1088,15 @@ target_include_directories(track_waveform_thumbnail_provider_test PRIVATE
 
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
+add_dependencies(player_experience_controller_test decoder_fixture)
 add_dependencies(waveform_provider_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(playback_controller_test PROPERTIES
+    ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(player_experience_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(waveform_provider_test PROPERTIES
