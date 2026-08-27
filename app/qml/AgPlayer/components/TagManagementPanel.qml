@@ -405,7 +405,7 @@ Item {
                             height: implicitHeight
                             radius: 12
                             clip: true
-                            color: Qt.rgba(resolvedSurface.r,
+                            color: Qt.rgba(resolvedSurface.r, // theme-color-allow: user tag color with glass opacity
                                            resolvedSurface.g,
                                            resolvedSurface.b, 0.78)
                             border.color: dropVisual || selectedVisual
@@ -423,7 +423,7 @@ Item {
                                 anchors.rightMargin: 7
                                 height: 1
                                 radius: 0.5
-                                color: Qt.rgba(1, 1, 1, 0.16)
+                                color: Qt.rgba(1, 1, 1, 0.16) // theme-color-allow: fixed glass highlight
                             }
 
                             Text {
