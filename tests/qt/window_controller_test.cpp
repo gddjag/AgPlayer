@@ -640,17 +640,34 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
     }
     const QList<QScreen*> screens = QGuiApplication::screens();
     if (screens.size() < 2) {
-        QSKIP("requires two active displays; DPI size policy has an algorithm test");
+        QSKIP("hardware gap: requires at least two active Windows displays for mixed-DPI coverage");
+    }
+
+    QScreen* sourceScreen = nullptr;
+    QScreen* targetScreen = nullptr;
+    for (QScreen* source : screens) {
+        for (QScreen* target : screens) {
+            if (source != target
+                && !qFuzzyCompare(source->devicePixelRatio(), target->devicePixelRatio())) {
+                sourceScreen = source;
+                targetScreen = target;
+                break;
+            }
+        }
+        if (sourceScreen != nullptr) break;
+    }
+    if (sourceScreen == nullptr) {
+        QSKIP("hardware gap: requires two active Windows displays with different device-pixel ratios");
     }
 
     QWindow mainWindow;
-    mainWindow.setGeometry(QRect(screens.at(0)->availableGeometry().topLeft()
+    mainWindow.setGeometry(QRect(sourceScreen->availableGeometry().topLeft()
                                      + QPoint(60, 60),
                                  QSize(640, 320)));
     QWindow toolsWindow;
     QWindow settingsWindow;
     const QRect initialGeometry(
-        screens.at(0)->availableGeometry().topLeft() + QPoint(100, 100),
+        sourceScreen->availableGeometry().topLeft() + QPoint(100, 100),
         QSize(880, 560));
     toolsWindow.setGeometry(initialGeometry);
     settingsWindow.setGeometry(initialGeometry);
@@ -664,6 +681,7 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
     QVERIFY(QTest::qWaitForWindowExposed(&settingsWindow));
 
     for (QWindow* window : {&toolsWindow, &settingsWindow}) {
+        QTRY_VERIFY(window->screen() == sourceScreen);
         RECT before{};
         QVERIFY(GetWindowRect(reinterpret_cast<HWND>(window->winId()), &before));
         const QSize nativeSize(before.right - before.left,
@@ -671,9 +689,14 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
         const qreal sourceDpr = window->devicePixelRatio();
         const QSize logicalSize(qRound(nativeSize.width() / sourceDpr),
                                 qRound(nativeSize.height() / sourceDpr));
-        window->setPosition(screens.at(1)->availableGeometry().topLeft()
-                             + QPoint(100, 100));
-        QTRY_VERIFY(window->screen() == screens.at(1));
+        // Drive the actual Windows DPI-change message path; QWindow::setPosition()
+        // can update its screen association without producing that transition.
+        const QPoint targetPosition = targetScreen->availableGeometry().topLeft()
+            + QPoint(100, 100);
+        QVERIFY(SetWindowPos(reinterpret_cast<HWND>(window->winId()), nullptr,
+                              targetPosition.x(), targetPosition.y(), 0, 0,
+                              SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE));
+        QTRY_VERIFY(window->screen() == targetScreen);
         const auto currentNativeSize = [window]() {
             RECT rect{};
             if (!GetWindowRect(reinterpret_cast<HWND>(window->winId()), &rect)) {

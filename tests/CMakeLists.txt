@@ -1287,6 +1287,14 @@ if(WIN32)
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
             -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/window_icon_contract_test.ps1
             -SourceRoot ${CMAKE_SOURCE_DIR})
+    add_test(NAME window_mixed_dpi_transition_test
+        COMMAND window_controller_test auxiliaryWindowsKeepNativeSizeAcrossScreens
+            -o -,txt)
+    set_tests_properties(window_mixed_dpi_transition_test PROPERTIES
+        TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=windows"
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
     add_test(NAME window_taskbar_native_test
         COMMAND window_controller_test taskbarActivationDoesNotCancelMinimize
             -o -,txt)
