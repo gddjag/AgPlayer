@@ -13,6 +13,8 @@ add_library(agplayer_qt STATIC
     src/audio_editor/project_document.hpp
     src/audio_editor/selection_drag_controller.cpp
     src/audio_editor/selection_drag_controller.hpp
+    src/audio_editor/playback_clip_drag_adapter.cpp
+    src/audio_editor/playback_clip_drag_adapter.hpp
     src/audio_file_discovery.cpp
     src/audio_file_discovery.hpp
     src/audio_preview_controller.cpp

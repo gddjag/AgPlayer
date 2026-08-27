@@ -170,6 +170,7 @@ bool SettingsController::autoReadRating() const noexcept { return autoReadRating
 
 // Appearance & Visualizer getters
 int SettingsController::themeMode() const noexcept { return themeMode_; }
+int SettingsController::playerShellMode() const noexcept { return playerShellMode_; }
 int SettingsController::skinColorMode() const noexcept { return skinColorMode_; }
 QString SettingsController::skinPreset() const { return skinPreset_; }
 QString SettingsController::skinCustomColor() const { return skinCustomColor_; }
@@ -437,6 +438,17 @@ void SettingsController::setThemeMode(int value)
     themeMode_ = value;
     persistValue(QStringLiteral("appearance/themeMode"), value);
     emit themeModeChanged();
+}
+
+void SettingsController::setPlayerShellMode(int value)
+{
+    value = value == 1 ? 1 : 0;
+    if (playerShellMode_ == value) {
+        return;
+    }
+    playerShellMode_ = value;
+    persistValue(QStringLiteral("appearance/playerShellMode"), value);
+    emit playerShellModeChanged();
 }
 
 void SettingsController::setSkinColorMode(int value)
@@ -1055,6 +1067,7 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit autoReadRatingChanged();
 
     emit themeModeChanged();
+    emit playerShellModeChanged();
     emit skinColorModeChanged();
     emit skinPresetChanged();
     emit skinCustomColorChanged();
@@ -1315,6 +1328,18 @@ void SettingsController::load()
         if (!storedThemeMode.has_value()
             || *storedThemeMode < 0 || *storedThemeMode > 2) {
             settings_.setValue(QStringLiteral("themeMode"), themeMode_);
+        }
+    }
+    if (settings_.contains(QStringLiteral("playerShellMode"))) {
+        const std::optional<int> storedPlayerShellMode =
+            storedInteger(settings_.value(QStringLiteral("playerShellMode")));
+        playerShellMode_ = storedPlayerShellMode.has_value()
+                && (*storedPlayerShellMode == 0 || *storedPlayerShellMode == 1)
+            ? *storedPlayerShellMode
+            : 0;
+        if (!storedPlayerShellMode.has_value()
+            || (*storedPlayerShellMode != 0 && *storedPlayerShellMode != 1)) {
+            settings_.setValue(QStringLiteral("playerShellMode"), playerShellMode_);
         }
     }
     skinColorMode_ = settings_.value(
@@ -1589,6 +1614,7 @@ void SettingsController::load()
     closeBehavior_ = clampValue(closeBehavior_, 0, 1);
     defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
     themeMode_ = themeMode_ >= 0 && themeMode_ <= 2 ? themeMode_ : 2;
+    playerShellMode_ = playerShellMode_ == 1 ? 1 : 0;
     skinColorMode_ = normalizedColorChoiceMode(skinColorMode_);
     skinPreset_ = normalizedThemePreset(skinPreset_);
     const QString normalizedSkinCustomColor =
@@ -1682,6 +1708,7 @@ void SettingsController::saveAll(const bool includeMediaSettings)
 
     settings_.beginGroup(QStringLiteral("appearance"));
     persistValue(QStringLiteral("themeMode"), themeMode_);
+    persistValue(QStringLiteral("playerShellMode"), playerShellMode_);
     persistValue(QStringLiteral("skinColorMode"), skinColorMode_);
     persistValue(QStringLiteral("skinPreset"), skinPreset_);
     persistValue(QStringLiteral("skinCustomColor"), skinCustomColor_);
@@ -1774,6 +1801,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     autoReadRating_ = true;
 
     themeMode_ = 2;
+    playerShellMode_ = 0;
     skinColorMode_ = kDefaultColorChoiceMode;
     skinPreset_ = defaultThemePresetId();
     skinCustomColor_ = defaultThemeCustomColor();

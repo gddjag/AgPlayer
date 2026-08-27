@@ -1,6 +1,7 @@
 #include "selection_drag_controller.hpp"
 
 #include "audio_editor/document_render_pipeline.hpp"
+#include "audio_editor/audio_source_probe.hpp"
 
 #include <QApplication>
 #include <QCryptographicHash>
@@ -11,6 +12,7 @@
 #include <QFutureWatcher>
 #include <QMimeData>
 #include <QStandardPaths>
+#include <QRegularExpression>
 #include <QtConcurrent>
 
 #include <cmath>
@@ -24,6 +26,73 @@ QString defaultHandoffDirectory()
     return QDir(QStandardPaths::writableLocation(
         QStandardPaths::AppDataLocation))
         .filePath(QStringLiteral("AudioEditor/Handoff"));
+}
+
+QString safeFileStem(QString value)
+{
+    value.replace(QRegularExpression(QStringLiteral(R"([<>:"/\\|?*\x00-\x1f])")),
+                  QStringLiteral("_"));
+    value = value.simplified();
+    while (value.endsWith(QLatin1Char('.'))
+           || value.endsWith(QLatin1Char(' '))) {
+        value.chop(1);
+    }
+    if (value.isEmpty()) value = QStringLiteral("clip");
+    return value.left(160);
+}
+
+qint64 frameForMilliseconds(const qint64 milliseconds,
+                            const std::uint32_t sampleRate)
+{
+    return static_cast<qint64>(std::llround(
+        static_cast<long double>(milliseconds)
+        * static_cast<long double>(sampleRate) / 1000.0L));
+}
+
+bool materializePlaybackClip(HandoffRequest& request,
+                             const std::atomic_bool* cancelled,
+                             QString& error)
+{
+    if (!request.playbackClip) return true;
+    const auto clip = *request.playbackClip;
+    if (clip.path.isEmpty() || clip.startMs < 0
+        || clip.endMs - clip.startMs < 100) {
+        error = QStringLiteral("拖出音频选区无效");
+        return false;
+    }
+    const auto probe = agplayer::editor::AudioSourceProbe::probe(
+        std::filesystem::path(clip.path.toStdWString()),
+        std::chrono::steady_clock::now() + std::chrono::seconds(10),
+        cancelled);
+    if (!probe.ok()) {
+        error = QString::fromStdString(probe.message.empty()
+            ? std::string("无法读取拖出音频源") : probe.message);
+        return false;
+    }
+    const qint64 startFrame = std::clamp<qint64>(
+        frameForMilliseconds(clip.startMs, probe.source.sample_rate), 0,
+        probe.source.total_frames);
+    const qint64 endFrame = std::clamp<qint64>(
+        frameForMilliseconds(clip.endMs, probe.source.sample_rate), 0,
+        probe.source.total_frames);
+    if (endFrame <= startFrame) {
+        error = QStringLiteral("拖出音频选区超出源文件范围");
+        return false;
+    }
+    request.snapshot = agplayer::editor::AudioDocument::fromSource(probe.source)
+        .timelineSnapshot();
+    request.selection = {startFrame, endFrame};
+    request.timelineRevision = request.snapshot.revision;
+    request.renderState.sampleRate = static_cast<int>(probe.source.sample_rate);
+    request.renderState.channels = static_cast<int>(probe.source.channels);
+    request.renderState.trackGain = 1.0F;
+    request.renderState.muted = false;
+    request.renderState.speedPercent = 100.0;
+    request.renderState.pitchCents = 0;
+    request.renderState.keepPitch = true;
+    request.renderState.formantPreservation = false;
+    request.playbackClip.reset();
+    return true;
 }
 
 QString cacheKey(const HandoffRequest& request)
@@ -109,10 +178,16 @@ HandoffAssetManager::HandoffAssetManager(QString directory)
 HandoffAssetResult HandoffAssetManager::prepare(
     const HandoffRequest& request, const std::atomic_bool* cancelled) const
 {
-    if (request.snapshot.events.empty() || !request.selection.valid()
-        || request.sourceIdentity.isEmpty()
-        || request.renderState.sampleRate <= 0
-        || request.renderState.channels <= 0) {
+    HandoffRequest renderRequest = request;
+    QString materializeError;
+    if (!materializePlaybackClip(renderRequest, cancelled, materializeError)) {
+        return {false, {}, {}, materializeError};
+    }
+    if (renderRequest.snapshot.events.empty()
+        || !renderRequest.selection.valid()
+        || renderRequest.sourceIdentity.isEmpty()
+        || renderRequest.renderState.sampleRate <= 0
+        || renderRequest.renderState.channels <= 0) {
         return {false, {}, {}, QStringLiteral("拖出音频请求无效")};
     }
     if (cancelled && cancelled->load(std::memory_order_acquire)) {
@@ -122,33 +197,37 @@ HandoffAssetResult HandoffAssetManager::prepare(
     if (!outputDirectory.mkpath(QStringLiteral("."))) {
         return {false, {}, {}, QStringLiteral("无法创建拖出音频目录")};
     }
-    const QString path = outputDirectory.filePath(
-        QStringLiteral("handoff-%1.wav").arg(cacheKey(request)));
+    const QString key = cacheKey(renderRequest);
+    const QString fileName = renderRequest.outputFileStem.isEmpty()
+        ? QStringLiteral("handoff-%1.wav").arg(key)
+        : QStringLiteral("%1_%2.wav")
+              .arg(safeFileStem(renderRequest.outputFileStem), key.left(8));
+    const QString path = outputDirectory.filePath(fileName);
     if (QFileInfo::exists(path)) {
         const auto cached = verifiedAsset(path);
         if (cached.success) return cached;
     }
 
     agplayer::editor::WriteRequest write;
-    write.snapshot = request.snapshot;
+    write.snapshot = renderRequest.snapshot;
     write.output_path = std::filesystem::path(path.toStdWString());
     write.codec_name = "pcm_s24le";
-    write.sample_rate = request.renderState.sampleRate;
-    write.channels = request.renderState.channels;
+    write.sample_rate = renderRequest.renderState.sampleRate;
+    write.channels = renderRequest.renderState.channels;
     write.keep_metadata = false;
-    write.range = request.selection;
+    write.range = renderRequest.selection;
     agplayer::editor::TimePitchSession timePitch;
-    if (!timePitch.setSpeedPercent(request.renderState.speedPercent)) {
+    if (!timePitch.setSpeedPercent(renderRequest.renderState.speedPercent)) {
         return {false, {}, {}, QStringLiteral("拖出音频变速参数无效")};
     }
-    const int semitones = request.renderState.pitchCents / 100;
-    const int cents = request.renderState.pitchCents - semitones * 100;
+    const int semitones = renderRequest.renderState.pitchCents / 100;
+    const int cents = renderRequest.renderState.pitchCents - semitones * 100;
     if (!timePitch.setPitch(semitones, cents)) {
         return {false, {}, {}, QStringLiteral("拖出音频变调参数无效")};
     }
-    timePitch.setKeepPitch(request.renderState.keepPitch);
+    timePitch.setKeepPitch(renderRequest.renderState.keepPitch);
     timePitch.setFormantPreservation(
-        request.renderState.formantPreservation);
+        renderRequest.renderState.formantPreservation);
     const auto result = agplayer::editor::DocumentRenderPipeline{}.write(
         write, timePitch, cancelled);
     if (!result.ok()) {

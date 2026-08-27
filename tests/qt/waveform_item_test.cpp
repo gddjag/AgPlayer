@@ -61,6 +61,8 @@ private slots:
     void preservesTimelineMetadataInPeakSnapshot();
     void windowScaleAndScreenKeepCursorAligned();
     void resizeLoopStaysWithinInteractiveBudget();
+    void zoomKeepsAnchorStableAndUsesVisibleRange();
+    void zoomClampsToEightTimesAndResizeDoesNotResetViewport();
 };
 
 namespace {
@@ -875,6 +877,38 @@ void WaveformItemTest::resizeLoopStaysWithinInteractiveBudget()
                             .arg(elapsedMs)));
     QCOMPARE(item.peaks(), values);
     delete node;
+}
+
+void WaveformItemTest::zoomKeepsAnchorStableAndUsesVisibleRange()
+{
+    WaveformItem item;
+    item.setWidth(1000.0);
+    item.setDuration(200000);
+
+    item.zoomAt(250.0, 2.0);
+
+    QCOMPARE(item.visibleStartMs(), qint64{25000});
+    QCOMPARE(item.visibleEndMs(), qint64{125000});
+    QCOMPARE(item.timeForX(0.0), qint64{25000});
+    QCOMPARE(item.timeForX(250.0), qint64{50000});
+    QCOMPARE(item.pixelForTime(50000), 250.0);
+}
+
+void WaveformItemTest::zoomClampsToEightTimesAndResizeDoesNotResetViewport()
+{
+    WaveformItem item;
+    item.setWidth(1000.0);
+    item.setDuration(200000);
+    item.zoomAt(500.0, 32.0);
+
+    QCOMPARE(item.visibleStartMs(), qint64{87500});
+    QCOMPARE(item.visibleEndMs(), qint64{112500});
+
+    item.setWidth(2000.0);
+    QCOMPARE(item.visibleStartMs(), qint64{87500});
+    QCOMPARE(item.visibleEndMs(), qint64{112500});
+    QCOMPARE(item.timeForX(1000.0), qint64{100000});
+    QCOMPARE(item.pixelForTime(100000), 1000.0);
 }
 
 QTEST_MAIN(WaveformItemTest)

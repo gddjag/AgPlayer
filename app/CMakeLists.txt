@@ -139,6 +139,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/SettingsPage.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
+        qml/AgPlayer/components/IntegratedPlayerShell.qml
+        qml/AgPlayer/components/WaveSelectionOverlay.qml
+        qml/AgPlayer/components/WaveformSession.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/EqualizerBandSlider.qml

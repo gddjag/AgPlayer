@@ -67,6 +67,7 @@ private slots:
     void mainMaximizeHidesOnlyDockedList();
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
+    void shellModesPersistIndependentMainWindowGeometry();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
     void restoredGeometryBalancesMinimumAndAvailableScreen();
     void offscreenGeometryRestoresInsideAvailableScreen();
@@ -164,6 +165,32 @@ void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
     windows.showMain();
     QVERIFY(windows.mainVisible());
     QVERIFY(!windows.miniVisible());
+}
+
+void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(40, 50, 960, 298);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    mainWindow.setGeometry(20, 30, 700, 320);
+
+    windows.setMainWindowShellMode(1);
+    QCOMPARE(mainWindow.size(), QSize(1672, 941).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
+    mainWindow.setGeometry(20, 40, 760, 700);
+
+    windows.setMainWindowShellMode(0);
+    QCOMPARE(mainWindow.geometry(), QRect(20, 30, 700, 320));
+
+    windows.setMainWindowShellMode(1);
+    QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
+    QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect(),
+             QRect(20, 30, 700, 320));
+    QCOMPARE(QSettings().value(
+                 QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             QRect(20, 40, 760, 700));
 }
 
 void WindowControllerTest::updatesExistingWindowObjectsAndFlags()

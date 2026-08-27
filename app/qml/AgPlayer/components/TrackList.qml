@@ -21,12 +21,13 @@ ListView {
     property string searchText: ""
     property bool tagFilterActive: false
     property string activeTagKey: ""
+    property bool integratedCompact: false
     property var selectedTrackIds: []
     property int selectionAnchor: -1
     property var lastTrashResult: ({ successCount: 0, failureCount: 0, failures: [] })
     readonly property bool windowActive: root.Window.active
     readonly property bool showAlbumColumn: true
-    readonly property bool compactColumns: width < 900
+    readonly property bool compactColumns: integratedCompact || width < 900
     readonly property int favoriteAlbumGap: 6
     readonly property int artistAlbumGap: 6
     readonly property int albumRatingGap: 6

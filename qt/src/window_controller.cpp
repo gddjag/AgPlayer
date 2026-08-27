@@ -122,10 +122,11 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
     mainWindowHandle_ = 0;
     miniWindow_ = miniWindow;
     if (mainWindow != nullptr) {
-        const QString mainGeometryKey = QStringLiteral("windows/mainGeometry");
+        const QString mainGeometryKey = mainWindowGeometryKey();
         const QString mainGeometryVersionKey =
             QStringLiteral("windows/mainGeometryVersion");
-        if (settings_.value(mainGeometryVersionKey, 0).toInt() < 2) {
+        if (mainWindowShellMode_ == 0
+            && settings_.value(mainGeometryVersionKey, 0).toInt() < 2) {
             QRect geometry = settings_.value(mainGeometryKey).toRect();
             if (geometry.isValid() && geometry.height() == 399) {
                 geometry.setHeight(380);
@@ -140,7 +141,7 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
             }
             settings_.setValue(mainGeometryVersionKey, 2);
         }
-        restoreGeometry(mainWindow, mainGeometryKey);
+        restoreMainWindowGeometry(mainWindow);
         const bool usesWindowsPlatform =
             QGuiApplication::platformName().compare(
                 QStringLiteral("windows"), Qt::CaseInsensitive) == 0;
@@ -161,7 +162,7 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
                 });
         applyPlatformWindowStyle(mainWindow_);
         mainWindow_->setVisible(mainVisible_);
-        persistGeometry(mainWindow_, QStringLiteral("windows/mainGeometry"));
+        persistGeometry(mainWindow_, mainWindowGeometryKey());
         if (audioToolsWindow_ != nullptr) {
             audioToolsWindow_->setTransientParent(mainWindow_);
         }
@@ -187,6 +188,21 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
         miniWindow_->setFlag(Qt::WindowStaysOnTopHint, alwaysOnTop_);
         miniWindow_->setVisible(miniVisible_);
         persistGeometry(miniWindow_, miniGeometryKey);
+    }
+}
+
+void WindowController::setMainWindowShellMode(int mode)
+{
+    mode = mode == 1 ? 1 : 0;
+    if (mainWindowShellMode_ == mode) {
+        return;
+    }
+    persistGeometry(mainWindow_, mainWindowGeometryKey());
+    mainWindowShellMode_ = mode;
+    if (mainWindow_ != nullptr) {
+        restoreMainWindowGeometry(mainWindow_);
+        rememberNativePixelSize(mainWindow_);
+        persistGeometry(mainWindow_, mainWindowGeometryKey());
     }
 }
 
@@ -1200,7 +1216,7 @@ void WindowController::scheduleWindowStateSync()
 void WindowController::flushWindowState()
 {
     windowStateSyncTimer_.stop();
-    persistGeometry(mainWindow_, QStringLiteral("windows/mainGeometry"));
+    persistGeometry(mainWindow_, mainWindowGeometryKey());
     persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
     persistGeometry(listWindow_, QStringLiteral("windows/listGeometry"));
     if (!isMinimized(audioToolsWindow_) && !isMaximized(audioToolsWindow_)) {
@@ -1210,6 +1226,36 @@ void WindowController::flushWindowState()
         persistGeometry(settingsWindow_, QStringLiteral("windows/settingsGeometry"));
     }
     settings_.sync();
+}
+
+QString WindowController::mainWindowGeometryKey() const
+{
+    return mainWindowShellMode_ == 1
+        ? QStringLiteral("windows/integratedMainGeometry")
+        : QStringLiteral("windows/mainGeometry");
+}
+
+bool WindowController::restoreMainWindowGeometry(QWindow* window)
+{
+    if (restoreGeometry(window, mainWindowGeometryKey())) {
+        return true;
+    }
+    if (window == nullptr || mainWindowShellMode_ != 1) {
+        return false;
+    }
+    QScreen* screen = window->screen();
+    if (screen == nullptr) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen == nullptr) {
+        return false;
+    }
+    const QRect available = screen->availableGeometry();
+    const QSize size = QSize(1672, 941).boundedTo(available.size());
+    QRect geometry(QPoint(), size);
+    geometry.moveCenter(available.center());
+    window->setGeometry(geometry);
+    return true;
 }
 
 QString WindowController::edgeForPreference(int edge)

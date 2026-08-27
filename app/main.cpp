@@ -44,6 +44,7 @@
 
 #include "audio_tools_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
+#include "audio_editor/playback_clip_drag_adapter.hpp"
 #include "equalizer_controller.hpp"
 #include "filename_processor.hpp"
 #include "format_converter.hpp"
@@ -279,6 +280,10 @@ int main(int argc, char* argv[])
     QString qaLogPath;
     QString qaPlayPath;
     QString qaScreenshotMain;
+    QString qaPlayerShell;
+    int qaMainWidth = 0;
+    int qaMainHeight = 0;
+    bool qaIntegratedShellLifecycleProbe = false;
     QString qaScreenshotMini;
     QString qaScreenshotTools;
     int qaTool = 0;
@@ -298,6 +303,8 @@ int main(int argc, char* argv[])
     QString qaImportFolder;
     qint64 qaEditorSelectionStartMs = -1;
     qint64 qaEditorSelectionEndMs = -1;
+    qint64 qaPlaybackSelectionStartMs = -1;
+    qint64 qaPlaybackSelectionEndMs = -1;
     qint64 qaEditorPlayheadMs = -1;
     bool qaEditorReferenceState = false;
     QString initialFilePath;
@@ -315,6 +322,21 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-screenshot-main")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotMain = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-player-shell")
+                       && i + 1 < cliArgs.size()) {
+                qaPlayerShell = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-width")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int value = cliArgs.at(++i).toInt(&ok);
+                if (ok && value > 0) qaMainWidth = value;
+            } else if (arg == QStringLiteral("--qa-height")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int value = cliArgs.at(++i).toInt(&ok);
+                if (ok && value > 0) qaMainHeight = value;
+            } else if (arg == QStringLiteral("--qa-integrated-shell-lifecycle-probe")) {
+                qaIntegratedShellLifecycleProbe = true;
             } else if (arg == QStringLiteral("--qa-screenshot-mini")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotMini = cliArgs.at(++i);
@@ -385,6 +407,16 @@ int main(int argc, char* argv[])
                 if (startOk && endOk && start >= 0 && end > start) {
                     qaEditorSelectionStartMs = start;
                     qaEditorSelectionEndMs = end;
+                }
+            } else if (arg == QStringLiteral("--qa-playback-selection-ms")
+                       && i + 2 < cliArgs.size()) {
+                bool startOk = false;
+                bool endOk = false;
+                const qint64 start = cliArgs.at(++i).toLongLong(&startOk);
+                const qint64 end = cliArgs.at(++i).toLongLong(&endOk);
+                if (startOk && endOk && start >= 0 && end > start) {
+                    qaPlaybackSelectionStartMs = start;
+                    qaPlaybackSelectionEndMs = end;
                 }
             } else if (arg == QStringLiteral("--qa-editor-playhead-ms")
                        && i + 1 < cliArgs.size()) {
@@ -582,18 +614,43 @@ int main(int argc, char* argv[])
             for (const QString& tagName : qaSeedTags) {
                 tagModel.createTag(tagName);
             }
+            if (!qaSeedTags.isEmpty()) {
+                tagModel.flush();
+                qInfo().noquote() << "QA seeded tags: requested="
+                                  << qaSeedTags.size()
+                                  << "created=" << tagModel.count();
+            }
             if (!qaSelectedTag.isEmpty()) {
                 tagModel.setSelectedKey(qaSelectedTag);
             }
         }
 
         PlaybackController playback(core, &library);
+        if (qaPlaybackSelectionStartMs >= 0
+            && qaPlaybackSelectionEndMs > qaPlaybackSelectionStartMs) {
+            QObject::connect(
+                &playback, &PlaybackController::durationMsChanged, &app,
+                [&playback, qaPlaybackSelectionStartMs,
+                 qaPlaybackSelectionEndMs]() {
+                    if (playback.durationMs() > 0
+                        && playback.selectionEndMs() <= playback.selectionStartMs()) {
+                        playback.commitSelection(qaPlaybackSelectionStartMs,
+                                                 qaPlaybackSelectionEndMs);
+                    }
+                });
+        }
+        PlaybackClipDragAdapter playbackClipDrag(&library);
         EqualizerController equalizer(core);
         QObject::connect(&playback, &PlaybackController::currentTrackIdChanged,
                          &equalizer, &EqualizerController::refreshStatus);
         QObject::connect(&playback, &PlaybackController::stateChanged,
                          &equalizer, &EqualizerController::refreshStatus);
         SettingsController settings;
+        if (qaPlayerShell == QStringLiteral("integrated")) {
+            settings.setPlayerShellMode(1);
+        } else if (qaPlayerShell == QStringLiteral("classic")) {
+            settings.setPlayerShellMode(0);
+        }
         const auto applyOutputDevice = [&settings, &playback]() {
             const QString requested = settings.outputDevice();
             if (!requested.isEmpty()
@@ -874,7 +931,8 @@ int main(int argc, char* argv[])
                                         &libraryNavigation,
                                         &libraryManager,
                                         &trackWaveformThumbnailProvider,
-                                        &themeManager});
+                                        &themeManager,
+                                        &playbackClipDrag});
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
@@ -1120,66 +1178,87 @@ int main(int argc, char* argv[])
             QQmlComponent audioToolsComponent(&engine);
             QObject* audioToolsWindow = nullptr;
 
-            // Stand-alone playlist window. Reuses the LibraryFilterModel
-            // instance owned by Main.qml so filtering state stays in sync.
+            // Classic owns the stand-alone playlist window. Integrated keeps
+            // the same filter model inside Main.qml and does not construct a
+            // second top-level shell.
             QObject* filterModel = mainWindow->findChild<QObject*>(
                 QStringLiteral("filterModel"));
             QQmlComponent listComponent(&engine);
             listComponent.loadFromModule("AgPlayer", "ListWindow");
             QObject* listWindow = nullptr;
-            if (!listComponent.isError()) {
-                if (filterModel != nullptr) {
-                    listWindow = listComponent.createWithInitialProperties(
-                        QVariantMap{{QStringLiteral("filterModel"),
-                                     QVariant::fromValue(filterModel)}});
-                } else {
-                    listWindow = listComponent.create();
-                }
-            } else {
-                qWarning().noquote()
-                    << "List window QML failed:"
-                    << listComponent.errorString();
-            }
-
-            // The existing screenshot category seam must enter the real
-            // navigation state before docking. This lets page-specific width
-            // constraints participate in the same first-show path as a user
-            // opening Tag Management.
-            if (qaListCategory == QStringLiteral("tags")
-                && listWindow != nullptr) {
-                if (QObject* navigation = listWindow->findChild<QObject*>(
-                        QStringLiteral("referenceSideNavigation"))) {
-                    QMetaObject::invokeMethod(
-                        navigation, "activateNode",
-                        Q_ARG(QVariant, QStringLiteral("tags")),
-                        Q_ARG(QVariant, QStringLiteral("tags:manage")),
-                        Q_ARG(QVariant, QString{}));
-                }
-            }
-
+            windows.setMainWindowShellMode(settings.playerShellMode());
             windows.setWindows(qobject_cast<QWindow*>(mainWindow),
                                qobject_cast<QWindow*>(miniWindow));
-            windows.setListWindow(qobject_cast<QWindow*>(listWindow));
 
             QWindow* const nativeMainWindow = qobject_cast<QWindow*>(mainWindow);
-            QWindow* const nativeListWindow = qobject_cast<QWindow*>(listWindow);
+            if (nativeMainWindow != nullptr
+                && qaMainWidth > 0 && qaMainHeight > 0) {
+                nativeMainWindow->resize(qaMainWidth, qaMainHeight);
+            }
             nativeDrops.registerWindow(nativeMainWindow,
                                        NativeDropRouter::Target::Main);
-            nativeDrops.registerWindow(nativeListWindow,
-                                       NativeDropRouter::Target::List);
-            const QPointer<QObject> listDropTarget = listWindow;
-            nativeDrops.registerHitTarget(
-                nativeListWindow, NativeDropRouter::Target::ResourceFolder,
-                [listDropTarget](const QPointF& position) {
-                    if (listDropTarget == nullptr) return false;
-                    QVariant hit;
-                    return QMetaObject::invokeMethod(
-                               listDropTarget, "resourceDropContainsPoint",
-                               Q_RETURN_ARG(QVariant, hit),
-                               Q_ARG(QVariant, position.x()),
-                               Q_ARG(QVariant, position.y()))
-                        && hit.toBool();
-                });
+            const auto ensureListWindow = [&]() -> QObject* {
+                if (listWindow != nullptr) return listWindow;
+                if (listComponent.isError()) {
+                    qWarning().noquote() << "List window QML failed:"
+                                         << listComponent.errorString();
+                    return nullptr;
+                }
+                QVariantMap properties;
+                if (filterModel != nullptr) {
+                    properties.insert(QStringLiteral("filterModel"),
+                                      QVariant::fromValue(filterModel));
+                }
+                properties.insert(QStringLiteral("tagSearchText"),
+                                  mainWindow->property("tagSearchText"));
+                listWindow = listComponent.createWithInitialProperties(properties);
+                if (listWindow == nullptr) {
+                    qWarning().noquote() << "List window QML failed:"
+                                         << listComponent.errorString();
+                    return nullptr;
+                }
+                if (qaListCategory == QStringLiteral("tags")) {
+                    if (QObject* navigation = listWindow->findChild<QObject*>(
+                            QStringLiteral("referenceSideNavigation"))) {
+                        QMetaObject::invokeMethod(
+                            navigation, "activateNode",
+                            Q_ARG(QVariant, QStringLiteral("tags")),
+                            Q_ARG(QVariant, QStringLiteral("tags:manage")),
+                            Q_ARG(QVariant, QString{}));
+                    }
+                }
+                auto* const nativeListWindow = qobject_cast<QWindow*>(listWindow);
+                windows.setListWindow(nativeListWindow);
+                nativeDrops.registerWindow(nativeListWindow,
+                                           NativeDropRouter::Target::List);
+                const QPointer<QObject> listDropTarget = listWindow;
+                nativeDrops.registerHitTarget(
+                    nativeListWindow, NativeDropRouter::Target::ResourceFolder,
+                    [listDropTarget](const QPointF& position) {
+                        if (listDropTarget == nullptr) return false;
+                        QVariant hit;
+                        return QMetaObject::invokeMethod(
+                                   listDropTarget, "resourceDropContainsPoint",
+                                   Q_RETURN_ARG(QVariant, hit),
+                                   Q_ARG(QVariant, position.x()),
+                                   Q_ARG(QVariant, position.y()))
+                            && hit.toBool();
+                    });
+                return listWindow;
+            };
+            const auto destroyListWindow = [&]() {
+                if (listWindow == nullptr) return;
+                mainWindow->setProperty("tagSearchText",
+                                        listWindow->property("tagSearchText"));
+                auto* const nativeListWindow = qobject_cast<QWindow*>(listWindow);
+                nativeDrops.unregisterWindow(nativeListWindow);
+                windows.setListWindow(nullptr);
+                delete listWindow;
+                listWindow = nullptr;
+            };
+            if (settings.playerShellMode() == 0) {
+                (void)ensureListWindow();
+            }
             const auto ensureAudioToolsWindow = [&]() -> QObject* {
                 if (audioToolsWindow != nullptr) return audioToolsWindow;
                 audioToolsComponent.loadFromModule("AgPlayer", "AudioToolsWindow");
@@ -1268,13 +1347,97 @@ int main(int argc, char* argv[])
             QObject::connect(&library, &LibraryModel::countChanged, &app,
                              [&library, &settings, &windows]() {
                 windows.setListWindowPanelAllowed(
-                    library.count() > 0 && settings.showListWindowPanel());
+                    settings.playerShellMode() == 0
+                    && library.count() > 0 && settings.showListWindowPanel());
             });
             QObject::connect(&settings, &SettingsController::showListWindowPanelChanged,
                              &app, [&library, &settings, &windows]() {
                 windows.setListWindowPanelAllowed(
-                    library.count() > 0 && settings.showListWindowPanel());
+                    settings.playerShellMode() == 0
+                    && library.count() > 0 && settings.showListWindowPanel());
             });
+            QObject::connect(
+                &settings, &SettingsController::playerShellModeChanged, &app,
+                [&library, &settings, &windows, &ensureListWindow,
+                 &destroyListWindow]() {
+                    windows.setMainWindowShellMode(settings.playerShellMode());
+                    if (settings.playerShellMode() == 0) {
+                        (void)ensureListWindow();
+                    } else {
+                        destroyListWindow();
+                    }
+                    windows.setListWindowPanelAllowed(
+                        settings.playerShellMode() == 0
+                        && library.count() > 0
+                        && settings.showListWindowPanel());
+                });
+            windows.setListWindowPanelAllowed(
+                settings.playerShellMode() == 0
+                && library.count() > 0 && settings.showListWindowPanel());
+            if (qaIntegratedShellLifecycleProbe) {
+                QTimer::singleShot(
+                    0, &app,
+                    [&app, &settings, &playback, &listWindow, mainWindow]() {
+                        const auto countShells = [mainWindow](const char* name) {
+                            return mainWindow->findChildren<QObject*>(
+                                QString::fromLatin1(name),
+                                Qt::FindChildrenRecursively).size();
+                        };
+                        const auto settleLoader = [] {
+                            QCoreApplication::processEvents(
+                                QEventLoop::AllEvents, 500);
+                            QCoreApplication::sendPostedEvents(
+                                nullptr, QEvent::DeferredDelete);
+                            QCoreApplication::processEvents(
+                                QEventLoop::AllEvents, 500);
+                        };
+                        settleLoader();
+                        const QString originalTrackId = playback.currentTrackId();
+                        const qint64 originalPositionMs = playback.positionMs();
+                        const PlaybackController::State originalState = playback.state();
+                        const float originalVolume = playback.volume();
+                        const PlaybackController::Mode originalMode = playback.mode();
+                        const QStringList originalQueue = playback.queueTrackIds();
+                        const bool classicInitial = settings.playerShellMode() == 0
+                            && listWindow != nullptr
+                            && countShells("classicPlayerShell") == 1
+                            && countShells("integratedPlayerShell") == 0;
+
+                        settings.setPlayerShellMode(1);
+                        settleLoader();
+                        const bool integratedLoaded = listWindow == nullptr
+                            && countShells("classicPlayerShell") == 0
+                            && countShells("integratedPlayerShell") == 1;
+
+                        settings.setPlayerShellMode(0);
+                        settleLoader();
+                        const bool classicRestored = listWindow != nullptr
+                            && countShells("classicPlayerShell") == 1
+                            && countShells("integratedPlayerShell") == 0;
+                        const qint64 positionDrift = qAbs(
+                            playback.positionMs() - originalPositionMs);
+                        const bool playbackPreserved =
+                            playback.currentTrackId() == originalTrackId
+                            && (originalState == PlaybackController::Playing
+                                    ? positionDrift < 1'000
+                                    : positionDrift == 0)
+                            && playback.state() == originalState
+                            && qFuzzyCompare(playback.volume(), originalVolume)
+                            && playback.mode() == originalMode
+                            && playback.queueTrackIds() == originalQueue;
+                        const bool passed = classicInitial && integratedLoaded
+                            && classicRestored && playbackPreserved;
+                        qInfo().noquote()
+                            << "Integrated shell lifecycle probe:"
+                            << (passed ? "passed" : "failed")
+                            << "classicInitial=" << classicInitial
+                            << "integratedLoaded=" << integratedLoaded
+                            << "classicRestored=" << classicRestored
+                            << "playbackPreserved=" << playbackPreserved
+                            << "positionDriftMs=" << positionDrift;
+                        app.exit(passed ? 0 : 7);
+                    });
+            }
             const bool qaShellProbe =
                 qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1;
             if (qaShellProbe) {
@@ -1492,7 +1655,8 @@ int main(int argc, char* argv[])
                         : wantScreenshotTools
                             ? qaScreenshotTools : qaScreenshotList;
 
-                const auto captureWindow = [targetWindow, screenshotPath]() {
+                const auto captureWindow = [targetWindow, screenshotPath,
+                                            mainWindow, &playback]() {
                     if (targetWindow == nullptr) {
                         qWarning("QA screenshot target window was not created");
                         QCoreApplication::quit();
@@ -1500,6 +1664,35 @@ int main(int argc, char* argv[])
                     }
                     targetWindow->setVisible(true);
                     targetWindow->requestActivate();
+                    if (QObject* waveform = mainWindow->findChild<QObject*>(
+                            QStringLiteral("integratedWaveform"))) {
+                        qInfo().noquote()
+                            << "Integrated waveform QA state: durationMs="
+                            << waveform->property("duration").toLongLong()
+                            << "peakCount="
+                            << waveform->property("peakCount").toLongLong()
+                            << "visualMode="
+                            << waveform->property("visualMode").toInt();
+                    }
+                    if (QObject* controls = mainWindow->findChild<QObject*>(
+                            QStringLiteral("playerControls"))) {
+                        qInfo().noquote()
+                            << "Integrated controls QA geometry: x="
+                            << controls->property("x").toReal()
+                            << "width=" << controls->property("width").toReal();
+                    }
+                    if (QObject* center = mainWindow->findChild<QObject*>(
+                            QStringLiteral("centerPlaybackControls"))) {
+                        qInfo().noquote()
+                            << "Integrated center controls QA geometry: x="
+                            << center->property("x").toReal()
+                            << "width=" << center->property("width").toReal();
+                    }
+                    qInfo().noquote()
+                        << "Playback selection QA state: startMs="
+                        << playback.selectionStartMs()
+                        << "endMs=" << playback.selectionEndMs()
+                        << "loop=" << playback.selectionLoopEnabled();
                     auto* const quickWin = qobject_cast<QQuickWindow*>(targetWindow);
                     if (quickWin != nullptr) {
                         quickWin->update();
@@ -1519,6 +1712,10 @@ int main(int argc, char* argv[])
                             qWarning("QA screenshot capture returned an empty image");
                         } else if (!screenshot.save(screenshotPath)) {
                             qWarning("QA screenshot could not be saved");
+                        } else {
+                            qInfo().noquote()
+                                << "QA screenshot saved:" << screenshotPath
+                                << screenshot.size();
                         }
                     } else {
                         qWarning("QA screenshot target is not a QQuickWindow");
@@ -1596,8 +1793,7 @@ int main(int argc, char* argv[])
 
             if (audioToolsWindow)
                 delete audioToolsWindow;
-            if (listWindow)
-                delete listWindow;
+            destroyListWindow();
             if (miniWindow)
                 delete miniWindow;
         }

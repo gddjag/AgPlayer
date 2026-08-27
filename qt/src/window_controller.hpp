@@ -74,6 +74,7 @@ public:
         const QList<QRect>& availableScreens, int primaryScreenIndex);
 
     void setWindows(QWindow* mainWindow, QWindow* miniWindow);
+    void setMainWindowShellMode(int mode);
     void setListWindow(QWindow* listWindow);
     void setAudioToolsWindow(QWindow* audioToolsWindow);
     void setMainReady(bool ready) noexcept;
@@ -148,6 +149,8 @@ private:
     void persistGeometry(QWindow* window, const QString& key);
     void scheduleWindowStateSync();
     void flushWindowState();
+    QString mainWindowGeometryKey() const;
+    bool restoreMainWindowGeometry(QWindow* window);
     static QString edgeForPreference(int edge);
     void updateListWindowPosition();
     QPoint computeSnappedPosition(int x, int y) const;
@@ -179,6 +182,7 @@ private:
     QSettings settings_;
     QTimer windowStateSyncTimer_;
     bool mainVisible_ = true;
+    int mainWindowShellMode_ = 0;
     bool miniVisible_ = false;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;

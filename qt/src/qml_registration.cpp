@@ -3,6 +3,7 @@
 #include "audio_preview_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/audio_editor_waveform_item.hpp"
+#include "audio_editor/playback_clip_drag_adapter.hpp"
 #include "equalizer_controller.hpp"
 #include "audio_tools_controller.hpp"
 #include "filename_processor.hpp"
@@ -105,6 +106,17 @@ void register_agplayer_qml_types(LibraryModel* library,
         qmlRegisterSingletonInstance("AgPlayer", 1, 0,
                                      "TrackWaveformThumbnailProvider",
                                      runtime.trackWaveformThumbnailProvider);
+    }
+    if (runtime.playbackClipDragAdapter != nullptr) {
+        qmlRegisterSingletonInstance(
+            "AgPlayer", 1, 0, "PlaybackClipDragAdapter",
+            runtime.playbackClipDragAdapter);
+    } else {
+        qmlRegisterSingletonType<PlaybackClipDragAdapter>(
+            "AgPlayer", 1, 0, "PlaybackClipDragAdapter",
+            [library](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new PlaybackClipDragAdapter(library);
+            });
     }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ThemeManager", themeManager);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
