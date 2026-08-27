@@ -1009,6 +1009,7 @@ target_link_libraries(qml_audio_tools_test PRIVATE
     agplayer_app_qml
     agplayer_app_qmlplugin
     Qt6::QuickTest
+    Qt6::QmlWorkerScript
 )
 target_compile_definitions(qml_audio_tools_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
@@ -1057,7 +1058,8 @@ set_tests_properties(qml_filename_process_test PROPERTIES
 )
 
 add_test(NAME qml_metadata_editor_test
-    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-metadata-editor.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
 set_tests_properties(qml_metadata_editor_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
@@ -1066,7 +1068,8 @@ set_tests_properties(qml_metadata_editor_test PROPERTIES
 )
 
 add_test(NAME qml_metadata_status_filter_test
-    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_status_filter.qml)
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-metadata-status-filter.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_status_filter.qml)
 set_tests_properties(qml_metadata_status_filter_test PROPERTIES
     TIMEOUT 15
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
