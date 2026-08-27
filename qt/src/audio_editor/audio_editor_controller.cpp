@@ -866,8 +866,7 @@ bool AudioEditorController::busy() const noexcept
 {
     return state_ == EditorSessionState::Processing
         || state_ == EditorSessionState::Saving
-        || state_ == EditorSessionState::Exporting
-        || state_ == EditorSessionState::Finalizing;
+        || state_ == EditorSessionState::Exporting;
 }
 
 qint64 AudioEditorController::selectionStart() const noexcept
@@ -3143,8 +3142,7 @@ void AudioEditorController::refreshActions()
     const bool selection = document_.selection().has_value();
     const bool idle = state_ != EditorSessionState::Saving
         && state_ != EditorSessionState::Exporting
-        && state_ != EditorSessionState::Processing
-        && state_ != EditorSessionState::Finalizing;
+        && state_ != EditorSessionState::Processing;
     actions_.setEnabled(QStringLiteral("editor.open"), idle);
     actions_.setEnabled(QStringLiteral("editor.save"), has_document_ && idle);
     actions_.setEnabled(QStringLiteral("editor.export"), exportSupported()

@@ -17,6 +17,7 @@ configure_file(
 
 option(AG_ENABLE_AUDIO_EDITOR "Enable audio editor" ON)
 option(AG_ENABLE_TIME_PITCH "Enable time and pitch processing" ON)
+unset(AG_ENABLE_NATIVE_RECORDING CACHE)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

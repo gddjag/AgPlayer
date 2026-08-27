@@ -37,7 +37,6 @@ enum class EditorSessionState {
     Empty,
     Ready,
     Playing,
-    Finalizing,
     Previewing,
     Processing,
     Saving,

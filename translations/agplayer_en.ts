@@ -81,26 +81,6 @@
         <translation>无法提交速度与音高处理结果</translation>
     </message>
     <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="711"/>
-        <source>请选择录音保存位置</source>
-        <translation>请选择录音保存位置</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="725"/>
-        <source>无法启动录音设备，请检查设备与权限</source>
-        <translation>无法启动录音设备，请检查设备与权限</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="787"/>
-        <source>录音完成，但无法插入当前文档</source>
-        <translation>录音完成，但无法插入当前文档</translation>
-    </message>
-    <message>
-        <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="825"/>
-        <source>录音已取消</source>
-        <translation>录音已取消</translation>
-    </message>
-    <message>
         <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="910"/>
         <source>无法创建预览目录</source>
         <translation>无法创建预览目录</translation>
@@ -113,18 +93,11 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
-    <message><source>录音</source><translation>Recording</translation></message>
     <message><source>处理</source><translation>Processing</translation></message>
     <message><source>导出</source><translation>Export</translation></message>
     <message><source>选择音频导出目录</source><translation>Choose audio export folder</translation></message>
     <message><source>音频源不可用：</source><translation>Audio source unavailable: </translation></message>
     <message><source>重新定位文件</source><translation>Relink file</translation></message>
-    <message><source>（单声道）</source><translation>(Mono)</translation></message>
-    <message><source>（立体声）</source><translation>(Stereo)</translation></message>
-    <message><source>选择录音设备（Alt+R）</source><translation>Select recording device (Alt+R)</translation></message>
-    <message><source>暂停 / 继续录音（Shift+R）</source><translation>Pause / Resume recording (Shift+R)</translation></message>
-    <message><source>开始 / 继续录音（R）</source><translation>Start / Resume recording (R)</translation></message>
-    <message><source>停止并保存录音（Ctrl+R）</source><translation>Stop and save recording (Ctrl+R)</translation></message>
     <message><source>跳到开头（Home）</source><translation>Go to start (Home)</translation></message>
     <message><source>后退 5 秒（←）</source><translation>Back 5 seconds (←)</translation></message>
     <message><source>播放 / 暂停（Space）</source><translation>Play / Pause (Space)</translation></message>
@@ -142,9 +115,7 @@
     <message><source>拖拽片段边缘 = 修剪</source><translation>Drag clip edge = Trim</translation></message>
     <message><source>拖拽右上角 = 调整淡出</source><translation>Drag top-right = Adjust fade-out</translation></message>
     <message><source>双击音量线 = 添加控制点</source><translation>Double-click volume line = Add control point</translation></message>
-    <message><source>空格 = 播放 / 暂停       R = 开始录音       Shift+R = 暂停 / 继续录音       Ctrl+R = 停止并保存       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>Space = Play / Pause       R = Start recording       Shift+R = Pause / Resume recording       Ctrl+R = Stop and save       S = Split at playhead       Delete = Delete clip       Ctrl+C / X / V = Copy / Cut / Paste       Ctrl+Z / Y = Undo / Redo</translation></message>
     <message><source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪       拖拽右上角 = 调整淡出       双击音量线 = 添加控制点</source><translation>Ctrl+drag = Duplicate clip       Ctrl+wheel = Zoom timeline       Shift+wheel = Scroll horizontally       Drag clip edge = Trim       Drag top-right = Adjust fade-out       Double-click volume line = Add control point</translation></message>
-    <message><source>未检测到输入设备</source><translation>No input device detected</translation></message>
     <message><source>BPM</source><translation>BPM</translation></message>
     <message><source>人声保真 / Formant保护</source><translation>Vocal fidelity / Formant protection</translation></message>
     <message><source>浏览</source><translation>Browse</translation></message>
@@ -275,11 +246,6 @@
         <translation>插入 1 秒静音</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="187"/>
-        <source>取消录音</source>
-        <translation>取消录音</translation>
-    </message>
-    <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="178"/>
         <source>导出选区…</source>
         <translation>导出选区…</translation>
@@ -350,41 +316,6 @@
         <translation>The current project contains unsaved changes.</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="337"/>
-        <source>录音控制</source>
-        <translation>Recording controls</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="357"/>
-        <source>开始录音</source>
-        <translation>Start recording</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="374"/>
-        <source>暂停或继续录音</source>
-        <translation>Pause or resume recording</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="399"/>
-        <source>Phase 9 前不可用</source>
-        <translation>Unavailable until Phase 9</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="402"/>
-        <source>录音已暂停</source>
-        <translation>Recording paused</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="402"/>
-        <source>正在录音</source>
-        <translation>Recording</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="403"/>
-        <source>准备录音</source>
-        <translation>Ready to record</translation>
-    </message>
-    <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="410"/>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="508"/>
         <source>停止</source>
@@ -436,31 +367,6 @@
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="549"/>
         <source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪</source>
         <translation>Ctrl+drag = Quick duplicate       Ctrl+mouse wheel = Zoom timeline       Shift+mouse wheel = Scroll horizontally       Drag clip edge = Trim</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="607"/>
-        <source>A. 录音</source>
-        <translation>A. Recording</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="611"/>
-        <source>输入设备</source>
-        <translation>Input device</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="619"/>
-        <source>输入电平</source>
-        <translation>Input level</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="627"/>
-        <source>监听</source>
-        <translation>Monitor</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="632"/>
-        <source>录音格式</source>
-        <translation>Recording format</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="639"/>
@@ -547,11 +453,9 @@
         <source>编辑设置</source>
         <translation>Edit settings</translation>
     </message>
-    <message><source>继续录音</source><translation>Resume recording</translation></message><message><source>跳到末尾</source><translation>Jump to end</translation></message><message><source>选择录音设备</source><translation>Choose recording device</translation></message><message><source>暂停录音</source><translation>Pause recording</translation></message><message><source>停止并保存录音</source><translation>Stop and save recording</translation></message>
-    <message><source>展开导出设置</source><translation>Expand export settings</translation></message><message><source>展开录音设置</source><translation>Expand recording settings</translation></message><message><source>展开升降调设置</source><translation>Expand pitch settings</translation></message><message><source>展开速度设置</source><translation>Expand speed settings</translation></message><message><source>展开音调保护设置</source><translation>Expand pitch preservation settings</translation></message>
-    <message><source>折叠导出设置</source><translation>Collapse export settings</translation></message><message><source>折叠录音设置</source><translation>Collapse recording settings</translation></message><message><source>折叠升降调设置</source><translation>Collapse pitch settings</translation></message><message><source>折叠速度设置</source><translation>Collapse speed settings</translation></message><message><source>折叠音调保护设置</source><translation>Collapse pitch preservation settings</translation></message>
-    <message><source>停止录音</source><translation>Stop recording</translation></message>
-    <message><source>刷新输入设备</source><translation>Refresh input devices</translation></message>
+    <message><source>跳到末尾</source><translation>Jump to end</translation></message>
+    <message><source>展开导出设置</source><translation>Expand export settings</translation></message><message><source>展开升降调设置</source><translation>Expand pitch settings</translation></message><message><source>展开速度设置</source><translation>Expand speed settings</translation></message><message><source>展开音调保护设置</source><translation>Expand pitch preservation settings</translation></message>
+    <message><source>折叠导出设置</source><translation>Collapse export settings</translation></message><message><source>折叠升降调设置</source><translation>Collapse pitch settings</translation></message><message><source>折叠速度设置</source><translation>Collapse speed settings</translation></message><message><source>折叠音调保护设置</source><translation>Collapse pitch preservation settings</translation></message>
     <message><source>正在处理音频…</source><translation>Processing audio…</translation></message>
     <message><source>已导出到：</source><translation>Exported to:</translation></message>
     <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24-bit, %1 kHz)</translation></message>
@@ -657,11 +561,6 @@
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="61"/>
         <source>打开</source>
         <translation>打开</translation>
-    </message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="62"/>
-        <source>新建录音</source>
-        <translation>新建录音</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="63"/>
@@ -773,11 +672,6 @@
         <translation>No audio open</translation>
     </message>
     <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="27"/>
-        <source>播放：Phase 12 接入 · R：Phase 9 接入 · Ctrl+Shift+A 取消选区 · Ctrl+W 清空</source>
-        <translation>Playback: Phase 12 integration · R: Phase 9 integration · Ctrl+Shift+A Clear selection · Ctrl+W Clear</translation>
-    </message>
-    <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="29"/>
         <source>选区范围：%1 - %2（%3 帧）</source>
         <translation>Selection: %1 - %2 (%3 frames)</translation>
@@ -802,11 +696,6 @@
     <name>EditorWaveformCanvas</name>
     <message><source>拖出片段</source><translation>Drag clip out</translation></message>
     <message><source>淡出控制点</source><translation>Fade-out control point</translation></message>
-    <message>
-        <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="173"/>
-        <source>打开音频或新建录音以开始编辑</source>
-        <translation>打开音频或新建录音以开始编辑</translation>
-    </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="147"/>
         <source>片段左修剪手柄</source>

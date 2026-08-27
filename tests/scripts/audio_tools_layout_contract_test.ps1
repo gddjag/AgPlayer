@@ -28,7 +28,7 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
 
-$forbidden = @('RecordingSession', 'recordingSupported', 'startRecording',
+$forbidden = @('RecordingSession', 'Finalizing', 'recordingSupported', 'startRecording',
                'editor.newRecording', 'editorRecordingTransport',
                'inspectorRecordingGroup')
 $productionRoots = @(
@@ -47,6 +47,40 @@ foreach ($symbol in $forbidden) {
     $matches = $productionFiles | Select-String -SimpleMatch -Pattern $symbol
     if ($matches) {
         throw "Recording production symbol remains: $symbol ($($matches[0].Path):$($matches[0].LineNumber))"
+    }
+}
+
+$recordingTranslationSources = @(
+    '6K+36YCJ5oup5b2V6Z+z5L+d5a2Y5L2N572u',
+    '5peg5rOV5ZCv5Yqo5b2V6Z+z6K6+5aSH77yM6K+35qOA5p+l6K6+5aSH5LiO5p2D6ZmQ',
+    '5b2V6Z+z5a6M5oiQ77yM5L2G5peg5rOV5o+S5YWl5b2T5YmN5paH5qGj',
+    '5b2V6Z+z5bey5Y+W5raI', '5b2V6Z+z', '77yI5Y2V5aOw6YGT77yJ',
+    '77yI56uL5L2T5aOw77yJ', '6YCJ5oup5b2V6Z+z6K6+5aSH77yIQWx0K1LvvIk=',
+    '5pqC5YGcIC8g57un57ut5b2V6Z+z77yIU2hpZnQrUu+8iQ==',
+    '5byA5aeLIC8g57un57ut5b2V6Z+z77yIUu+8iQ==',
+    '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z77yIQ3RybCtS77yJ',
+    '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGcICAgICAgIFIgPSDlvIDlp4vlvZXpn7MgICAgICAgU2hpZnQrUiA9IOaaguWBnCAvIOe7p+e7reW9lemfsyAgICAgICBDdHJsK1IgPSDlgZzmraLlubbkv53lrZggICAgICAgUyA9IOWcqOaSreaUvuWktOWkhOWIhuWJsiAgICAgICBEZWxldGUgPSDliKDpmaTniYfmrrUgICAgICAgQ3RybCtDIC8gWCAvIFYgPSDlpI3liLYgLyDliarliIcgLyDnspjotLQgICAgICAgQ3RybCtaIC8gWSA9IOaSpOmUgCAvIOmHjeWBmg==',
+    '5pyq5qOA5rWL5Yiw6L6T5YWl6K6+5aSH', '5Y+W5raI5b2V6Z+z',
+    '5b2V6Z+z5o6n5Yi2', '5byA5aeL5b2V6Z+z',
+    '5pqC5YGc5oiW57un57ut5b2V6Z+z', '5b2V6Z+z5bey5pqC5YGc',
+    '5q2j5Zyo5b2V6Z+z', '5YeG5aSH5b2V6Z+z', 'QS4g5b2V6Z+z',
+    '6L6T5YWl6K6+5aSH', '6L6T5YWl55S15bmz', '55uR5ZCs',
+    '5b2V6Z+z5qC85byP', 'UGhhc2UgOSDliY3kuI3lj6/nlKg=',
+    '57un57ut5b2V6Z+z', '6YCJ5oup5b2V6Z+z6K6+5aSH',
+    '5pqC5YGc5b2V6Z+z', '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z',
+    '5bGV5byA5b2V6Z+z6K6+572u', '5oqY5Y+g5b2V6Z+z6K6+572u',
+    '5YGc5q2i5b2V6Z+z', '5Yi35paw6L6T5YWl6K6+5aSH',
+    '5paw5bu65b2V6Z+z', '5omT5byA6Z+z6aKR5oiW5paw5bu65b2V6Z+z5Lul5byA5aeL57yW6L6R',
+    '5pKt5pS+77yaUGhhc2UgMTIg5o6l5YWlIMK3IFLvvJpQaGFzZSA5IOaOpeWFpSDCtyBDdHJsK1NoaWZ0K0Eg5Y+W5raI6YCJ5Yy6IMK3IEN0cmwrVyDmuIXnqbo=') |
+    ForEach-Object { ConvertFrom-Utf8Base64 $_ }
+$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts', 'agplayer_th.ts',
+                      'agplayer_vi.ts') | ForEach-Object {
+    Join-Path $SourceRoot "translations/$_"
+}
+foreach ($source in $recordingTranslationSources) {
+    $matches = Select-String -Path $translationFiles -SimpleMatch -Pattern "<source>$source</source>"
+    if ($matches) {
+        throw "Recording translation remains: $source ($($matches[0].Path):$($matches[0].LineNumber))"
     }
 }
 

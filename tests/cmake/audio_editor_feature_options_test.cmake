@@ -27,6 +27,8 @@ set(configure_arguments
         -DVCPKG_TARGET_TRIPLET=x64-windows
 )
 
+list(APPEND configure_arguments -DAG_ENABLE_NATIVE_RECORDING=ON)
+
 if(DEFINED VCVARS_BAT AND NOT "${VCVARS_BAT}" STREQUAL "")
     if(NOT EXISTS "${VCVARS_BAT}")
         message(FATAL_ERROR "MSVC environment script is missing: ${VCVARS_BAT}")
@@ -60,6 +62,42 @@ endif()
 if(NOT configure_result EQUAL 0)
     message(FATAL_ERROR
         "Feature option configure failed (${configure_result})\n"
+        "stdout:\n${configure_stdout}\n"
+        "stderr:\n${configure_stderr}")
+endif()
+
+list(POP_BACK configure_arguments legacy_recording_option)
+
+if(DEFINED VCVARS_BAT AND NOT "${VCVARS_BAT}" STREQUAL "")
+    set(configure_command "\"${CMAKE_COMMAND}\"")
+    foreach(argument IN LISTS configure_arguments)
+        string(REPLACE "\"" "\\\"" escaped_argument "${argument}")
+        string(APPEND configure_command " \"${escaped_argument}\"")
+    endforeach()
+    set(configure_batch "${TEST_BINARY_DIR}-configure.cmd")
+    file(WRITE "${configure_batch}"
+        "@echo off\r\n"
+        "call \"${VCVARS_BAT}\" >nul\r\n"
+        "if errorlevel 1 exit /b %errorlevel%\r\n"
+        "${configure_command}\r\n")
+    execute_process(
+        COMMAND cmd.exe /D /C "${configure_batch}"
+        RESULT_VARIABLE configure_result
+        OUTPUT_VARIABLE configure_stdout
+        ERROR_VARIABLE configure_stderr
+    )
+else()
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" ${configure_arguments}
+        RESULT_VARIABLE configure_result
+        OUTPUT_VARIABLE configure_stdout
+        ERROR_VARIABLE configure_stderr
+    )
+endif()
+
+if(NOT configure_result EQUAL 0)
+    message(FATAL_ERROR
+        "Legacy-cache reconfigure failed (${configure_result})\n"
         "stdout:\n${configure_stdout}\n"
         "stderr:\n${configure_stderr}")
 endif()
