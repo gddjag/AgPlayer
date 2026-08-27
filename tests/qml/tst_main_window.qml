@@ -538,7 +538,7 @@ TestCase {
         verify(findChild(mainWindow, "settingsButton"), "settingsButton should exist in Phase 2 settings task")
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
         verify(findChild(mainWindow, "equalizerButton"),
-               "equalizerButton should expose the real ten-band EQ")
+               "equalizerButton should expose the real eighteen-control EQ")
         verify(findChild(mainWindow, "listWindowButton"), "listWindowButton should exist")
         verify(findChild(mainWindow, "playerCover"), "player cover should exist")
         verify(findChild(mainWindow, "playerCoverImage").source.toString().length > 0,
@@ -576,16 +576,16 @@ TestCase {
         item.destroy()
     }
 
-    function test_equalizer_opens_compact_real_control_window() {
+    function test_equalizer_opens_apple_style_eighteen_control_window() {
         var button = findChild(mainWindow, "equalizerButton")
         verify(button)
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        compare(window.width, 520)
-        compare(window.height, 307)
-        compare(window.minimumWidth, 520)
-        compare(window.minimumHeight, 307)
+        verify(window.width >= 1180)
+        verify(window.height >= 680)
+        compare(window.minimumWidth, 960)
+        compare(window.minimumHeight, 580)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -593,8 +593,9 @@ TestCase {
         verify(equalizerContent,
                "EQ must lay out at native size instead of shrinking a large canvas")
         compare(equalizerContent.scale, 1)
-        verify(equalizerTitle.font.pixelSize >= 14)
-        compare(findChild(window, "equalizerHeaderPanel").height, 38)
+        compare(equalizerTitle.text, qsTr("十八段图形均衡器"))
+        verify(equalizerTitle.font.pixelSize >= 18)
+        verify(findChild(window, "equalizerHeaderPanel").height >= 64)
         compare(findChild(window, "equalizerMinimizeButton").width, 30)
         verify(findChild(window, "equalizerEnabledSwitch"))
         compare(button.contentItem.rotation, 90)
@@ -620,7 +621,7 @@ TestCase {
         SettingsController.themeMode = previousThemeMode
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
-        compare(bands.count, 10)
+        compare(bands.count, 17)
         verify(findChild(window, "equalizerPreampSlider"))
         verify(findChild(window, "equalizerAutoProtection"))
         verify(findChild(window, "equalizerBypassButton"))
@@ -631,6 +632,8 @@ TestCase {
         firstBand.setGain(3.2)
         tryCompare(firstBand, "gainDb", 3.2)
         compare(EqualizerController.bandGain(0), 3.2)
+        compare(EqualizerController.currentPresetId, "custom")
+        compare(presetBox.displayText, qsTr("Custom"))
         var firstBandControl = findChild(firstBand, "eqBandSlider-0-control")
         verify(firstBandControl)
         firstBand.setGain(12)
@@ -649,6 +652,16 @@ TestCase {
                 "double-clicking an EQ band must reset it to 0 dB")
         firstBand.setGain(6)
         tryCompare(firstBand, "gainDb", 6)
+        firstBandControl.forceActiveFocus()
+        keyPress(Qt.Key_Up)
+        tryCompare(firstBand, "gainDb", 6.1)
+        keyPress(Qt.Key_PageUp)
+        tryCompare(firstBand, "gainDb", 7.1)
+        keyPress(Qt.Key_PageDown)
+        tryCompare(firstBand, "gainDb", 6.1)
+        mouseWheel(firstBandControl, firstBandControl.width / 2,
+                   firstBandControl.height / 2, 0, -120)
+        tryCompare(firstBand, "gainDb", 6.0)
         var firstBandLabel = findChild(firstBand, "eqBandSlider-0-frequency")
         verify(firstBandLabel)
         mouseDoubleClickSequence(firstBandLabel, firstBandLabel.width / 2,

@@ -91,7 +91,7 @@ Rectangle {
             icon.width: 20
             icon.height: 20
             contentItem.rotation: 90
-            Accessible.name: qsTr("十段图形均衡器")
+            Accessible.name: qsTr("十八段图形均衡器")
             onClicked: root.openEqualizerRequested()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered

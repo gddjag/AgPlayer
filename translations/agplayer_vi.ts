@@ -917,33 +917,37 @@
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="380"/>
-        <source>Bass Boost</source>
-        <translation>Tăng âm trầm</translation>
+        <source>Bass</source>
+        <translation>Âm trầm mạnh</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="382"/>
-        <source>Bass Cut</source>
-        <translation>Giảm âm trầm</translation>
+        <source>Classical</source>
+        <translation>Cổ điển</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="384"/>
-        <source>Vocal Clarity</source>
-        <translation>Làm rõ giọng hát</translation>
+        <source>Pop</source>
+        <translation>Nhạc pop</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="386"/>
-        <source>Treble Boost</source>
-        <translation>Tăng âm cao</translation>
+        <source>Rock</source>
+        <translation>Rock</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="388"/>
-        <source>Treble Cut</source>
-        <translation>Giảm âm cao</translation>
+        <source>Vocal</source>
+        <translation>Giọng hát</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="390"/>
-        <source>Rock</source>
-        <translation>Rock</translation>
+        <source>EDM</source>
+        <translation>EDM điện tử</translation>
+    </message>
+    <message>
+        <source>Jazz</source>
+        <translation>Jazz</translation>
     </message>
 </context>
 <context>
@@ -951,9 +955,20 @@
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82"/>
-        <source>十段图形均衡器</source>
-        <translation>Bộ cân bằng đồ họa 10 băng tần</translation>
+        <source>十八段图形均衡器</source>
+        <translation>Bộ cân bằng đồ họa 18 băng tần</translation>
     </message>
+    <message><source>最小化</source><translation>Thu nhỏ</translation></message>
+    <message><source>最大化</source><translation>Phóng to</translation></message>
+    <message><source>关闭</source><translation>Đóng</translation></message>
+    <message><source>启用均衡器</source><translation>Bật bộ cân bằng</translation></message>
+    <message><source>Custom</source><translation>Tùy chỉnh</translation></message>
+    <message><source>均衡器预设</source><translation>Cài đặt sẵn bộ cân bằng</translation></message>
+    <message><source>旁路均衡器</source><translation>Bỏ qua bộ cân bằng</translation></message>
+    <message><source>全部归零</source><translation>Đặt lại tất cả</translation></message>
+    <message><source>余量</source><translation>Khoảng dự phòng</translation></message>
+    <message><source>保护中</source><translation>Đang bảo vệ</translation></message>
+    <message><source>双击滑杆归零 · 滚轮或方向键微调</source><translation>Nhấp đúp thanh trượt để đặt lại · Tinh chỉnh bằng con lăn hoặc phím mũi tên</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="136"/>
         <source>启用</source>
@@ -2873,8 +2888,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="94"/>
-        <source>十段图形均衡器</source>
-        <translation>Bộ cân bằng đồ họa 10 băng tần</translation>
+        <source>十八段图形均衡器</source>
+        <translation>Bộ cân bằng đồ họa 18 băng tần</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="108"/>

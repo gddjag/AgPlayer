@@ -241,6 +241,14 @@ private:
 int main(int argc, char* argv[])
 {
 #ifdef Q_OS_WIN
+    // The application ships ahead-of-time compiled QML in its executable.  A
+    // stale per-user disk cache can otherwise keep an older control tree after
+    // an upgrade (for example, the former ten-band equalizer).  Prefer the
+    // versioned resources from this build; this does not disable the compiled
+    // QML cache embedded by qt_add_qml_module.
+    qputenv("QML_DISABLE_DISK_CACHE", QByteArrayLiteral("1"));
+#endif
+#ifdef Q_OS_WIN
     // Must be set before Qt creates any native window so taskbar grouping and
     // the installed shortcut resolve to the same stable application identity.
     SetCurrentProcessExplicitAppUserModelID(L"AgPlayer.Desktop");
@@ -273,6 +281,7 @@ int main(int argc, char* argv[])
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
     //   --qa-skin <default|id|#RRGGBB> set the complete theme skin seed
     //   --qa-settings-section <0..6> capture one settings section
+    //   --qa-equalizer-size <w> <h> resize the EQ visual target
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
     bool qaTestMode = false;
@@ -294,6 +303,7 @@ int main(int argc, char* argv[])
     bool qaOpenSettings = false;
     int qaSettingsSection = -1;
     bool qaOpenEqualizer = false;
+    QSize qaEqualizerSize;
     QString qaLibraryPath;
     QString qaImportFolder;
     qint64 qaEditorSelectionStartMs = -1;
@@ -370,6 +380,15 @@ int main(int argc, char* argv[])
                 }
             } else if (arg == QStringLiteral("--qa-open-equalizer")) {
                 qaOpenEqualizer = true;
+            } else if (arg == QStringLiteral("--qa-equalizer-size")
+                       && i + 2 < cliArgs.size()) {
+                bool widthOk = false;
+                bool heightOk = false;
+                const int width = cliArgs.at(++i).toInt(&widthOk);
+                const int height = cliArgs.at(++i).toInt(&heightOk);
+                if (widthOk && heightOk && width >= 960 && height >= 580) {
+                    qaEqualizerSize = QSize(width, height);
+                }
             } else if (arg == QStringLiteral("--qa-library")
                        && i + 1 < cliArgs.size()) {
                 qaLibraryPath = cliArgs.at(++i);
@@ -1301,6 +1320,19 @@ int main(int argc, char* argv[])
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
                 equalizerWindow = mainWindow->findChild<QObject*>(
                     QStringLiteral("equalizerWindow"));
+                if (equalizerWindow == nullptr) {
+                    if (QObject* loader = mainWindow->findChild<QObject*>(
+                            QStringLiteral("equalizerWindowLoader"))) {
+                        equalizerWindow = qvariant_cast<QObject*>(
+                            loader->property("item"));
+                    }
+                }
+                if (qaEqualizerSize.isValid()) {
+                    if (auto* equalizerWin = qobject_cast<QWindow*>(
+                            equalizerWindow)) {
+                        equalizerWin->resize(qaEqualizerSize);
+                    }
+                }
             }
 
             playFileIfPending();

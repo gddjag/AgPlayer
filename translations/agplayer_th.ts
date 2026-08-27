@@ -917,33 +917,37 @@
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="380"/>
-        <source>Bass Boost</source>
-        <translation>เพิ่มเสียงเบส</translation>
+        <source>Bass</source>
+        <translation>เบสหนัก</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="382"/>
-        <source>Bass Cut</source>
-        <translation>ลดเสียงเบส</translation>
+        <source>Classical</source>
+        <translation>คลาสสิก</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="384"/>
-        <source>Vocal Clarity</source>
-        <translation>เสียงร้องชัดเจน</translation>
+        <source>Pop</source>
+        <translation>ป๊อป</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="386"/>
-        <source>Treble Boost</source>
-        <translation>เพิ่มเสียงแหลม</translation>
+        <source>Rock</source>
+        <translation>ร็อก</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="388"/>
-        <source>Treble Cut</source>
-        <translation>ลดเสียงแหลม</translation>
+        <source>Vocal</source>
+        <translation>เสียงร้อง</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="390"/>
-        <source>Rock</source>
-        <translation>ร็อก</translation>
+        <source>EDM</source>
+        <translation>EDM อิเล็กทรอนิกส์</translation>
+    </message>
+    <message>
+        <source>Jazz</source>
+        <translation>แจ๊ส</translation>
     </message>
 </context>
 <context>
@@ -951,9 +955,20 @@
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82"/>
-        <source>十段图形均衡器</source>
-        <translation>อีควอไลเซอร์กราฟิก 10 แบนด์</translation>
+        <source>十八段图形均衡器</source>
+        <translation>อีควอไลเซอร์กราฟิก 18 แบนด์</translation>
     </message>
+    <message><source>最小化</source><translation>ย่อหน้าต่าง</translation></message>
+    <message><source>最大化</source><translation>ขยายหน้าต่าง</translation></message>
+    <message><source>关闭</source><translation>ปิด</translation></message>
+    <message><source>启用均衡器</source><translation>เปิดใช้งานอีควอไลเซอร์</translation></message>
+    <message><source>Custom</source><translation>กำหนดเอง</translation></message>
+    <message><source>均衡器预设</source><translation>พรีเซ็ตอีควอไลเซอร์</translation></message>
+    <message><source>旁路均衡器</source><translation>บายพาสอีควอไลเซอร์</translation></message>
+    <message><source>全部归零</source><translation>รีเซ็ตทั้งหมด</translation></message>
+    <message><source>余量</source><translation>เฮดรูม</translation></message>
+    <message><source>保护中</source><translation>กำลังป้องกัน</translation></message>
+    <message><source>双击滑杆归零 · 滚轮或方向键微调</source><translation>ดับเบิลคลิกแถบเลื่อนเพื่อรีเซ็ต · ปรับละเอียดด้วยล้อเมาส์หรือปุ่มลูกศร</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="136"/>
         <source>启用</source>
@@ -2873,8 +2888,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="94"/>
-        <source>十段图形均衡器</source>
-        <translation>อีควอไลเซอร์กราฟิก 10 แบนด์</translation>
+        <source>十八段图形均衡器</source>
+        <translation>อีควอไลเซอร์กราฟิก 18 แบนด์</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="108"/>

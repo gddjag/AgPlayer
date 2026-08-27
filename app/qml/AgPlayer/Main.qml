@@ -216,6 +216,7 @@ ApplicationWindow {
 
     Loader {
         id: equalizerWindowLoader
+        objectName: "equalizerWindowLoader"
         active: false
         sourceComponent: Component {
             EqualizerWindow {}

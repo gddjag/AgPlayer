@@ -917,33 +917,37 @@
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="380"/>
-        <source>Bass Boost</source>
-        <translation>Bass Boost</translation>
+        <source>Bass</source>
+        <translation>Bass</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="382"/>
-        <source>Bass Cut</source>
-        <translation>Bass Cut</translation>
+        <source>Classical</source>
+        <translation>Classical</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="384"/>
-        <source>Vocal Clarity</source>
-        <translation>Vocal Clarity</translation>
+        <source>Pop</source>
+        <translation>Pop</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="386"/>
-        <source>Treble Boost</source>
-        <translation>Treble Boost</translation>
+        <source>Rock</source>
+        <translation>Rock</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="388"/>
-        <source>Treble Cut</source>
-        <translation>Treble Cut</translation>
+        <source>Vocal</source>
+        <translation>Vocal</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="390"/>
-        <source>Rock</source>
-        <translation>Rock</translation>
+        <source>EDM</source>
+        <translation>EDM</translation>
+    </message>
+    <message>
+        <source>Jazz</source>
+        <translation>Jazz</translation>
     </message>
 </context>
 <context>
@@ -951,9 +955,20 @@
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82"/>
-        <source>十段图形均衡器</source>
-        <translation>10-Band Graphic Equalizer</translation>
+        <source>十八段图形均衡器</source>
+        <translation>18-Band Graphic Equalizer</translation>
     </message>
+    <message><source>最小化</source><translation>Minimize</translation></message>
+    <message><source>最大化</source><translation>Maximize</translation></message>
+    <message><source>关闭</source><translation>Close</translation></message>
+    <message><source>启用均衡器</source><translation>Enable Equalizer</translation></message>
+    <message><source>Custom</source><translation>Custom</translation></message>
+    <message><source>均衡器预设</source><translation>Equalizer Preset</translation></message>
+    <message><source>旁路均衡器</source><translation>Bypass Equalizer</translation></message>
+    <message><source>全部归零</source><translation>Reset All</translation></message>
+    <message><source>余量</source><translation>Headroom</translation></message>
+    <message><source>保护中</source><translation>Protecting</translation></message>
+    <message><source>双击滑杆归零 · 滚轮或方向键微调</source><translation>Double-click a slider to reset · Fine-tune with the wheel or arrow keys</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="136"/>
         <source>启用</source>
@@ -2930,8 +2945,8 @@ Clear: Remove all known aliases for this field.</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="94"/>
-        <source>十段图形均衡器</source>
-        <translation>10-Band Graphic Equalizer</translation>
+        <source>十八段图形均衡器</source>
+        <translation>18-Band Graphic Equalizer</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="108"/>
