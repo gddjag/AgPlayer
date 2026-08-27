@@ -8,7 +8,6 @@
 #include "project_document.hpp"
 #include "selection_drag_controller.hpp"
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
-#include "../../../core/src/audio_editor/recording_session.hpp"
 #include "../../../core/src/audio_editor/document_writer.hpp"
 #include "../../../core/src/audio_editor/noise_reducer.hpp"
 #include "../../../core/src/audio_editor/peak_pyramid.hpp"
@@ -38,8 +37,6 @@ enum class EditorSessionState {
     Empty,
     Ready,
     Playing,
-    Recording,
-    RecordingPaused,
     Finalizing,
     Previewing,
     Processing,
@@ -79,8 +76,6 @@ class AudioEditorController final : public QObject {
                    READ formantPreservationSupported CONSTANT)
     Q_PROPERTY(bool formantPreservation READ formantPreservation
                    WRITE setFormantPreservation NOTIFY timePitchChanged)
-    Q_PROPERTY(bool recordingSupported READ recordingSupported
-                   NOTIFY recordingDevicesChanged)
     Q_PROPERTY(bool bpmDetectionSupported READ bpmDetectionSupported CONSTANT)
     Q_PROPERTY(bool timePitchSupported READ timePitchSupported CONSTANT)
     Q_PROPERTY(bool playbackSupported READ playbackSupported CONSTANT)
@@ -116,25 +111,6 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(int pitchCents READ pitchCents NOTIFY timePitchChanged)
     Q_PROPERTY(bool timePitchPreviewActive READ timePitchPreviewActive
                    NOTIFY timePitchChanged)
-    Q_PROPERTY(QVariantList recordingDevices READ recordingDevices NOTIFY recordingDevicesChanged)
-    Q_PROPERTY(QString recordingDeviceId READ recordingDeviceId
-                   NOTIFY recordingPreferencesChanged)
-    Q_PROPERTY(int recordingSampleRate READ recordingSampleRate
-                   NOTIFY recordingPreferencesChanged)
-    Q_PROPERTY(int recordingChannels READ recordingChannels
-                   NOTIFY recordingPreferencesChanged)
-    Q_PROPERTY(bool recordingMonitor READ recordingMonitor
-                   NOTIFY recordingPreferencesChanged)
-    Q_PROPERTY(QString recordingDirectory READ recordingDirectory
-                   NOTIFY recordingPreferencesChanged)
-    Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
-    Q_PROPERTY(bool recordingPaused READ recordingPaused NOTIFY recordingChanged)
-    Q_PROPERTY(double inputLevel READ inputLevel NOTIFY recordingChanged)
-    Q_PROPERTY(QVariantList inputPeakLevels READ inputPeakLevels
-                   NOTIFY recordingChanged)
-    Q_PROPERTY(QVariantList inputRmsLevels READ inputRmsLevels
-                   NOTIFY recordingChanged)
-    Q_PROPERTY(qint64 recordingFrames READ recordingFrames NOTIFY recordingChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(bool noiseReductionActive READ noiseReductionActive
@@ -148,9 +124,6 @@ public:
     void setPlaybackController(PlaybackController* controller);
     [[nodiscard]] ag_player* playerHandleForTesting() const noexcept
     { return player_; }
-    [[nodiscard]] agplayer::editor::RecordingSession&
-    recordingSessionForTesting() noexcept { return recording_session_; }
-    void publishRecordingTickForTesting() { publishRecordingTick(); }
 
     [[nodiscard]] EditorActionModel* actions() noexcept { return &actions_; }
     [[nodiscard]] EditorViewport* viewport() noexcept { return &viewport_; }
@@ -158,7 +131,7 @@ public:
     [[nodiscard]] bool hasDocument() const noexcept { return has_document_; }
     [[nodiscard]] bool modified() const noexcept { return modified_; }
     [[nodiscard]] qint64 totalFrames() const noexcept
-    { return recording() ? recordingFrames() : document_.totalFrames(); }
+    { return document_.totalFrames(); }
     [[nodiscard]] qint64 selectionStart() const noexcept;
     [[nodiscard]] qint64 selectionEnd() const noexcept;
     [[nodiscard]] qint64 selectionFrames() const noexcept;
@@ -166,9 +139,9 @@ public:
     [[nodiscard]] QString fileName() const;
     [[nodiscard]] QString formatName() const { return format_name_; }
     [[nodiscard]] int sampleRate() const noexcept
-    { return recording() ? recording_sample_rate_ : sample_rate_; }
+    { return sample_rate_; }
     [[nodiscard]] int channels() const noexcept
-    { return recording() ? recording_channels_ : channels_; }
+    { return channels_; }
     [[nodiscard]] int bitsPerSample() const noexcept { return bits_per_sample_; }
     [[nodiscard]] qint64 bitRate() const noexcept { return bit_rate_; }
     [[nodiscard]] QVariantList channelPeaks() const;
@@ -180,8 +153,6 @@ public:
     { return true; }
     [[nodiscard]] bool formantPreservation() const noexcept
     { return time_pitch_.formantPreservation(); }
-    [[nodiscard]] bool recordingSupported() const noexcept
-    { return !recording_devices_.isEmpty(); }
     [[nodiscard]] constexpr bool bpmDetectionSupported() const noexcept
     { return true; }
     [[nodiscard]] constexpr bool timePitchSupported() const noexcept
@@ -217,20 +188,6 @@ public:
     [[nodiscard]] int pitchCents() const noexcept { return time_pitch_.pitchCents(); }
     [[nodiscard]] bool timePitchPreviewActive() const noexcept
     { return time_pitch_preview_active_; }
-    [[nodiscard]] QVariantList recordingDevices() const { return recording_devices_; }
-    [[nodiscard]] QString recordingDeviceId() const { return recording_device_id_; }
-    [[nodiscard]] int recordingSampleRate() const noexcept { return recording_sample_rate_; }
-    [[nodiscard]] int recordingChannels() const noexcept { return recording_channels_; }
-    [[nodiscard]] bool recordingMonitor() const noexcept { return recording_monitor_; }
-    [[nodiscard]] QString recordingDirectory() const { return recording_directory_; }
-    [[nodiscard]] bool recording() const noexcept;
-    [[nodiscard]] bool recordingPaused() const noexcept;
-    [[nodiscard]] double inputLevel() const noexcept;
-    [[nodiscard]] QVariantList inputPeakLevels() const
-    { return input_peak_levels_; }
-    [[nodiscard]] QVariantList inputRmsLevels() const
-    { return input_rms_levels_; }
-    [[nodiscard]] qint64 recordingFrames() const noexcept;
     [[nodiscard]] bool busy() const noexcept;
     [[nodiscard]] bool loading() const noexcept { return document_loading_; }
     [[nodiscard]] bool noiseReductionActive() const noexcept
@@ -268,7 +225,6 @@ public:
     }
     Q_INVOKABLE bool createUntitledDocument(
         quint32 sampleRate, quint32 channels, qint64 frames);
-    Q_INVOKABLE bool createRecordingDocument(quint32 sampleRate, quint32 channels);
     Q_INVOKABLE bool clearDocument();
     Q_INVOKABLE bool openFile(const QUrl& source);
     bool openFileWhenReady(const QUrl& source, QObject* context,
@@ -351,20 +307,6 @@ public:
     Q_INVOKABLE void setKeepPitch(bool value);
     Q_INVOKABLE void setFormantPreservation(bool value);
     Q_INVOKABLE bool setPitch(int semitones, int cents);
-    Q_INVOKABLE void refreshRecordingDevices();
-    Q_INVOKABLE bool startRecording(const QUrl& target,
-                                    const QString& deviceId,
-                                    int recordingSampleRate,
-                                    int recordingChannels,
-                                    bool monitor,
-                                    bool insertAtCursor);
-    Q_INVOKABLE bool startRecordingToTemporaryFile(
-        const QString& deviceId, int recordingSampleRate,
-        int recordingChannels, bool monitor, bool insertAtCursor);
-    Q_INVOKABLE bool pauseRecording();
-    Q_INVOKABLE bool resumeRecording();
-    Q_INVOKABLE bool stopRecording();
-    Q_INVOKABLE bool cancelRecording();
     Q_INVOKABLE void cancelOperation();
     Q_INVOKABLE void deactivate();
     Q_INVOKABLE void activate();
@@ -384,9 +326,6 @@ signals:
     void projectChanged();
     void timePitchChanged();
     void bpmChanged();
-    void recordingDevicesChanged();
-    void recordingPreferencesChanged();
-    void recordingChanged();
     void openRequested();
     void saveAsRequested();
     void saveProjectAsRequested();
@@ -394,24 +333,13 @@ signals:
     void exportDirectoryRequested();
     void exportSucceeded(const QString& path);
     void exportResultChanged();
-    void newRecordingRequested();
     void discardConfirmationRequested();
     void loadingChanged();
 
 private:
     explicit AudioEditorController(std::optional<ag_audio_backend> backend,
                                    QObject* parent);
-    struct RecordingFinalizeResult;
     struct NoiseReductionFinalizeResult;
-    struct PendingRecordingRequest final {
-        QUrl target;
-        QString finalPath;
-        QString deviceId;
-        int sampleRate{};
-        int channels{};
-        bool monitor{};
-        bool insertAtCursor{};
-    };
     using ViewportWaveformPeaks = std::vector<std::vector<float>>;
     using SourcePeakPyramids = std::unordered_map<std::string,
         std::shared_ptr<const agplayer::editor::PeakPyramid>>;
@@ -469,7 +397,6 @@ private:
     bool preparePlayback();
     void ensureSelectionHandoffServices();
     void pollPlayback();
-    void publishRecordingTick();
     void setState(EditorSessionState value);
     void setError(QString message);
     void setProgress(double value);
@@ -492,7 +419,6 @@ private:
     [[nodiscard]] QString generatedMediaDirectory() const;
     [[nodiscard]] QString uniqueGeneratedMediaPath(
         const QString& prefix) const;
-    bool startRecordingInternal(const PendingRecordingRequest& request);
     bool exportWithSettings(const QUrl& target, bool selectionOnly,
                             const QString& codecName, int sampleRate,
                             int channels, qint64 bitRate, bool keepMetadata,
@@ -515,7 +441,6 @@ private:
     QUrl pending_open_url_;
     bool pending_open_is_project_{};
     bool pending_clear_document_{};
-    std::optional<PendingRecordingRequest> pending_recording_;
     QString format_name_;
     int sample_rate_{};
     int channels_{};
@@ -561,11 +486,8 @@ private:
     QVariantList project_issues_;
     QVariantList known_project_issues_;
     agplayer::editor::TimePitchSession time_pitch_;
-    agplayer::editor::RecordingSession recording_session_;
     QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
-    QFutureWatcher<bool>* recording_start_watcher_{};
-    QFutureWatcher<RecordingFinalizeResult>* recording_stop_watcher_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
     bool bpm_busy_{};
     double bpm_result_{};
@@ -573,17 +495,6 @@ private:
     QFutureWatcher<NoiseReductionFinalizeResult>*
         noise_reduction_watcher_{};
     std::atomic_bool operation_cancelled_{false};
-    QVariantList recording_devices_;
-    QString recording_device_id_;
-    QString recording_directory_;
-    int recording_sample_rate_{48'000};
-    int recording_channels_{2};
-    bool recording_monitor_{};
-    QTimer recording_timer_;
-    QVariantList input_peak_levels_;
-    QVariantList input_rms_levels_;
-    bool insert_recording_at_cursor_{};
-    QString recording_final_path_;
     bool time_pitch_preview_active_{};
     bool allow_document_replace_{};
     bool suppress_persisted_state_tracking_{};
@@ -596,7 +507,6 @@ private:
     qint64 saved_visible_start_frame_{};
     qint64 saved_visible_end_frame_{};
     agplayer::editor::ProjectExportSettings saved_export_settings_;
-    qint64 recording_insert_frame_{};
 
     enum class EventGestureKind {
         None,

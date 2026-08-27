@@ -25,7 +25,6 @@ set(configure_arguments
         "-DSoundTouch_DIR=${SOUNDTOUCH_DIR}"
         -DVCPKG_MANIFEST_MODE=OFF
         -DVCPKG_TARGET_TRIPLET=x64-windows
-        -DAG_ENABLE_NATIVE_RECORDING=OFF
 )
 
 if(DEFINED VCVARS_BAT AND NOT "${VCVARS_BAT}" STREQUAL "")
@@ -74,7 +73,7 @@ foreach(enabled_option IN ITEMS AG_ENABLE_AUDIO_EDITOR AG_ENABLE_TIME_PITCH)
     endif()
 endforeach()
 
-if(NOT cache MATCHES "AG_ENABLE_NATIVE_RECORDING:BOOL=OFF")
+if(cache MATCHES "AG_ENABLE_NATIVE_RECORDING")
     message(FATAL_ERROR
-        "AG_ENABLE_NATIVE_RECORDING=OFF must survive configuration")
+        "AG_ENABLE_NATIVE_RECORDING must not remain in the configured project")
 endif()

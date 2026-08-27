@@ -126,7 +126,6 @@ Rectangle {
         lineWidth: SettingsController.waveformMode === 2
             ? 3.0 : SettingsController.waveformThickness
         visible: AudioEditorController.hasDocument
-            || AudioEditorController.recording
     }
 
     Rectangle {
@@ -670,8 +669,7 @@ Rectangle {
         width: 2
         height: canvas.height
         color: Theme.editorPlayhead
-        visible: (AudioEditorController.hasDocument
-                  || AudioEditorController.recording)
+        visible: AudioEditorController.hasDocument
             && canvas.displayedPlayheadFrame
                 >= AudioEditorController.viewport.visibleStartFrame
             && canvas.displayedPlayheadFrame
@@ -853,7 +851,6 @@ Rectangle {
     Text {
         anchors.centerIn: parent
         visible: !AudioEditorController.hasDocument
-            && !AudioEditorController.recording
         text: qsTr("导入音频后开始编辑")
         color: Theme.textTertiary
         font.family: Theme.fontPrimary

@@ -39,7 +39,6 @@ QtObject {
     readonly property color warning: ThemeManager.warning
     readonly property color error: ThemeManager.error
     readonly property color danger: ThemeManager.danger
-    readonly property color recording: ThemeManager.recording
     readonly property color critical: ThemeManager.critical
 
     // Compatibility aliases for existing QML pages.

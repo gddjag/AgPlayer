@@ -268,7 +268,6 @@ void ThemeManagerTest::semanticColorsKeepIdentity()
     QCOMPARE(blue.success, pink.success);
     QCOMPARE(blue.warning, pink.warning);
     QCOMPARE(blue.error, pink.error);
-    QCOMPARE(blue.recording, pink.recording);
     QVERIFY(blue.success.toHsl().hslHue() >= 90
             && blue.success.toHsl().hslHue() <= 160);
     QVERIFY(blue.warning.toHsl().hslHue() >= 30

@@ -9,8 +9,6 @@ std::vector<EditorAction> defaultActions()
     return {
         {"editor.open", QStringLiteral("打开"), QStringLiteral("打开音频文件"),
             "Ctrl+O", "folder-open-line"},
-        {"editor.newRecording", QStringLiteral("新建录音"),
-            QStringLiteral("新建录音文档"), "Ctrl+R", "record-circle-line"},
         {"editor.save", QStringLiteral("保存"), QStringLiteral("保存当前音频"),
             "Ctrl+S", "save-3-line"},
         {"editor.undo", QStringLiteral("撤销"), QStringLiteral("撤销上一步"),

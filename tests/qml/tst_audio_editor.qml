@@ -47,6 +47,14 @@ TestCase {
         tryVerify(function() { return page.width > 0 && page.height > 0 })
     }
 
+    function test_recordingSurfaceIsAbsent() {
+        compare(findChild(page, "editorRecordingTransport"), null)
+        compare(findChild(page, "inspectorRecordingGroup"), null)
+        compare(findChild(page, "editorRecordShortcut"), null)
+        compare(findChild(page, "editorPauseRecordingShortcut"), null)
+        compare(findChild(page, "editorStopRecordingShortcut"), null)
+    }
+
     function test_switchingAwayDeactivatesAndReturningActivatesEditor() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const shell = createTemporaryObject(shellComponent, testCase)
@@ -92,8 +100,7 @@ TestCase {
         verifyGeometry("editorTimeRuler", 118, 152, 1167, 50)
         verifyGeometry("editorWaveformCanvas", 118, 202, 1167, 284)
         verifyGeometry("editorTimelineScrollbar", 118, 500, 1167, 16)
-        verifyGeometry("editorRecordingTransport", 12, 527, 556, 130)
-        verifyGeometry("editorPlaybackTransport", 580, 527, 708, 130)
+        verifyGeometry("editorPlaybackTransport", 12, 527, 1276, 130)
         verifyGeometry("editorShortcutCard", 12, 667, 1276, 157)
         verifyGeometry("editorStatusBar", 0, 824, 1300, 25)
     }
@@ -182,9 +189,9 @@ TestCase {
         }
     }
 
-    function test_inspectorAThroughEMatchesReferenceControls() {
+    function test_inspectorNonRecordingControlsMatchReference() {
         const names = [
-            "inspectorRecordingGroup", "inspectorTempoGroup",
+            "inspectorTempoGroup",
             "inspectorPitchGroup", "inspectorPreservePitchGroup",
             "inspectorExportGroup"
         ]
@@ -196,8 +203,6 @@ TestCase {
             previousY = group.y
         }
         for (const name of [
-                 "inspectorRecordingDevice", "inspectorInputMeter",
-                 "inspectorMonitorSwitch", "inspectorRecordingFormat",
                  "inspectorBpmInput", "inspectorDetectBpmButton",
                  "inspectorSpeedSlider", "inspectorSpeedValue",
                  "inspectorSpeedResetButton", "inspectorPitchMinus",
@@ -223,14 +228,14 @@ TestCase {
     }
 
     function test_inspectorReferenceGeometryAndCollapsibleHeaders() {
-        const names = ["inspectorRecordingGroup", "inspectorTempoGroup",
+        const names = ["inspectorTempoGroup",
                        "inspectorPitchGroup", "inspectorPreservePitchGroup",
                        "inspectorExportGroup"]
-        const arrows = ["inspectorRecordingCollapse", "inspectorTempoCollapse",
+        const arrows = ["inspectorTempoCollapse",
                         "inspectorPitchCollapse", "inspectorPreservePitchCollapse",
                         "inspectorExportCollapse"]
-        const heights = [186, 129, 107, 104, 276]
-        const positions = [0, 192, 327, 440, 550]
+        const heights = [129, 107, 104, 276]
+        const positions = [0, 135, 248, 358]
         for (let index = 0; index < names.length; ++index) {
             const group = findChild(page, names[index])
             const arrow = findChild(page, arrows[index])
@@ -242,13 +247,13 @@ TestCase {
             verify(arrow.Accessible.name.length > 0)
         }
 
-        const tempo = findChild(page, names[1])
-        const pitch = findChild(page, names[2])
-        mouseClick(findChild(page, arrows[1]))
+        const tempo = findChild(page, names[0])
+        const pitch = findChild(page, names[1])
+        mouseClick(findChild(page, arrows[0]))
         compare(tempo.height, 38)
         tryCompare(pitch, "y", tempo.y + 44)
-        mouseClick(findChild(page, arrows[1]))
-        compare(tempo.height, heights[1])
+        mouseClick(findChild(page, arrows[0]))
+        compare(tempo.height, heights[0])
     }
 
     function test_keyboardToolSelectionSplitAndEscape() {
@@ -288,14 +293,9 @@ TestCase {
     }
 
     function test_transportControlsKeepReferenceAppearanceWhenUnavailable() {
-        const microphone = findChild(page, "recordingMicrophoneButton")
-        const pause = findChild(page, "recordingPauseButton")
-        const recording = findChild(page, "recordingRecordButton")
-        const stop = findChild(page, "recordingStopButton")
         const play = findChild(page, "editorPrimaryPlayButton")
         const narrowPlay = findChild(page, "editorNarrowPlaybackAccess")
-        for (const control of [microphone, pause, recording, stop,
-                               play, narrowPlay]) {
+        for (const control of [play, narrowPlay]) {
             verify(control)
             verify(control.opacity >= 0.9,
                    control.objectName + " lost the reference appearance")
@@ -305,16 +305,11 @@ TestCase {
     }
 
     function test_referenceTransportShortcutAndStatusCopy() {
-        const recordingState = findChild(page, "recordingStateText")
-        const recordingTime = findChild(page, "recordingTimeText")
         const playBackground = findChild(page, "editorPrimaryPlayBackground")
         const shortcutFirst = findChild(page, "editorShortcutFirstGroup_0")
         const shortcutFade = findChild(page, "editorShortcutSecondGroup_4")
         const shortcutEnvelope = findChild(page, "editorShortcutSecondGroup_5")
-        verify(recordingState && recordingTime && playBackground
-               && shortcutFirst && shortcutFade && shortcutEnvelope)
-        compare(recordingState.text, "准备录音")
-        compare(recordingTime.text, "00:00:00")
+        verify(playBackground && shortcutFirst && shortcutFade && shortcutEnvelope)
         verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
         compare(shortcutFirst.text.indexOf("R = 开始录音"), -1)
         compare(shortcutFirst.text.indexOf("Shift+R"), -1)
@@ -391,83 +386,28 @@ TestCase {
         }
     }
 
-    function test_recordingButtonsMatchReferenceRolesFromIdle() {
-        const microphone = findChild(page, "recordingMicrophoneButton")
-        const pause = findChild(page, "recordingPauseButton")
-        const record = findChild(page, "recordingRecordButton")
-        const stop = findChild(page, "recordingStopButton")
-        const device = findChild(page, "inspectorRecordingDevice")
-        verify(microphone && pause && record && stop && device)
-        compare(microphone.Accessible.name, "选择录音设备")
-        compare(pause.Accessible.name, "暂停录音")
-        compare(record.Accessible.name, "开始录音")
-        compare(stop.Accessible.name, "停止并保存录音")
-        compare(record.enabled,
-                AudioEditorController.recordingSupported
-                && !AudioEditorController.busy)
-        compare(pause.enabled, false)
-        compare(stop.enabled, false)
-        verify(Math.abs(microphone.x - 151) <= 2)
-        verify(Math.abs(pause.x - 253) <= 2)
-        verify(Math.abs(record.x - 356) <= 2)
-        verify(Math.abs(stop.x - 458) <= 2)
-        for (const control of [microphone, pause, record, stop]) {
-            verify(Math.abs(control.y - 31) <= 2)
-            verify(Math.abs(control.width - 74) <= 2)
-            verify(Math.abs(control.height - 74) <= 2)
-        }
-        if (AudioEditorController.recordingSupported) {
-            mouseClick(microphone)
-            tryCompare(device.popup, "visible", true)
-        } else {
-            compare(microphone.enabled, false)
-            compare(device.enabled, false)
-        }
-    }
-
-    function test_recordingShortcutsMatchReferenceRoles() {
-        const record = findChild(page, "editorRecordShortcut")
-        const pause = findChild(page, "editorPauseRecordingShortcut")
-        const stop = findChild(page, "editorStopRecordingShortcut")
-        verify(record && pause && stop)
-        compare(record.sequence.toString(), "R")
-        compare(pause.sequence.toString(), "Shift+R")
-        compare(stop.sequence.toString(), "Ctrl+R")
-    }
-
     function test_referenceTransportUsesFineControlsAndHoverShortcuts() {
-        const microphone = findChild(page, "recordingMicrophoneButton")
-        const pause = findChild(page, "recordingPauseButton")
-        const record = findChild(page, "recordingRecordButton")
-        const recordStop = findChild(page, "recordingStopButton")
         const toStart = findChild(page, "editorPlaybackToStartButton")
         const rewind = findChild(page, "editorPlaybackRewindButton")
         const play = findChild(page, "editorPrimaryPlayButton")
         const forward = findChild(page, "editorPlaybackForwardButton")
         const stop = findChild(page, "editorPlaybackStopButton")
-        const deviceShortcut = findChild(page, "editorDeviceShortcut")
         const startShortcut = findChild(page, "editorToStartShortcut")
         const rewindShortcut = findChild(page, "editorRewindShortcut")
         const forwardShortcut = findChild(page, "editorForwardShortcut")
         const stopShortcut = findChild(page, "editorStopPlaybackShortcut")
 
-        for (const control of [microphone, pause, record, recordStop,
-                               toStart, rewind, play, forward, stop]) {
+        for (const control of [toStart, rewind, play, forward, stop]) {
             verify(control, "missing reference transport control")
             compare(control.toolTipDelay, 500)
             verify(control.toolTipText.length > 0)
         }
-        compare(microphone.toolTipText, "选择录音设备（Alt+R）")
-        compare(pause.toolTipText, "暂停 / 继续录音（Shift+R）")
-        compare(record.toolTipText, "开始 / 继续录音（R）")
-        compare(recordStop.toolTipText, "停止并保存录音（Ctrl+R）")
         compare(toStart.toolTipText, "跳到开头（Home）")
         compare(rewind.toolTipText, "后退 5 秒（←）")
         compare(play.toolTipText, "播放 / 暂停（Space）")
         compare(forward.toolTipText, "前进 5 秒（→）")
         compare(stop.toolTipText, "停止（Ctrl+Space）")
 
-        compare(deviceShortcut.sequence.toString(), "Alt+R")
         compare(startShortcut.sequence.toString(), "Home")
         compare(rewindShortcut.sequence.toString(), "Left")
         compare(forwardShortcut.sequence.toString(), "Right")
@@ -495,9 +435,8 @@ TestCase {
             else
                 verify(Math.abs(groove.width - 4) <= 1)
         }
-        for (const switchName of ["inspectorMonitorSwitch",
-                                  "inspectorPreservePitchSwitch",
-                                  "inspectorFormantSwitch"]) {
+        for (const switchName of ["inspectorPreservePitchSwitch",
+                                   "inspectorFormantSwitch"]) {
             const control = findChild(page, switchName)
             verify(control)
             compare(control.width, 40)
@@ -554,31 +493,6 @@ TestCase {
                 verify(activePosition.x >= groovePosition.x)
                 verify(activePosition.x + active.width
                        <= groovePosition.x + groove.width + 0.5)
-            }
-        }
-    }
-
-    function test_recordingButtonsDoNotOverlapAtMinimumWindowWidth() {
-        host.width = 880
-        host.height = 560
-        wait(0)
-
-        const controls = [
-            findChild(page, "recordingMicrophoneButton"),
-            findChild(page, "recordingPauseButton"),
-            findChild(page, "recordingRecordButton"),
-            findChild(page, "recordingStopButton")
-        ]
-        for (let index = 0; index < controls.length; ++index) {
-            verify(controls[index])
-            verify(controls[index].width >= 40)
-            verify(controls[index].x >= 0)
-            verify(controls[index].x + controls[index].width
-                   <= controls[index].parent.width + 0.5)
-            if (index > 0) {
-                verify(controls[index].x
-                       >= controls[index - 1].x
-                          + controls[index - 1].width)
             }
         }
     }

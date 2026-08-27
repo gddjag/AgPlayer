@@ -44,7 +44,6 @@ struct ThemePalette final {
     QColor warning;
     QColor error;
     QColor danger;
-    QColor recording;
     QColor critical;
 
     bool operator==(const ThemePalette& other) const;
@@ -83,7 +82,6 @@ class ThemeManager final : public QObject {
     Q_PROPERTY(QColor warning READ warning NOTIFY paletteChanged)
     Q_PROPERTY(QColor error READ error NOTIFY paletteChanged)
     Q_PROPERTY(QColor danger READ danger NOTIFY paletteChanged)
-    Q_PROPERTY(QColor recording READ recording NOTIFY paletteChanged)
     Q_PROPERTY(QColor critical READ critical NOTIFY paletteChanged)
     Q_PROPERTY(bool isLight READ isLight NOTIFY paletteChanged)
 
@@ -155,7 +153,6 @@ public:
     QColor warning() const { return palette_.warning; }
     QColor error() const { return palette_.error; }
     QColor danger() const { return palette_.danger; }
-    QColor recording() const { return palette_.recording; }
     QColor critical() const { return palette_.critical; }
     bool isLight() const;
 

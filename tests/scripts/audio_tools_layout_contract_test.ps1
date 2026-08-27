@@ -28,6 +28,28 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
 
+$forbidden = @('RecordingSession', 'recordingSupported', 'startRecording',
+               'editor.newRecording', 'editorRecordingTransport',
+               'inspectorRecordingGroup')
+$productionRoots = @(
+    (Join-Path $SourceRoot 'core/src'),
+    (Join-Path $SourceRoot 'qt/src'),
+    (Join-Path $SourceRoot 'app/qml'))
+$productionFiles = foreach ($root in $productionRoots) {
+    Get-ChildItem -LiteralPath $root -File -Recurse
+}
+$productionFiles += @(
+    (Join-Path $SourceRoot 'CMakeLists.txt'),
+    (Join-Path $SourceRoot 'core/CMakeLists.txt')) | Where-Object {
+    Test-Path -LiteralPath $_
+}
+foreach ($symbol in $forbidden) {
+    $matches = $productionFiles | Select-String -SimpleMatch -Pattern $symbol
+    if ($matches) {
+        throw "Recording production symbol remains: $symbol ($($matches[0].Path):$($matches[0].LineNumber))"
+    }
+}
+
 if ($appMain -notmatch 'audioEditor\.setPlaybackController\(&playback\)') {
     throw 'The production audio editor is not wired to the shared playback controller.'
 }
@@ -64,7 +86,7 @@ foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
     'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',
     'editorWaveformCanvas', 'editorTimelineScrollbar',
-    'editorRecordingTransport', 'editorPlaybackTransport',
+    'editorPlaybackTransport',
     'editorShortcutCard', 'editorStatusBar')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The Phase 6 audio editor is missing $control."
@@ -156,15 +178,14 @@ foreach ($obsolete in @(
 }
 
 foreach ($group in @(
-    'inspectorRecordingGroup', 'inspectorTempoGroup', 'inspectorPitchGroup',
+    'inspectorTempoGroup', 'inspectorPitchGroup',
     'inspectorPreservePitchGroup', 'inspectorExportGroup')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $group + '"')) {
         throw "The Phase 6 inspector is missing $group."
     }
 }
 foreach ($control in @(
-    'inspectorRecordingDevice', 'inspectorInputMeter', 'inspectorMonitorSwitch',
-    'inspectorRecordingFormat', 'inspectorBpmInput', 'inspectorDetectBpmButton',
+    'inspectorBpmInput', 'inspectorDetectBpmButton',
     'inspectorSpeedSlider', 'inspectorSpeedValue', 'inspectorSpeedResetButton',
     'inspectorPitchMinus', 'inspectorPitchSlider', 'inspectorPitchPlus',
     'inspectorPitchValue', 'inspectorPreservePitchSwitch',
@@ -224,8 +245,7 @@ if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
     $waveformCanvas -match 'waveformColor:\s*"#2587ff"') {
     throw 'Editor and player waveforms must use the same configurable style inputs.'
 }
-foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V',
-    'sequence:\s*"R"', 'sequence:\s*"Shift\+R"', 'sequence:\s*"Ctrl\+R"')) {
+foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V')) {
     if ($audioEditor -notmatch $shortcut) {
         throw "The editor is missing the interaction shortcut: $shortcut"
     }
@@ -237,7 +257,7 @@ foreach ($responsiveHook in @('referenceLayout', 'narrowLayout',
     }
 }
 
-foreach ($capability in @('recordingSupported', 'bpmDetectionSupported',
+foreach ($capability in @('bpmDetectionSupported',
     'timePitchSupported', 'playbackSupported', 'exportSupported')) {
     if ($controllerHeader -notmatch ('Q_PROPERTY\(bool\s+' + $capability) -or
         $audioEditor -notmatch ('AudioEditorController\.' + $capability)) {
@@ -254,22 +274,17 @@ foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
 $shortcutPlay = [regex]::Escape((ConvertFrom-Utf8Base64 '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGc'))
 $shortcutFade = [regex]::Escape((ConvertFrom-Utf8Base64 '5ouW5ou95Y+z5LiK6KeSID0g6LCD5pW05reh5Ye6'))
 $shortcutEnvelope = [regex]::Escape((ConvertFrom-Utf8Base64 '5Y+M5Ye76Z+z6YeP57q/ID0g5re75Yqg5o6n5Yi254K5'))
-$recordingReady = [regex]::Escape((ConvertFrom-Utf8Base64 '5YeG5aSH5b2V6Z+z'))
 if (($audioEditor + "`n" + $commandBar) -match 'Phase\s*[0-9]' -or
     $audioEditor -notmatch $shortcutPlay -or
     $audioEditor -notmatch $shortcutFade -or
-    $audioEditor -notmatch $shortcutEnvelope -or
-    $audioEditor -notmatch ('qsTr\("' + $recordingReady + '"\)')) {
+    $audioEditor -notmatch $shortcutEnvelope) {
     throw 'The editor still contains phased placeholder copy or is missing reference instructions.'
 }
-if ($audioEditor -notmatch 'objectName:\s*"recordingTimeText"[\s\S]{0,220}00:00:00' -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,160}visible:\s*false') {
-    throw 'Recording time or the visually absent reference status bar does not match the source image.'
+if ($audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,160}visible:\s*false') {
+    throw 'The visually absent reference status bar does not match the source image.'
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',
-    'recordingMicrophoneButton', 'recordingPauseButton',
-    'recordingRecordButton', 'recordingStopButton',
     'editorPrimaryPlayButton', 'editorPlayheadHandle',
     'editorSelectionStartHandle', 'editorSelectionEndHandle',
     'editorEventLeftTrimHandle', 'editorEventRightTrimHandle')) {

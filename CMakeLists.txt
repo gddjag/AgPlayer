@@ -16,13 +16,7 @@ configure_file(
 )
 
 option(AG_ENABLE_AUDIO_EDITOR "Enable audio editor" ON)
-option(AG_ENABLE_NATIVE_RECORDING "Enable native recording" ON)
 option(AG_ENABLE_TIME_PITCH "Enable time and pitch processing" ON)
-
-if(NOT WIN32)
-    set(AG_ENABLE_NATIVE_RECORDING OFF CACHE BOOL
-        "Native recording is currently implemented on Windows" FORCE)
-endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

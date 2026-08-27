@@ -170,14 +170,12 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.warning = QColor(QStringLiteral("#F2B84B"));
         palette.error = QColor(QStringLiteral("#FF625C"));
         palette.danger = QColor(QStringLiteral("#FF625C"));
-        palette.recording = QColor(QStringLiteral("#FF4D5E"));
         palette.critical = QColor(QStringLiteral("#FF625C"));
     } else {
         palette.success = QColor(QStringLiteral("#208A4A"));
         palette.warning = QColor(QStringLiteral("#9B6500"));
         palette.error = QColor(QStringLiteral("#C93632"));
         palette.danger = QColor(QStringLiteral("#C93632"));
-        palette.recording = QColor(QStringLiteral("#C7253E"));
         palette.critical = QColor(QStringLiteral("#C93632"));
     }
 
@@ -282,8 +280,8 @@ bool ThemePalette::operator==(const ThemePalette& other) const
                     textDisabled, border, borderStrong, divider, disabled, accent,
                     accentHover, accentPressed, accentSoft, accentText, highlight,
                     highlightHover, highlightPressed, highlightSoft, highlightText,
-                    focus, currentTrackSurface, success, warning, error, danger,
-                    recording, critical)
+                     focus, currentTrackSurface, success, warning, error, danger,
+                     critical)
         == std::tie(other.background, other.surface, other.surfaceElevated,
                     other.surfaceHover, other.surfacePressed, other.textPrimary,
                     other.textSecondary, other.textTertiary, other.textDisabled,
@@ -292,8 +290,8 @@ bool ThemePalette::operator==(const ThemePalette& other) const
                     other.accentSoft, other.accentText, other.highlight,
                      other.highlightHover, other.highlightPressed,
                      other.highlightSoft, other.highlightText, other.focus,
-                     other.currentTrackSurface, other.success, other.warning,
-                     other.error, other.danger, other.recording, other.critical);
+                      other.currentTrackSurface, other.success, other.warning,
+                     other.error, other.danger, other.critical);
 }
 
 ThemeManager::ThemeManager(QGuiApplication& application, QObject* parent)

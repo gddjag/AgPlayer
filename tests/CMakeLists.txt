@@ -295,32 +295,6 @@ set_tests_properties(noise_reducer_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
-add_executable(recording_session_test
-    core/recording_session_test.cpp
-)
-target_include_directories(recording_session_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(recording_session_test PRIVATE agplayer_core)
-agplayer_enable_warnings(recording_session_test)
-add_test(NAME recording_session_test COMMAND recording_session_test)
-set_tests_properties(recording_session_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-)
-
-# Opt-in real-device acceptance executable. It is deliberately not registered
-# with CTest because CI machines are not required to expose a capture device.
-add_executable(recording_hardware_smoke
-    core/recording_hardware_smoke.cpp
-)
-target_include_directories(recording_hardware_smoke PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(recording_hardware_smoke PRIVATE agplayer_core)
-agplayer_enable_warnings(recording_hardware_smoke)
-
 foreach(audio_editor_core_test IN ITEMS
     time_pixel_mapper_test
     peak_pyramid_test
