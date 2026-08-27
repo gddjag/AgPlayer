@@ -533,6 +533,11 @@ int main(const int argc, char** argv)
     const std::filesystem::path src = work_dir / "meta-write-src.wav";
     std::filesystem::copy_file(fixture, src,
                                std::filesystem::copy_options::overwrite_existing);
+    const std::filesystem::path backup = src.string() + ".agbak";
+    {
+        std::ofstream stale_backup(backup, std::ios::binary);
+        stale_backup << "stale-internal-rollback";
+    }
 
     const ag_result result = ag_metadata_write(
         src.u8string().c_str(),
@@ -548,8 +553,12 @@ int main(const int argc, char** argv)
     assert(std::strcmp(ag_metadata_artist(metadata), "New Artist") == 0);
     ag_metadata_destroy(metadata);
 
-    const std::filesystem::path backup = src.string() + ".agbak";
-    assert(std::filesystem::exists(backup));
+    assert(!std::filesystem::exists(backup));
+    for (const auto& item : std::filesystem::directory_iterator(work_dir)) {
+        assert(item.path().filename().u8string().find(
+                   "meta-write-src.wav.agbak.preserved-")
+               == std::string::npos);
+    }
 
     const std::filesystem::path mp3 = work_dir / "meta-cover.mp3";
     std::filesystem::remove(mp3);
@@ -828,10 +837,11 @@ int main(const int argc, char** argv)
         const char* codec;
         bool cover_expected;
     };
-    constexpr std::array<MatrixEntry, 7> matrix{{
+    constexpr std::array<MatrixEntry, 8> matrix{{
         {"wav", nullptr, false},
         {"mp3", "libmp3lame", true},
         {"flac", "flac", true},
+        {"aac", "aac", false},
         {"ogg", "vorbis", false},
         {"opus", "opus", false},
         {"m4a", "aac", true},
@@ -906,6 +916,41 @@ int main(const int argc, char** argv)
             assert(field.status == agplayer::FieldWriteStatus::Updated);
             assert(field.actual_value == field.requested_value);
         }
+        assert(!std::filesystem::exists(path.u8string() + ".agbak"));
+
+        agplayer::MetadataEditPlan replace_title_plan;
+        replace_title_plan.fields = {
+            {agplayer::CanonicalField::Title, agplayer::MetadataAction::Set,
+             "Replacement Title"},
+        };
+        agplayer::MetadataFileResult replace_title_result;
+        assert(agplayer::write_metadata_plan(path.u8string(),
+                                              replace_title_plan,
+                                              replace_title_result) == AG_OK);
+        assert(replace_title_result.fields.size() == 1U);
+        assert(replace_title_result.fields.front().before_value
+               == "Unicode Title");
+        assert(replace_title_result.fields.front().actual_value
+               == "Replacement Title");
+        assert(!std::filesystem::exists(path.u8string() + ".agbak"));
+
+        agplayer::MetadataEditPlan clear_title_plan;
+        clear_title_plan.fields = {
+            {agplayer::CanonicalField::Title, agplayer::MetadataAction::Clear,
+             std::nullopt},
+        };
+        agplayer::MetadataFileResult clear_title_result;
+        assert(agplayer::write_metadata_plan(path.u8string(), clear_title_plan,
+                                              clear_title_result) == AG_OK);
+        assert(clear_title_result.fields.size() == 1U);
+        assert(clear_title_result.fields.front().before_value
+               == "Replacement Title");
+        assert(clear_title_result.fields.front().actual_value.empty());
+        metadata = nullptr;
+        assert(ag_metadata_open(path.u8string().c_str(), &metadata) == AG_OK);
+        assert(std::strlen(ag_metadata_title(metadata)) == 0U);
+        ag_metadata_destroy(metadata);
+        assert(!std::filesystem::exists(path.u8string() + ".agbak"));
 
         if (std::strcmp(entry.extension, "m4a") == 0) {
             agplayer::MetadataEditPlan integer_bpm_plan;

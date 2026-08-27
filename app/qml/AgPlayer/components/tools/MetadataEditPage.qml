@@ -590,7 +590,6 @@ Rectangle {
             }
             ComboBox {
                 objectName: "metadataStatusFilter"
-                visible: false
                 Layout.preferredWidth: 110
                 Layout.preferredHeight: 38
                 textRole: "text"

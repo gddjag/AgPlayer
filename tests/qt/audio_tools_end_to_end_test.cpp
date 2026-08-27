@@ -3131,11 +3131,22 @@ void AudioToolsEndToEndTest::metadataEditorAppliesUiPayloadToMixedContainerBatch
     QVERIFY(temp.isValid());
     const QString source = temp.filePath(QStringLiteral("batch-source.wav"));
     QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 2));
+    const auto readTitle = [](const QString& path) {
+        ag_metadata* metadata = nullptr;
+        if (ag_metadata_open(path.toUtf8().constData(), &metadata) != AG_OK
+            || metadata == nullptr) {
+            return QString{};
+        }
+        const QString title = QString::fromUtf8(ag_metadata_title(metadata));
+        ag_metadata_destroy(metadata);
+        return title;
+    };
 
     const QList<QPair<QString, QString>> targets{
         {QStringLiteral("batch.mp3"), QStringLiteral("libmp3lame")},
         {QStringLiteral("batch.flac"), QStringLiteral("flac")},
         {QStringLiteral("batch.m4a"), QStringLiteral("aac")},
+        {QStringLiteral("batch.aac"), QStringLiteral("aac")},
         {QStringLiteral("batch.ogg"), QStringLiteral("libvorbis")},
         {QStringLiteral("batch.opus"), QStringLiteral("libopus")}};
     QList<QUrl> urls;
@@ -3168,6 +3179,42 @@ void AudioToolsEndToEndTest::metadataEditorAppliesUiPayloadToMixedContainerBatch
     for (int index = 0; index < editor.fileCount(); ++index) {
         QCOMPARE(editor.entryAt(index).value(QStringLiteral("title")).toString(),
                  QStringLiteral("Mixed batch"));
+        const QString path = editor.entryAt(index).value(
+            QStringLiteral("path")).toString();
+        QCOMPARE(readTitle(path), QStringLiteral("Mixed batch"));
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral(".agbak")));
+        QCOMPARE(editor.results().at(index).toMap()
+                     .value(QStringLiteral("status")).toString(),
+                 QStringLiteral("completed"));
+    }
+
+    const QVariantMap replacement{
+        {QStringLiteral("title"),
+         QVariantMap{{QStringLiteral("mode"), QStringLiteral("set")},
+                     {QStringLiteral("value"), QStringLiteral("Replacement batch")}}}};
+    applied.clear();
+    editor.applyMetadata(replacement, {});
+    QVERIFY(applied.wait(30'000));
+    QCOMPARE(editor.successCount(), targets.size());
+    for (int index = 0; index < editor.fileCount(); ++index) {
+        const QString path = editor.entryAt(index).value(
+            QStringLiteral("path")).toString();
+        QCOMPARE(readTitle(path), QStringLiteral("Replacement batch"));
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral(".agbak")));
+    }
+
+    const QVariantMap clearTitle{
+        {QStringLiteral("title"),
+         QVariantMap{{QStringLiteral("mode"), QStringLiteral("clear")}}}};
+    applied.clear();
+    editor.applyMetadata(clearTitle, {});
+    QVERIFY(applied.wait(30'000));
+    QCOMPARE(editor.successCount(), targets.size());
+    for (int index = 0; index < editor.fileCount(); ++index) {
+        const QString path = editor.entryAt(index).value(
+            QStringLiteral("path")).toString();
+        QCOMPARE(readTitle(path), QString());
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral(".agbak")));
     }
 }
 
