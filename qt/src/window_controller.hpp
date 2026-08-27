@@ -69,6 +69,11 @@ public:
     int listWindowHeight() const noexcept;
     static QRect geometryForDpiChange(const QRect& currentGeometry,
                                       const QRect& suggestedGeometry);
+    static QRect geometryForDpiChange(const QRect& currentNativeGeometry,
+                                      qreal currentDpr,
+                                      const QRect& suggestedNativeGeometry,
+                                      qreal targetDpr,
+                                      const QRect& targetAvailableGeometry);
     static QRect geometryForAvailableScreens(
         const QRect& savedGeometry, const QSize& minimumSize,
         const QList<QRect>& availableScreens, int primaryScreenIndex);

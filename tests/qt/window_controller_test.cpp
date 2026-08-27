@@ -149,27 +149,42 @@ void WindowControllerTest::dpiChangePreservesLogicalSizeAcrossScales()
 {
     struct DpiTransition {
         const char* name;
+        qreal sourceDpr;
+        qreal targetDpr;
+        QRect currentNativeGeometry;
         QSize currentLogicalSize;
-        QRect suggestedGeometry;
+        QRect suggestedNativeGeometry;
         QRect targetAvailableGeometry;
     };
     const QList<DpiTransition> transitions{
-        {"100-to-125", QSize(1104, 342), QRect(1920, 120, 1380, 428),
+        {"100-to-125", 1.0, 1.25, QRect(120, 80, 1104, 342), QSize(1104, 342),
+         QRect(1920, 120, 1380, 428),
          QRect(1920, 0, 1920, 1040)},
-        {"125-to-150", QSize(1104, 342), QRect(3840, 80, 1656, 513),
+        {"125-to-150", 1.25, 1.5, QRect(1920, 120, 1380, 428), QSize(1104, 342),
+         QRect(3840, 80, 1656, 513),
          QRect(3840, 0, 2560, 1400)},
-        {"150-to-100", QSize(1104, 342), QRect(0, 100, 1104, 342),
+        {"150-to-100", 1.5, 1.0, QRect(3840, 80, 1656, 513), QSize(1104, 342),
+         QRect(0, 100, 1104, 342),
          QRect(0, 0, 1920, 1080)},
     };
 
     for (const DpiTransition& transition : transitions) {
         const QRect result = WindowController::geometryForDpiChange(
-            QRect(QPoint(0, 0), transition.currentLogicalSize),
-            transition.suggestedGeometry);
-        QCOMPARE(result.size(), transition.currentLogicalSize);
-        QVERIFY2(transition.targetAvailableGeometry.contains(result.topLeft()),
-                 transition.name);
+            transition.currentNativeGeometry, transition.sourceDpr,
+            transition.suggestedNativeGeometry, transition.targetDpr,
+            transition.targetAvailableGeometry);
+        QCOMPARE(QSize(qRound(result.width() / transition.targetDpr),
+                       qRound(result.height() / transition.targetDpr)),
+                 transition.currentLogicalSize);
+        QCOMPARE(result.topLeft(), transition.suggestedNativeGeometry.topLeft());
+        QVERIFY2(transition.targetAvailableGeometry.contains(result), transition.name);
     }
+
+    const QRect bounded = WindowController::geometryForDpiChange(
+        QRect(0, 0, 1800, 900), 1.0, QRect(1500, 900, 2250, 1125), 1.25,
+        QRect(1920, 0, 1600, 900));
+    QCOMPARE(bounded.size(), QSize(1600, 900));
+    QVERIFY(QRect(1920, 0, 1600, 900).contains(bounded));
 }
 
 void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
@@ -653,8 +668,11 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
         QVERIFY(GetWindowRect(reinterpret_cast<HWND>(window->winId()), &before));
         const QSize nativeSize(before.right - before.left,
                                before.bottom - before.top);
+        const qreal sourceDpr = window->devicePixelRatio();
+        const QSize logicalSize(qRound(nativeSize.width() / sourceDpr),
+                                qRound(nativeSize.height() / sourceDpr));
         window->setPosition(screens.at(1)->availableGeometry().topLeft()
-                            + QPoint(100, 100));
+                             + QPoint(100, 100));
         QTRY_VERIFY(window->screen() == screens.at(1));
         const auto currentNativeSize = [window]() {
             RECT rect{};
@@ -663,7 +681,14 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
             }
             return QSize(rect.right - rect.left, rect.bottom - rect.top);
         };
-        QTRY_COMPARE(currentNativeSize(), nativeSize);
+        if (window == &toolsWindow) {
+            const QSize expectedNativeSize(
+                qRound(logicalSize.width() * window->devicePixelRatio()),
+                qRound(logicalSize.height() * window->devicePixelRatio()));
+            QTRY_COMPARE(currentNativeSize(), expectedNativeSize);
+        } else {
+            QTRY_COMPARE(currentNativeSize(), nativeSize);
+        }
     }
 }
 

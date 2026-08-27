@@ -972,22 +972,28 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
                     suggestedRect->left, suggestedRect->top,
                     suggestedRect->right - suggestedRect->left,
                     suggestedRect->bottom - suggestedRect->top);
-                QRect adjusted = geometryForDpiChange(
-                    currentGeometry, suggestedGeometry);
                 const qreal newDpr = qreal(LOWORD(msg->wParam)) / 96.0;
+                QRect adjusted;
                 if (audioToolsChanged) {
-                    // Windows supplies the right target monitor position.  Keep
-                    // the QML logical dimensions stable, then convert them to
-                    // the target monitor's native pixels instead of restoring
-                    // the previous physical rectangle.
-                    const qreal currentDpr = qMax(audioToolsTrackedDpr_, 1.0);
-                    const QSize logicalSize(
-                        qRound(currentGeometry.width() / currentDpr),
-                        qRound(currentGeometry.height() / currentDpr));
-                    adjusted.setSize(QSize(
-                        qRound(logicalSize.width() * newDpr),
-                        qRound(logicalSize.height() * newDpr)));
+                    MONITORINFO targetMonitorInfo{};
+                    targetMonitorInfo.cbSize = sizeof(targetMonitorInfo);
+                    QRect targetAvailableGeometry;
+                    const HMONITOR targetMonitor = MonitorFromRect(
+                        suggestedRect, MONITOR_DEFAULTTONEAREST);
+                    if (targetMonitor != nullptr
+                        && GetMonitorInfoW(targetMonitor, &targetMonitorInfo)) {
+                        const RECT& workArea = targetMonitorInfo.rcWork;
+                        targetAvailableGeometry = QRect(
+                            workArea.left, workArea.top,
+                            workArea.right - workArea.left,
+                            workArea.bottom - workArea.top);
+                    }
+                    adjusted = geometryForDpiChange(
+                        currentGeometry, audioToolsTrackedDpr_, suggestedGeometry,
+                        newDpr, targetAvailableGeometry);
                 } else {
+                    adjusted = geometryForDpiChange(
+                        currentGeometry, suggestedGeometry);
                     const QSize preservedSize = mainChanged ? mainNativePixelSize_
                         : listChanged ? listNativePixelSize_ : settingsNativePixelSize_;
                     if (preservedSize.isValid()) adjusted.setSize(preservedSize);
@@ -1240,6 +1246,34 @@ QRect WindowController::geometryForDpiChange(
     }
     QRect adjusted = suggestedGeometry;
     adjusted.setSize(currentGeometry.size());
+    return adjusted;
+}
+
+QRect WindowController::geometryForDpiChange(
+    const QRect& currentNativeGeometry, qreal currentDpr,
+    const QRect& suggestedNativeGeometry, qreal targetDpr,
+    const QRect& targetAvailableGeometry)
+{
+    if (!currentNativeGeometry.isValid() || !suggestedNativeGeometry.isValid()) {
+        return suggestedNativeGeometry;
+    }
+    currentDpr = qMax(currentDpr, 0.01);
+    targetDpr = qMax(targetDpr, 0.01);
+    const QSize logicalSize(
+        qMax(1, qRound(currentNativeGeometry.width() / currentDpr)),
+        qMax(1, qRound(currentNativeGeometry.height() / currentDpr)));
+    const QSize targetNativeSize(
+        qMax(1, qRound(logicalSize.width() * targetDpr)),
+        qMax(1, qRound(logicalSize.height() * targetDpr)));
+    QRect adjusted(suggestedNativeGeometry.topLeft(), targetNativeSize);
+    if (!targetAvailableGeometry.isValid()) return adjusted;
+
+    adjusted.setSize(QSize(qMin(adjusted.width(), targetAvailableGeometry.width()),
+                           qMin(adjusted.height(), targetAvailableGeometry.height())));
+    const int maxX = targetAvailableGeometry.right() - adjusted.width() + 1;
+    const int maxY = targetAvailableGeometry.bottom() - adjusted.height() + 1;
+    adjusted.moveLeft(qBound(targetAvailableGeometry.left(), adjusted.left(), maxX));
+    adjusted.moveTop(qBound(targetAvailableGeometry.top(), adjusted.top(), maxY));
     return adjusted;
 }
 
