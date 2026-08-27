@@ -23,8 +23,12 @@ extern "C" {
 #include <string_view>
 
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 
@@ -1681,7 +1685,9 @@ ag_result transcode(const std::string& input_path,
             return stream.stream_index == selected_stream;
         });
     TranscodeVerificationPlan verification_plan;
-    if (selected != source_probe.audio_streams.end()) {
+    const bool source_duration_is_estimated = source_probe.container == "aac";
+    if (selected != source_probe.audio_streams.end()
+        && !source_duration_is_estimated) {
         verification_plan.expected_duration_ms = selected->duration_ms;
     }
     verification_plan.lossless =

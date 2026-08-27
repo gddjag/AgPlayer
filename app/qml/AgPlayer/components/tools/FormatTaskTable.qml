@@ -70,7 +70,7 @@ Rectangle {
                 model: [
                     { key: "All", text: qsTr("全部"), count: converter.fileCount },
                     { key: "Converting", text: qsTr("转换中"), count: converter.convertingCount },
-                    { key: "Done", text: qsTr("已完成"), count: converter.completedCount },
+                    { key: "Done", text: qsTr("已完成"), count: converter.doneCount },
                     { key: "Error", text: qsTr("失败"), count: converter.failedCount },
                     { key: "Cancelled", text: qsTr("已取消"), count: converter.cancelledCount }
                 ]
@@ -113,7 +113,9 @@ Rectangle {
                         ReferenceCheckBox {
                             visible: index === 0
                             anchors.centerIn: parent
-                            checked: converter.checkedCount > 0 && converter.checkedCount === converter.fileCount
+                            checked: converter.filteredTaskModel.visibleCount > 0
+                                     && converter.filteredTaskModel.visibleCheckedCount
+                                        === converter.filteredTaskModel.visibleCount
                             onClicked: converter.setAllVisibleChecked(checked)
                             objectName: index === 0 ? "formatSelectAllCheck" : ""
                         }

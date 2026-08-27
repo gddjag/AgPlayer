@@ -283,6 +283,40 @@ FormatBatchPlan build_format_conversion_plan(
             });
         if (selectedStream != input.probe.audio_streams.cend()) {
             const QString format = request.formatKey.toLower();
+            if (task.resolvedProfile.value(QStringLiteral("sampleRate")).toInt()
+                == 0) {
+                int resolvedRate = selectedStream->sample_rate;
+                if (!capability->sample_rates.empty()) {
+                    resolvedRate = capability->sample_rates.front();
+                    for (const int candidate : capability->sample_rates) {
+                        if (std::abs(candidate - selectedStream->sample_rate)
+                            < std::abs(resolvedRate
+                                       - selectedStream->sample_rate)) {
+                            resolvedRate = candidate;
+                        }
+                    }
+                }
+                task.resolvedProfile.insert(QStringLiteral("sampleRate"),
+                                            resolvedRate);
+            }
+            if (task.resolvedProfile.value(
+                    QStringLiteral("channelLayout")).toString().isEmpty()) {
+                task.resolvedProfile.insert(
+                    QStringLiteral("channelLayout"),
+                    QString::fromStdString(selectedStream->channel_layout));
+            }
+            if (task.resolvedProfile.value(
+                    QStringLiteral("sampleFormat")).toString().isEmpty()
+                && !capability->sample_formats.empty()) {
+                const auto preferred = std::find(
+                    capability->sample_formats.cbegin(),
+                    capability->sample_formats.cend(), "fltp");
+                task.resolvedProfile.insert(
+                    QStringLiteral("sampleFormat"),
+                    QString::fromStdString(
+                        preferred != capability->sample_formats.cend()
+                            ? *preferred : capability->sample_formats.front()));
+            }
             const ResolvedDepth depth = resolve_depth(format, request.bitDepth,
                                                        *selectedStream);
             if (!depth.key.isEmpty()) {

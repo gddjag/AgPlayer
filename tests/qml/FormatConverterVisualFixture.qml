@@ -40,6 +40,7 @@ Pane {
         property int checkedCount: 12
         property int convertingCount: 3
         property int completedCount: 16
+        property int doneCount: 16
         property int failedCount: 1
         property int cancelledCount: 1
         property real progress: 0.66

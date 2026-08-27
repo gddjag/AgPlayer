@@ -227,6 +227,27 @@ TestCase {
         compare(parallelBox.currentValue, 10)
     }
 
+    function test_parallelJobsControlMatchesSchedulerContract() {
+        const bottomBar = findChild(page, "formatBottomBar")
+        const parallelBox = findChild(page, "converterParallelJobsBox")
+        const parallelFrame = findChild(page, "converterParallelJobsBoxFrame")
+        const summary = findChild(page, "formatSummaryCard")
+        verify(bottomBar && parallelBox && summary)
+        compare(parallelBox.count, 10)
+        SettingsController.resetToDefaults()
+        compare(parallelBox.currentValue, 5)
+        verify(parallelFrame)
+        verify(parallelFrame.border.width > 0)
+        const boxPosition = parallelBox.mapToItem(bottomBar, 0, 0)
+        const summaryPosition = summary.mapToItem(bottomBar, 0, 0)
+        verify(boxPosition.x < summaryPosition.x)
+
+        FormatConverter.addUrls([testAudioUrl])
+        compare(FormatConverter.busy, true)
+        compare(parallelBox.enabled, false)
+        tryVerify(function() { return !FormatConverter.busy }, 5000)
+    }
+
     function test_rowContextMenuRemovesExactlyOneTask() {
         const secondUrl = nativeDropHelper.copyForNativeDrop(testAudioUrl)
         verify(secondUrl.toString().length > 0)
