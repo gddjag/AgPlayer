@@ -44,6 +44,31 @@ bool fileMatches(const VocalDownloadFile& file, const QString& path)
         && hashFile(path) == file.sha256;
 }
 
+bool isSha256(const QString& value)
+{
+    if (value.size() != 64) {
+        return false;
+    }
+    for (const QChar character : value) {
+        if (!((character >= QLatin1Char('0') && character <= QLatin1Char('9'))
+              || (character >= QLatin1Char('a') && character <= QLatin1Char('f')))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const QList<VocalDownloadFile>& runtimeFiles()
+{
+    static const QList<VocalDownloadFile> files{
+        {QStringLiteral("onnxruntime.dll"), {}, 17'328'152,
+         QStringLiteral("e7eedec6a6f26dc39dc948276a75ef6d2bee3fff944d874ceed0bbd3b97bff40")},
+        {QStringLiteral("onnxruntime_providers_shared.dll"), {}, 22'040,
+         QStringLiteral("265c8daf29637cb259cac8be9f08f2cd45f3883f0f0e4949cbfddd5b4cbec3b6")},
+    };
+    return files;
+}
+
 } // namespace
 
 VocalDownloadState VocalDownloadStateMachine::state() const
@@ -159,22 +184,9 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
 
     const QString versionedRoot = QDir(runtimeRoot).filePath(package.id);
     const QString stagingRoot = versionedRoot + QStringLiteral(".staging");
-    const QStringList requiredFiles{
-        QStringLiteral("onnxruntime.dll"),
-        QStringLiteral("onnxruntime_providers_shared.dll"),
-        QStringLiteral("onnxruntime_providers_dml.dll"),
-        QStringLiteral("DirectML.dll")};
-    const QString markerPath = QDir(versionedRoot).filePath(QStringLiteral("runtime.sha256"));
-    QFile marker(markerPath);
     if (QFileInfo::exists(versionedRoot)) {
-        if (!marker.open(QIODevice::ReadOnly)
-            || QString::fromLatin1(marker.readAll()).trimmed() != package.sha256) {
-            return fail(QStringLiteral("Existing DirectML runtime has no verified activation marker"));
-        }
-        for (const QString& fileName : requiredFiles) {
-            if (!QFileInfo(QDir(versionedRoot).filePath(fileName)).isFile()) {
-                return fail(QStringLiteral("Existing DirectML runtime is incomplete"));
-            }
+        if (!runtimeDirectoryIsVerified(versionedRoot, package.sha256)) {
+            return fail(QStringLiteral("Existing DirectML runtime failed integrity verification"));
         }
         return {true, {}};
     }
@@ -186,12 +198,12 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
     const QString script = QStringLiteral(
         "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; "
         "$zip=[IO.Compression.ZipFile]::OpenRead($env:AGPLAYER_RUNTIME_ARCHIVE); "
-        "try { $names=@('onnxruntime.dll','onnxruntime_providers_shared.dll','onnxruntime_providers_dml.dll','DirectML.dll'); "
+        "try { $names=@('onnxruntime.dll','onnxruntime_providers_shared.dll'); "
         "foreach($name in $names) { $entry=$zip.GetEntry('runtimes/win-x64/native/'+$name); "
         "if($null -eq $entry){throw 'Missing native runtime file: '+$name}; "
         "$target=[IO.Path]::Combine($env:AGPLAYER_RUNTIME_STAGING,$name); "
         "$input=$entry.Open(); try { $output=[IO.File]::Open($target,[IO.FileMode]::CreateNew); try {$input.CopyTo($output)} finally {$output.Dispose()} } finally {$input.Dispose()} } "
-        "} } finally { $zip.Dispose() }");
+        "} finally { $zip.Dispose() }");
     QProcess process;
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("AGPLAYER_RUNTIME_ARCHIVE"), nupkgPath);
@@ -201,11 +213,18 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
                   {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
                    QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                    QStringLiteral("-Command"), script});
+    process.closeWriteChannel();
     if (!process.waitForFinished(60'000) || process.exitStatus() != QProcess::NormalExit
         || process.exitCode() != 0) {
         QDir(stagingRoot).removeRecursively();
         return fail(QStringLiteral("Cannot extract pinned DirectML runtime: %1")
                         .arg(QString::fromLocal8Bit(process.readAllStandardError()).trimmed()));
+    }
+    for (const VocalDownloadFile& file : runtimeFiles()) {
+        if (!fileMatches(file, QDir(stagingRoot).filePath(file.fileName))) {
+            QDir(stagingRoot).removeRecursively();
+            return fail(QStringLiteral("Extracted DirectML runtime file failed integrity verification"));
+        }
     }
     QFile stagingMarker(QDir(stagingRoot).filePath(QStringLiteral("runtime.sha256")));
     if (!stagingMarker.open(QIODevice::WriteOnly | QIODevice::Truncate)
@@ -222,10 +241,33 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
     return {true, {}};
 }
 
+bool VocalSeparationInstaller::runtimeDirectoryIsVerified(
+    const QString& runtimeDirectory, const QString& expectedArchiveSha256)
+{
+    if (!isSha256(expectedArchiveSha256)) {
+        return false;
+    }
+    QFile marker(QDir(runtimeDirectory).filePath(QStringLiteral("runtime.sha256")));
+    if (!marker.open(QIODevice::ReadOnly)
+        || QString::fromLatin1(marker.readAll()).trimmed() != expectedArchiveSha256) {
+        return false;
+    }
+    for (const VocalDownloadFile& file : runtimeFiles()) {
+        if (!fileMatches(file, QDir(runtimeDirectory).filePath(file.fileName))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 VocalSeparationDownloader::VocalSeparationDownloader(QNetworkAccessManager* network,
                                                        QObject* parent)
     : QObject(parent), m_network(network)
 {
+    m_retryTimer.setSingleShot(true);
+    connect(&m_retryTimer, &QTimer::timeout, this, [this] {
+        issueRequest(m_operation);
+    });
 }
 
 VocalDownloadState VocalSeparationDownloader::state() const
@@ -241,22 +283,29 @@ QString VocalSeparationDownloader::error() const
 void VocalSeparationDownloader::start(const VocalDownloadFile& file,
                                       const QString& destination)
 {
+    if (m_state.state() == VocalDownloadState::Downloading
+        || m_state.state() == VocalDownloadState::Paused
+        || m_state.state() == VocalDownloadState::Verifying) {
+        m_error = QStringLiteral("Download is already active");
+        return;
+    }
     if (m_network == nullptr || !file.url.isValid() || file.bytes <= 0
         || file.sha256.size() != 64 || destination.isEmpty()) {
         finishFailure(QStringLiteral("Invalid download request"));
         return;
     }
-    m_file = file;
-    m_destination = destination;
-    m_attempt = 0;
-    m_error.clear();
-    m_pausing = false;
-    m_cancelling = false;
     if (!m_state.start()) {
         m_error = QStringLiteral("Download is already active");
         return;
     }
-    issueRequest();
+    m_retryTimer.stop();
+    ++m_operation;
+    m_file = file;
+    m_destination = destination;
+    m_attempt = 0;
+    m_error.clear();
+    setState(VocalDownloadState::Downloading);
+    issueRequest(m_operation);
 }
 
 void VocalSeparationDownloader::pause()
@@ -264,9 +313,11 @@ void VocalSeparationDownloader::pause()
     if (!m_state.pause()) {
         return;
     }
-    m_pausing = true;
+    m_retryTimer.stop();
+    ++m_operation;
     if (m_reply != nullptr) {
         m_reply->abort();
+        m_reply = nullptr;
     }
     setState(VocalDownloadState::Paused);
 }
@@ -276,23 +327,29 @@ void VocalSeparationDownloader::resume()
     if (!m_state.resume()) {
         return;
     }
-    m_pausing = false;
+    ++m_operation;
     setState(VocalDownloadState::Downloading);
-    issueRequest();
+    issueRequest(m_operation);
 }
 
 void VocalSeparationDownloader::cancel()
 {
-    m_cancelling = true;
     m_state.cancel();
+    m_retryTimer.stop();
+    ++m_operation;
     if (m_reply != nullptr) {
         m_reply->abort();
+        m_reply = nullptr;
     }
     setState(VocalDownloadState::Cancelled);
 }
 
-void VocalSeparationDownloader::issueRequest()
+void VocalSeparationDownloader::issueRequest(quint64 operation)
 {
+    if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading
+        || m_reply != nullptr) {
+        return;
+    }
     m_resumeOffset = VocalSeparationInstaller::resumeOffset(m_destination);
     if (m_resumeOffset > m_file.bytes) {
         QFile::remove(VocalSeparationInstaller::partPath(m_destination));
@@ -323,9 +380,13 @@ void VocalSeparationDownloader::issueRequest()
     if (m_resumeOffset > 0) {
         request.setRawHeader("Range", "bytes=" + QByteArray::number(m_resumeOffset) + "-");
     }
-    m_reply = m_network->get(request);
-    connect(m_reply, &QNetworkReply::metaDataChanged, this, [this] {
-        const int status = m_reply->attribute(
+    QNetworkReply* const reply = m_network->get(request);
+    m_reply = reply;
+    connect(reply, &QNetworkReply::metaDataChanged, this, [this, operation, reply] {
+        if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) {
+            return;
+        }
+        const int status = reply->attribute(
             QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (m_resumeOffset > 0 && status != 206) {
             QFile part(VocalSeparationInstaller::partPath(m_destination));
@@ -337,34 +398,45 @@ void VocalSeparationDownloader::issueRequest()
             m_resumeOffset = 0;
         }
     });
-    connect(m_reply, &QNetworkReply::readyRead, this, [this] {
+    connect(reply, &QNetworkReply::readyRead, this, [this, operation, reply] {
+        if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) {
+            reply->readAll();
+            return;
+        }
         QFile part(VocalSeparationInstaller::partPath(m_destination));
         if (!part.open(QIODevice::WriteOnly | QIODevice::Append)) {
             finishFailure(QStringLiteral("Cannot write partial download"));
             return;
         }
-        const QByteArray bytes = m_reply->readAll();
+        const QByteArray bytes = reply->readAll();
+        if (bytes.isEmpty()) {
+            return;
+        }
         if (part.write(bytes) != bytes.size()) {
             part.close();
             finishFailure(QStringLiteral("Cannot write complete partial download"));
         }
     });
-    connect(m_reply, &QNetworkReply::downloadProgress, this,
-            [this](qint64 received, qint64 total) {
+    connect(reply, &QNetworkReply::downloadProgress, this,
+            [this, operation](qint64 received, qint64 total) {
+        if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) {
+            return;
+        }
         emit progressChanged(m_resumeOffset + received,
                              total < 0 ? -1 : m_resumeOffset + total);
     });
-    connect(m_reply, &QNetworkReply::finished, this, [this] {
-        QNetworkReply* reply = m_reply;
-        m_reply = nullptr;
+    connect(reply, &QNetworkReply::finished, this, [this, operation, reply] {
+        if (m_reply == reply) {
+            m_reply = nullptr;
+        }
         const QNetworkReply::NetworkError networkError = reply->error();
         reply->deleteLater();
-        if (m_pausing || m_cancelling) {
+        if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) {
             return;
         }
         if (networkError != QNetworkReply::NoError) {
             if (++m_attempt < kMaxAttempts) {
-                QTimer::singleShot(250 * m_attempt, this, &VocalSeparationDownloader::issueRequest);
+                m_retryTimer.start(250 * m_attempt);
                 return;
             }
             finishFailure(QStringLiteral("Download failed after retries"));
@@ -393,9 +465,11 @@ void VocalSeparationDownloader::setState(VocalDownloadState state)
 void VocalSeparationDownloader::finishFailure(const QString& error)
 {
     m_error = error;
+    m_retryTimer.stop();
+    ++m_operation;
     if (m_reply != nullptr) {
-        m_cancelling = true;
         m_reply->abort();
+        m_reply = nullptr;
     }
     m_state.fail();
     setState(VocalDownloadState::Failed);

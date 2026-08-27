@@ -6,6 +6,10 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkProxy>
+#include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -17,6 +21,10 @@ private slots:
     void exposesDownloadStateTransitions();
     void rejectsUnsafeCustomManifests();
     void resumesAndActivatesOnlyVerifiedFiles();
+    void downloaderUsesRangeAndSignalsInitialState();
+    void overlappingStartPreservesActiveTransfer();
+    void cancelledRetryDoesNotReconnect();
+    void runtimeVerificationRejectsChangedNativeFile();
 };
 
 namespace {
@@ -41,6 +49,31 @@ QJsonObject validMdxManifest()
             {QStringLiteral("shape"), QJsonArray{1, 2, 3072}}
         }}}
     };
+}
+
+VocalDownloadFile downloadFileFor(const QByteArray& payload, const QUrl& url,
+                                  const QString& name = QStringLiteral("model.onnx"))
+{
+    VocalDownloadFile file;
+    file.fileName = name;
+    file.url = url;
+    file.bytes = payload.size();
+    file.sha256 = sha256(payload);
+    return file;
+}
+
+bool writeFile(const QString& path, const QByteArray& bytes)
+{
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+}
+
+void disableProxyForLocalTests()
+{
+    qputenv("http_proxy", "");
+    qputenv("https_proxy", "");
+    qputenv("HTTP_PROXY", "");
+    qputenv("HTTPS_PROXY", "");
 }
 
 } // namespace
@@ -178,6 +211,106 @@ void VocalSeparationInstallTest::resumesAndActivatesOnlyVerifiedFiles()
     QCOMPARE(installed.readAll(), payload);
 }
 
-QTEST_APPLESS_MAIN(VocalSeparationInstallTest)
+void VocalSeparationInstallTest::downloaderUsesRangeAndSignalsInitialState()
+{
+    const QByteArray payload("range-resume-payload");
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString source = temporary.filePath(QStringLiteral("source.onnx"));
+    QVERIFY(writeFile(source, payload));
+    const QString destination = temporary.filePath(QStringLiteral("模型.onnx"));
+    QVERIFY(writeFile(VocalSeparationInstaller::partPath(destination), payload.left(5)));
+
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy states(&downloader, &VocalSeparationDownloader::stateChanged);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    downloader.start(downloadFileFor(payload, QUrl::fromLocalFile(source)), destination);
+    const bool completed = finished.wait(3'000);
+    if (!completed) {
+        downloader.cancel();
+    }
+    QVERIFY(completed);
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(QFileInfo::exists(destination));
+    QVERIFY(states.count() >= 3);
+    QCOMPARE(states.at(0).at(0).value<VocalDownloadState>(),
+             VocalDownloadState::Downloading);
+}
+
+void VocalSeparationInstallTest::overlappingStartPreservesActiveTransfer()
+{
+    const QByteArray activePayload("active-transfer");
+    const QByteArray rejectedPayload("rejected-transfer");
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString source = temporary.filePath(QStringLiteral("source.onnx"));
+    QVERIFY(writeFile(source, activePayload));
+    const QString activeDestination = temporary.filePath(QStringLiteral("active.onnx"));
+    const QString rejectedDestination = temporary.filePath(QStringLiteral("rejected.onnx"));
+
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    downloader.start(downloadFileFor(activePayload, QUrl::fromLocalFile(source), QStringLiteral("active.onnx")),
+                     activeDestination);
+    downloader.start(downloadFileFor(rejectedPayload, QUrl::fromLocalFile(source), QStringLiteral("rejected.onnx")),
+                     rejectedDestination);
+    const bool completed = finished.wait(3'000);
+    if (!completed) {
+        downloader.cancel();
+    }
+    QVERIFY(completed);
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(QFileInfo::exists(activeDestination));
+    QVERIFY(!QFileInfo::exists(rejectedDestination));
+    QVERIFY(!QFileInfo::exists(VocalSeparationInstaller::partPath(rejectedDestination)));
+}
+
+void VocalSeparationInstallTest::cancelledRetryDoesNotReconnect()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    const QByteArray expectedPayload("never-arrives");
+    downloader.start(downloadFileFor(expectedPayload, QUrl(QStringLiteral("http://127.0.0.1:1/model.onnx"))),
+                     temporary.filePath(QStringLiteral("cancelled.onnx")));
+    QTest::qWait(100);
+    downloader.cancel();
+    QTest::qWait(750);
+    QVERIFY(!QFileInfo::exists(temporary.filePath(QStringLiteral("cancelled.onnx"))));
+    QCOMPARE(downloader.state(), VocalDownloadState::Cancelled);
+}
+
+void VocalSeparationInstallTest::runtimeVerificationRejectsChangedNativeFile()
+{
+    const QString packagePath = QDir(QStandardPaths::writableLocation(
+        QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
+    if (!QFileInfo(packagePath).isFile()) {
+        QSKIP("Pinned DirectML archive fixture is unavailable");
+    }
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const VocalInstallResult installed = VocalSeparationInstaller::installDirectMlRuntime(
+        packagePath, temporary.path());
+    QVERIFY2(installed.ok, qPrintable(installed.error));
+    const QString runtime = QDir(temporary.path()).filePath(
+        QStringLiteral("onnxruntime-directml-1.24.4"));
+    QVERIFY(VocalSeparationInstaller::runtimeDirectoryIsVerified(
+        runtime, VocalSeparationCatalog::directMlRuntime().sha256));
+    QVERIFY(writeFile(QDir(runtime).filePath(QStringLiteral("onnxruntime.dll")), QByteArray()));
+    QVERIFY(!VocalSeparationInstaller::runtimeDirectoryIsVerified(runtime,
+                                                                   VocalSeparationCatalog::directMlRuntime().sha256));
+}
+
+QTEST_GUILESS_MAIN(VocalSeparationInstallTest)
 
 #include "vocal_separation_install_test.moc"

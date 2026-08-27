@@ -3,6 +3,7 @@
 #include "vocal_separation_catalog.hpp"
 
 #include <QObject>
+#include <QTimer>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -44,6 +45,8 @@ public:
     static bool hasDiskSpace(const QString& destination, qint64 bytesRequired);
     static VocalInstallResult activateVerifiedPart(const VocalDownloadFile& file,
                                                    const QString& destination);
+    static bool runtimeDirectoryIsVerified(const QString& runtimeDirectory,
+                                           const QString& expectedArchiveSha256);
     static VocalInstallResult installDirectMlRuntime(const QString& nupkgPath,
                                                      const QString& runtimeRoot);
 };
@@ -68,7 +71,7 @@ signals:
     void finished(const VocalInstallResult& result);
 
 private:
-    void issueRequest();
+    void issueRequest(quint64 operation);
     void setState(VocalDownloadState state);
     void finishFailure(const QString& error);
 
@@ -79,7 +82,7 @@ private:
     QString m_error;
     qint64 m_resumeOffset = 0;
     int m_attempt = 0;
-    bool m_pausing = false;
-    bool m_cancelling = false;
+    quint64 m_operation = 0;
+    QTimer m_retryTimer;
     VocalDownloadStateMachine m_state;
 };

@@ -504,6 +504,8 @@ endforeach()
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
+target_link_libraries(vocal_separation_install_test PRIVATE Qt6::Network)
+set_tests_properties(vocal_separation_install_test PROPERTIES TIMEOUT 30)
 
 add_executable(editor_viewport_test
     qt/editor_viewport_test.cpp
