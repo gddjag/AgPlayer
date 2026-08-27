@@ -1292,6 +1292,7 @@ if(WIN32)
             -o -,txt)
     set_tests_properties(window_mixed_dpi_transition_test PROPERTIES
         TIMEOUT 20
+        SKIP_REGULAR_EXPRESSION "hardware gap:"
         ENVIRONMENT "QT_QPA_PLATFORM=windows"
         ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
