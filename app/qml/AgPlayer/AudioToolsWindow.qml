@@ -15,6 +15,20 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 音频工具")
+    function editableTextHasFocus() {
+        const active = window.activeFocusItem
+        return active && active.readOnly !== true
+            && (active.echoMode !== undefined
+                || active.textDocument !== undefined
+                || active.editable === true)
+    }
+    function playPauseFromSpace() {
+        // QShortcut is resolved before the focused control receives the key.
+        // Move focus to the window surface so Button/ComboBox cannot process
+        // the same Space press as a second, unrelated activation.
+        window.contentItem.forceActiveFocus()
+        AudioEditorController.playPause()
+    }
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -52,6 +66,18 @@ Window {
             else
                 AudioEditorController.deactivate()
         }
+    }
+
+    Shortcut {
+        objectName: "audioToolsSpaceShortcut"
+        sequence: "Space"
+        context: Qt.ApplicationShortcut
+        enabled: window.visible
+            && AudioToolsController.currentTool === 0
+            && !window.editableTextHasFocus()
+            && AudioEditorController.playbackSupported
+            && AudioEditorController.hasDocument
+        onActivated: window.playPauseFromSpace()
     }
 
     Dialog {
@@ -119,6 +145,8 @@ Window {
 
                     ToolButton {
                         objectName: "audioToolsMinimizeButton"
+                        focusPolicy: Qt.NoFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
@@ -133,6 +161,8 @@ Window {
                     }
                     ToolButton {
                         objectName: "audioToolsMaximizeButton"
+                        focusPolicy: Qt.NoFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon(window.visibility === Window.Maximized
@@ -151,6 +181,8 @@ Window {
                     }
                     ToolButton {
                         objectName: "audioToolsCloseButton"
+                        focusPolicy: Qt.NoFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")

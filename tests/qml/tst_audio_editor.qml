@@ -90,19 +90,75 @@ TestCase {
         host.width = 1672
         host.height = 849
         wait(0)
-        verifyGeometry("editorMainColumn", 0, 0, 1300, 849)
-        verifyGeometry("editorInspector", 1300, 0, 372, 849)
-        verifyGeometry("editorCommandBar", 12, 13, 1278, 61)
-        verifyGeometry("fileSummaryBar", 12, 88, 1278, 48)
+        verifyGeometry("editorMainColumn", 0, 0, 1328, 849)
+        verifyGeometry("editorInspector", 1328, 0, 344, 849)
+        verifyGeometry("editorCommandBar", 12, 13, 1306, 61)
+        verifyGeometry("fileSummaryBar", 12, 88, 1306, 48)
         verify(findChild(page, "fileSummaryIcon"))
-        verifyGeometry("editorTimelineWorkspace", 12, 152, 1276, 364)
+        verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 364)
         verifyGeometry("editorTrackHeader", 12, 202, 96, 284)
-        verifyGeometry("editorTimeRuler", 118, 152, 1167, 50)
-        verifyGeometry("editorWaveformCanvas", 118, 202, 1167, 284)
-        verifyGeometry("editorTimelineScrollbar", 118, 500, 1167, 16)
-        verifyGeometry("editorPlaybackTransport", 12, 527, 1276, 130)
-        verifyGeometry("editorShortcutCard", 12, 667, 1276, 157)
-        verifyGeometry("editorStatusBar", 0, 824, 1300, 25)
+        verifyGeometry("editorTimeRuler", 118, 152, 1195, 50)
+        verifyGeometry("editorWaveformCanvas", 118, 202, 1195, 284)
+        verifyGeometry("editorTimelineScrollbar", 118, 500, 1195, 16)
+        verifyGeometry("editorPlaybackTransport", 12, 527, 1304, 130)
+        verifyGeometry("editorShortcutCard", 12, 667, 1304, 157)
+        verifyGeometry("editorStatusBar", 0, 824, 1328, 25)
+
+        compare(findChild(page, "inspectorTempoTitle").text,
+                "A. 速度 / BPM")
+        compare(findChild(page, "inspectorPitchTitle").text,
+                "B. 升调降调")
+        compare(findChild(page, "inspectorPreservePitchTitle").text,
+                "C. 保持音调")
+        compare(findChild(page, "inspectorExportTitle").text,
+                "D. 导出设置")
+    }
+
+    function test_continuousMainAndInspectorWidths_data() {
+        return [
+            { tag: "wide", width: 1800, inspector: 372 },
+            { tag: "reference", width: 1672, inspector: 344 },
+            { tag: "medium", width: 1500, inspector: 320 },
+            { tag: "desktop", width: 1280, inspector: 320 },
+            { tag: "compact", width: 880, inspector: 0 }
+        ]
+    }
+
+    function test_continuousMainAndInspectorWidths(data) {
+        host.width = data.width
+        host.height = data.width === 880 ? 468 : 849
+        wait(0)
+        const main = findChild(page, "editorMainColumn")
+        const inspector = findChild(page, "editorInspector")
+        const transport = findChild(page, "editorPlaybackTransport")
+        const exportButton = findChild(page, "editorExportButton")
+        const summary = findChild(page, "fileSummaryBar")
+        const summaryContent = findChild(page, "fileSummaryContent")
+        verify(main && inspector && transport && exportButton
+               && summary && summaryContent)
+        compare(Math.round(inspector.visible ? inspector.width : 0),
+                data.inspector)
+        verify(Math.abs(main.width
+                        + (inspector.visible ? inspector.width : 0)
+                        - page.width) <= 1,
+               "main and visible inspector must exactly fill " + data.width)
+        verify(transport.visible)
+        verify(summaryContent.implicitWidth <= summary.width,
+               "file summary must contract without clipping at " + data.width)
+        if (data.width === 880) {
+            const access = findChild(page, "editorInspectorAccess")
+            verify(access && access.visible)
+            mouseClick(access)
+            verify(inspector.visible)
+            const scroller = findChild(page, "editorInspectorScroller")
+            scroller.contentY = Math.max(0,
+                scroller.contentHeight - scroller.height)
+            wait(0)
+            const exportPosition = exportButton.mapToItem(page, 0, 0)
+            verify(exportPosition.y >= 0)
+            verify(exportPosition.y + exportButton.height <= page.height)
+            mouseClick(access)
+        }
     }
 
     function test_timeRulerHasReferenceMinorTicks() {
@@ -118,12 +174,67 @@ TestCase {
         tryVerify(function() { return shell.visible })
         const shellPage = findChild(shell, "audioEditorPage")
         verify(shellPage)
-        verify(findChild(shell, "editorSpaceShortcut"))
-        compare(findChild(shell, "audioToolsSpaceShortcut"), null)
+        verify(findChild(shell, "audioToolsSpaceShortcut"))
+        compare(findChild(shellPage, "editorSpaceShortcut"), null)
         const shortcutText = findChild(shellPage,
                                        "editorShortcutFirstGroup_0").text
         verify(shortcutText.indexOf("空格 = 播放 / 暂停") >= 0)
         compare(shortcutText.indexOf("Phase"), -1)
+    }
+
+    function test_spaceTransportOwnsFocusAcrossNonTextControls() {
+        const shell = createTemporaryObject(shellComponent, testCase)
+        verify(shell)
+        tryVerify(function() { return shell.visible })
+        shell.requestActivate()
+        tryVerify(function() { return shell.active })
+        const shellPage = findChild(shell, "audioEditorPage")
+        const spaceShortcut = findChild(shell, "audioToolsSpaceShortcut")
+        verify(shellPage && spaceShortcut)
+        compare(spaceShortcut.context, Qt.ApplicationShortcut)
+
+        const controls = [
+            findChild(shellPage, "editorCommand_split"),
+            findChild(shellPage, "editorPrimaryPlayButton"),
+            findChild(shellPage, "inspectorSpeedSlider"),
+            findChild(shellPage, "editorExportCodec")
+        ]
+        for (let index = 0; index < controls.length; ++index) {
+            const control = controls[index]
+            verify(control, "missing Space focus regression control")
+            if (index < 2)
+                compare(control.focusPolicy, Qt.NoFocus)
+        }
+
+        if (AudioEditorController.hasDocument)
+            verify(AudioEditorController.clearDocument())
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setActiveTool("select"))
+        const previousSliderValue = controls[2].value
+        const previousComboIndex = controls[3].currentIndex
+        for (const control of controls) {
+            control.forceActiveFocus()
+            tryVerify(function() { return control.activeFocus })
+            verify(spaceShortcut.enabled,
+                   "Space shortcut disabled for " + control.objectName)
+            compare(AudioEditorController.activeTool, "select")
+            compare(controls[2].value, previousSliderValue)
+            compare(controls[3].currentIndex, previousComboIndex)
+            compare(controls[3].popup.visible, false)
+        }
+        keyClick(Qt.Key_Space)
+        tryVerify(function() { return AudioEditorController.playing },
+                  1000,
+                  controls[3].objectName + ": "
+                      + AudioEditorController.errorMessage)
+        compare(AudioEditorController.activeTool, "select")
+        compare(controls[2].value, previousSliderValue)
+        compare(controls[3].currentIndex, previousComboIndex)
+        compare(controls[3].popup.visible, false)
+        keyClick(Qt.Key_Space)
+        tryCompare(AudioEditorController, "playing", false)
+        AudioEditorController.deactivate()
+        AudioEditorController.activate()
     }
 
     function test_toolbarExactOrderAndClearKeepsDocument() {
@@ -391,21 +502,23 @@ TestCase {
         const rewind = findChild(page, "editorPlaybackRewindButton")
         const play = findChild(page, "editorPrimaryPlayButton")
         const forward = findChild(page, "editorPlaybackForwardButton")
+        const next = findChild(page, "editorPlaybackNextButton")
         const stop = findChild(page, "editorPlaybackStopButton")
         const startShortcut = findChild(page, "editorToStartShortcut")
         const rewindShortcut = findChild(page, "editorRewindShortcut")
         const forwardShortcut = findChild(page, "editorForwardShortcut")
         const stopShortcut = findChild(page, "editorStopPlaybackShortcut")
 
-        for (const control of [toStart, rewind, play, forward, stop]) {
+        for (const control of [toStart, rewind, play, forward, next, stop]) {
             verify(control, "missing reference transport control")
             compare(control.toolTipDelay, 500)
             verify(control.toolTipText.length > 0)
         }
-        compare(toStart.toolTipText, "跳到开头（Home）")
+        compare(toStart.toolTipText, "上一段（Home）")
         compare(rewind.toolTipText, "后退 5 秒（←）")
         compare(play.toolTipText, "播放 / 暂停（Space）")
         compare(forward.toolTipText, "前进 5 秒（→）")
+        compare(next.toolTipText, "下一段")
         compare(stop.toolTipText, "停止（Ctrl+Space）")
 
         compare(startShortcut.sequence.toString(), "Home")
@@ -419,6 +532,7 @@ TestCase {
         compare(rewind.icon.width, 32)
         compare(play.icon.width, 42)
         compare(forward.icon.width, 32)
+        compare(next.icon.width, 32)
         compare(stop.icon.width, 32)
 
         for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",

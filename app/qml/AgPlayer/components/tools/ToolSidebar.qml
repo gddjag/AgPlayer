@@ -34,7 +34,8 @@ Rectangle {
                 flat: true
                 text: modelData
                 checked: navigation.currentTool === index
-                focusPolicy: Qt.StrongFocus
+                focusPolicy: Qt.NoFocus
+                Keys.onSpacePressed: function(event) { event.accepted = true }
                 contentItem: Text {
                     text: parent.text
                     color: parent.checked ? navigation.activeLabelColor

@@ -31,6 +31,8 @@ Rectangle {
         property bool mirrorIcon: false
         property real referenceWidth: 0
         objectName: "editorCommand_" + commandName
+        focusPolicy: Qt.NoFocus
+        Keys.onSpacePressed: function(event) { event.accepted = true }
         enabled: commandEnabled
         Layout.fillWidth: false
         Layout.preferredWidth: referenceWidth * bar.referenceScale

@@ -147,9 +147,11 @@ if ($toolsWindow -notmatch ('title:\s*qsTr\("' + $audioToolsTitle + '"\)') -or
     $toolsWindow -notmatch ('text:\s*qsTr\("' + $audioToolsTitle + '"\)')) {
     throw 'The native and custom title bars must use AgPlayer · 音频工具.'
 }
-if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
-    $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
-    throw 'The composed tools shell is missing its real Space playback shortcut.'
+if ($toolsWindow -notmatch 'objectName:\s*"audioToolsSpaceShortcut"' -or
+    $toolsWindow -notmatch 'sequence:\s*"Space"' -or
+    $toolsWindow -notmatch 'context:\s*Qt\.ApplicationShortcut' -or
+    $audioEditor -match 'objectName:\s*"editorSpaceShortcut"') {
+    throw 'The tools shell must own the only global Space playback shortcut.'
 }
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
@@ -284,8 +286,9 @@ foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', '
         throw "The editor is missing the interaction shortcut: $shortcut"
     }
 }
-foreach ($responsiveHook in @('referenceLayout', 'narrowLayout',
-    'editorInspectorScroller', 'editorInspectorAccess')) {
+foreach ($responsiveHook in @('inspectorWidth', 'mainWidth',
+    'responsiveContentHeight', 'narrowLayout', 'editorInspectorScroller',
+    'editorInspectorAccess')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."
     }
