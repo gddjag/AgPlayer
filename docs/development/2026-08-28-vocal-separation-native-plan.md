@@ -27,7 +27,11 @@
 
 - Add a small `AgSeparationWorker` executable that loads the external ORT library dynamically and never runs until separation starts.
 - Implement versioned NDJSON messages `hello`, `probe`, `start`, `progress`, `cancel`, `result`, `error`, and `shutdown`, each with protocol version and request ID.
-- Add MDX and Demucs adapters with bounded threading/chunking, structured errors, provider probing, Auto/CPU/GPU behavior, and CPU fallback for Auto.
+- Add exactly two trusted adapters:
+  - MDX uses 44.1kHz stereo, periodic Hann STFT/ISTFT (`n_fft=6144`, `hop=1024`, `center=true`), channel packing `[L.real,L.imag,R.real,R.imag]`, three cleared low bins, 25% overlap, and weighted overlap-add. KARA uses `[N,4,2048,256]`, chunk 261120, trim 3072, vocals output and compensation 1.035. HQ3 uses `[N,4,3072,256]`, the same chunk/trim, instrumental output and compensation 1.022. The complementary stem is the original mix minus the primary stem.
+  - Demucs uses four sequential sessions with `mix` FLOAT `[1,2,343980]` and `stems` FLOAT `[1,4,2,343980]`, output order `[drums,bass,other,vocals]`, overlap 85995 and stride 257985. Each specialized file contributes only its named row. The fifth accompaniment track is derived as `drums+bass+other` with final clipping protection; four sessions never remain resident together.
+- Keep the first release on the built-in SHA-256 allowlist (or an application-signed manifest). ONNX graph checks are defense-in-depth only because the approved graphs do not embed the sampling rate, STFT, compensation, or stem semantics.
+- Add bounded threading/chunking, structured errors, provider probing, Auto/CPU/GPU behavior, and CPU fallback for Auto. DirectML sessions disable memory patterns and use sequential execution. GPU is available only after enumerating DXGI adapters and completing a real minimal inference probe; provider presence or session creation alone is insufficient.
 - Decode and encode through existing FFmpeg facilities. Write every selected stem to a same-volume temporary directory, reopen-verify all outputs, then atomically commit; cancellation/failure removes temporary outputs and never overwrites existing results.
 - Tests cover protocol parsing, incompatible versions, request routing, cancellation, timeout/crash, invalid model tensors, output transactions, and CPU fallback. Real-model tests are opt-in and use the approved catalog.
 
