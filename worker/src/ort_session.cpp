@@ -7,9 +7,6 @@
 #include <wrl/client.h>
 #endif
 
-#include <QFile>
-#include <QDir>
-
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -47,6 +44,21 @@ TensorElementType tensorType(ONNXTensorElementDataType type)
 }
 
 } // namespace
+
+OrtOperationResult requestOrtRunTermination(const OrtApi* api,
+                                             OrtRunOptions* runOptions)
+{
+    if (api == nullptr || runOptions == nullptr
+        || api->RunOptionsSetTerminate == nullptr) {
+        return {false, QStringLiteral("inference_cancel_failed"),
+                QStringLiteral("ONNX Runtime cannot terminate this inference"), {}};
+    }
+    const QString error = statusMessage(api, api->RunOptionsSetTerminate(runOptions));
+    if (!error.isEmpty()) {
+        return {false, QStringLiteral("inference_cancel_failed"), error, {}};
+    }
+    return {true, {}, {}, {}};
+}
 
 class OrtModelSession::Impl final {
 public:
@@ -95,7 +107,7 @@ OrtModelSession::OrtModelSession() : impl_(std::make_unique<Impl>()) {}
 OrtModelSession::~OrtModelSession() = default;
 
 OrtOperationResult OrtModelSession::open(const QString& runtimePath,
-                                         const QString& modelPath,
+                                         const QByteArray& approvedModelBytes,
                                          ExecutionProvider provider,
                                          int directMlDeviceId)
 {
@@ -148,22 +160,21 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
         if (!error.isEmpty()) {
             return {false, QStringLiteral("directml_session_failed"), error, {}};
         }
+        error = statusMessage(impl_->api, impl_->api->AddSessionConfigEntry(
+            options, "session.disable_cpu_ep_fallback", "1"));
+        if (!error.isEmpty()) {
+            return {false, QStringLiteral("directml_session_failed"), error, {}};
+        }
     }
-#ifdef Q_OS_WIN
-    const std::wstring nativePath = QDir::toNativeSeparators(modelPath).toStdWString();
-    error = statusMessage(impl_->api, impl_->api->CreateSession(
-        impl_->environment, nativePath.c_str(), options, &impl_->session));
-#else
-    const QByteArray nativePath = QFile::encodeName(modelPath);
-    error = statusMessage(impl_->api, impl_->api->CreateSession(
-        impl_->environment, nativePath.constData(), options, &impl_->session));
-#endif
+    error = statusMessage(impl_->api, impl_->api->CreateSessionFromArray(
+        impl_->environment, approvedModelBytes.constData(),
+        static_cast<size_t>(approvedModelBytes.size()), options, &impl_->session));
     if (!error.isEmpty()) {
         return {false, QStringLiteral("model_open_failed"), error, {}};
     }
     OrtOperationResult inspected = impl_->inspect();
     if (!inspected.ok) return inspected;
-    impl_->metadata.opset = readOnnxDefaultOpset(modelPath);
+    impl_->metadata.opset = readOnnxDefaultOpset(approvedModelBytes);
     if (impl_->metadata.opset < 0) {
         return {false, QStringLiteral("model_metadata_failed"),
                 QStringLiteral("Could not read the default ONNX opset import"), {}};
@@ -261,13 +272,13 @@ const ModelMetadata& OrtModelSession::metadata() const
 OrtOperationResult OrtModelSession::run(const QVector<float>& input,
                                         const QVector<qint64>& inputShape,
                                         const QVector<qint64>& outputShape,
-                                        const std::atomic_bool& cancelled)
+                                        const CancellationToken& cancelled)
 {
     if (impl_->session == nullptr || impl_->api == nullptr) {
         return {false, QStringLiteral("session_not_open"),
                 QStringLiteral("ONNX session is not open"), {}};
     }
-    if (cancelled.load()) {
+    if (cancelled.isCancelled()) {
         return {false, QStringLiteral("cancelled"),
                 QStringLiteral("Separation cancelled"), {}};
     }
@@ -307,13 +318,14 @@ OrtOperationResult OrtModelSession::run(const QVector<float>& input,
     std::mutex monitorMutex;
     std::condition_variable monitorWake;
     bool finished = false;
+    OrtOperationResult terminationResult{true, {}, {}, {}};
+    auto cancellationSubscription = cancelled.notifyOnCancel(
+        [&monitorWake] { monitorWake.notify_all(); });
     std::thread monitor([&] {
         std::unique_lock lock(monitorMutex);
-        while (!finished && !cancelled.load()) {
-            monitorWake.wait_for(lock, std::chrono::milliseconds(5));
-        }
-        if (!finished && cancelled.load()) {
-            impl_->api->RunOptionsSetTerminate(runOptions);
+        monitorWake.wait(lock, [&] { return finished || cancelled.isCancelled(); });
+        if (!finished && cancelled.isCancelled()) {
+            terminationResult = requestOrtRunTermination(impl_->api, runOptions);
         }
     });
     OrtValue* outputValue = nullptr;
@@ -331,11 +343,15 @@ OrtOperationResult OrtModelSession::run(const QVector<float>& input,
     monitorWake.notify_all();
     monitor.join();
     error = statusMessage(impl_->api, runStatus);
+    if (!terminationResult.ok) {
+        if (outputValue != nullptr) impl_->api->ReleaseValue(outputValue);
+        return terminationResult;
+    }
     if (!error.isEmpty()) {
         if (outputValue != nullptr) impl_->api->ReleaseValue(outputValue);
-        return {false, cancelled.load() ? QStringLiteral("cancelled")
+        return {false, cancelled.isCancelled() ? QStringLiteral("cancelled")
                                         : QStringLiteral("inference_failed"),
-                cancelled.load() ? QStringLiteral("Separation cancelled") : error, {}};
+                cancelled.isCancelled() ? QStringLiteral("Separation cancelled") : error, {}};
     }
     const auto releaseOutput = qScopeGuard(
         [this, &outputValue] { impl_->api->ReleaseValue(outputValue); });

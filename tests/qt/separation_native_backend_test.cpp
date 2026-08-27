@@ -1,9 +1,13 @@
 #include "native_worker_backend.hpp"
 
+#include "decoder.hpp"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <cmath>
 
 using namespace agplayer::separation;
 
@@ -12,8 +16,10 @@ class SeparationNativeBackendTest final : public QObject {
 
 private slots:
     void startRequestRequiresBoundedNativeFields();
+    void startRequestRejectsOversizedPathsAndNames();
     void sha256IsComputedFromTheActualFile();
-    void rawFloatWaveWriterStreamsAndFinalizesAProbeableHeader();
+    void ffmpegWaveWriterRoundTripsThroughTheProductionDecoder();
+    void inferenceProgressLeavesRoomForVerificationAndCompletion();
     void readsTheActualDefaultOnnxOpset();
 };
 
@@ -50,6 +56,41 @@ void SeparationNativeBackendTest::startRequestRequiresBoundedNativeFields()
     QCOMPARE(parseStartRequest(unknown).code, QStringLiteral("invalid_start_request"));
 }
 
+void SeparationNativeBackendTest::startRequestRejectsOversizedPathsAndNames()
+{
+    const QJsonObject base{
+        {QStringLiteral("runtimePath"), QStringLiteral("C:/runtime/onnxruntime.dll")},
+        {QStringLiteral("inputPath"), QStringLiteral("C:/audio/source.wav")},
+        {QStringLiteral("modelFiles"), QJsonArray{QStringLiteral("C:/models/model.onnx")}},
+        {QStringLiteral("outputDirectory"), QStringLiteral("C:/audio")},
+        {QStringLiteral("baseName"), QStringLiteral("source")},
+        {QStringLiteral("extension"), QStringLiteral("wav")},
+        {QStringLiteral("stems"), QJsonArray{QStringLiteral("vocals")}},
+        {QStringLiteral("device"), QStringLiteral("cpu")},
+    };
+    for (const QString& field : {QStringLiteral("runtimePath"),
+                                 QStringLiteral("inputPath"),
+                                 QStringLiteral("outputDirectory")}) {
+        QJsonObject oversized = base;
+        oversized.insert(field, QString(32768, QLatin1Char('x')));
+        QCOMPARE(parseStartRequest(oversized).code,
+                 QStringLiteral("invalid_start_request"));
+    }
+    QJsonObject longModel = base;
+    longModel.insert(QStringLiteral("modelFiles"),
+                     QJsonArray{QString(32768, QLatin1Char('m'))});
+    QCOMPARE(parseStartRequest(longModel).code,
+             QStringLiteral("invalid_start_request"));
+    QJsonObject longBase = base;
+    longBase.insert(QStringLiteral("baseName"), QString(241, QLatin1Char('b')));
+    QCOMPARE(parseStartRequest(longBase).code,
+             QStringLiteral("invalid_start_request"));
+    QJsonObject longExtension = base;
+    longExtension.insert(QStringLiteral("extension"), QString(17, QLatin1Char('e')));
+    QCOMPARE(parseStartRequest(longExtension).code,
+             QStringLiteral("invalid_start_request"));
+}
+
 void SeparationNativeBackendTest::sha256IsComputedFromTheActualFile()
 {
     QTemporaryDir temporary;
@@ -62,22 +103,33 @@ void SeparationNativeBackendTest::sha256IsComputedFromTheActualFile()
              QStringLiteral("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
 }
 
-void SeparationNativeBackendTest::rawFloatWaveWriterStreamsAndFinalizesAProbeableHeader()
+void SeparationNativeBackendTest::ffmpegWaveWriterRoundTripsThroughTheProductionDecoder()
 {
     QTemporaryDir temporary;
     const QString path = temporary.filePath(QStringLiteral("流式.wav"));
-    FloatWaveWriter writer;
+    FfmpegWaveWriter writer;
     QVERIFY(writer.open(path, 44100, 2));
-    QVERIFY(writer.write({0.25F, -0.25F, 0.5F, -0.5F}));
+    const QVector<float> expected{0.25F, -0.25F, 0.5F, -0.5F};
+    QVERIFY(writer.write(expected));
     QVERIFY(writer.finish());
 
-    QFile file(path);
-    QVERIFY(file.open(QIODevice::ReadOnly));
-    const QByteArray header = file.read(44);
-    QCOMPARE(header.left(4), QByteArrayLiteral("RIFF"));
-    QCOMPARE(header.mid(8, 4), QByteArrayLiteral("WAVE"));
-    QCOMPARE(qFromLittleEndian<quint32>(header.constData() + 40), quint32{16});
-    QCOMPARE(file.size(), qint64{60});
+    agplayer::Decoder decoder;
+    QCOMPARE(decoder.open(path.toUtf8().toStdString(), 44100, 2), AG_OK);
+    agplayer::DecodedAudioBlock decoded;
+    QCOMPARE(decoder.read(decoded), AG_OK);
+    QVERIFY(decoded.frames >= 2);
+    for (qsizetype index = 0; index < expected.size(); ++index) {
+        QVERIFY(std::abs(decoded.samples.at(index) - expected.at(index)) < 1.0e-6F);
+    }
+}
+
+void SeparationNativeBackendTest::inferenceProgressLeavesRoomForVerificationAndCompletion()
+{
+    const double halfway = nativeInferenceProgress(1, 2);
+    const double finished = nativeInferenceProgress(2, 2);
+    QVERIFY(halfway >= 0.0);
+    QVERIFY(finished > halfway);
+    QVERIFY(finished < 0.98);
 }
 
 void SeparationNativeBackendTest::readsTheActualDefaultOnnxOpset()
@@ -90,7 +142,9 @@ void SeparationNativeBackendTest::readsTheActualDefaultOnnxOpset()
     // OperatorSetIdProto.version (field 2, varint) = 17.
     QCOMPARE(file.write(QByteArray::fromHex("42021011")), qint64{4});
     file.close();
-    QCOMPARE(readOnnxDefaultOpset(path), 17);
+    QFile input(path);
+    QVERIFY(input.open(QIODevice::ReadOnly));
+    QCOMPARE(readOnnxDefaultOpset(input.readAll()), 17);
 
     const QString customOnly = temporary.filePath(QStringLiteral("custom.onnx"));
     QFile custom(customOnly);
@@ -98,7 +152,9 @@ void SeparationNativeBackendTest::readsTheActualDefaultOnnxOpset()
     // domain="custom" followed by version=17: no default ai.onnx opset.
     QCOMPARE(custom.write(QByteArray::fromHex("420a0a06637573746f6d1011")), qint64{12});
     custom.close();
-    QCOMPARE(readOnnxDefaultOpset(customOnly), -1);
+    QFile customInput(customOnly);
+    QVERIFY(customInput.open(QIODevice::ReadOnly));
+    QCOMPARE(readOnnxDefaultOpset(customInput.readAll()), -1);
 }
 
 QTEST_GUILESS_MAIN(SeparationNativeBackendTest)

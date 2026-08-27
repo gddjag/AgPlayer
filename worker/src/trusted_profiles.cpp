@@ -1,7 +1,5 @@
 #include "trusted_profiles.hpp"
 
-#include <QFile>
-
 #include <algorithm>
 #include <limits>
 
@@ -116,19 +114,6 @@ ContractValidationResult validateModelMetadata(const TrustedModelProfile& truste
 
 namespace {
 
-bool readVarint(QFile& file, quint64* value)
-{
-    *value = 0;
-    for (int shift = 0; shift < 64; shift += 7) {
-        char byte = 0;
-        if (file.read(&byte, 1) != 1) return false;
-        const auto octet = static_cast<quint8>(byte);
-        *value |= static_cast<quint64>(octet & 0x7fU) << shift;
-        if ((octet & 0x80U) == 0) return true;
-    }
-    return false;
-}
-
 bool readBufferVarint(const QByteArray& buffer, qsizetype* offset, quint64* value)
 {
     *value = 0;
@@ -185,37 +170,37 @@ int parseOpsetImport(const QByteArray& message)
 
 } // namespace
 
-int readOnnxDefaultOpset(const QString& modelPath)
+int readOnnxDefaultOpset(const QByteArray& modelBytes)
 {
-    QFile file(modelPath);
-    if (!file.open(QIODevice::ReadOnly)) return -1;
-    while (!file.atEnd()) {
+    qsizetype offset = 0;
+    while (offset < modelBytes.size()) {
         quint64 tag = 0;
-        if (!readVarint(file, &tag)) return -1;
+        if (!readBufferVarint(modelBytes, &offset, &tag)) return -1;
         const quint64 field = tag >> 3U;
         const quint64 wire = tag & 7U;
         if (wire == 0) {
             quint64 ignored = 0;
-            if (!readVarint(file, &ignored)) return -1;
+            if (!readBufferVarint(modelBytes, &offset, &ignored)) return -1;
         } else if (wire == 1) {
-            if (!file.seek(file.pos() + 8)) return -1;
+            offset += 8;
         } else if (wire == 2) {
             quint64 length = 0;
-            if (!readVarint(file, &length)
-                || length > static_cast<quint64>(file.size() - file.pos())) return -1;
+            if (!readBufferVarint(modelBytes, &offset, &length)
+                || length > static_cast<quint64>(modelBytes.size() - offset)) return -1;
             if (field == 8) {
                 if (length > 4096) return -1;
-                const QByteArray import = file.read(static_cast<qint64>(length));
+                const QByteArray import = modelBytes.mid(
+                    offset, static_cast<qsizetype>(length));
                 const int opset = parseOpsetImport(import);
                 if (opset >= 0) return opset;
-            } else if (!file.seek(file.pos() + static_cast<qint64>(length))) {
-                return -1;
             }
+            offset += static_cast<qsizetype>(length);
         } else if (wire == 5) {
-            if (!file.seek(file.pos() + 4)) return -1;
+            offset += 4;
         } else {
             return -1;
         }
+        if (offset > modelBytes.size()) return -1;
     }
     return -1;
 }

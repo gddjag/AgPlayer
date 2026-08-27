@@ -28,7 +28,7 @@ WorkerEngine::WorkerEngine(std::shared_ptr<WorkerBackend> backend,
 WorkerEngine::~WorkerEngine()
 {
     shuttingDown_ = true;
-    if (activeJob_) activeJob_->cancelled->store(true);
+    if (activeJob_) activeJob_->cancelled->cancel();
     threadPool_.waitForDone();
 }
 
@@ -88,8 +88,8 @@ void WorkerEngine::acceptLine(const QByteArray& line)
     case ProtocolType::Cancel: {
         bool accepted = cancelledRequests_.contains(message.requestId);
         if (activeJob_ && activeJob_->requestId == message.requestId) {
-            activeJob_->cancelled->store(true);
-            cancelledRequests_.insert(message.requestId);
+            activeJob_->cancelled->cancel();
+            rememberCancelledRequest(message.requestId);
             activeJob_.reset();
             ++generation_;
             accepted = true;
@@ -104,7 +104,7 @@ void WorkerEngine::acceptLine(const QByteArray& line)
             shuttingDown_ = true;
             shutdownRequestId_ = message.requestId;
             if (activeJob_) {
-                activeJob_->cancelled->store(true);
+                activeJob_->cancelled->cancel();
                 activeJob_.reset();
                 ++generation_;
             }
@@ -149,9 +149,10 @@ void WorkerEngine::startJob(const QString& requestId,
     auto context = std::make_shared<JobContext>();
     context->requestId = requestId;
     context->generation = ++generation_;
-    context->cancelled = std::make_shared<std::atomic_bool>(false);
+    context->cancelled = std::make_shared<CancellationToken>();
     activeJob_ = context;
     cancelledRequests_.remove(requestId);
+    cancelledRequestOrder_.removeAll(requestId);
     ++pendingTasks_;
 
     const QPointer<WorkerEngine> self(this);
@@ -233,6 +234,17 @@ void WorkerEngine::taskFinished()
 {
     --pendingTasks_;
     if (shuttingDown_ && pendingTasks_ == 0) emit shutdownReady();
+}
+
+void WorkerEngine::rememberCancelledRequest(const QString& requestId)
+{
+    constexpr qsizetype kMaximumRememberedCancellations = 16;
+    if (cancelledRequests_.contains(requestId)) return;
+    cancelledRequests_.insert(requestId);
+    cancelledRequestOrder_.enqueue(requestId);
+    while (cancelledRequestOrder_.size() > kMaximumRememberedCancellations) {
+        cancelledRequests_.remove(cancelledRequestOrder_.dequeue());
+    }
 }
 
 } // namespace agplayer::separation

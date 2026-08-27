@@ -1,34 +1,82 @@
+#include "native_worker_backend.hpp"
+#include "ort_session.hpp"
 #include "ort_runtime.hpp"
 #include "trusted_profiles.hpp"
 
+#include <onnxruntime_c_api.h>
+
 #include <QFile>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <future>
+
 using namespace agplayer::separation;
+
+#ifndef AG_SEPARATION_FAKE_ORT_PATH
+#error AG_SEPARATION_FAKE_ORT_PATH must name the fake ORT runtime
+#endif
 
 namespace {
 
-class FakeProbeBackend final : public InferenceProbeBackend {
+int releasedTerminateStatuses = 0;
+
+OrtStatus* ORT_API_CALL rejectedTerminate(OrtRunOptions*) noexcept
+{
+    return reinterpret_cast<OrtStatus*>(quintptr{1});
+}
+
+const char* ORT_API_CALL terminateErrorMessage(const OrtStatus*) noexcept
+{
+    return "terminate refused";
+}
+
+void ORT_API_CALL releaseTerminateStatus(OrtStatus*) noexcept
+{
+    ++releasedTerminateStatuses;
+}
+
+class ControlledNativeProbe final : public NativeProviderProbe {
 public:
     bool cpu = true;
     bool gpu = false;
     QString reason = QStringLiteral("minimal inference failed");
     int cpuCalls = 0;
     int gpuCalls = 0;
+    bool block = false;
+    QSemaphore entered;
+    QSemaphore release;
+    const CancellationToken* observedCancellation = nullptr;
 
-    bool probeCpu(QString* error) override
+    QVector<DxgiAdapterInfo> hardwareAdapters() override
     {
-        ++cpuCalls;
-        if (!cpu && error) *error = QStringLiteral("CPU failed");
-        return cpu;
+        return {{7, QStringLiteral("test adapter"), 1024}};
     }
 
-    bool probeDirectMl(QString* error) override
+    BackendResult prove(const NativeStartRequest&, const TrustedModelProfile&,
+                        ExecutionProvider provider, int,
+                        const CancellationToken& cancelled) override
     {
-        ++gpuCalls;
-        if (!gpu && error) *error = reason;
-        return gpu;
+        observedCancellation = &cancelled;
+        if (block) {
+            entered.release();
+            release.acquire();
+        }
+        if (cancelled.isCancelled()) {
+            return {false, QStringLiteral("cancelled"),
+                    QStringLiteral("Provider probe cancelled"), {}};
+        }
+        if (provider == ExecutionProvider::DirectMl) {
+            ++gpuCalls;
+            return gpu ? BackendResult{true, {}, {}, {}}
+                       : BackendResult{false, QStringLiteral("gpu_probe_failed"),
+                                       reason, {}};
+        }
+        ++cpuCalls;
+        return cpu ? BackendResult{true, {}, {}, {}}
+                   : BackendResult{false, QStringLiteral("cpu_probe_failed"),
+                                   QStringLiteral("CPU failed"), {}};
     }
 };
 
@@ -42,7 +90,11 @@ private slots:
     void trustedProfilesBindHashesToExactTensorSemantics();
     void demucsRowsAreBoundToTrustedHashes();
     void invalidTensorNamesTypesShapesAndOpsetsAreRejected();
-    void autoUsesOnlyVerifiedGpuAndFallsBackToCpu();
+    void productionProviderSelectionObservesCancellation();
+    void productionAutoSelectionFallsBackToCpuWithReason();
+    void directMlSessionUsesApprovedBytesAndDisablesCpuFallback();
+    void terminateFailureIsReleasedAndReported();
+    void cancellationNotificationDoesNotRequirePolling();
 };
 
 void SeparationRuntimeTest::missingAndBadDynamicRuntimeAreRejected()
@@ -119,28 +171,83 @@ void SeparationRuntimeTest::invalidTensorNamesTypesShapesAndOpsetsAreRejected()
     QCOMPARE(validateModelMetadata(profile, invalid).code, QStringLiteral("opset_mismatch"));
 }
 
-void SeparationRuntimeTest::autoUsesOnlyVerifiedGpuAndFallsBackToCpu()
+void SeparationRuntimeTest::productionProviderSelectionObservesCancellation()
 {
-    FakeProbeBackend backend;
-    ProviderDecision decision = chooseProvider(DeviceMode::Auto, backend);
-    QVERIFY(decision.ok);
-    QCOMPARE(decision.provider, ExecutionProvider::Cpu);
-    QCOMPARE(decision.fallbackReason, QStringLiteral("minimal inference failed"));
-    QCOMPARE(backend.gpuCalls, 1);
-    QCOMPARE(backend.cpuCalls, 1);
+    ControlledNativeProbe probe;
+    probe.block = true;
+    NativeStartRequest request;
+    request.device = DeviceMode::Cpu;
+    CancellationToken cancelled;
+    const TrustedModelProfile profile = *trustedProfileForHashes({QStringLiteral(
+        "e3167c87333a48548413e972a286bf40bf5694001d2853861eb1435953f02d63")});
 
-    backend.gpu = true;
-    backend.cpuCalls = backend.gpuCalls = 0;
-    decision = chooseProvider(DeviceMode::Auto, backend);
-    QVERIFY(decision.ok);
-    QCOMPARE(decision.provider, ExecutionProvider::DirectMl);
-    QCOMPARE(backend.gpuCalls, 1);
-    QCOMPARE(backend.cpuCalls, 0);
+    auto future = std::async(std::launch::async, [&] {
+        return selectNativeProvider(request, profile, cancelled, probe);
+    });
+    QVERIFY(probe.entered.tryAcquire(1, 2000));
+    cancelled.cancel();
+    probe.release.release();
+    QVERIFY(future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    const NativeProviderSelection selection = future.get();
+    QVERIFY(!selection.ok);
+    QCOMPARE(selection.code, QStringLiteral("cancelled"));
+    QCOMPARE(probe.observedCancellation, &cancelled);
+}
 
-    backend.gpu = false;
-    decision = chooseProvider(DeviceMode::Gpu, backend);
-    QVERIFY(!decision.ok);
-    QCOMPARE(decision.code, QStringLiteral("gpu_probe_failed"));
+void SeparationRuntimeTest::productionAutoSelectionFallsBackToCpuWithReason()
+{
+    ControlledNativeProbe probe;
+    NativeStartRequest request;
+    request.device = DeviceMode::Auto;
+    CancellationToken cancelled;
+    const TrustedModelProfile profile = *trustedProfileForHashes({QStringLiteral(
+        "e3167c87333a48548413e972a286bf40bf5694001d2853861eb1435953f02d63")});
+
+    const NativeProviderSelection selection =
+        selectNativeProvider(request, profile, cancelled, probe);
+    QVERIFY(selection.ok);
+    QCOMPARE(selection.provider, ExecutionProvider::Cpu);
+    QCOMPARE(selection.fallbackReason, QStringLiteral("minimal inference failed"));
+    QCOMPARE(probe.gpuCalls, 1);
+    QCOMPARE(probe.cpuCalls, 1);
+}
+
+void SeparationRuntimeTest::directMlSessionUsesApprovedBytesAndDisablesCpuFallback()
+{
+    const QByteArray approvedModel = QByteArray::fromHex("42021011");
+    OrtModelSession session;
+    const OrtOperationResult opened = session.open(
+        QString::fromUtf8(AG_SEPARATION_FAKE_ORT_PATH), approvedModel,
+        ExecutionProvider::DirectMl, 0);
+    QVERIFY(!opened.ok);
+    QCOMPARE(opened.code, QStringLiteral("model_open_failed"));
+    QCOMPARE(opened.message, QStringLiteral("strict-array-session"));
+}
+
+void SeparationRuntimeTest::terminateFailureIsReleasedAndReported()
+{
+    OrtApi api{};
+    api.RunOptionsSetTerminate = &rejectedTerminate;
+    api.GetErrorMessage = &terminateErrorMessage;
+    api.ReleaseStatus = &releaseTerminateStatus;
+    releasedTerminateStatuses = 0;
+
+    const OrtOperationResult result = requestOrtRunTermination(
+        &api, reinterpret_cast<OrtRunOptions*>(quintptr{2}));
+    QVERIFY(!result.ok);
+    QCOMPARE(result.code, QStringLiteral("inference_cancel_failed"));
+    QCOMPARE(result.message, QStringLiteral("terminate refused"));
+    QCOMPARE(releasedTerminateStatuses, 1);
+}
+
+void SeparationRuntimeTest::cancellationNotificationDoesNotRequirePolling()
+{
+    CancellationToken cancellation;
+    QSemaphore notified;
+    auto subscription = cancellation.notifyOnCancel([&] { notified.release(); });
+    cancellation.cancel();
+    QVERIFY(notified.tryAcquire(1, 100));
+    QVERIFY(cancellation.isCancelled());
 }
 
 QTEST_GUILESS_MAIN(SeparationRuntimeTest)

@@ -47,7 +47,7 @@ void SeparationRealModelTest::approvedCatalogModelRunsOnCpuWhenExplicitlyEnabled
         QTemporaryDir output;
         QVERIFY(output.isValid());
         NativeWorkerBackend backend;
-        std::atomic_bool cancelled{false};
+        CancellationToken cancelled;
         const BackendResult result = backend.separate(
             {{QStringLiteral("runtimePath"), runtime},
              {QStringLiteral("inputPath"), input},

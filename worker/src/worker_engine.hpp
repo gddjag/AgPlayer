@@ -1,7 +1,10 @@
 #pragma once
 
+#include "cancellation_token.hpp"
+
 #include <QJsonObject>
 #include <QObject>
+#include <QQueue>
 #include <QSet>
 #include <QThreadPool>
 
@@ -25,7 +28,7 @@ public:
     virtual ~WorkerBackend() = default;
     virtual BackendResult probe(const QJsonObject& payload) = 0;
     virtual BackendResult separate(const QJsonObject& payload,
-                                   const std::atomic_bool& cancelled,
+                                   const CancellationToken& cancelled,
                                    const ProgressCallback& progress) = 0;
 };
 
@@ -51,7 +54,7 @@ private:
     struct JobContext {
         QString requestId;
         quint64 generation = 0;
-        std::shared_ptr<std::atomic_bool> cancelled;
+        std::shared_ptr<CancellationToken> cancelled;
     };
 
     void sendError(const QString& requestId, const QString& code,
@@ -64,11 +67,13 @@ private:
     void finishJob(const QString& requestId, quint64 generation,
                    const BackendResult& result);
     void taskFinished();
+    void rememberCancelledRequest(const QString& requestId);
 
     std::shared_ptr<WorkerBackend> backend_;
     QThreadPool threadPool_;
     std::shared_ptr<JobContext> activeJob_;
     QSet<QString> cancelledRequests_;
+    QQueue<QString> cancelledRequestOrder_;
     quint64 generation_ = 0;
     int pendingTasks_ = 0;
     bool shuttingDown_ = false;

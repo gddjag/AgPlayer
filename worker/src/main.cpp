@@ -13,7 +13,6 @@
 #include <cstdio>
 #include <iostream>
 #include <memory>
-#include <string>
 #include <thread>
 
 using namespace agplayer::separation;
@@ -38,13 +37,31 @@ int main(int argc, char* argv[])
 
     const QPointer<WorkerEngine> guardedEngine(&engine);
     std::thread([guardedEngine] {
-        std::string line;
-        while (std::getline(std::cin, line)) {
+        const auto submit = [guardedEngine](const QByteArray& message) {
             if (!guardedEngine) return;
-            const QByteArray message(line.data(), static_cast<qsizetype>(line.size()));
             QMetaObject::invokeMethod(guardedEngine, [guardedEngine, message] {
                 if (guardedEngine) guardedEngine->acceptLine(message);
             });
+        };
+        QByteArray line;
+        line.reserve(4096);
+        bool oversized = false;
+        char character = 0;
+        while (std::cin.get(character)) {
+            if (character == '\n') {
+                submit(oversized ? QByteArray(kMaximumProtocolLineBytes + 1, 'x')
+                                 : line);
+                line.clear();
+                oversized = false;
+            } else if (line.size() <= kMaximumProtocolLineBytes) {
+                line.append(character);
+            } else {
+                oversized = true;
+            }
+        }
+        if (!line.isEmpty() || oversized) {
+            submit(oversized ? QByteArray(kMaximumProtocolLineBytes + 1, 'x')
+                             : line);
         }
         if (guardedEngine) {
             const QByteArray shutdown = encodeProtocolMessage(

@@ -1,4 +1,6 @@
 add_library(ag_separation_worker_core STATIC
+    src/cancellation_token.cpp
+    src/cancellation_token.hpp
     src/demucs_adapter.cpp
     src/demucs_adapter.hpp
     src/mdx_adapter.cpp

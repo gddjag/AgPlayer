@@ -49,6 +49,10 @@ QString protocolTypeName(ProtocolType type)
 
 ProtocolParseResult parseProtocolMessage(const QByteArray& line)
 {
+    if (line.size() > kMaximumProtocolLineBytes) {
+        return reject(QStringLiteral("message_too_large"),
+                      QStringLiteral("Protocol message exceeds the 1 MiB limit"));
+    }
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
     if (parseError.error != QJsonParseError::NoError) {

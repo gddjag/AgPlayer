@@ -7,6 +7,7 @@
 namespace agplayer::separation {
 
 constexpr int kSeparationProtocolVersion = 1;
+constexpr qsizetype kMaximumProtocolLineBytes = 1024 * 1024;
 
 enum class ProtocolType {
     Hello,

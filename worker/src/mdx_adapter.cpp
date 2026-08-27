@@ -18,22 +18,6 @@ qsizetype spectrumIndex(int channel, int bin, int frame, int bins, int frames)
     return (static_cast<qsizetype>(channel) * bins + bin) * frames + frame;
 }
 
-float chunkWeight(qint64 localFrame, qint64 chunkFrames, bool first, bool last,
-                  qint64 fadeIn, qint64 fadeOut)
-{
-    float weight = 1.0F;
-    if (!first && fadeIn > 1 && localFrame < fadeIn) {
-        weight = std::min(weight, static_cast<float>(localFrame)
-                                     / static_cast<float>(fadeIn - 1));
-    }
-    if (!last && fadeOut > 1 && localFrame >= chunkFrames - fadeOut) {
-        weight = std::min(weight,
-                          static_cast<float>(chunkFrames - 1 - localFrame)
-                              / static_cast<float>(fadeOut - 1));
-    }
-    return std::max(0.0F, weight);
-}
-
 } // namespace
 
 MdxProfile MdxProfile::kara()
@@ -184,40 +168,76 @@ QVector<qint64> mdxChunkStarts(qint64 totalFrames)
     return starts;
 }
 
-QVector<float> mdxWeightedOverlapAdd(const QVector<PositionedAudioChunk>& chunks,
-                                     qint64 totalFrames)
+QVector<float> overlapWeights(const QVector<qint64>& starts, qsizetype index,
+                              int chunkFrames)
 {
-    if (totalFrames <= 0) return {};
-    QVector<float> output(totalFrames * 2);
-    QVector<float> weights(totalFrames);
-    for (qsizetype index = 0; index < chunks.size(); ++index) {
-        const PositionedAudioChunk& chunk = chunks.at(index);
-        const qint64 chunkFrames = chunk.interleavedStereo.size() / 2;
-        const qint64 fadeIn = index == 0
-            ? 0 : std::max<qint64>(0, chunks.at(index - 1).startFrame
-                                         + chunks.at(index - 1).interleavedStereo.size() / 2
-                                         - chunk.startFrame);
-        const qint64 fadeOut = index + 1 >= chunks.size()
-            ? 0 : std::max<qint64>(0, chunk.startFrame + chunkFrames
-                                         - chunks.at(index + 1).startFrame);
-        for (qint64 frame = 0; frame < chunkFrames; ++frame) {
-            const qint64 destination = chunk.startFrame + frame;
-            if (destination < 0 || destination >= totalFrames) continue;
-            const float weight = chunkWeight(frame, chunkFrames, index == 0,
-                                             index + 1 == chunks.size(),
-                                             fadeIn, fadeOut);
-            output[destination * 2] += chunk.interleavedStereo.at(frame * 2) * weight;
-            output[destination * 2 + 1] += chunk.interleavedStereo.at(frame * 2 + 1) * weight;
-            weights[destination] += weight;
+    QVector<float> weights(chunkFrames, 1.0F);
+    if (index > 0) {
+        const qint64 overlap = starts.at(index - 1) + chunkFrames - starts.at(index);
+        for (qint64 sample = 0; sample < overlap; ++sample) {
+            weights[static_cast<qsizetype>(sample)] = overlap > 1
+                ? static_cast<float>(sample) / static_cast<float>(overlap - 1)
+                : 1.0F;
         }
     }
-    for (qint64 frame = 0; frame < totalFrames; ++frame) {
-        if (weights.at(frame) > 0.0F) {
-            output[frame * 2] /= weights.at(frame);
-            output[frame * 2 + 1] /= weights.at(frame);
+    if (index + 1 < starts.size()) {
+        const qint64 overlap = starts.at(index) + chunkFrames - starts.at(index + 1);
+        for (qint64 sample = 0; sample < overlap; ++sample) {
+            const qsizetype position = static_cast<qsizetype>(chunkFrames - overlap + sample);
+            const float fade = overlap > 1
+                ? 1.0F - static_cast<float>(sample) / static_cast<float>(overlap - 1)
+                : 1.0F;
+            weights[position] = std::min(weights.at(position), fade);
         }
     }
-    return output;
+    return weights;
+}
+
+StreamingOverlapAdd::StreamingOverlapAdd(Sink sink) : sink_(std::move(sink)) {}
+
+bool StreamingOverlapAdd::add(qint64 start, const QVector<float>& samples,
+                              const QVector<float>& weights)
+{
+    if (!takeBefore(start)) return false;
+    const qint64 frames = samples.size() / 2;
+    if (weights.size() != frames || start < base_) return false;
+    const qint64 offset = start - base_;
+    const qint64 required = offset + frames;
+    if (accumulated_.size() < required * 2) accumulated_.resize(required * 2);
+    if (normalization_.size() < required) normalization_.resize(required);
+    for (qint64 frame = 0; frame < frames; ++frame) {
+        const qint64 destination = offset + frame;
+        const float weight = weights.at(static_cast<qsizetype>(frame));
+        accumulated_[destination * 2] += samples.at(frame * 2) * weight;
+        accumulated_[destination * 2 + 1] += samples.at(frame * 2 + 1) * weight;
+        normalization_[destination] += weight;
+    }
+    return true;
+}
+
+bool StreamingOverlapAdd::finish(qint64 totalFrames)
+{
+    return takeBefore(totalFrames);
+}
+
+bool StreamingOverlapAdd::takeBefore(qint64 end)
+{
+    const qint64 frames = std::clamp<qint64>(end - base_, 0,
+                                             normalization_.size());
+    if (frames == 0) return true;
+    QVector<float> published(frames * 2);
+    for (qint64 frame = 0; frame < frames; ++frame) {
+        const float weight = normalization_.at(frame);
+        if (weight > 0.0F) {
+            published[frame * 2] = accumulated_.at(frame * 2) / weight;
+            published[frame * 2 + 1] = accumulated_.at(frame * 2 + 1) / weight;
+        }
+    }
+    if (!sink_(published)) return false;
+    accumulated_.remove(0, static_cast<qsizetype>(frames * 2));
+    normalization_.remove(0, static_cast<qsizetype>(frames));
+    base_ += frames;
+    return true;
 }
 
 QVector<float> complementaryStem(const QVector<float>& mix,

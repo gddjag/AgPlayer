@@ -12,6 +12,7 @@ class SeparationProtocolTest final : public QObject {
 private slots:
     void parsesEveryVersionOneMessage();
     void rejectsMalformedUnknownAndIncompatibleMessages();
+    void rejectsOversizedNdjsonLines();
     void serializesEveryMessageWithVersionAndRequestId();
 };
 
@@ -66,6 +67,14 @@ void SeparationProtocolTest::rejectsMalformedUnknownAndIncompatibleMessages()
         QVERIFY(!parsed.ok);
         QCOMPARE(parsed.error.code, testCase.code);
     }
+}
+
+void SeparationProtocolTest::rejectsOversizedNdjsonLines()
+{
+    const ProtocolParseResult oversized = parseProtocolMessage(
+        QByteArray(1024 * 1024 + 1, 'x'));
+    QVERIFY(!oversized.ok);
+    QCOMPARE(oversized.error.code, QStringLiteral("message_too_large"));
 }
 
 void SeparationProtocolTest::serializesEveryMessageWithVersionAndRequestId()

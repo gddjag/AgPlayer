@@ -532,6 +532,32 @@ foreach(separation_test IN ITEMS
     )
 endforeach()
 
+set_tests_properties(separation_real_model_test PROPERTIES TIMEOUT 3600)
+
+add_library(separation_fake_ort SHARED
+    qt/separation_fake_ort.cpp
+)
+target_include_directories(separation_fake_ort PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/third_party/onnxruntime/include"
+)
+set_target_properties(separation_fake_ort PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "onnxruntime_test"
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
+agplayer_enable_warnings(separation_fake_ort)
+target_compile_definitions(separation_runtime_test PRIVATE
+    AG_SEPARATION_FAKE_ORT_PATH="$<TARGET_FILE:separation_fake_ort>"
+)
+target_include_directories(separation_runtime_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/third_party/onnxruntime/include"
+)
+add_dependencies(separation_runtime_test separation_fake_ort)
+target_include_directories(separation_native_backend_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+
 if(TARGET AgSeparationWorker)
 add_executable(separation_worker_process_test
     qt/separation_worker_process_test.cpp

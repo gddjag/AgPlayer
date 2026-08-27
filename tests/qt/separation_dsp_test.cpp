@@ -84,8 +84,17 @@ void SeparationDspTest::mdxChunkingUsesTwentyFivePercentOverlapAndWeightedOla()
 
     const QVector<float> first(261120 * 2, 0.25F);
     const QVector<float> second(261120 * 2, 0.75F);
-    const QVector<float> joined = mdxWeightedOverlapAdd(
-        {{0, first}, {195840, second}}, 456960);
+    QVector<float> joined;
+    StreamingOverlapAdd publisher(
+        [&](const QVector<float>& block) {
+            joined += block;
+            return true;
+        });
+    const QVector<qint64> starts{0, 195840};
+    QVERIFY(publisher.add(0, first, overlapWeights(starts, 0, 261120)));
+    QVERIFY(publisher.add(195840, second,
+                          overlapWeights(starts, 1, 261120)));
+    QVERIFY(publisher.finish(456960));
     QCOMPARE(joined.size(), 456960 * 2);
     QCOMPARE(joined.at(1000 * 2), 0.25F);
     QVERIFY(joined.at(228480 * 2) > 0.49F && joined.at(228480 * 2) < 0.51F);
@@ -121,10 +130,6 @@ void SeparationDspTest::demucsGeometryFadesAndNamedRowsAreExact()
                   output.begin() + (row + 1) * 2 * 343980,
                   static_cast<float>(row + 1));
     }
-    QCOMPARE(demucsRowForModelFile(QStringLiteral("htdemucs_ft_drums_fp16weights.onnx")), 0);
-    QCOMPARE(demucsRowForModelFile(QStringLiteral("htdemucs_ft_bass_fp16weights.onnx")), 1);
-    QCOMPARE(demucsRowForModelFile(QStringLiteral("htdemucs_ft_other_fp16weights.onnx")), 2);
-    QCOMPARE(demucsRowForModelFile(QStringLiteral("htdemucs_ft_vocals_fp16weights.onnx")), 3);
     const QVector<float> vocals = selectDemucsRow(output, 3);
     QCOMPARE(vocals.size(), 2 * 343980);
     QCOMPARE(vocals.front(), 4.0F);
@@ -136,7 +141,10 @@ void SeparationDspTest::derivedAccompanimentUsesOnlyThreeRowsAndProtectsFromClip
     const QVector<float> drums{0.5F, -0.7F, 0.2F};
     const QVector<float> bass{0.5F, -0.4F, 0.2F};
     const QVector<float> other{0.5F, -0.1F, 0.2F};
-    const QVector<float> accompaniment = deriveAccompaniment(drums, bass, other);
+    const float peak = accompanimentPeak(drums, bass, other);
+    QCOMPARE(peak, 1.5F);
+    const QVector<float> accompaniment = sumAccompaniment(
+        drums, bass, other, 1.0F / peak);
     QCOMPARE(accompaniment.size(), 3);
     QCOMPARE(accompaniment.at(0), 1.0F);
     QCOMPARE(accompaniment.at(1), -0.8F);

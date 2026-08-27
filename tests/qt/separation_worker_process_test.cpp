@@ -15,6 +15,9 @@ class SeparationWorkerProcessTest final : public QObject {
 
 private slots:
     void helloMalformedAndShutdownUseNdjsonAndExitCleanly();
+    void stdinEofDrainsAndExitsWithinTheClientDeadline();
+    void oversizedLineIsRejectedAndTheWorkerStillShutsDown();
+    void clientTimeoutCanForceAWorkerCrashWithoutAFalseResult();
 };
 
 void SeparationWorkerProcessTest::helloMalformedAndShutdownUseNdjsonAndExitCleanly()
@@ -53,6 +56,57 @@ void SeparationWorkerProcessTest::helloMalformedAndShutdownUseNdjsonAndExitClean
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QCOMPARE(process.exitCode(), 0);
     QCOMPARE(process.readAllStandardError(), QByteArray());
+}
+
+void SeparationWorkerProcessTest::stdinEofDrainsAndExitsWithinTheClientDeadline()
+{
+    QProcess process;
+    process.setProgram(QString::fromUtf8(AG_SEPARATION_WORKER_PATH));
+    process.start();
+    QVERIFY2(process.waitForStarted(3000), qPrintable(process.errorString()));
+    process.closeWriteChannel();
+    QVERIFY2(process.waitForFinished(3000), qPrintable(process.errorString()));
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(process.exitCode(), 0);
+
+    const ProtocolParseResult shutdown = parseProtocolMessage(process.readLine());
+    QVERIFY(shutdown.ok);
+    QCOMPARE(shutdown.message.type, ProtocolType::Shutdown);
+    QCOMPARE(shutdown.message.requestId, QStringLiteral("stdin-eof"));
+}
+
+void SeparationWorkerProcessTest::oversizedLineIsRejectedAndTheWorkerStillShutsDown()
+{
+    QProcess process;
+    process.setProgram(QString::fromUtf8(AG_SEPARATION_WORKER_PATH));
+    process.start();
+    QVERIFY2(process.waitForStarted(3000), qPrintable(process.errorString()));
+    process.write(QByteArray(kMaximumProtocolLineBytes + 1, 'x') + '\n');
+    QVERIFY(process.waitForReadyRead(5000));
+    const ProtocolParseResult rejected = parseProtocolMessage(process.readLine());
+    QVERIFY(rejected.ok);
+    QCOMPARE(rejected.message.type, ProtocolType::Error);
+    QCOMPARE(rejected.message.payload.value(QStringLiteral("code")).toString(),
+             QStringLiteral("message_too_large"));
+
+    process.write(encodeProtocolMessage(ProtocolType::Shutdown,
+                                        QStringLiteral("after-oversized")));
+    QVERIFY(process.waitForReadyRead(3000));
+    QVERIFY(process.waitForFinished(3000));
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+}
+
+void SeparationWorkerProcessTest::clientTimeoutCanForceAWorkerCrashWithoutAFalseResult()
+{
+    QProcess process;
+    process.setProgram(QString::fromUtf8(AG_SEPARATION_WORKER_PATH));
+    process.start();
+    QVERIFY2(process.waitForStarted(3000), qPrintable(process.errorString()));
+    process.kill();
+    QVERIFY2(process.waitForFinished(3000), qPrintable(process.errorString()));
+    QCOMPARE(process.exitStatus(), QProcess::CrashExit);
+    const QByteArray output = process.readAllStandardOutput();
+    QVERIFY(!output.contains("\"type\":\"result\""));
 }
 
 QTEST_GUILESS_MAIN(SeparationWorkerProcessTest)

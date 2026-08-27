@@ -37,7 +37,7 @@ OutputTransaction::OutputTransaction(
 
 OutputTransaction::~OutputTransaction()
 {
-    if (active_) rollback();
+    if (active_) (void)rollback();
 }
 
 TransactionResult OutputTransaction::reject(const QString& code,
@@ -108,54 +108,96 @@ QString OutputTransaction::temporaryDirectory() const
 }
 
 TransactionResult OutputTransaction::commit(
-    const std::function<bool(const QString&)>& verifier)
+    const std::function<bool(const QString&)>& verifier,
+    const std::atomic_bool& cancelled)
 {
     if (!active_) {
         return reject(QStringLiteral("transaction_inactive"),
                       QStringLiteral("Output transaction has not begun"));
     }
+    const auto rollbackFailure = [this](const QString& message) {
+        TransactionResult result = reject(QStringLiteral("rollback_failed"), message);
+        result.outputs = committedPaths_;
+        if (QFileInfo::exists(temporaryDirectory_)) {
+            result.outputs.push_back(temporaryDirectory_);
+        }
+        return result;
+    };
+    const auto rejectCancelled = [this, &rollbackFailure] {
+        if (!rollback()) {
+            return rollbackFailure(
+                QStringLiteral("Cancellation cleanup left output artifacts"));
+        }
+        return reject(QStringLiteral("cancelled"),
+                      QStringLiteral("Output commit was cancelled"));
+    };
+    if (cancelled.load()) return rejectCancelled();
     for (const QString& stem : plan_.stems) {
+        if (cancelled.load()) return rejectCancelled();
         const QString path = temporaryPaths_.value(stem);
         if (!QFileInfo(path).isFile() || !verifier(path)) {
-            rollback();
+            if (!rollback()) {
+                return rollbackFailure(
+                    QStringLiteral("Verification cleanup left output artifacts"));
+            }
             return reject(QStringLiteral("verification_failed"),
                           QStringLiteral("A temporary output failed reopen verification"));
         }
+        if (cancelled.load()) return rejectCancelled();
     }
 
     for (const QString& stem : plan_.stems) {
+        if (cancelled.load()) return rejectCancelled();
         const QString finalPath = finalPaths_.value(stem);
         if (QFileInfo::exists(finalPath)
             || !operations_->renameFile(temporaryPaths_.value(stem), finalPath)) {
-            rollback();
+            if (!rollback()) {
+                return rollbackFailure(
+                    QStringLiteral("Commit rollback left output artifacts"));
+            }
             return reject(QStringLiteral("commit_failed"),
                           QStringLiteral("Atomic output commit failed"));
         }
         committedPaths_.push_back(finalPath);
+        if (cancelled.load()) return rejectCancelled();
     }
 
     const QStringList outputs = committedPaths_;
+    if (!QDir(temporaryDirectory_).removeRecursively()
+        || QFileInfo::exists(temporaryDirectory_)) {
+        if (!rollback()) {
+            return rollbackFailure(
+                QStringLiteral("Temporary-directory cleanup left output artifacts"));
+        }
+        return reject(QStringLiteral("commit_failed"),
+                      QStringLiteral("Could not remove the temporary output directory"));
+    }
+    if (cancelled.load()) return rejectCancelled();
     committedPaths_.clear();
-    QDir(temporaryDirectory_).removeRecursively();
     active_ = false;
     return {true, {}, {}, outputs};
 }
 
-void OutputTransaction::rollback()
+bool OutputTransaction::rollback()
 {
+    QStringList remaining;
     for (const QString& path : std::as_const(committedPaths_)) {
-        operations_->removeFile(path);
+        (void)operations_->removeFile(path);
+        if (QFileInfo::exists(path)) remaining.push_back(path);
     }
-    committedPaths_.clear();
+    committedPaths_ = remaining;
     if (!temporaryDirectory_.isEmpty()) {
-        QDir(temporaryDirectory_).removeRecursively();
+        (void)QDir(temporaryDirectory_).removeRecursively();
     }
-    active_ = false;
+    const bool clean = committedPaths_.isEmpty()
+        && !QFileInfo::exists(temporaryDirectory_);
+    active_ = !clean;
+    return clean;
 }
 
 void OutputTransaction::cancel()
 {
-    if (active_) rollback();
+    if (active_) (void)rollback();
 }
 
 } // namespace agplayer::separation

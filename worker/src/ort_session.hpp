@@ -1,13 +1,18 @@
 #pragma once
 
+#include "cancellation_token.hpp"
 #include "ort_runtime.hpp"
 #include "trusted_profiles.hpp"
 
+#include <QByteArray>
 #include <QString>
 #include <QVector>
 
 #include <atomic>
 #include <memory>
+
+struct OrtApi;
+struct OrtRunOptions;
 
 namespace agplayer::separation {
 
@@ -24,6 +29,9 @@ struct OrtOperationResult {
     QVector<float> output;
 };
 
+[[nodiscard]] OrtOperationResult requestOrtRunTermination(
+    const OrtApi* api, OrtRunOptions* runOptions);
+
 [[nodiscard]] QVector<DxgiAdapterInfo> enumerateDxgiHardwareAdapters();
 
 class OrtModelSession final {
@@ -35,14 +43,14 @@ public:
     OrtModelSession& operator=(const OrtModelSession&) = delete;
 
     [[nodiscard]] OrtOperationResult open(const QString& runtimePath,
-                                          const QString& modelPath,
+                                          const QByteArray& approvedModelBytes,
                                           ExecutionProvider provider,
                                           int directMlDeviceId = 0);
     [[nodiscard]] const ModelMetadata& metadata() const;
     [[nodiscard]] OrtOperationResult run(const QVector<float>& input,
                                          const QVector<qint64>& inputShape,
                                          const QVector<qint64>& outputShape,
-                                         const std::atomic_bool& cancelled);
+                                         const CancellationToken& cancelled);
 
 private:
     class Impl;

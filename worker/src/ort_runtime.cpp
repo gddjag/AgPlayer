@@ -53,33 +53,4 @@ QFunctionPointer DynamicOrtRuntime::resolve(const char* symbol)
     return library_.isLoaded() ? library_.resolve(symbol) : nullptr;
 }
 
-ProviderDecision chooseProvider(DeviceMode mode, InferenceProbeBackend& backend)
-{
-    QString error;
-    if (mode == DeviceMode::Gpu) {
-        if (backend.probeDirectMl(&error)) {
-            return {true, ExecutionProvider::DirectMl, {}, {}, {}};
-        }
-        return {false, ExecutionProvider::DirectMl,
-                QStringLiteral("gpu_probe_failed"), error, {}};
-    }
-    if (mode == DeviceMode::Cpu) {
-        if (backend.probeCpu(&error)) {
-            return {true, ExecutionProvider::Cpu, {}, {}, {}};
-        }
-        return {false, ExecutionProvider::Cpu,
-                QStringLiteral("cpu_probe_failed"), error, {}};
-    }
-
-    QString gpuError;
-    if (backend.probeDirectMl(&gpuError)) {
-        return {true, ExecutionProvider::DirectMl, {}, {}, {}};
-    }
-    if (backend.probeCpu(&error)) {
-        return {true, ExecutionProvider::Cpu, {}, {}, gpuError};
-    }
-    return {false, ExecutionProvider::Cpu,
-            QStringLiteral("no_usable_provider"), error, gpuError};
-}
-
 } // namespace agplayer::separation

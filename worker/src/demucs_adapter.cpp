@@ -46,16 +46,6 @@ QVector<float> demucsPublisherWeights(int chunkIndex, int chunkCount)
     return weights;
 }
 
-int demucsRowForModelFile(const QString& fileName)
-{
-    const QString name = fileName.toLower();
-    if (name.contains(QStringLiteral("drums"))) return 0;
-    if (name.contains(QStringLiteral("bass"))) return 1;
-    if (name.contains(QStringLiteral("other"))) return 2;
-    if (name.contains(QStringLiteral("vocals"))) return 3;
-    return -1;
-}
-
 QVector<float> selectDemucsRow(const QVector<float>& modelOutput, int row)
 {
     constexpr int rowSamples = 2 * 343980;
@@ -64,19 +54,30 @@ QVector<float> selectDemucsRow(const QVector<float>& modelOutput, int row)
                           modelOutput.cbegin() + (row + 1) * rowSamples);
 }
 
-QVector<float> deriveAccompaniment(const QVector<float>& drums,
-                                   const QVector<float>& bass,
-                                   const QVector<float>& other)
+float accompanimentPeak(const QVector<float>& drums,
+                        const QVector<float>& bass,
+                        const QVector<float>& other)
 {
-    if (drums.size() != bass.size() || drums.size() != other.size()) return {};
-    QVector<float> output(drums.size());
+    if (drums.size() != bass.size() || drums.size() != other.size()) return -1.0F;
     float peak = 0.0F;
-    for (qsizetype index = 0; index < output.size(); ++index) {
-        output[index] = drums.at(index) + bass.at(index) + other.at(index);
-        peak = std::max(peak, std::abs(output.at(index)));
+    for (qsizetype index = 0; index < drums.size(); ++index) {
+        peak = std::max(peak, std::abs(drums.at(index) + bass.at(index)
+                                     + other.at(index)));
     }
-    if (peak > 1.0F) {
-        for (float& sample : output) sample /= peak;
+    return peak;
+}
+
+QVector<float> sumAccompaniment(const QVector<float>& drums,
+                                const QVector<float>& bass,
+                                const QVector<float>& other, float scale)
+{
+    if (drums.size() != bass.size() || drums.size() != other.size()
+        || !std::isfinite(scale) || scale < 0.0F) {
+        return {};
+    }
+    QVector<float> output(drums.size());
+    for (qsizetype index = 0; index < output.size(); ++index) {
+        output[index] = (drums.at(index) + bass.at(index) + other.at(index)) * scale;
     }
     return output;
 }

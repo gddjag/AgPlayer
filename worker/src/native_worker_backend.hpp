@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ort_runtime.hpp"
+#include "ort_session.hpp"
 #include "trusted_profiles.hpp"
 #include "worker_engine.hpp"
 
@@ -30,16 +31,44 @@ struct StartRequestParseResult {
     NativeStartRequest request;
 };
 
+struct NativeProviderSelection {
+    bool ok = false;
+    ExecutionProvider provider = ExecutionProvider::Cpu;
+    int adapterId = 0;
+    QString fallbackReason;
+    QString code;
+    QString message;
+};
+
+class NativeProviderProbe {
+public:
+    virtual ~NativeProviderProbe() = default;
+    [[nodiscard]] virtual QVector<DxgiAdapterInfo> hardwareAdapters() = 0;
+    [[nodiscard]] virtual BackendResult prove(
+        const NativeStartRequest& request,
+        const TrustedModelProfile& profile,
+        ExecutionProvider provider,
+        int adapterId,
+        const CancellationToken& cancelled) = 0;
+};
+
+[[nodiscard]] NativeProviderSelection selectNativeProvider(
+    const NativeStartRequest& request,
+    const TrustedModelProfile& profile,
+    const CancellationToken& cancelled,
+    NativeProviderProbe& probe);
+
 [[nodiscard]] StartRequestParseResult parseStartRequest(const QJsonObject& payload);
 [[nodiscard]] QString hashFileSha256(const QString& path);
+[[nodiscard]] double nativeInferenceProgress(qint64 completed, qint64 total);
 
-class FloatWaveWriter final {
+class FfmpegWaveWriter final {
 public:
-    FloatWaveWriter() = default;
-    ~FloatWaveWriter();
+    FfmpegWaveWriter();
+    ~FfmpegWaveWriter();
 
-    FloatWaveWriter(const FloatWaveWriter&) = delete;
-    FloatWaveWriter& operator=(const FloatWaveWriter&) = delete;
+    FfmpegWaveWriter(const FfmpegWaveWriter&) = delete;
+    FfmpegWaveWriter& operator=(const FfmpegWaveWriter&) = delete;
 
     [[nodiscard]] bool open(const QString& path, int sampleRate, int channels);
     [[nodiscard]] bool write(const QVector<float>& interleavedSamples);
@@ -47,18 +76,15 @@ public:
     [[nodiscard]] QString errorString() const;
 
 private:
-    QFile file_;
-    quint64 dataBytes_ = 0;
-    int sampleRate_ = 0;
-    int channels_ = 0;
-    QString error_;
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 class NativeWorkerBackend final : public WorkerBackend {
 public:
     BackendResult probe(const QJsonObject& payload) override;
     BackendResult separate(const QJsonObject& payload,
-                           const std::atomic_bool& cancelled,
+                           const CancellationToken& cancelled,
                            const ProgressCallback& progress) override;
 };
 

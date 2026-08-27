@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <memory>
+#include <atomic>
 
 namespace agplayer::separation {
 
@@ -45,13 +46,14 @@ public:
     [[nodiscard]] QString temporaryPath(const QString& stem) const;
     [[nodiscard]] QString temporaryDirectory() const;
     [[nodiscard]] TransactionResult
-    commit(const std::function<bool(const QString&)>& verifier);
+    commit(const std::function<bool(const QString&)>& verifier,
+           const std::atomic_bool& cancelled);
     void cancel();
 
 private:
     [[nodiscard]] TransactionResult reject(const QString& code,
                                            const QString& message);
-    void rollback();
+    [[nodiscard]] bool rollback();
 
     OutputPlan plan_;
     std::shared_ptr<NativeOutputFileOps> operations_;

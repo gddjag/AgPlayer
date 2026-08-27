@@ -46,7 +46,7 @@ public:
     }
 
     BackendResult separate(const QJsonObject& payload,
-                           const std::atomic_bool& cancelled,
+                           const CancellationToken& cancelled,
                            const ProgressCallback& progress) override
     {
         const int current = ++running;
@@ -55,7 +55,7 @@ public:
         progress(0.5, QStringLiteral("inference"));
         release.acquire();
         --running;
-        if (cancelled.load()) {
+        if (cancelled.isCancelled()) {
             return {false, QStringLiteral("cancelled"),
                     QStringLiteral("Separation cancelled"), {}};
         }
@@ -74,6 +74,7 @@ private slots:
     void startRunsOffCallerThreadAndAllowsOnlyOneActiveRequest();
     void probeQueueIsBounded();
     void cancellationIsIdempotentAndStaleResultsCannotLeak();
+    void cancellationAcknowledgementHistoryIsBounded();
     void cancelledRestartLoopCannotGrowTheQueueWithoutBound();
     void shutdownCancelsWorkAndSignalsOnlyAfterTheQueueDrains();
     void rejectsWorkerOnlyMessageDirections();
@@ -199,6 +200,31 @@ void SeparationWorkerEngineTest::cancellationIsIdempotentAndStaleResultsCannotLe
     QVERIFY(!oldTerminalLeaked);
     QVERIFY(newResult);
     QCOMPARE(backend->maximumRunning.load(), 1);
+}
+
+void SeparationWorkerEngineTest::cancellationAcknowledgementHistoryIsBounded()
+{
+    auto backend = std::make_shared<ControlledBackend>();
+    WorkerEngine engine(backend);
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+
+    constexpr int kHistoryLimit = 16;
+    for (int index = 0; index <= kHistoryLimit; ++index) {
+        const QString requestId = QStringLiteral("bounded-%1").arg(index);
+        engine.acceptLine(message(ProtocolType::Start, requestId));
+        QVERIFY(backend->entered.tryAcquire(1, 2000));
+        engine.acceptLine(message(ProtocolType::Cancel, requestId));
+        backend->release.release();
+        QTRY_COMPARE_WITH_TIMEOUT(backend->running.load(), 0, 2000);
+        QCoreApplication::processEvents();
+    }
+
+    output.clear();
+    engine.acceptLine(message(ProtocolType::Cancel, QStringLiteral("bounded-0")));
+    QCOMPARE(output.size(), 1);
+    const ProtocolMessage expired = decode(output.takeFirst().at(0));
+    QCOMPARE(expired.type, ProtocolType::Cancel);
+    QVERIFY(!expired.payload.value(QStringLiteral("accepted")).toBool());
 }
 
 void SeparationWorkerEngineTest::shutdownCancelsWorkAndSignalsOnlyAfterTheQueueDrains()

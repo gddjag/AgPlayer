@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -51,6 +52,6 @@ trustedProfileForHashes(const QStringList& sha256);
 [[nodiscard]] ContractValidationResult
 validateModelMetadata(const TrustedModelProfile& trusted,
                       const ModelMetadata& actual);
-[[nodiscard]] int readOnnxDefaultOpset(const QString& modelPath);
+[[nodiscard]] int readOnnxDefaultOpset(const QByteArray& modelBytes);
 
 } // namespace agplayer::separation

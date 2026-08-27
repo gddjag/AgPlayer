@@ -39,24 +39,4 @@ enum class ExecutionProvider {
     DirectMl,
 };
 
-class InferenceProbeBackend {
-public:
-    virtual ~InferenceProbeBackend() = default;
-    virtual bool probeCpu(QString* error) = 0;
-    // Implementations must enumerate a hardware DXGI adapter and complete a
-    // real minimal inference. Provider presence/session creation is not enough.
-    virtual bool probeDirectMl(QString* error) = 0;
-};
-
-struct ProviderDecision {
-    bool ok = false;
-    ExecutionProvider provider = ExecutionProvider::Cpu;
-    QString code;
-    QString message;
-    QString fallbackReason;
-};
-
-[[nodiscard]] ProviderDecision chooseProvider(DeviceMode mode,
-                                              InferenceProbeBackend& backend);
-
 } // namespace agplayer::separation

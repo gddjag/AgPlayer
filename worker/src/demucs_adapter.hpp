@@ -20,11 +20,14 @@ struct DemucsProfile {
 [[nodiscard]] QVector<qint64> demucsChunkStarts(qint64 totalFrames);
 [[nodiscard]] QVector<float> demucsPublisherWeights(int chunkIndex,
                                                     int chunkCount);
-[[nodiscard]] int demucsRowForModelFile(const QString& fileName);
 [[nodiscard]] QVector<float> selectDemucsRow(const QVector<float>& modelOutput,
                                              int row);
-[[nodiscard]] QVector<float> deriveAccompaniment(const QVector<float>& drums,
-                                                 const QVector<float>& bass,
-                                                 const QVector<float>& other);
+[[nodiscard]] float accompanimentPeak(const QVector<float>& drums,
+                                      const QVector<float>& bass,
+                                      const QVector<float>& other);
+[[nodiscard]] QVector<float> sumAccompaniment(const QVector<float>& drums,
+                                              const QVector<float>& bass,
+                                              const QVector<float>& other,
+                                              float scale);
 
 } // namespace agplayer::separation

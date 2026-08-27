@@ -3,6 +3,8 @@
 #include <QString>
 #include <QVector>
 
+#include <functional>
+
 namespace agplayer::separation {
 
 struct MdxProfile {
@@ -30,9 +32,22 @@ struct MdxSpectrogram {
     [[nodiscard]] float at(int channel, int bin, int frame) const;
 };
 
-struct PositionedAudioChunk {
-    qint64 startFrame = 0;
-    QVector<float> interleavedStereo;
+class StreamingOverlapAdd final {
+public:
+    using Sink = std::function<bool(const QVector<float>&)>;
+
+    explicit StreamingOverlapAdd(Sink sink);
+    [[nodiscard]] bool add(qint64 start, const QVector<float>& samples,
+                           const QVector<float>& weights);
+    [[nodiscard]] bool finish(qint64 totalFrames);
+
+private:
+    [[nodiscard]] bool takeBefore(qint64 end);
+
+    Sink sink_;
+    QVector<float> accumulated_;
+    QVector<float> normalization_;
+    qint64 base_ = 0;
 };
 
 [[nodiscard]] QVector<float> periodicHann(int size);
@@ -43,8 +58,8 @@ struct PositionedAudioChunk {
                                             int outputFrames);
 [[nodiscard]] QVector<qint64> mdxChunkStarts(qint64 totalFrames);
 [[nodiscard]] QVector<float>
-mdxWeightedOverlapAdd(const QVector<PositionedAudioChunk>& chunks,
-                      qint64 totalFrames);
+overlapWeights(const QVector<qint64>& starts, qsizetype index,
+               int chunkFrames);
 [[nodiscard]] QVector<float> complementaryStem(const QVector<float>& mix,
                                                const QVector<float>& primary);
 
