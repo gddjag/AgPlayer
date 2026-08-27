@@ -25,7 +25,7 @@ private slots:
     void glassBackdropContractIsAbsent();
     void defaultListSizeMatchesReference();
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
-    void dpiChangePreservesNativePixelSize();
+    void dpiChangePreservesLogicalSizeAcrossScales();
     void switchingWindowsDoesNotRecreatePlayback();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
@@ -145,14 +145,31 @@ void WindowControllerTest::legacyListWidthsMigrateWithoutOverwritingIndependentS
     QCOMPARE(independentList.size(), QSize(733, 611));
 }
 
-void WindowControllerTest::dpiChangePreservesNativePixelSize()
+void WindowControllerTest::dpiChangePreservesLogicalSizeAcrossScales()
 {
-    const QRect currentGeometry(120, 80, 1104, 342);
-    const QRect windowsSuggestedGeometry(1920, 120, 1656, 513);
+    struct DpiTransition {
+        const char* name;
+        QSize currentLogicalSize;
+        QRect suggestedGeometry;
+        QRect targetAvailableGeometry;
+    };
+    const QList<DpiTransition> transitions{
+        {"100-to-125", QSize(1104, 342), QRect(1920, 120, 1380, 428),
+         QRect(1920, 0, 1920, 1040)},
+        {"125-to-150", QSize(1104, 342), QRect(3840, 80, 1656, 513),
+         QRect(3840, 0, 2560, 1400)},
+        {"150-to-100", QSize(1104, 342), QRect(0, 100, 1104, 342),
+         QRect(0, 0, 1920, 1080)},
+    };
 
-    QCOMPARE(WindowController::geometryForDpiChange(
-                 currentGeometry, windowsSuggestedGeometry),
-             QRect(1920, 120, 1104, 342));
+    for (const DpiTransition& transition : transitions) {
+        const QRect result = WindowController::geometryForDpiChange(
+            QRect(QPoint(0, 0), transition.currentLogicalSize),
+            transition.suggestedGeometry);
+        QCOMPARE(result.size(), transition.currentLogicalSize);
+        QVERIFY2(transition.targetAvailableGeometry.contains(result.topLeft()),
+                 transition.name);
+    }
 }
 
 void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()

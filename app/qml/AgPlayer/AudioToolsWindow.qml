@@ -199,8 +199,6 @@ Window {
 
                 MouseArea {
                     objectName: "audioToolsMoveArea"
-                    property point lastGlobalPoint: Qt.point(0, 0)
-                    property bool nativeMoveStarted: false
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
@@ -209,24 +207,10 @@ Window {
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
-                        lastGlobalPoint = mapToGlobal(mouse.x, mouse.y)
-                        // The tools shell has custom docking/resizing. Moving it
-                        // directly keeps that path deterministic on Windows and
-                        // avoids startSystemMove swallowing drag delivery from
-                        // QML, which made the title bar appear unresponsive.
-                        nativeMoveStarted = false
+                        if (window.visibility !== Window.Maximized)
+                            window.startSystemMove()
                         mouse.accepted = true
                     }
-                    onPositionChanged: function(mouse) {
-                        if (!pressed || nativeMoveStarted
-                                || window.visibility === Window.Maximized)
-                            return
-                        var globalPoint = mapToGlobal(mouse.x, mouse.y)
-                        window.x += globalPoint.x - lastGlobalPoint.x
-                        window.y += globalPoint.y - lastGlobalPoint.y
-                        lastGlobalPoint = globalPoint
-                    }
-                    onReleased: nativeMoveStarted = false
                 }
             }
 

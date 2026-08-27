@@ -153,6 +153,10 @@ if ($toolsWindow -notmatch 'objectName:\s*"audioToolsSpaceShortcut"' -or
     $audioEditor -match 'objectName:\s*"editorSpaceShortcut"') {
     throw 'The tools shell must own the only global Space playback shortcut.'
 }
+if ($toolsWindow -notmatch 'window\.startSystemMove\(\)' -or
+    $toolsWindow -match 'window\.(x|y)\s*\+=') {
+    throw 'The audio tools title bar must use native movement without manual coordinates.'
+}
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
     throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
 }

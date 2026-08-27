@@ -167,7 +167,6 @@ private:
     qreal listTrackedDpr_ = 1.0;
     QPointer<QWindow> audioToolsWindow_;
     quintptr audioToolsWindowHandle_ = 0;
-    QSize audioToolsNativePixelSize_;
     qreal audioToolsTrackedDpr_ = 1.0;
     QPointer<QWindow> settingsWindow_;
     quintptr settingsWindowHandle_ = 0;
