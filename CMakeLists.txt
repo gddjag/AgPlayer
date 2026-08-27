@@ -31,6 +31,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     Qml
     QuickControls2
     Concurrent
+    Network
     Test
     QuickTest
     LinguistTools

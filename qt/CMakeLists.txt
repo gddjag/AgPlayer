@@ -61,6 +61,10 @@ add_library(agplayer_qt STATIC
     src/metadata_editor.hpp
     src/native_drop_router.cpp
     src/native_drop_router.hpp
+    src/vocal_separation_catalog.cpp
+    src/vocal_separation_catalog.hpp
+    src/vocal_separation_installer.cpp
+    src/vocal_separation_installer.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
     src/playback_state_store.cpp

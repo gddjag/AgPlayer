@@ -483,6 +483,7 @@ foreach(qt_test IN ITEMS
     format_conversion_task_model_test
     file_association_controller_test
     equalizer_controller_test
+    vocal_separation_install_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
