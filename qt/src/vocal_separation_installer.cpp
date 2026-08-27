@@ -214,7 +214,12 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
                    QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                    QStringLiteral("-Command"), script});
     process.closeWriteChannel();
-    if (!process.waitForFinished(60'000) || process.exitStatus() != QProcess::NormalExit
+    const bool processFinished = process.waitForFinished(60'000);
+    if (!processFinished) {
+        process.kill();
+        process.waitForFinished();
+    }
+    if (!processFinished || process.exitStatus() != QProcess::NormalExit
         || process.exitCode() != 0) {
         QDir(stagingRoot).removeRecursively();
         return fail(QStringLiteral("Cannot extract pinned DirectML runtime: %1")
@@ -388,7 +393,12 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
         }
         const int status = reply->attribute(
             QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (m_resumeOffset > 0 && status != 206) {
+        if (m_resumeOffset > 0 && status == 206) {
+            const QByteArray expected = "bytes " + QByteArray::number(m_resumeOffset) + "-";
+            if (!reply->rawHeader("Content-Range").startsWith(expected)) {
+                finishFailure(QStringLiteral("Server returned an invalid Content-Range"));
+            }
+        } else if (m_resumeOffset > 0) {
             QFile part(VocalSeparationInstaller::partPath(m_destination));
             if (!part.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
                 finishFailure(QStringLiteral("Cannot restart partial download"));

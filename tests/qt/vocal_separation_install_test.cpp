@@ -10,6 +10,8 @@
 #include <QNetworkProxy>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -25,6 +27,8 @@ private slots:
     void overlappingStartPreservesActiveTransfer();
     void cancelledRetryDoesNotReconnect();
     void runtimeVerificationRejectsChangedNativeFile();
+    void httpResumeValidatesRangeAndFallback();
+    void pauseAndCancelPreventBackoffReconnect();
 };
 
 namespace {
@@ -75,6 +79,48 @@ void disableProxyForLocalTests()
     qputenv("HTTP_PROXY", "");
     qputenv("HTTPS_PROXY", "");
 }
+
+class LocalHttpServer final : public QObject {
+public:
+    enum class Mode { Valid206, Wrong206, Full200, Http500 };
+    LocalHttpServer(QByteArray body, Mode mode) : m_body(std::move(body)), m_mode(mode)
+    {
+        connect(&m_server, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket* socket = m_server.nextPendingConnection()) {
+                ++m_connections;
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
+                    const QByteArray request = socket->readAll();
+                    if (!request.contains("\r\n\r\n")) return;
+                    const int at = request.indexOf("Range: bytes=");
+                    qint64 offset = 0;
+                    if (at >= 0) {
+                        const int begin = at + 13;
+                        offset = request.mid(begin, request.indexOf('-', begin) - begin).toLongLong();
+                        m_range = request.mid(at, request.indexOf("\r\n", at) - at);
+                    }
+                    if (m_mode == Mode::Http500) {
+                        socket->write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        socket->flush(); socket->disconnectFromHost(); return;
+                    }
+                    const bool partial = m_mode != Mode::Full200;
+                    const qint64 servedOffset = m_mode == Mode::Wrong206 ? offset + 1 : offset;
+                    const QByteArray body = partial ? m_body.mid(servedOffset) : m_body;
+                    QByteArray response = partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n";
+                    if (partial) response += "Content-Range: bytes " + QByteArray::number(servedOffset)
+                        + "-" + QByteArray::number(m_body.size() - 1) + "/" + QByteArray::number(m_body.size()) + "\r\n";
+                    response += "Content-Length: " + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+                    socket->write(response); socket->flush(); socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    bool start() { return m_server.listen(QHostAddress::LocalHost); }
+    QUrl url() const { return QUrl(QStringLiteral("http://127.0.0.1:%1/model.onnx").arg(m_server.serverPort())); }
+    QByteArray range() const { return m_range; }
+    int connections() const { return m_connections; }
+private:
+    QTcpServer m_server; QByteArray m_body; Mode m_mode; QByteArray m_range; int m_connections = 0;
+};
 
 } // namespace
 
@@ -309,6 +355,44 @@ void VocalSeparationInstallTest::runtimeVerificationRejectsChangedNativeFile()
     QVERIFY(writeFile(QDir(runtime).filePath(QStringLiteral("onnxruntime.dll")), QByteArray()));
     QVERIFY(!VocalSeparationInstaller::runtimeDirectoryIsVerified(runtime,
                                                                    VocalSeparationCatalog::directMlRuntime().sha256));
+}
+
+void VocalSeparationInstallTest::httpResumeValidatesRangeAndFallback()
+{
+    const QByteArray payload("http-resume-payload");
+    auto run = [&](LocalHttpServer::Mode mode, bool expectSuccess) {
+        LocalHttpServer server(payload, mode); QVERIFY(server.start());
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString destination = temp.filePath(QStringLiteral("model.onnx"));
+        QVERIFY(writeFile(VocalSeparationInstaller::partPath(destination), payload.left(5)));
+        disableProxyForLocalTests(); QNetworkAccessManager network; network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+        VocalSeparationDownloader downloader(&network); QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+        downloader.start(downloadFileFor(payload, server.url()), destination);
+        QVERIFY(finished.wait(3'000)); QCOMPARE(server.range(), QByteArray("Range: bytes=5-"));
+        QCOMPARE(QFileInfo::exists(destination), expectSuccess);
+        if (expectSuccess) { QFile installed(destination); QVERIFY(installed.open(QIODevice::ReadOnly)); QCOMPARE(installed.readAll(), payload); }
+        else QVERIFY(QFileInfo::exists(VocalSeparationInstaller::partPath(destination)));
+    };
+    run(LocalHttpServer::Mode::Valid206, true);
+    run(LocalHttpServer::Mode::Wrong206, false);
+    run(LocalHttpServer::Mode::Full200, true);
+}
+
+void VocalSeparationInstallTest::pauseAndCancelPreventBackoffReconnect()
+{
+    const QByteArray payload("retry-payload");
+    auto verify = [&](bool pause) {
+        LocalHttpServer server(payload, LocalHttpServer::Mode::Http500); QVERIFY(server.start());
+        QTemporaryDir temp; QVERIFY(temp.isValid()); disableProxyForLocalTests();
+        QNetworkAccessManager network; network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+        VocalSeparationDownloader downloader(&network);
+        downloader.start(downloadFileFor(payload, server.url()), temp.filePath(QStringLiteral("model.onnx")));
+        QTRY_COMPARE_WITH_TIMEOUT(server.connections(), 1, 1'000);
+        if (pause) downloader.pause(); else downloader.cancel();
+        QTest::qWait(750); QCOMPARE(server.connections(), 1);
+        if (pause) { downloader.resume(); QTRY_VERIFY_WITH_TIMEOUT(server.connections() > 1, 1'000); downloader.cancel(); }
+    };
+    verify(false); verify(true);
 }
 
 QTEST_GUILESS_MAIN(VocalSeparationInstallTest)
