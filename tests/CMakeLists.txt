@@ -507,6 +507,55 @@ target_include_directories(format_conversion_plan_test PRIVATE
 target_link_libraries(vocal_separation_install_test PRIVATE Qt6::Network)
 set_tests_properties(vocal_separation_install_test PROPERTIES TIMEOUT 30)
 
+foreach(separation_test IN ITEMS
+    separation_protocol_test
+    separation_dsp_test
+    separation_runtime_test
+    separation_output_transaction_test
+    separation_worker_engine_test
+    separation_native_backend_test
+    separation_real_model_test
+)
+    add_executable(${separation_test} "qt/${separation_test}.cpp")
+    set_target_properties(${separation_test} PROPERTIES AUTOMOC ON)
+    target_include_directories(${separation_test} PRIVATE
+        "${CMAKE_SOURCE_DIR}/worker/src"
+    )
+    target_link_libraries(${separation_test} PRIVATE
+        ag_separation_worker_core Qt6::Core Qt6::Test)
+    agplayer_enable_warnings(${separation_test})
+    add_test(NAME ${separation_test} COMMAND ${separation_test})
+    set_tests_properties(${separation_test} PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+    )
+endforeach()
+
+if(TARGET AgSeparationWorker)
+add_executable(separation_worker_process_test
+    qt/separation_worker_process_test.cpp
+)
+set_target_properties(separation_worker_process_test PROPERTIES AUTOMOC ON)
+target_include_directories(separation_worker_process_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/src"
+)
+target_link_libraries(separation_worker_process_test PRIVATE
+    ag_separation_worker_core Qt6::Core Qt6::Test
+)
+target_compile_definitions(separation_worker_process_test PRIVATE
+    AG_SEPARATION_WORKER_PATH="$<TARGET_FILE:AgSeparationWorker>"
+)
+add_dependencies(separation_worker_process_test AgSeparationWorker)
+agplayer_enable_warnings(separation_worker_process_test)
+add_test(NAME separation_worker_process_test COMMAND separation_worker_process_test)
+set_tests_properties(separation_worker_process_test PROPERTIES
+    TIMEOUT 15
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+endif()
+
 add_executable(editor_viewport_test
     qt/editor_viewport_test.cpp
     "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
