@@ -108,3 +108,93 @@ The Debug `AgPlayer` target also built and deployed its Qt runtime successfully.
   default because no renderer host exists yet.
 - The documented pre-existing `qml_main_window_test` failure was not changed or
   used as a success criterion.
+
+## Review round 1 (CHANGES_REQUIRED) — 2026-08-28
+
+### Implementation
+
+- `PlayerExperienceController::load()` now uses strict stored-value readers:
+  native integer/double/bool values and exactly canonical strings are accepted;
+  wrong QVariant types, malformed strings, and non-finite doubles fall back to
+  the field default.  The normalized state is written back to `immersiveVisual`
+  so invalid persisted settings are repaired to canonical native values.
+- Windows `QSettings` restores a saved `QVariantList` as `QStringList`; that
+  native persistence form remains accepted, with each EQ entry strictly parsed.
+- The focused test now injects bad terrain/quality/cinema/panel values and
+  verifies both default fallback and write-back, then verifies canonical string
+  inputs.
+- The audio-feature lifecycle test now creates the real null-backend playback
+  core and proves `PlaybackController::spectrumChanged` causes work only while
+  active; after deactivation later published spectra leave the update count
+  unchanged.
+- Kick and snare now each test positive-flux values below, equal to, and above
+  their thresholds.
+
+### RED evidence
+
+Tests were added before implementation.  Command:
+
+```powershell
+& cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 >nul && cmake --build build\debug --target player_experience_controller_test --config Debug'
+ctest --test-dir build/debug -R "^player_experience_controller_test$" --output-on-failure
+```
+
+Output before the strict reader implementation:
+
+```text
+Test project D:/ai/AgPlayer/.worktrees/immersive-visual-lyrics/build/debug
+    Start 65: player_experience_controller_test
+1/1 Test #65: player_experience_controller_test ...***Failed
+0% tests passed, 1 tests failed out of 1
+```
+
+The new strict-persistence assertion failed because the old permissive
+`QVariant::toInt`/`toDouble`/`toBool` conversions accepted or coerced invalid
+stored types.  The initial threshold setup also exposed that a low current-band
+energy could mask the flux condition; its test data was corrected before the
+implementation to isolate each strict `<`, `==`, and `>` boundary.
+
+### GREEN and regression evidence
+
+Focused command:
+
+```powershell
+& cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 >nul && cmake --build build\debug --target player_experience_controller_test --config Debug'
+ctest --test-dir build/debug -R "^player_experience_controller_test$" --output-on-failure
+```
+
+Output:
+
+```text
+1/1 Test #65: player_experience_controller_test ... Passed    0.38 sec
+100% tests passed out of 1
+```
+
+Regression/build/diff command:
+
+```powershell
+& cmd.exe /d /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 >nul && cmake --build build\debug --target player_experience_controller_test settings_controller_test playback_controller_test AgPlayer --config Debug'
+ctest --test-dir build/debug -R "^(player_experience_controller_test|settings_controller_test|playback_controller_test)$" --output-on-failure
+git diff --check
+```
+
+Output:
+
+```text
+1/3 Test #50: playback_controller_test ............ Passed    4.65 sec
+2/3 Test #60: settings_controller_test ............ Passed    0.87 sec
+3/3 Test #65: player_experience_controller_test ... Passed    0.34 sec
+100% tests passed out of 3
+```
+
+The Debug `AgPlayer` target built and deployed successfully.  `git diff --check`
+completed without whitespace errors.
+
+### Commit and self-review
+
+- Corrective implementation commit: `d00e912 fix: harden immersive experience state`.
+- Rechecked that strict parsing rejects only malformed persisted scalar inputs;
+  legal native values and the Windows-native `QStringList` EQ representation
+  remain loadable.
+- No QML, renderer, lyric, queue, or unrelated test was changed.  The known
+  `qml_main_window_test` baseline failure remains out of scope.
