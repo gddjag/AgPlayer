@@ -387,6 +387,8 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
     }
     QNetworkReply* const reply = m_network->get(request);
     m_reply = reply;
+    m_acceptResponseBody = !m_file.url.scheme().startsWith(QStringLiteral("http"),
+                                                            Qt::CaseInsensitive);
     connect(reply, &QNetworkReply::metaDataChanged, this, [this, operation, reply] {
         if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) {
             return;
@@ -397,7 +399,9 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
             const QByteArray expected = "bytes " + QByteArray::number(m_resumeOffset) + "-";
             if (!reply->rawHeader("Content-Range").startsWith(expected)) {
                 finishFailure(QStringLiteral("Server returned an invalid Content-Range"));
+                return;
             }
+            m_acceptResponseBody = true;
         } else if (m_resumeOffset > 0 && status == 200) {
             QFile part(VocalSeparationInstaller::partPath(m_destination));
             if (!part.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -406,10 +410,17 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
             }
             part.close();
             m_resumeOffset = 0;
+            m_acceptResponseBody = true;
+        } else if (m_resumeOffset == 0 && status == 200) {
+            m_acceptResponseBody = true;
         }
     });
     connect(reply, &QNetworkReply::readyRead, this, [this, operation, reply] {
         if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) {
+            reply->readAll();
+            return;
+        }
+        if (!m_acceptResponseBody) {
             reply->readAll();
             return;
         }

@@ -99,7 +99,7 @@ public:
                         m_range = request.mid(at, request.indexOf("\r\n", at) - at);
                     }
                     if (m_mode == Mode::Http500) {
-                        socket->write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        socket->write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 11\r\nConnection: close\r\n\r\nerror-body!");
                         socket->flush(); socket->disconnectFromHost(); return;
                     }
                     const bool partial = m_mode != Mode::Full200;
@@ -392,7 +392,9 @@ void VocalSeparationInstallTest::pauseAndCancelPreventBackoffReconnect()
         if (pause) downloader.pause(); else downloader.cancel();
         QTest::qWait(750); QCOMPARE(server.connections(), 1);
         QCOMPARE(VocalSeparationInstaller::resumeOffset(destination), qint64{4});
-        if (pause) { downloader.resume(); QTRY_VERIFY_WITH_TIMEOUT(server.connections() > 1, 1'000); downloader.cancel(); }
+        QFile partial(VocalSeparationInstaller::partPath(destination)); QVERIFY(partial.open(QIODevice::ReadOnly));
+        QCOMPARE(partial.readAll(), payload.left(4));
+        if (pause) { downloader.resume(); QTRY_VERIFY_WITH_TIMEOUT(server.connections() > 1, 1'000); QCOMPARE(server.range(), QByteArray("Range: bytes=4-")); downloader.cancel(); }
     };
     verify(false); verify(true);
 }

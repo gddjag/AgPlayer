@@ -81,6 +81,7 @@ private:
     QString m_destination;
     QString m_error;
     qint64 m_resumeOffset = 0;
+    bool m_acceptResponseBody = false;
     int m_attempt = 0;
     quint64 m_operation = 0;
     QTimer m_retryTimer;
