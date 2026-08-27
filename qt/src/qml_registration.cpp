@@ -6,6 +6,7 @@
 #include "audio_editor/playback_clip_drag_adapter.hpp"
 #include "equalizer_controller.hpp"
 #include "audio_tools_controller.hpp"
+#include "audio_visual_feature_controller.hpp"
 #include "filename_processor.hpp"
 #include "format_converter.hpp"
 #include "import_controller.hpp"
@@ -16,6 +17,7 @@
 #include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
+#include "player_experience_controller.hpp"
 #include "replay_gain_scanner.hpp"
 #include "playlist_model.hpp"
 #include "settings_controller.hpp"
@@ -45,7 +47,9 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  PlaylistModel* playlistModel,
                                  EqualizerController* equalizer,
                                  AudioEditorController* audioEditor,
-                                 const AgPlayerQmlRuntimeModels& runtime)
+                                 const AgPlayerQmlRuntimeModels& runtime,
+                                 PlayerExperienceController* experience,
+                                 AudioVisualFeatureController* audioFeatures)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -127,6 +131,26 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FormatConverter", formatConverter);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FilenameProcessor", filenameProcessor);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SettingsController", settings);
+    if (experience != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "PlayerExperienceController", experience);
+    } else {
+        qmlRegisterSingletonType<PlayerExperienceController>(
+            "AgPlayer", 1, 0, "PlayerExperienceController",
+            [settings](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new PlayerExperienceController(settings);
+            });
+    }
+    if (audioFeatures != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "AudioVisualFeatureController", audioFeatures);
+    } else {
+        qmlRegisterSingletonType<AudioVisualFeatureController>(
+            "AgPlayer", 1, 0, "AudioVisualFeatureController",
+            [playback](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new AudioVisualFeatureController(playback);
+            });
+    }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "EqualizerController",
                                  equalizer != nullptr ? equalizer
                                                       : &fallbackEqualizer);

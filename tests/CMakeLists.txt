@@ -656,6 +656,7 @@ foreach(qt_test IN ITEMS
     replay_gain_scanner_test
     translation_manager_test
     audio_preview_controller_test
+    player_experience_controller_test
     editor_timeline_math_test
     audio_tools_end_to_end_test
     format_conversion_plan_test

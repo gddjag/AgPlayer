@@ -39,6 +39,8 @@ add_library(agplayer_qt STATIC
     src/equalizer_controller.hpp
     src/audio_tools_controller.cpp
     src/audio_tools_controller.hpp
+    src/audio_visual_feature_controller.cpp
+    src/audio_visual_feature_controller.hpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
     src/cache_janitor.cpp
@@ -83,6 +85,8 @@ add_library(agplayer_qt STATIC
     src/native_drop_router.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
+    src/player_experience_controller.cpp
+    src/player_experience_controller.hpp
     src/playback_state_store.cpp
     src/playback_state_store.hpp
     src/replay_gain_scanner.cpp
