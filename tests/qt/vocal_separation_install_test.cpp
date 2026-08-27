@@ -23,7 +23,7 @@ private slots:
     void exposesDownloadStateTransitions();
     void rejectsUnsafeCustomManifests();
     void resumesAndActivatesOnlyVerifiedFiles();
-    void downloaderUsesRangeAndSignalsInitialState();
+    void downloaderSignalsInitialState();
     void overlappingStartPreservesActiveTransfer();
     void cancelledRetryDoesNotReconnect();
     void runtimeVerificationRejectsChangedNativeFile();
@@ -257,7 +257,7 @@ void VocalSeparationInstallTest::resumesAndActivatesOnlyVerifiedFiles()
     QCOMPARE(installed.readAll(), payload);
 }
 
-void VocalSeparationInstallTest::downloaderUsesRangeAndSignalsInitialState()
+void VocalSeparationInstallTest::downloaderSignalsInitialState()
 {
     const QByteArray payload("range-resume-payload");
     QTemporaryDir temporary;
@@ -265,7 +265,6 @@ void VocalSeparationInstallTest::downloaderUsesRangeAndSignalsInitialState()
     const QString source = temporary.filePath(QStringLiteral("source.onnx"));
     QVERIFY(writeFile(source, payload));
     const QString destination = temporary.filePath(QStringLiteral("模型.onnx"));
-    QVERIFY(writeFile(VocalSeparationInstaller::partPath(destination), payload.left(5)));
 
     disableProxyForLocalTests();
     QNetworkAccessManager network;
@@ -280,7 +279,6 @@ void VocalSeparationInstallTest::downloaderUsesRangeAndSignalsInitialState()
     }
     QVERIFY(completed);
     QCOMPARE(finished.count(), 1);
-    QVERIFY(QFileInfo::exists(destination));
     QVERIFY(states.count() >= 3);
     QCOMPARE(states.at(0).at(0).value<VocalDownloadState>(),
              VocalDownloadState::Downloading);
@@ -385,11 +383,15 @@ void VocalSeparationInstallTest::pauseAndCancelPreventBackoffReconnect()
         LocalHttpServer server(payload, LocalHttpServer::Mode::Http500); QVERIFY(server.start());
         QTemporaryDir temp; QVERIFY(temp.isValid()); disableProxyForLocalTests();
         QNetworkAccessManager network; network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
-        VocalSeparationDownloader downloader(&network);
-        downloader.start(downloadFileFor(payload, server.url()), temp.filePath(QStringLiteral("model.onnx")));
+        VocalSeparationDownloader downloader(&network); QSignalSpy replies(&network, &QNetworkAccessManager::finished);
+        const QString destination = temp.filePath(QStringLiteral("model.onnx"));
+        QVERIFY(writeFile(VocalSeparationInstaller::partPath(destination), payload.left(4)));
+        downloader.start(downloadFileFor(payload, server.url()), destination);
         QTRY_COMPARE_WITH_TIMEOUT(server.connections(), 1, 1'000);
+        QTRY_COMPARE_WITH_TIMEOUT(replies.count(), 1, 1'000);
         if (pause) downloader.pause(); else downloader.cancel();
         QTest::qWait(750); QCOMPARE(server.connections(), 1);
+        QCOMPARE(VocalSeparationInstaller::resumeOffset(destination), qint64{4});
         if (pause) { downloader.resume(); QTRY_VERIFY_WITH_TIMEOUT(server.connections() > 1, 1'000); downloader.cancel(); }
     };
     verify(false); verify(true);

@@ -398,7 +398,7 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
             if (!reply->rawHeader("Content-Range").startsWith(expected)) {
                 finishFailure(QStringLiteral("Server returned an invalid Content-Range"));
             }
-        } else if (m_resumeOffset > 0) {
+        } else if (m_resumeOffset > 0 && status == 200) {
             QFile part(VocalSeparationInstaller::partPath(m_destination));
             if (!part.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
                 finishFailure(QStringLiteral("Cannot restart partial download"));
