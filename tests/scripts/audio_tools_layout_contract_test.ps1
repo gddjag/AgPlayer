@@ -305,7 +305,7 @@ foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
     'editorExportBitDepth', 'editorExportChannels', 'editorExportBitRate',
     'editorExportDirectory')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $field + '"')) {
-        throw "The editable E group is missing $field."
+        throw "The D. export settings group is missing $field."
     }
 }
 $shortcutPlay = [regex]::Escape((ConvertFrom-Utf8Base64 '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGc'))
