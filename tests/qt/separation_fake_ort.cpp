@@ -2,6 +2,9 @@
 
 #include <cstring>
 #include <cstdint>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 namespace {
 
@@ -9,6 +12,7 @@ enum class Marker : std::uintptr_t {
     PathSession = 1,
     MissingStrictDml = 2,
     StrictArraySession = 3,
+    LoadCancelled = 4,
 };
 
 OrtStatus* marker(Marker value)
@@ -17,6 +21,11 @@ OrtStatus* marker(Marker value)
 }
 
 bool strictDml = false;
+std::atomic_bool loadEntered{false};
+std::atomic_bool loadCancelled{false};
+std::atomic_int loadCancellationCalls{0};
+std::mutex loadMutex;
+std::condition_variable loadWake;
 
 const char* ORT_API_CALL getErrorMessage(const OrtStatus* status) noexcept
 {
@@ -24,6 +33,7 @@ const char* ORT_API_CALL getErrorMessage(const OrtStatus* status) noexcept
     case Marker::PathSession: return "path-session-was-used";
     case Marker::MissingStrictDml: return "directml-cpu-fallback-was-not-disabled";
     case Marker::StrictArraySession: return "strict-array-session";
+    case Marker::LoadCancelled: return "session-load-cancelled";
     }
     return "unknown-test-status";
 }
@@ -39,6 +49,8 @@ OrtStatus* ORT_API_CALL createEnv(OrtLoggingLevel, const char*, OrtEnv** out) no
 OrtStatus* ORT_API_CALL createSessionOptions(OrtSessionOptions** out) noexcept
 {
     strictDml = false;
+    loadEntered.store(false);
+    loadCancelled.store(false);
     *out = reinterpret_cast<OrtSessionOptions*>(std::uintptr_t{1});
     return nullptr;
 }
@@ -73,12 +85,32 @@ OrtStatus* ORT_API_CALL createPathSession(const OrtEnv*, const ORTCHAR_T*,
     return marker(Marker::PathSession);
 }
 
-OrtStatus* ORT_API_CALL createArraySession(const OrtEnv*, const void*, size_t,
+OrtStatus* ORT_API_CALL createArraySession(const OrtEnv*, const void* modelData,
+                                            size_t modelDataLength,
                                             const OrtSessionOptions*,
                                             OrtSession**) noexcept
 {
+    const char* model = static_cast<const char*>(modelData);
+    if (modelDataLength == std::strlen("block-load")
+        && std::memcmp(model, "block-load", modelDataLength) == 0) {
+        loadEntered.store(true);
+        loadWake.notify_all();
+        std::unique_lock lock(loadMutex);
+        loadWake.wait(lock, [] { return loadCancelled.load(); });
+        return marker(Marker::LoadCancelled);
+    }
     return strictDml ? marker(Marker::StrictArraySession)
                      : marker(Marker::MissingStrictDml);
+}
+
+OrtStatus* ORT_API_CALL setLoadCancellation(OrtSessionOptions*, bool cancel) noexcept
+{
+    if (cancel) {
+        ++loadCancellationCalls;
+        loadCancelled.store(true);
+        loadWake.notify_all();
+    }
+    return nullptr;
 }
 
 void ORT_API_CALL releaseEnv(OrtEnv*) noexcept {}
@@ -99,6 +131,7 @@ const OrtApi* ORT_API_CALL getApi(uint32_t version) noexcept
     api.AddSessionConfigEntry = addSessionConfig;
     api.CreateSession = createPathSession;
     api.CreateSessionFromArray = createArraySession;
+    api.SessionOptionsSetLoadCancellationFlag = setLoadCancellation;
     api.GetErrorMessage = getErrorMessage;
     api.ReleaseStatus = releaseStatus;
     api.ReleaseEnv = releaseEnv;
@@ -116,6 +149,23 @@ const OrtApiBase* ORT_API_CALL
 OrtGetApiBase(void) noexcept
 {
     return &apiBase;
+}
+
+extern "C" bool AgSeparationFakeOrtLoadEntered() noexcept
+{
+    return loadEntered.load();
+}
+
+extern "C" int AgSeparationFakeOrtLoadCancellationCalls() noexcept
+{
+    return loadCancellationCalls.load();
+}
+
+extern "C" void AgSeparationFakeOrtResetLoadState() noexcept
+{
+    loadEntered.store(false);
+    loadCancelled.store(false);
+    loadCancellationCalls.store(0);
 }
 
 extern "C" OrtStatus* ORT_API_CALL

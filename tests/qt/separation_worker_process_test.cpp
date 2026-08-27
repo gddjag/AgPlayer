@@ -1,13 +1,20 @@
 #include "separation_protocol.hpp"
+#include "output_transaction.hpp"
 
+#include <QDir>
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace agplayer::separation;
 
 #ifndef AG_SEPARATION_WORKER_PATH
 #error AG_SEPARATION_WORKER_PATH must name the worker executable
+#endif
+#ifndef AG_SEPARATION_BLOCKING_WORKER_PATH
+#error AG_SEPARATION_BLOCKING_WORKER_PATH must name the blocking test worker
 #endif
 
 class SeparationWorkerProcessTest final : public QObject {
@@ -17,7 +24,7 @@ private slots:
     void helloMalformedAndShutdownUseNdjsonAndExitCleanly();
     void stdinEofDrainsAndExitsWithinTheClientDeadline();
     void oversizedLineIsRejectedAndTheWorkerStillShutsDown();
-    void clientTimeoutCanForceAWorkerCrashWithoutAFalseResult();
+    void activeCommitTimeoutCancelsThenKillsAndRecoversThePartialRename();
 };
 
 void SeparationWorkerProcessTest::helloMalformedAndShutdownUseNdjsonAndExitCleanly()
@@ -96,17 +103,59 @@ void SeparationWorkerProcessTest::oversizedLineIsRejectedAndTheWorkerStillShutsD
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
 }
 
-void SeparationWorkerProcessTest::clientTimeoutCanForceAWorkerCrashWithoutAFalseResult()
+void SeparationWorkerProcessTest::activeCommitTimeoutCancelsThenKillsAndRecoversThePartialRename()
 {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString markerPath = temporary.filePath(QStringLiteral("renamed.marker"));
+    const QString firstFinal = temporary.filePath(QStringLiteral("timeout-vocals.wav"));
+
     QProcess process;
-    process.setProgram(QString::fromUtf8(AG_SEPARATION_WORKER_PATH));
+    process.setProgram(QString::fromUtf8(AG_SEPARATION_BLOCKING_WORKER_PATH));
     process.start();
     QVERIFY2(process.waitForStarted(3000), qPrintable(process.errorString()));
+    process.write(encodeProtocolMessage(
+        ProtocolType::Start, QStringLiteral("active-timeout"),
+        {{QStringLiteral("outputDirectory"), temporary.path()},
+         {QStringLiteral("markerPath"), markerPath}}));
+
+    QByteArray observed;
+    QElapsedTimer deadline;
+    deadline.start();
+    while (!QFileInfo::exists(markerPath) && deadline.elapsed() < 3000) {
+        if (process.waitForReadyRead(100)) observed += process.readAllStandardOutput();
+    }
+    QVERIFY2(QFileInfo::exists(markerPath), observed.constData());
+    QVERIFY(QFileInfo::exists(firstFinal));
+    QVERIFY(observed.contains("\"stage\":\"active_commit\""));
+
+    process.write(encodeProtocolMessage(ProtocolType::Cancel,
+                                        QStringLiteral("active-timeout")));
+    deadline.restart();
+    while (!observed.contains("\"type\":\"cancel\"")
+           && deadline.elapsed() < 1000) {
+        if (process.waitForReadyRead(100)) observed += process.readAllStandardOutput();
+    }
+    QVERIFY(observed.contains("\"type\":\"cancel\""));
+    QVERIFY(observed.contains("\"accepted\":true"));
+    QVERIFY(!process.waitForFinished(250));
     process.kill();
-    QVERIFY2(process.waitForFinished(3000), qPrintable(process.errorString()));
+    QVERIFY(process.waitForFinished(3000));
+    observed += process.readAllStandardOutput();
     QCOMPARE(process.exitStatus(), QProcess::CrashExit);
-    const QByteArray output = process.readAllStandardOutput();
-    QVERIFY(!output.contains("\"type\":\"result\""));
+    QVERIFY(!observed.contains("\"type\":\"result\""));
+
+    OutputTransaction recovered(
+        {temporary.path(), QStringLiteral("timeout"), QStringLiteral("wav"),
+         {QStringLiteral("vocals"), QStringLiteral("instrumental")}});
+    const TransactionResult begun = recovered.begin();
+    QVERIFY2(begun.ok, qPrintable(begun.message));
+    QVERIFY(!QFileInfo::exists(firstFinal));
+    QVERIFY(recovered.cancel().ok);
+    QCOMPARE(QDir(temporary.path()).entryList(
+                 {QStringLiteral(".agplayer-separation-*")},
+                 QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot),
+             QStringList{});
 }
 
 QTEST_GUILESS_MAIN(SeparationWorkerProcessTest)

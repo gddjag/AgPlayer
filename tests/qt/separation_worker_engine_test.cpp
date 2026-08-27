@@ -2,6 +2,7 @@
 #include "worker_engine.hpp"
 
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QSemaphore>
 #include <QSignalSpy>
 #include <QTest>
@@ -53,11 +54,22 @@ public:
         maximumRunning.store(std::max(maximumRunning.load(), current));
         entered.release();
         progress(0.5, QStringLiteral("inference"));
+        if (payload.value(QStringLiteral("nonMonotonic")).toBool()) {
+            progress(0.8, QStringLiteral("inference"));
+            progress(0.2, QStringLiteral("inference"));
+        }
         release.acquire();
         --running;
         if (cancelled.isCancelled()) {
             return {false, QStringLiteral("cancelled"),
                     QStringLiteral("Separation cancelled"), {}};
+        }
+        if (payload.value(QStringLiteral("diagnosticFailure")).toBool()) {
+            return {false, QStringLiteral("rollback_failed"),
+                    QStringLiteral("Cleanup left output artifacts"),
+                    {{QStringLiteral("remainingPaths"),
+                      QJsonArray{QStringLiteral("C:/locked-vocals.wav")}},
+                     {QStringLiteral("causeCode"), QStringLiteral("cancelled")}}};
         }
         return {true, {}, {}, QJsonObject{{QStringLiteral("token"),
                                            payload.value(QStringLiteral("token"))}}};
@@ -78,6 +90,9 @@ private slots:
     void cancelledRestartLoopCannotGrowTheQueueWithoutBound();
     void shutdownCancelsWorkAndSignalsOnlyAfterTheQueueDrains();
     void rejectsWorkerOnlyMessageDirections();
+    void backendErrorDiagnosticsReachNdjson();
+    void requestIdReuseClearsStaleCancellationForEveryMessageType();
+    void progressIsMonotonicAtTheProcessBoundary();
 };
 
 void SeparationWorkerEngineTest::helloAndProbeRouteTheirRequestIds()
@@ -301,6 +316,81 @@ void SeparationWorkerEngineTest::rejectsWorkerOnlyMessageDirections()
         QCOMPARE(emitted.type, ProtocolType::Error);
         QCOMPARE(emitted.payload.value(QStringLiteral("code")).toString(),
                  QStringLiteral("unsupported_direction"));
+    }
+}
+
+void SeparationWorkerEngineTest::backendErrorDiagnosticsReachNdjson()
+{
+    auto backend = std::make_shared<ControlledBackend>();
+    WorkerEngine engine(backend);
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+    engine.acceptLine(message(
+        ProtocolType::Start, QStringLiteral("diagnostics"),
+        {{QStringLiteral("diagnosticFailure"), true}}));
+    QVERIFY(backend->entered.tryAcquire(1, 2000));
+    backend->release.release();
+
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QList<QVariant>& arguments : output) {
+            if (decode(arguments.at(0)).type == ProtocolType::Error) return true;
+        }
+        return false;
+    }(), 2000);
+    ProtocolMessage terminal;
+    for (const QList<QVariant>& arguments : output) {
+        const ProtocolMessage emitted = decode(arguments.at(0));
+        if (emitted.type == ProtocolType::Error) terminal = emitted;
+    }
+    QCOMPARE(terminal.type, ProtocolType::Error);
+    QCOMPARE(terminal.payload.value(QStringLiteral("code")).toString(),
+             QStringLiteral("rollback_failed"));
+    QCOMPARE(terminal.payload.value(QStringLiteral("causeCode")).toString(),
+             QStringLiteral("cancelled"));
+    QCOMPARE(terminal.payload.value(QStringLiteral("remainingPaths")).toArray(),
+             QJsonArray{QStringLiteral("C:/locked-vocals.wav")});
+}
+
+void SeparationWorkerEngineTest::requestIdReuseClearsStaleCancellationForEveryMessageType()
+{
+    auto backend = std::make_shared<ControlledBackend>();
+    WorkerEngine engine(backend);
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+    const QString requestId = QStringLiteral("reused");
+    engine.acceptLine(message(ProtocolType::Start, requestId));
+    QVERIFY(backend->entered.tryAcquire(1, 2000));
+    engine.acceptLine(message(ProtocolType::Cancel, requestId));
+    backend->release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(backend->running.load(), 0, 2000);
+    QCoreApplication::processEvents();
+
+    output.clear();
+    engine.acceptLine(message(ProtocolType::Hello, requestId));
+    engine.acceptLine(message(ProtocolType::Cancel, requestId));
+    QCOMPARE(output.size(), 2);
+    const ProtocolMessage cancel = decode(output.at(1).at(0));
+    QCOMPARE(cancel.type, ProtocolType::Cancel);
+    QVERIFY(!cancel.payload.value(QStringLiteral("accepted")).toBool());
+}
+
+void SeparationWorkerEngineTest::progressIsMonotonicAtTheProcessBoundary()
+{
+    auto backend = std::make_shared<ControlledBackend>();
+    WorkerEngine engine(backend);
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+    engine.acceptLine(message(
+        ProtocolType::Start, QStringLiteral("progress"),
+        {{QStringLiteral("nonMonotonic"), true}}));
+    QVERIFY(backend->entered.tryAcquire(1, 2000));
+    const auto releaseBackend = qScopeGuard([&] { backend->release.release(); });
+    QTRY_VERIFY_WITH_TIMEOUT(output.size() >= 3, 2000);
+
+    double previous = 0.0;
+    for (const QList<QVariant>& arguments : output) {
+        const ProtocolMessage emitted = decode(arguments.at(0));
+        if (emitted.type != ProtocolType::Progress) continue;
+        const double fraction = emitted.payload.value(QStringLiteral("fraction")).toDouble();
+        QVERIFY(fraction >= previous);
+        previous = fraction;
     }
 }
 

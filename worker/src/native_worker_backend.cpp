@@ -39,6 +39,29 @@ BackendResult fail(const QString& code, const QString& message)
     return {false, code, message, {}};
 }
 
+BackendResult transactionFailure(const TransactionResult& transaction,
+                                 const BackendResult* cause = nullptr)
+{
+    QJsonArray remainingPaths;
+    for (const QString& path : transaction.outputs) remainingPaths.push_back(path);
+    QJsonObject diagnostics;
+    if (!remainingPaths.isEmpty()) {
+        diagnostics.insert(QStringLiteral("remainingPaths"), remainingPaths);
+    }
+    if (cause != nullptr) {
+        diagnostics.insert(QStringLiteral("causeCode"), cause->code);
+        diagnostics.insert(QStringLiteral("causeMessage"), cause->message);
+    }
+    return {false, transaction.code, transaction.message, diagnostics};
+}
+
+BackendResult cleanupAfterFailure(OutputTransaction& transaction,
+                                  const BackendResult& cause)
+{
+    const TransactionResult cleanup = transaction.cancel();
+    return cleanup.ok ? cause : transactionFailure(cleanup, &cause);
+}
+
 QStringList stringArray(const QJsonValue& value, qsizetype maximumEntryLength,
                         bool* valid)
 {
@@ -163,50 +186,28 @@ BackendResult validateSession(const TrustedModelProfile& profile,
                          : fail(validation.code, validation.message);
 }
 
-struct TrustedModelArtifact {
-    QByteArray bytes;
-    QString sha256;
-};
-
 BackendResult loadTrustedModelArtifact(const QString& modelPath,
                                        const TrustedModelProfile& profile,
-                                       TrustedModelArtifact* artifact)
+                                       const CancellationToken& cancelled,
+                                       ModelArtifactReadResult* artifact)
 {
-    QFile file(modelPath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return fail(QStringLiteral("model_missing"),
-                    QStringLiteral("A model file cannot be read"));
-    }
-    if (file.size() <= 0 || file.size() > (std::numeric_limits<int>::max)()) {
-        return fail(QStringLiteral("model_invalid"),
-                    QStringLiteral("Model size is not supported"));
-    }
-    QByteArray bytes = file.readAll();
-    if (bytes.size() != file.size() || file.error() != QFileDevice::NoError) {
-        return fail(QStringLiteral("model_read_failed"),
-                    QStringLiteral("Could not capture the approved model bytes"));
-    }
-    const QString sha = QString::fromLatin1(
-        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
-    if (!profile.sha256.contains(sha, Qt::CaseInsensitive)) {
-        return fail(QStringLiteral("model_changed"),
-                    QStringLiteral("Model bytes changed after trust validation"));
-    }
-    artifact->bytes = std::move(bytes);
-    artifact->sha256 = sha;
-    return {true, {}, {}, {}};
+    *artifact = readModelArtifact(modelPath, true,
+                                  trustedFilesForProfile(profile), cancelled);
+    return artifact->ok ? BackendResult{true, {}, {}, {}}
+                        : fail(artifact->code, artifact->message);
 }
 
 BackendResult openSession(const NativeStartRequest& request,
                           const TrustedModelProfile& profile,
                           const QByteArray& approvedModelBytes,
                           ExecutionProvider provider,
-                          int adapterId, std::unique_ptr<OrtModelSession>* session)
+                          int adapterId, const CancellationToken& cancelled,
+                          std::unique_ptr<OrtModelSession>* session)
 {
     auto candidate = std::make_unique<OrtModelSession>();
     OrtOperationResult opened = candidate->open(request.runtimePath,
                                                 approvedModelBytes, provider,
-                                                adapterId);
+                                                adapterId, cancelled);
     if (!opened.ok) return fail(opened.code, opened.message);
     BackendResult validated = validateSession(profile, *candidate);
     if (!validated.ok) return validated;
@@ -219,13 +220,13 @@ BackendResult proveProvider(const NativeStartRequest& request,
                             ExecutionProvider provider, int adapterId,
                             const CancellationToken& cancelled)
 {
-    TrustedModelArtifact artifact;
+    ModelArtifactReadResult artifact;
     BackendResult loaded = loadTrustedModelArtifact(
-        request.modelFiles.front(), profile, &artifact);
+        request.modelFiles.front(), profile, cancelled, &artifact);
     if (!loaded.ok) return loaded;
     std::unique_ptr<OrtModelSession> session;
     BackendResult opened = openSession(request, profile, artifact.bytes,
-                                       provider, adapterId, &session);
+                                       provider, adapterId, cancelled, &session);
     if (!opened.ok) return opened;
     artifact.bytes.clear();
     artifact.bytes.squeeze();
@@ -353,13 +354,14 @@ BackendResult runMdx(const NativeStartRequest& request,
     if (totalFrames <= 0) return fail(QStringLiteral("decode_failed"), error);
     const QVector<qint64> starts = mdxChunkStarts(totalFrames);
 
-    TrustedModelArtifact artifact;
+    ModelArtifactReadResult artifact;
     BackendResult loaded = loadTrustedModelArtifact(
-        request.modelFiles.front(), trusted, &artifact);
+        request.modelFiles.front(), trusted, cancelled, &artifact);
     if (!loaded.ok) return loaded;
     std::unique_ptr<OrtModelSession> session;
     BackendResult opened = openSession(request, trusted, artifact.bytes,
-                                       provider.provider, provider.adapterId, &session);
+                                       provider.provider, provider.adapterId,
+                                       cancelled, &session);
     if (!opened.ok) return opened;
     artifact.bytes.clear();
     artifact.bytes.squeeze();
@@ -590,8 +592,9 @@ BackendResult runDemucs(const NativeStartRequest& request,
         if (cancelled.isCancelled()) return fail(QStringLiteral("cancelled"),
                                           QStringLiteral("Separation cancelled"));
         const QString modelPath = request.modelFiles.at(modelIndex);
-        TrustedModelArtifact artifact;
-        BackendResult loaded = loadTrustedModelArtifact(modelPath, trusted, &artifact);
+        ModelArtifactReadResult artifact;
+        BackendResult loaded = loadTrustedModelArtifact(
+            modelPath, trusted, cancelled, &artifact);
         if (!loaded.ok) return loaded;
         const int row = trustedDemucsRowForHash(artifact.sha256);
         if (row < 0) return fail(QStringLiteral("model_semantics_invalid"),
@@ -607,7 +610,7 @@ BackendResult runDemucs(const NativeStartRequest& request,
         std::unique_ptr<OrtModelSession> session;
         BackendResult opened = openSession(request, trusted, artifact.bytes,
                                            provider.provider, provider.adapterId,
-                                           &session);
+                                           cancelled, &session);
         if (!opened.ok) return opened;
         artifact.bytes.clear();
         artifact.bytes.squeeze();
@@ -711,17 +714,101 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
     return {true, {}, {}, request};
 }
 
-QString hashFileSha256(const QString& path)
+ModelArtifactReadResult readModelArtifact(
+    const QString& path, bool captureBytes,
+    const QVector<TrustedModelFile>& trustedFiles,
+    const CancellationToken& cancelled,
+    const ModelReadProgress& progress)
 {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) return {};
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    while (!file.atEnd()) {
-        const QByteArray block = file.read(1024 * 1024);
-        if (block.isEmpty() && file.error() != QFileDevice::NoError) return {};
-        hash.addData(block);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {false, QStringLiteral("model_missing"),
+                QStringLiteral("A model file cannot be read"), {}, {}};
     }
-    return QString::fromLatin1(hash.result().toHex());
+    const qint64 expectedBytes = file.size();
+    if (expectedBytes <= 0) {
+        return {false, QStringLiteral("model_invalid"),
+                QStringLiteral("Model file is empty"), {}, {}};
+    }
+    if (!trustedFiles.isEmpty()) {
+        const bool allowedSize = std::any_of(
+            trustedFiles.cbegin(), trustedFiles.cend(),
+            [expectedBytes](const TrustedModelFile& trusted) {
+                return trusted.expectedSizeBytes == expectedBytes;
+            });
+        if (!allowedSize) {
+            return {false, QStringLiteral("model_size_mismatch"),
+                    QStringLiteral("Model size does not match its trusted profile"), {}, {}};
+        }
+    } else {
+        qint64 maximumBytes = 0;
+        for (const TrustedModelFile& trusted : allTrustedModelFiles()) {
+            maximumBytes = std::max(maximumBytes, trusted.expectedSizeBytes);
+        }
+        if (expectedBytes > maximumBytes) {
+            return {false, QStringLiteral("model_too_large"),
+                    QStringLiteral("Model file exceeds the built-in model bound"), {}, {}};
+        }
+    }
+    if (cancelled.isCancelled()) {
+        return {false, QStringLiteral("cancelled"),
+                QStringLiteral("Separation cancelled"), {}, {}};
+    }
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    QByteArray bytes;
+    if (captureBytes) bytes.reserve(static_cast<qsizetype>(expectedBytes));
+    qint64 completed = 0;
+    while (completed < expectedBytes) {
+        if (cancelled.isCancelled()) {
+            return {false, QStringLiteral("cancelled"),
+                    QStringLiteral("Separation cancelled"), {}, {}};
+        }
+        const QByteArray block = file.read(1024 * 1024);
+        if (block.isEmpty()) {
+            return {false, QStringLiteral("model_read_failed"),
+                    QStringLiteral("Could not read the complete model file"), {}, {}};
+        }
+        completed += block.size();
+        if (completed > expectedBytes) {
+            return {false, QStringLiteral("model_read_failed"),
+                    QStringLiteral("Model size changed while it was being read"), {}, {}};
+        }
+        hash.addData(QByteArrayView(block));
+        if (captureBytes) bytes.append(block);
+        if (progress) progress(completed, expectedBytes);
+        if (cancelled.isCancelled()) {
+            return {false, QStringLiteral("cancelled"),
+                    QStringLiteral("Separation cancelled"), {}, {}};
+        }
+    }
+    if (file.error() != QFileDevice::NoError || completed != expectedBytes
+        || !file.atEnd()) {
+        return {false, QStringLiteral("model_read_failed"),
+                QStringLiteral("Model size changed while it was being read"), {}, {}};
+    }
+    const QString sha = QString::fromLatin1(hash.result().toHex());
+    if (!trustedFiles.isEmpty()) {
+        const auto trusted = std::find_if(
+            trustedFiles.cbegin(), trustedFiles.cend(),
+            [&sha](const TrustedModelFile& candidate) {
+                return candidate.sha256.compare(sha, Qt::CaseInsensitive) == 0;
+            });
+        if (trusted == trustedFiles.cend()) {
+            return {false,
+                    captureBytes ? QStringLiteral("model_changed")
+                                 : QStringLiteral("model_untrusted"),
+                    captureBytes
+                        ? QStringLiteral("Model bytes changed after trust validation")
+                        : QStringLiteral("Model hash is not on the built-in allowlist"),
+                    {}, {}};
+        }
+        if (trusted->expectedSizeBytes != completed) {
+            return {false, QStringLiteral("model_size_mismatch"),
+                    QStringLiteral("Model size changed while it was being read"), {}, {}};
+        }
+    }
+    return {true, {}, {}, sha, std::move(bytes)};
 }
 
 double nativeInferenceProgress(qint64 completed, qint64 total)
@@ -734,10 +821,18 @@ double nativeInferenceProgress(qint64 completed, qint64 total)
 
 class FfmpegWaveWriter::Impl final {
 public:
+    explicit Impl(CloseFunction closeFunction)
+        : close(std::move(closeFunction))
+    {
+        if (!close) {
+            close = [](AVIOContext** output) { return avio_closep(output); };
+        }
+    }
+
     ~Impl()
     {
         if (format != nullptr) {
-            if (format->pb != nullptr) avio_closep(&format->pb);
+            if (format->pb != nullptr) (void)close(&format->pb);
             avformat_free_context(format);
         }
     }
@@ -754,9 +849,13 @@ public:
     qint64 nextPts = 0;
     int channels = 0;
     QString error;
+    CloseFunction close;
 };
 
-FfmpegWaveWriter::FfmpegWaveWriter() : impl_(std::make_unique<Impl>()) {}
+FfmpegWaveWriter::FfmpegWaveWriter(CloseFunction close)
+    : impl_(std::make_unique<Impl>(std::move(close)))
+{
+}
 FfmpegWaveWriter::~FfmpegWaveWriter() = default;
 
 bool FfmpegWaveWriter::open(const QString& path, int sampleRate, int channels)
@@ -840,16 +939,19 @@ bool FfmpegWaveWriter::write(const QVector<float>& interleavedSamples)
 bool FfmpegWaveWriter::finish()
 {
     if (impl_->format == nullptr || impl_->format->pb == nullptr) return false;
-    const int result = av_write_trailer(impl_->format);
-    if (result < 0) {
-        impl_->setError(result, QStringLiteral("Could not finalize FFmpeg WAV output"));
-        return false;
+    const int trailerResult = av_write_trailer(impl_->format);
+    const int closeResult = impl_->close(&impl_->format->pb);
+    if (trailerResult < 0) {
+        impl_->setError(trailerResult,
+                        QStringLiteral("Could not finalize FFmpeg WAV output"));
+    } else if (closeResult < 0) {
+        impl_->setError(closeResult,
+                        QStringLiteral("Could not close FFmpeg WAV output"));
     }
-    avio_closep(&impl_->format->pb);
     avformat_free_context(impl_->format);
     impl_->format = nullptr;
     impl_->stream = nullptr;
-    return true;
+    return trailerResult >= 0 && closeResult >= 0;
 }
 
 QString FfmpegWaveWriter::errorString() const { return impl_->error; }
@@ -894,10 +996,10 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     }
     QStringList hashes;
     for (const QString& model : request.modelFiles) {
-        const QString hash = hashFileSha256(model);
-        if (hash.isEmpty()) return fail(QStringLiteral("model_missing"),
-                                        QStringLiteral("A model file cannot be read"));
-        hashes.push_back(hash);
+        const ModelArtifactReadResult hashed = readModelArtifact(
+            model, false, allTrustedModelFiles(), cancelled);
+        if (!hashed.ok) return fail(hashed.code, hashed.message);
+        hashes.push_back(hashed.sha256);
     }
     const std::optional<TrustedModelProfile> trusted = trustedProfileForHashes(hashes);
     if (!trusted) return fail(QStringLiteral("model_untrusted"),
@@ -916,25 +1018,28 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     OutputTransaction transaction({request.outputDirectory, request.baseName,
                                    request.extension, request.stems});
     const TransactionResult begun = transaction.begin();
-    if (!begun.ok) return fail(begun.code, begun.message);
+    if (!begun.ok) return transactionFailure(begun);
     progress(0.0, QStringLiteral("provider_probe"));
     OrtNativeProviderProbe providerProbe;
     const NativeProviderSelection provider = selectNativeProvider(
         request, *trusted, cancelled, providerProbe);
-    if (!provider.ok) return fail(provider.code, provider.message);
+    if (!provider.ok) {
+        return cleanupAfterFailure(
+            transaction, fail(provider.code, provider.message));
+    }
     BackendResult separated = trusted->family == QStringLiteral("mdx")
         ? runMdx(request, *trusted, provider, cancelled, progress, transaction)
         : runDemucs(request, *trusted, provider, cancelled, progress, transaction);
-    if (!separated.ok) return separated;
+    if (!separated.ok) return cleanupAfterFailure(transaction, separated);
     progress(0.98, QStringLiteral("verification"));
     if (cancelled.isCancelled()) {
-        transaction.cancel();
-        return fail(QStringLiteral("cancelled"),
-                    QStringLiteral("Separation cancelled"));
+        return cleanupAfterFailure(
+            transaction, fail(QStringLiteral("cancelled"),
+                              QStringLiteral("Separation cancelled")));
     }
     const TransactionResult committed = transaction.commit(
         verifyAudio, cancelled.atomicFlag());
-    if (!committed.ok) return fail(committed.code, committed.message);
+    if (!committed.ok) return transactionFailure(committed);
     QJsonArray outputs;
     for (const QString& path : committed.outputs) outputs.push_back(path);
     progress(1.0, QStringLiteral("completed"));

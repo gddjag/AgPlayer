@@ -8,6 +8,8 @@
 #include <memory>
 #include <atomic>
 
+class QLockFile;
+
 namespace agplayer::separation {
 
 struct OutputPlan {
@@ -48,16 +50,20 @@ public:
     [[nodiscard]] TransactionResult
     commit(const std::function<bool(const QString&)>& verifier,
            const std::atomic_bool& cancelled);
-    void cancel();
+    [[nodiscard]] TransactionResult cancel();
 
 private:
     [[nodiscard]] TransactionResult reject(const QString& code,
                                            const QString& message);
-    [[nodiscard]] bool rollback();
+    [[nodiscard]] TransactionResult rollback();
+    [[nodiscard]] TransactionResult writeManifest(const QString& phase);
+    [[nodiscard]] TransactionResult recoverStaleTransactions();
 
     OutputPlan plan_;
     std::shared_ptr<NativeOutputFileOps> operations_;
+    std::unique_ptr<QLockFile> lock_;
     QString temporaryDirectory_;
+    QString manifestPath_;
     QHash<QString, QString> temporaryPaths_;
     QHash<QString, QString> finalPaths_;
     QStringList committedPaths_;

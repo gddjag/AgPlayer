@@ -551,14 +551,31 @@ target_compile_definitions(separation_runtime_test PRIVATE
 )
 target_include_directories(separation_runtime_test PRIVATE
     "${CMAKE_SOURCE_DIR}/worker/third_party/onnxruntime/include"
+    "${CMAKE_SOURCE_DIR}/qt/src"
 )
+target_link_libraries(separation_runtime_test PRIVATE agplayer_qt)
 add_dependencies(separation_runtime_test separation_fake_ort)
 target_include_directories(separation_native_backend_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
     "${CMAKE_SOURCE_DIR}/core/include"
 )
+target_include_directories(separation_native_backend_test SYSTEM PRIVATE
+    "${FFMPEG_INCLUDE_DIRS}"
+)
 
 if(TARGET AgSeparationWorker)
+add_executable(separation_blocking_worker
+    qt/separation_blocking_worker.cpp
+)
+set_target_properties(separation_blocking_worker PROPERTIES AUTOMOC ON)
+target_include_directories(separation_blocking_worker PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/src"
+)
+target_link_libraries(separation_blocking_worker PRIVATE
+    ag_separation_worker_core Qt6::Core
+)
+agplayer_enable_warnings(separation_blocking_worker)
+
 add_executable(separation_worker_process_test
     qt/separation_worker_process_test.cpp
 )
@@ -571,8 +588,9 @@ target_link_libraries(separation_worker_process_test PRIVATE
 )
 target_compile_definitions(separation_worker_process_test PRIVATE
     AG_SEPARATION_WORKER_PATH="$<TARGET_FILE:AgSeparationWorker>"
+    AG_SEPARATION_BLOCKING_WORKER_PATH="$<TARGET_FILE:separation_blocking_worker>"
 )
-add_dependencies(separation_worker_process_test AgSeparationWorker)
+add_dependencies(separation_worker_process_test AgSeparationWorker separation_blocking_worker)
 agplayer_enable_warnings(separation_worker_process_test)
 add_test(NAME separation_worker_process_test COMMAND separation_worker_process_test)
 set_tests_properties(separation_worker_process_test PROPERTIES

@@ -9,10 +9,12 @@
 namespace agplayer::separation {
 namespace {
 
-QJsonObject errorPayload(const QString& code, const QString& message)
+QJsonObject errorPayload(const QString& code, const QString& message,
+                         QJsonObject diagnostics)
 {
-    return {{QStringLiteral("code"), code},
-            {QStringLiteral("message"), message}};
+    diagnostics.insert(QStringLiteral("code"), code);
+    diagnostics.insert(QStringLiteral("message"), message);
+    return diagnostics;
 }
 
 } // namespace
@@ -33,12 +35,13 @@ WorkerEngine::~WorkerEngine()
 }
 
 void WorkerEngine::sendError(const QString& requestId, const QString& code,
-                             const QString& message)
+                             const QString& message,
+                             const QJsonObject& diagnostics)
 {
     emit messageReady(encodeProtocolMessage(
         ProtocolType::Error,
         requestId.isEmpty() ? QStringLiteral("invalid-request") : requestId,
-        errorPayload(code, message)));
+        errorPayload(code, message, diagnostics)));
 }
 
 void WorkerEngine::acceptLine(const QByteArray& line)
@@ -49,6 +52,9 @@ void WorkerEngine::acceptLine(const QByteArray& line)
         return;
     }
     const ProtocolMessage& message = parsed.message;
+    if (message.type != ProtocolType::Cancel) {
+        forgetCancelledRequest(message.requestId);
+    }
     if (shuttingDown_ && message.type != ProtocolType::Shutdown) {
         sendError(message.requestId, QStringLiteral("worker_shutting_down"),
                   QStringLiteral("Worker is shutting down"));
@@ -151,8 +157,7 @@ void WorkerEngine::startJob(const QString& requestId,
     context->generation = ++generation_;
     context->cancelled = std::make_shared<CancellationToken>();
     activeJob_ = context;
-    cancelledRequests_.remove(requestId);
-    cancelledRequestOrder_.removeAll(requestId);
+    forgetCancelledRequest(requestId);
     ++pendingTasks_;
 
     const QPointer<WorkerEngine> self(this);
@@ -192,9 +197,12 @@ void WorkerEngine::deliverProgress(const QString& requestId,
         || activeJob_->generation != generation) {
         return;
     }
+    const double monotonicFraction = std::max(
+        activeJob_->lastProgress, std::clamp(fraction, 0.0, 1.0));
+    activeJob_->lastProgress = monotonicFraction;
     emit messageReady(encodeProtocolMessage(
         ProtocolType::Progress, requestId,
-        {{QStringLiteral("fraction"), std::clamp(fraction, 0.0, 1.0)},
+        {{QStringLiteral("fraction"), monotonicFraction},
          {QStringLiteral("stage"), stage}}));
 }
 
@@ -206,7 +214,7 @@ void WorkerEngine::finishProbe(const QString& requestId,
             emit messageReady(encodeProtocolMessage(ProtocolType::Probe,
                                                     requestId, result.payload));
         } else {
-            sendError(requestId, result.code, result.message);
+            sendError(requestId, result.code, result.message, result.payload);
         }
     }
     taskFinished();
@@ -224,7 +232,7 @@ void WorkerEngine::finishJob(const QString& requestId, quint64 generation,
             emit messageReady(encodeProtocolMessage(ProtocolType::Result,
                                                     requestId, result.payload));
         } else {
-            sendError(requestId, result.code, result.message);
+            sendError(requestId, result.code, result.message, result.payload);
         }
     }
     taskFinished();
@@ -245,6 +253,12 @@ void WorkerEngine::rememberCancelledRequest(const QString& requestId)
     while (cancelledRequestOrder_.size() > kMaximumRememberedCancellations) {
         cancelledRequests_.remove(cancelledRequestOrder_.dequeue());
     }
+}
+
+void WorkerEngine::forgetCancelledRequest(const QString& requestId)
+{
+    cancelledRequests_.remove(requestId);
+    cancelledRequestOrder_.removeAll(requestId);
 }
 
 } // namespace agplayer::separation

@@ -45,7 +45,8 @@ public:
     [[nodiscard]] OrtOperationResult open(const QString& runtimePath,
                                           const QByteArray& approvedModelBytes,
                                           ExecutionProvider provider,
-                                          int directMlDeviceId = 0);
+                                          int directMlDeviceId,
+                                          const CancellationToken& cancelled);
     [[nodiscard]] const ModelMetadata& metadata() const;
     [[nodiscard]] OrtOperationResult run(const QVector<float>& input,
                                          const QVector<qint64>& inputShape,

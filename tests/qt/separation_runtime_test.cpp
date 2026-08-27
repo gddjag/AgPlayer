@@ -2,10 +2,12 @@
 #include "ort_session.hpp"
 #include "ort_runtime.hpp"
 #include "trusted_profiles.hpp"
+#include "vocal_separation_catalog.hpp"
 
 #include <onnxruntime_c_api.h>
 
 #include <QFile>
+#include <QLibrary>
 #include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTest>
@@ -88,11 +90,13 @@ class SeparationRuntimeTest final : public QObject {
 private slots:
     void missingAndBadDynamicRuntimeAreRejected();
     void trustedProfilesBindHashesToExactTensorSemantics();
+    void workerTrustSizesAndHashesMatchTheInstallCatalog();
     void demucsRowsAreBoundToTrustedHashes();
     void invalidTensorNamesTypesShapesAndOpsetsAreRejected();
     void productionProviderSelectionObservesCancellation();
     void productionAutoSelectionFallsBackToCpuWithReason();
     void directMlSessionUsesApprovedBytesAndDisablesCpuFallback();
+    void sessionLoadUsesTheStartCancellationTokenAndUnsubscribesSafely();
     void terminateFailureIsReleasedAndReported();
     void cancellationNotificationDoesNotRequirePolling();
 };
@@ -135,6 +139,22 @@ void SeparationRuntimeTest::trustedProfilesBindHashesToExactTensorSemantics()
     QCOMPARE(demucs->outputs.front().shape, (QVector<qint64>{1, 4, 2, 343980}));
 
     QVERIFY(!trustedProfileForHashes({QString(64, QLatin1Char('0'))}).has_value());
+}
+
+void SeparationRuntimeTest::workerTrustSizesAndHashesMatchTheInstallCatalog()
+{
+    for (const VocalModelCard& card : VocalSeparationCatalog::models()) {
+        QStringList hashes;
+        QVector<qint64> sizes;
+        for (const VocalDownloadFile& file : card.files) {
+            hashes.push_back(file.sha256);
+            sizes.push_back(file.bytes);
+        }
+        const auto profile = trustedProfileForHashes(hashes);
+        QVERIFY2(profile.has_value(), qPrintable(card.id));
+        QCOMPARE(profile->sha256, hashes);
+        QCOMPARE(profile->expectedSizeBytes, sizes);
+    }
 }
 
 void SeparationRuntimeTest::demucsRowsAreBoundToTrustedHashes()
@@ -215,13 +235,57 @@ void SeparationRuntimeTest::productionAutoSelectionFallsBackToCpuWithReason()
 void SeparationRuntimeTest::directMlSessionUsesApprovedBytesAndDisablesCpuFallback()
 {
     const QByteArray approvedModel = QByteArray::fromHex("42021011");
+    CancellationToken cancelled;
     OrtModelSession session;
     const OrtOperationResult opened = session.open(
         QString::fromUtf8(AG_SEPARATION_FAKE_ORT_PATH), approvedModel,
-        ExecutionProvider::DirectMl, 0);
+        ExecutionProvider::DirectMl, 0, cancelled);
     QVERIFY(!opened.ok);
     QCOMPARE(opened.code, QStringLiteral("model_open_failed"));
     QCOMPARE(opened.message, QStringLiteral("strict-array-session"));
+}
+
+void SeparationRuntimeTest::sessionLoadUsesTheStartCancellationTokenAndUnsubscribesSafely()
+{
+    QLibrary controls(QString::fromUtf8(AG_SEPARATION_FAKE_ORT_PATH));
+    QVERIFY2(controls.load(), qPrintable(controls.errorString()));
+    const auto entered = reinterpret_cast<bool(*)()>(
+        controls.resolve("AgSeparationFakeOrtLoadEntered"));
+    const auto calls = reinterpret_cast<int(*)()>(
+        controls.resolve("AgSeparationFakeOrtLoadCancellationCalls"));
+    const auto reset = reinterpret_cast<void(*)()>(
+        controls.resolve("AgSeparationFakeOrtResetLoadState"));
+    QVERIFY(entered != nullptr);
+    QVERIFY(calls != nullptr);
+    QVERIFY(reset != nullptr);
+
+    reset();
+    CancellationToken cancelled;
+    OrtModelSession session;
+    auto future = std::async(std::launch::async, [&] {
+        return session.open(QString::fromUtf8(AG_SEPARATION_FAKE_ORT_PATH),
+                            QByteArrayLiteral("block-load"),
+                            ExecutionProvider::Cpu, 0, cancelled);
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(entered(), 2000);
+    cancelled.cancel();
+    QVERIFY(future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    const OrtOperationResult interrupted = future.get();
+    QVERIFY(!interrupted.ok);
+    QCOMPARE(interrupted.code, QStringLiteral("cancelled"));
+    QCOMPARE(calls(), 1);
+
+    reset();
+    CancellationToken lateCancellation;
+    OrtModelSession completedOpen;
+    const OrtOperationResult completed = completedOpen.open(
+        QString::fromUtf8(AG_SEPARATION_FAKE_ORT_PATH),
+        QByteArray::fromHex("42021011"), ExecutionProvider::DirectMl, 0,
+        lateCancellation);
+    QVERIFY(!completed.ok);
+    QCOMPARE(calls(), 0);
+    lateCancellation.cancel();
+    QCOMPARE(calls(), 0);
 }
 
 void SeparationRuntimeTest::terminateFailureIsReleasedAndReported()

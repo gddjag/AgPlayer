@@ -29,9 +29,15 @@ struct TrustedModelProfile {
     QString id;
     QString family;
     QStringList sha256;
+    QVector<qint64> expectedSizeBytes;
     int minimumOpset = 0;
     QVector<TensorContract> inputs;
     QVector<TensorContract> outputs;
+};
+
+struct TrustedModelFile {
+    QString sha256;
+    qint64 expectedSizeBytes = 0;
 };
 
 struct ModelMetadata {
@@ -48,6 +54,9 @@ struct ContractValidationResult {
 
 [[nodiscard]] std::optional<TrustedModelProfile>
 trustedProfileForHashes(const QStringList& sha256);
+[[nodiscard]] QVector<TrustedModelFile> allTrustedModelFiles();
+[[nodiscard]] QVector<TrustedModelFile>
+trustedFilesForProfile(const TrustedModelProfile& profile);
 [[nodiscard]] int trustedDemucsRowForHash(const QString& sha256);
 [[nodiscard]] ContractValidationResult
 validateModelMetadata(const TrustedModelProfile& trusted,

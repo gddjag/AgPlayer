@@ -9,6 +9,11 @@
 
 #include <cmath>
 
+extern "C" {
+#include <libavformat/avio.h>
+#include <libavutil/error.h>
+}
+
 using namespace agplayer::separation;
 
 class SeparationNativeBackendTest final : public QObject {
@@ -18,7 +23,10 @@ private slots:
     void startRequestRequiresBoundedNativeFields();
     void startRequestRejectsOversizedPathsAndNames();
     void sha256IsComputedFromTheActualFile();
+    void streamedModelCaptureIsCancellableAndBounded();
+    void capturedModelBytesRejectAReplacementAfterTrustValidation();
     void ffmpegWaveWriterRoundTripsThroughTheProductionDecoder();
+    void ffmpegWaveWriterPropagatesDelayedAvioCloseErrors();
     void inferenceProgressLeavesRoomForVerificationAndCompletion();
     void readsTheActualDefaultOnnxOpset();
 };
@@ -99,8 +107,76 @@ void SeparationNativeBackendTest::sha256IsComputedFromTheActualFile()
     QVERIFY(file.open(QIODevice::WriteOnly));
     QCOMPARE(file.write("abc"), qint64{3});
     file.close();
-    QCOMPARE(hashFileSha256(path),
+    CancellationToken active;
+    const ModelArtifactReadResult artifact = readModelArtifact(
+        path, false, {}, active);
+    QVERIFY2(artifact.ok, qPrintable(artifact.message));
+    QCOMPARE(artifact.sha256,
              QStringLiteral("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+}
+
+void SeparationNativeBackendTest::streamedModelCaptureIsCancellableAndBounded()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString path = temporary.filePath(QStringLiteral("large.onnx"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write(QByteArray(3 * 1024 * 1024, 'm')),
+             qint64{3 * 1024 * 1024});
+    file.close();
+
+    CancellationToken cancelled;
+    const QString trustedSha = QStringLiteral(
+        "f695ffaeeacc71331952f965959777d5ef652cea9754523ed8929e21017708c5");
+    const QVector<TrustedModelFile> trustedFiles{
+        {trustedSha, 3 * 1024 * 1024}};
+    const ModelArtifactReadResult interrupted = readModelArtifact(
+        path, true, trustedFiles, cancelled,
+        [&](qint64 completed, qint64) {
+            if (completed >= 1024 * 1024) cancelled.cancel();
+        });
+    QVERIFY(!interrupted.ok);
+    QCOMPARE(interrupted.code, QStringLiteral("cancelled"));
+    QVERIFY(interrupted.bytes.isEmpty());
+
+    const QString oversizedPath = temporary.filePath(QStringLiteral("wrong-size.onnx"));
+    QFile oversized(oversizedPath);
+    QVERIFY(oversized.open(QIODevice::WriteOnly));
+    QVERIFY(oversized.resize(3 * 1024 * 1024 + 1));
+    oversized.close();
+    CancellationToken active;
+    const ModelArtifactReadResult rejected = readModelArtifact(
+        oversizedPath, true, trustedFiles, active);
+    QVERIFY(!rejected.ok);
+    QCOMPARE(rejected.code, QStringLiteral("model_size_mismatch"));
+}
+
+void SeparationNativeBackendTest::capturedModelBytesRejectAReplacementAfterTrustValidation()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString path = temporary.filePath(QStringLiteral("replace.onnx"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("trusted"), qint64{7});
+    file.close();
+
+    CancellationToken cancelled;
+    const ModelArtifactReadResult trusted = readModelArtifact(
+        path, false, {}, cancelled);
+    QVERIFY2(trusted.ok, qPrintable(trusted.message));
+
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(file.write("changed"), qint64{7});
+    file.close();
+    const QVector<TrustedModelFile> trustedFiles{
+        {trusted.sha256, qint64{7}}};
+    const ModelArtifactReadResult replaced = readModelArtifact(
+        path, true, trustedFiles, cancelled);
+    QVERIFY(!replaced.ok);
+    QCOMPARE(replaced.code, QStringLiteral("model_changed"));
+    QVERIFY(replaced.bytes.isEmpty());
 }
 
 void SeparationNativeBackendTest::ffmpegWaveWriterRoundTripsThroughTheProductionDecoder()
@@ -121,6 +197,21 @@ void SeparationNativeBackendTest::ffmpegWaveWriterRoundTripsThroughTheProduction
     for (qsizetype index = 0; index < expected.size(); ++index) {
         QVERIFY(std::abs(decoded.samples.at(index) - expected.at(index)) < 1.0e-6F);
     }
+}
+
+void SeparationNativeBackendTest::ffmpegWaveWriterPropagatesDelayedAvioCloseErrors()
+{
+    QTemporaryDir temporary;
+    const QString path = temporary.filePath(QStringLiteral("delayed-error.wav"));
+    FfmpegWaveWriter writer([](AVIOContext** output) {
+        const int closeResult = avio_closep(output);
+        return closeResult < 0 ? closeResult : AVERROR(EIO);
+    });
+    QVERIFY(writer.open(path, 44100, 2));
+    QVERIFY(writer.write({0.25F, -0.25F}));
+    QVERIFY(!writer.finish());
+    QVERIFY(writer.errorString().contains(QStringLiteral("close"),
+                                          Qt::CaseInsensitive));
 }
 
 void SeparationNativeBackendTest::inferenceProgressLeavesRoomForVerificationAndCompletion()

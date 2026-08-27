@@ -55,10 +55,12 @@ private:
         QString requestId;
         quint64 generation = 0;
         std::shared_ptr<CancellationToken> cancelled;
+        double lastProgress = 0.0;
     };
 
     void sendError(const QString& requestId, const QString& code,
-                   const QString& message);
+                   const QString& message,
+                   const QJsonObject& diagnostics = {});
     void startProbe(const QString& requestId, const QJsonObject& payload);
     void startJob(const QString& requestId, const QJsonObject& payload);
     void deliverProgress(const QString& requestId, quint64 generation,
@@ -68,6 +70,7 @@ private:
                    const BackendResult& result);
     void taskFinished();
     void rememberCancelledRequest(const QString& requestId);
+    void forgetCancelledRequest(const QString& requestId);
 
     std::shared_ptr<WorkerBackend> backend_;
     QThreadPool threadPool_;

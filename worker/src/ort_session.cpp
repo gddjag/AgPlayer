@@ -109,9 +109,14 @@ OrtModelSession::~OrtModelSession() = default;
 OrtOperationResult OrtModelSession::open(const QString& runtimePath,
                                          const QByteArray& approvedModelBytes,
                                          ExecutionProvider provider,
-                                         int directMlDeviceId)
+                                         int directMlDeviceId,
+                                         const CancellationToken& cancelled)
 {
     impl_ = std::make_unique<Impl>();
+    if (cancelled.isCancelled()) {
+        return {false, QStringLiteral("cancelled"),
+                QStringLiteral("Separation cancelled"), {}};
+    }
     if (!impl_->runtime.load(runtimePath)) {
         return {false, impl_->runtime.errorCode(), impl_->runtime.errorMessage(), {}};
     }
@@ -166,9 +171,46 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
             return {false, QStringLiteral("directml_session_failed"), error, {}};
         }
     }
-    error = statusMessage(impl_->api, impl_->api->CreateSessionFromArray(
+    if (impl_->api->SessionOptionsSetLoadCancellationFlag == nullptr) {
+        return {false, QStringLiteral("runtime_api_mismatch"),
+                QStringLiteral("ONNX Runtime does not support cancellable session loading"), {}};
+    }
+    error = statusMessage(impl_->api,
+                          impl_->api->SessionOptionsSetLoadCancellationFlag(
+                              options, false));
+    if (!error.isEmpty()) {
+        return {false, QStringLiteral("session_options_failed"), error, {}};
+    }
+
+    std::mutex cancellationMutex;
+    QString cancellationError;
+    const OrtApi* api = impl_->api;
+    auto cancellationSubscription = cancelled.notifyOnCancel(
+        [api, options, &cancellationMutex, &cancellationError] {
+            const QString flagError = statusMessage(
+                api, api->SessionOptionsSetLoadCancellationFlag(options, true));
+            if (!flagError.isEmpty()) {
+                const std::lock_guard lock(cancellationMutex);
+                cancellationError = flagError;
+            }
+        });
+    OrtStatus* loadStatus = impl_->api->CreateSessionFromArray(
         impl_->environment, approvedModelBytes.constData(),
-        static_cast<size_t>(approvedModelBytes.size()), options, &impl_->session));
+        static_cast<size_t>(approvedModelBytes.size()), options, &impl_->session);
+    cancellationSubscription = {};
+    {
+        const std::lock_guard lock(cancellationMutex);
+        if (!cancellationError.isEmpty()) {
+            (void)statusMessage(impl_->api, loadStatus);
+            return {false, QStringLiteral("session_load_cancel_failed"),
+                    cancellationError, {}};
+        }
+    }
+    error = statusMessage(impl_->api, loadStatus);
+    if (cancelled.isCancelled()) {
+        return {false, QStringLiteral("cancelled"),
+                QStringLiteral("Separation cancelled"), {}};
+    }
     if (!error.isEmpty()) {
         return {false, QStringLiteral("model_open_failed"), error, {}};
     }

@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -53,16 +54,18 @@ class SeparationOutputTransactionTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void commitsAllVerifiedFilesAtomicallyAfterPreflight();
+    void commitsAllVerifiedFilesAfterPreflight();
     void noOverwritePreservesExistingOutputs();
     void renameFailureRollsBackAllCommittedAndTemporaryFiles();
     void rollbackDeleteFailureIsReportedAndCanBeRetried();
+    void destructorReportsRollbackFailureInsteadOfDiscardingIt();
+    void recoveryNeverTreatsALiveTransactionAsStale();
     void cancellationAfterVerificationNeverPublishesFinalFiles();
     void cancelAndVerificationFailureCleanTemporaryFiles();
     void unicodeAndLongPathsStayOnTheOutputVolume();
 };
 
-void SeparationOutputTransactionTest::commitsAllVerifiedFilesAtomicallyAfterPreflight()
+void SeparationOutputTransactionTest::commitsAllVerifiedFilesAfterPreflight()
 {
     QTemporaryDir temporary;
     OutputTransaction transaction({temporary.path(), QStringLiteral("song"),
@@ -139,10 +142,70 @@ void SeparationOutputTransactionTest::rollbackDeleteFailureIsReportedAndCanBeRet
         .filePath(QStringLiteral("locked-vocals.wav"));
     QVERIFY(QFileInfo::exists(stranded));
 
+    const TransactionResult stillLocked = transaction.cancel();
+    QVERIFY(!stillLocked.ok);
+    QCOMPARE(stillLocked.code, QStringLiteral("rollback_failed"));
+    QVERIFY(stillLocked.outputs.contains(stranded));
+    QVERIFY(QFileInfo::exists(transaction.temporaryDirectory()));
+
     operations->allowCleanup = true;
-    transaction.cancel();
+    QVERIFY(transaction.cancel().ok);
     QVERIFY(!QFileInfo::exists(stranded));
     QVERIFY(!QFileInfo::exists(transaction.temporaryDirectory()));
+}
+
+void SeparationOutputTransactionTest::destructorReportsRollbackFailureInsteadOfDiscardingIt()
+{
+    QTemporaryDir temporary;
+    auto operations = std::make_shared<FailingCleanupOps>();
+    QString stranded;
+    QString stagingDirectory;
+    QTest::ignoreMessage(
+        QtCriticalMsg,
+        QRegularExpression(QStringLiteral(
+            "^Separation output rollback failed; remaining paths:.*")));
+    {
+        OutputTransaction transaction(
+            {temporary.path(), QStringLiteral("destructor"), QStringLiteral("wav"),
+             {QStringLiteral("vocals"), QStringLiteral("instrumental")}},
+            operations);
+        QVERIFY(transaction.begin().ok);
+        stagingDirectory = transaction.temporaryDirectory();
+        QVERIFY(writePayload(transaction.temporaryPath(QStringLiteral("vocals"))));
+        QVERIFY(writePayload(transaction.temporaryPath(QStringLiteral("instrumental"))));
+        std::atomic_bool cancelled{false};
+        const TransactionResult committed = transaction.commit(
+            [](const QString&) { return true; }, cancelled);
+        QCOMPARE(committed.code, QStringLiteral("rollback_failed"));
+        stranded = temporary.filePath(QStringLiteral("destructor-vocals.wav"));
+    }
+    QVERIFY(QFileInfo::exists(stranded));
+    operations->allowCleanup = true;
+    QVERIFY(operations->removeFile(stranded));
+    QVERIFY(QDir(stagingDirectory).removeRecursively());
+}
+
+void SeparationOutputTransactionTest::recoveryNeverTreatsALiveTransactionAsStale()
+{
+    QTemporaryDir temporary;
+    OutputTransaction active(
+        {temporary.path(), QStringLiteral("active"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    QVERIFY(active.begin().ok);
+    const QString activeDirectory = active.temporaryDirectory();
+    QVERIFY(writePayload(active.temporaryPath(QStringLiteral("vocals"))));
+
+    OutputTransaction contender(
+        {temporary.path(), QStringLiteral("contender"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult blocked = contender.begin();
+    QVERIFY(!blocked.ok);
+    QCOMPARE(blocked.code, QStringLiteral("recovery_in_use"));
+    QVERIFY(QFileInfo::exists(activeDirectory));
+
+    QVERIFY(active.cancel().ok);
+    QVERIFY(contender.begin().ok);
+    QVERIFY(contender.cancel().ok);
 }
 
 void SeparationOutputTransactionTest::cancellationAfterVerificationNeverPublishesFinalFiles()
@@ -190,7 +253,7 @@ void SeparationOutputTransactionTest::cancelAndVerificationFailureCleanTemporary
                                  QStringLiteral("wav"), {QStringLiteral("vocals")}});
     QVERIFY(cancelled.begin().ok);
     QVERIFY(writePayload(cancelled.temporaryPath(QStringLiteral("vocals"))));
-    cancelled.cancel();
+    QVERIFY(cancelled.cancel().ok);
     QVERIFY(!QFileInfo::exists(cancelled.temporaryDirectory()));
     QVERIFY(!QFileInfo::exists(QDir(temporary.path()).filePath(QStringLiteral("cancelled-vocals.wav"))));
 }

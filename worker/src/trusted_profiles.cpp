@@ -18,11 +18,13 @@ const QVector<TrustedModelProfile>& profiles()
     static const QVector<TrustedModelProfile> value{
         {QStringLiteral("uvr-mdxnet-kara"), QStringLiteral("mdx"),
          {QStringLiteral("e3167c87333a48548413e972a286bf40bf5694001d2853861eb1435953f02d63")},
+         {29'704'436},
          17,
          {{QStringLiteral("input"), TensorElementType::Float32, {-1, 4, 2048, 256}}},
          {{QStringLiteral("output"), TensorElementType::Float32, {-1, 4, 2048, 256}}}},
         {QStringLiteral("uvr-mdx-net-inst-hq3"), QStringLiteral("mdx"),
          {QStringLiteral("317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc")},
+         {66'759'214},
          17,
          {{QStringLiteral("input"), TensorElementType::Float32, {-1, 4, 3072, 256}}},
          {{QStringLiteral("output"), TensorElementType::Float32, {-1, 4, 3072, 256}}}},
@@ -31,6 +33,7 @@ const QVector<TrustedModelProfile>& profiles()
           QStringLiteral("047764dff888cfb87da917013377d4ec7a134f7419cbe486d9c339aa17975ddd"),
           QStringLiteral("b739171a7057b3107bb0711c6222d4a619b41b13a8f04026431d30f32ad2bd71"),
           QStringLiteral("0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce")},
+         {165'612'636, 165'612'636, 165'612'636, 165'612'636},
          17,
          {{QStringLiteral("mix"), TensorElementType::Float32, {1, 2, 343980}}},
          {{QStringLiteral("stems"), TensorElementType::Float32, {1, 4, 2, 343980}}}},
@@ -76,6 +79,28 @@ std::optional<TrustedModelProfile> trustedProfileForHashes(const QStringList& sh
         if (normalized(profile.sha256) == wanted) return profile;
     }
     return std::nullopt;
+}
+
+QVector<TrustedModelFile> trustedFilesForProfile(
+    const TrustedModelProfile& profile)
+{
+    QVector<TrustedModelFile> result;
+    if (profile.sha256.size() != profile.expectedSizeBytes.size()) return result;
+    result.reserve(profile.sha256.size());
+    for (qsizetype index = 0; index < profile.sha256.size(); ++index) {
+        result.push_back({profile.sha256.at(index),
+                          profile.expectedSizeBytes.at(index)});
+    }
+    return result;
+}
+
+QVector<TrustedModelFile> allTrustedModelFiles()
+{
+    QVector<TrustedModelFile> result;
+    for (const TrustedModelProfile& profile : profiles()) {
+        result += trustedFilesForProfile(profile);
+    }
+    return result;
 }
 
 int trustedDemucsRowForHash(const QString& sha256)

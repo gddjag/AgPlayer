@@ -5,11 +5,15 @@
 #include "trusted_profiles.hpp"
 #include "worker_engine.hpp"
 
-#include <QFile>
+#include <QByteArray>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QVector>
+
+#include <functional>
+
+struct AVIOContext;
 
 namespace agplayer::separation {
 
@@ -30,6 +34,22 @@ struct StartRequestParseResult {
     QString message;
     NativeStartRequest request;
 };
+
+struct ModelArtifactReadResult {
+    bool ok = false;
+    QString code;
+    QString message;
+    QString sha256;
+    QByteArray bytes;
+};
+
+using ModelReadProgress = std::function<void(qint64, qint64)>;
+
+[[nodiscard]] ModelArtifactReadResult readModelArtifact(
+    const QString& path, bool captureBytes,
+    const QVector<TrustedModelFile>& trustedFiles,
+    const CancellationToken& cancelled,
+    const ModelReadProgress& progress = {});
 
 struct NativeProviderSelection {
     bool ok = false;
@@ -59,12 +79,13 @@ public:
     NativeProviderProbe& probe);
 
 [[nodiscard]] StartRequestParseResult parseStartRequest(const QJsonObject& payload);
-[[nodiscard]] QString hashFileSha256(const QString& path);
 [[nodiscard]] double nativeInferenceProgress(qint64 completed, qint64 total);
 
 class FfmpegWaveWriter final {
 public:
-    FfmpegWaveWriter();
+    using CloseFunction = std::function<int(AVIOContext**)>;
+
+    explicit FfmpegWaveWriter(CloseFunction close = {});
     ~FfmpegWaveWriter();
 
     FfmpegWaveWriter(const FfmpegWaveWriter&) = delete;
