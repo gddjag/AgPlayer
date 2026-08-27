@@ -1022,6 +1022,7 @@ add_test(NAME qml_format_converter_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
 set_tests_properties(qml_format_converter_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1032,6 +1033,7 @@ add_test(NAME qml_format_converter_matrix_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter_matrix.qml)
 set_tests_properties(qml_format_converter_matrix_test PROPERTIES
     TIMEOUT 90
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1043,6 +1045,7 @@ add_test(NAME qml_format_converter_visual_fixture_test
     COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter_visual_fixture.qml)
 set_tests_properties(qml_format_converter_visual_fixture_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
@@ -1052,6 +1055,7 @@ add_test(NAME qml_filename_process_test
     COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_filename_process.qml)
 set_tests_properties(qml_filename_process_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1062,6 +1066,7 @@ add_test(NAME qml_metadata_editor_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
 set_tests_properties(qml_metadata_editor_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1072,6 +1077,7 @@ add_test(NAME qml_metadata_status_filter_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_status_filter.qml)
 set_tests_properties(qml_metadata_status_filter_test PROPERTIES
     TIMEOUT 15
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
