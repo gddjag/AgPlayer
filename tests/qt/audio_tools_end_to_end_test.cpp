@@ -104,6 +104,7 @@ private slots:
     void formatConverterCancellationPreservesExistingOutput();
     void formatConverterExportsAndReopensEveryExposedFormat();
     void formatConverterTranscodesRealAacToRequiredContainers();
+    void formatConverterValidatesLosslessResolvedProfileReadback();
     void formatConverterSeparatesFinishedDoneAndFailedCounts();
     void formatConverterDeduplicatesCanonicalImportPaths();
     void formatConverterRejectsUnsupportedParameterCombinations();
@@ -1755,6 +1756,97 @@ void AudioToolsEndToEndTest::formatConverterTranscodesRealAacToRequiredContainer
         QCOMPARE(ag_metadata_sample_rate(metadata), expected.sampleRate);
         QCOMPARE(ag_metadata_channels(metadata), 2);
         ag_metadata_destroy(metadata);
+    }
+}
+
+void AudioToolsEndToEndTest::
+    formatConverterValidatesLosslessResolvedProfileReadback()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("profile-source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+
+    struct LosslessCase {
+        const char* format;
+        const char* sampleFormat;
+    };
+    constexpr std::array<LosslessCase, 2> cases{{
+        {"alac", "s32p"},
+        {"aiff", "s32"},
+    }};
+    for (const LosslessCase& test_case : cases) {
+        const QString format = QString::fromLatin1(test_case.format);
+        const QString output_dir = temp.filePath(format);
+        QVERIFY(QDir().mkpath(output_dir));
+        FormatConverter converter;
+        converter.loadFiles({QUrl::fromLocalFile(input)});
+        waitForConverterLoad(converter);
+        const QVariantMap plan = converter.buildPreflight({
+            {QStringLiteral("outputFormat"), format},
+            {QStringLiteral("preset"), QStringLiteral("custom")},
+            {QStringLiteral("sampleRate"), 44'100},
+            {QStringLiteral("channels"), 2},
+            {QStringLiteral("channelLayout"), QStringLiteral("stereo")},
+            {QStringLiteral("bitDepth"), QStringLiteral("s24")},
+            {QStringLiteral("outputDir"), output_dir},
+            {QStringLiteral("keepMetadata"), false},
+            {QStringLiteral("keepCover"), false},
+        });
+        QVERIFY2(plan.value(QStringLiteral("ready")).toBool(),
+                 qPrintable(plan.value(QStringLiteral("error")).toString()));
+        const QVariantMap profile = plan.value(
+            QStringLiteral("resolvedProfile")).toMap();
+        QCOMPARE(profile.value(QStringLiteral("bitDepth")).toString(),
+                 QStringLiteral("s24"));
+        QCOMPARE(profile.value(QStringLiteral("sampleFormat")).toString(),
+                 QString::fromLatin1(test_case.sampleFormat));
+
+        QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+        converter.confirmPendingPlan();
+        if (completed.isEmpty()) {
+            QVERIFY2(completed.wait(30'000), qPrintable(format));
+        }
+        const QVariantMap row = converter.files().first().toMap();
+        QVERIFY2(converter.failedCount() == 0,
+                 qPrintable(row.value(QStringLiteral("errorMessage")).toString()));
+        const QString output = row.value(QStringLiteral("outputPath")).toString();
+
+        agplayer::MediaProbe readback;
+        std::string probe_error;
+        QCOMPARE(agplayer::probe_transcode_input(
+                     output.toUtf8().toStdString(), readback, probe_error),
+                 AG_OK);
+        QCOMPARE(readback.audio_streams.size(), std::size_t{1});
+        const agplayer::AudioStreamProbe& audio = readback.audio_streams.front();
+        QCOMPARE(audio.bits_per_sample, 24);
+        QCOMPARE(QString::fromStdString(audio.sample_format),
+                 QString::fromLatin1(test_case.sampleFormat));
+
+        QString validation_error;
+        QVERIFY2(format_converter_detail::validate_audio_output(
+                     output, profile, validation_error),
+                 qPrintable(validation_error));
+
+        QVariantMap wrong_depth = profile;
+        wrong_depth.insert(QStringLiteral("bitDepth"), QStringLiteral("s16"));
+        validation_error.clear();
+        QVERIFY(!format_converter_detail::validate_audio_output(
+            output, wrong_depth, validation_error));
+        QCOMPARE(validation_error,
+                 QStringLiteral("resolved profile bitDepth mismatch "
+                                "(expected=s16, actual=s24)"));
+
+        QVariantMap wrong_format = profile;
+        wrong_format.insert(QStringLiteral("sampleFormat"),
+                            QStringLiteral("s16"));
+        validation_error.clear();
+        QVERIFY(!format_converter_detail::validate_audio_output(
+            output, wrong_format, validation_error));
+        QCOMPARE(validation_error,
+                 QStringLiteral("resolved profile sampleFormat mismatch "
+                                "(expected=s16, actual=%1)")
+                     .arg(QString::fromLatin1(test_case.sampleFormat)));
     }
 }
 

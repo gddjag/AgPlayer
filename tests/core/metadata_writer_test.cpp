@@ -1,6 +1,8 @@
 #undef NDEBUG
 #include <agplayer/c_api.h>
 #include "metadata_writer.hpp"
+#include "transcode_probe.hpp"
+#include "transcode_verifier.hpp"
 #include <atomic>
 #include <algorithm>
 #include <cassert>
@@ -59,6 +61,80 @@ std::vector<unsigned char> file_bytes(const std::filesystem::path& path)
             std::istreambuf_iterator<char>()};
 }
 
+std::vector<unsigned char> adts_audio_bytes(const std::filesystem::path& path)
+{
+    const std::vector<unsigned char> bytes = file_bytes(path);
+    std::size_t offset = 0;
+    if (bytes.size() >= 10U && bytes[0] == 'I' && bytes[1] == 'D'
+        && bytes[2] == '3') {
+        const std::size_t tag_size =
+            (static_cast<std::size_t>(bytes[6] & 0x7fU) << 21U)
+            | (static_cast<std::size_t>(bytes[7] & 0x7fU) << 14U)
+            | (static_cast<std::size_t>(bytes[8] & 0x7fU) << 7U)
+            | static_cast<std::size_t>(bytes[9] & 0x7fU);
+        offset = 10U + tag_size + ((bytes[5] & 0x10U) != 0U ? 10U : 0U);
+    }
+    assert(offset < bytes.size());
+    assert(bytes[offset] == 0xffU);
+    assert((bytes[offset + 1U] & 0xf6U) == 0xf0U);
+    return {bytes.begin() + static_cast<std::ptrdiff_t>(offset), bytes.end()};
+}
+
+struct AudioFacts {
+    int sample_rate = 0;
+    int channels = 0;
+    std::int64_t container_duration_ms = 0;
+    std::int64_t probed_duration_ms = 0;
+    std::int64_t decoded_duration_ms = 0;
+    std::int64_t decoded_samples = 0;
+};
+
+AudioFacts read_audio_facts(const std::filesystem::path& path)
+{
+    AudioFacts facts;
+    ag_metadata* metadata = nullptr;
+    assert(ag_metadata_open(path.u8string().c_str(), &metadata) == AG_OK);
+    assert(metadata != nullptr);
+    facts.sample_rate = ag_metadata_sample_rate(metadata);
+    facts.channels = ag_metadata_channels(metadata);
+    facts.container_duration_ms = ag_metadata_duration_ms(metadata);
+    ag_metadata_destroy(metadata);
+
+    agplayer::MediaProbe probe;
+    std::string error;
+    assert(agplayer::probe_transcode_input(path.u8string(), probe, error)
+           == AG_OK);
+    assert(probe.audio_streams.size() == 1U);
+    facts.probed_duration_ms = probe.audio_streams.front().duration_ms;
+
+    agplayer::TranscodeVerificationPlan verification_plan;
+    agplayer::TranscodeVerificationResult verification;
+    assert(agplayer::verify_transcoded_output(
+               path.u8string(), verification_plan, verification, error)
+           == AG_OK);
+    facts.decoded_duration_ms = verification.decoded_duration_ms;
+    facts.decoded_samples = verification.decoded_samples;
+    return facts;
+}
+
+void assert_audio_facts_equal(const AudioFacts& actual,
+                              const AudioFacts& expected)
+{
+    assert(actual.sample_rate == expected.sample_rate);
+    assert(actual.channels == expected.channels);
+    // Raw ADTS has no container duration. FFmpeg estimates it from bitrate and
+    // file size, so an ID3 prefix can move this coarse value by a few ms even
+    // when the audio is byte-identical. The decoded duration below is exact.
+    assert(actual.container_duration_ms > 0);
+    assert(actual.probed_duration_ms > 0);
+    assert(std::llabs(actual.container_duration_ms
+                      - expected.container_duration_ms) <= 100);
+    assert(std::llabs(actual.probed_duration_ms
+                      - expected.probed_duration_ms) <= 100);
+    assert(actual.decoded_duration_ms == expected.decoded_duration_ms);
+    assert(actual.decoded_samples == expected.decoded_samples);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -66,6 +142,34 @@ int main(const int argc, char** argv)
     assert(argc == 2);
     const std::filesystem::path fixture = argv[1];
     const std::filesystem::path work_dir = fixture.parent_path();
+
+    // Hand-derived AAC-LC/stereo ADTS fixed-header bytes. A parser that reads
+    // sampling_frequency_index from any bits except byte 2 bits 5..2 fails
+    // this table, including the common 44.1 kHz case and every legal rate.
+    constexpr std::array<std::pair<unsigned char, int>, 13> adts_rates{{
+        {static_cast<unsigned char>(0x40), 96'000},
+        {static_cast<unsigned char>(0x44), 88'200},
+        {static_cast<unsigned char>(0x48), 64'000},
+        {static_cast<unsigned char>(0x4c), 48'000},
+        {static_cast<unsigned char>(0x50), 44'100},
+        {static_cast<unsigned char>(0x54), 32'000},
+        {static_cast<unsigned char>(0x58), 24'000},
+        {static_cast<unsigned char>(0x5c), 22'050},
+        {static_cast<unsigned char>(0x60), 16'000},
+        {static_cast<unsigned char>(0x64), 12'000},
+        {static_cast<unsigned char>(0x68), 11'025},
+        {static_cast<unsigned char>(0x6c), 8'000},
+        {static_cast<unsigned char>(0x70), 7'350},
+    }};
+    for (const auto& [byte2, expected_rate] : adts_rates) {
+        int parsed_rate = 0;
+        int parsed_channels = 0;
+        assert(agplayer::metadata_writer_detail::parse_adts_audio_parameters(
+            byte2, static_cast<unsigned char>(0x80),
+            parsed_rate, parsed_channels));
+        assert(parsed_rate == expected_rate);
+        assert(parsed_channels == 2);
+    }
 
     // The canonical plan is the sole core write contract: Set is read back
     // from the replacement file, while Keep leaves unrelated tags untouched.
@@ -831,6 +935,46 @@ int main(const int argc, char** argv)
                mp3.u8string().c_str(), nullptr, nullptr, nullptr, nullptr,
                nullptr, nullptr, &clear_marker, 0U, nullptr) == AG_OK);
     assert_cover(mp3, false);
+
+    // ADTS sampling_frequency_index occupies byte 2 bits 5..2. Exercise the
+    // real metadata-only production path after it has gained an ID3 prefix,
+    // because that is when FFmpeg needs the codec-free ADTS header fallback.
+    // Each successful Set A -> Set B -> Clear round must preserve every audio
+    // property and the complete ADTS payload after the metadata prefix.
+    for (const int sample_rate : {44'100, 48'000, 32'000, 24'000, 8'000}) {
+        const std::filesystem::path adts = work_dir
+            / ("meta-adts-" + std::to_string(sample_rate) + ".aac");
+        std::filesystem::remove(adts);
+        std::filesystem::remove(adts.u8string() + ".agbak");
+        assert(ag_transcode(fixture.u8string().c_str(), adts.u8string().c_str(),
+                            "aac", 128'000, sample_rate, 2,
+                            nullptr, nullptr, nullptr) == AG_OK);
+        const AudioFacts baseline = read_audio_facts(adts);
+        assert(baseline.sample_rate == sample_rate);
+        assert(baseline.channels == 2);
+        assert(baseline.container_duration_ms > 0);
+        assert(baseline.probed_duration_ms > 0);
+        assert(baseline.decoded_duration_ms > 0);
+        assert(baseline.decoded_samples > 0);
+        const std::vector<unsigned char> baseline_audio = adts_audio_bytes(adts);
+
+        const auto apply_title = [&](const agplayer::MetadataAction action,
+                                     const std::optional<std::string>& value) {
+            agplayer::MetadataEditPlan plan;
+            plan.fields = {{agplayer::CanonicalField::Title, action, value}};
+            agplayer::MetadataFileResult write_result;
+            assert(agplayer::write_metadata_plan(adts.u8string(), plan,
+                                                  write_result) == AG_OK);
+            assert(write_result.audio_verified_unchanged);
+            assert_audio_facts_equal(read_audio_facts(adts), baseline);
+            assert(adts_audio_bytes(adts) == baseline_audio);
+            assert(!std::filesystem::exists(adts.u8string() + ".agbak"));
+        };
+        apply_title(agplayer::MetadataAction::Set, "ADTS title A");
+        apply_title(agplayer::MetadataAction::Set, "ADTS title B");
+        apply_title(agplayer::MetadataAction::Clear, std::nullopt);
+        std::filesystem::remove(adts);
+    }
 
     struct MatrixEntry {
         const char* extension;

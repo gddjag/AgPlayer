@@ -130,9 +130,25 @@ bool container_matches(const QString& muxer, const QString& readback)
     return readback.contains(muxer, Qt::CaseInsensitive);
 }
 
-bool validate_audio_output(const QString& path,
-                           const QVariantMap& resolvedProfile,
-                           QString& error)
+QString bit_depth_key(const int bits, const QString& sampleFormat)
+{
+    if (bits == 32 && sampleFormat.contains(QStringLiteral("flt"))) {
+        return QStringLiteral("flt");
+    }
+    return bits > 0 ? QStringLiteral("s%1").arg(bits) : QStringLiteral("unknown");
+}
+
+int bit_depth_bits(const QString& key)
+{
+    if (key == QStringLiteral("s16")) return 16;
+    if (key == QStringLiteral("s24")) return 24;
+    if (key == QStringLiteral("s32") || key == QStringLiteral("flt")) return 32;
+    return 0;
+}
+
+bool validate_audio_output_impl(const QString& path,
+                                const QVariantMap& resolvedProfile,
+                                QString& error)
 {
     ag_metadata* metadata = nullptr;
     const QByteArray utf8 = path.toUtf8();
@@ -169,15 +185,57 @@ bool validate_audio_output(const QString& path,
         QStringLiteral("codec")).toString());
     const QString expectedMuxer = resolvedProfile.value(
         QStringLiteral("muxer")).toString();
-    if ((expectedRate > 0 && audio.sample_rate != expectedRate)
-        || (!expectedLayout.isEmpty()
-            && QString::fromStdString(audio.channel_layout) != expectedLayout)
-        || (!expectedCodec.isEmpty()
-            && QString::fromStdString(audio.codec) != expectedCodec)
-        || (!expectedMuxer.isEmpty()
-            && !container_matches(expectedMuxer,
-                                  QString::fromStdString(readback.container)))) {
-        error = QStringLiteral("resolved profile differs from output readback");
+    const QString expectedSampleFormat = resolvedProfile.value(
+        QStringLiteral("sampleFormat")).toString();
+    const QString expectedBitDepth = resolvedProfile.value(
+        QStringLiteral("bitDepth")).toString();
+    const QString actualLayout = QString::fromStdString(audio.channel_layout);
+    const QString actualCodec = QString::fromStdString(audio.codec);
+    const QString actualMuxer = QString::fromStdString(readback.container);
+    const QString actualSampleFormat = QString::fromStdString(audio.sample_format);
+    if (expectedRate > 0 && audio.sample_rate != expectedRate) {
+        error = QStringLiteral("resolved profile sampleRate mismatch "
+                               "(expected=%1, actual=%2)")
+                    .arg(expectedRate).arg(audio.sample_rate);
+        return false;
+    }
+    if (!expectedLayout.isEmpty() && actualLayout != expectedLayout) {
+        error = QStringLiteral("resolved profile channelLayout mismatch "
+                               "(expected=%1, actual=%2)")
+                    .arg(expectedLayout, actualLayout);
+        return false;
+    }
+    if (!expectedCodec.isEmpty() && actualCodec != expectedCodec) {
+        error = QStringLiteral("resolved profile codec mismatch "
+                               "(expected=%1, actual=%2)")
+                    .arg(expectedCodec, actualCodec);
+        return false;
+    }
+    if (!expectedMuxer.isEmpty()
+        && !container_matches(expectedMuxer, actualMuxer)) {
+        error = QStringLiteral("resolved profile muxer mismatch "
+                               "(expected=%1, actual=%2)")
+                    .arg(expectedMuxer, actualMuxer);
+        return false;
+    }
+    // For lossy codecs this profile value selects the encoder input format,
+    // while probe readback exposes the decoder output format; they are not the
+    // same contract (for example Opus s16 input decodes as fltp). Lossless
+    // depth profiles freeze both values and can be compared directly.
+    if (!expectedBitDepth.isEmpty() && !expectedSampleFormat.isEmpty()
+        && actualSampleFormat != expectedSampleFormat) {
+        error = QStringLiteral("resolved profile sampleFormat mismatch "
+                               "(expected=%1, actual=%2)")
+                    .arg(expectedSampleFormat, actualSampleFormat);
+        return false;
+    }
+    const int expectedBits = bit_depth_bits(expectedBitDepth);
+    if (expectedBits > 0 && audio.bits_per_sample != expectedBits) {
+        error = QStringLiteral("resolved profile bitDepth mismatch "
+                               "(expected=%1, actual=%2)")
+                    .arg(expectedBitDepth,
+                         bit_depth_key(audio.bits_per_sample,
+                                       actualSampleFormat));
         return false;
     }
     return true;
@@ -207,6 +265,12 @@ QString prepare_output_directory(QString& path)
 }
 
 } // namespace
+
+bool format_converter_detail::validate_audio_output(
+    const QString& path, const QVariantMap& resolvedProfile, QString& error)
+{
+    return validate_audio_output_impl(path, resolvedProfile, error);
+}
 
 bool format_converter_detail::commit_staged_output(
     const QString& stagedPath,
@@ -2696,8 +2760,8 @@ void FormatConverter::runTranscode(const QString& outputFormat,
             return;
         } else if (result == AG_OK) {
             QString validationError;
-            if (!validate_audio_output(stagedPath, resolvedProfile,
-                                       validationError)) {
+            if (!format_converter_detail::validate_audio_output(
+                    stagedPath, resolvedProfile, validationError)) {
                 QFile::remove(stagedPath);
                 complete(FileStatus::Error,
                          tr("转换结果验证失败：%1").arg(validationError));

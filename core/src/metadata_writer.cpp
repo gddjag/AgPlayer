@@ -69,6 +69,24 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
     return title;
 }
 
+bool metadata_writer_detail::parse_adts_audio_parameters(
+    const unsigned char byte2, const unsigned char byte3,
+    int& sample_rate, int& channels) noexcept
+{
+    static constexpr std::array<int, 13> sample_rates{
+        96'000, 88'200, 64'000, 48'000, 44'100, 32'000, 24'000,
+        22'050, 16'000, 12'000, 11'025, 8'000, 7'350};
+    const unsigned int rate_index = (byte2 >> 2U) & 0x0fU;
+    const unsigned int channel_count =
+        ((byte2 & 0x01U) << 2U) | ((byte3 >> 6U) & 0x03U);
+    if (rate_index >= sample_rates.size() || channel_count == 0U) {
+        return false;
+    }
+    sample_rate = sample_rates[rate_index];
+    channels = static_cast<int>(channel_count);
+    return true;
+}
+
 namespace {
 
 int metadata_only_stream_info_probe_forbidden(AVFormatContext*,
@@ -263,24 +281,20 @@ bool populate_adts_parameters_without_decoder(AVFormatContext* context,
     input.read(reinterpret_cast<char*>(bytes.data()),
                static_cast<std::streamsize>(bytes.size()));
     const std::size_t count = static_cast<std::size_t>(input.gcount());
-    static constexpr std::array<int, 13> sample_rates{
-        96'000, 88'200, 64'000, 48'000, 44'100, 32'000, 24'000,
-        22'050, 16'000, 12'000, 11'025, 8'000, 7'350};
     for (std::size_t offset = 0; offset + 6U < count; ++offset) {
         if (bytes[offset] != 0xffU || (bytes[offset + 1U] & 0xf6U) != 0xf0U) {
             continue;
         }
-        const unsigned int rate_index =
-            ((bytes[offset + 2U] & 0x03U) << 1U)
-            | ((bytes[offset + 3U] >> 7U) & 0x01U);
-        const unsigned int channels =
-            ((bytes[offset + 2U] & 0x01U) << 2U)
-            | ((bytes[offset + 3U] >> 6U) & 0x03U);
-        if (rate_index >= sample_rates.size() || channels == 0U) continue;
-        parameters->sample_rate = sample_rates[rate_index];
+        int sample_rate = 0;
+        int channels = 0;
+        if (!metadata_writer_detail::parse_adts_audio_parameters(
+                bytes[offset + 2U], bytes[offset + 3U],
+                sample_rate, channels)) {
+            continue;
+        }
+        parameters->sample_rate = sample_rate;
         av_channel_layout_uninit(&parameters->ch_layout);
-        av_channel_layout_default(&parameters->ch_layout,
-                                  static_cast<int>(channels));
+        av_channel_layout_default(&parameters->ch_layout, channels);
         return true;
     }
     return false;

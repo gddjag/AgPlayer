@@ -29,6 +29,10 @@ bool commit_staged_output(const QString& stagedPath,
                           OutputCommitMode mode,
                           const std::function<void()>& beforeCommit = {});
 
+bool validate_audio_output(const QString& path,
+                           const QVariantMap& resolvedProfile,
+                           QString& error);
+
 } // namespace format_converter_detail
 
 template <typename T>
