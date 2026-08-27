@@ -13,6 +13,7 @@
 #include "library_filter_model.hpp"
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
+#include "lyrics_service.hpp"
 #include "library_manager_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
@@ -49,7 +50,8 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  AudioEditorController* audioEditor,
                                  const AgPlayerQmlRuntimeModels& runtime,
                                  PlayerExperienceController* experience,
-                                 AudioVisualFeatureController* audioFeatures)
+                                 AudioVisualFeatureController* audioFeatures,
+                                 LyricsService* lyricsService)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
@@ -131,6 +133,15 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FormatConverter", formatConverter);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "FilenameProcessor", filenameProcessor);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SettingsController", settings);
+    if (lyricsService != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LyricsService", lyricsService);
+    } else {
+        qmlRegisterSingletonType<LyricsService>(
+            "AgPlayer", 1, 0, "LyricsService",
+            [library, playback, settings](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new LyricsService(library, playback, settings);
+            });
+    }
     if (experience != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0,
                                      "PlayerExperienceController", experience);

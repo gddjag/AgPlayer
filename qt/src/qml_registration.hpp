@@ -11,6 +11,7 @@ class LibraryFilterModel;
 class LibraryManagerController;
 class LibraryNavigationModel;
 class LibraryModel;
+class LyricsService;
 class MetadataEditor;
 class PlaybackController;
 class PlayerExperienceController;
@@ -51,4 +52,5 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  AudioEditorController* audioEditor = nullptr,
                                  const AgPlayerQmlRuntimeModels& runtime = {},
                                  PlayerExperienceController* experience = nullptr,
-                                 AudioVisualFeatureController* audioFeatures = nullptr);
+                                 AudioVisualFeatureController* audioFeatures = nullptr,
+                                 LyricsService* lyricsService = nullptr);

@@ -52,6 +52,7 @@
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "lyrics_service.hpp"
 #include "library_manager_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "library_store.hpp"
@@ -650,6 +651,7 @@ int main(int argc, char* argv[])
         SettingsController settings;
         PlayerExperienceController playerExperience(&settings);
         AudioVisualFeatureController audioVisualFeatures(&playback);
+        LyricsService lyricsService(&library, &playback, &settings);
         if (qaPlayerShell == QStringLiteral("integrated")) {
             settings.setPlayerShellMode(1);
         } else if (qaPlayerShell == QStringLiteral("classic")) {
@@ -937,7 +939,8 @@ int main(int argc, char* argv[])
                                         &trackWaveformThumbnailProvider,
                                         &themeManager,
                                         &playbackClipDrag},
-                                    &playerExperience, &audioVisualFeatures);
+                                    &playerExperience, &audioVisualFeatures,
+                                    &lyricsService);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

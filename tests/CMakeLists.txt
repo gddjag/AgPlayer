@@ -630,6 +630,7 @@ foreach(qt_test IN ITEMS
     filename_processing_test
     rename_transaction_test
     library_model_test
+    lyrics_service_test
     tag_model_test
     tag_filter_model_test
     library_store_test

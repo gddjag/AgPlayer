@@ -63,6 +63,14 @@ add_library(agplayer_qt STATIC
     src/library_file_operations.hpp
     src/library_model.cpp
     src/library_model.hpp
+    src/lyrics_cache.cpp
+    src/lyrics_cache.hpp
+    src/lyrics_line_model.cpp
+    src/lyrics_line_model.hpp
+    src/lyrics_provider.cpp
+    src/lyrics_provider.hpp
+    src/lyrics_service.cpp
+    src/lyrics_service.hpp
     src/library_manager_controller.cpp
     src/library_manager_controller.hpp
     src/library_navigation_model.cpp
