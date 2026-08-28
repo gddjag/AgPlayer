@@ -67,3 +67,45 @@
 - Not verified: live LRCLIB traffic/rate-limit behavior, real audio playback
   synchronization, manual QML lyrics panel (Task 4), platform-specific runtime
   behavior outside Windows, and hardware/network soak testing.
+
+## Review round 1 — RED → GREEN
+
+- Focused correction commit: `51a0f17` — `fix(lyrics): harden cache and provider state`.
+- RED was captured before implementation: after adding the transport test,
+  `lyrics_service_test` failed to compile with MSVC C2661 because
+  `LrclibProvider` had no injectable timeout argument. That failure proves the
+  test was exercising the missing controllable transport boundary, rather than
+  synthesizing provider results.
+- GREEN: `ctest --test-dir build\\debug --output-on-failure -R
+  "lyrics_service_test|library_model_test|playback_controller_test"` passed 3/3
+  after the corrections. `cmake --build build\\debug --target AgPlayer --parallel
+  1` linked and deployed the Debug executable. `git diff --check` passed before
+  the correction commit.
+
+### Corrected behavior
+
+- A search candidate is rejected if title and artist match but both durations
+  are known and differ by more than three seconds.
+- A final confirmed NotFound (including an incompatible search result) clears
+  the consecutive technical-failure streak; only technical failures can trigger
+  the three-failure, 20-minute degradation window.
+- Disabled services no longer publish position-driven current-line changes.
+- Metadata-only embedded text is not considered lyrics: local lookup continues
+  through sidecar/cache/provider. Next-track prefetch performs the same
+  embedded/sidecar/cache local check before issuing its low-priority request.
+- Cache reads now require the complete version-1 schema and exact types for
+  every field/line/metadata value; corrupt, truncated, incompatible, or
+  semantically empty non-instrumental entries are cache misses. Atomic writes
+  remain `QSaveFile` based.
+- LRCLIB transport tests exercise the actual `QNetworkAccessManager` request:
+  exact/search URL/query, identifying User-Agent, high/low priority, explicit
+  cancellation, short injected timeout/abort, numeric Retry-After, and HTTP-date
+  Retry-After. Production timeout remains 15 seconds.
+- Injected `LyricsProvider` objects are borrowed and tracked safely, while the
+  default LRCLIB provider remains service-owned.
+
+### QML status
+
+- No QML files were changed and `qml_main_window_test` is still not claimed as
+  passing. Its prior category-scroll and Windows native-dialog failure remains
+  an unconfirmed baseline issue outside this task's edited scope.
