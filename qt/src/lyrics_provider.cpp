@@ -15,6 +15,43 @@
 
 #include <algorithm>
 
+namespace {
+
+bool isStringOrNull(const QJsonObject& object, const QString& key)
+{
+    if (!object.contains(key)) return false;
+    const QJsonValue value = object.value(key);
+    return value.isString() || value.isNull();
+}
+
+bool parseCandidate(const QJsonObject& object, LyricsProvider::Candidate* candidate)
+{
+    const QJsonValue trackName = object.value(QStringLiteral("trackName"));
+    const QJsonValue artistName = object.value(QStringLiteral("artistName"));
+    const QJsonValue instrumental = object.value(QStringLiteral("instrumental"));
+    if (!trackName.isString() || !artistName.isString() || !instrumental.isBool()
+        || !isStringOrNull(object, QStringLiteral("syncedLyrics"))
+        || !isStringOrNull(object, QStringLiteral("plainLyrics"))) {
+        return false;
+    }
+    const QJsonValue albumName = object.value(QStringLiteral("albumName"));
+    const QJsonValue duration = object.value(QStringLiteral("duration"));
+    if ((!albumName.isUndefined() && !albumName.isString() && !albumName.isNull())
+        || (!duration.isUndefined() && !duration.isDouble() && !duration.isNull())) {
+        return false;
+    }
+    candidate->title = trackName.toString();
+    candidate->artist = artistName.toString();
+    candidate->album = albumName.toString();
+    candidate->durationSeconds = duration.toVariant().toLongLong();
+    candidate->syncedLyrics = object.value(QStringLiteral("syncedLyrics")).toString();
+    candidate->plainLyrics = object.value(QStringLiteral("plainLyrics")).toString();
+    candidate->instrumental = instrumental.toBool();
+    return true;
+}
+
+} // namespace
+
 LyricsProvider::Result LyricsProvider::Result::found(Candidate candidate)
 {
     Result result; result.kind = Found; result.candidate = std::move(candidate); return result;
@@ -133,25 +170,31 @@ void LrclibProvider::handleReply(QNetworkReply* reply, const bool exact)
         complete(requestId, Result::technicalError(status)); reply->deleteLater(); return;
     }
     const QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
-    const auto candidateFromObject = [](const QJsonObject& object) {
-        Candidate candidate;
-        candidate.title = object.value(QStringLiteral("trackName")).toString();
-        candidate.artist = object.value(QStringLiteral("artistName")).toString();
-        candidate.album = object.value(QStringLiteral("albumName")).toString();
-        candidate.durationSeconds = object.value(QStringLiteral("duration")).toVariant().toLongLong();
-        candidate.syncedLyrics = object.value(QStringLiteral("syncedLyrics")).toString();
-        candidate.plainLyrics = object.value(QStringLiteral("plainLyrics")).toString();
-        candidate.instrumental = object.value(QStringLiteral("instrumental")).toBool();
-        return candidate;
-    };
     if (exact && document.isObject()) {
-        complete(requestId, Result::found(candidateFromObject(document.object())));
+        Candidate candidate;
+        if (parseCandidate(document.object(), &candidate)) {
+            complete(requestId, Result::found(std::move(candidate)));
+        } else {
+            complete(requestId, Result::technicalError(
+                status, false, QStringLiteral("invalid-response")));
+        }
     } else if (!exact && document.isArray()) {
         QList<Candidate> candidates;
+        bool valid = true;
         for (const QJsonValue value : document.array()) {
-            if (value.isObject()) candidates.append(candidateFromObject(value.toObject()));
+            Candidate candidate;
+            if (!value.isObject() || !parseCandidate(value.toObject(), &candidate)) {
+                valid = false;
+                break;
+            }
+            candidates.append(std::move(candidate));
         }
-        complete(requestId, Result::search(std::move(candidates)));
+        if (valid) {
+            complete(requestId, Result::search(std::move(candidates)));
+        } else {
+            complete(requestId, Result::technicalError(
+                status, false, QStringLiteral("invalid-response")));
+        }
     } else {
         complete(requestId, Result::technicalError(status, false, QStringLiteral("invalid-response")));
     }

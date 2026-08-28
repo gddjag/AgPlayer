@@ -127,6 +127,8 @@ private slots:
     void pauseFollowDefaultsToFiveSecondsAndNotifies();
     void injectedProviderRemainsBorrowed();
     void lrclibTransportBuildsRequestsAndHandlesCancelTimeoutAndRetryAfter();
+    void malformedLrclibResponsesAreTechnicalErrors();
+    void threeInvalidProviderResponsesDegradeService();
 };
 
 void LyricsServiceTest::parseLrcPreservesTimingMetadataAndUntimedText()
@@ -450,6 +452,50 @@ void LyricsServiceTest::lrclibTransportBuildsRequestsAndHandlesCancelTimeoutAndR
     QTRY_VERIFY(manager.requests.constLast().reply->aborted);
     QTRY_VERIFY(!results.isEmpty());
     QCOMPARE(results.constLast().diagnostic, QStringLiteral("timeout"));
+}
+
+void LyricsServiceTest::malformedLrclibResponsesAreTechnicalErrors()
+{
+    FakeNetworkAccessManager manager;
+    LrclibProvider provider(&manager, nullptr, 1000);
+    QList<LyricsProvider::Result> results;
+    connect(&provider, &LyricsProvider::finished, this,
+            [&results](quint64, const LyricsProvider::Result& result) { results.append(result); });
+    const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+    const auto verifyInvalid = [&provider, &manager, &results, &track](quint64 requestId,
+                                                                         QByteArray payload) {
+        provider.requestExact(requestId, track);
+        manager.requests.constLast().reply->respond(200, std::move(payload));
+        QCOMPARE(results.constLast().kind, LyricsProvider::Result::TechnicalError);
+        QCOMPARE(results.constLast().diagnostic, QStringLiteral("invalid-response"));
+    };
+    verifyInvalid(1, QByteArrayLiteral("{}"));
+    verifyInvalid(2, QByteArrayLiteral(
+        R"({"trackName":"Song","artistName":"Artist","instrumental":false,"syncedLyrics":null})"));
+    verifyInvalid(3, QByteArrayLiteral(
+        R"({"trackName":"Song","artistName":"Artist","instrumental":"false","syncedLyrics":null,"plainLyrics":null})"));
+
+    provider.requestExact(4, track);
+    manager.requests.constLast().reply->respond(200, QByteArrayLiteral(
+        R"({"trackName":"Song","artistName":"Artist","instrumental":false,"syncedLyrics":null,"plainLyrics":null})"));
+    QCOMPARE(results.constLast().kind, LyricsProvider::Result::Found);
+}
+
+void LyricsServiceTest::threeInvalidProviderResponsesDegradeService()
+{
+    auto* provider = new FakeLyricsProvider;
+    LyricsService service(nullptr, nullptr, nullptr, provider);
+    service.setEnabled(true);
+    TrackRecord track; track.trackId = QStringLiteral("invalid"); track.title = QStringLiteral("Invalid");
+    service.requestTrack(track);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        provider->complete(provider->exactRequests.constLast().requestId,
+            LyricsProvider::Result::technicalError(200, false, QStringLiteral("invalid-response")));
+        if (attempt < 2) service.retry();
+    }
+    QCOMPARE(service.consecutiveTechnicalFailures(), 3);
+    QVERIFY(service.degradedUntilMs() >= service.clockMs() + 19 * 60 * 1000);
+    QCOMPARE(service.status(), LyricsService::Offline);
 }
 
 QTEST_MAIN(LyricsServiceTest)
