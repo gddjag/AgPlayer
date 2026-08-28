@@ -117,6 +117,14 @@ bool reframeEvent(AudioEvent& event, const SampleFrame newSourceStart,
     return isValid(event);
 }
 
+bool sameSharedBoundaryParameters(const AudioEvent& left,
+                                  const AudioEvent& right) noexcept
+{
+    return left.source == right.source && left.gain == right.gain
+        && left.speedRatio == right.speedRatio
+        && left.pitchSemitone == right.pitchSemitone && left.mute == right.mute;
+}
+
 } // namespace
 
 bool operator==(const Selection& left, const Selection& right) noexcept
@@ -234,6 +242,39 @@ bool AudioDocument::trimEvent(const EventId id, const SampleFrame sourceStart,
     return applyCandidate(std::move(candidate));
 }
 
+bool AudioDocument::trimSharedBoundary(const EventId leftId,
+                                       const EventId rightId,
+                                       const SampleFrame sourceBoundary)
+{
+    if (leftId == rightId) return false;
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto left = std::find_if(candidate.begin(), candidate.end(),
+        [leftId](const AudioEvent& event) { return event.id == leftId; });
+    const auto right = std::find_if(candidate.begin(), candidate.end(),
+        [rightId](const AudioEvent& event) { return event.id == rightId; });
+    if (left == candidate.end() || right == candidate.end()
+        || left->timelineStart + audibleFrames(*left) != right->timelineStart
+        || left->sourceEnd != right->sourceStart
+        || !sameSharedBoundaryParameters(*left, *right)
+        || sourceBoundary <= left->sourceStart
+        || sourceBoundary >= right->sourceEnd) {
+        return false;
+    }
+    const SampleFrame leftTimelineStart = left->timelineStart;
+    const SampleFrame rightSourceEnd = right->sourceEnd;
+    if (!reframeEvent(*left, left->sourceStart, sourceBoundary,
+                      leftTimelineStart)) {
+        return false;
+    }
+    const SampleFrame rightTimelineStart = leftTimelineStart
+        + audibleFrames(*left);
+    if (!reframeEvent(*right, sourceBoundary, rightSourceEnd,
+                      rightTimelineStart)) {
+        return false;
+    }
+    return applyCandidate(std::move(candidate));
+}
+
 bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
                             const SampleFrame frame, const EventId rightId)
 {
@@ -280,6 +321,12 @@ bool AudioDocument::splitEventAt(const EventId id, const SampleFrame frame)
         || !applyCandidate(std::move(candidate))) return false;
     ++next_event_id_;
     return true;
+}
+
+bool AudioDocument::clearTimeline()
+{
+    if (timeline_.snapshot().events.empty()) return false;
+    return applyCandidate({});
 }
 
 bool AudioDocument::hasValidSelection() const noexcept

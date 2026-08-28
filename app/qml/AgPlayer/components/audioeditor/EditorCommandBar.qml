@@ -196,9 +196,9 @@ Rectangle {
             label: qsTr("清除")
             iconName: "brush-line"
             referenceWidth: 82
-            commandEnabled: AudioEditorController.selectionStart >= 0
-                || AudioEditorController.activeTool !== "select"
-            onClicked: AudioEditorController.clearTransientState()
+            commandEnabled: AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+            onClicked: AudioEditorController.clearTimeline()
         }
     }
 }

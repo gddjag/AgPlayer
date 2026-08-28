@@ -46,6 +46,25 @@ Rectangle {
         selectionCandidateStart = -1
         selectionCandidateEnd = -1
     }
+    function selectionContains(frame) {
+        return AudioEditorController.selectionStart >= 0
+            && frame >= AudioEditorController.selectionStart
+            && frame < AudioEditorController.selectionEnd
+    }
+    function previousTimelineEvent(id) {
+        const events = AudioEditorController.timelineEventViews
+        for (let index = 1; index < events.length; ++index) {
+            if (events[index].id === id) return events[index - 1]
+        }
+        return null
+    }
+    function nextTimelineEvent(id) {
+        const events = AudioEditorController.timelineEventViews
+        for (let index = 0; index + 1 < events.length; ++index) {
+            if (events[index].id === id) return events[index + 1]
+        }
+        return null
+    }
     function gainFromY(y, height) {
         return Math.max(0, Math.min(2, 2 * (1 - y / height)))
     }
@@ -268,7 +287,7 @@ Rectangle {
                 z: 5
                 cursorShape: AudioEditorController.activeTool === "scissors"
                     ? Qt.CrossCursor : Qt.ArrowCursor
-                acceptedButtons: Qt.LeftButton
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 property real pressCanvasX: 0
                 property double pressFrame: 0
                 property double originalTimelineStart: 0
@@ -277,11 +296,18 @@ Rectangle {
                 onPressed: function(mouse) {
                     movedDuringPress = false
                     canvas.cancelSelectionPreview()
+                    if (mouse.button === Qt.RightButton) {
+                        AudioEditorController.clearSelection()
+                        mouse.accepted = true
+                        return
+                    }
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     pressCanvasX = point.x
                     originalTimelineStart = Number(modelData.timelineStart)
                     const frame = canvas.frameAtCanvasPixel(point.x)
                     pressFrame = frame
+                    if (!canvas.selectionContains(frame))
+                        AudioEditorController.clearSelection()
                     AudioEditorController.seekFrame(frame)
                     if (AudioEditorController.activeTool === "scissors") {
                         AudioEditorController.splitEvent(modelData.id, frame)
@@ -337,10 +363,24 @@ Rectangle {
                 Accessible.role: Accessible.Slider
                 property double originalTimelineStart: 0
                 property double originalSourceStart: 0
+                property string sharedLeftId: ""
+                property string sharedRightId: ""
+                property bool useSharedBoundary: false
                 onPressed: function(mouse) {
                     originalTimelineStart = Number(modelData.timelineStart)
                     originalSourceStart = Number(modelData.sourceStart)
-                    AudioEditorController.beginEventGesture(modelData.id, "trim")
+                    const previous = canvas.previousTimelineEvent(modelData.id)
+                    sharedLeftId = previous ? previous.id : ""
+                    sharedRightId = modelData.id
+                    useSharedBoundary = previous
+                        && Number(previous.timelineEnd)
+                            === Number(modelData.timelineStart)
+                        && Number(previous.sourceEnd)
+                            === Number(modelData.sourceStart)
+                        && AudioEditorController.beginSharedBoundaryGesture(
+                            sharedLeftId, sharedRightId)
+                    if (!useSharedBoundary)
+                        AudioEditorController.beginEventGesture(modelData.id, "trim")
                     forceActiveFocus()
                     mouse.accepted = true
                 }
@@ -349,14 +389,26 @@ Rectangle {
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     const nextTimeline = canvas.frameAtCanvasPixel(point.x)
                     const delta = nextTimeline - originalTimelineStart
-                    AudioEditorController.trimEvent(
-                        modelData.id,
-                        Math.max(0, Math.round(originalSourceStart + delta)),
-                        Number(modelData.sourceEnd),
-                        Math.max(0, nextTimeline))
+                    if (useSharedBoundary) {
+                        AudioEditorController.trimSharedBoundary(
+                            sharedLeftId, sharedRightId,
+                            Math.round(originalSourceStart + delta))
+                    } else {
+                        AudioEditorController.trimEvent(
+                            modelData.id,
+                            Math.max(0, Math.round(originalSourceStart + delta)),
+                            Number(modelData.sourceEnd),
+                            Math.max(0, nextTimeline))
+                    }
                 }
-                onReleased: AudioEditorController.endEventGesture()
-                onCanceled: AudioEditorController.cancelEventGesture()
+                onReleased: {
+                    AudioEditorController.endEventGesture()
+                    useSharedBoundary = false
+                }
+                onCanceled: {
+                    AudioEditorController.cancelEventGesture()
+                    useSharedBoundary = false
+                }
                 Keys.onPressed: function(event) {
                     if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
                         return
@@ -384,10 +436,24 @@ Rectangle {
                 Accessible.role: Accessible.Slider
                 property double originalSourceEnd: 0
                 property double originalTimelineEnd: 0
+                property string sharedLeftId: ""
+                property string sharedRightId: ""
+                property bool useSharedBoundary: false
                 onPressed: function(mouse) {
                     originalSourceEnd = Number(modelData.sourceEnd)
                     originalTimelineEnd = Number(modelData.timelineEnd)
-                    AudioEditorController.beginEventGesture(modelData.id, "trim")
+                    const next = canvas.nextTimelineEvent(modelData.id)
+                    sharedLeftId = modelData.id
+                    sharedRightId = next ? next.id : ""
+                    useSharedBoundary = next
+                        && Number(next.timelineStart)
+                            === Number(modelData.timelineEnd)
+                        && Number(next.sourceStart)
+                            === Number(modelData.sourceEnd)
+                        && AudioEditorController.beginSharedBoundaryGesture(
+                            sharedLeftId, sharedRightId)
+                    if (!useSharedBoundary)
+                        AudioEditorController.beginEventGesture(modelData.id, "trim")
                     forceActiveFocus()
                     mouse.accepted = true
                 }
@@ -395,15 +461,27 @@ Rectangle {
                     if (!pressed) return
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     const nextEnd = canvas.frameAtCanvasPixel(point.x)
-                    AudioEditorController.trimEvent(
-                        modelData.id, Number(modelData.sourceStart),
-                        Math.max(Number(modelData.sourceStart) + 1,
-                            Math.round(originalSourceEnd
-                                + nextEnd - originalTimelineEnd)),
-                        Number(modelData.timelineStart))
+                    const boundary = Math.round(originalSourceEnd
+                        + nextEnd - originalTimelineEnd)
+                    if (useSharedBoundary) {
+                        AudioEditorController.trimSharedBoundary(
+                            sharedLeftId, sharedRightId, boundary)
+                    } else {
+                        AudioEditorController.trimEvent(
+                            modelData.id, Number(modelData.sourceStart),
+                            Math.max(Number(modelData.sourceStart) + 1,
+                                boundary),
+                            Number(modelData.timelineStart))
+                    }
                 }
-                onReleased: AudioEditorController.endEventGesture()
-                onCanceled: AudioEditorController.cancelEventGesture()
+                onReleased: {
+                    AudioEditorController.endEventGesture()
+                    useSharedBoundary = false
+                }
+                onCanceled: {
+                    AudioEditorController.cancelEventGesture()
+                    useSharedBoundary = false
+                }
                 Keys.onPressed: function(event) {
                     if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
                         return
@@ -561,6 +639,12 @@ Rectangle {
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.SizeVerCursor
                     onPressed: function(mouse) {
+                        const canvasPoint = mapToItem(
+                            canvas, mouse.x, mouse.y)
+                        const frame = canvas.frameAtCanvasPixel(canvasPoint.x)
+                        if (!canvas.selectionContains(frame))
+                            AudioEditorController.clearSelection()
+                        AudioEditorController.seekFrame(frame)
                         volumeLine.gainCandidate = Number(
                             eventDelegate.modelData.gain)
                         AudioEditorController.beginEventGainGesture(
@@ -681,7 +765,7 @@ Rectangle {
         id: backgroundInteraction
         objectName: "editorWaveformInteraction"
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
         enabled: AudioEditorController.hasDocument
         z: 1
         property double pressFrame: 0
@@ -693,9 +777,16 @@ Rectangle {
                 lastPanX = mouse.x
                 return
             }
+            if (mouse.button === Qt.RightButton) {
+                canvas.cancelSelectionPreview()
+                AudioEditorController.clearSelection()
+                return
+            }
             pressFrame = canvas.frameAtCanvasPixel(mouse.x)
             selecting = false
             canvas.cancelSelectionPreview()
+            if (!canvas.selectionContains(pressFrame))
+                AudioEditorController.clearSelection()
             AudioEditorController.seekFrame(pressFrame)
         }
         onPositionChanged: function(mouse) {

@@ -251,6 +251,7 @@ public:
     Q_INVOKABLE bool exportToConfiguredDirectory();
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
+    Q_INVOKABLE bool clearTimeline();
     Q_INVOKABLE bool beginSelectionHandoff(double sceneX, double sceneY);
     Q_INVOKABLE void updateSelectionHandoff(double sceneX, double sceneY);
     Q_INVOKABLE void cancelSelectionHandoff();
@@ -262,6 +263,9 @@ public:
     Q_INVOKABLE bool moveEvent(const QString& id, qint64 timelineStart);
     Q_INVOKABLE bool trimEvent(const QString& id, qint64 sourceStart,
                                qint64 sourceEnd, qint64 timelineStart);
+    Q_INVOKABLE bool trimSharedBoundary(const QString& leftId,
+                                        const QString& rightId,
+                                        qint64 sourceBoundary);
     Q_INVOKABLE bool splitEvent(const QString& id, qint64 frame);
     Q_INVOKABLE bool setEventFadeOut(const QString& id, qint64 frames);
     Q_INVOKABLE bool setEventGain(const QString& id, double gain);
@@ -283,6 +287,8 @@ public:
     Q_INVOKABLE bool beginEventGesture(const QString& id,
                                        const QString& operation,
                                        bool duplicate = false);
+    Q_INVOKABLE bool beginSharedBoundaryGesture(const QString& leftId,
+                                                const QString& rightId);
     Q_INVOKABLE bool endEventGesture();
     Q_INVOKABLE bool cancelEventGesture();
     Q_INVOKABLE bool setActiveTool(const QString& tool);
@@ -511,6 +517,7 @@ private:
         None,
         Move,
         Trim,
+        SharedBoundary,
         FadeOut,
         Gain,
         EnvelopePoint
@@ -518,6 +525,7 @@ private:
     struct EventGesture final {
         EventGestureKind kind{EventGestureKind::None};
         agplayer::editor::EventId id{};
+        agplayer::editor::EventId secondaryId{};
         bool duplicate{};
         bool pending{};
         qint64 timelineStart{};

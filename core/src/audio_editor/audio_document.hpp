@@ -43,7 +43,10 @@ public:
     bool moveEvent(EventId id, SampleFrame timelineStart);
     bool trimEvent(EventId id, SampleFrame sourceStart, SampleFrame sourceEnd,
                    SampleFrame timelineStart);
+    bool trimSharedBoundary(EventId leftId, EventId rightId,
+                            SampleFrame sourceBoundary);
     bool splitEventAt(EventId id, SampleFrame frame);
+    bool clearTimeline();
     bool deleteSelection();
     bool cropToSelection();
     bool silenceSelection();

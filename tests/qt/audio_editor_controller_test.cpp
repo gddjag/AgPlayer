@@ -497,6 +497,38 @@ private slots:
         QCOMPARE(controller.actionEnabled(QStringLiteral("editor.undo")), undoEnabled);
     }
 
+    void selectionLoopClearAndSharedBoundaryGesturesAreTransactional()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(controller.setSelection(100, 300));
+        QVERIFY(controller.loopEnabled());
+        QVERIFY(controller.clearSelection());
+        QVERIFY(!controller.loopEnabled());
+
+        QVERIFY(controller.splitEvent(QStringLiteral("1"), 400));
+        const auto historyAfterSplit = controller.historyStateIdForTesting();
+        QVERIFY(controller.beginSharedBoundaryGesture(
+            QStringLiteral("1"), QStringLiteral("2")));
+        QVERIFY(controller.trimSharedBoundary(QStringLiteral("1"),
+                                              QStringLiteral("2"), 250));
+        QVERIFY(controller.trimSharedBoundary(QStringLiteral("1"),
+                                              QStringLiteral("2"), 640));
+        QCOMPARE(controller.historyStateIdForTesting(), historyAfterSplit);
+        QVERIFY(controller.endEventGesture());
+        QCOMPARE(controller.historyStateIdForTesting(), historyAfterSplit + 1);
+        const QVariantList views = controller.timelineEventViews();
+        QCOMPARE(views[0].toMap().value(QStringLiteral("sourceEnd")).toLongLong(),
+                 qint64{640});
+        QCOMPARE(views[1].toMap().value(QStringLiteral("sourceStart")).toLongLong(),
+                 qint64{640});
+
+        QVERIFY(controller.clearTimeline());
+        QCOMPARE(controller.totalFrames(), qint64{0});
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().size(), 2);
+    }
+
     void fadeOutGestureAndEnvelopeUseObservableSingleStepEdits()
     {
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);

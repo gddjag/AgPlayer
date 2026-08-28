@@ -832,6 +832,24 @@ AudioEditorController::timelineSnapshotForView() const
         || !event_gesture_.pending) {
         return snapshot;
     }
+    if (event_gesture_.kind == EventGestureKind::SharedBoundary) {
+        const auto left = std::find_if(snapshot.events.begin(),
+            snapshot.events.end(), [this](const AudioEvent& item) {
+                return item.id == event_gesture_.id;
+            });
+        const auto right = std::find_if(snapshot.events.begin(),
+            snapshot.events.end(), [this](const AudioEvent& item) {
+                return item.id == event_gesture_.secondaryId;
+            });
+        if (left == snapshot.events.end() || right == snapshot.events.end()) {
+            return snapshot;
+        }
+        left->sourceEnd = event_gesture_.sourceEnd;
+        right->sourceStart = event_gesture_.sourceEnd;
+        right->timelineStart = left->timelineStart
+            + agplayer::editor::audibleFrames(*left);
+        return snapshot;
+    }
     const auto event = std::find_if(
         snapshot.events.begin(), snapshot.events.end(),
         [this](const AudioEvent& item) { return item.id == event_gesture_.id; });
@@ -1414,6 +1432,7 @@ bool AudioEditorController::setSelection(
     if (!has_document_ || !document_.setSelection({startFrame, endFrame})) {
         return false;
     }
+    setLoopEnabled(true);
     (void)syncModifiedFromHistory();
     refreshActions();
     emit documentChanged();
@@ -1423,13 +1442,24 @@ bool AudioEditorController::setSelection(
 
 bool AudioEditorController::clearSelection()
 {
-    if (!document_.clearSelection()) {
+    const bool selectionChanged = document_.clearSelection();
+    const bool loopChanged = loop_enabled_;
+    setLoopEnabled(false);
+    if (!selectionChanged && !loopChanged) {
         return false;
     }
     (void)syncModifiedFromHistory();
     refreshActions();
     emit documentChanged();
     emit projectChanged();
+    return true;
+}
+
+bool AudioEditorController::clearTimeline()
+{
+    if (!has_document_ || busy() || !document_.clearTimeline()) return false;
+    setLoopEnabled(false);
+    finishTimelineMutation();
     return true;
 }
 
@@ -1747,6 +1777,45 @@ bool AudioEditorController::trimEvent(const QString& id,
                      timelineStart);
 }
 
+bool AudioEditorController::trimSharedBoundary(const QString& leftId,
+                                               const QString& rightId,
+                                               const qint64 sourceBoundary)
+{
+    const auto left = parseEventId(leftId);
+    const auto right = parseEventId(rightId);
+    if (!left || !right || sourceBoundary < 0) return false;
+    if (event_gesture_.kind == EventGestureKind::SharedBoundary) {
+        if (event_gesture_.id != *left || event_gesture_.secondaryId != *right) {
+            return false;
+        }
+        const auto snapshot = document_.timelineSnapshot();
+        const auto leftEvent = std::find_if(snapshot.events.cbegin(),
+            snapshot.events.cend(), [left](const AudioEvent& event) {
+                return event.id == *left;
+            });
+        const auto rightEvent = std::find_if(snapshot.events.cbegin(),
+            snapshot.events.cend(), [right](const AudioEvent& event) {
+                return event.id == *right;
+            });
+        if (leftEvent == snapshot.events.cend()
+            || rightEvent == snapshot.events.cend()
+            || sourceBoundary <= leftEvent->sourceStart
+            || sourceBoundary >= rightEvent->sourceEnd) {
+            return false;
+        }
+        event_gesture_.sourceEnd = sourceBoundary;
+        event_gesture_.pending = sourceBoundary != leftEvent->sourceEnd;
+        emit documentChanged();
+        return true;
+    }
+    if (!has_document_ || busy()
+        || !document_.trimSharedBoundary(*left, *right, sourceBoundary)) {
+        return false;
+    }
+    finishTimelineMutation();
+    return true;
+}
+
 bool AudioEditorController::splitEvent(const quint64 id, const qint64 frame)
 {
     if (!has_document_ || busy()
@@ -1783,9 +1852,46 @@ bool AudioEditorController::beginEventGesture(const QString& id,
         || (duplicate && kind != EventGestureKind::Move)) {
         return false;
     }
-    event_gesture_ = EventGesture{kind, *eventId, duplicate, false,
+    event_gesture_ = EventGesture{kind, *eventId, 0, duplicate, false,
         event->timelineStart, event->sourceStart, event->sourceEnd,
         event->fadeOut};
+    return true;
+}
+
+bool AudioEditorController::beginSharedBoundaryGesture(const QString& leftId,
+                                                        const QString& rightId)
+{
+    if (!has_document_ || busy()
+        || event_gesture_.kind != EventGestureKind::None) {
+        return false;
+    }
+    const auto leftIdValue = parseEventId(leftId);
+    const auto rightIdValue = parseEventId(rightId);
+    if (!leftIdValue || !rightIdValue || *leftIdValue == *rightIdValue) {
+        return false;
+    }
+    const auto snapshot = document_.timelineSnapshot();
+    const auto left = std::find_if(snapshot.events.cbegin(), snapshot.events.cend(),
+        [leftIdValue](const AudioEvent& event) { return event.id == *leftIdValue; });
+    const auto right = std::find_if(snapshot.events.cbegin(), snapshot.events.cend(),
+        [rightIdValue](const AudioEvent& event) { return event.id == *rightIdValue; });
+    if (left == snapshot.events.cend() || right == snapshot.events.cend()
+        || left->timelineStart + agplayer::editor::audibleFrames(*left)
+            != right->timelineStart
+        || left->sourceEnd != right->sourceStart
+        || left->source != right->source || left->gain != right->gain
+        || left->speedRatio != right->speedRatio
+        || left->pitchSemitone != right->pitchSemitone
+        || left->mute != right->mute) {
+        return false;
+    }
+    event_gesture_ = {};
+    event_gesture_.kind = EventGestureKind::SharedBoundary;
+    event_gesture_.id = *leftIdValue;
+    event_gesture_.secondaryId = *rightIdValue;
+    event_gesture_.timelineStart = left->timelineStart;
+    event_gesture_.sourceStart = left->sourceStart;
+    event_gesture_.sourceEnd = left->sourceEnd;
     return true;
 }
 
@@ -1810,6 +1916,9 @@ bool AudioEditorController::endEventGesture()
         changed = document_.trimEvent(gesture.id, gesture.sourceStart,
                                       gesture.sourceEnd,
                                       gesture.timelineStart);
+    } else if (gesture.kind == EventGestureKind::SharedBoundary) {
+        changed = document_.trimSharedBoundary(gesture.id, gesture.secondaryId,
+                                               gesture.sourceEnd);
     } else if (gesture.kind == EventGestureKind::FadeOut) {
         changed = document_.setEventFadeOut(gesture.id, gesture.fadeOut);
     } else if (gesture.kind == EventGestureKind::Gain) {

@@ -237,7 +237,7 @@ TestCase {
         AudioEditorController.activate()
     }
 
-    function test_toolbarExactOrderAndClearKeepsDocument() {
+    function test_toolbarExactOrderAndClearKeepsDocumentShell() {
         const names = [
             "importAudio", "saveProject", "select", "split", "delete",
             "crop", "copy", "paste", "fadeIn", "fadeOut", "mute",
@@ -262,8 +262,10 @@ TestCase {
         const clearButton = findChild(page, "editorCommand_clear")
         mouseClick(clearButton)
         compare(AudioEditorController.hasDocument, true)
+        compare(AudioEditorController.totalFrames, 0)
         compare(AudioEditorController.selectionStart, -1)
-        compare(AudioEditorController.activeTool, "select")
+        verify(AudioEditorController.undo())
+        compare(AudioEditorController.totalFrames, 96000)
     }
 
     function test_toolbarReferenceButtonWidthsAt1672() {
@@ -677,6 +679,38 @@ TestCase {
         verify(AudioEditorController.selectionStart >= 0)
         verify(AudioEditorController.selectionEnd
                > AudioEditorController.selectionStart)
+    }
+
+    function test_selectionEnablesLoopAndTimelineClicksClearItPrecisely() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        verify(AudioEditorController.setActiveTool("select"))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        const body = findChild(canvas, "editorEventBodyInteraction")
+        verify(body)
+
+        verify(AudioEditorController.setSelection(12000, 36000))
+        compare(AudioEditorController.loopEnabled, true)
+        const outside = canvas.mapToItem(body,
+            canvas.pixelAtFrame(72000), canvas.height * 0.5)
+        const resolvedOutside = body.mapToItem(canvas, outside.x, outside.y)
+        verify(Math.abs(canvas.frameAtCanvasPixel(resolvedOutside.x) - 72000)
+               <= 40)
+        mouseClick(body, outside.x, outside.y, Qt.LeftButton)
+        compare(AudioEditorController.selectionStart, -1)
+        compare(AudioEditorController.loopEnabled, false)
+        verify(Math.abs(AudioEditorController.playheadFrame
+                        - canvas.frameAtCanvasPixel(resolvedOutside.x)) <= 1)
+
+        verify(AudioEditorController.setSelection(12000, 36000))
+        compare(AudioEditorController.loopEnabled, true)
+        const inside = canvas.mapToItem(body,
+            canvas.pixelAtFrame(24000), canvas.height * 0.5)
+        mouseClick(body, inside.x, inside.y, Qt.RightButton)
+        compare(AudioEditorController.selectionStart, -1)
+        compare(AudioEditorController.loopEnabled, false)
     }
 
     function test_selectionUsesOneDashedBorderAndShowsExactLabels() {
