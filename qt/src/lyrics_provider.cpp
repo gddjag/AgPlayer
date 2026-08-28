@@ -1,6 +1,7 @@
 #include "lyrics_provider.hpp"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -11,6 +12,8 @@
 #include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
+
+#include <algorithm>
 
 LyricsProvider::Result LyricsProvider::Result::found(Candidate candidate)
 {
@@ -33,8 +36,9 @@ LyricsProvider::Result LyricsProvider::Result::rateLimited(const qint64 retryAft
     Result result; result.kind = RateLimited; result.retryAfterMs = retryAfterMs; return result;
 }
 
-LrclibProvider::LrclibProvider(QNetworkAccessManager* manager, QObject* parent)
-    : LyricsProvider(parent), manager_(manager) {}
+LrclibProvider::LrclibProvider(QNetworkAccessManager* manager, QObject* parent,
+                               const int requestTimeoutMs)
+    : LyricsProvider(parent), manager_(manager), requestTimeoutMs_(std::max(0, requestTimeoutMs)) {}
 
 void LrclibProvider::requestExact(const quint64 requestId, const Track& track)
 {
@@ -81,7 +85,7 @@ void LrclibProvider::request(const quint64 requestId, const Track& track, const 
     replies_.insert(requestId, reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, exact] { handleReply(reply, exact); });
     reply->setProperty("lyricsRequestId", QVariant::fromValue(requestId));
-    QTimer::singleShot(15000, this, [this, requestId, reply = QPointer<QNetworkReply>(reply)] {
+    QTimer::singleShot(requestTimeoutMs_, this, [this, requestId, reply = QPointer<QNetworkReply>(reply)] {
         if (reply.isNull() || replies_.value(requestId) != reply) return;
         reply->setProperty("lyricsTimedOut", true);
         reply->abort();
@@ -109,8 +113,19 @@ void LrclibProvider::handleReply(QNetworkReply* reply, const bool exact)
     if (status == 404) { complete(requestId, Result::notFound()); reply->deleteLater(); return; }
     if (status == 429) {
         bool ok = false;
-        const qint64 seconds = reply->rawHeader("Retry-After").trimmed().toLongLong(&ok);
-        complete(requestId, Result::rateLimited(ok ? seconds * 1000 : 20 * 60 * 1000));
+        const QByteArray retryAfter = reply->rawHeader("Retry-After").trimmed();
+        const qint64 seconds = retryAfter.toLongLong(&ok);
+        qint64 delayMs = 20 * 60 * 1000;
+        if (ok) {
+            delayMs = std::max<qint64>(0, seconds) * 1000;
+        } else {
+            const QDateTime date = QDateTime::fromString(
+                QString::fromLatin1(retryAfter), Qt::RFC2822Date).toUTC();
+            if (date.isValid()) {
+                delayMs = std::max<qint64>(0, QDateTime::currentDateTimeUtc().msecsTo(date));
+            }
+        }
+        complete(requestId, Result::rateLimited(delayMs));
         reply->deleteLater();
         return;
     }

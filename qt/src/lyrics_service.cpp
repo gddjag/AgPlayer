@@ -39,7 +39,6 @@ LyricsService::LyricsService(LibraryModel* library, PlaybackController* playback
 {
     if (provider != nullptr) {
         provider_ = provider;
-        provider_->setParent(this);
     } else {
         networkManager_ = new QNetworkAccessManager(this);
         provider_ = new LrclibProvider(networkManager_, this);
@@ -157,9 +156,11 @@ void LyricsService::requestTrack(const TrackRecord& track, const QString& embedd
 void LyricsService::resolveLocal(const TrackRecord& track, const QString& embeddedLyrics)
 {
     if (!embeddedLyrics.trimmed().isEmpty()) {
-        applyDocument(track, {LyricsLineModel::parseLrc(embeddedLyrics.toUtf8()),
-                              QStringLiteral("embedded"), false});
-        return;
+        const LyricsDocument document = LyricsLineModel::parseLrc(embeddedLyrics.toUtf8());
+        if (hasUsableLyrics(document)) {
+            applyDocument(track, {document, QStringLiteral("embedded"), false});
+            return;
+        }
     }
     const QFileInfo audio(track.path);
     const QString sidecar = audio.dir().filePath(audio.completeBaseName() + QStringLiteral(".lrc"));
@@ -182,6 +183,21 @@ void LyricsService::resolveLocal(const TrackRecord& track, const QString& embedd
     beginExact(track);
 }
 
+bool LyricsService::hasLocalLyrics(const TrackRecord& track, const QString& embeddedLyrics) const
+{
+    if (!embeddedLyrics.trimmed().isEmpty()
+        && hasUsableLyrics(LyricsLineModel::parseLrc(embeddedLyrics.toUtf8()))) {
+        return true;
+    }
+    const QFileInfo audio(track.path);
+    const QString sidecar = audio.dir().filePath(audio.completeBaseName() + QStringLiteral(".lrc"));
+    QFile file(sidecar);
+    if (file.open(QIODevice::ReadOnly) && hasUsableLyrics(LyricsLineModel::parseLrc(file.readAll()))) {
+        return true;
+    }
+    return cache_.load(track).has_value();
+}
+
 LyricsProvider::Track LyricsService::providerTrack(const TrackRecord& track,
                                                    const bool lowPriority) const
 {
@@ -191,6 +207,7 @@ LyricsProvider::Track LyricsService::providerTrack(const TrackRecord& track,
 void LyricsService::beginExact(const TrackRecord& track, const bool prefetch)
 {
     if (track.title.trimmed().isEmpty()) { if (!prefetch) setStatus(NotFound); return; }
+    if (provider_.isNull()) { if (!prefetch) setStatus(Error); return; }
     const quint64 requestId = nextRequestId_++;
     pending_.insert(requestId, {track, Exact, generation_, prefetch});
     if (!prefetch) setStatus(Loading);
@@ -199,6 +216,7 @@ void LyricsService::beginExact(const TrackRecord& track, const bool prefetch)
 
 void LyricsService::beginSearch(const TrackRecord& track, const bool prefetch)
 {
+    if (provider_.isNull()) { if (!prefetch) setStatus(Error); return; }
     const quint64 requestId = nextRequestId_++;
     pending_.insert(requestId, {track, Search, generation_, prefetch});
     if (!prefetch) setStatus(Loading);
@@ -213,7 +231,7 @@ void LyricsService::prefetchNext()
     if (index < 0 || index + 1 >= queue.size()) return;
     const TrackRecord* next = library_->recordForId(queue.at(index + 1));
     if (next == nullptr || next->title.trimmed().isEmpty()
-        || cache_.load(*next).has_value()) return;
+        || hasLocalLyrics(*next, next->lyrics)) return;
     beginExact(*next, true);
 }
 
@@ -229,6 +247,10 @@ void LyricsService::onProviderFinished(const quint64 requestId,
 
     if (result.kind == LyricsProvider::Result::NotFound) {
         if (pending.stage == Exact) { beginSearch(pending.track, pending.prefetch); return; }
+        consecutiveTechnicalFailures_ = 0;
+        lastHttpStatus_ = 0;
+        lastDiagnostic_.clear();
+        emit diagnosticsChanged();
         if (!pending.prefetch) setStatus(NotFound);
         return;
     }
@@ -250,7 +272,14 @@ void LyricsService::onProviderFinished(const quint64 requestId,
     if (result.kind == LyricsProvider::Result::SearchResults) {
         candidate = bestCandidate(pending.track, result.candidates);
     }
-    if (!candidate.has_value()) { if (!pending.prefetch) setStatus(NotFound); return; }
+    if (!candidate.has_value()) {
+        consecutiveTechnicalFailures_ = 0;
+        lastHttpStatus_ = 0;
+        lastDiagnostic_.clear();
+        emit diagnosticsChanged();
+        if (!pending.prefetch) setStatus(NotFound);
+        return;
+    }
 
     consecutiveTechnicalFailures_ = 0;
     lastHttpStatus_ = result.httpStatus;
@@ -261,6 +290,10 @@ void LyricsService::onProviderFinished(const quint64 requestId,
     if (candidate->instrumental) {
         document = {};
     } else if (document.lines.isEmpty() && document.untimedText.isEmpty()) {
+        consecutiveTechnicalFailures_ = 0;
+        lastHttpStatus_ = 0;
+        lastDiagnostic_.clear();
+        emit diagnosticsChanged();
         if (!pending.prefetch) setStatus(NotFound);
         return;
     }
@@ -288,7 +321,10 @@ void LyricsService::applyDocument(const TrackRecord& track, LyricsCache::Entry e
     emit diagnosticsChanged();
 }
 
-void LyricsService::updateCurrentLine() { emit currentLineChanged(); }
+void LyricsService::updateCurrentLine()
+{
+    if (enabled_) emit currentLineChanged();
+}
 
 void LyricsService::setStatus(const Status status)
 {
@@ -299,7 +335,9 @@ void LyricsService::setStatus(const Status status)
 
 void LyricsService::cancelPending()
 {
-    for (auto it = pending_.cbegin(); it != pending_.cend(); ++it) provider_->cancel(it.key());
+    if (!provider_.isNull()) {
+        for (auto it = pending_.cbegin(); it != pending_.cend(); ++it) provider_->cancel(it.key());
+    }
     pending_.clear();
 }
 
@@ -332,6 +370,8 @@ std::optional<LyricsProvider::Candidate> LyricsService::bestCandidate(
         const QString candidateArtist = normalizedMatch(candidate.artist);
         if ((!title.isEmpty() && candidateTitle != title)
             || (!artist.isEmpty() && candidateArtist != artist)) continue;
+        if (track.durationMs > 0 && candidate.durationSeconds > 0
+            && std::llabs(track.durationMs / 1000 - candidate.durationSeconds) > 3) continue;
         int score = 200;
         if (!album.isEmpty() && normalizedMatch(candidate.album) == album) score += 30;
         if (track.durationMs > 0 && candidate.durationSeconds > 0
@@ -340,6 +380,11 @@ std::optional<LyricsProvider::Candidate> LyricsService::bestCandidate(
         if (score > bestScore) { bestScore = score; best = candidate; }
     }
     return best;
+}
+
+bool LyricsService::hasUsableLyrics(const LyricsDocument& document)
+{
+    return !document.lines.isEmpty() || !document.untimedText.isEmpty();
 }
 
 QString LyricsService::normalizedMatch(const QString& value)

@@ -7,6 +7,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 
 class PlaybackController;
 class SettingsController;
@@ -78,6 +79,8 @@ private:
 
     void requestCurrentTrack();
     void resolveLocal(const TrackRecord& track, const QString& embeddedLyrics);
+    [[nodiscard]] bool hasLocalLyrics(const TrackRecord& track,
+                                      const QString& embeddedLyrics) const;
     void beginExact(const TrackRecord& track, bool prefetch = false);
     void beginSearch(const TrackRecord& track, bool prefetch = false);
     void prefetchNext();
@@ -92,12 +95,13 @@ private:
     [[nodiscard]] std::optional<LyricsProvider::Candidate> bestCandidate(
         const TrackRecord& track, const QList<LyricsProvider::Candidate>& candidates) const;
     [[nodiscard]] static QString normalizedMatch(const QString& value);
+    [[nodiscard]] static bool hasUsableLyrics(const LyricsDocument& document);
 
     LibraryModel* library_ = nullptr;
     PlaybackController* playback_ = nullptr;
     SettingsController* settings_ = nullptr;
     QNetworkAccessManager* networkManager_ = nullptr;
-    LyricsProvider* provider_ = nullptr;
+    QPointer<LyricsProvider> provider_;
     LyricsLineModel lineModel_;
     LyricsCache cache_;
     TrackRecord currentTrack_;

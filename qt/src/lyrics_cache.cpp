@@ -8,6 +8,8 @@
 #include <QJsonObject>
 #include <QSaveFile>
 
+#include <cmath>
+
 namespace {
 
 QString normalizedPath(const QString& path)
@@ -20,6 +22,18 @@ QString normalizedPath(const QString& path)
     normalized = normalized.toCaseFolded();
 #endif
     return normalized;
+}
+
+bool isSupportedSource(const QString& source)
+{
+    return source == QStringLiteral("manual") || source == QStringLiteral("lrclib");
+}
+
+bool isInteger(const QJsonValue& value)
+{
+    if (!value.isDouble()) return false;
+    const double number = value.toDouble();
+    return std::isfinite(number) && std::floor(number) == number;
 }
 
 } // namespace
@@ -57,30 +71,54 @@ std::optional<LyricsCache::Entry> LyricsCache::load(const TrackRecord& track) co
     const QJsonDocument json = QJsonDocument::fromJson(file.readAll());
     if (!json.isObject()) return std::nullopt;
     const QJsonObject object = json.object();
-    if (object.value(QStringLiteral("key")).toString() != keyFor(track)) return std::nullopt;
+    const QJsonValue version = object.value(QStringLiteral("version"));
+    const QJsonValue key = object.value(QStringLiteral("key"));
+    const QJsonValue source = object.value(QStringLiteral("source"));
+    const QJsonValue instrumental = object.value(QStringLiteral("instrumental"));
+    const QJsonValue offsetMs = object.value(QStringLiteral("offsetMs"));
+    const QJsonValue untimedText = object.value(QStringLiteral("untimedText"));
+    const QJsonValue lines = object.value(QStringLiteral("lines"));
+    const QJsonValue metadata = object.value(QStringLiteral("metadata"));
+    if (!isInteger(version) || version.toInteger() != 1
+        || !key.isString() || key.toString() != keyFor(track)
+        || !source.isString() || !isSupportedSource(source.toString())
+        || !instrumental.isBool() || !isInteger(offsetMs)
+        || !untimedText.isString() || !lines.isArray() || !metadata.isObject()) {
+        return std::nullopt;
+    }
 
     Entry entry;
-    entry.source = object.value(QStringLiteral("source")).toString();
-    entry.instrumental = object.value(QStringLiteral("instrumental")).toBool();
-    entry.document.offsetMs = object.value(QStringLiteral("offsetMs")).toVariant().toLongLong();
-    entry.document.untimedText = object.value(QStringLiteral("untimedText")).toString();
-    for (const QJsonValue value : object.value(QStringLiteral("lines")).toArray()) {
+    entry.source = source.toString();
+    entry.instrumental = instrumental.toBool();
+    entry.document.offsetMs = offsetMs.toInteger();
+    entry.document.untimedText = untimedText.toString();
+    for (const QJsonValue value : lines.toArray()) {
+        if (!value.isObject()) return std::nullopt;
         const QJsonObject line = value.toObject();
-        if (!line.contains(QStringLiteral("timeMs")) || !line.contains(QStringLiteral("text"))) {
+        const QJsonValue timeMs = line.value(QStringLiteral("timeMs"));
+        const QJsonValue text = line.value(QStringLiteral("text"));
+        if (!isInteger(timeMs) || !text.isString()) {
             return std::nullopt;
         }
-        entry.document.lines.append({line.value(QStringLiteral("timeMs")).toVariant().toLongLong(),
-                                     line.value(QStringLiteral("text")).toString()});
+        entry.document.lines.append({timeMs.toInteger(), text.toString()});
     }
-    const QJsonObject metadata = object.value(QStringLiteral("metadata")).toObject();
-    for (auto it = metadata.begin(); it != metadata.end(); ++it) {
+    const QJsonObject metadataObject = metadata.toObject();
+    for (auto it = metadataObject.begin(); it != metadataObject.end(); ++it) {
+        if (!it.value().isString()) return std::nullopt;
         entry.document.metadata.insert(it.key(), it.value().toString());
     }
+    if (!entry.instrumental && entry.document.lines.isEmpty()
+        && entry.document.untimedText.isEmpty()) return std::nullopt;
     return entry;
 }
 
 bool LyricsCache::save(const TrackRecord& track, const Entry& entry) const
 {
+    if (!isSupportedSource(entry.source)
+        || (!entry.instrumental && entry.document.lines.isEmpty()
+            && entry.document.untimedText.isEmpty())) {
+        return false;
+    }
     const QString path = pathFor(track);
     if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
     QJsonArray lines;

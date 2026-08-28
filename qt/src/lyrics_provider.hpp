@@ -59,7 +59,8 @@ class LrclibProvider final : public LyricsProvider {
     Q_OBJECT
 
 public:
-    explicit LrclibProvider(QNetworkAccessManager* manager, QObject* parent = nullptr);
+    explicit LrclibProvider(QNetworkAccessManager* manager, QObject* parent = nullptr,
+                            int requestTimeoutMs = 15000);
     void requestExact(quint64 requestId, const Track& track) override;
     void requestSearch(quint64 requestId, const Track& track) override;
     void cancel(quint64 requestId) override;
@@ -69,6 +70,7 @@ private:
     void handleReply(QNetworkReply* reply, bool exact);
     QNetworkAccessManager* manager_ = nullptr;
     QHash<quint64, QNetworkReply*> replies_;
+    int requestTimeoutMs_ = 15000;
 };
 
 Q_DECLARE_METATYPE(LyricsProvider::Result)
