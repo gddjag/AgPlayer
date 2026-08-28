@@ -2263,7 +2263,8 @@ private slots:
 
         for (const auto [dpr, expectedBuckets] : {
                  std::pair{1.0, 20}, std::pair{1.25, 25},
-                 std::pair{1.5, 30}, std::pair{2.0, 40}}) {
+                 std::pair{1.5, 30}, std::pair{2.0, 40},
+                 std::pair{8.0, 80}}) {
             controller.setViewportWaveformDevicePixelRatio(dpr);
             QTRY_VERIFY_WITH_TIMEOUT(
                 controller.viewportChannelPeaks().size() == 1

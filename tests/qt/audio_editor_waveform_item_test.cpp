@@ -204,6 +204,33 @@ private slots:
         delete node;
     }
 
+    void devicePixelRatioDoesNotExceedSharedWaveformBudget()
+    {
+        QQuickWindow window;
+        QImage image(80, 320, QImage::Format_RGBA8888_Premultiplied);
+        QQuickRenderTarget renderTarget = QQuickRenderTarget::fromPaintDevice(
+            &image);
+        renderTarget.setDevicePixelRatio(8.0);
+        window.setRenderTarget(renderTarget);
+
+        TestableAudioEditorWaveformItem item;
+        item.setParentItem(window.contentItem());
+        item.setWidth(10.0);
+        item.setHeight(80.0);
+        QVariantList dense;
+        for (int index = 0; index < 100; ++index) {
+            dense.append(-0.75);
+            dense.append(0.75);
+        }
+        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QCOMPARE(window.effectiveDevicePixelRatio(), 8.0);
+        QCOMPARE(item.generatedPointCount(), 160);
+        delete node;
+    }
+
     void sparseFiniteBucketsInterpolateWithoutCrossingBlankBuckets()
     {
         TestableAudioEditorWaveformItem item;

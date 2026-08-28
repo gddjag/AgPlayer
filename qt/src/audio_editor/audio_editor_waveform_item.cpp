@@ -1,4 +1,5 @@
 #include "audio_editor_waveform_item.hpp"
+#include "waveform_render_limits.hpp"
 
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
@@ -237,8 +238,9 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         delete oldNode;
         return nullptr;
     }
-    const qreal devicePixelRatio = window() != nullptr
-        ? window()->effectiveDevicePixelRatio() : 1.0;
+    const qreal devicePixelRatio = std::clamp(window() != nullptr
+        ? window()->effectiveDevicePixelRatio() : 1.0, 1.0,
+        kMaxWaveformDevicePixelRatio);
     const qreal densityScale = std::min<qreal>(2.0, density_) / 2.0;
     const std::size_t maximum_buckets = std::max<std::size_t>(1U,
         static_cast<std::size_t>(std::ceil(

@@ -1,6 +1,7 @@
 #include "audio_editor_controller.hpp"
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/document_render_pipeline.hpp"
+#include "audio_editor/waveform_render_limits.hpp"
 #include "bpm_analyzer.hpp"
 #include "../playback_controller.hpp"
 
@@ -55,7 +56,8 @@ qint64 viewportTargetPoints(const qint64 visibleFrames,
                            const qreal viewportWidth,
                            const qreal devicePixelRatio)
 {
-    const qreal boundedDpr = std::clamp(devicePixelRatio, 1.0, 4.0);
+    const qreal boundedDpr = std::clamp(devicePixelRatio, 1.0,
+                                        kMaxWaveformDevicePixelRatio);
     const qreal scaledBuckets = 2.0 * std::max<qreal>(0.0, viewportWidth)
         * boundedDpr;
     const qint64 buckets = std::max<qint64>(1, static_cast<qint64>(
@@ -3129,7 +3131,8 @@ void AudioEditorController::setViewportWaveformDevicePixelRatio(
     const double devicePixelRatio)
 {
     const qreal bounded = std::clamp<qreal>(
-        static_cast<qreal>(devicePixelRatio), 1.0, 4.0);
+        static_cast<qreal>(devicePixelRatio), 1.0,
+        kMaxWaveformDevicePixelRatio);
     if (qFuzzyCompare(viewport_waveform_device_pixel_ratio_, bounded)) return;
     viewport_waveform_device_pixel_ratio_ = bounded;
     requestViewportWaveform();
