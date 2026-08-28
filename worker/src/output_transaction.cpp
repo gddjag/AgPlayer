@@ -1,29 +1,22 @@
 #include "output_transaction.hpp"
 
-#include <QDir>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLockFile>
-#include <QSaveFile>
 #include <QSet>
 #include <QTemporaryDir>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
 
 namespace agplayer::separation {
 namespace {
 
-constexpr auto kManifestName = ".agplayer-separation-transaction.json";
-constexpr auto kLockSuffix = ".lock";
-constexpr qint64 kMaximumManifestBytes = 64 * 1024;
+constexpr auto kTemporaryPattern = ".agplayer-separation-job-*";
+constexpr auto kTemporaryTemplate = ".agplayer-separation-job-XXXXXX";
+constexpr auto kOwnedMarkerName = ".agplayer-separation-owned";
+constexpr auto kOwnedMarkerValue = "agplayer-separation-v1";
+constexpr auto kOutputLockName = ".agplayer-separation.lock";
+constexpr int kMaximumNumberedDirectories = 10'000;
 
 bool safeName(const QString& value)
 {
@@ -53,100 +46,47 @@ bool directChildOf(const QString& path, const QString& directory)
     return samePath(QFileInfo(path).absolutePath(), directory);
 }
 
-bool flushFilePath(const QString& path)
+QString markerPath(const QString& directory)
 {
-#ifdef Q_OS_WIN
-    const HANDLE handle = CreateFileW(
-        reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) return false;
-    const bool flushed = FlushFileBuffers(handle) != FALSE;
-    CloseHandle(handle);
-    return flushed;
-#else
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) return false;
-    return ::fsync(file.handle()) == 0;
-#endif
+    return QDir(directory).filePath(QString::fromLatin1(kOwnedMarkerName));
 }
 
-bool writeDurableJson(const QString& path, const QJsonObject& object)
+bool createOwnedMarker(const QString& directory)
 {
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) return false;
-    const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
-    if (file.write(bytes) != bytes.size() || !file.commit()) return false;
-    return flushFilePath(path);
+    QFile marker(markerPath(directory));
+    if (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)) return false;
+    const QByteArray value = QByteArrayLiteral(kOwnedMarkerValue);
+    return marker.write(value) == value.size() && marker.flush();
 }
 
-struct RecoveryManifest {
-    QString phase;
-    QString temporaryDirectory;
-    QStringList finalPaths;
-};
-
-bool readRecoveryManifest(const QString& manifestPath,
-                          const QString& outputDirectory,
-                          const QString& temporaryDirectory,
-                          RecoveryManifest* manifest)
+bool hasOwnedMarker(const QString& directory)
 {
-    QFile file(manifestPath);
-    if (!file.open(QIODevice::ReadOnly) || file.size() <= 0
-        || file.size() > kMaximumManifestBytes) {
-        return false;
-    }
-    QJsonParseError parseError;
-    const QByteArray manifestBytes = file.read(kMaximumManifestBytes + 1);
-    if (manifestBytes.size() != file.size()) return false;
-    const QJsonDocument document = QJsonDocument::fromJson(manifestBytes, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) return false;
-    const QJsonObject object = document.object();
-    if (object.value(QStringLiteral("version")).toInt() != 1
-        || !samePath(object.value(QStringLiteral("outputDirectory")).toString(),
-                     outputDirectory)
-        || !samePath(object.value(QStringLiteral("temporaryDirectory")).toString(),
-                     temporaryDirectory)) {
-        return false;
-    }
-    const QString phase = object.value(QStringLiteral("phase")).toString();
-    if (phase != QStringLiteral("staging")
-        && phase != QStringLiteral("committing")) {
-        return false;
-    }
-    const QJsonArray entries = object.value(QStringLiteral("entries")).toArray();
-    if (entries.isEmpty() || entries.size() > 5) return false;
-    QSet<QString> finals;
-    for (const QJsonValue& value : entries) {
-        const QJsonObject entry = value.toObject();
-        const QString temporary = entry.value(QStringLiteral("temporary")).toString();
-        const QString final = entry.value(QStringLiteral("final")).toString();
-        const QString finalKey = absoluteCleanPath(final).toCaseFolded();
-        if (temporary.isEmpty() || final.isEmpty()
-            || !directChildOf(temporary, temporaryDirectory)
-            || !directChildOf(final, outputDirectory)
-            || finals.contains(finalKey)) {
-            return false;
-        }
-        finals.insert(finalKey);
-        manifest->finalPaths.push_back(final);
-    }
-    manifest->phase = phase;
-    manifest->temporaryDirectory = temporaryDirectory;
-    return true;
+    QFile marker(markerPath(directory));
+    const QByteArray expected = QByteArrayLiteral(kOwnedMarkerValue);
+    return marker.open(QIODevice::ReadOnly)
+        && marker.size() == expected.size()
+        && marker.read(expected.size() + 1) == expected;
+}
+
+QString numberedFinalDirectory(const OutputPlan& plan, int number)
+{
+    const QString name = number == 1
+        ? plan.baseName
+        : QStringLiteral("%1-%2").arg(plan.baseName).arg(number);
+    return QDir(plan.outputDirectory).filePath(name);
 }
 
 } // namespace
 
-bool NativeOutputFileOps::renameFile(const QString& source,
-                                     const QString& destination)
+bool NativeOutputFileOps::renameDirectory(const QString& source,
+                                          const QString& destination)
 {
-    return QFile::rename(source, destination);
+    return QDir().rename(source, destination);
 }
 
-bool NativeOutputFileOps::removeFile(const QString& path)
+bool NativeOutputFileOps::removeDirectory(const QString& path)
 {
-    return !QFileInfo::exists(path) || QFile::remove(path);
+    return !QFileInfo::exists(path) || QDir(path).removeRecursively();
 }
 
 OutputTransaction::OutputTransaction(
@@ -167,9 +107,31 @@ OutputTransaction::~OutputTransaction()
 }
 
 TransactionResult OutputTransaction::reject(const QString& code,
-                                            const QString& message)
+                                             const QString& message)
 {
     return {false, code, message, {}};
+}
+
+TransactionResult OutputTransaction::recoverOwnedTemporaryDirectories()
+{
+    QDir output(plan_.outputDirectory);
+    const QFileInfoList candidates = output.entryInfoList(
+        {QString::fromLatin1(kTemporaryPattern)},
+        QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+    for (const QFileInfo& candidate : candidates) {
+        const QString path = candidate.absoluteFilePath();
+        if (!directChildOf(path, plan_.outputDirectory)
+            || !hasOwnedMarker(path)) {
+            continue;
+        }
+        (void)operations_->removeDirectory(path);
+        if (QFileInfo::exists(path)) {
+            return {false, QStringLiteral("recovery_failed"),
+                    QStringLiteral("Stale temporary job cleanup left artifacts"),
+                    {path}};
+        }
+    }
+    return {true, {}, {}, {}};
 }
 
 TransactionResult OutputTransaction::begin()
@@ -185,140 +147,63 @@ TransactionResult OutputTransaction::begin()
     }
     plan_.outputDirectory = outputInfo.absoluteFilePath();
     if (!safeName(plan_.baseName) || !safeName(plan_.extension)
-        || plan_.stems.isEmpty()) {
+        || plan_.stems.isEmpty()
+        || plan_.baseName.startsWith(QStringLiteral(".agplayer-separation-"),
+                                     Qt::CaseInsensitive)) {
         return reject(QStringLiteral("invalid_output_plan"),
                       QStringLiteral("Output plan contains an unsafe name"));
     }
-
-    const TransactionResult recovered = recoverStaleTransactions();
-    if (!recovered.ok) return recovered;
-
-    QHash<QString, QString> candidateFinals;
+    QSet<QString> stems;
     for (const QString& stem : plan_.stems) {
-        if (!safeName(stem) || candidateFinals.contains(stem)) {
+        const QString key = stem.toCaseFolded();
+        if (!safeName(stem) || stems.contains(key)) {
             return reject(QStringLiteral("invalid_output_plan"),
                           QStringLiteral("Output plan contains an unsafe or duplicate stem"));
         }
-        const QString finalPath = QDir(plan_.outputDirectory)
-            .filePath(QStringLiteral("%1-%2.%3").arg(plan_.baseName, stem,
-                                                     plan_.extension));
-        if (QFileInfo::exists(finalPath)) {
-            return reject(QStringLiteral("output_exists"),
-                          QStringLiteral("An output file already exists"));
-        }
-        candidateFinals.insert(stem, finalPath);
+        stems.insert(key);
     }
 
-    QTemporaryDir temporary(QDir(plan_.outputDirectory)
-                                .filePath(QStringLiteral(".agplayer-separation-XXXXXX")));
-    if (!temporary.isValid()) {
-        return reject(QStringLiteral("temporary_directory_failed"),
-                      QStringLiteral("Could not create a sibling temporary directory"));
-    }
-    temporary.setAutoRemove(false);
-    temporaryDirectory_ = temporary.path();
-    lock_ = std::make_unique<QLockFile>(
-        temporaryDirectory_ + QString::fromLatin1(kLockSuffix));
+    lock_ = std::make_unique<QLockFile>(QDir(plan_.outputDirectory).filePath(
+        QString::fromLatin1(kOutputLockName)));
     lock_->setStaleLockTime(0);
     if (!lock_->tryLock(0)) {
         lock_.reset();
-        (void)QDir(temporaryDirectory_).removeRecursively();
-        temporaryDirectory_.clear();
         return reject(QStringLiteral("transaction_lock_failed"),
-                      QStringLiteral("Could not acquire the output transaction lock"));
+                      QStringLiteral("Another output transaction is active"));
     }
-    manifestPath_ = QDir(temporaryDirectory_).filePath(
-        QString::fromLatin1(kManifestName));
-    finalPaths_ = candidateFinals;
+
+    const TransactionResult recovered = recoverOwnedTemporaryDirectories();
+    if (!recovered.ok) {
+        lock_.reset();
+        return recovered;
+    }
+
+    QTemporaryDir temporary(QDir(plan_.outputDirectory).filePath(
+        QString::fromLatin1(kTemporaryTemplate)));
+    if (!temporary.isValid()) {
+        lock_.reset();
+        return reject(QStringLiteral("temporary_directory_failed"),
+                      QStringLiteral("Could not create a sibling temporary job directory"));
+    }
+    temporary.setAutoRemove(false);
+    temporaryDirectory_ = temporary.path();
+    active_ = true;
+    if (!createOwnedMarker(temporaryDirectory_)) {
+        TransactionResult cleanup = rollback();
+        if (!cleanup.ok) {
+            cleanup.causeCode = QStringLiteral("marker_write_failed");
+            cleanup.causeMessage = QStringLiteral(
+                "Could not create the temporary job ownership marker");
+            return cleanup;
+        }
+        return reject(QStringLiteral("marker_write_failed"),
+                      QStringLiteral("Could not create the temporary job ownership marker"));
+    }
     for (const QString& stem : plan_.stems) {
         temporaryPaths_.insert(
-            stem, QDir(temporaryDirectory_)
-                      .filePath(QStringLiteral("%1.%2").arg(stem, plan_.extension)));
-    }
-    active_ = true;
-    const TransactionResult manifest = writeManifest(QStringLiteral("staging"));
-    if (!manifest.ok) {
-        const TransactionResult cleanup = rollback();
-        if (!cleanup.ok) return cleanup;
-        return manifest;
-    }
-    return {true, {}, {}, {}};
-}
-
-TransactionResult OutputTransaction::recoverStaleTransactions()
-{
-    QDir output(plan_.outputDirectory);
-    const QFileInfoList staleDirectories = output.entryInfoList(
-        {QStringLiteral(".agplayer-separation-*")},
-        QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot);
-    for (const QFileInfo& staleInfo : staleDirectories) {
-        const QString staleDirectory = staleInfo.absoluteFilePath();
-        QLockFile recoveryLock(
-            staleDirectory + QString::fromLatin1(kLockSuffix));
-        recoveryLock.setStaleLockTime(0);
-        if (!recoveryLock.tryLock(0)) {
-            TransactionResult result = reject(
-                recoveryLock.error() == QLockFile::LockFailedError
-                    ? QStringLiteral("recovery_in_use")
-                    : QStringLiteral("recovery_failed"),
-                QStringLiteral("An output transaction is still active"));
-            result.outputs = {staleDirectory};
-            return result;
-        }
-        const QString staleManifest = QDir(staleDirectory).filePath(
-            QString::fromLatin1(kManifestName));
-        RecoveryManifest manifest;
-        if (!readRecoveryManifest(staleManifest, plan_.outputDirectory,
-                                  staleDirectory, &manifest)) {
-            TransactionResult result = reject(
-                QStringLiteral("recovery_failed"),
-                QStringLiteral("A stale output transaction has an invalid recovery manifest"));
-            result.outputs = {staleDirectory};
-            return result;
-        }
-
-        QStringList remaining;
-        if (manifest.phase == QStringLiteral("committing")) {
-            for (const QString& finalPath : manifest.finalPaths) {
-                (void)operations_->removeFile(finalPath);
-                if (QFileInfo::exists(finalPath)) remaining.push_back(finalPath);
-            }
-        }
-        if (!QDir(staleDirectory).removeRecursively()
-            || QFileInfo::exists(staleDirectory)) {
-            remaining.push_back(staleDirectory);
-        }
-        if (!remaining.isEmpty()) {
-            return {false, QStringLiteral("recovery_failed"),
-                    QStringLiteral("Stale output transaction recovery left artifacts"),
-                    remaining};
-        }
-    }
-    return {true, {}, {}, {}};
-}
-
-TransactionResult OutputTransaction::writeManifest(const QString& phase)
-{
-    QJsonArray entries;
-    for (const QString& stem : plan_.stems) {
-        entries.push_back(QJsonObject{
-            {QStringLiteral("temporary"), temporaryPaths_.value(stem)},
-            {QStringLiteral("final"), finalPaths_.value(stem)}});
-    }
-    const QJsonObject manifest{
-        {QStringLiteral("version"), 1},
-        {QStringLiteral("phase"), phase},
-        {QStringLiteral("outputDirectory"), plan_.outputDirectory},
-        {QStringLiteral("temporaryDirectory"), temporaryDirectory_},
-        {QStringLiteral("entries"), entries}};
-    if (!writeDurableJson(manifestPath_, manifest)) {
-        TransactionResult result = reject(
-            QStringLiteral("manifest_write_failed"),
-            QStringLiteral("Could not durably write the output transaction manifest"));
-        if (QFileInfo::exists(temporaryDirectory_)) {
-            result.outputs.push_back(temporaryDirectory_);
-        }
-        return result;
+            stem, QDir(temporaryDirectory_).filePath(
+                QStringLiteral("%1-%2.%3").arg(plan_.baseName, stem,
+                                                plan_.extension)));
     }
     return {true, {}, {}, {}};
 }
@@ -335,71 +220,73 @@ QString OutputTransaction::temporaryDirectory() const
 
 TransactionResult OutputTransaction::commit(
     const std::function<bool(const QString&)>& verifier,
-    const std::atomic_bool& cancelled)
+    const CancellationToken& cancellation)
 {
     if (!active_) {
         return reject(QStringLiteral("transaction_inactive"),
                       QStringLiteral("Output transaction has not begun"));
     }
-    const auto cleanupOr = [this](const QString& message,
-                                  const TransactionResult& fallback) {
+    const auto failAndRollback = [this](const QString& code,
+                                        const QString& message,
+                                        const QString& cleanupMessage) {
+        const TransactionResult cause = reject(code, message);
         TransactionResult cleanup = rollback();
         if (!cleanup.ok) {
-            cleanup.message = message;
+            cleanup.message = cleanupMessage;
+            cleanup.causeCode = cause.code;
+            cleanup.causeMessage = cause.message;
             return cleanup;
         }
-        return fallback;
+        return cause;
     };
-    const auto rejectCancelled = [this, &cleanupOr] {
-        return cleanupOr(
-            QStringLiteral("Cancellation cleanup left output artifacts"),
-            reject(QStringLiteral("cancelled"),
-                   QStringLiteral("Output commit was cancelled")));
+    const auto cancelled = [&] {
+        return failAndRollback(
+            QStringLiteral("cancelled"),
+            QStringLiteral("Output commit was cancelled"),
+            QStringLiteral("Cancellation cleanup left output artifacts"));
     };
-    if (cancelled.load()) return rejectCancelled();
+
+    if (cancellation.isCancelled()) return cancelled();
     for (const QString& stem : plan_.stems) {
-        if (cancelled.load()) return rejectCancelled();
+        if (cancellation.isCancelled()) return cancelled();
         const QString path = temporaryPaths_.value(stem);
         if (!QFileInfo(path).isFile() || !verifier(path)) {
-            return cleanupOr(
-                QStringLiteral("Verification cleanup left output artifacts"),
-                reject(QStringLiteral("verification_failed"),
-                       QStringLiteral("A temporary output failed reopen verification")));
+            return failAndRollback(
+                QStringLiteral("verification_failed"),
+                QStringLiteral("A temporary output failed reopen verification"),
+                QStringLiteral("Verification cleanup left output artifacts"));
         }
-        if (cancelled.load()) return rejectCancelled();
+        if (cancellation.isCancelled()) return cancelled();
     }
 
-    const TransactionResult committing = writeManifest(QStringLiteral("committing"));
-    if (!committing.ok) {
-        return cleanupOr(
-            QStringLiteral("Manifest failure cleanup left output artifacts"),
-            committing);
+    QString finalDirectory;
+    const bool published = cancellation.tryCommit([&] {
+        for (int number = 1; number <= kMaximumNumberedDirectories; ++number) {
+            const QString candidate = numberedFinalDirectory(plan_, number);
+            if (QFileInfo::exists(candidate)) continue;
+            if (operations_->renameDirectory(temporaryDirectory_, candidate)) {
+                finalDirectory = candidate;
+                return true;
+            }
+            if (!QFileInfo::exists(candidate)) return false;
+        }
+        return false;
+    });
+    if (!published) {
+        return cancellation.isCancelled()
+            ? cancelled()
+            : failAndRollback(
+                QStringLiteral("commit_failed"),
+                QStringLiteral("Output job directory rename failed"),
+                QStringLiteral("Commit cleanup left output artifacts"));
     }
 
+    QStringList outputs;
+    outputs.reserve(plan_.stems.size());
     for (const QString& stem : plan_.stems) {
-        if (cancelled.load()) return rejectCancelled();
-        const QString finalPath = finalPaths_.value(stem);
-        if (QFileInfo::exists(finalPath)
-            || !operations_->renameFile(temporaryPaths_.value(stem), finalPath)) {
-            return cleanupOr(
-                QStringLiteral("Commit rollback left output artifacts"),
-                reject(QStringLiteral("commit_failed"),
-                       QStringLiteral("Output commit rename failed")));
-        }
-        committedPaths_.push_back(finalPath);
-        if (cancelled.load()) return rejectCancelled();
+        outputs.push_back(QDir(finalDirectory).filePath(
+            QFileInfo(temporaryPaths_.value(stem)).fileName()));
     }
-
-    const QStringList outputs = committedPaths_;
-    if (!QDir(temporaryDirectory_).removeRecursively()
-        || QFileInfo::exists(temporaryDirectory_)) {
-        return cleanupOr(
-            QStringLiteral("Temporary-directory cleanup left output artifacts"),
-            reject(QStringLiteral("commit_failed"),
-                   QStringLiteral("Could not remove the temporary output directory")));
-    }
-    if (cancelled.load()) return rejectCancelled();
-    committedPaths_.clear();
     active_ = false;
     lock_.reset();
     return {true, {}, {}, outputs};
@@ -407,27 +294,17 @@ TransactionResult OutputTransaction::commit(
 
 TransactionResult OutputTransaction::rollback()
 {
+    if (!temporaryDirectory_.isEmpty()) {
+        (void)operations_->removeDirectory(temporaryDirectory_);
+    }
     QStringList remaining;
-    for (const QString& path : std::as_const(committedPaths_)) {
-        (void)operations_->removeFile(path);
-        if (QFileInfo::exists(path)) remaining.push_back(path);
-    }
-    committedPaths_ = remaining;
-    // Keep the durable manifest while any published final remains. If this
-    // process exits before a retry succeeds, the next transaction can still
-    // identify and recover the partial commit.
-    if (committedPaths_.isEmpty() && !temporaryDirectory_.isEmpty()) {
-        (void)QDir(temporaryDirectory_).removeRecursively();
-    }
-    const bool clean = committedPaths_.isEmpty()
-        && !QFileInfo::exists(temporaryDirectory_);
-    active_ = !clean;
-    if (clean) {
-        lock_.reset();
-        return {true, {}, {}, {}};
-    }
     if (QFileInfo::exists(temporaryDirectory_)) {
         remaining.push_back(temporaryDirectory_);
+    }
+    active_ = !remaining.isEmpty();
+    if (!active_) {
+        lock_.reset();
+        return {true, {}, {}, {}};
     }
     return {false, QStringLiteral("rollback_failed"),
             QStringLiteral("Output rollback left artifacts"), remaining};

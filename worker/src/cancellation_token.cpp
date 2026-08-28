@@ -37,9 +37,13 @@ void CancellationToken::Subscription::reset()
     entry->callback = {};
 }
 
-void CancellationToken::cancel()
+bool CancellationToken::cancel()
 {
-    if (cancelled_.exchange(true)) return;
+    {
+        const std::lock_guard lock(terminalMutex_);
+        if (committed_) return false;
+        if (cancelled_.exchange(true)) return true;
+    }
     std::vector<std::shared_ptr<CallbackEntry>> callbacks;
     {
         const std::lock_guard lock(callbacksMutex_);
@@ -56,9 +60,19 @@ void CancellationToken::cancel()
         const std::lock_guard lock(entry->mutex);
         if (entry->active && entry->callback) entry->callback();
     }
+    return true;
 }
 
 bool CancellationToken::isCancelled() const { return cancelled_.load(); }
+
+bool CancellationToken::tryCommit(
+    const std::function<bool()>& publish) const
+{
+    const std::lock_guard lock(terminalMutex_);
+    if (cancelled_.load() || committed_ || !publish()) return false;
+    committed_ = true;
+    return true;
+}
 
 const std::atomic_bool& CancellationToken::atomicFlag() const
 {

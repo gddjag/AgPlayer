@@ -35,8 +35,9 @@ public:
     CancellationToken(const CancellationToken&) = delete;
     CancellationToken& operator=(const CancellationToken&) = delete;
 
-    void cancel();
+    bool cancel();
     [[nodiscard]] bool isCancelled() const;
+    [[nodiscard]] bool tryCommit(const std::function<bool()>& publish) const;
     [[nodiscard]] const std::atomic_bool& atomicFlag() const;
     [[nodiscard]] Subscription notifyOnCancel(std::function<void()> callback) const;
 
@@ -48,6 +49,8 @@ private:
     };
 
     std::atomic_bool cancelled_{false};
+    mutable std::mutex terminalMutex_;
+    mutable bool committed_ = false;
     mutable std::mutex callbacksMutex_;
     mutable std::vector<std::weak_ptr<CallbackEntry>> callbacks_;
 };

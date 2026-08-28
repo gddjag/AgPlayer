@@ -5,7 +5,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QPointer>
-#include <QThread>
+#include <QSemaphore>
 
 #ifdef Q_OS_WIN
 #include <fcntl.h>
@@ -21,28 +21,6 @@ using namespace agplayer::separation;
 
 namespace {
 
-class BlockingRenameOps final : public NativeOutputFileOps {
-public:
-    explicit BlockingRenameOps(QString markerPath)
-        : markerPath_(std::move(markerPath))
-    {
-    }
-
-    bool renameFile(const QString& source, const QString& destination) override
-    {
-        if (!NativeOutputFileOps::renameFile(source, destination)) return false;
-        QFile marker(markerPath_);
-        if (marker.open(QIODevice::WriteOnly)) {
-            marker.write("first-rename-complete");
-            marker.close();
-        }
-        for (;;) QThread::msleep(1000);
-    }
-
-private:
-    QString markerPath_;
-};
-
 class BlockingBackend final : public WorkerBackend {
 public:
     BackendResult probe(const QJsonObject&) override
@@ -54,13 +32,10 @@ public:
                            const CancellationToken& cancelled,
                            const ProgressCallback& progress) override
     {
-        auto operations = std::make_shared<BlockingRenameOps>(
-            payload.value(QStringLiteral("markerPath")).toString());
         OutputTransaction transaction(
             {payload.value(QStringLiteral("outputDirectory")).toString(),
              QStringLiteral("timeout"), QStringLiteral("wav"),
-             {QStringLiteral("vocals"), QStringLiteral("instrumental")}},
-            operations);
+             {QStringLiteral("vocals"), QStringLiteral("instrumental")}});
         const TransactionResult begun = transaction.begin();
         if (!begun.ok) return {false, begun.code, begun.message, {}};
         for (const QString& stem : {QStringLiteral("vocals"),
@@ -71,9 +46,18 @@ public:
                         QStringLiteral("Could not stage test output"), {}};
             }
         }
-        progress(0.5, QStringLiteral("active_commit"));
+        progress(0.5, QStringLiteral("active_precommit"));
+        QFile marker(payload.value(QStringLiteral("markerPath")).toString());
+        if (!marker.open(QIODevice::WriteOnly)
+            || marker.write("staging-complete") != 16) {
+            return {false, QStringLiteral("test_marker_failed"),
+                    QStringLiteral("Could not write the staging marker"), {}};
+        }
+        marker.close();
+        QSemaphore blocker;
+        blocker.acquire();
         const TransactionResult committed = transaction.commit(
-            [](const QString&) { return true; }, cancelled.atomicFlag());
+            [](const QString&) { return true; }, cancelled);
         return committed.ok
             ? BackendResult{true, {}, {}, {}}
             : BackendResult{false, committed.code, committed.message, {}};

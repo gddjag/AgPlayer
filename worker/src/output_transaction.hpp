@@ -1,12 +1,13 @@
 #pragma once
 
+#include "cancellation_token.hpp"
+
 #include <QHash>
 #include <QString>
 #include <QStringList>
 
 #include <functional>
 #include <memory>
-#include <atomic>
 
 class QLockFile;
 
@@ -24,13 +25,16 @@ struct TransactionResult {
     QString code;
     QString message;
     QStringList outputs;
+    QString causeCode;
+    QString causeMessage;
 };
 
 class NativeOutputFileOps {
 public:
     virtual ~NativeOutputFileOps() = default;
-    virtual bool renameFile(const QString& source, const QString& destination);
-    virtual bool removeFile(const QString& path);
+    virtual bool renameDirectory(const QString& source,
+                                 const QString& destination);
+    virtual bool removeDirectory(const QString& path);
 };
 
 class OutputTransaction final {
@@ -49,24 +53,20 @@ public:
     [[nodiscard]] QString temporaryDirectory() const;
     [[nodiscard]] TransactionResult
     commit(const std::function<bool(const QString&)>& verifier,
-           const std::atomic_bool& cancelled);
+           const CancellationToken& cancellation);
     [[nodiscard]] TransactionResult cancel();
 
 private:
     [[nodiscard]] TransactionResult reject(const QString& code,
                                            const QString& message);
     [[nodiscard]] TransactionResult rollback();
-    [[nodiscard]] TransactionResult writeManifest(const QString& phase);
-    [[nodiscard]] TransactionResult recoverStaleTransactions();
+    [[nodiscard]] TransactionResult recoverOwnedTemporaryDirectories();
 
     OutputPlan plan_;
     std::shared_ptr<NativeOutputFileOps> operations_;
     std::unique_ptr<QLockFile> lock_;
     QString temporaryDirectory_;
-    QString manifestPath_;
     QHash<QString, QString> temporaryPaths_;
-    QHash<QString, QString> finalPaths_;
-    QStringList committedPaths_;
     bool active_ = false;
 };
 

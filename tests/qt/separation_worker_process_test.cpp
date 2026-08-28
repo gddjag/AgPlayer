@@ -24,7 +24,7 @@ private slots:
     void helloMalformedAndShutdownUseNdjsonAndExitCleanly();
     void stdinEofDrainsAndExitsWithinTheClientDeadline();
     void oversizedLineIsRejectedAndTheWorkerStillShutsDown();
-    void activeCommitTimeoutCancelsThenKillsAndRecoversThePartialRename();
+    void activePreCommitTimeoutCancelsThenKillsAndRecoversOwnedTemporaryDirectory();
 };
 
 void SeparationWorkerProcessTest::helloMalformedAndShutdownUseNdjsonAndExitCleanly()
@@ -103,12 +103,11 @@ void SeparationWorkerProcessTest::oversizedLineIsRejectedAndTheWorkerStillShutsD
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
 }
 
-void SeparationWorkerProcessTest::activeCommitTimeoutCancelsThenKillsAndRecoversThePartialRename()
+void SeparationWorkerProcessTest::activePreCommitTimeoutCancelsThenKillsAndRecoversOwnedTemporaryDirectory()
 {
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
-    const QString markerPath = temporary.filePath(QStringLiteral("renamed.marker"));
-    const QString firstFinal = temporary.filePath(QStringLiteral("timeout-vocals.wav"));
+    const QString markerPath = temporary.filePath(QStringLiteral("staged.marker"));
 
     QProcess process;
     process.setProgram(QString::fromUtf8(AG_SEPARATION_BLOCKING_WORKER_PATH));
@@ -126,8 +125,12 @@ void SeparationWorkerProcessTest::activeCommitTimeoutCancelsThenKillsAndRecovers
         if (process.waitForReadyRead(100)) observed += process.readAllStandardOutput();
     }
     QVERIFY2(QFileInfo::exists(markerPath), observed.constData());
-    QVERIFY(QFileInfo::exists(firstFinal));
-    QVERIFY(observed.contains("\"stage\":\"active_commit\""));
+    QVERIFY(observed.contains("\"stage\":\"active_precommit\""));
+    QCOMPARE(QDir(temporary.path()).entryList(
+                 {QStringLiteral(".agplayer-separation-job-*")},
+                 QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot).size(),
+             1);
+    QVERIFY(!QFileInfo::exists(temporary.filePath(QStringLiteral("timeout"))));
 
     process.write(encodeProtocolMessage(ProtocolType::Cancel,
                                         QStringLiteral("active-timeout")));
@@ -146,16 +149,16 @@ void SeparationWorkerProcessTest::activeCommitTimeoutCancelsThenKillsAndRecovers
     QVERIFY(!observed.contains("\"type\":\"result\""));
 
     OutputTransaction recovered(
-        {temporary.path(), QStringLiteral("timeout"), QStringLiteral("wav"),
+        {temporary.path(), QStringLiteral("recovered"), QStringLiteral("wav"),
          {QStringLiteral("vocals"), QStringLiteral("instrumental")}});
     const TransactionResult begun = recovered.begin();
     QVERIFY2(begun.ok, qPrintable(begun.message));
-    QVERIFY(!QFileInfo::exists(firstFinal));
     QVERIFY(recovered.cancel().ok);
     QCOMPARE(QDir(temporary.path()).entryList(
                  {QStringLiteral(".agplayer-separation-*")},
                  QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot),
              QStringList{});
+    QVERIFY(!QFileInfo::exists(temporary.filePath(QStringLiteral("timeout"))));
 }
 
 QTEST_GUILESS_MAIN(SeparationWorkerProcessTest)

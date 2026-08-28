@@ -1,10 +1,13 @@
 #include "separation_protocol.hpp"
+#include "output_transaction.hpp"
 #include "worker_engine.hpp"
 
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QSemaphore>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <atomic>
@@ -76,6 +79,45 @@ public:
     }
 };
 
+class CommitBlockingBackend final : public WorkerBackend {
+public:
+    QSemaphore committed;
+    QSemaphore release;
+
+    BackendResult probe(const QJsonObject&) override
+    {
+        return {true, {}, {}, {}};
+    }
+
+    BackendResult separate(const QJsonObject& payload,
+                           const CancellationToken& cancellation,
+                           const ProgressCallback&) override
+    {
+        OutputTransaction transaction(
+            {payload.value(QStringLiteral("outputDirectory")).toString(),
+             QStringLiteral("race"), QStringLiteral("wav"),
+             {QStringLiteral("vocals")}});
+        const TransactionResult begun = transaction.begin();
+        if (!begun.ok) return {false, begun.code, begun.message, {}};
+        QFile staged(transaction.temporaryPath(QStringLiteral("vocals")));
+        if (!staged.open(QIODevice::WriteOnly) || staged.write("audio") != 5) {
+            return {false, QStringLiteral("test_write_failed"),
+                    QStringLiteral("Could not stage output"), {}};
+        }
+        staged.close();
+        const TransactionResult published = transaction.commit(
+            [](const QString&) { return true; }, cancellation);
+        if (!published.ok) {
+            return {false, published.code, published.message, {}};
+        }
+        committed.release();
+        release.acquire();
+        QJsonArray outputs;
+        for (const QString& path : published.outputs) outputs.push_back(path);
+        return {true, {}, {}, {{QStringLiteral("outputs"), outputs}}};
+    }
+};
+
 } // namespace
 
 class SeparationWorkerEngineTest final : public QObject {
@@ -93,6 +135,7 @@ private slots:
     void backendErrorDiagnosticsReachNdjson();
     void requestIdReuseClearsStaleCancellationForEveryMessageType();
     void progressIsMonotonicAtTheProcessBoundary();
+    void cancelAfterAtomicCommitIsRejectedAndResultRemainsVisible();
 };
 
 void SeparationWorkerEngineTest::helloAndProbeRouteTheirRequestIds()
@@ -392,6 +435,37 @@ void SeparationWorkerEngineTest::progressIsMonotonicAtTheProcessBoundary()
         QVERIFY(fraction >= previous);
         previous = fraction;
     }
+}
+
+void SeparationWorkerEngineTest::cancelAfterAtomicCommitIsRejectedAndResultRemainsVisible()
+{
+    QTemporaryDir outputDirectory;
+    auto backend = std::make_shared<CommitBlockingBackend>();
+    WorkerEngine engine(backend);
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+    const QString requestId = QStringLiteral("commit-race");
+    engine.acceptLine(message(
+        ProtocolType::Start, requestId,
+        {{QStringLiteral("outputDirectory"), outputDirectory.path()}}));
+    QVERIFY(backend->committed.tryAcquire(1, 2000));
+    QVERIFY(QFileInfo::exists(outputDirectory.filePath(
+        QStringLiteral("race/race-vocals.wav"))));
+
+    engine.acceptLine(message(ProtocolType::Cancel, requestId));
+    QCOMPARE(output.size(), 1);
+    const ProtocolMessage cancel = decode(output.front().at(0));
+    QCOMPARE(cancel.type, ProtocolType::Cancel);
+    QVERIFY(!cancel.payload.value(QStringLiteral("accepted")).toBool());
+
+    backend->release.release();
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QList<QVariant>& arguments : output) {
+            if (decode(arguments.at(0)).type == ProtocolType::Result) return true;
+        }
+        return false;
+    }(), 2000);
+    QVERIFY(QFileInfo::exists(outputDirectory.filePath(
+        QStringLiteral("race/race-vocals.wav"))));
 }
 
 QTEST_GUILESS_MAIN(SeparationWorkerEngineTest)

@@ -48,7 +48,10 @@ BackendResult transactionFailure(const TransactionResult& transaction,
     if (!remainingPaths.isEmpty()) {
         diagnostics.insert(QStringLiteral("remainingPaths"), remainingPaths);
     }
-    if (cause != nullptr) {
+    if (!transaction.causeCode.isEmpty()) {
+        diagnostics.insert(QStringLiteral("causeCode"), transaction.causeCode);
+        diagnostics.insert(QStringLiteral("causeMessage"), transaction.causeMessage);
+    } else if (cause != nullptr) {
         diagnostics.insert(QStringLiteral("causeCode"), cause->code);
         diagnostics.insert(QStringLiteral("causeMessage"), cause->message);
     }
@@ -1038,7 +1041,7 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
                               QStringLiteral("Separation cancelled")));
     }
     const TransactionResult committed = transaction.commit(
-        verifyAudio, cancelled.atomicFlag());
+        verifyAudio, cancelled);
     if (!committed.ok) return transactionFailure(committed);
     QJsonArray outputs;
     for (const QString& path : committed.outputs) outputs.push_back(path);

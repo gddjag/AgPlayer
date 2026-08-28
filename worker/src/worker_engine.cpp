@@ -94,11 +94,12 @@ void WorkerEngine::acceptLine(const QByteArray& line)
     case ProtocolType::Cancel: {
         bool accepted = cancelledRequests_.contains(message.requestId);
         if (activeJob_ && activeJob_->requestId == message.requestId) {
-            activeJob_->cancelled->cancel();
-            rememberCancelledRequest(message.requestId);
-            activeJob_.reset();
-            ++generation_;
-            accepted = true;
+            accepted = activeJob_->cancelled->cancel();
+            if (accepted) {
+                rememberCancelledRequest(message.requestId);
+                activeJob_.reset();
+                ++generation_;
+            }
         }
         emit messageReady(encodeProtocolMessage(
             ProtocolType::Cancel, message.requestId,
