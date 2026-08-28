@@ -110,23 +110,34 @@ Rectangle {
             eventId, Math.round(offset), gain)
     }
 
-    onWidthChanged: AudioEditorController.viewport.setViewportWidth(
-        Math.max(1, width))
-    Component.onCompleted: AudioEditorController.viewport.setViewportWidth(
-        Math.max(1, width))
+    function syncViewportWaveformMetrics() {
+        AudioEditorController.viewport.setViewportWidth(Math.max(1, width))
+        AudioEditorController.setViewportWaveformDevicePixelRatio(
+            Screen.devicePixelRatio)
+    }
 
-    Repeater {
-        model: Math.max(1, AudioEditorController.channels)
-        Rectangle {
-            required property int index
-            x: 0
-            y: (index + 0.5) * canvas.height
-               / Math.max(1, AudioEditorController.channels)
-            width: canvas.width
-            height: 1
-            color: Theme.borderStrong
-            opacity: 0.7
+    onWidthChanged: syncViewportWaveformMetrics()
+    onWindowChanged: syncViewportWaveformMetrics()
+    Component.onCompleted: {
+        syncViewportWaveformMetrics()
+    }
+
+    Connections {
+        target: canvas.window
+        function onScreenChanged() {
+            canvas.syncViewportWaveformMetrics()
         }
+    }
+
+    Rectangle {
+        id: waveformCenterLine
+        objectName: "editorWaveformCenterLine"
+        x: 0
+        y: Math.round((canvas.height - height) * 0.5)
+        width: canvas.width
+        height: 1
+        color: Theme.borderStrong
+        opacity: 0.7
     }
 
     AudioEditorWaveformItem {

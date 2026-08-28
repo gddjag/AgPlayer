@@ -789,6 +789,15 @@ TestCase {
             - updatedGain.parent.height * 0.25) <= 1)
     }
 
+    function test_waveformUsesOneCenteredBaseline() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        const centerLine = findChild(canvas, "editorWaveformCenterLine")
+        verify(centerLine)
+        compare(centerLine.height, 1)
+        verify(Math.abs(centerLine.y - (canvas.height - 1) / 2) <= 1)
+    }
+
     function test_fadeHandleAndVolumeLinePersistSampleExactEdits() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         const canvas = findChild(page, "editorWaveformCanvas")

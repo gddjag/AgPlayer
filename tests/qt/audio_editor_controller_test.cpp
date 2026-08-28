@@ -2230,10 +2230,10 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(cachedReady(), 10'000);
         const QVariantList cached = controller.viewportChannelPeaks()
             .front().toList();
-        QVERIFY(peakValue(cached, 0, false) > 0.12);
+        QVERIFY(peakValue(cached, 0, false) < -0.12);
         QVERIFY(peakValue(cached, 0, true) < 0.14);
         QVERIFY(peakValue(cached, 32, true) > 0.20);
-        QVERIFY(std::abs(peakValue(cached, 63, false)) < 0.0001);
+        QVERIFY(peakValue(cached, 63, false) < -0.30);
         QVERIFY(peakValue(cached, 63, true) > 0.30);
 
         QVERIFY(writeMonoFloatWav(source,
@@ -2247,7 +2247,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(preciseReady(), 10'000);
         const QVariantList precise = controller.viewportChannelPeaks()
             .front().toList();
-        QVERIFY(std::abs(peakValue(precise, 0, false) - 0.125) < 0.001);
+        QVERIFY(std::abs(peakValue(precise, 0, false) + 0.125) < 0.001);
         QVERIFY(std::abs(peakValue(precise, 0, true) - 0.125) < 0.001);
         QVERIFY(std::abs(peakValue(precise, 512, true) - 0.25) < 0.01);
         QVERIFY(std::abs(peakValue(precise, 1'023, true)) < 0.0001);
@@ -2273,7 +2273,7 @@ private slots:
         }
     }
 
-    void stereoWaveformPublishesOneCenteredMixEnvelope()
+    void antiphaseStereoWaveformPublishesOneCenteredAmplitudeEnvelope()
     {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -2296,8 +2296,11 @@ private slots:
         };
         QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
         const QVariantList mix = controller.viewportChannelPeaks().front().toList();
-        for (qsizetype index = 0; index < mix.size(); ++index) {
-            QVERIFY(std::abs(mix[index].toDouble()) < 0.001);
+        for (qsizetype index = 0; index < mix.size(); index += 2) {
+            QVERIFY2(std::abs(mix[index].toDouble() + 0.5) < 0.001,
+                     "opposite-polarity channels must not cancel the envelope");
+            QVERIFY2(std::abs(mix[index + 1].toDouble() - 0.5) < 0.001,
+                     "single waveform must remain centered around zero");
         }
     }
 
@@ -3079,8 +3082,9 @@ private slots:
         const QVariantList precise = controller.viewportChannelPeaks()
             .front().toList();
         for (qsizetype point = 0; point < 8; ++point) {
-            const double expected = samples[static_cast<std::size_t>(point + 10)];
-            QVERIFY(std::abs(peakValue(precise, point, false) - expected)
+            const double expected = std::abs(
+                samples[static_cast<std::size_t>(point + 10)]);
+            QVERIFY(std::abs(peakValue(precise, point, false) + expected)
                     < 0.0001);
             QVERIFY(std::abs(peakValue(precise, point, true) - expected)
                     < 0.0001);
@@ -3116,9 +3120,9 @@ private slots:
             const QVariantList precise = controller.viewportChannelPeaks()
                 .front().toList();
             for (qsizetype point = 0; point < 8; ++point) {
-                const double expected = samples[static_cast<std::size_t>(
-                    sourceStart + point)];
-                QVERIFY2(std::abs(peakValue(precise, point, false) - expected)
+                const double expected = std::abs(samples[static_cast<std::size_t>(
+                    sourceStart + point)]);
+                QVERIFY2(std::abs(peakValue(precise, point, false) + expected)
                              < 0.0001,
                          qPrintable(QStringLiteral(
                              "sample rate %1 point %2 was not sample-exact")

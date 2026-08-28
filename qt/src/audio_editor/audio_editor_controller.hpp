@@ -252,6 +252,13 @@ public:
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
     Q_INVOKABLE bool clearTimeline();
+    Q_INVOKABLE void setViewportWaveformDevicePixelRatio(
+        double devicePixelRatio);
+    struct ViewportWaveformResult final {
+        std::vector<std::vector<float>> peaks;
+        bool hasVisibleEvent{};
+        bool hasUnavailableVisibleEvent{};
+    };
     Q_INVOKABLE bool beginSelectionHandoff(double sceneX, double sceneY);
     Q_INVOKABLE void updateSelectionHandoff(double sceneX, double sceneY);
     Q_INVOKABLE void cancelSelectionHandoff();
@@ -345,13 +352,12 @@ private:
     explicit AudioEditorController(std::optional<ag_audio_backend> backend,
                                    QObject* parent);
     struct NoiseReductionFinalizeResult;
-    using ViewportWaveformPeaks = std::vector<std::vector<float>>;
     using SourcePeakPyramids = std::unordered_map<std::string,
         std::shared_ptr<const agplayer::editor::PeakPyramid>>;
     struct ViewportWaveformJob final {
         quint64 generation{};
         std::shared_ptr<std::atomic_bool> cancelToken;
-        std::function<ViewportWaveformPeaks()> work;
+        std::function<ViewportWaveformResult()> work;
     };
     struct SourcePeakCacheResult final {
         SourcePeakPyramids pyramids;
@@ -511,6 +517,7 @@ private:
     qint64 saved_playhead_frame_{};
     qint64 saved_visible_start_frame_{};
     qint64 saved_visible_end_frame_{};
+    qreal viewport_waveform_device_pixel_ratio_{1.0};
     agplayer::editor::ProjectExportSettings saved_export_settings_;
 
     enum class EventGestureKind {
