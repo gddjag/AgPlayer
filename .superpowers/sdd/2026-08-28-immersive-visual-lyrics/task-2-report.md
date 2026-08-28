@@ -109,3 +109,23 @@
 - No QML files were changed and `qml_main_window_test` is still not claimed as
   passing. Its prior category-scroll and Windows native-dialog failure remains
   an unconfirmed baseline issue outside this task's edited scope.
+
+## Review round 2 — LRCLIB response contract
+
+- Focused correction commit: `e41d2b1` — `fix(lyrics): reject malformed LRCLIB responses`.
+- RED: new transport cases for `{}`, a missing lyrics field, and a wrong
+  `instrumental` type failed in `lyrics_service_test` before the provider change.
+  The old object coercion converted those payloads into empty candidates, which
+  could later be reported as NotFound and reset provider health.
+- GREEN: LRCLIB 2xx objects now require string `trackName` and `artistName`,
+  boolean `instrumental`, and present `syncedLyrics`/`plainLyrics` fields that
+  are either strings or JSON null. Optional album/duration fields are typed when
+  present. Any malformed exact object (or malformed search entry) reports
+  `TechnicalError("invalid-response")` instead of NotFound.
+- A complete record with both lyrics fields null remains a valid Found response;
+  the service may then apply its existing NotFound/instrumental contract. A
+  service regression proves three `invalid-response` technical failures enter
+  the existing 20-minute degraded window.
+- Validation: `lyrics_service_test`, `library_model_test`, and
+  `playback_controller_test` passed 3/3; Debug `AgPlayer` built successfully;
+  `git diff --check` passed before the correction commit.
