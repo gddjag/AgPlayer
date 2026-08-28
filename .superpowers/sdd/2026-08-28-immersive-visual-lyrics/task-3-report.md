@@ -140,3 +140,58 @@
 - Integrated host mouse input and screenshot-based visual acceptance remain
   Task 4 work. The smoke used deterministic synthetic Task 1-shaped features;
   it did not claim real audio playback or visual-design acceptance.
+
+## Review round 2 — quality timing and one-shot punch events
+
+### Correction commit and RED evidence
+
+- Correction implementation: `47771d0` —
+  `fix(visuals): separate quality timing and punch events`.
+- Tests were changed before production code. The quality RED failed to compile
+  because `AutomaticQualityController` had no `observeWorkSample()` or
+  `advanceWallClock()` APIs. The punch RED independently failed on the missing
+  `PunchEvent`, `PunchEventConsumer`, and `TerrainReactorItem::punchRevision()`.
+  These failures established that the old contracts still coupled pacing delay
+  to load and represented punch as persistent camera state.
+
+### Closed review findings
+
+- The automatic-quality loop now classifies only the current render-thread CPU
+  submission segment, measured from instance/uniform preparation through QRhi
+  command recording. Eco pacer skips and presentation/vsync delay are outside
+  that work sample. Hysteresis and cooldown advance separately using elapsed
+  wall time between allowed frames.
+- The pure-logic test simulates 30 FPS Eco pacing on both 75 Hz and 165 Hz idle
+  displays with 2 ms submission work and remains at full quality. It separately
+  proves a sustained 40 ms work sample downgrades after 2.00 s and a 2 ms sample
+  restores after 8.00 s while preserving the existing 5 s cooldown and ordered
+  degradation contract.
+- Punch is now a compact strength/revision event copied in the immutable render
+  snapshot. The renderer consumes each monotonically newer revision once and
+  owns the decaying envelope. Orbit/zoom revisions carry only manual camera
+  deltas and cannot copy an old GUI punch back into renderer state. New events
+  retrigger even when their strength equals or is below the previous event.
+
+### Round 2 verification
+
+- Passed: `ctest --test-dir build/debug -R
+  "(player_experience_controller|terrain_reactor_(state|item|gpu_smoke))_test"
+  --output-on-failure` — 4/4 tests.
+- Passed: Debug `AgPlayer` build with MSVC `/W4 /WX`; the application target
+  rebuilt after the terrain item ABI change and the build command exited 0.
+- Passed on the accelerated backend: verbose GPU smoke explicitly reported
+  `Terrain Reactor accelerated backend: Direct3D11`, with 3/3 QtTest cases,
+  zero failures, zero skips, and exit 0.
+- Passed: final implementation `git diff --cached --check`; the implementation
+  commit contains only terrain state/item production files and their focused
+  tests.
+
+### Remaining limits
+
+- The Direct3D11 smoke proves renderer/resource execution but does not inject a
+  controlled 2 s real-GPU overload or validate hardware GPU timing. Automatic
+  quality currently uses render-thread CPU submission cost, as requested, not
+  GPU timestamp queries.
+- OpenGL, Vulkan, Metal, device-loss recovery, extended VRAM/resource soak,
+  integrated Task 4 mouse input, and screenshot-based visual acceptance remain
+  unverified.
