@@ -658,6 +658,8 @@ foreach(qt_test IN ITEMS
     translation_manager_test
     audio_preview_controller_test
     player_experience_controller_test
+    terrain_reactor_state_test
+    terrain_reactor_item_test
     editor_timeline_math_test
     audio_tools_end_to_end_test
     format_conversion_plan_test
@@ -1116,6 +1118,9 @@ set_tests_properties(playback_controller_test qml_main_window_test
 )
 set_tests_properties(settings_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+set_tests_properties(terrain_reactor_item_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
 set_tests_properties(track_waveform_thumbnail_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"

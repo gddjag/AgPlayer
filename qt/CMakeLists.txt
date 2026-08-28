@@ -1,3 +1,5 @@
+find_package(Qt6 6.7 REQUIRED COMPONENTS ShaderTools)
+
 add_library(agplayer_qt STATIC
     src/audio_editor/audio_editor_waveform_item.cpp
     src/audio_editor/audio_editor_waveform_item.hpp
@@ -83,6 +85,10 @@ add_library(agplayer_qt STATIC
     src/tag_filter_model.hpp
     src/tag_store.cpp
     src/tag_store.hpp
+    src/terrain_reactor_item.cpp
+    src/terrain_reactor_item.hpp
+    src/terrain_reactor_state.cpp
+    src/terrain_reactor_state.hpp
     src/theme_manager.cpp
     src/theme_manager.hpp
     src/metadata_editor.cpp
@@ -143,7 +149,15 @@ target_link_libraries(agplayer_qt
         agplayer_core
     PRIVATE
         Qt6::Concurrent
+        Qt6::GuiPrivate
         Qt6::Network
+)
+
+qt_add_shaders(agplayer_qt agplayer_terrain_reactor_shaders
+    PREFIX "/terrain"
+    FILES
+        shaders/terrain_reactor.vert
+        shaders/terrain_reactor.frag
 )
 
 if(WIN32)

@@ -24,6 +24,7 @@
 #include "settings_controller.hpp"
 #include "tag_model.hpp"
 #include "tag_filter_model.hpp"
+#include "terrain_reactor_item.hpp"
 #include "theme_manager.hpp"
 #include "track_waveform_thumbnail_item.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
@@ -171,6 +172,8 @@ void register_agplayer_qml_types(LibraryModel* library,
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
     qmlRegisterType<TrackWaveformThumbnailItem>(
         "AgPlayer", 1, 0, "TrackWaveformThumbnailItem");
+    qmlRegisterType<TerrainReactorItem>("AgPlayer", 1, 0,
+                                        "TerrainReactorItem");
     qmlRegisterType<AudioEditorWaveformItem>(
         "AgPlayer", 1, 0, "AudioEditorWaveformItem");
 }
