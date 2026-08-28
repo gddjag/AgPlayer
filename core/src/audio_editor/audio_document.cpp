@@ -117,6 +117,96 @@ bool reframeEvent(AudioEvent& event, const SampleFrame newSourceStart,
     return isValid(event);
 }
 
+struct SourceEnvelopePoint final {
+    SampleFrame sourceFrame{};
+    float gain{1.0F};
+};
+
+void appendSourceEnvelope(const AudioEvent& event,
+                          std::vector<SourceEnvelopePoint>& result)
+{
+    result.push_back({event.sourceStart, envelopeGainAt(event, 0)});
+    for (const EnvelopePoint& point : event.envelope) {
+        result.push_back({event.sourceStart + point.offset, point.gain});
+    }
+}
+
+std::vector<SourceEnvelopePoint> sharedSourceEnvelope(
+    const AudioEvent& left, const AudioEvent& right)
+{
+    std::vector<SourceEnvelopePoint> result;
+    result.reserve(left.envelope.size() + right.envelope.size() + 2U);
+    appendSourceEnvelope(left, result);
+    appendSourceEnvelope(right, result);
+    std::stable_sort(result.begin(), result.end(),
+        [](const SourceEnvelopePoint& first, const SourceEnvelopePoint& second) {
+            return first.sourceFrame < second.sourceFrame;
+        });
+    std::vector<SourceEnvelopePoint> unique;
+    unique.reserve(result.size());
+    for (const SourceEnvelopePoint& point : result) {
+        if (!unique.empty() && unique.back().sourceFrame == point.sourceFrame) {
+            unique.back().gain = point.gain;
+        } else {
+            unique.push_back(point);
+        }
+    }
+    return unique;
+}
+
+float sourceEnvelopeGainAt(const std::vector<SourceEnvelopePoint>& points,
+                           const SampleFrame sourceFrame) noexcept
+{
+    if (points.empty()) return 1.0F;
+    SourceEnvelopePoint previous = points.front();
+    if (sourceFrame <= previous.sourceFrame) return previous.gain;
+    for (std::size_t index = 1; index < points.size(); ++index) {
+        const SourceEnvelopePoint& next = points[index];
+        if (sourceFrame <= next.sourceFrame) {
+            const double fraction = static_cast<double>(
+                sourceFrame - previous.sourceFrame)
+                / static_cast<double>(next.sourceFrame - previous.sourceFrame);
+            return previous.gain + static_cast<float>(
+                (next.gain - previous.gain) * fraction);
+        }
+        previous = next;
+    }
+    return previous.gain;
+}
+
+std::vector<EnvelopePoint> reframeSharedEnvelope(
+    const std::vector<SourceEnvelopePoint>& points,
+    const SampleFrame sourceStart, const SampleFrame sourceEnd)
+{
+    const SampleFrame frames = sourceEnd - sourceStart;
+    std::vector<EnvelopePoint> result;
+    result.reserve(points.size() + 1U);
+    const float startGain = sourceEnvelopeGainAt(points, sourceStart);
+    if (startGain != 1.0F) result.push_back({0, startGain});
+    for (const SourceEnvelopePoint& point : points) {
+        if (point.sourceFrame <= sourceStart || point.sourceFrame >= sourceEnd) {
+            continue;
+        }
+        const SampleFrame offset = point.sourceFrame - sourceStart;
+        if (!result.empty() && result.back().offset == offset) {
+            result.back().gain = point.gain;
+        } else {
+            result.push_back({offset, point.gain});
+        }
+    }
+    const SampleFrame lastOffset = frames - 1;
+    const float lastGain = sourceEnvelopeGainAt(points,
+                                                sourceStart + lastOffset);
+    if (!result.empty() && result.back().offset == lastOffset) {
+        result.back().gain = lastGain;
+    } else if (lastGain != 1.0F
+               && (result.empty() || result.back().gain != lastGain)) {
+        result.push_back({lastOffset, lastGain});
+    }
+    fitEnvelopePointLimit(result);
+    return result;
+}
+
 bool sameSharedBoundaryParameters(const AudioEvent& left,
                                   const AudioEvent& right) noexcept
 {
@@ -135,6 +225,33 @@ bool operator==(const Selection& left, const Selection& right) noexcept
 bool operator==(const Marker& left, const Marker& right) noexcept
 {
     return left.name == right.name && left.frame == right.frame;
+}
+
+bool reframeSharedBoundary(AudioEvent& left, AudioEvent& right,
+                           const SampleFrame sourceBoundary)
+{
+    if (!left.source || left.source != right.source
+        || left.timelineStart + audibleFrames(left) != right.timelineStart
+        || left.sourceEnd != right.sourceStart
+        || !sameSharedBoundaryParameters(left, right)
+        || sourceBoundary <= left.sourceStart
+        || sourceBoundary >= right.sourceEnd) {
+        return false;
+    }
+    const auto envelope = sharedSourceEnvelope(left, right);
+    const SampleFrame leftTimelineStart = left.timelineStart;
+    const SampleFrame rightSourceEnd = right.sourceEnd;
+    if (!reframeEvent(left, left.sourceStart, sourceBoundary,
+                      leftTimelineStart)
+        || !reframeEvent(right, sourceBoundary, rightSourceEnd,
+                         leftTimelineStart + audibleFrames(left))) {
+        return false;
+    }
+    left.envelope = reframeSharedEnvelope(envelope, left.sourceStart,
+                                          left.sourceEnd);
+    right.envelope = reframeSharedEnvelope(envelope, right.sourceStart,
+                                           right.sourceEnd);
+    return isValid(left) && isValid(right);
 }
 
 AudioDocument AudioDocument::fromSource(AudioSource source)
@@ -253,23 +370,7 @@ bool AudioDocument::trimSharedBoundary(const EventId leftId,
     const auto right = std::find_if(candidate.begin(), candidate.end(),
         [rightId](const AudioEvent& event) { return event.id == rightId; });
     if (left == candidate.end() || right == candidate.end()
-        || left->timelineStart + audibleFrames(*left) != right->timelineStart
-        || left->sourceEnd != right->sourceStart
-        || !sameSharedBoundaryParameters(*left, *right)
-        || sourceBoundary <= left->sourceStart
-        || sourceBoundary >= right->sourceEnd) {
-        return false;
-    }
-    const SampleFrame leftTimelineStart = left->timelineStart;
-    const SampleFrame rightSourceEnd = right->sourceEnd;
-    if (!reframeEvent(*left, left->sourceStart, sourceBoundary,
-                      leftTimelineStart)) {
-        return false;
-    }
-    const SampleFrame rightTimelineStart = leftTimelineStart
-        + audibleFrames(*left);
-    if (!reframeEvent(*right, sourceBoundary, rightSourceEnd,
-                      rightTimelineStart)) {
+        || !reframeSharedBoundary(*left, *right, sourceBoundary)) {
         return false;
     }
     return applyCandidate(std::move(candidate));

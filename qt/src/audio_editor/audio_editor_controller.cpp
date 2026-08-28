@@ -844,10 +844,10 @@ AudioEditorController::timelineSnapshotForView() const
         if (left == snapshot.events.end() || right == snapshot.events.end()) {
             return snapshot;
         }
-        left->sourceEnd = event_gesture_.sourceEnd;
-        right->sourceStart = event_gesture_.sourceEnd;
-        right->timelineStart = left->timelineStart
-            + agplayer::editor::audibleFrames(*left);
+        if (!agplayer::editor::reframeSharedBoundary(
+                *left, *right, event_gesture_.sourceEnd)) {
+            return document_.timelineSnapshot();
+        }
         return snapshot;
     }
     const auto event = std::find_if(
@@ -1798,11 +1798,13 @@ bool AudioEditorController::trimSharedBoundary(const QString& leftId,
                 return event.id == *right;
             });
         if (leftEvent == snapshot.events.cend()
-            || rightEvent == snapshot.events.cend()
-            || sourceBoundary <= leftEvent->sourceStart
-            || sourceBoundary >= rightEvent->sourceEnd) {
+            || rightEvent == snapshot.events.cend()) {
             return false;
         }
+        AudioEvent previewLeft = *leftEvent;
+        AudioEvent previewRight = *rightEvent;
+        if (!agplayer::editor::reframeSharedBoundary(
+                previewLeft, previewRight, sourceBoundary)) return false;
         event_gesture_.sourceEnd = sourceBoundary;
         event_gesture_.pending = sourceBoundary != leftEvent->sourceEnd;
         emit documentChanged();
@@ -1875,16 +1877,13 @@ bool AudioEditorController::beginSharedBoundaryGesture(const QString& leftId,
         [leftIdValue](const AudioEvent& event) { return event.id == *leftIdValue; });
     const auto right = std::find_if(snapshot.events.cbegin(), snapshot.events.cend(),
         [rightIdValue](const AudioEvent& event) { return event.id == *rightIdValue; });
-    if (left == snapshot.events.cend() || right == snapshot.events.cend()
-        || left->timelineStart + agplayer::editor::audibleFrames(*left)
-            != right->timelineStart
-        || left->sourceEnd != right->sourceStart
-        || left->source != right->source || left->gain != right->gain
-        || left->speedRatio != right->speedRatio
-        || left->pitchSemitone != right->pitchSemitone
-        || left->mute != right->mute) {
+    if (left == snapshot.events.cend() || right == snapshot.events.cend()) {
         return false;
     }
+    AudioEvent previewLeft = *left;
+    AudioEvent previewRight = *right;
+    if (!agplayer::editor::reframeSharedBoundary(
+            previewLeft, previewRight, left->sourceEnd)) return false;
     event_gesture_ = {};
     event_gesture_.kind = EventGestureKind::SharedBoundary;
     event_gesture_.id = *leftIdValue;
@@ -3377,6 +3376,7 @@ void AudioEditorController::finishTimelineMutation()
 {
     const qint64 requestedPlayhead = playhead_frame_;
     stopPlayback();
+    if (!document_.selection()) setLoopEnabled(false);
     syncProjectSourcesAndIssues();
     syncPrimarySourceSummary();
     const qint64 frames = std::max<qint64>(0, document_.totalFrames());

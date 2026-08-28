@@ -383,6 +383,7 @@ private slots:
         QCOMPARE(controller.totalFrames(), qint64{1'000});
         QVERIFY(controller.modified());
         QCOMPARE(controller.selectionFrames(), qint64{0});
+        QVERIFY(!controller.loopEnabled());
     }
 
     void moveAndTrimUseCanonicalDocumentTimeline()
@@ -506,12 +507,23 @@ private slots:
         QVERIFY(controller.clearSelection());
         QVERIFY(!controller.loopEnabled());
 
+        QVERIFY(controller.addEnvelopePoint(QStringLiteral("1"), 700, 0.2));
         QVERIFY(controller.splitEvent(QStringLiteral("1"), 400));
         const auto historyAfterSplit = controller.historyStateIdForTesting();
         QVERIFY(controller.beginSharedBoundaryGesture(
             QStringLiteral("1"), QStringLiteral("2")));
         QVERIFY(controller.trimSharedBoundary(QStringLiteral("1"),
                                               QStringLiteral("2"), 250));
+        const QVariantList preview = controller.timelineEventViews();
+        const auto previewLeft = preview[0].toMap();
+        const qint64 previewLength = previewLeft.value(
+            QStringLiteral("sourceEnd")).toLongLong()
+            - previewLeft.value(QStringLiteral("sourceStart")).toLongLong();
+        for (const QVariant& point : previewLeft.value(
+                 QStringLiteral("envelope")).toList()) {
+            QVERIFY(point.toMap().value(QStringLiteral("offset")).toLongLong()
+                    < previewLength);
+        }
         QVERIFY(controller.trimSharedBoundary(QStringLiteral("1"),
                                               QStringLiteral("2"), 640));
         QCOMPARE(controller.historyStateIdForTesting(), historyAfterSplit);
@@ -527,6 +539,29 @@ private slots:
         QCOMPARE(controller.totalFrames(), qint64{0});
         QVERIFY(controller.undo());
         QCOMPARE(controller.timelineEventViews().size(), 2);
+    }
+
+    void selectionPlaybackPollSeeksBackToSelectionStart()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("loop.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(16'000, 0.25F)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        QVERIFY(controller.setSelection(4'000, 8'000));
+        QVERIFY(controller.seekFrame(4'000));
+        bool loopedToSelectionStart = false;
+        QObject::connect(&controller, &AudioEditorController::playbackChanged,
+                         &controller, [&] {
+            loopedToSelectionStart = loopedToSelectionStart
+                || controller.playheadFrame() == 4'000;
+        });
+        QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        QVERIFY(controller.seekFrame(8'000));
+        QTRY_VERIFY_WITH_TIMEOUT(loopedToSelectionStart, 2'000);
+        QVERIFY(controller.playing());
     }
 
     void fadeOutGestureAndEnvelopeUseObservableSingleStepEdits()

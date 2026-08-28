@@ -688,17 +688,17 @@ TestCase {
         verify(canvas)
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
-        const body = findChild(canvas, "editorEventBodyInteraction")
-        verify(body)
+        const gain = findChild(canvas, "editorEventGainInteraction")
+        verify(gain)
 
         verify(AudioEditorController.setSelection(12000, 36000))
         compare(AudioEditorController.loopEnabled, true)
-        const outside = canvas.mapToItem(body,
+        const outside = canvas.mapToItem(gain,
             canvas.pixelAtFrame(72000), canvas.height * 0.5)
-        const resolvedOutside = body.mapToItem(canvas, outside.x, outside.y)
+        const resolvedOutside = gain.mapToItem(canvas, outside.x, outside.y)
         verify(Math.abs(canvas.frameAtCanvasPixel(resolvedOutside.x) - 72000)
                <= 40)
-        mouseClick(body, outside.x, outside.y, Qt.LeftButton)
+        mouseClick(gain, outside.x, outside.y, Qt.LeftButton)
         compare(AudioEditorController.selectionStart, -1)
         compare(AudioEditorController.loopEnabled, false)
         verify(Math.abs(AudioEditorController.playheadFrame
@@ -706,11 +706,14 @@ TestCase {
 
         verify(AudioEditorController.setSelection(12000, 36000))
         compare(AudioEditorController.loopEnabled, true)
-        const inside = canvas.mapToItem(body,
+        verify(AudioEditorController.seekFrame(24000))
+        const playheadBeforeRightClick = AudioEditorController.playheadFrame
+        const inside = canvas.mapToItem(gain,
             canvas.pixelAtFrame(24000), canvas.height * 0.5)
-        mouseClick(body, inside.x, inside.y, Qt.RightButton)
+        mouseClick(gain, inside.x, inside.y, Qt.RightButton)
         compare(AudioEditorController.selectionStart, -1)
         compare(AudioEditorController.loopEnabled, false)
+        compare(AudioEditorController.playheadFrame, playheadBeforeRightClick)
     }
 
     function test_selectionUsesOneDashedBorderAndShowsExactLabels() {

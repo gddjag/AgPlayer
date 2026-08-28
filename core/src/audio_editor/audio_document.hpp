@@ -30,6 +30,12 @@ struct Marker final {
 [[nodiscard]] bool operator==(const Marker& left,
                               const Marker& right) noexcept;
 
+// Rebuilds two contiguous views of one source around a new shared boundary.
+// Both event envelopes are mapped onto their source coordinate before being
+// reframed, so extending either side retains automation from the other side.
+[[nodiscard]] bool reframeSharedBoundary(AudioEvent& left, AudioEvent& right,
+                                         SampleFrame sourceBoundary);
+
 class AudioDocument final {
 public:
     [[nodiscard]] static AudioDocument fromSource(AudioSource source);
