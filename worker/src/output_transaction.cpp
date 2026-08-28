@@ -4,19 +4,37 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLockFile>
+#include <QSaveFile>
 #include <QSet>
-#include <QTemporaryDir>
+#include <QUuid>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace agplayer::separation {
 namespace {
 
-constexpr auto kTemporaryPattern = ".agplayer-separation-job-*";
-constexpr auto kTemporaryTemplate = ".agplayer-separation-job-XXXXXX";
-constexpr auto kOwnedMarkerName = ".agplayer-separation-owned";
-constexpr auto kOwnedMarkerValue = "agplayer-separation-v1";
+constexpr auto kReservationPattern = ".agplayer-separation-reservation-*.json";
+constexpr auto kReservationPrefix = ".agplayer-separation-reservation-";
+constexpr auto kReservationSuffix = ".json";
+constexpr auto kTemporaryPrefix = ".agplayer-separation-job-";
 constexpr auto kOutputLockName = ".agplayer-separation.lock";
+constexpr qint64 kMaximumReservationBytes = 4096;
 constexpr int kMaximumNumberedDirectories = 10'000;
+
+enum class PathKind { Missing, RegularFile, Directory, Unsafe };
+
+struct Reservation {
+    QString path;
+    QString temporaryPath;
+};
 
 bool safeName(const QString& value)
 {
@@ -46,26 +64,151 @@ bool directChildOf(const QString& path, const QString& directory)
     return samePath(QFileInfo(path).absolutePath(), directory);
 }
 
-QString markerPath(const QString& directory)
+#ifdef Q_OS_WIN
+QString extendedNativePath(const QString& path)
 {
-    return QDir(directory).filePath(QString::fromLatin1(kOwnedMarkerName));
+    QString native = QDir::toNativeSeparators(absoluteCleanPath(path));
+    if (native.startsWith(QStringLiteral("\\\\?\\"))) return native;
+    if (native.startsWith(QStringLiteral("\\\\"))) {
+        return QStringLiteral("\\\\?\\UNC\\") + native.mid(2);
+    }
+    return QStringLiteral("\\\\?\\") + native;
 }
 
-bool createOwnedMarker(const QString& directory)
+PathKind pathKind(const QString& path)
 {
-    QFile marker(markerPath(directory));
-    if (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)) return false;
-    const QByteArray value = QByteArrayLiteral(kOwnedMarkerValue);
-    return marker.write(value) == value.size() && marker.flush();
+    const QString native = extendedNativePath(path);
+    const DWORD attributes = GetFileAttributesW(
+        reinterpret_cast<LPCWSTR>(native.utf16()));
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        const DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND
+            ? PathKind::Missing
+            : PathKind::Unsafe;
+    }
+    if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+        return PathKind::Unsafe;
+    }
+    return (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0
+        ? PathKind::Directory
+        : PathKind::RegularFile;
+}
+#else
+PathKind pathKind(const QString& path)
+{
+    const QFileInfo info(path);
+    if (info.isSymbolicLink()) return PathKind::Unsafe;
+    if (!info.exists()) return PathKind::Missing;
+    if (info.isFile()) return PathKind::RegularFile;
+    if (info.isDir()) return PathKind::Directory;
+    return PathKind::Unsafe;
+}
+#endif
+
+QString reservationPath(const QString& outputDirectory, const QString& token)
+{
+    return QDir(outputDirectory).filePath(
+        QString::fromLatin1(kReservationPrefix) + token
+        + QString::fromLatin1(kReservationSuffix));
 }
 
-bool hasOwnedMarker(const QString& directory)
+QString temporaryName(const QString& token)
 {
-    QFile marker(markerPath(directory));
-    const QByteArray expected = QByteArrayLiteral(kOwnedMarkerValue);
-    return marker.open(QIODevice::ReadOnly)
-        && marker.size() == expected.size()
-        && marker.read(expected.size() + 1) == expected;
+    return QString::fromLatin1(kTemporaryPrefix) + token;
+}
+
+bool validToken(const QString& token)
+{
+    if (token.size() != 32) return false;
+    for (const QChar character : token) {
+        if (!character.isDigit()
+            && (character < QLatin1Char('a') || character > QLatin1Char('f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool writeReservation(const QString& path, const QString& token,
+                      const QString& temporaryDirectoryName)
+{
+    QSaveFile file(path);
+    file.setDirectWriteFallback(false);
+    if (!file.open(QIODevice::WriteOnly)) return false;
+    const QByteArray bytes = QJsonDocument(QJsonObject{
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("token"), token},
+        {QStringLiteral("temporaryName"), temporaryDirectoryName}})
+                                 .toJson(QJsonDocument::Compact);
+    return file.write(bytes) == bytes.size() && file.flush() && file.commit();
+}
+
+bool parseReservation(const QString& path, const QString& outputDirectory,
+                      Reservation* reservation)
+{
+    if (pathKind(path) != PathKind::RegularFile
+        || !directChildOf(path, outputDirectory)) {
+        return false;
+    }
+    const QString fileName = QFileInfo(path).fileName();
+    const QString prefix = QString::fromLatin1(kReservationPrefix);
+    const QString suffix = QString::fromLatin1(kReservationSuffix);
+    if (!fileName.startsWith(prefix) || !fileName.endsWith(suffix)) return false;
+    const QString fileToken = fileName.mid(
+        prefix.size(), fileName.size() - prefix.size() - suffix.size());
+    if (!validToken(fileToken)) return false;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() <= 0
+        || file.size() > kMaximumReservationBytes) {
+        return false;
+    }
+    const QByteArray bytes = file.read(kMaximumReservationBytes + 1);
+    if (bytes.size() != file.size()) return false;
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        return false;
+    }
+    const QJsonObject object = document.object();
+    const QString token = object.value(QStringLiteral("token")).toString();
+    const QString name = object.value(QStringLiteral("temporaryName")).toString();
+    if (object.value(QStringLiteral("version")).toInt(-1) != 1
+        || token != fileToken || name != temporaryName(token)) {
+        return false;
+    }
+    const QString temporaryPath = QDir(outputDirectory).filePath(name);
+    if (!safeName(name) || !directChildOf(temporaryPath, outputDirectory)) {
+        return false;
+    }
+    *reservation = {path, temporaryPath};
+    return true;
+}
+
+QFileInfoList flatEntries(const QString& directory)
+{
+    return QDir(directory).entryInfoList(
+        QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+        QDir::Name);
+}
+
+void appendExisting(QStringList* paths, const QString& path)
+{
+    if (pathKind(path) != PathKind::Missing && !paths->contains(path)) {
+        paths->push_back(path);
+    }
+}
+
+QStringList flatRemainingPaths(const Reservation& reservation,
+                               const QFileInfoList& entries = {})
+{
+    QStringList remaining;
+    for (const QFileInfo& entry : entries) {
+        appendExisting(&remaining, entry.absoluteFilePath());
+    }
+    appendExisting(&remaining, reservation.temporaryPath);
+    appendExisting(&remaining, reservation.path);
+    return remaining;
 }
 
 QString numberedFinalDirectory(const OutputPlan& plan, int number)
@@ -84,9 +227,16 @@ bool NativeOutputFileOps::renameDirectory(const QString& source,
     return QDir().rename(source, destination);
 }
 
-bool NativeOutputFileOps::removeDirectory(const QString& path)
+bool NativeOutputFileOps::removeFile(const QString& path)
 {
-    return !QFileInfo::exists(path) || QDir(path).removeRecursively();
+    return !QFileInfo::exists(path) || QFile::remove(path);
+}
+
+bool NativeOutputFileOps::removeEmptyDirectory(const QString& path)
+{
+    if (!QFileInfo::exists(path)) return true;
+    const QFileInfo info(path);
+    return QDir(info.absolutePath()).rmdir(info.fileName());
 }
 
 OutputTransaction::OutputTransaction(
@@ -98,11 +248,11 @@ OutputTransaction::OutputTransaction(
 OutputTransaction::~OutputTransaction()
 {
     if (!active_) return;
-    const TransactionResult result = rollback();
-    if (!result.ok) {
+    const TransactionResult cleanup = rollback();
+    if (!cleanup.ok) {
         qCritical().noquote()
             << "Separation output rollback failed; remaining paths:"
-            << result.outputs.join(QStringLiteral(", "));
+            << cleanup.outputs.join(QStringLiteral(", "));
     }
 }
 
@@ -112,24 +262,98 @@ TransactionResult OutputTransaction::reject(const QString& code,
     return {false, code, message, {}};
 }
 
-TransactionResult OutputTransaction::recoverOwnedTemporaryDirectories()
+TransactionResult OutputTransaction::cleanupReservedJob(
+    const QString& reservationPathValue)
 {
-    QDir output(plan_.outputDirectory);
-    const QFileInfoList candidates = output.entryInfoList(
-        {QString::fromLatin1(kTemporaryPattern)},
-        QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot | QDir::NoSymLinks);
-    for (const QFileInfo& candidate : candidates) {
-        const QString path = candidate.absoluteFilePath();
-        if (!directChildOf(path, plan_.outputDirectory)
-            || !hasOwnedMarker(path)) {
-            continue;
-        }
-        (void)operations_->removeDirectory(path);
-        if (QFileInfo::exists(path)) {
+    if (pathKind(plan_.outputDirectory) != PathKind::Directory) {
+        return {false, QStringLiteral("recovery_failed"),
+                QStringLiteral("Output root is unsafe for cleanup"),
+                {plan_.outputDirectory}};
+    }
+
+    Reservation reservation;
+    if (!parseReservation(reservationPathValue, plan_.outputDirectory,
+                          &reservation)) {
+        QStringList remaining;
+        appendExisting(&remaining, reservationPathValue);
+        return {false, QStringLiteral("recovery_failed"),
+                QStringLiteral("Output reservation is invalid or unsafe"),
+                remaining};
+    }
+
+    const PathKind temporaryKind = pathKind(reservation.temporaryPath);
+    if (temporaryKind == PathKind::Missing) {
+        (void)operations_->removeFile(reservation.path);
+        QStringList remaining;
+        appendExisting(&remaining, reservation.path);
+        return remaining.isEmpty()
+            ? TransactionResult{true, {}, {}, {}}
+            : TransactionResult{false, QStringLiteral("recovery_failed"),
+                                QStringLiteral("Stale reservation cleanup failed"),
+                                remaining};
+    }
+    if (temporaryKind != PathKind::Directory) {
+        return {false, QStringLiteral("recovery_failed"),
+                QStringLiteral("Reserved temporary path is unsafe"),
+                flatRemainingPaths(reservation)};
+    }
+
+    const QFileInfoList entries = flatEntries(reservation.temporaryPath);
+    for (const QFileInfo& entry : entries) {
+        const QString path = entry.absoluteFilePath();
+        if (!directChildOf(path, reservation.temporaryPath)
+            || pathKind(path) != PathKind::RegularFile) {
             return {false, QStringLiteral("recovery_failed"),
-                    QStringLiteral("Stale temporary job cleanup left artifacts"),
-                    {path}};
+                    QStringLiteral("Reserved temporary directory is not flat"),
+                    flatRemainingPaths(reservation, entries)};
         }
+    }
+
+    for (const QFileInfo& entry : entries) {
+        const QString path = entry.absoluteFilePath();
+        if (pathKind(path) != PathKind::RegularFile) {
+            return {false, QStringLiteral("recovery_failed"),
+                    QStringLiteral("Reserved temporary entry became unsafe"),
+                    flatRemainingPaths(reservation, flatEntries(
+                        reservation.temporaryPath))};
+        }
+        (void)operations_->removeFile(path);
+    }
+
+    const QFileInfoList remainingEntries = flatEntries(reservation.temporaryPath);
+    if (!remainingEntries.isEmpty()
+        || pathKind(reservation.temporaryPath) != PathKind::Directory) {
+        return {false, QStringLiteral("recovery_failed"),
+                QStringLiteral("Temporary file cleanup left artifacts"),
+                flatRemainingPaths(reservation, remainingEntries)};
+    }
+    (void)operations_->removeEmptyDirectory(reservation.temporaryPath);
+    if (pathKind(reservation.temporaryPath) != PathKind::Missing) {
+        return {false, QStringLiteral("recovery_failed"),
+                QStringLiteral("Temporary directory cleanup failed"),
+                flatRemainingPaths(reservation)};
+    }
+
+    (void)operations_->removeFile(reservation.path);
+    QStringList remaining;
+    appendExisting(&remaining, reservation.path);
+    return remaining.isEmpty()
+        ? TransactionResult{true, {}, {}, {}}
+        : TransactionResult{false, QStringLiteral("recovery_failed"),
+                            QStringLiteral("Reservation cleanup failed"),
+                            remaining};
+}
+
+TransactionResult OutputTransaction::recoverReservedJobs()
+{
+    const QFileInfoList reservations = QDir(plan_.outputDirectory).entryInfoList(
+        {QString::fromLatin1(kReservationPattern)},
+        QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+        QDir::Name);
+    for (const QFileInfo& reservation : reservations) {
+        const TransactionResult recovered = cleanupReservedJob(
+            reservation.absoluteFilePath());
+        if (!recovered.ok) return recovered;
     }
     return {true, {}, {}, {}};
 }
@@ -141,11 +365,15 @@ TransactionResult OutputTransaction::begin()
                       QStringLiteral("Output transaction is already active"));
     }
     const QFileInfo outputInfo(plan_.outputDirectory);
-    if (!outputInfo.isDir() || !outputInfo.isWritable()) {
+    if (!outputInfo.exists() || !outputInfo.isDir() || !outputInfo.isWritable()) {
         return reject(QStringLiteral("output_unwritable"),
                       QStringLiteral("Output directory does not exist or is not writable"));
     }
     plan_.outputDirectory = outputInfo.absoluteFilePath();
+    if (pathKind(plan_.outputDirectory) != PathKind::Directory) {
+        return reject(QStringLiteral("unsafe_output_root"),
+                      QStringLiteral("Output directory is a link or reparse point"));
+    }
     if (!safeName(plan_.baseName) || !safeName(plan_.extension)
         || plan_.stems.isEmpty()
         || plan_.baseName.startsWith(QStringLiteral(".agplayer-separation-"),
@@ -172,33 +400,39 @@ TransactionResult OutputTransaction::begin()
                       QStringLiteral("Another output transaction is active"));
     }
 
-    const TransactionResult recovered = recoverOwnedTemporaryDirectories();
+    const TransactionResult recovered = recoverReservedJobs();
     if (!recovered.ok) {
         lock_.reset();
         return recovered;
     }
 
-    QTemporaryDir temporary(QDir(plan_.outputDirectory).filePath(
-        QString::fromLatin1(kTemporaryTemplate)));
-    if (!temporary.isValid()) {
+    const QString token = QUuid::createUuid().toString(QUuid::Id128).toLower();
+    const QString name = temporaryName(token);
+    reservationPath_ = reservationPath(plan_.outputDirectory, token);
+    temporaryDirectory_ = QDir(plan_.outputDirectory).filePath(name);
+    if (pathKind(reservationPath_) != PathKind::Missing
+        || !writeReservation(reservationPath_, token, name)) {
+        reservationPath_.clear();
+        temporaryDirectory_.clear();
         lock_.reset();
-        return reject(QStringLiteral("temporary_directory_failed"),
-                      QStringLiteral("Could not create a sibling temporary job directory"));
+        return reject(QStringLiteral("reservation_failed"),
+                      QStringLiteral("Could not atomically reserve a temporary job"));
     }
-    temporary.setAutoRemove(false);
-    temporaryDirectory_ = temporary.path();
+
     active_ = true;
-    if (!createOwnedMarker(temporaryDirectory_)) {
+    if (!QDir(plan_.outputDirectory).mkdir(name)
+        || pathKind(temporaryDirectory_) != PathKind::Directory) {
         TransactionResult cleanup = rollback();
         if (!cleanup.ok) {
-            cleanup.causeCode = QStringLiteral("marker_write_failed");
+            cleanup.causeCode = QStringLiteral("temporary_directory_failed");
             cleanup.causeMessage = QStringLiteral(
-                "Could not create the temporary job ownership marker");
+                "Could not create a safe sibling temporary job directory");
             return cleanup;
         }
-        return reject(QStringLiteral("marker_write_failed"),
-                      QStringLiteral("Could not create the temporary job ownership marker"));
+        return reject(QStringLiteral("temporary_directory_failed"),
+                      QStringLiteral("Could not create a safe sibling temporary job directory"));
     }
+
     for (const QString& stem : plan_.stems) {
         temporaryPaths_.insert(
             stem, QDir(temporaryDirectory_).filePath(
@@ -288,31 +522,36 @@ TransactionResult OutputTransaction::commit(
             QFileInfo(temporaryPaths_.value(stem)).fileName()));
     }
     active_ = false;
+    (void)operations_->removeFile(reservationPath_);
+    reservationPath_.clear();
     lock_.reset();
     return {true, {}, {}, outputs};
 }
 
 TransactionResult OutputTransaction::rollback()
 {
-    if (!temporaryDirectory_.isEmpty()) {
-        (void)operations_->removeDirectory(temporaryDirectory_);
-    }
-    QStringList remaining;
-    if (QFileInfo::exists(temporaryDirectory_)) {
-        remaining.push_back(temporaryDirectory_);
-    }
-    active_ = !remaining.isEmpty();
-    if (!active_) {
+    if (reservationPath_.isEmpty()) {
+        active_ = false;
         lock_.reset();
         return {true, {}, {}, {}};
     }
-    return {false, QStringLiteral("rollback_failed"),
-            QStringLiteral("Output rollback left artifacts"), remaining};
+    TransactionResult cleanup = cleanupReservedJob(reservationPath_);
+    if (cleanup.ok) {
+        active_ = false;
+        reservationPath_.clear();
+        lock_.reset();
+        return cleanup;
+    }
+    active_ = true;
+    cleanup.code = QStringLiteral("rollback_failed");
+    cleanup.message = QStringLiteral("Output rollback left artifacts");
+    return cleanup;
 }
 
 TransactionResult OutputTransaction::cancel()
 {
-    return active_ ? rollback() : TransactionResult{true, {}, {}, {}};
+    if (!active_) return {true, {}, {}, {}};
+    return rollback();
 }
 
 } // namespace agplayer::separation

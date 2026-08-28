@@ -2,16 +2,24 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QTemporaryDir>
 #include <QTest>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 using namespace agplayer::separation;
 
 namespace {
 
-constexpr auto kOwnedMarkerName = ".agplayer-separation-owned";
-constexpr auto kOwnedMarkerValue = "agplayer-separation-v1";
+constexpr auto kReservationPrefix = ".agplayer-separation-reservation-";
+constexpr auto kTemporaryPrefix = ".agplayer-separation-job-";
 
 bool writePayload(const QString& path,
                   const QByteArray& bytes = QByteArrayLiteral("audio"))
@@ -20,12 +28,75 @@ bool writePayload(const QString& path,
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
 }
 
-bool createOwnedMarker(const QString& directory)
+struct ReservedJob {
+    QString reservationPath;
+    QString temporaryName;
+    QString temporaryPath;
+};
+
+ReservedJob createReservedJob(const QString& outputDirectory,
+                              const QString& token,
+                              bool createDirectory)
 {
-    return writePayload(QDir(directory).filePath(
-                            QString::fromLatin1(kOwnedMarkerName)),
-                        QByteArrayLiteral(kOwnedMarkerValue));
+    ReservedJob job;
+    job.temporaryName = QString::fromLatin1(kTemporaryPrefix) + token;
+    job.temporaryPath = QDir(outputDirectory).filePath(job.temporaryName);
+    job.reservationPath = QDir(outputDirectory).filePath(
+        QString::fromLatin1(kReservationPrefix) + token
+        + QStringLiteral(".json"));
+    QSaveFile reservation(job.reservationPath);
+    if (!reservation.open(QIODevice::WriteOnly)) return {};
+    const QByteArray payload = QJsonDocument(QJsonObject{
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("token"), token},
+        {QStringLiteral("temporaryName"), job.temporaryName}})
+                                   .toJson(QJsonDocument::Compact);
+    if (reservation.write(payload) != payload.size()
+        || !reservation.flush() || !reservation.commit()) {
+        return {};
+    }
+    if (createDirectory && !QDir(outputDirectory).mkdir(job.temporaryName)) {
+        return {};
+    }
+    return job;
 }
+
+#ifdef Q_OS_WIN
+bool createJunction(const QString& junctionPath, const QString& targetPath)
+{
+    QProcess process;
+    process.setProgram(QStringLiteral("cmd.exe"));
+    process.setArguments(
+        {QStringLiteral("/d"), QStringLiteral("/c"), QStringLiteral("mklink"),
+         QStringLiteral("/J"), QDir::toNativeSeparators(junctionPath),
+         QDir::toNativeSeparators(targetPath)});
+    process.start();
+    return process.waitForFinished(5000) && process.exitCode() == 0
+        && QFileInfo(junctionPath).isDir();
+}
+
+bool markHiddenAndSystem(const QString& path)
+{
+    const QString native = QDir::toNativeSeparators(path);
+    return SetFileAttributesW(reinterpret_cast<LPCWSTR>(native.utf16()),
+                              FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
+        != FALSE;
+}
+
+class JunctionGuard final {
+public:
+    explicit JunctionGuard(QString path) : path_(std::move(path)) {}
+    ~JunctionGuard()
+    {
+        if (!path_.isEmpty()) {
+            RemoveDirectoryW(reinterpret_cast<LPCWSTR>(path_.utf16()));
+        }
+    }
+
+private:
+    QString path_;
+};
+#endif
 
 class ControlledDirectoryOps final : public NativeOutputFileOps {
 public:
@@ -42,10 +113,17 @@ public:
             && NativeOutputFileOps::renameDirectory(source, destination);
     }
 
-    bool removeDirectory(const QString& path) override
+    bool removeFile(const QString& path) override
     {
         if (!allowCleanup) return false;
-        const bool removed = NativeOutputFileOps::removeDirectory(path);
+        const bool removed = NativeOutputFileOps::removeFile(path);
+        return reportCleanupFailureAfterRemoval ? false : removed;
+    }
+
+    bool removeEmptyDirectory(const QString& path) override
+    {
+        if (!allowCleanup) return false;
+        const bool removed = NativeOutputFileOps::removeEmptyDirectory(path);
         return reportCleanupFailureAfterRemoval ? false : removed;
     }
 };
@@ -62,7 +140,13 @@ private slots:
     void rollbackFailurePreservesCauseAndOnlyExistingPaths();
     void cleanupRescanNeverReportsAPathThatWasActuallyRemoved();
     void destructorReportsRollbackFailureInsteadOfDiscardingIt();
-    void recoveryCleansOnlyMarkedTemporaryJobDirectories();
+    void recoveryCleansOnlyReservedFlatTemporaryJobDirectories();
+    void rootJunctionIsRejectedWithoutTouchingItsTarget();
+    void nestedJunctionFailsClosedWithoutTouchingItsTarget();
+    void nestedDirectoryFailsClosedWithoutTraversal();
+    void reservationWithoutTemporaryDirectoryIsRecovered();
+    void reservedDirectoryWithoutLegacyMarkerIsRecovered();
+    void staleReservationAfterCommitNeverDeletesTheFinalDirectory();
     void liveTransactionPreventsRecovery();
     void cancellationAfterVerificationNeverPublishesAJobDirectory();
     void verificationFailureCleansTheTemporaryJobDirectory();
@@ -95,6 +179,14 @@ void SeparationOutputTransactionTest::commitPublishesAllStemsWithOneDirectoryRen
         QCOMPARE(QFileInfo(path).absolutePath(), finalDirectory);
         QVERIFY(QFileInfo::exists(path));
     }
+    QCOMPARE(QDir(output.path()).entryList(
+                 {QStringLiteral(".agplayer-separation-reservation-*.json")},
+                 QDir::Files | QDir::Hidden | QDir::System),
+             QStringList{});
+    QCOMPARE(QDir(finalDirectory).entryList(
+                 QDir::Files | QDir::Hidden | QDir::System, QDir::Name),
+             QStringList({QStringLiteral("song-instrumental.wav"),
+                          QStringLiteral("song-vocals.wav")}));
     QVERIFY(!QFileInfo::exists(transaction.temporaryDirectory()));
 }
 
@@ -174,8 +266,8 @@ void SeparationOutputTransactionTest::rollbackFailurePreservesCauseAndOnlyExisti
     QCOMPARE(result.code, QStringLiteral("rollback_failed"));
     QCOMPARE(result.causeCode, QStringLiteral("commit_failed"));
     QCOMPARE(result.causeMessage, QStringLiteral("Output job directory rename failed"));
-    QCOMPARE(result.outputs, QStringList{temporaryDirectory});
-    QVERIFY(QFileInfo::exists(temporaryDirectory));
+    QVERIFY(result.outputs.contains(temporaryDirectory));
+    for (const QString& path : result.outputs) QVERIFY(QFileInfo::exists(path));
 
     operations->allowCleanup = true;
     QVERIFY(transaction.cancel().ok);
@@ -225,23 +317,33 @@ void SeparationOutputTransactionTest::destructorReportsRollbackFailureInsteadOfD
     }
     QVERIFY(QFileInfo::exists(temporaryDirectory));
     operations->allowCleanup = true;
-    QVERIFY(operations->removeDirectory(temporaryDirectory));
+    QVERIFY(operations->removeEmptyDirectory(temporaryDirectory));
+    const QStringList reservations = QDir(output.path()).entryList(
+        {QStringLiteral(".agplayer-separation-reservation-*.json")},
+        QDir::Files | QDir::Hidden | QDir::System);
+    QCOMPARE(reservations.size(), 1);
+    QVERIFY(operations->removeFile(output.filePath(reservations.front())));
 }
 
-void SeparationOutputTransactionTest::recoveryCleansOnlyMarkedTemporaryJobDirectories()
+void SeparationOutputTransactionTest::recoveryCleansOnlyReservedFlatTemporaryJobDirectories()
 {
     QTemporaryDir output;
-    const QString owned = output.filePath(
-        QStringLiteral(".agplayer-separation-job-owned"));
+    const ReservedJob owned = createReservedJob(
+        output.path(), QStringLiteral("11111111111111111111111111111111"), true);
+    QVERIFY(!owned.reservationPath.isEmpty());
     const QString foreign = output.filePath(
         QStringLiteral(".agplayer-separation-job-foreign"));
     const QString finalDirectory = output.filePath(QStringLiteral("song"));
-    QVERIFY(QDir().mkpath(owned));
     QVERIFY(QDir().mkpath(foreign));
     QVERIFY(QDir().mkpath(finalDirectory));
-    QVERIFY(createOwnedMarker(owned));
-    QVERIFY(createOwnedMarker(finalDirectory));
-    QVERIFY(writePayload(QDir(owned).filePath(QStringLiteral("partial.wav"))));
+    QVERIFY(writePayload(QDir(owned.temporaryPath).filePath(
+        QStringLiteral("partial.wav"))));
+#ifdef Q_OS_WIN
+    const QString hiddenSystem = QDir(owned.temporaryPath).filePath(
+        QStringLiteral("hidden-system.tmp"));
+    QVERIFY(writePayload(hiddenSystem));
+    QVERIFY(markHiddenAndSystem(hiddenSystem));
+#endif
     QVERIFY(writePayload(QDir(foreign).filePath(QStringLiteral("keep.wav"))));
     QVERIFY(writePayload(QDir(finalDirectory).filePath(QStringLiteral("keep.wav"))));
 
@@ -251,10 +353,157 @@ void SeparationOutputTransactionTest::recoveryCleansOnlyMarkedTemporaryJobDirect
     const TransactionResult begun = transaction.begin();
 
     QVERIFY2(begun.ok, qPrintable(begun.message));
-    QVERIFY(!QFileInfo::exists(owned));
+    QVERIFY(!QFileInfo::exists(owned.temporaryPath));
+    QVERIFY(!QFileInfo::exists(owned.reservationPath));
     QVERIFY(QFileInfo::exists(foreign));
     QVERIFY(QFileInfo::exists(QDir(finalDirectory).filePath(
         QStringLiteral("keep.wav"))));
+    QVERIFY(transaction.cancel().ok);
+}
+
+void SeparationOutputTransactionTest::rootJunctionIsRejectedWithoutTouchingItsTarget()
+{
+#ifndef Q_OS_WIN
+    QSKIP("NTFS junction coverage is Windows-only");
+#else
+    QTemporaryDir holder;
+    QTemporaryDir external;
+    QVERIFY(holder.isValid());
+    QVERIFY(external.isValid());
+    const QString sentinel = external.filePath(QStringLiteral("sentinel.txt"));
+    QVERIFY(writePayload(sentinel, QByteArrayLiteral("outside")));
+    const QString junction = holder.filePath(QStringLiteral("output-junction"));
+    if (!createJunction(junction, external.path())) {
+        QSKIP("This environment cannot create an NTFS directory junction");
+    }
+    JunctionGuard guard(junction);
+
+    OutputTransaction transaction(
+        {junction, QStringLiteral("unsafe"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult begun = transaction.begin();
+
+    QVERIFY(!begun.ok);
+    QCOMPARE(begun.code, QStringLiteral("unsafe_output_root"));
+    QVERIFY(QFileInfo::exists(sentinel));
+#endif
+}
+
+void SeparationOutputTransactionTest::nestedJunctionFailsClosedWithoutTouchingItsTarget()
+{
+#ifndef Q_OS_WIN
+    QSKIP("NTFS junction coverage is Windows-only");
+#else
+    QTemporaryDir output;
+    QTemporaryDir external;
+    const ReservedJob stale = createReservedJob(
+        output.path(), QStringLiteral("22222222222222222222222222222222"), true);
+    QVERIFY(!stale.reservationPath.isEmpty());
+    const QString sentinel = external.filePath(QStringLiteral("sentinel.txt"));
+    QVERIFY(writePayload(sentinel, QByteArrayLiteral("outside")));
+    const QString junction = QDir(stale.temporaryPath).filePath(
+        QStringLiteral("nested-junction"));
+    if (!createJunction(junction, external.path())) {
+        QSKIP("This environment cannot create an NTFS directory junction");
+    }
+    JunctionGuard guard(junction);
+
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("new-job"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult begun = transaction.begin();
+
+    QVERIFY(!begun.ok);
+    QCOMPARE(begun.code, QStringLiteral("recovery_failed"));
+    QVERIFY(begun.outputs.contains(junction));
+    QVERIFY(QFileInfo::exists(sentinel));
+    QVERIFY(QFileInfo::exists(stale.temporaryPath));
+    QVERIFY(QFileInfo::exists(stale.reservationPath));
+#endif
+}
+
+void SeparationOutputTransactionTest::nestedDirectoryFailsClosedWithoutTraversal()
+{
+    QTemporaryDir output;
+    const ReservedJob stale = createReservedJob(
+        output.path(), QStringLiteral("33333333333333333333333333333333"), true);
+    QVERIFY(!stale.reservationPath.isEmpty());
+    const QString nested = QDir(stale.temporaryPath).filePath(
+        QStringLiteral("unexpected-directory"));
+    QVERIFY(QDir().mkdir(nested));
+    const QString sentinel = QDir(nested).filePath(QStringLiteral("keep.txt"));
+    QVERIFY(writePayload(sentinel));
+
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("new-job"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult begun = transaction.begin();
+
+    QVERIFY(!begun.ok);
+    QCOMPARE(begun.code, QStringLiteral("recovery_failed"));
+    QVERIFY(begun.outputs.contains(nested));
+    QVERIFY(QFileInfo::exists(sentinel));
+}
+
+void SeparationOutputTransactionTest::reservationWithoutTemporaryDirectoryIsRecovered()
+{
+    QTemporaryDir output;
+    const ReservedJob stale = createReservedJob(
+        output.path(), QStringLiteral("44444444444444444444444444444444"), false);
+    QVERIFY(!stale.reservationPath.isEmpty());
+    QVERIFY(!QFileInfo::exists(stale.temporaryPath));
+
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("new-job"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult begun = transaction.begin();
+
+    QVERIFY2(begun.ok, qPrintable(begun.message));
+    QVERIFY(!QFileInfo::exists(stale.reservationPath));
+    QVERIFY(transaction.cancel().ok);
+}
+
+void SeparationOutputTransactionTest::reservedDirectoryWithoutLegacyMarkerIsRecovered()
+{
+    QTemporaryDir output;
+    const ReservedJob stale = createReservedJob(
+        output.path(), QStringLiteral("55555555555555555555555555555555"), true);
+    QVERIFY(!stale.reservationPath.isEmpty());
+    QVERIFY(QDir(stale.temporaryPath).entryList(
+        QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot)
+                .isEmpty());
+
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("new-job"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult begun = transaction.begin();
+
+    QVERIFY2(begun.ok, qPrintable(begun.message));
+    QVERIFY(!QFileInfo::exists(stale.temporaryPath));
+    QVERIFY(!QFileInfo::exists(stale.reservationPath));
+    QVERIFY(transaction.cancel().ok);
+}
+
+void SeparationOutputTransactionTest::staleReservationAfterCommitNeverDeletesTheFinalDirectory()
+{
+    QTemporaryDir output;
+    const ReservedJob stale = createReservedJob(
+        output.path(), QStringLiteral("66666666666666666666666666666666"), false);
+    QVERIFY(!stale.reservationPath.isEmpty());
+    const QString finalDirectory = output.filePath(QStringLiteral("committed"));
+    QVERIFY(QDir().mkdir(finalDirectory));
+    const QString sentinel = QDir(finalDirectory).filePath(
+        QStringLiteral("committed-vocals.wav"));
+    QVERIFY(writePayload(sentinel));
+
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("new-job"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}});
+    const TransactionResult begun = transaction.begin();
+
+    QVERIFY2(begun.ok, qPrintable(begun.message));
+    QVERIFY(!QFileInfo::exists(stale.reservationPath));
+    QVERIFY(QFileInfo::exists(sentinel));
     QVERIFY(transaction.cancel().ok);
 }
 

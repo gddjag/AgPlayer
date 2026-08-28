@@ -34,7 +34,8 @@ public:
     virtual ~NativeOutputFileOps() = default;
     virtual bool renameDirectory(const QString& source,
                                  const QString& destination);
-    virtual bool removeDirectory(const QString& path);
+    virtual bool removeFile(const QString& path);
+    virtual bool removeEmptyDirectory(const QString& path);
 };
 
 class OutputTransaction final {
@@ -60,11 +61,14 @@ private:
     [[nodiscard]] TransactionResult reject(const QString& code,
                                            const QString& message);
     [[nodiscard]] TransactionResult rollback();
-    [[nodiscard]] TransactionResult recoverOwnedTemporaryDirectories();
+    [[nodiscard]] TransactionResult recoverReservedJobs();
+    [[nodiscard]] TransactionResult cleanupReservedJob(
+        const QString& reservationPath);
 
     OutputPlan plan_;
     std::shared_ptr<NativeOutputFileOps> operations_;
     std::unique_ptr<QLockFile> lock_;
+    QString reservationPath_;
     QString temporaryDirectory_;
     QHash<QString, QString> temporaryPaths_;
     bool active_ = false;
