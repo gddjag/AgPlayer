@@ -72,3 +72,71 @@
   screenshot acceptance, GPU timing/VRAM/resource-loss soak, or integrated
   host interaction. The actual Terrain Reactor host and mouse wiring belong to
   Task 4, so accelerated visual acceptance must be performed after integration.
+
+## Review round 1 — lifecycle, style, effects, and real GPU evidence
+
+### Correction commit and RED evidence
+
+- Correction implementation: `c35787f` —
+  `fix(visuals): harden terrain reactor lifecycle`.
+- Tests were extended before production changes. The first state-test build
+  failed because finite meteor trail/collision collections, `MeteorPhase`,
+  incremental camera synchronization, and `FramePacer` did not exist. The
+  first item-test build likewise failed on the missing Task 1 style snapshot,
+  shared renderer lifecycle, event-filter, and high-DPI APIs.
+- The initial accelerated smoke used Direct3D11 and exposed an incremental-build
+  ABI mismatch after the item header layout changed while `agplayer_qt` still
+  contained the old object. Rebuilding that target removed the shared-pointer
+  crash and revealed the real lifecycle RED: resources were created in
+  `initialize()` before the first `synchronize()`, but Ready notification was
+  lost because no item snapshot was available yet (`actual Inactive`,
+  `expected Ready`). The renderer now creates resources independently of an
+  old snapshot, caches status, and publishes it after synchronization with the
+  current active snapshot.
+
+### Closed review findings
+
+- The GUI clock is the sole camera time origin. Renderer auto-rotation and
+  audio punch are preserved while GUI orbit/zoom changes are applied as deltas;
+  manual motion pauses auto-rotation for four seconds and then resumes.
+- Fixed-seed meteors now have finite flight and collision phases. Three trail
+  instances, eight white landing-ripple segments, and eight collision-burst
+  particles per meteor share the existing instance buffer and single indexed
+  draw with the terrain and other effects.
+- A compact copied `RenderStyleSnapshot` carries Task 1 base/cool/warm/accent/
+  peak colors, color mode/RGB sweep, eight visual-EQ gains, amplitude, motion,
+  gradient, glow, cinema shake, auto-rotation, peak boost, and all effect
+  toggles into renderer state and uniforms. No FFT, decoding, or playback code
+  was added.
+- Window Expose/Show/Hide/WindowStateChange events refresh scheduling gates.
+  Item/shared atomics enforce one live renderer, reject duplicates with a
+  diagnostic, and allocate globally monotonic resource generations.
+- Eco cadence is capped by a deterministic 30 FPS frame pacer. Reduced internal
+  targets use logical item size multiplied by effective DPR and internal scale;
+  a 2x DPR test verifies the physical buffer dimensions.
+
+### Round 1 verification
+
+- Passed from a clean build: `cmake --build --preset windows-msvc-debug
+  --target AgPlayer --clean-first --parallel 4` (245 build steps, exit 0).
+  The post-clean qmlimportscanner initially reported missing old generated QML
+  paths; CMake regenerated them and the full Debug application linked and
+  deployed successfully.
+- Passed: `ctest --test-dir build/debug -R
+  "(player_experience_controller|terrain_reactor_(state|item|gpu_smoke))_test"
+  --output-on-failure` — 4/4 tests.
+- Passed on a real accelerated backend: direct Debug smoke reported
+  `Terrain Reactor accelerated backend: Direct3D11`, with 3/3 QtTest cases and
+  exit 0. It verified first activation with static synthetic bands, resource
+  generation, frame/upload work, Off counter freeze and On recovery,
+  minimized counter freeze and restored rendering, and one live renderer.
+- Passed: offline qsb regeneration for both shaders, MSVC `/W4 /WX`, and final
+  staged `git diff --check`.
+
+### Remaining limits
+
+- Direct3D11 was exercised, but OpenGL, Vulkan, Metal, GPU device-loss recovery,
+  long VRAM/resource soak, and multi-monitor live-DPR transitions were not.
+- Integrated host mouse input and screenshot-based visual acceptance remain
+  Task 4 work. The smoke used deterministic synthetic Task 1-shaped features;
+  it did not claim real audio playback or visual-design acceptance.
