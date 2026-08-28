@@ -126,7 +126,8 @@ public:
         std::shared_ptr<RendererResourceState> resourceState)
         : telemetry_(std::move(telemetry)),
           resourceState_(std::move(resourceState)),
-          rendererId_(++nextRendererId_)
+          rendererId_(++nextRendererId_),
+          punchEvents_(*resourceState_)
     {
         claimed_ = resourceState_->acquireRenderer(rendererId_);
         frameTimer_.start();

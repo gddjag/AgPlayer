@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <thread>
 
 using namespace agplayer::terrain;
 
@@ -21,6 +22,7 @@ private slots:
     void manualCameraControlRecoversAfterFourSeconds();
     void manualCameraDeltaPreservesRendererMotion();
     void punchEventsAreConsumedOnceByRevision();
+    void punchRevisionClaimSurvivesRendererRebuild();
     void ecoFramePacerLimitsWorkToThirtyFrames();
 };
 
@@ -261,8 +263,9 @@ void TerrainReactorStateTest::manualCameraDeltaPreservesRendererMotion()
 
 void TerrainReactorStateTest::punchEventsAreConsumedOnceByRevision()
 {
+    RendererResourceState lifecycle;
     CameraMotion camera;
-    PunchEventConsumer consumer;
+    PunchEventConsumer consumer(lifecycle);
     const PunchEvent first{0.7F, 1};
     QVERIFY(consumer.consume(first, camera));
     const float initialPunch = camera.snapshot().punch;
@@ -291,6 +294,44 @@ void TerrainReactorStateTest::punchEventsAreConsumedOnceByRevision()
     const PunchEvent weaker{0.2F, 3};
     QVERIFY(consumer.consume(weaker, camera));
     QVERIFY(camera.snapshot().punch > beforeWeaker);
+}
+
+void TerrainReactorStateTest::punchRevisionClaimSurvivesRendererRebuild()
+{
+    RendererResourceState itemLifecycle;
+    const PunchEvent existing{0.6F, 41};
+
+    CameraMotion firstCamera;
+    PunchEventConsumer firstRenderer(itemLifecycle);
+    QVERIFY(firstRenderer.consume(existing, firstCamera));
+
+    CameraMotion rebuiltCamera;
+    PunchEventConsumer rebuiltRenderer(itemLifecycle);
+    QVERIFY(!rebuiltRenderer.consume(existing, rebuiltCamera));
+    QCOMPARE(rebuiltCamera.snapshot().punch, 0.0F);
+
+    const PunchEvent next{0.6F, 42};
+    QVERIFY(rebuiltRenderer.consume(next, rebuiltCamera));
+    QVERIFY(rebuiltCamera.snapshot().punch >= 0.59F);
+
+    RendererResourceState otherItemLifecycle;
+    CameraMotion otherItemCamera;
+    PunchEventConsumer otherItemRenderer(otherItemLifecycle);
+    QVERIFY(otherItemRenderer.consume(existing, otherItemCamera));
+
+    RendererResourceState concurrentLifecycle;
+    std::atomic<int> claims{0};
+    const PunchEvent concurrentEvent{0.5F, 90};
+    const auto claim = [&] {
+        CameraMotion localCamera;
+        PunchEventConsumer renderer(concurrentLifecycle);
+        if (renderer.consume(concurrentEvent, localCamera)) ++claims;
+    };
+    std::thread firstClaim(claim);
+    std::thread secondClaim(claim);
+    firstClaim.join();
+    secondClaim.join();
+    QCOMPARE(claims.load(), 1);
 }
 
 void TerrainReactorStateTest::ecoFramePacerLimitsWorkToThirtyFrames()

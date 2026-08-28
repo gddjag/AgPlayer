@@ -56,12 +56,14 @@ void TerrainReactorItemTest::consumesTaskOneFeaturesWithoutSpectrumAnalysis()
     item.setActive(true);
     const quint64 revisionBeforeUpdate = item.featureRevision();
     QCOMPARE(revisionBeforeUpdate, quint64{1}); // initial immutable source snapshot
+    const quint64 punchBeforeUpdate = item.punchRevision();
 
     QVariantList spectrum(128, 0.0);
-    for (int index = 0; index < 16; ++index) spectrum[index] = 1.0;
+    for (int index = 0; index < 32; ++index) spectrum[index] = 1.0;
     features.processSpectrum(spectrum);
 
     QCOMPARE(item.featureRevision(), revisionBeforeUpdate + 1);
+    QCOMPARE(item.punchRevision(), punchBeforeUpdate + 1);
     const QVariantList bands = item.featureBands();
     QCOMPARE(bands.size(), 8);
     QCOMPARE(bands.at(0).toDouble(), 1.0);

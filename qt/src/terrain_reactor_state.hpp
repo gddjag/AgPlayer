@@ -195,11 +195,13 @@ public:
     bool resourcesReady() const noexcept;
     int liveRendererCount() const noexcept;
     quint64 generation() const noexcept;
+    bool claimPunchRevision(quint64 revision) noexcept;
 
 private:
     static std::atomic<quint64> globalGeneration_;
     std::atomic<quint64> rendererId_{0};
     std::atomic<quint64> generation_{0};
+    std::atomic<quint64> consumedPunchRevision_{0};
     std::atomic_bool resourcesReady_{false};
 };
 
@@ -249,10 +251,11 @@ struct PunchEvent {
 
 class PunchEventConsumer final {
 public:
+    explicit PunchEventConsumer(RendererResourceState& lifecycle) noexcept;
     bool consume(const PunchEvent& event, CameraMotion& camera) noexcept;
 
 private:
-    quint64 consumedRevision_ = 0;
+    RendererResourceState& lifecycle_;
 };
 
 } // namespace agplayer::terrain

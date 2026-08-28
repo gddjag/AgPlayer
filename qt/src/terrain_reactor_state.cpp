@@ -360,6 +360,20 @@ quint64 RendererResourceState::generation() const noexcept
     return generation_.load(std::memory_order_acquire);
 }
 
+bool RendererResourceState::claimPunchRevision(quint64 revision) noexcept
+{
+    if (revision == 0) return false;
+    quint64 consumed = consumedPunchRevision_.load(std::memory_order_acquire);
+    while (revision > consumed) {
+        if (consumedPunchRevision_.compare_exchange_weak(
+                consumed, revision, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FramePacer::shouldRender(double nowSeconds,
                               double targetFramesPerSecond) noexcept
 {
@@ -431,13 +445,18 @@ void CameraMotion::markManual(double nowSeconds) noexcept
     manualUntilSeconds_ = std::max(0.0, nowSeconds) + 4.0;
 }
 
+PunchEventConsumer::PunchEventConsumer(
+    RendererResourceState& lifecycle) noexcept
+    : lifecycle_(lifecycle)
+{
+}
+
 bool PunchEventConsumer::consume(const PunchEvent& event,
                                  CameraMotion& camera) noexcept
 {
-    if (event.revision == 0 || event.revision <= consumedRevision_) {
+    if (!lifecycle_.claimPunchRevision(event.revision)) {
         return false;
     }
-    consumedRevision_ = event.revision;
     camera.applyBeatPunch(event.strength);
     return true;
 }
