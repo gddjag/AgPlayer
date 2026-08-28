@@ -15,10 +15,12 @@ private slots:
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void audioFeaturesDriveBoundedVisualParameters();
     void automaticQualityUsesHysteresisCooldownAndEffectFirstOrder();
+    void qualityFeedbackSeparatesPacerDelayFromWorkCost();
     void inactiveOrOccludedGateFreezesAllWorkCounters();
     void rendererOwnershipHasOneLiveResourceGeneration();
     void manualCameraControlRecoversAfterFourSeconds();
     void manualCameraDeltaPreservesRendererMotion();
+    void punchEventsAreConsumedOnceByRevision();
     void ecoFramePacerLimitsWorkToThirtyFrames();
 };
 
@@ -110,11 +112,16 @@ void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
 void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFirstOrder()
 {
     AutomaticQualityController quality;
+    const auto observe = [&quality](double workMilliseconds,
+                                    double elapsedSeconds) {
+        quality.observeWorkSample(workMilliseconds);
+        quality.advanceWallClock(elapsedSeconds);
+    };
     QCOMPARE(quality.stage(), DegradationStage::Full);
 
-    quality.observe(40.0, 1.99);
+    observe(40.0, 1.99);
     QCOMPARE(quality.stage(), DegradationStage::Full);
-    quality.observe(40.0, 0.01);
+    observe(40.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
     const QualityConfiguration particlesReduced = quality.configuration();
     QVERIFY(particlesReduced.particleCount < 180);
@@ -123,30 +130,64 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     QCOMPARE(particlesReduced.rippleCount, 10);
     QCOMPARE(particlesReduced.gridSize, 160);
 
-    quality.observe(40.0, 4.99);
+    observe(40.0, 4.99);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
-    quality.observe(40.0, 0.01);
-    quality.observe(40.0, 2.0);
+    observe(40.0, 0.01);
+    observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedMeteors);
     const QualityConfiguration meteorsReduced = quality.configuration();
     QCOMPARE(meteorsReduced.particleCount, particlesReduced.particleCount);
     QVERIFY(meteorsReduced.meteorCount < particlesReduced.meteorCount);
     QCOMPARE(meteorsReduced.rippleCount, particlesReduced.rippleCount);
     QCOMPARE(meteorsReduced.gridSize, particlesReduced.gridSize);
-    quality.observe(40.0, 5.0);
-    quality.observe(40.0, 2.0);
+    observe(40.0, 5.0);
+    observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedRipples);
-    quality.observe(40.0, 5.0);
-    quality.observe(40.0, 2.0);
+    observe(40.0, 5.0);
+    observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedGrid);
-    quality.observe(40.0, 5.0);
-    quality.observe(40.0, 2.0);
+    observe(40.0, 5.0);
+    observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedResolution);
 
-    quality.observe(10.0, 7.99);
+    observe(10.0, 7.99);
     QCOMPARE(quality.stage(), DegradationStage::ReducedResolution);
-    quality.observe(10.0, 0.01);
+    observe(10.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedGrid);
+}
+
+void TerrainReactorStateTest::qualityFeedbackSeparatesPacerDelayFromWorkCost()
+{
+    const auto simulateIdleDisplay = [](double refreshRate) {
+        AutomaticQualityController quality;
+        FramePacer pacer;
+        double previousAllowed = 0.0;
+        const int ticks = qRound(refreshRate * 3.0);
+        for (int tick = 0; tick <= ticks; ++tick) {
+            const double now = double(tick) / refreshRate;
+            if (!pacer.shouldRender(now, 30.0)) continue;
+            quality.observeWorkSample(2.0);
+            quality.advanceWallClock(now - previousAllowed);
+            previousAllowed = now;
+        }
+        return quality.stage();
+    };
+
+    QCOMPARE(simulateIdleDisplay(75.0), DegradationStage::Full);
+    QCOMPARE(simulateIdleDisplay(165.0), DegradationStage::Full);
+
+    AutomaticQualityController overloaded;
+    overloaded.observeWorkSample(40.0);
+    overloaded.advanceWallClock(1.99);
+    QCOMPARE(overloaded.stage(), DegradationStage::Full);
+    overloaded.advanceWallClock(0.01);
+    QCOMPARE(overloaded.stage(), DegradationStage::ReducedParticles);
+
+    overloaded.observeWorkSample(2.0);
+    overloaded.advanceWallClock(7.99);
+    QCOMPARE(overloaded.stage(), DegradationStage::ReducedParticles);
+    overloaded.advanceWallClock(0.01);
+    QCOMPARE(overloaded.stage(), DegradationStage::Full);
 }
 
 void TerrainReactorStateTest::inactiveOrOccludedGateFreezesAllWorkCounters()
@@ -216,6 +257,40 @@ void TerrainReactorStateTest::manualCameraDeltaPreservesRendererMotion()
     QCOMPARE(renderer.snapshot().yaw, automaticallyRotated + 0.25F);
     renderer.advance(9.01, 1.0F, 1.0F);
     QVERIFY(renderer.snapshot().yaw > automaticallyRotated + 0.25F);
+}
+
+void TerrainReactorStateTest::punchEventsAreConsumedOnceByRevision()
+{
+    CameraMotion camera;
+    PunchEventConsumer consumer;
+    const PunchEvent first{0.7F, 1};
+    QVERIFY(consumer.consume(first, camera));
+    const float initialPunch = camera.snapshot().punch;
+    QVERIFY(initialPunch >= 0.69F);
+
+    camera.advance(0.1, 0.1F, 0.0F);
+    const float decayedPunch = camera.snapshot().punch;
+    QVERIFY(decayedPunch < initialPunch);
+
+    CameraSnapshot previousGui;
+    previousGui.punch = first.strength;
+    CameraSnapshot nextGui = previousGui;
+    nextGui.yaw += 0.1F;
+    nextGui.distance = 64.0F;
+    camera.applyManualDelta(previousGui, nextGui, 0.1);
+    QCOMPARE(camera.snapshot().punch, decayedPunch);
+
+    QVERIFY(!consumer.consume(first, camera));
+    QCOMPARE(camera.snapshot().punch, decayedPunch);
+
+    const PunchEvent sameStrength{0.7F, 2};
+    QVERIFY(consumer.consume(sameStrength, camera));
+    QVERIFY(camera.snapshot().punch > decayedPunch);
+    camera.advance(0.2, 0.1F, 0.0F);
+    const float beforeWeaker = camera.snapshot().punch;
+    const PunchEvent weaker{0.2F, 3};
+    QVERIFY(consumer.consume(weaker, camera));
+    QVERIFY(camera.snapshot().punch > beforeWeaker);
 }
 
 void TerrainReactorStateTest::ecoFramePacerLimitsWorkToThirtyFrames()

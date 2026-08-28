@@ -179,6 +179,7 @@ protected:
         auto* terrainItem = static_cast<TerrainReactorItem*>(item);
         item_ = terrainItem;
         const auto next = terrainItem->snapshotForRenderer();
+        if (!snapshot_.running && next.running) frameTimer_.restart();
         if (next.running || failed_) publishStatus();
         const bool layoutChanged = next.seed != snapshot_.seed
             || next.quality != snapshot_.quality
@@ -213,20 +214,18 @@ protected:
 
         const qint64 elapsedNanoseconds = frameTimer_.nsecsElapsed();
         frameTimer_.restart();
-        const double elapsedSeconds = std::clamp(
-            static_cast<double>(elapsedNanoseconds) / 1'000'000'000.0,
-            0.001, 0.25);
-        quality_.observe(elapsedSeconds * 1000.0, elapsedSeconds);
-        if (lastStage_ != quality_.stage()) {
-            lastStage_ = quality_.stage();
-            instancesDirty_ = true;
-        }
+        const double wallElapsedSeconds = std::max(0.0,
+            static_cast<double>(elapsedNanoseconds) / 1'000'000'000.0);
+        const double animationElapsedSeconds = std::clamp(
+            wallElapsedSeconds, 0.001, 0.25);
+        QElapsedTimer workTimer;
+        workTimer.start();
 
         buildInstancesIfNeeded();
         const VisualParameters visual = mapVisualParameters(snapshot_.features,
                                                             snapshot_.timeSeconds);
-        camera_.applyBeatPunch(visual.cameraPunch);
-        camera_.advance(snapshot_.timeSeconds, float(elapsedSeconds),
+        punchEvents_.consume(snapshot_.punchEvent, camera_);
+        camera_.advance(snapshot_.timeSeconds, float(animationElapsedSeconds),
                         snapshot_.style.autoRotate * snapshot_.style.motionResponse);
         UniformBlock uniforms = buildUniforms(visual, camera_.snapshot());
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
@@ -260,6 +259,15 @@ protected:
         commandBuffer->drawIndexed(cubeIndexCount,
                                    static_cast<quint32>(instances_.size()));
         commandBuffer->endPass();
+
+        const double workMilliseconds = static_cast<double>(workTimer.nsecsElapsed())
+            / 1'000'000.0;
+        quality_.observeWorkSample(workMilliseconds);
+        quality_.advanceWallClock(wallElapsedSeconds);
+        if (lastStage_ != quality_.stage()) {
+            lastStage_ = quality_.stage();
+            instancesDirty_ = true;
+        }
 
         telemetry_->frames.fetch_add(1, std::memory_order_relaxed);
         telemetry_->animations.fetch_add(1, std::memory_order_relaxed);
@@ -410,8 +418,8 @@ private:
     UniformBlock buildUniforms(const VisualParameters& visual,
                                const CameraSnapshot& camera)
     {
-        // Camera state is supplied by the GUI snapshot; only the audio punch
-        // envelope is advanced on the render thread.
+        // Manual camera deltas come from the GUI snapshot. The punch envelope
+        // is a revisioned event owned and advanced by the render thread.
         QMatrix4x4 projection;
         const QSize size = renderTarget()->pixelSize();
         const float aspect = size.height() > 0
@@ -425,7 +433,7 @@ private:
                       14.5F + radius * std::sin(pitch) * 0.66F,
                       radius * std::cos(pitch) * std::cos(yaw));
         const float shake = snapshot_.style.cinemaShake
-            * (visual.spectralFlux * 0.22F + visual.cameraPunch * 0.12F);
+            * (visual.spectralFlux * 0.22F + camera.punch * 0.12F);
         eye += QVector3D(std::sin(visual.timeSeconds * 21.0F) * shake,
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
@@ -455,7 +463,7 @@ private:
         result.parameters[3] = visual.timeSeconds;
         result.effects[0] = visual.particleActivity;
         result.effects[1] = visual.meteorActivity;
-        result.effects[2] = visual.cameraPunch;
+        result.effects[2] = camera.punch;
         result.effects[3] = float(currentRippleCount_);
         result.styleParameters[0] = snapshot_.style.terrainAmplitude;
         result.styleParameters[1] = snapshot_.style.motionResponse;
@@ -525,6 +533,7 @@ private:
     DegradationStage lastStage_ = DegradationStage::Full;
     TerrainReactorItem::RenderSnapshot snapshot_;
     CameraMotion camera_;
+    PunchEventConsumer punchEvents_;
     CameraSnapshot previousGuiCamera_;
     bool cameraSynchronized_ = false;
     quint64 syncedCameraRevision_ = std::numeric_limits<quint64>::max();
@@ -753,7 +762,11 @@ RenderStyleSnapshot TerrainReactorItem::renderStyleSnapshot() const
 qreal TerrainReactorItem::cameraYaw() const noexcept { return camera_.snapshot().yaw; }
 qreal TerrainReactorItem::cameraPitch() const noexcept { return camera_.snapshot().pitch; }
 qreal TerrainReactorItem::cameraDistance() const noexcept { return camera_.snapshot().distance; }
-qreal TerrainReactorItem::cameraPunch() const noexcept { return camera_.snapshot().punch; }
+qreal TerrainReactorItem::cameraPunch() const noexcept { return pendingPunch_.strength; }
+quint64 TerrainReactorItem::punchRevision() const noexcept
+{
+    return pendingPunch_.revision;
+}
 
 quint64 TerrainReactorItem::frameCount() const noexcept
 {
@@ -817,8 +830,8 @@ void TerrainReactorItem::zoomBy(qreal wheelDelta, qreal nowSeconds)
 }
 void TerrainReactorItem::triggerCameraPunch(qreal strength)
 {
-    camera_.applyBeatPunch(float(strength));
-    ++cameraRevision_;
+    pendingPunch_.strength = std::clamp(float(strength), 0.0F, 1.0F);
+    ++pendingPunch_.revision;
     emit cameraChanged();
     scheduleIfRunnable();
 }
@@ -843,6 +856,7 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.features = useSyntheticFeatures_ ? syntheticFeatures_ : liveFeatures_;
     result.style = renderStyle_;
     result.camera = camera_.snapshot();
+    result.punchEvent = pendingPunch_;
     result.cameraManualUntilSeconds = camera_.manualUntilSeconds();
     result.cameraRevision = cameraRevision_;
     result.seed = deterministicSeed_;
@@ -910,8 +924,15 @@ void TerrainReactorItem::copyFeatureSource()
     if (!useSyntheticFeatures_) applyCurrentFeatures(liveFeatures_);
 }
 
-void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures&)
+void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)
 {
+    const float punch = mapVisualParameters(features,
+        float(clock_.elapsed()) / 1000.0F).cameraPunch;
+    if (punch > 0.0F) {
+        pendingPunch_.strength = punch;
+        ++pendingPunch_.revision;
+        emit cameraChanged();
+    }
     ++featureRevision_;
     emit featureRevisionChanged();
     scheduleIfRunnable();

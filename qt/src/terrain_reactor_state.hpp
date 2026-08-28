@@ -138,7 +138,8 @@ struct QualityConfiguration {
 
 class AutomaticQualityController final {
 public:
-    void observe(double frameMilliseconds, double elapsedSeconds) noexcept;
+    void observeWorkSample(double workMilliseconds) noexcept;
+    void advanceWallClock(double elapsedSeconds) noexcept;
     DegradationStage stage() const noexcept;
     QualityConfiguration configuration() const noexcept;
 
@@ -149,6 +150,8 @@ private:
     static constexpr double cooldownSeconds_ = 5.0;
 
     DegradationStage stage_ = DegradationStage::Full;
+    enum class LoadSample : quint8 { Neutral, OverBudget, UnderBudget };
+    LoadSample loadSample_ = LoadSample::Neutral;
     double overBudgetSeconds_ = 0.0;
     double underBudgetSeconds_ = 0.0;
     double cooldownRemainingSeconds_ = 0.0;
@@ -237,6 +240,19 @@ private:
 
     CameraSnapshot snapshot_;
     double manualUntilSeconds_ = 0.0;
+};
+
+struct PunchEvent {
+    float strength = 0.0F;
+    quint64 revision = 0;
+};
+
+class PunchEventConsumer final {
+public:
+    bool consume(const PunchEvent& event, CameraMotion& camera) noexcept;
+
+private:
+    quint64 consumedRevision_ = 0;
 };
 
 } // namespace agplayer::terrain

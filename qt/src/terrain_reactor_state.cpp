@@ -208,19 +208,30 @@ float terrainHeight(const SceneInstance& instance,
                       0.035F, 18.0F);
 }
 
-void AutomaticQualityController::observe(double frameMilliseconds,
-                                         double elapsedSeconds) noexcept
+void AutomaticQualityController::observeWorkSample(
+    double workMilliseconds) noexcept
+{
+    const double work = std::max(0.0, workMilliseconds);
+    if (work > frameBudgetMilliseconds_ * 1.05) {
+        loadSample_ = LoadSample::OverBudget;
+    } else if (work < frameBudgetMilliseconds_ * 0.80) {
+        loadSample_ = LoadSample::UnderBudget;
+    } else {
+        loadSample_ = LoadSample::Neutral;
+    }
+}
+
+void AutomaticQualityController::advanceWallClock(
+    double elapsedSeconds) noexcept
 {
     const double elapsed = std::max(0.0, elapsedSeconds);
     cooldownRemainingSeconds_ = std::max(0.0,
         cooldownRemainingSeconds_ - elapsed);
 
-    const bool overBudget = frameMilliseconds > frameBudgetMilliseconds_ * 1.05;
-    const bool underBudget = frameMilliseconds < frameBudgetMilliseconds_ * 0.80;
-    if (overBudget) {
+    if (loadSample_ == LoadSample::OverBudget) {
         overBudgetSeconds_ += elapsed;
         underBudgetSeconds_ = 0.0;
-    } else if (underBudget) {
+    } else if (loadSample_ == LoadSample::UnderBudget) {
         underBudgetSeconds_ += elapsed;
         overBudgetSeconds_ = 0.0;
     } else {
@@ -378,7 +389,7 @@ void CameraMotion::zoomBy(float wheelDelta, double nowSeconds) noexcept
 }
 void CameraMotion::applyBeatPunch(float strength) noexcept
 {
-    snapshot_.punch = std::max(snapshot_.punch, clampUnit(strength));
+    snapshot_.punch = clampUnit(snapshot_.punch + clampUnit(strength));
 }
 void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
                            float autoRotateSpeed) noexcept
@@ -413,12 +424,22 @@ void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
     snapshot_.yaw += yawDelta;
     snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
     snapshot_.distance = std::clamp(next.distance, 42.0F, 128.0F);
-    snapshot_.punch = std::max(snapshot_.punch, clampUnit(next.punch));
     if (manuallyMoved) markManual(nowSeconds);
 }
 void CameraMotion::markManual(double nowSeconds) noexcept
 {
     manualUntilSeconds_ = std::max(0.0, nowSeconds) + 4.0;
+}
+
+bool PunchEventConsumer::consume(const PunchEvent& event,
+                                 CameraMotion& camera) noexcept
+{
+    if (event.revision == 0 || event.revision <= consumedRevision_) {
+        return false;
+    }
+    consumedRevision_ = event.revision;
+    camera.applyBeatPunch(event.strength);
+    return true;
 }
 
 } // namespace agplayer::terrain

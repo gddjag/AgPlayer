@@ -38,6 +38,7 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(qreal cameraPitch READ cameraPitch NOTIFY cameraChanged)
     Q_PROPERTY(qreal cameraDistance READ cameraDistance NOTIFY cameraChanged)
     Q_PROPERTY(qreal cameraPunch READ cameraPunch NOTIFY cameraChanged)
+    Q_PROPERTY(quint64 punchRevision READ punchRevision NOTIFY cameraChanged)
     Q_PROPERTY(quint64 featureRevision READ featureRevision
                    NOTIFY featureRevisionChanged)
     Q_PROPERTY(quint64 styleRevision READ styleRevision
@@ -102,6 +103,7 @@ public:
     qreal cameraPitch() const noexcept;
     qreal cameraDistance() const noexcept;
     qreal cameraPunch() const noexcept;
+    quint64 punchRevision() const noexcept;
 
     quint64 frameCount() const noexcept;
     quint64 animationCount() const noexcept;
@@ -151,6 +153,7 @@ private:
         agplayer::terrain::AudioFeatures features;
         agplayer::terrain::RenderStyleSnapshot style;
         agplayer::terrain::CameraSnapshot camera;
+        agplayer::terrain::PunchEvent punchEvent;
         double cameraManualUntilSeconds = 0.0;
         quint64 cameraRevision = 0;
         quint32 seed = 0x5eedU;
@@ -189,6 +192,7 @@ private:
     quint64 featureRevision_ = 0;
     quint64 styleRevision_ = 0;
     quint64 cameraRevision_ = 0;
+    agplayer::terrain::PunchEvent pendingPunch_;
     float internalScale_ = 1.0F;
     agplayer::terrain::CameraMotion camera_;
     QElapsedTimer clock_;

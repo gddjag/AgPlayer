@@ -209,12 +209,20 @@ void TerrainReactorItemTest::cameraPropertiesSupportTaskFourInput()
 {
     TerrainReactorItem item;
     const qreal originalYaw = item.cameraYaw();
+    const quint64 originalPunchRevision = item.punchRevision();
+    item.triggerCameraPunch(0.7);
+    QCOMPARE(item.punchRevision(), originalPunchRevision + 1);
+    const quint64 firstPunchRevision = item.punchRevision();
     item.orbitBy(0.25, -0.1, 1.0);
     item.zoomBy(-1000.0, 1.0);
+    QCOMPARE(item.punchRevision(), firstPunchRevision);
     item.triggerCameraPunch(0.7);
+    QCOMPARE(item.punchRevision(), firstPunchRevision + 1);
+    item.triggerCameraPunch(0.2);
+    QCOMPARE(item.punchRevision(), firstPunchRevision + 2);
     QCOMPARE(item.cameraYaw(), originalYaw + 0.25);
     QCOMPARE(item.cameraDistance(), 42.0);
-    QVERIFY(item.cameraPunch() >= 0.69);
+    QVERIFY(item.cameraPunch() >= 0.19);
 }
 
 QTEST_MAIN(TerrainReactorItemTest)
