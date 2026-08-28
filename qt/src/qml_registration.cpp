@@ -20,6 +20,7 @@
 #include "settings_controller.hpp"
 #include "waveform_item.hpp"
 #include "waveform_provider.hpp"
+#include "vocal_separation_controller.hpp"
 #include "window_controller.hpp"
 
 #include <qqml.h>
@@ -36,18 +37,29 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WaveformProvider* waveformProvider,
                                  PlaylistModel* playlistModel,
                                  EqualizerController* equalizer,
-                                 AudioEditorController* audioEditor)
+                                 AudioEditorController* audioEditor,
+                                 AudioPreviewController* audioPreview,
+                                 VocalSeparationController* vocalSeparation)
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
     PlaylistModel* const playlists = playlistModel != nullptr
         ? playlistModel : &fallbackPlaylistModel;
-    qmlRegisterSingletonType<AudioPreviewController>(
-        "AgPlayer", 1, 0, "AudioPreviewController",
-        [playback](QQmlEngine*, QJSEngine*) -> QObject* {
-            return new AudioPreviewController(
-                AG_AUDIO_BACKEND_DEFAULT, playback);
-        });
+    if (audioPreview != nullptr) {
+        qmlRegisterSingletonInstance(
+            "AgPlayer", 1, 0, "AudioPreviewController", audioPreview);
+    } else {
+        qmlRegisterSingletonType<AudioPreviewController>(
+            "AgPlayer", 1, 0, "AudioPreviewController",
+            [playback](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new AudioPreviewController(
+                    AG_AUDIO_BACKEND_DEFAULT, playback);
+            });
+    }
+    if (vocalSeparation != nullptr) {
+        qmlRegisterSingletonInstance(
+            "AgPlayer", 1, 0, "VocalSeparationController", vocalSeparation);
+    }
     if (audioEditor != nullptr) {
         qmlRegisterSingletonInstance(
             "AgPlayer", 1, 0, "AudioEditorController", audioEditor);

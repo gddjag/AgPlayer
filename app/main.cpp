@@ -41,6 +41,7 @@
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "audio_preview_controller.hpp"
 #include "equalizer_controller.hpp"
 #include "format_converter.hpp"
 #include "global_hotkey_manager.hpp"
@@ -60,6 +61,7 @@
 #include "settings_controller.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
+#include "vocal_separation_controller.hpp"
 #include "window_controller.hpp"
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
@@ -699,6 +701,16 @@ int main(int argc, char* argv[])
         FilenameProcessor filenameProcessor;
         filenameProcessor.setLibraryModel(&library);
         FormatConverter formatConverter;
+        AudioPreviewController audioPreview(
+            AG_AUDIO_BACKEND_DEFAULT, &playback);
+        WaveformProvider separationWaveformProvider(&settings);
+        VocalSeparationControllerOptions separationOptions;
+        separationOptions.dataRoot = QFileInfo(libraryPath).dir().filePath(
+            QStringLiteral("separation"));
+        separationOptions.outputDirectory = settings.defaultOutputDirectory();
+        VocalSeparationController vocalSeparation(
+            &audioPreview, &separationWaveformProvider, &library, &importer,
+            &playlists, separationOptions);
         if (!qaScreenshotTools.isEmpty() && !qaPlayPath.isEmpty()
             && QFileInfo::exists(qaPlayPath)) {
             const QList<QUrl> qaToolUrls{QUrl::fromLocalFile(qaPlayPath)};
@@ -736,7 +748,8 @@ int main(int argc, char* argv[])
                                     &audioTools, &metadataEditor,
                                     &formatConverter, &filenameProcessor,
                                     &settings, &waveformProvider, &playlists,
-                                    &equalizer, &audioEditor);
+                                    &equalizer, &audioEditor, &audioPreview,
+                                    &vocalSeparation);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;

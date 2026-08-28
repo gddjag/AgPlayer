@@ -43,6 +43,8 @@ public:
     static QString partPath(const QString& destination);
     static qint64 resumeOffset(const QString& destination);
     static bool hasDiskSpace(const QString& destination, qint64 bytesRequired);
+    static bool isVerifiedFile(const VocalDownloadFile& file,
+                               const QString& path);
     static VocalInstallResult activateVerifiedPart(const VocalDownloadFile& file,
                                                    const QString& destination);
     static bool runtimeDirectoryIsVerified(const QString& runtimeDirectory,

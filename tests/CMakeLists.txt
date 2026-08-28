@@ -484,6 +484,7 @@ foreach(qt_test IN ITEMS
     file_association_controller_test
     equalizer_controller_test
     vocal_separation_install_test
+    vocal_separation_history_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -564,6 +565,64 @@ target_include_directories(separation_native_backend_test SYSTEM PRIVATE
 )
 
 if(TARGET AgSeparationWorker)
+add_executable(separation_controller_test_worker
+    qt/separation_controller_test_worker.cpp
+)
+set_target_properties(separation_controller_test_worker PROPERTIES AUTOMOC ON)
+target_include_directories(separation_controller_test_worker PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/src"
+)
+target_link_libraries(separation_controller_test_worker PRIVATE
+    ag_separation_worker_core Qt6::Core
+)
+agplayer_enable_warnings(separation_controller_test_worker)
+
+add_executable(separation_process_client_test
+    qt/separation_process_client_test.cpp
+)
+set_target_properties(separation_process_client_test PROPERTIES AUTOMOC ON)
+target_include_directories(separation_process_client_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(separation_process_client_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+target_compile_definitions(separation_process_client_test PRIVATE
+    AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH="$<TARGET_FILE:separation_controller_test_worker>"
+)
+add_dependencies(separation_process_client_test separation_controller_test_worker)
+agplayer_enable_warnings(separation_process_client_test)
+add_test(NAME separation_process_client_test COMMAND separation_process_client_test)
+set_tests_properties(separation_process_client_test PROPERTIES
+    TIMEOUT 15
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
+add_executable(vocal_separation_controller_test
+    qt/vocal_separation_controller_test.cpp
+)
+set_target_properties(vocal_separation_controller_test PROPERTIES AUTOMOC ON)
+target_include_directories(vocal_separation_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(vocal_separation_controller_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+target_compile_definitions(vocal_separation_controller_test PRIVATE
+    AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH="$<TARGET_FILE:separation_controller_test_worker>"
+)
+add_dependencies(vocal_separation_controller_test
+    separation_controller_test_worker decoder_fixture)
+agplayer_enable_warnings(vocal_separation_controller_test)
+add_test(NAME vocal_separation_controller_test COMMAND vocal_separation_controller_test)
+set_tests_properties(vocal_separation_controller_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(separation_blocking_worker
     qt/separation_blocking_worker.cpp
 )

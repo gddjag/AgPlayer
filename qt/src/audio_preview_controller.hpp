@@ -50,6 +50,7 @@ public:
     Q_INVOKABLE void pause();
     Q_INVOKABLE void stop();
     Q_INVOKABLE void seek(qint64 positionMs);
+    Q_INVOKABLE bool switchSourcePreservingPosition(const QUrl& source);
     Q_INVOKABLE bool isCurrentSource(const QUrl& source) const;
     Q_INVOKABLE void setDspParameters(
         double speedRatio,

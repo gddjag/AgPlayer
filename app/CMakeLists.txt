@@ -157,6 +157,16 @@ qt_add_executable(AgPlayer
     agplayer.rc
     agplayer.manifest
 )
+if(TARGET AgSeparationWorker)
+    add_dependencies(AgPlayer AgSeparationWorker)
+    add_custom_command(TARGET AgPlayer POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:AgSeparationWorker>"
+            "$<TARGET_FILE_DIR:AgPlayer>"
+        COMMENT "Deploying the on-demand separation Worker"
+        VERBATIM
+    )
+endif()
 target_link_libraries(AgPlayer PRIVATE
     Qt6::Widgets
     agplayer_app_qml

@@ -9,10 +9,12 @@ class LibraryFilterModel;
 class LibraryModel;
 class MetadataEditor;
 class AudioEditorController;
+class AudioPreviewController;
 class PlaybackController;
 class PlaylistModel;
 class SettingsController;
 class WaveformProvider;
+class VocalSeparationController;
 class WindowController;
 
 // Registers all AgPlayer QML singletons and the WaveformItem type into the
@@ -31,4 +33,6 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  WaveformProvider* waveformProvider = nullptr,
                                  PlaylistModel* playlistModel = nullptr,
                                  EqualizerController* equalizer = nullptr,
-                                 AudioEditorController* audioEditor = nullptr);
+                                 AudioEditorController* audioEditor = nullptr,
+                                 AudioPreviewController* audioPreview = nullptr,
+                                 VocalSeparationController* vocalSeparation = nullptr);

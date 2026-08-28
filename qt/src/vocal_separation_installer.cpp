@@ -146,6 +146,12 @@ bool VocalSeparationInstaller::hasDiskSpace(const QString& destination,
         && storage.bytesAvailable() >= bytesRequired;
 }
 
+bool VocalSeparationInstaller::isVerifiedFile(const VocalDownloadFile& file,
+                                              const QString& path)
+{
+    return fileMatches(file, path);
+}
+
 VocalInstallResult VocalSeparationInstaller::activateVerifiedPart(
     const VocalDownloadFile& file, const QString& destination)
 {

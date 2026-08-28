@@ -183,6 +183,29 @@ void AudioPreviewController::seek(const qint64 positionMs)
     }
 }
 
+bool AudioPreviewController::switchSourcePreservingPosition(const QUrl& source)
+{
+    const QString path = source.toLocalFile();
+    if (player_ == nullptr || path.isEmpty() || !QFileInfo::exists(path)) {
+        setError(tr("预览文件不存在"));
+        return false;
+    }
+    if (!hasSource()) {
+        play(source);
+        return isCurrentSource(source);
+    }
+    pollSnapshot();
+    const qint64 savedPosition = positionMs_;
+    const bool wasPlaying = playing_;
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+    if (!loadPlaybackPath(absolutePath, absolutePath, 0.0, false)) {
+        return false;
+    }
+    seek(savedPosition);
+    if (wasPlaying) resume();
+    return isCurrentSource(source);
+}
+
 void AudioPreviewController::setVolume(const double value)
 {
     const double bounded = std::clamp(value, 0.0, 1.0);
