@@ -45,15 +45,21 @@ using agplayer::editor::WriteRequest;
 namespace {
 
 constexpr std::size_t kMaxProjectSources = 4'096;
+enum class PeakReadState {
+    Complete,
+    Unavailable,
+    Cancelled,
+};
+
 qint64 viewportTargetPoints(const qint64 visibleFrames,
                            const qreal viewportWidth,
                            const qreal devicePixelRatio)
 {
-    const qint64 width = std::max<qint64>(1, static_cast<qint64>(std::ceil(
-        std::max<qreal>(1.0, viewportWidth))));
     const qreal boundedDpr = std::clamp(devicePixelRatio, 1.0, 4.0);
+    const qreal scaledBuckets = 2.0 * std::max<qreal>(0.0, viewportWidth)
+        * boundedDpr;
     const qint64 buckets = std::max<qint64>(1, static_cast<qint64>(
-        std::ceil(static_cast<qreal>(width * 2) * boundedDpr)));
+        std::floor(scaledBuckets)));
     return std::min<qint64>(visibleFrames, buckets);
 }
 
@@ -279,21 +285,29 @@ std::pair<float, float> eventGainExtrema(
     return {minimum, maximum};
 }
 
-bool mergeEventFromSourcePeaks(
+PeakReadState mergeEventFromSourcePeaks(
     const AudioEvent& event,
     const std::vector<std::vector<float>>& sourcePeaks,
     const qint64 sourcePeakStart, const qint64 sourcePeakFrames,
     const qint64 visibleStart, const qint64 visibleEnd,
     const qint64 targetPoints, std::vector<std::vector<float>>& output)
 {
-    if (!event.source || sourcePeaks.empty()) return false;
+    if (!event.source || sourcePeaks.empty() || sourcePeakFrames <= 0
+        || output.empty() || targetPoints <= 0) {
+        return PeakReadState::Unavailable;
+    }
     const qint64 eventEnd = event.timelineStart
         + agplayer::editor::audibleFrames(event);
     const qint64 intersectionStart = std::max(visibleStart, event.timelineStart);
     const qint64 intersectionEnd = std::min(visibleEnd, eventEnd);
-    if (intersectionEnd <= intersectionStart) return false;
+    if (intersectionEnd <= intersectionStart) return PeakReadState::Unavailable;
+    if (event.sourceStart + intersectionStart - event.timelineStart
+            < sourcePeakStart
+        || event.sourceStart + intersectionEnd - event.timelineStart
+            > sourcePeakStart + sourcePeakFrames) {
+        return PeakReadState::Unavailable;
+    }
     const qint64 visibleFrames = visibleEnd - visibleStart;
-    bool wrote = false;
 
     for (qint64 point = 0; point < targetPoints; ++point) {
         const qint64 pointStart = visibleStart
@@ -314,8 +328,11 @@ bool mergeEventFromSourcePeaks(
             const auto sourceIndex = std::min(channelIndex,
                                               sourcePeaks.size() - 1U);
             const auto& channel = sourcePeaks[sourceIndex];
+            if (channel.empty() || channel.size() % 2U != 0U) {
+                return PeakReadState::Unavailable;
+            }
             const qint64 buckets = static_cast<qint64>(channel.size() / 2U);
-            if (buckets <= 0) continue;
+            if (buckets <= 0) return PeakReadState::Unavailable;
             const qint64 first = scaledBucket(
                 std::max<qint64>(0, sourceStart - sourcePeakStart),
                 sourcePeakFrames, buckets);
@@ -326,7 +343,9 @@ bool mergeEventFromSourcePeaks(
             float maximum = -std::numeric_limits<float>::infinity();
             for (qint64 bucket = first; bucket <= last; ++bucket) {
                 const auto index = static_cast<std::size_t>(bucket * 2);
-                if (index + 1U >= channel.size()) break;
+                if (index + 1U >= channel.size()) {
+                    return PeakReadState::Unavailable;
+                }
                 const qint64 bucketSourceStart = sourcePeakStart
                     + static_cast<qint64>(static_cast<long double>(bucket)
                         * sourcePeakFrames / buckets);
@@ -353,29 +372,29 @@ bool mergeEventFromSourcePeaks(
                 minimum = std::min(minimum, *productExtrema.first);
                 maximum = std::max(maximum, *productExtrema.second);
             }
-            if (std::isfinite(minimum) && std::isfinite(maximum)) {
-                includePeakWithGainRange(output[channelIndex], point,
-                    minimum, maximum, 1.0F, 1.0F);
-                wrote = true;
+            if (!std::isfinite(minimum) || !std::isfinite(maximum)) {
+                return PeakReadState::Unavailable;
             }
+            includePeakWithGainRange(output[channelIndex], point,
+                minimum, maximum, 1.0F, 1.0F);
         }
     }
-    return wrote;
+    return PeakReadState::Complete;
 }
 
-bool mergeEventFromDecodedSlice(
+PeakReadState mergeEventFromDecodedSlice(
     const AudioEvent& event, const qint64 visibleStart, const qint64 visibleEnd,
     const qint64 targetPoints,
     const std::shared_ptr<std::atomic_bool>& cancelToken,
     std::vector<std::vector<float>>& output)
 {
     if (!event.source || event.source->path.empty() || output.empty()
-        || targetPoints <= 0) return false;
+        || targetPoints <= 0) return PeakReadState::Unavailable;
     const qint64 eventEnd = event.timelineStart
         + agplayer::editor::audibleFrames(event);
     const qint64 intersectionStart = std::max(visibleStart, event.timelineStart);
     const qint64 intersectionEnd = std::min(visibleEnd, eventEnd);
-    if (intersectionEnd <= intersectionStart) return false;
+    if (intersectionEnd <= intersectionStart) return PeakReadState::Unavailable;
     const qint64 sourceStart = event.sourceStart
         + intersectionStart - event.timelineStart;
     const qint64 sourceEnd = event.sourceStart
@@ -383,31 +402,38 @@ bool mergeEventFromDecodedSlice(
     const int sourceChannels = static_cast<int>(event.source->channels);
     const int sampleRate = static_cast<int>(event.source->sample_rate);
     if (sourceChannels <= 0 || sampleRate <= 0 || sourceEnd <= sourceStart) {
-        return false;
+        return PeakReadState::Unavailable;
     }
     const QString path = QString::fromStdWString(event.source->path.wstring());
     agplayer::Decoder decoder;
     if (decoder.open(path.toUtf8().toStdString()) != AG_OK
         || decoder.seekFrame(sourceStart) != AG_OK) {
         decoder.close();
-        return false;
+        return PeakReadState::Unavailable;
     }
     const qint64 visibleFrames = visibleEnd - visibleStart;
-    qint64 currentFrame = sourceStart;
-    bool wrote = false;
+    qint64 nextSourceFrame = sourceStart;
     agplayer::DecodedAudioBlock block;
-    while (currentFrame < sourceEnd) {
-        if (cancelToken->load(std::memory_order_acquire)) break;
-        if (decoder.read(block) != AG_OK) break;
-        if (cancelToken->load(std::memory_order_acquire)) break;
-        if (block.frames == 0U) {
-            if (block.end_of_stream) break;
-            continue;
+    while (nextSourceFrame < sourceEnd) {
+        if (cancelToken->load(std::memory_order_acquire)) {
+            decoder.close();
+            return PeakReadState::Cancelled;
+        }
+        if (decoder.read(block) != AG_OK
+            || cancelToken->load(std::memory_order_acquire)
+            || block.frames == 0U) {
+            decoder.close();
+            return cancelToken->load(std::memory_order_acquire)
+                ? PeakReadState::Cancelled : PeakReadState::Unavailable;
         }
         const qint64 blockStart = block.timestamp_frame >= 0
-            ? block.timestamp_frame : currentFrame;
+            ? block.timestamp_frame : nextSourceFrame;
         const qint64 blockEnd = blockStart + static_cast<qint64>(block.frames);
-        const qint64 localStart = std::max(blockStart, sourceStart);
+        if (blockStart > nextSourceFrame || blockEnd <= nextSourceFrame) {
+            decoder.close();
+            return PeakReadState::Unavailable;
+        }
+        const qint64 localStart = nextSourceFrame;
         const qint64 localEnd = std::min(blockEnd, sourceEnd);
         for (qint64 sourceFrame = localStart; sourceFrame < localEnd;
              ++sourceFrame) {
@@ -419,12 +445,14 @@ bool mergeEventFromDecodedSlice(
                     * targetPoints / visibleFrames)), 0, targetPoints - 1);
             const std::size_t sampleBase = static_cast<std::size_t>(
                 sourceFrame - blockStart) * static_cast<std::size_t>(sourceChannels);
-            if (sampleBase >= block.samples.size()) break;
+            if (sampleBase + static_cast<std::size_t>(sourceChannels)
+                > block.samples.size()) {
+                decoder.close();
+                return PeakReadState::Unavailable;
+            }
             float amplitude = 0.0F;
             for (int sourceChannel = 0; sourceChannel < sourceChannels;
                  ++sourceChannel) {
-                if (sampleBase + static_cast<std::size_t>(sourceChannel)
-                    >= block.samples.size()) break;
                 amplitude = std::max(amplitude, std::abs(block.samples[
                     sampleBase + static_cast<std::size_t>(sourceChannel)]));
             }
@@ -435,13 +463,15 @@ bool mergeEventFromDecodedSlice(
                 includePeak(channel, point, minimum, maximum,
                     agplayer::editor::eventAmplitudeGainAt(event, localOffset));
             }
-            wrote = true;
         }
-        currentFrame = std::max(currentFrame + 1, blockEnd);
-        if (block.end_of_stream) break;
+        nextSourceFrame = localEnd;
+        if (block.end_of_stream && nextSourceFrame < sourceEnd) {
+            decoder.close();
+            return PeakReadState::Unavailable;
+        }
     }
     decoder.close();
-    return wrote;
+    return PeakReadState::Complete;
 }
 
 std::string sourcePeakKey(const AudioSource& source)
@@ -493,13 +523,14 @@ AudioEditorController::ViewportWaveformResult composeVisibleTimelinePeaks(
                        : std::shared_ptr<const agplayer::editor::PeakPyramid>{});
         const bool cachedSource = eventPyramid
             && eventPyramid->channelCount() > 0U;
-        bool decoded = false;
+        PeakReadState readState = PeakReadState::Unavailable;
         if (preciseSlice) {
-            decoded = mergeEventFromDecodedSlice(
+            readState = mergeEventFromDecodedSlice(
                 event, visibleStart, visibleEnd, targetPoints,
                 cancelToken, result);
         }
-        if (!decoded && (primary || cachedSource)) {
+        if (readState == PeakReadState::Cancelled) return {};
+        if (readState != PeakReadState::Complete && (primary || cachedSource)) {
             const qint64 intersectionStart = std::max(
                 visibleStart, event.timelineStart);
             const qint64 intersectionEnd = std::min(visibleEnd, eventEnd);
@@ -534,17 +565,17 @@ AudioEditorController::ViewportWaveformResult composeVisibleTimelinePeaks(
                 }
             }
             if (!selectedPeaks.empty() && !selectedPeaks.front().empty()) {
-                decoded = mergeEventFromSourcePeaks(
+                readState = mergeEventFromSourcePeaks(
                     event, selectedPeaks, selectedPeakStart, selectedPeakFrames,
                     visibleStart, visibleEnd, targetPoints, result);
             } else {
-                decoded = mergeEventFromSourcePeaks(
+                readState = mergeEventFromSourcePeaks(
                     event, primarySourcePeaks, 0, event.source->total_frames,
                     visibleStart, visibleEnd, targetPoints, result);
             }
         }
         composition.hasUnavailableVisibleEvent = composition.hasUnavailableVisibleEvent
-            || !decoded;
+            || readState != PeakReadState::Complete;
     }
     return composition;
 }
@@ -3102,6 +3133,13 @@ void AudioEditorController::setViewportWaveformDevicePixelRatio(
     if (qFuzzyCompare(viewport_waveform_device_pixel_ratio_, bounded)) return;
     viewport_waveform_device_pixel_ratio_ = bounded;
     requestViewportWaveform();
+}
+
+void AudioEditorController::clearViewportSourcePeaksForTesting()
+{
+    channel_peaks_.clear();
+    primary_peak_pyramid_.reset();
+    source_peak_pyramids_.clear();
 }
 
 void AudioEditorController::cancelSourcePeakCacheJob()

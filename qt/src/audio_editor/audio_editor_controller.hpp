@@ -212,6 +212,7 @@ public:
     void setViewportWaveformTaskObserverForTesting(
         std::function<void(bool)> observer)
     { viewport_waveform_task_observer_ = std::move(observer); }
+    void clearViewportSourcePeaksForTesting();
     void setSourcePeakCacheTaskObserverForTesting(
         std::function<void(bool)> observer)
     { source_peak_cache_task_observer_ = std::move(observer); }

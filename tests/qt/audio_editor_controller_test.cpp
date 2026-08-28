@@ -2198,6 +2198,87 @@ private slots:
         QVERIFY(!controller.viewportChannelPeaks().isEmpty());
     }
 
+    void unavailableViewportReadKeepsLastGoodAfterTimelineMutations()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        constexpr qint64 frames = 2'048;
+        QVERIFY(writeMonoFloatWav(source,
+            std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        controller.viewport()->setViewportWidth(64.0);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.viewportChannelPeaks().isEmpty(),
+                                 10'000);
+        const QVariantList lastGood = controller.viewportChannelPeaks();
+
+        // Remove all already-built source views before deleting the file so
+        // every following edit exercises the real unavailable decoder path.
+        controller.clearViewportSourcePeaksForTesting();
+        QVERIFY(QFile::remove(source));
+        std::atomic_int starts{0};
+        std::atomic_int finishes{0};
+        controller.setViewportWaveformTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    ++starts;
+                } else {
+                    ++finishes;
+                }
+            });
+        const auto verifyLastGood = [&] {
+            QVERIFY2(starts.load() > 0,
+                     "the unavailable viewport job was not scheduled");
+            QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), starts.load(), 5'000);
+            QCOMPARE(controller.viewportChannelPeaks(), lastGood);
+        };
+
+        QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        QVERIFY(controller.splitEvent(id, frames / 2));
+        verifyLastGood();
+        QVERIFY(controller.trimEvent(id, 0, frames / 4, 0));
+        verifyLastGood();
+        QVERIFY(controller.setSelection(0, frames / 8));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.cropToSelection")));
+        verifyLastGood();
+        id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        QVERIFY(controller.setEventGain(id, 0.5));
+        verifyLastGood();
+        QVERIFY(controller.addEnvelopePoint(id, 8, 0.5));
+        verifyLastGood();
+    }
+
+    void viewportWaveformTargetUsesBoundedFractionalDevicePixelRatio()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(4'096, 0.5F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        controller.viewport()->setViewportWidth(10.0);
+
+        for (const auto [dpr, expectedBuckets] : {
+                 std::pair{1.0, 20}, std::pair{1.25, 25},
+                 std::pair{1.5, 30}, std::pair{2.0, 40}}) {
+            controller.setViewportWaveformDevicePixelRatio(dpr);
+            QTRY_VERIFY_WITH_TIMEOUT(
+                controller.viewportChannelPeaks().size() == 1
+                    && controller.viewportChannelPeaks().front().toList().size()
+                        == expectedBuckets * 2,
+                10'000);
+        }
+        controller.viewport()->setViewportWidth(0.4);
+        controller.setViewportWaveformDevicePixelRatio(1.0);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().size() == 1
+                && controller.viewportChannelPeaks().front().toList().size() == 2,
+            10'000);
+    }
+
     void cachedAndPreciseWaveformsApplyGainFadeAndEnvelopeConsistently()
     {
         QTemporaryDir temporary;

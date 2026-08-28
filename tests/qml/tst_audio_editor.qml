@@ -796,6 +796,16 @@ TestCase {
         verify(centerLine)
         compare(centerLine.height, 1)
         verify(Math.abs(centerLine.y - (canvas.height - 1) / 2) <= 1)
+        let visibleBaselineCount = 0
+        for (let index = 0; index < canvas.children.length; ++index) {
+            const child = canvas.children[index]
+            if (child.visible && child.width === canvas.width
+                    && child.height === 1
+                    && child.color === Theme.borderStrong) {
+                ++visibleBaselineCount
+            }
+        }
+        compare(visibleBaselineCount, 1)
     }
 
     function test_fadeHandleAndVolumeLinePersistSampleExactEdits() {
