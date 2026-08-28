@@ -195,3 +195,53 @@
 - OpenGL, Vulkan, Metal, device-loss recovery, extended VRAM/resource soak,
   integrated Task 4 mouse input, and screenshot-based visual acceptance remain
   unverified.
+
+## Review round 3 — punch claim lifetime across renderer rebuilds
+
+### Correction commit and RED evidence
+
+- Correction implementation: `9252b46` —
+  `fix(visuals): persist punch claims across renderers`.
+- The lifecycle test was added before production changes. Its RED build failed
+  with MSVC `C2665` at each attempted
+  `PunchEventConsumer(RendererResourceState&)` construction, proving that the
+  consumer had no item-shared lifecycle seam and would reset its consumed
+  revision whenever the renderer object was rebuilt.
+
+### Closed review finding
+
+- The last consumed punch revision now lives in the existing state object owned
+  uniquely by each `TerrainReactorItem` and shared with its renderer instances.
+  A monotonic atomic compare/exchange claim accepts revision zero never, accepts
+  the first positive revision once, rejects stale/equal revisions across a
+  renderer rebuild, and accepts later revisions. Resource invalidation and
+  generation changes do not reset the claim.
+- The focused state test constructs consumer A and consumes revision N, then
+  constructs consumer B over the same item state and verifies N is not replayed
+  while N+1 is consumed. It also proves a separate item can consume N and two
+  concurrent consumers obtain exactly one claim for the same revision.
+- The Task 1 item test now explicitly verifies that a real
+  `AudioVisualFeatureController` kick update advances the pending punch revision;
+  the existing kick/snare-to-punch mapping and immutable snapshot path remain
+  intact.
+
+### Round 3 verification
+
+- Passed: `ctest --test-dir build/debug -R
+  "(player_experience_controller|terrain_reactor_(state|item|gpu_smoke))_test"
+  --output-on-failure` — 4/4 tests.
+- Passed: verbose accelerated smoke reported
+  `Terrain Reactor accelerated backend: Direct3D11`, with 3/3 QtTest cases,
+  zero failures, zero skips, and exit 0.
+- Passed: Debug `AgPlayer` rebuilt, linked, and deployed after the terrain state
+  ABI change; the build command exited 0 under MSVC `/W4 /WX`.
+- Passed: implementation `git diff --cached --check`; the commit is limited to
+  terrain state/item production files and their focused tests.
+
+### Remaining limits
+
+- Cross-renderer claim behavior and concurrency are deterministic pure-logic
+  tests; the accelerated smoke does not deliberately force Qt to destroy and
+  recreate the scene-graph renderer during a live frame race.
+- OpenGL, Vulkan, Metal, device-loss recovery, extended resource soak,
+  integrated Task 4 input, and screenshot visual acceptance remain unverified.
