@@ -552,14 +552,23 @@ private slots:
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.setSelection(4'000, 8'000));
         QVERIFY(controller.seekFrame(4'000));
+        bool pollArmed = false;
+        bool observedSelectionEnd = false;
         bool loopedToSelectionStart = false;
         QObject::connect(&controller, &AudioEditorController::playbackChanged,
                          &controller, [&] {
-            loopedToSelectionStart = loopedToSelectionStart
-                || controller.playheadFrame() == 4'000;
+            if (!pollArmed) return;
+            if (controller.playheadFrame() == 8'000) {
+                observedSelectionEnd = true;
+            } else if (observedSelectionEnd && controller.playing()
+                       && controller.playheadFrame() == 4'000) {
+                loopedToSelectionStart = true;
+            }
         });
         QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        pollArmed = true;
         QVERIFY(controller.seekFrame(8'000));
+        QVERIFY(observedSelectionEnd);
         QTRY_VERIFY_WITH_TIMEOUT(loopedToSelectionStart, 2'000);
         QVERIFY(controller.playing());
     }
