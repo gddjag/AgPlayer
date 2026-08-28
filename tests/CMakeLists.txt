@@ -660,6 +660,7 @@ foreach(qt_test IN ITEMS
     player_experience_controller_test
     terrain_reactor_state_test
     terrain_reactor_item_test
+    terrain_reactor_gpu_smoke_test
     editor_timeline_math_test
     audio_tools_end_to_end_test
     format_conversion_plan_test

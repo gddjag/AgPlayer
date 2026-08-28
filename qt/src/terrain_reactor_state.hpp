@@ -2,8 +2,10 @@
 
 #include <QVector>
 #include <QVector3D>
+#include <QVector4D>
 
 #include <array>
+#include <atomic>
 
 namespace agplayer::terrain {
 
@@ -19,13 +21,15 @@ struct SceneInstance {
     QVector3D position;
     QVector3D scale{1.0F, 1.0F, 1.0F};
     float random = 0.0F;
+    float aux = 0.0F;
     ColorZone zone = ColorZone::Dark;
 
     friend bool operator==(const SceneInstance& lhs,
                            const SceneInstance& rhs) noexcept
     {
         return lhs.position == rhs.position && lhs.scale == rhs.scale
-            && lhs.random == rhs.random && lhs.zone == rhs.zone;
+            && lhs.random == rhs.random && lhs.aux == rhs.aux
+            && lhs.zone == rhs.zone;
     }
 };
 
@@ -33,11 +37,61 @@ struct SceneLayout {
     QVector<SceneInstance> terrain;
     QVector<SceneInstance> floating;
     QVector<SceneInstance> meteors;
+    QVector<SceneInstance> meteorTrails;
+    QVector<SceneInstance> collisionRipples;
+    QVector<SceneInstance> collisionParticles;
     QVector<SceneInstance> particles;
 };
 
 SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                             int meteorCount, int particleCount);
+
+struct MeteorPhase {
+    float normalizedAge = 0.0F;
+    float fallDistance = 0.0F;
+    float collisionProgress = 0.0F;
+    bool flightActive = false;
+    bool collisionActive = false;
+
+    friend bool operator==(const MeteorPhase& lhs,
+                           const MeteorPhase& rhs) noexcept
+    {
+        return lhs.normalizedAge == rhs.normalizedAge
+            && lhs.fallDistance == rhs.fallDistance
+            && lhs.collisionProgress == rhs.collisionProgress
+            && lhs.flightActive == rhs.flightActive
+            && lhs.collisionActive == rhs.collisionActive;
+    }
+};
+
+MeteorPhase meteorPhase(float random, float timeSeconds) noexcept;
+
+enum class RenderColorMode : quint8 { MultiRegion, Custom, RgbSweep };
+
+struct RenderStyleSnapshot {
+    std::array<QVector4D, 5> colors{
+        QVector4D(0.031F, 0.024F, 0.086F, 1.0F),
+        QVector4D(0.31F, 0.435F, 1.0F, 1.0F),
+        QVector4D(1.0F, 0.278F, 0.471F, 1.0F),
+        QVector4D(0.467F, 0.918F, 1.0F, 1.0F),
+        QVector4D(0.843F, 1.0F, 0.345F, 1.0F),
+    };
+    std::array<float, 8> visualEqGains{0.9F, 0.92F, 0.5F, 0.5F,
+                                       0.5F, 0.5F, 0.5F, 0.48F};
+    RenderColorMode colorMode = RenderColorMode::MultiRegion;
+    float terrainAmplitude = 0.62F;
+    float motionResponse = 0.56F;
+    float gradientLayers = 0.74F;
+    float glowIntensity = 0.38F;
+    float cinemaShake = 0.4F;
+    float autoRotate = 0.54F;
+    float peakBoost = 0.58F;
+    bool ripplesEnabled = true;
+    bool floatingCubesEnabled = true;
+    bool meteorsEnabled = true;
+    bool idleBreathingEnabled = true;
+    bool themeCycleEnabled = false;
+};
 
 struct AudioFeatures {
     std::array<float, 8> bands{};
@@ -140,9 +194,19 @@ public:
     quint64 generation() const noexcept;
 
 private:
-    quint64 rendererId_ = 0;
-    quint64 generation_ = 0;
-    bool resourcesReady_ = false;
+    static std::atomic<quint64> globalGeneration_;
+    std::atomic<quint64> rendererId_{0};
+    std::atomic<quint64> generation_{0};
+    std::atomic_bool resourcesReady_{false};
+};
+
+class FramePacer final {
+public:
+    bool shouldRender(double nowSeconds, double targetFramesPerSecond) noexcept;
+
+private:
+    double nextFrameSeconds_ = 0.0;
+    bool initialized_ = false;
 };
 
 struct CameraSnapshot {
@@ -164,6 +228,9 @@ public:
     double manualUntilSeconds() const noexcept;
     void synchronize(CameraSnapshot snapshot,
                      double manualUntilSeconds) noexcept;
+    void applyManualDelta(const CameraSnapshot& previous,
+                          const CameraSnapshot& next,
+                          double nowSeconds) noexcept;
 
 private:
     void markManual(double nowSeconds) noexcept;

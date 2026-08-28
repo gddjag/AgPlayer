@@ -1,12 +1,17 @@
 #include "audio_visual_feature_controller.hpp"
+#include "player_experience_controller.hpp"
 #include "terrain_reactor_item.hpp"
 
 #include <QSignalSpy>
+#include <QImage>
+#include <QQuickRenderTarget>
 #include <QQuickWindow>
 #include <QTest>
 
 #include <array>
 #include <cmath>
+
+using namespace agplayer::terrain;
 
 class TerrainReactorItemTest final : public QObject {
     Q_OBJECT
@@ -16,8 +21,19 @@ private slots:
     void consumesTaskOneFeaturesWithoutSpectrumAnalysis();
     void syntheticFeaturesAreDeterministicAndClamped();
     void visibilityAndExposureGateRendering();
+    void windowEventsGateShowMinimizeAndRestore();
     void softwareBackendFailsClosedWithoutSchedulingWork();
+    void taskOneStyleIsCopiedIntoImmutableSnapshot();
+    void highDpiInternalScaleUsesPhysicalPixels();
+    void duplicateRendererIsRejectedBySharedLifecycle();
     void cameraPropertiesSupportTaskFourInput();
+};
+
+class TestableTerrainReactorItem final : public TerrainReactorItem {
+public:
+    using TerrainReactorItem::TerrainReactorItem;
+    using TerrainReactorItem::applyInternalScale;
+    using TerrainReactorItem::createRenderer;
 };
 
 void TerrainReactorItemTest::defaultsDoNotScheduleRendering()
@@ -86,6 +102,23 @@ void TerrainReactorItemTest::visibilityAndExposureGateRendering()
     QVERIFY(!item.renderingRequested());
 }
 
+void TerrainReactorItemTest::windowEventsGateShowMinimizeAndRestore()
+{
+    QQuickWindow window;
+    TerrainReactorItem item(window.contentItem());
+    item.setActive(true);
+    window.show();
+    QTRY_VERIFY(item.renderingRequested());
+    window.hide();
+    QTRY_VERIFY(!item.renderingRequested());
+    window.show();
+    QTRY_VERIFY(item.renderingRequested());
+    window.showMinimized();
+    QTRY_VERIFY(!item.renderingRequested());
+    window.showNormal();
+    QTRY_VERIFY(item.renderingRequested());
+}
+
 void TerrainReactorItemTest::softwareBackendFailsClosedWithoutSchedulingWork()
 {
     QQuickWindow window;
@@ -103,6 +136,73 @@ void TerrainReactorItemTest::softwareBackendFailsClosedWithoutSchedulingWork()
     QCOMPARE(item.frameCount(), frames);
     QCOMPARE(item.uploadCount(), uploads);
     QVERIFY(!item.diagnostic().isEmpty());
+}
+
+void TerrainReactorItemTest::taskOneStyleIsCopiedIntoImmutableSnapshot()
+{
+    PlayerExperienceController style;
+    style.setColorMode(PlayerExperienceController::RgbSweep);
+    style.setCoolColor(QStringLiteral("#123456"));
+    style.setTerrainAmplitude(81);
+    style.setMotionResponse(37);
+    style.setGlowIntensity(72);
+    style.setCinemaShake(1.2);
+    style.setAutoRotate(43);
+    style.setPeakBoost(67);
+    style.setMeteorsEnabled(false);
+    style.setVisualEqGains({10, 20, 30, 40, 50, 60, 70, 80});
+
+    TerrainReactorItem item;
+    item.setStyleSource(&style);
+    // Initial binding publishes one complete immutable style snapshot.
+    QCOMPARE(item.styleRevision(), quint64{1});
+    const RenderStyleSnapshot snapshot = item.renderStyleSnapshot();
+    QCOMPARE(snapshot.colorMode, RenderColorMode::RgbSweep);
+    QVERIFY(std::abs(snapshot.colors[1].x() - 0.070588) < 0.00001);
+    QVERIFY(std::abs(snapshot.terrainAmplitude - 0.81F) < 0.00001F);
+    QVERIFY(std::abs(snapshot.motionResponse - 0.37F) < 0.00001F);
+    QVERIFY(std::abs(snapshot.glowIntensity - 0.72F) < 0.00001F);
+    QVERIFY(std::abs(snapshot.cinemaShake - 1.2F) < 0.00001F);
+    QVERIFY(std::abs(snapshot.autoRotate - 0.43F) < 0.00001F);
+    QVERIFY(std::abs(snapshot.peakBoost - 0.67F) < 0.00001F);
+    QVERIFY(!snapshot.meteorsEnabled);
+    QVERIFY(std::abs(snapshot.visualEqGains.front() - 0.1F) < 0.00001F);
+    QVERIFY(std::abs(snapshot.visualEqGains.back() - 0.8F) < 0.00001F);
+
+    style.setRipplesEnabled(false);
+    QCOMPARE(item.styleRevision(), quint64{2});
+    QVERIFY(!item.renderStyleSnapshot().ripplesEnabled);
+}
+
+void TerrainReactorItemTest::highDpiInternalScaleUsesPhysicalPixels()
+{
+    QQuickWindow window;
+    QImage image(400, 200, QImage::Format_RGBA8888_Premultiplied);
+    QQuickRenderTarget target = QQuickRenderTarget::fromPaintDevice(&image);
+    target.setDevicePixelRatio(2.0);
+    window.setRenderTarget(target);
+    TestableTerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(100, 50));
+    item.applyInternalScale(0.75F);
+    QCOMPARE(window.effectiveDevicePixelRatio(), 2.0);
+    QCOMPARE(item.fixedColorBufferWidth(), 150);
+    QCOMPARE(item.fixedColorBufferHeight(), 75);
+}
+
+void TerrainReactorItemTest::duplicateRendererIsRejectedBySharedLifecycle()
+{
+    TestableTerrainReactorItem item;
+    QQuickRhiItemRenderer* first = item.createRenderer();
+    QCOMPARE(item.liveRendererCount(), 1);
+    QQuickRhiItemRenderer* duplicate = item.createRenderer();
+    QCOMPARE(item.liveRendererCount(), 1);
+    QTRY_COMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::ResourceError);
+    QTRY_VERIFY(item.diagnostic().contains(QStringLiteral("renderer"),
+                                           Qt::CaseInsensitive));
+    delete duplicate;
+    QCOMPARE(item.liveRendererCount(), 1);
+    delete first;
+    QCOMPARE(item.liveRendererCount(), 0);
 }
 
 void TerrainReactorItemTest::cameraPropertiesSupportTaskFourInput()

@@ -12,11 +12,14 @@ class TerrainReactorStateTest final : public QObject {
 
 private slots:
     void fixedSeedProducesStableLayoutAndColorZones();
+    void meteorsHaveFiniteTrailsAndCollisionEffects();
     void audioFeaturesDriveBoundedVisualParameters();
     void automaticQualityUsesHysteresisCooldownAndEffectFirstOrder();
     void inactiveOrOccludedGateFreezesAllWorkCounters();
     void rendererOwnershipHasOneLiveResourceGeneration();
     void manualCameraControlRecoversAfterFourSeconds();
+    void manualCameraDeltaPreservesRendererMotion();
+    void ecoFramePacerLimitsWorkToThirtyFrames();
 };
 
 void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
@@ -46,6 +49,29 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QVERIFY(hasZone(ColorZone::Accent));
     QVERIFY(hasZone(ColorZone::Peak));
     QCOMPARE(first.terrain.at(40).zone, ColorZone::Peak);
+}
+
+void TerrainReactorStateTest::meteorsHaveFiniteTrailsAndCollisionEffects()
+{
+    const SceneLayout layout = makeSceneLayout(0x5eedU, 9, 3, 4, 8);
+    QCOMPARE(layout.meteorTrails.size(), 12);
+    QCOMPARE(layout.collisionRipples.size(), 32);
+    QCOMPARE(layout.collisionParticles.size(), 32);
+
+    const MeteorPhase flight = meteorPhase(0.25F, 0.5F);
+    const MeteorPhase repeated = meteorPhase(0.25F, 0.5F);
+    QCOMPARE(flight, repeated);
+    QVERIFY(flight.flightActive);
+    QVERIFY(!flight.collisionActive);
+    const MeteorPhase collision = meteorPhase(0.25F, 3.0F);
+    QVERIFY(!collision.flightActive);
+    QVERIFY(collision.collisionActive);
+    QVERIFY(collision.collisionProgress > 0.0F);
+    const MeteorPhase later = meteorPhase(0.25F, 20.0F);
+    QVERIFY(later.normalizedAge >= 0.0F && later.normalizedAge < 1.0F);
+    QVERIFY(later.fallDistance >= 0.0F && later.fallDistance <= 1.0F);
+    QVERIFY(later.collisionProgress >= 0.0F
+            && later.collisionProgress <= 1.0F);
 }
 
 void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
@@ -153,15 +179,54 @@ void TerrainReactorStateTest::rendererOwnershipHasOneLiveResourceGeneration()
     QVERIFY(resources.acquireRenderer(41));
     QVERIFY(!resources.acquireRenderer(42));
     QCOMPARE(resources.liveRendererCount(), 1);
-    QCOMPARE(resources.initializeResources(), quint64{1});
-    QCOMPARE(resources.initializeResources(), quint64{1});
+    const quint64 firstGeneration = resources.initializeResources();
+    QVERIFY(firstGeneration > 0);
+    QCOMPARE(resources.initializeResources(), firstGeneration);
 
     resources.invalidateResources();
     QVERIFY(!resources.resourcesReady());
-    QCOMPARE(resources.initializeResources(), quint64{2});
+    const quint64 rebuiltGeneration = resources.initializeResources();
+    QVERIFY(rebuiltGeneration > firstGeneration);
     resources.releaseRenderer(41);
     QCOMPARE(resources.liveRendererCount(), 0);
     QVERIFY(resources.acquireRenderer(42));
+
+    RendererResourceState otherItem;
+    QVERIFY(otherItem.acquireRenderer(77));
+    const quint64 otherGeneration = otherItem.initializeResources();
+    QVERIFY(otherGeneration > resources.generation());
+}
+
+void TerrainReactorStateTest::manualCameraDeltaPreservesRendererMotion()
+{
+    CameraMotion renderer;
+    renderer.advance(5.0, 5.0F, 1.0F);
+    const float automaticallyRotated = renderer.snapshot().yaw;
+
+    CameraSnapshot previousGui;
+    CameraSnapshot nextGui = previousGui;
+    nextGui.yaw += 0.25F;
+    nextGui.pitch -= 0.1F;
+    nextGui.distance = 64.0F;
+    renderer.applyManualDelta(previousGui, nextGui, 5.0);
+    QCOMPARE(renderer.snapshot().yaw, automaticallyRotated + 0.25F);
+    QCOMPARE(renderer.snapshot().distance, 64.0F);
+
+    renderer.advance(8.99, 1.0F, 1.0F);
+    QCOMPARE(renderer.snapshot().yaw, automaticallyRotated + 0.25F);
+    renderer.advance(9.01, 1.0F, 1.0F);
+    QVERIFY(renderer.snapshot().yaw > automaticallyRotated + 0.25F);
+}
+
+void TerrainReactorStateTest::ecoFramePacerLimitsWorkToThirtyFrames()
+{
+    FramePacer pacer;
+    int rendered = 0;
+    for (int tick = 0; tick <= 120; ++tick) {
+        if (pacer.shouldRender(double(tick) / 120.0, 30.0)) ++rendered;
+    }
+    QVERIFY(rendered >= 30 && rendered <= 31);
+    QVERIFY(pacer.shouldRender(2.0, 60.0));
 }
 
 void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()

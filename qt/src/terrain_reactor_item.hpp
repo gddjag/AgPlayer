@@ -13,6 +13,7 @@
 #include <memory>
 
 class AudioVisualFeatureController;
+class PlayerExperienceController;
 class QQuickWindow;
 class TerrainReactorRenderer;
 
@@ -26,6 +27,8 @@ class TerrainReactorItem : public QQuickRhiItem {
                    NOTIFY renderingRequestedChanged)
     Q_PROPERTY(QObject* featureSource READ featureSource WRITE setFeatureSource
                    NOTIFY featureSourceChanged)
+    Q_PROPERTY(QObject* styleSource READ styleSource WRITE setStyleSource
+                   NOTIFY styleSourceChanged)
     Q_PROPERTY(bool useSyntheticFeatures READ useSyntheticFeatures
                    WRITE setUseSyntheticFeatures NOTIFY useSyntheticFeaturesChanged)
     Q_PROPERTY(quint32 deterministicSeed READ deterministicSeed
@@ -37,10 +40,14 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(qreal cameraPunch READ cameraPunch NOTIFY cameraChanged)
     Q_PROPERTY(quint64 featureRevision READ featureRevision
                    NOTIFY featureRevisionChanged)
+    Q_PROPERTY(quint64 styleRevision READ styleRevision
+                   NOTIFY styleRevisionChanged)
     Q_PROPERTY(quint64 frameCount READ frameCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 animationCount READ animationCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 uploadCount READ uploadCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 resourceGeneration READ resourceGeneration
+                   NOTIFY countersChanged)
+    Q_PROPERTY(int liveRendererCount READ liveRendererCount
                    NOTIFY countersChanged)
     Q_PROPERTY(RenderStatus renderStatus READ renderStatus
                    NOTIFY renderStatusChanged)
@@ -73,6 +80,8 @@ public:
 
     QObject* featureSource() const noexcept;
     void setFeatureSource(QObject* source);
+    QObject* styleSource() const noexcept;
+    void setStyleSource(QObject* source);
     bool useSyntheticFeatures() const noexcept;
     void setUseSyntheticFeatures(bool enabled);
     quint32 deterministicSeed() const noexcept;
@@ -86,6 +95,8 @@ public:
     bool featureKick() const noexcept;
     bool featureSnare() const noexcept;
     quint64 featureRevision() const noexcept;
+    quint64 styleRevision() const noexcept;
+    agplayer::terrain::RenderStyleSnapshot renderStyleSnapshot() const;
 
     qreal cameraYaw() const noexcept;
     qreal cameraPitch() const noexcept;
@@ -96,6 +107,7 @@ public:
     quint64 animationCount() const noexcept;
     quint64 uploadCount() const noexcept;
     quint64 resourceGeneration() const noexcept;
+    int liveRendererCount() const noexcept;
     RenderStatus renderStatus() const noexcept;
     QString diagnostic() const;
 
@@ -112,16 +124,20 @@ signals:
     void hostExposedChanged();
     void renderingRequestedChanged();
     void featureSourceChanged();
+    void styleSourceChanged();
     void useSyntheticFeaturesChanged();
     void deterministicSeedChanged();
     void qualityChanged();
     void featureRevisionChanged();
+    void styleRevisionChanged();
     void cameraChanged();
     void countersChanged();
     void renderStatusChanged();
 
 protected:
     QQuickRhiItemRenderer* createRenderer() override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void applyInternalScale(float scale);
 
 private:
     struct Telemetry {
@@ -133,6 +149,7 @@ private:
 
     struct RenderSnapshot {
         agplayer::terrain::AudioFeatures features;
+        agplayer::terrain::RenderStyleSnapshot style;
         agplayer::terrain::CameraSnapshot camera;
         double cameraManualUntilSeconds = 0.0;
         quint64 cameraRevision = 0;
@@ -141,15 +158,17 @@ private:
         bool running = false;
         float timeSeconds = 0.0F;
         quint64 featureRevision = 0;
+        quint64 styleRevision = 0;
     };
 
     RenderSnapshot snapshotForRenderer() const;
     void copyFeatureSource();
+    void copyStyleSource();
     void applyCurrentFeatures(const agplayer::terrain::AudioFeatures& features);
     void scheduleIfRunnable();
-    void applyInternalScale(float scale);
     void updateColorBufferSize();
     void updateWindowState(QQuickWindow* window);
+    void refreshWindowExposure();
     void reportRenderStatus(RenderStatus status, const QString& diagnostic);
 
     bool active_ = false;
@@ -159,17 +178,23 @@ private:
     quint32 deterministicSeed_ = 0x5eedU;
     Quality quality_ = Quality::Eco;
     QPointer<AudioVisualFeatureController> featureSource_;
+    QPointer<PlayerExperienceController> styleSource_;
     QMetaObject::Connection featureConnection_;
     QMetaObject::Connection sourceDestroyedConnection_;
+    QVector<QMetaObject::Connection> styleConnections_;
     QMetaObject::Connection windowVisibilityConnection_;
+    QPointer<QQuickWindow> trackedWindow_;
     agplayer::terrain::AudioFeatures liveFeatures_;
     agplayer::terrain::AudioFeatures syntheticFeatures_;
     quint64 featureRevision_ = 0;
+    quint64 styleRevision_ = 0;
     quint64 cameraRevision_ = 0;
     float internalScale_ = 1.0F;
     agplayer::terrain::CameraMotion camera_;
     QElapsedTimer clock_;
     std::shared_ptr<Telemetry> telemetry_;
+    std::shared_ptr<agplayer::terrain::RendererResourceState> resourceState_;
+    agplayer::terrain::RenderStyleSnapshot renderStyle_;
     RenderStatus renderStatus_ = RenderStatus::Inactive;
     QString diagnostic_;
 

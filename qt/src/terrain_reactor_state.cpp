@@ -77,6 +77,9 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     result.terrain.reserve(terrainCount);
     result.floating.reserve(std::max(0, floatingCount));
     result.meteors.reserve(std::max(0, meteorCount));
+    result.meteorTrails.reserve(std::max(0, meteorCount) * 3);
+    result.collisionRipples.reserve(std::max(0, meteorCount) * 8);
+    result.collisionParticles.reserve(std::max(0, meteorCount) * 8);
     result.particles.reserve(std::max(0, particleCount));
 
     DeterministicRandom random(seed);
@@ -110,6 +113,23 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                                          32.0F, 46.0F, ColorZone::Peak);
         meteor.scale = QVector3D(0.34F, 1.85F, 0.34F);
         result.meteors.append(meteor);
+        for (int segment = 0; segment < 3; ++segment) {
+            SceneInstance trail = meteor;
+            trail.aux = float(segment + 1) / 4.0F;
+            trail.scale = QVector3D(0.22F, 1.35F, 0.22F);
+            result.meteorTrails.append(trail);
+        }
+        for (int segment = 0; segment < 8; ++segment) {
+            SceneInstance ripple = meteor;
+            ripple.position.setY(0.08F);
+            ripple.scale = QVector3D(0.8F, 0.08F, 0.22F);
+            ripple.aux = float(segment) / 8.0F;
+            result.collisionRipples.append(ripple);
+
+            SceneInstance burst = ripple;
+            burst.scale = QVector3D(0.15F, 0.15F, 0.15F);
+            result.collisionParticles.append(burst);
+        }
     }
     for (int index = 0; index < particleCount; ++index) {
         SceneInstance particle = makeExtra(random, 0.0F, 18.0F,
@@ -117,6 +137,25 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         particle.scale = QVector3D(0.16F, 0.16F, 0.16F);
         result.particles.append(particle);
     }
+    return result;
+}
+
+MeteorPhase meteorPhase(float random, float timeSeconds) noexcept
+{
+    const float boundedRandom = clampUnit(random);
+    const float cycleSeconds = 4.5F + boundedRandom * 2.0F;
+    const float time = std::max(0.0F, timeSeconds)
+        + boundedRandom * cycleSeconds;
+    const float age = std::fmod(time, cycleSeconds) / cycleSeconds;
+    constexpr float impactAge = 0.72F;
+    MeteorPhase result;
+    result.normalizedAge = age;
+    result.flightActive = age < impactAge;
+    result.collisionActive = !result.flightActive;
+    result.fallDistance = std::clamp(age / impactAge, 0.0F, 1.0F);
+    result.collisionProgress = result.collisionActive
+        ? std::clamp((age - impactAge) / (1.0F - impactAge), 0.0F, 1.0F)
+        : 0.0F;
     return result;
 }
 
@@ -263,42 +302,66 @@ bool RenderWorkGate::advance(bool uploaded) noexcept
 }
 WorkCounters RenderWorkGate::counters() const noexcept { return counters_; }
 
+std::atomic<quint64> RendererResourceState::globalGeneration_{0};
+
 bool RendererResourceState::acquireRenderer(quint64 rendererId) noexcept
 {
-    if (rendererId == 0 || (rendererId_ != 0 && rendererId_ != rendererId)) {
-        return false;
-    }
-    rendererId_ = rendererId;
-    return true;
+    if (rendererId == 0) return false;
+    quint64 expected = 0;
+    return rendererId_.compare_exchange_strong(expected, rendererId,
+                                                std::memory_order_acq_rel);
 }
 void RendererResourceState::releaseRenderer(quint64 rendererId) noexcept
 {
-    if (rendererId_ != rendererId) return;
-    rendererId_ = 0;
-    resourcesReady_ = false;
+    quint64 expected = rendererId;
+    if (rendererId_.compare_exchange_strong(expected, 0,
+                                             std::memory_order_acq_rel)) {
+        resourcesReady_.store(false, std::memory_order_release);
+    }
 }
 quint64 RendererResourceState::initializeResources() noexcept
 {
-    if (rendererId_ == 0) return generation_;
-    if (!resourcesReady_) {
-        resourcesReady_ = true;
-        ++generation_;
+    if (rendererId_.load(std::memory_order_acquire) == 0) {
+        return generation_.load(std::memory_order_acquire);
     }
-    return generation_;
+    bool expected = false;
+    if (resourcesReady_.compare_exchange_strong(expected, true,
+                                                 std::memory_order_acq_rel)) {
+        generation_.store(globalGeneration_.fetch_add(1,
+            std::memory_order_acq_rel) + 1, std::memory_order_release);
+    }
+    return generation_.load(std::memory_order_acquire);
 }
 void RendererResourceState::invalidateResources() noexcept
 {
-    resourcesReady_ = false;
+    resourcesReady_.store(false, std::memory_order_release);
 }
 bool RendererResourceState::resourcesReady() const noexcept
 {
-    return resourcesReady_;
+    return resourcesReady_.load(std::memory_order_acquire);
 }
 int RendererResourceState::liveRendererCount() const noexcept
 {
-    return rendererId_ == 0 ? 0 : 1;
+    return rendererId_.load(std::memory_order_acquire) == 0 ? 0 : 1;
 }
-quint64 RendererResourceState::generation() const noexcept { return generation_; }
+quint64 RendererResourceState::generation() const noexcept
+{
+    return generation_.load(std::memory_order_acquire);
+}
+
+bool FramePacer::shouldRender(double nowSeconds,
+                              double targetFramesPerSecond) noexcept
+{
+    const double now = std::max(0.0, nowSeconds);
+    const double framesPerSecond = std::clamp(targetFramesPerSecond, 1.0, 240.0);
+    const double interval = 1.0 / framesPerSecond;
+    if (!initialized_ || now + 0.000001 >= nextFrameSeconds_) {
+        initialized_ = true;
+        nextFrameSeconds_ = now + interval;
+        return true;
+    }
+    return false;
+}
 
 void CameraMotion::orbitBy(float yawDelta, float pitchDelta,
                            double nowSeconds) noexcept
@@ -337,6 +400,21 @@ void CameraMotion::synchronize(CameraSnapshot snapshot,
 {
     snapshot_ = snapshot;
     manualUntilSeconds_ = std::max(0.0, manualUntilSeconds);
+}
+void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
+                                    const CameraSnapshot& next,
+                                    double nowSeconds) noexcept
+{
+    const float yawDelta = next.yaw - previous.yaw;
+    const float pitchDelta = next.pitch - previous.pitch;
+    const bool manuallyMoved = std::abs(yawDelta) > 0.000001F
+        || std::abs(pitchDelta) > 0.000001F
+        || std::abs(next.distance - previous.distance) > 0.000001F;
+    snapshot_.yaw += yawDelta;
+    snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
+    snapshot_.distance = std::clamp(next.distance, 42.0F, 128.0F);
+    snapshot_.punch = std::max(snapshot_.punch, clampUnit(next.punch));
+    if (manuallyMoved) markManual(nowSeconds);
 }
 void CameraMotion::markManual(double nowSeconds) noexcept
 {

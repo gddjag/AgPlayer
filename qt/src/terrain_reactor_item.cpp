@@ -1,8 +1,10 @@
 #include "terrain_reactor_item.hpp"
 
 #include "audio_visual_feature_controller.hpp"
+#include "player_experience_controller.hpp"
 
 #include <QColor>
+#include <QEvent>
 #include <QFile>
 #include <QMatrix4x4>
 #include <QMetaObject>
@@ -45,6 +47,13 @@ struct alignas(16) UniformBlock {
     float bandsHigh[4]{};
     float parameters[4]{}; // energy, flux, ripple, time
     float effects[4]{}; // particles, meteors, punch, fog
+    float colors[5][4]{}; // base, cool, warm, accent, peak
+    float equalizerLow[4]{};
+    float equalizerHigh[4]{};
+    float styleParameters[4]{}; // amplitude, motion, glow, cinema
+    float styleDynamics[4]{}; // rotate, peak, color mode, gradient
+    float styleToggles[4]{}; // ripples, cubes, meteors, breathing
+    float styleExtra[4]{}; // theme cycle, reserved
 };
 
 constexpr std::array<Vertex, cubeVertexCount> cubeVertices{{
@@ -104,7 +113,7 @@ GpuInstance toGpuInstance(const SceneInstance& source, float type)
     result.data[0] = type;
     result.data[1] = zoneValue(source.zone);
     result.data[2] = source.random;
-    result.data[3] = 1.0F;
+    result.data[3] = source.aux;
     return result;
 }
 
@@ -112,23 +121,31 @@ GpuInstance toGpuInstance(const SceneInstance& source, float type)
 
 class TerrainReactorRenderer final : public QQuickRhiItemRenderer {
 public:
-    explicit TerrainReactorRenderer(std::shared_ptr<TerrainReactorItem::Telemetry> telemetry)
-        : telemetry_(std::move(telemetry)), rendererId_(++nextRendererId_)
+    TerrainReactorRenderer(
+        std::shared_ptr<TerrainReactorItem::Telemetry> telemetry,
+        std::shared_ptr<RendererResourceState> resourceState)
+        : telemetry_(std::move(telemetry)),
+          resourceState_(std::move(resourceState)),
+          rendererId_(++nextRendererId_)
     {
-        resourceState_.acquireRenderer(rendererId_);
+        claimed_ = resourceState_->acquireRenderer(rendererId_);
         frameTimer_.start();
     }
 
     ~TerrainReactorRenderer() override
     {
-        releaseResources();
-        resourceState_.releaseRenderer(rendererId_);
+        if (claimed_) {
+            releaseResources();
+            resourceState_->releaseRenderer(rendererId_);
+        }
     }
+
+    bool claimed() const noexcept { return claimed_; }
 
 protected:
     void initialize(QRhiCommandBuffer*) override
     {
-        if (!snapshot_.running) return;
+        if (!claimed_) return;
         if (rhi() == nullptr || rhi()->backend() == QRhi::Null) {
             fail(TerrainReactorItem::RenderStatus::SoftwareBackend,
                  QStringLiteral("Terrain Reactor requires an accelerated QRhi backend"));
@@ -144,7 +161,7 @@ protected:
         if (targetChanged && pipeline_) {
             pipeline_.reset();
             lastRenderTarget_ = nullptr;
-            resourceState_.invalidateResources();
+            resourceState_->invalidateResources();
         }
         if (pipeline_) return;
         if (!createResources()) {
@@ -152,8 +169,7 @@ protected:
                  QStringLiteral("Failed to create Terrain Reactor QRhi resources"));
             return;
         }
-        const quint64 generation = resourceState_.initializeResources();
-        telemetry_->resourceGeneration.store(generation, std::memory_order_relaxed);
+        resourceState_->initializeResources();
         notifyCounters();
         fail(TerrainReactorItem::RenderStatus::Ready, QString());
     }
@@ -163,21 +179,35 @@ protected:
         auto* terrainItem = static_cast<TerrainReactorItem*>(item);
         item_ = terrainItem;
         const auto next = terrainItem->snapshotForRenderer();
+        if (next.running || failed_) publishStatus();
         const bool layoutChanged = next.seed != snapshot_.seed
             || next.quality != snapshot_.quality
+            || next.styleRevision != snapshot_.styleRevision
             || quality_.stage() != lastStage_;
-        snapshot_ = next;
-        if (syncedCameraRevision_ != snapshot_.cameraRevision) {
-            camera_.synchronize(snapshot_.camera,
-                                snapshot_.cameraManualUntilSeconds);
-            syncedCameraRevision_ = snapshot_.cameraRevision;
+        if (!cameraSynchronized_) {
+            camera_.synchronize(next.camera, next.cameraManualUntilSeconds);
+            previousGuiCamera_ = next.camera;
+            cameraSynchronized_ = true;
+        } else if (syncedCameraRevision_ != next.cameraRevision) {
+            camera_.applyManualDelta(previousGuiCamera_, next.camera,
+                                     next.timeSeconds);
+            previousGuiCamera_ = next.camera;
         }
+        syncedCameraRevision_ = next.cameraRevision;
+        snapshot_ = next;
         if (layoutChanged) instancesDirty_ = true;
     }
 
     void render(QRhiCommandBuffer* commandBuffer) override
     {
         if (!snapshot_.running || failed_ || !pipeline_ || commandBuffer == nullptr) {
+            return;
+        }
+
+        const double targetFps = snapshot_.quality == TerrainReactorItem::Quality::Eco
+            ? 30.0 : 60.0;
+        if (!framePacer_.shouldRender(snapshot_.timeSeconds, targetFps)) {
+            update();
             return;
         }
 
@@ -196,7 +226,8 @@ protected:
         const VisualParameters visual = mapVisualParameters(snapshot_.features,
                                                             snapshot_.timeSeconds);
         camera_.applyBeatPunch(visual.cameraPunch);
-        camera_.advance(snapshot_.timeSeconds, float(elapsedSeconds), 1.0F);
+        camera_.advance(snapshot_.timeSeconds, float(elapsedSeconds),
+                        snapshot_.style.autoRotate * snapshot_.style.motionResponse);
         UniformBlock uniforms = buildUniforms(visual, camera_.snapshot());
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
         updates->updateDynamicBuffer(uniformBuffer_.get(), 0,
@@ -251,7 +282,8 @@ private:
             QRhiBuffer::VertexBuffer, sizeof(cubeVertices)));
         indexBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Immutable,
             QRhiBuffer::IndexBuffer, sizeof(cubeIndices)));
-        constexpr quint32 maximumInstances = 192U * 192U + 120U + 28U + 380U;
+        constexpr quint32 maximumInstances = 192U * 192U + 120U
+            + 28U * 20U + 380U;
         instanceBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic,
             QRhiBuffer::VertexBuffer, maximumInstances * sizeof(GpuInstance)));
         uniformBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic,
@@ -330,12 +362,18 @@ private:
             }
             break;
         }
+        if (!snapshot_.style.floatingCubesEnabled) config.floatingCount = 0;
+        if (!snapshot_.style.meteorsEnabled) config.meteorCount = 0;
+        if (!snapshot_.style.ripplesEnabled) config.rippleCount = 0;
         const SceneLayout layout = makeSceneLayout(snapshot_.seed,
             config.gridSize, config.floatingCount, config.meteorCount,
             config.particleCount);
         instances_.clear();
         instances_.reserve(layout.terrain.size() + layout.floating.size()
-                           + layout.meteors.size() + layout.particles.size());
+                           + layout.meteors.size() + layout.meteorTrails.size()
+                           + layout.collisionRipples.size()
+                           + layout.collisionParticles.size()
+                           + layout.particles.size());
         for (const auto& instance : layout.terrain) {
             instances_.append(toGpuInstance(instance, 0.0F));
         }
@@ -344,6 +382,15 @@ private:
         }
         for (const auto& instance : layout.meteors) {
             instances_.append(toGpuInstance(instance, 2.0F));
+        }
+        for (const auto& instance : layout.meteorTrails) {
+            instances_.append(toGpuInstance(instance, 4.0F));
+        }
+        for (const auto& instance : layout.collisionRipples) {
+            instances_.append(toGpuInstance(instance, 5.0F));
+        }
+        for (const auto& instance : layout.collisionParticles) {
+            instances_.append(toGpuInstance(instance, 6.0F));
         }
         for (const auto& instance : layout.particles) {
             instances_.append(toGpuInstance(instance, 3.0F));
@@ -377,6 +424,11 @@ private:
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       14.5F + radius * std::sin(pitch) * 0.66F,
                       radius * std::cos(pitch) * std::cos(yaw));
+        const float shake = snapshot_.style.cinemaShake
+            * (visual.spectralFlux * 0.22F + visual.cameraPunch * 0.12F);
+        eye += QVector3D(std::sin(visual.timeSeconds * 21.0F) * shake,
+                        std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
+                        std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
         QMatrix4x4 view;
         view.lookAt(eye, QVector3D(0.0F, 3.2F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));
@@ -386,6 +438,17 @@ private:
         std::memcpy(result.mvp, mvp.constData(), sizeof(result.mvp));
         std::copy_n(visual.bands.begin(), 4, result.bandsLow);
         std::copy_n(visual.bands.begin() + 4, 4, result.bandsHigh);
+        for (int index = 0; index < 5; ++index) {
+            const QVector4D& color = snapshot_.style.colors[std::size_t(index)];
+            result.colors[index][0] = color.x();
+            result.colors[index][1] = color.y();
+            result.colors[index][2] = color.z();
+            result.colors[index][3] = color.w();
+        }
+        std::copy_n(snapshot_.style.visualEqGains.begin(), 4,
+                    result.equalizerLow);
+        std::copy_n(snapshot_.style.visualEqGains.begin() + 4, 4,
+                    result.equalizerHigh);
         result.parameters[0] = visual.energy;
         result.parameters[1] = visual.spectralFlux;
         result.parameters[2] = visual.rippleStrength;
@@ -394,6 +457,19 @@ private:
         result.effects[1] = visual.meteorActivity;
         result.effects[2] = visual.cameraPunch;
         result.effects[3] = float(currentRippleCount_);
+        result.styleParameters[0] = snapshot_.style.terrainAmplitude;
+        result.styleParameters[1] = snapshot_.style.motionResponse;
+        result.styleParameters[2] = snapshot_.style.glowIntensity;
+        result.styleParameters[3] = snapshot_.style.cinemaShake;
+        result.styleDynamics[0] = snapshot_.style.autoRotate;
+        result.styleDynamics[1] = snapshot_.style.peakBoost;
+        result.styleDynamics[2] = float(snapshot_.style.colorMode);
+        result.styleDynamics[3] = snapshot_.style.gradientLayers;
+        result.styleToggles[0] = snapshot_.style.ripplesEnabled ? 1.0F : 0.0F;
+        result.styleToggles[1] = snapshot_.style.floatingCubesEnabled ? 1.0F : 0.0F;
+        result.styleToggles[2] = snapshot_.style.meteorsEnabled ? 1.0F : 0.0F;
+        result.styleToggles[3] = snapshot_.style.idleBreathingEnabled ? 1.0F : 0.0F;
+        result.styleExtra[0] = snapshot_.style.themeCycleEnabled ? 1.0F : 0.0F;
         return result;
     }
 
@@ -410,17 +486,26 @@ private:
         indexBuffer_.reset();
         vertexBuffer_.reset();
         lastRenderTarget_ = nullptr;
-        resourceState_.invalidateResources();
+        resourceState_->invalidateResources();
     }
 
     void fail(TerrainReactorItem::RenderStatus status, const QString& message)
     {
         failed_ = status == TerrainReactorItem::RenderStatus::SoftwareBackend
             || status == TerrainReactorItem::RenderStatus::ResourceError;
+        status_ = status;
+        diagnostic_ = message;
+        publishStatus();
+    }
+
+    void publishStatus()
+    {
         if (item_ == nullptr) return;
         TerrainReactorItem* const target = item_;
-        QMetaObject::invokeMethod(target, [target, status, message] {
-            target->reportRenderStatus(status, message);
+        const auto status = status_;
+        const auto diagnostic = diagnostic_;
+        QMetaObject::invokeMethod(target, [target, status, diagnostic] {
+            target->reportRenderStatus(status, diagnostic);
         }, Qt::QueuedConnection);
     }
 
@@ -433,21 +518,27 @@ private:
 
     static std::atomic<quint64> nextRendererId_;
     std::shared_ptr<TerrainReactorItem::Telemetry> telemetry_;
+    std::shared_ptr<RendererResourceState> resourceState_;
     quint64 rendererId_ = 0;
-    RendererResourceState resourceState_;
+    bool claimed_ = false;
     AutomaticQualityController quality_;
     DegradationStage lastStage_ = DegradationStage::Full;
     TerrainReactorItem::RenderSnapshot snapshot_;
     CameraMotion camera_;
+    CameraSnapshot previousGuiCamera_;
+    bool cameraSynchronized_ = false;
     quint64 syncedCameraRevision_ = std::numeric_limits<quint64>::max();
     TerrainReactorItem* item_ = nullptr;
     QElapsedTimer frameTimer_;
+    FramePacer framePacer_;
     QVector<GpuInstance> instances_;
     bool instancesDirty_ = true;
     bool instancesDirtyUpload_ = false;
     int currentRippleCount_ = 10;
     float currentInternalScale_ = 1.0F;
     bool failed_ = false;
+    TerrainReactorItem::RenderStatus status_ = TerrainReactorItem::RenderStatus::Inactive;
+    QString diagnostic_;
     QRhiRenderTarget* lastRenderTarget_ = nullptr;
     std::unique_ptr<QRhiBuffer> vertexBuffer_;
     std::unique_ptr<QRhiBuffer> indexBuffer_;
@@ -461,7 +552,8 @@ private:
 std::atomic<quint64> TerrainReactorRenderer::nextRendererId_{0};
 
 TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
-    : QQuickRhiItem(parent), telemetry_(std::make_shared<Telemetry>())
+    : QQuickRhiItem(parent), telemetry_(std::make_shared<Telemetry>()),
+      resourceState_(std::make_shared<RendererResourceState>())
 {
     setSampleCount(1);
     setAlphaBlending(false);
@@ -481,10 +573,70 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
 
 TerrainReactorItem::~TerrainReactorItem()
 {
+    if (trackedWindow_ != nullptr) trackedWindow_->removeEventFilter(this);
     disconnect(windowVisibilityConnection_);
     disconnect(featureConnection_);
     disconnect(sourceDestroyedConnection_);
+    for (const auto& connection : styleConnections_) disconnect(connection);
     disconnect(this, nullptr, this, nullptr);
+}
+
+QObject* TerrainReactorItem::styleSource() const noexcept { return styleSource_; }
+void TerrainReactorItem::setStyleSource(QObject* source)
+{
+    auto* typed = qobject_cast<PlayerExperienceController*>(source);
+    if (styleSource_ == typed) return;
+    for (const auto& connection : styleConnections_) disconnect(connection);
+    styleConnections_.clear();
+    styleSource_ = typed;
+    if (styleSource_ != nullptr) {
+        const auto capture = [this] { copyStyleSource(); };
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::colorModeChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::coolColorChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::warmColorChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::accentColorChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::peakColorChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::baseColorChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::terrainAmplitudeChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::motionResponseChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::gradientLayersChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::glowIntensityChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::cinemaShakeChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::autoRotateChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::peakBoostChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::ripplesEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::floatingCubesEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::meteorsEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::idleBreathingEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::themeCycleEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::visualEqGainsChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &QObject::destroyed,
+            this, [this] {
+                styleSource_.clear();
+                emit styleSourceChanged();
+            }));
+        copyStyleSource();
+    }
+    emit styleSourceChanged();
 }
 
 bool TerrainReactorItem::active() const noexcept { return active_; }
@@ -592,6 +744,11 @@ bool TerrainReactorItem::featureSnare() const noexcept
     return (useSyntheticFeatures_ ? syntheticFeatures_.snare : liveFeatures_.snare) > 0.5F;
 }
 quint64 TerrainReactorItem::featureRevision() const noexcept { return featureRevision_; }
+quint64 TerrainReactorItem::styleRevision() const noexcept { return styleRevision_; }
+RenderStyleSnapshot TerrainReactorItem::renderStyleSnapshot() const
+{
+    return renderStyle_;
+}
 
 qreal TerrainReactorItem::cameraYaw() const noexcept { return camera_.snapshot().yaw; }
 qreal TerrainReactorItem::cameraPitch() const noexcept { return camera_.snapshot().pitch; }
@@ -612,7 +769,11 @@ quint64 TerrainReactorItem::uploadCount() const noexcept
 }
 quint64 TerrainReactorItem::resourceGeneration() const noexcept
 {
-    return telemetry_->resourceGeneration.load(std::memory_order_relaxed);
+    return resourceState_->generation();
+}
+int TerrainReactorItem::liveRendererCount() const noexcept
+{
+    return resourceState_->liveRendererCount();
 }
 TerrainReactorItem::RenderStatus TerrainReactorItem::renderStatus() const noexcept
 {
@@ -639,14 +800,17 @@ void TerrainReactorItem::setSyntheticFeatures(const QVariantList& bands,
 void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
                                   qreal nowSeconds)
 {
-    camera_.orbitBy(float(yawDelta), float(pitchDelta), double(nowSeconds));
+    Q_UNUSED(nowSeconds)
+    camera_.orbitBy(float(yawDelta), float(pitchDelta),
+                    double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
     emit cameraChanged();
     scheduleIfRunnable();
 }
 void TerrainReactorItem::zoomBy(qreal wheelDelta, qreal nowSeconds)
 {
-    camera_.zoomBy(float(wheelDelta), double(nowSeconds));
+    Q_UNUSED(nowSeconds)
+    camera_.zoomBy(float(wheelDelta), double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
     emit cameraChanged();
     scheduleIfRunnable();
@@ -661,13 +825,23 @@ void TerrainReactorItem::triggerCameraPunch(qreal strength)
 
 QQuickRhiItemRenderer* TerrainReactorItem::createRenderer()
 {
-    return new TerrainReactorRenderer(telemetry_);
+    auto* renderer = new TerrainReactorRenderer(telemetry_, resourceState_);
+    const bool claimed = renderer->claimed();
+    QMetaObject::invokeMethod(this, [this, claimed] {
+        if (!claimed) {
+            reportRenderStatus(RenderStatus::ResourceError,
+                QStringLiteral("Terrain Reactor rejected a duplicate renderer"));
+        }
+        emit countersChanged();
+    }, Qt::QueuedConnection);
+    return renderer;
 }
 
 TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() const
 {
     RenderSnapshot result;
     result.features = useSyntheticFeatures_ ? syntheticFeatures_ : liveFeatures_;
+    result.style = renderStyle_;
     result.camera = camera_.snapshot();
     result.cameraManualUntilSeconds = camera_.manualUntilSeconds();
     result.cameraRevision = cameraRevision_;
@@ -676,7 +850,47 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.running = renderingRequested();
     result.timeSeconds = float(clock_.elapsed()) / 1000.0F;
     result.featureRevision = featureRevision_;
+    result.styleRevision = styleRevision_;
     return result;
+}
+
+void TerrainReactorItem::copyStyleSource()
+{
+    if (styleSource_ == nullptr) return;
+    const auto colorVector = [](const QString& text) {
+        const QColor color(text);
+        return QVector4D(float(color.redF()), float(color.greenF()),
+                         float(color.blueF()), float(color.alphaF()));
+    };
+    RenderStyleSnapshot next;
+    next.colors[0] = colorVector(styleSource_->baseColor());
+    next.colors[1] = colorVector(styleSource_->coolColor());
+    next.colors[2] = colorVector(styleSource_->warmColor());
+    next.colors[3] = colorVector(styleSource_->accentColor());
+    next.colors[4] = colorVector(styleSource_->peakColor());
+    next.colorMode = static_cast<RenderColorMode>(styleSource_->colorMode());
+    const QVariantList gains = styleSource_->visualEqGains();
+    for (int index = 0; index < 8; ++index) {
+        next.visualEqGains[std::size_t(index)] = index < gains.size()
+            ? std::clamp(float(gains.at(index).toDouble()) / 100.0F,
+                         0.0F, 1.0F) : 0.5F;
+    }
+    next.terrainAmplitude = float(styleSource_->terrainAmplitude()) / 100.0F;
+    next.motionResponse = float(styleSource_->motionResponse()) / 100.0F;
+    next.gradientLayers = float(styleSource_->gradientLayers()) / 100.0F;
+    next.glowIntensity = float(styleSource_->glowIntensity()) / 100.0F;
+    next.cinemaShake = float(styleSource_->cinemaShake());
+    next.autoRotate = float(styleSource_->autoRotate()) / 100.0F;
+    next.peakBoost = float(styleSource_->peakBoost()) / 100.0F;
+    next.ripplesEnabled = styleSource_->ripplesEnabled();
+    next.floatingCubesEnabled = styleSource_->floatingCubesEnabled();
+    next.meteorsEnabled = styleSource_->meteorsEnabled();
+    next.idleBreathingEnabled = styleSource_->idleBreathingEnabled();
+    next.themeCycleEnabled = styleSource_->themeCycleEnabled();
+    renderStyle_ = next;
+    ++styleRevision_;
+    emit styleRevisionChanged();
+    scheduleIfRunnable();
 }
 
 void TerrainReactorItem::copyFeatureSource()
@@ -723,34 +937,63 @@ void TerrainReactorItem::updateColorBufferSize()
         setFixedColorBufferHeight(0);
         return;
     }
-    setFixedColorBufferWidth(std::max(1, qRound(float(width()) * internalScale_)));
-    setFixedColorBufferHeight(std::max(1, qRound(float(height()) * internalScale_)));
+    const qreal dpr = window() != nullptr
+        ? window()->effectiveDevicePixelRatio() : 1.0;
+    setFixedColorBufferWidth(std::max(1, qRound(width() * dpr * internalScale_)));
+    setFixedColorBufferHeight(std::max(1, qRound(height() * dpr * internalScale_)));
 }
 
 void TerrainReactorItem::updateWindowState(QQuickWindow* window)
 {
+    if (trackedWindow_ != nullptr) trackedWindow_->removeEventFilter(this);
     if (windowVisibilityConnection_) disconnect(windowVisibilityConnection_);
+    trackedWindow_ = window;
     if (window == nullptr) {
         windowExposed_ = true;
     } else {
-        const auto refresh = [this, window] {
-            const bool exposed = window->isExposed()
-                && window->visibility() != QWindow::Hidden
-                && window->visibility() != QWindow::Minimized;
-            if (windowExposed_ == exposed) return;
-            windowExposed_ = exposed;
-            emit renderingRequestedChanged();
-            scheduleIfRunnable();
-        };
+        window->installEventFilter(this);
+        const auto refresh = [this] { refreshWindowExposure(); };
         windowVisibilityConnection_ = connect(window, &QWindow::visibilityChanged,
                                                this, refresh);
-        refresh();
-        if (window->rendererInterface()->graphicsApi()
-            == QSGRendererInterface::Software) {
-            reportRenderStatus(RenderStatus::SoftwareBackend,
-                QStringLiteral("Terrain Reactor is disabled on the software scene graph"));
+        refreshWindowExposure();
+    }
+    emit renderingRequestedChanged();
+    scheduleIfRunnable();
+}
+
+bool TerrainReactorItem::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == trackedWindow_ && event != nullptr) {
+        switch (event->type()) {
+        case QEvent::Expose:
+        case QEvent::Show:
+        case QEvent::Hide:
+        case QEvent::WindowStateChange:
+            QMetaObject::invokeMethod(this,
+                &TerrainReactorItem::refreshWindowExposure,
+                Qt::QueuedConnection);
+            break;
+        default:
+            break;
         }
     }
+    return QQuickRhiItem::eventFilter(watched, event);
+}
+
+void TerrainReactorItem::refreshWindowExposure()
+{
+    QQuickWindow* const window = trackedWindow_;
+    const bool exposed = window == nullptr
+        || (window->isExposed()
+            && window->visibility() != QWindow::Hidden
+            && window->visibility() != QWindow::Minimized);
+    if (window != nullptr && window->rendererInterface()->graphicsApi()
+        == QSGRendererInterface::Software) {
+        reportRenderStatus(RenderStatus::SoftwareBackend,
+            QStringLiteral("Terrain Reactor is disabled on the software scene graph"));
+    }
+    if (windowExposed_ == exposed) return;
+    windowExposed_ = exposed;
     emit renderingRequestedChanged();
     scheduleIfRunnable();
 }
