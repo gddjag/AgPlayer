@@ -73,13 +73,16 @@ Popup {
 
     function setRgbChannel(channel, value) {
         var number = Number(value)
-        if (!Number.isInteger(number) || number < 0 || number > 255) {
-            synchronizeInputs()
+        if (!Number.isInteger(number) || number < 0 || number > 255)
             return false
-        }
         var channels = rgb()
         channels[channel] = number
         return setRgb(channels.r, channels.g, channels.b)
+    }
+
+    function validRgbInput(input) {
+        return /^(0|[1-9][0-9]{0,2})$/.test(input.text)
+                && Number(input.text) >= 0 && Number(input.text) <= 255
     }
 
     function synchronizeInputs() {
@@ -133,9 +136,12 @@ Popup {
     function applyWorkingColor() {
         if (closeHandled)
             return
-        if (!setRgb(Number(redInput.text), Number(greenInput.text),
-                    Number(blueInput.text)) && !setWorkingHex(hexInput.text))
-            synchronizeInputs()
+        var normalizedHex = normalizeHex(hexInput.text)
+        if (!normalizedHex.length || !validRgbInput(redInput)
+                || !validRgbInput(greenInput) || !validRgbInput(blueInput))
+            return
+        setRgb(Number(redInput.text), Number(greenInput.text),
+               Number(blueInput.text))
         closeHandled = true
         applied(workingColor)
         close()
@@ -351,22 +357,14 @@ Popup {
                 KeyNavigation.tab: redInput
                 KeyNavigation.priority: KeyNavigation.BeforeItem
                 Keys.priority: Keys.BeforeItem
-                onEditingFinished: {
-                    if (!root.setWorkingHex(text))
-                        text = root.workingHex
-                }
-                onAccepted: {
-                    if (!root.setWorkingHex(text))
-                        text = root.workingHex
-                }
+                onEditingFinished: root.setWorkingHex(text)
+                onAccepted: root.setWorkingHex(text)
                 Keys.onReturnPressed: function(event) {
-                    if (!root.setWorkingHex(text))
-                        text = root.workingHex
+                    root.setWorkingHex(text)
                     event.accepted = true
                 }
                 Keys.onEnterPressed: function(event) {
-                    if (!root.setWorkingHex(text))
-                        text = root.workingHex
+                    root.setWorkingHex(text)
                     event.accepted = true
                 }
             }
@@ -536,6 +534,14 @@ Popup {
                 KeyNavigation.tab: cancelButton
                 KeyNavigation.priority: KeyNavigation.BeforeItem
                 onClicked: root.applyWorkingColor()
+                Keys.onReturnPressed: function(event) {
+                    root.applyWorkingColor()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: function(event) {
+                    root.applyWorkingColor()
+                    event.accepted = true
+                }
                 contentItem: Text {
                     text: qsTr("应用")
                     color: Theme.isLight ? "#FFFFFF" : "#1B1B1B"

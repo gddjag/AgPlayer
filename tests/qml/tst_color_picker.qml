@@ -257,6 +257,57 @@ TestCase {
         compare(normalizedColor(appliedSpy.signalArguments[0][0]), "#123456")
     }
 
+    function test_apply_return_emits_applied_once() {
+        openReferenceColor()
+        var apply = findChild(picker, "colorPickerApply")
+        verify(apply)
+
+        apply.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Return)
+
+        tryCompare(picker, "visible", false)
+        compare(appliedSpy.count, 1)
+        compare(cancelledSpy.count, 0)
+    }
+
+    function test_apply_enter_emits_applied_once() {
+        openReferenceColor()
+        var apply = findChild(picker, "colorPickerApply")
+        verify(apply)
+
+        apply.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Enter)
+
+        tryCompare(picker, "visible", false)
+        compare(appliedSpy.count, 1)
+        compare(cancelledSpy.count, 0)
+    }
+
+    function test_invalid_hex_and_rgb_do_not_apply() {
+        openReferenceColor()
+        var hex = findChild(picker, "colorPickerHex")
+        var apply = findChild(picker, "colorPickerApply")
+        verify(hex && apply)
+        hex.text = "invalid"
+        mouseClick(apply, apply.width / 2, apply.height / 2)
+
+        compare(picker.visible, true)
+        compare(appliedSpy.count, 0)
+        compare(hex.text, "invalid")
+
+        picker.cancelPicker()
+        openReferenceColor()
+        var red = findChild(picker, "colorPickerR")
+        apply = findChild(picker, "colorPickerApply")
+        verify(red && apply)
+        red.text = "999"
+        mouseClick(apply, apply.width / 2, apply.height / 2)
+
+        compare(picker.visible, true)
+        compare(appliedSpy.count, 0)
+        compare(red.text, "999")
+    }
+
     function test_bottom_right_field_popup_stays_inside_overlay() {
         integratedField.x = integratedField.parent.width
                             - integratedField.width - 1
