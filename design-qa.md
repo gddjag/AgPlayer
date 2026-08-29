@@ -1,87 +1,45 @@
-# Design QA — Tag management reference UI — 2026-08-22
+# Integrated 单窗口主题 Design QA
 
-## Source visual truth
+## 最终比对输入
 
-- Product source: `C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/标签管理.png`.
-- Repository copy: `design-qa/source-tag-management-1447x1087.png` (1447×1087).
-- Required state: dark theme, Tag Management selected, populated navigation/tree, shared track list, populated three-column tag panel, player loaded and playing.
+- 视觉真值：`C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/AG单窗口主题.png`
+- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1672x941-progress-restored-v7.png`
+- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1672x941-progress-restored-v7.png`（左参考、右实现）
+- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1672x941-progress-restored-v7-runtime.log`
+- 视口与密度：两侧均为 1672×941 逻辑像素、100% DPI；实现状态为深色主题、右栏展开、标签页激活、真实测试 WAV 元数据和有效波形。
 
-## Current implementation evidence
+## 比对历史
 
-- Real Debug AgPlayer executable: `build/msvc-debug/app/AgPlayer.exe`.
-- Safe state: `--qa-test-mode` with an isolated library/settings/cache root under `build/qa/task7-20260822`; no real user library, playlists, tags, settings, cache or monitored folders were used.
-- Tag page: `design-qa/implementation-tag-three-column-1447.png` (1447×570).
-- Normal page: `design-qa/implementation-non-tag-two-column.png` (1104×570).
-- Playback: `design-qa/implementation-tag-playing-main-1447.png` (1447×342) and `design-qa/implementation-tag-playing-list-1447.png` (1447×570).
-- Cache state: `design-qa/implementation-cache-hit-and-miss-visible.png` (1104×570), containing one existing v2 thumbnail cache hit and one cache miss that remained blank without a cache-only decode/write.
-- Diagnostic 1447×1087 implementation canvas: `design-qa/implementation-composite-blocked-1447x1087.png`. It contains unscaled real main/list window grabs, a two-pixel dock overlap and 177 pixels of explicit bottom padding. It is not a same-frame desktop capture.
-- True equal-canvas comparison opened and inspected: `design-qa/combined-final-blocked-source-vs-real-app.png` (2918×1121; each compared panel is exactly 1447×1087). Focused list region: `design-qa/combined-final-blocked-lower-region.png`.
+1. 首次实现截图 `integrated-1672x941.png` 发现 P1：右侧页签被内容布局挤到面板中部。
+2. 将右栏表头与内容改为明确的上下锚定区域后，`integrated-1672x941-v3.png` 关闭该 P1。
+3. 将左右选择 Handle 的可视条收窄为 2px，保留 14px 命中区；重建后以 `integrated-1672x941-v4.png` 完成最终复核。
+4. 按 1674×906 新参考复核右侧页签、搜索/添加玻璃表面、导航条和底栏；修复浅色主题下活动页签透明度反转，并将侧栏开关的可用图标区域扩大至 30×26px。
+5. 按最新反馈将 Integrated 表头收至 48px 并加粗；搜索、BPM、清空形成连续紧凑组；标签输入收至 34px；侧栏图标缩为 22px 并在 42px 折叠栏内居中；五个主容器和波形导航条统一降为 7%–10% 软描边/玻璃轨道。最终同尺寸合成针对本轮表头、筛选、侧栏、软描边和导航条反馈未发现 P0/P1/P2；不同曲目、选区和标签数据不纳入本轮像素一致性结论。
+6. 当前歌曲摘要从最多 450px 加宽到 520px，波形与播放栏间距从 12px 收敛为统一的 8px；1672×941 实机截图确认未侵占中央播放控件和右侧操作区。
+7. 移除 Integrated 已播放波形的矩形裁切叠图，波形与播放栏间距进一步统一为上下各 4px，底栏增高到 91px。首次修复仍让主画布按播放位置分段着色，稠密波形上仍形成整高色界，未真正关闭问题。
+8. 最终将 Integrated 概览波形固定为一份完整画布，播放位置仅由独立光标表示；同时让共享渲染器的多像素描边缩进半个描边宽度，避免首列描边钳制叠加。`v6` 截图中左侧播放色块和竖直裁切界均已消失。
+9. 用户确认已播放进度色属于必须保留的功能；撤销 `v6` 中错误的进度色移除，只恢复主画布的播放位置绑定。`v7` 同时保留单一 `WaveformItem` 和首列描边缩进，因此进度色恢复且没有重新引入裁切副本。
 
-## Environment and density coverage
+## 五个主要表面
 
-| Requested scale | Real-app render artifact | Captured logical pixels | Physical desktop reachability |
-| --- | --- | --- | --- |
-| 100% | `design-qa/tag-dpi-1-dark.png` | 1447×570 | Not externally verified |
-| 125% | `design-qa/tag-dpi-125-dark.png` | 1447×570 | Not externally verified |
-| 150% | `design-qa/tag-dpi-15-dark.png` | 1447×570 | Not externally verified |
-| 175% | `design-qa/tag-dpi-175-dark.png` | 1447×570 | Not externally verified |
-| 200% | `design-qa/tag-dpi-2-dark.png` | 1447×570 | Not externally verified |
+- 顶栏：品牌、设置和窗口按钮完整，52px 高度与参考层级一致。
+- 左栏与歌曲列表：Integrated 左栏按文字需求隐藏“标签管理”；48px 粗体表头与软边界稳定，歌曲列表和筛选栏没有裁切。
+- 右侧面板：标签管理/歌词页签保留当前项高亮；34px 搜索/添加框使用更淡玻璃表面，22px 开关折叠后在窄栏居中且可恢复。
+- 波形：列表与波形仅保留 4px 间距；同一个 `WaveformItem` 根据播放位置绘制已播放进度色和光标，不再生成裁切副本；首列多描边保持在画布边界内。悬停时间、毛玻璃时长/拖出胶囊、2px Handle 和 7%–28% 透明度的底部可拖导航条均完整。
+- 底部播放栏：91px 画布与波形保持 4px 间距；66px 封面、歌名和真实格式/位深/采样率/码率/BPM/文件大小元数据在左侧整体垂直居中；共享播放控件与右侧三个按钮均垂直居中。
 
-The real app-owned QQuickWindow capture path rendered complete logical content at all five per-process Qt scale factors. This does not prove that the physical Windows desktop, title controls and three independent scroll areas remained reachable; external UI observation was interrupted before that check.
+## 交互与响应式复核
 
-Dark and light were exercised through the real application theme path: `design-qa/tag-theme-dark.png` and `design-qa/tag-theme-light.png`, both 1447×570. Both rendered without white-on-white content or clipping, but the light state did not receive an externally operated interaction pass.
+- 框选后自动循环；选区内/外点击均立即播放，选区外点击只关闭循环并保留选区；右键选区清除。
+- 波形/频谱切换都能恢复可见数据；Ctrl+滚轮缩放和导航条拖动使用同一可见时间范围。
+- 标签/歌词切换、右栏收起恢复、主题菜单打开、Classic/Integrated 双向切换与播放控制通过 QML 自动测试；菜单同时列出“沉浸视觉模式（待集成）”，在独立沉浸分支合入前保持禁用，未伪装成可用功能。
+- 1280×720、1440×900 以及 125/150/200% DPI 证据均未见重叠、裁切或跨栏滚动。
 
-## Blocking visual rubric
+## 结论
 
-| Check | Result | Severity / evidence |
-| --- | --- | --- |
-| Typography and copy | Not accepted | P2: implementation has substantially smaller/sparser typography and synthetic fixture copy; populated reference copy was not reproduced. |
-| Spacing and column widths | Partially fixed | P1 fixed: tag page now has navigation + the shared list + 328px tag panel at a 1284 minimum, while ordinary pages remove the panel and reclaim the width. The exact reference lower-window height is still not reproduced. |
-| Row heights | Code/test verified only | 62px with thumbnails and 42px without remain covered by QML contracts; the 42px state was not externally compared in the reference state. |
-| Colors and selected state | Not accepted | P2: reference uses a muted purple selected row; current real app uses a bright blue playing row. Tag-pill colors/counts cannot be judged because representative real tags were not populated. |
-| Borders and radii | Partially accepted | No clipping or broken radii observed in the captured panels; the reference's finer border/contrast treatment still differs. |
-| Scroll state | Blocked | Left, middle and right independent scrolling was not externally driven or captured. |
-| Image quality/assets | Blocked | Real waveform thumbnails rendered, but reference cover art, metadata and tag corpus were unavailable in the isolated state. |
-| Tag panel | Structurally fixed, content blocked | Search/Add and narrow panel are present only on Tag Management; real pill layout, counts, rename/color/delete menus and scrolling were not exercised. |
-| Two-/three-column switching | Passed by production-path QML tests | One `sharedTrackList` instance survives tag → playlist/library/favorites/resource → tag; search, selection and playback identity are retained. |
+- P0：0
+- P1：0
+- P2：0
+- P3：测试夹具使用 2 秒短 WAV 和品牌占位封面，因此列表密度、封面内容与参考不同；底栏元数据已经由真实曲目模型渲染，差异属于数据状态而非布局缺陷。
 
-## P0 / P1 / P2 / P3 history
-
-- P0: none observed.
-- P1 fixed: normal library/playlist/resource pages reserved the tag column. The panel and divider are now fully hidden and the same center list reclaims the width.
-- P1 fixed: docked tag state was clipped to the 1104px player width. Docking now honors the active list page minimum and promotes both windows without hard-coding the reference width; returning to a normal page does not cause width churn, and a later user resize remains authoritative.
-- P1 fixed: test mode's default thumbnail cache could resolve into Documents. It now stays under the isolated test cache location; normal application defaults are unchanged.
-- P1 fixed: rapid real-library import/model mutation could leave a `Qt.callLater` thumbnail request bound to a destroyed QML context. The deferred request is now owned by a zero-delay child Timer and is cancelled with the delegate.
-- P1 unresolved: no one-frame, same-state 1447×1087 Windows desktop capture exists. The equal-canvas composite intentionally exposes the 177px height/state gap and cannot be used as pass evidence.
-- P1 unresolved: representative real tags, playlists and monitored resource-folder state were not safely populated and exercised through the externally controlled window.
-- P1 unresolved: physical 100–200% DPI reachability, required CRUD/drag/drop/scroll/search/sort flows, and playback seek/next/pause-resume plus simultaneous list interaction remain unexecuted.
-- P2 unresolved: selection color, typography/density, artwork/metadata and populated tag-pill visuals differ materially from the reference.
-- P3: fixture titles and abbreviated navigation counts are appropriate only for diagnostic evidence, not final reference acceptance.
-
-## Interaction and playback coverage
-
-- Executed in the real Debug AgPlayer process through its isolated controller paths: WAV import, thumbnail cache generation/hit, cache-only miss display, playback start and real position advance. The playback evidence shows `track-01`, pause state, 0:01/0:02 position, main waveform and BPM 210.
-- The configured Windows audio output path was opened by AgPlayer. No human audible-quality observation was made, so no claim is made about sound, beat accuracy, glitches or acoustic output quality.
-- Not executed through external real-window input: seek, next, pause/resume, simultaneous playback + list scroll/search, independent three-pane scrolling, tag filter and CRUD/cancel, playlist create/import/rename/delete, monitored-folder add/remove, single/multi drag preview/cancel/drop, and real-window sort/search/filter.
-- Automated production-path QML tests cover these controller/UI contracts, but automated tests are not substituted for the missing real-window acceptance steps.
-
-## Computer Use recovery history and limitation
-
-- Fresh `@oai/sky` sessions were initialized and window/app lists refreshed; a responsive native AgPlayer HWND existed but was not enumerable.
-- A safe `.lnk` using only isolated QA arguments launched the real worktree executable, but the AgPlayer window still was not exposed for external observation/injection.
-- `sky.launch_app` cannot pass command-line arguments, so it was not used to launch the executable against the user's real default state.
-- A minimal `Qt.Window | Qt.FramelessWindowHint` enumeration hypothesis was built and launched only with the isolated `.lnk`; the user interrupted the final observation with Escape. The experiment is inconclusive, both temporary hunks were reverted, PID 16608 was verified as the worktree executable and stopped, and no further Computer Use input was issued.
-
-## Verification
-
-- Debug `AgPlayer`, `qml_main_window_test`, `settings_controller_test` and `window_controller_test` built successfully.
-- Focused CTest: 5/5 passed (`window_controller`, settings, thumbnail provider/item/contract).
-- Task 7 shared-list transition: 3 passed, 0 failed.
-- Full QML: 79 passed, 0 failed, 1 skipped; the skip is the native WM_DROPFILES test under the offscreen platform.
-- Thumbnail lifecycle deterministic RED: 2 passed, 1 failed because the destroyed wrapper dispatched one provider request; GREEN after the child Timer fix: 3 passed, 0 failed with zero requests/cancels and no warning. The earlier real-import sequence also changed from invalid-context failure to pass.
-
-## Exit criteria
-
-No P0 was observed in the captured states and the discovered structural/lifecycle P1 defects are fixed, but the mandatory real-window interactions, physical DPI reachability and reference-equivalent same-frame evidence are incomplete. P1/P2 acceptance findings therefore remain open.
-
-final result: blocked
+final result: passed

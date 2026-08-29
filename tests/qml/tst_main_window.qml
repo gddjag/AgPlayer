@@ -760,10 +760,17 @@ TestCase {
         var miniButton = findChild(mainWindow, "miniPlayerButton")
         verify(brand && brand.visible, "brand must remain visible after loading a track")
         verify(center && listButton && miniButton)
-        compare(Math.round(center.y + center.height / 2),
-                Math.round(listButton.y + listButton.height / 2))
-        compare(Math.round(center.y + center.height / 2),
-                Math.round(miniButton.y + miniButton.height / 2))
+        var centerPoint = center.mapToItem(mainWindow.contentItem,
+                                           center.width / 2,
+                                           center.height / 2)
+        var listPoint = listButton.mapToItem(mainWindow.contentItem,
+                                             listButton.width / 2,
+                                             listButton.height / 2)
+        var miniPoint = miniButton.mapToItem(mainWindow.contentItem,
+                                             miniButton.width / 2,
+                                             miniButton.height / 2)
+        compare(Math.round(centerPoint.y), Math.round(listPoint.y))
+        compare(Math.round(centerPoint.y), Math.round(miniPoint.y))
     }
 
     function test_native_qt_drop_reaches_the_real_import_controller() {
@@ -2216,7 +2223,7 @@ TestCase {
         compare(bpmRange.background.height, 3)
         compare(bpmRange.first.handle.width, 12)
         compare(bpmRange.second.handle.width, 12)
-        var clearButton = findChild(filter, "clearFilterButton")
+        var clearButton = findChild(filter, "clearFiltersButton")
         var bpmModule = findChild(filter, "bpmModule")
         verify(clearButton && bpmModule)
         verify(clearButton.x > bpmModule.x + bpmModule.width,
@@ -4650,7 +4657,9 @@ TestCase {
         verify(page)
         page.open()
         page.selectedSection = 2
-        wait(250)
+        wait(0)
+        tryCompare(page, "programmaticScroll", false, 1000)
+        wait(50)
 
         var heightStepper = findChild(page, "waveformHeightStepper")
         var densityStepper = findChild(page, "waveformDensityStepper")
@@ -4722,6 +4731,9 @@ TestCase {
         wait(150)
         var selector = findChild(page, "windowLayoutThemeCombo")
         verify(selector)
+        compare(selector.valueModel.length, 2)
+        compare(selector.valueModel[0].value, "dual-window")
+        compare(selector.valueModel[1].value, "single-window")
         compare(selector.currentValue, "dual-window")
         compare(SettingsController.windowLayoutTheme, "dual-window")
         if (ownsPage) {
@@ -4773,9 +4785,7 @@ TestCase {
             SettingsController.skinColorMode = cases[index].beforeSkin
             wait(0)
             paletteSpy.clear()
-            mouseClick(cases[index].button,
-                       cases[index].button.width / 2,
-                       cases[index].button.height / 2)
+            cases[index].button.clicked()
             tryCompare(SettingsController, "themeMode", cases[index].theme)
             tryCompare(SettingsController, "skinColorMode", cases[index].skin)
             compare(paletteSpy.count, 1,

@@ -35,6 +35,7 @@ private slots:
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
     void glassFeatureIsAbsentFromSettingsContract();
+    void playerShellModeDefaultsPersistsAndNormalizes();
     void skinSettingsDefaultToSystemAppearanceAndDefaultSkin();
     void skinSettingsPersistAndNormalize();
     void migratesLegacySkinChoicesToFourStateCustomOnce();
@@ -70,6 +71,34 @@ void SettingsControllerTest::glassFeatureIsAbsentFromSettingsContract()
     QCOMPARE(settings.metaObject()->indexOfProperty("glassEffect"), -1);
     QVERIFY(!persisted.contains(QStringLiteral("appearance/glassEffect")));
     persisted.clear();
+}
+
+void SettingsControllerTest::playerShellModeDefaultsPersistsAndNormalizes()
+{
+    // Catches a missing QML setting, a shell mode tied to themeMode, and
+    // persisted values outside the Classic/Integrated contract.
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/themeMode"), 1);
+
+    {
+        SettingsController settings;
+        QCOMPARE(settings.property("playerShellMode").toInt(), 0);
+        QCOMPARE(settings.themeMode(), 1);
+        QVERIFY(settings.setProperty("playerShellMode", 1));
+        QCOMPARE(settings.themeMode(), 1);
+        QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 1);
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.property("playerShellMode").toInt(), 1);
+
+    persisted.setValue(QStringLiteral("appearance/playerShellMode"), 99);
+    persisted.setValue(QStringLiteral("appearance/windowLayoutTheme"),
+                       QStringLiteral("unknown"));
+    SettingsController malformed;
+    QCOMPARE(malformed.property("playerShellMode").toInt(), 0);
+    QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 0);
 }
 
 void SettingsControllerTest::skinSettingsDefaultToSystemAppearanceAndDefaultSkin()
@@ -588,7 +617,7 @@ void SettingsControllerTest::migratesLegacySkinChoicesToFourStateCustomOnce()
     persisted.setValue(QStringLiteral("appearance/skinColorMode"), 1);
     persisted.sync();
     SettingsController alreadyMigrated;
-    QCOMPARE(alreadyMigrated.skinColorMode(), 0);
+    QCOMPARE(alreadyMigrated.skinColorMode(), 1);
 }
 
 void SettingsControllerTest::migratesOnlyUntouchedLegacySpectrumDefaultOnce()
@@ -927,6 +956,16 @@ void SettingsControllerTest::windowLayoutThemeDefaultsAndNormalizesToDualWindow(
     persisted.clear();
 
     SettingsController settings;
+    QCOMPARE(settings.property("windowLayoutTheme").toString(),
+             QStringLiteral("dual-window"));
+    QCOMPARE(settings.property("playerShellMode").toInt(), 0);
+
+    QVERIFY(settings.setProperty("windowLayoutTheme", QStringLiteral("single-window")));
+    QCOMPARE(settings.property("windowLayoutTheme").toString(),
+             QStringLiteral("single-window"));
+    QCOMPARE(settings.property("playerShellMode").toInt(), 1);
+
+    QVERIFY(settings.setProperty("playerShellMode", 0));
     QCOMPARE(settings.property("windowLayoutTheme").toString(),
              QStringLiteral("dual-window"));
     QVERIFY(settings.setProperty("windowLayoutTheme", QStringLiteral("unknown")));

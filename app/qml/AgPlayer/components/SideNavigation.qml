@@ -13,6 +13,9 @@ Item {
     property string selectedTagKey: ""
     property string selectedResourceFolder: ""
     property string activeNodeType: "library"
+    // Classic keeps the existing tag-management route.  Integrated renders
+    // the same TagManagementPanel persistently in its right column instead.
+    property bool showTagManagementEntry: true
     property bool expanded: true
     property int allCount: 0
     property int favoriteCount: 0
@@ -62,6 +65,8 @@ Item {
             var modelIndex = navigationModel.index(row, 0)
             var type = navigationModel.data(
                         modelIndex, LibraryNavigationModel.NodeTypeRole)
+            if (type === "tags" && !showTagManagementEntry)
+                continue
             if (type === "resourceSection") {
                 var position = navigationList.contentItem.mapToItem(
                             root, 0, sectionContentY)
@@ -311,13 +316,14 @@ Item {
                                                  resourceFolder)
             property real dropLoadPulse: 0
             width: navigationList.width
-            height: nodeType === "resourceSection"
+            visible: root.showTagManagementEntry || nodeType !== "tags"
+            height: !visible ? 0 : nodeType === "resourceSection"
                     ? root.resourceSectionHeight : root.navigationRowHeight
             radius: nodeType === "resourceSection" ? 0 : Theme.radiusSm
             color: nodeType === "resourceSection" ? "transparent"
                    : selected ? Theme.listSelectedSurface
                    : nodeHover.hovered ? Theme.hoverSurface : "transparent"
-            objectName: nodeType === "resourceSection"
+            objectName: !visible ? "" : nodeType === "resourceSection"
                         ? "resourceFolderSection"
                         : nodeType === "playlist"
                         ? "playlistCategory-" + root.playlistIdForNode(nodeId)

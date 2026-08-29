@@ -1,0 +1,6 @@
+[2026-08-29T11:46:15.570Z] [INFO] [Qt] QA seeded tags: requested= 9 created= 9
+[2026-08-29T11:46:18.257Z] [INFO] [Qt] Integrated waveform QA state: durationMs= 2000 peakCount= 2000 visualMode= 1
+[2026-08-29T11:46:18.258Z] [INFO] [Qt] Integrated controls QA geometry: x= 0 width= 1638
+[2026-08-29T11:46:18.259Z] [INFO] [Qt] Integrated center controls QA geometry: x= 669 width= 300
+[2026-08-29T11:46:18.259Z] [INFO] [Qt] Playback selection QA state: startMs= 400 endMs= 1400 loop= true
+[2026-08-29T11:46:18.314Z] [INFO] [Qt] QA screenshot saved: D:\ai\AgPlayer\.worktrees\integrated-single-window-theme\build\evidence\integrated-theme-adjustments\integrated-1674x906-current.png QSize(1674, 906)

@@ -10,6 +10,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 
 struct HandoffRenderState final {
     int sampleRate{};
@@ -28,6 +29,15 @@ struct HandoffRequest final {
     QString sourceIdentity;
     quint64 timelineRevision{};
     HandoffRenderState renderState;
+    QString outputFileStem;
+
+    struct PlaybackClipSource final {
+        QString path;
+        QString title;
+        qint64 startMs{};
+        qint64 endMs{};
+    };
+    std::optional<PlaybackClipSource> playbackClip;
 };
 
 struct HandoffAssetResult final {

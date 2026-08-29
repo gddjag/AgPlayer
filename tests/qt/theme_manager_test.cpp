@@ -690,6 +690,7 @@ void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransact
     persisted.setValue(QStringLiteral("appearance/skinColorMode"), 1);
     persisted.setValue(QStringLiteral("appearance/skinPreset"),
                        QStringLiteral("aurora"));
+    persisted.setValue(QStringLiteral("appearance/themeSelectionSchemaVersion"), 2);
     SettingsController settings;
     ThemeManager manager(*qApp);
     ThemeSettingsSynchronizer synchronizer(manager, settings);

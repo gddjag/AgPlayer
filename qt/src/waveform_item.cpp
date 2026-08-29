@@ -282,6 +282,34 @@ std::vector<float> resampleValues(const std::vector<float>& values,
     return result;
 }
 
+void resampleVisibleValues(const std::vector<float>& values,
+                           qint64 visibleStartMs,
+                           qint64 visibleEndMs,
+                           qint64 durationMs,
+                           std::size_t pointCount,
+                           std::vector<float>& result)
+{
+    if (values.empty()) {
+        result.clear();
+        return;
+    }
+    if (durationMs <= 0
+        || (visibleStartMs == 0 && visibleEndMs == durationMs)) {
+        resampleValues(values, pointCount, result);
+        return;
+    }
+    const std::size_t lastIndex = values.size() - 1U;
+    const std::size_t first = std::min(lastIndex, static_cast<std::size_t>(
+        std::floor(static_cast<double>(visibleStartMs)
+                   / static_cast<double>(durationMs) * lastIndex)));
+    const std::size_t last = std::min(lastIndex, std::max(first, static_cast<std::size_t>(
+        std::ceil(static_cast<double>(visibleEndMs)
+                  / static_cast<double>(durationMs) * lastIndex))));
+    const std::vector<float> window(values.begin() + static_cast<qsizetype>(first),
+                                    values.begin() + static_cast<qsizetype>(last) + 1);
+    resampleValues(window, pointCount, result);
+}
+
 void updateLayerVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                              std::size_t peakCount,
                              std::size_t playedCount,
@@ -327,6 +355,8 @@ public:
     qreal lineWidth_ = -1.0;
     qint64 position_ = -1;
     qint64 duration_ = -1;
+    qint64 visibleStartMs_ = -1;
+    qint64 visibleEndMs_ = -1;
     QColor waveformColor_;
     int visualMode_ = -2;
     QColor baseColor_;
@@ -557,8 +587,22 @@ void WaveformItem::setDuration(qreal duration)
     if (clamped == duration_) {
         return;
     }
+    const qint64 previousVisibleStart = visibleStartMs_;
+    const qint64 previousVisibleEnd = visibleEndMs_;
     duration_ = clamped;
+    visibleStartMs_ = std::clamp(visibleStartMs_, qint64{0}, duration_);
+    visibleEndMs_ = std::clamp(visibleEndMs_, visibleStartMs_, duration_);
+    if (visibleEndMs_ == visibleStartMs_) {
+        visibleStartMs_ = 0;
+        visibleEndMs_ = duration_;
+    }
     emit durationChanged();
+    if (previousVisibleStart != visibleStartMs_) {
+        emit visibleStartMsChanged();
+    }
+    if (previousVisibleEnd != visibleEndMs_) {
+        emit visibleEndMsChanged();
+    }
     emit waveformCursorXChanged();
 
     if (position_ > duration_) {
@@ -573,6 +617,26 @@ void WaveformItem::setDuration(qreal duration)
         setHoverPosition(duration_);
     }
     update();
+}
+
+qint64 WaveformItem::visibleStartMs() const noexcept
+{
+    return visibleStartMs_;
+}
+
+qint64 WaveformItem::visibleEndMs() const noexcept
+{
+    return visibleEndMs_;
+}
+
+void WaveformItem::setVisibleStartMs(qint64 startMs)
+{
+    setVisibleRange(startMs, visibleEndMs_);
+}
+
+void WaveformItem::setVisibleEndMs(qint64 endMs)
+{
+    setVisibleRange(visibleStartMs_, endMs);
 }
 
 QColor WaveformItem::waveformColor() const
@@ -737,14 +801,34 @@ void WaveformItem::setLineWidth(qreal width)
 
 qint64 WaveformItem::timeForX(qreal x) const
 {
-    return WaveformCoordinateMapper::pixelToTime(
-        x, renderWidth_ > 0.0 ? renderWidth_ : width(), duration_);
+    const qreal width = renderWidth_ > 0.0 ? renderWidth_ : this->width();
+    const qint64 span = visibleEndMs_ - visibleStartMs_;
+    return visibleStartMs_ + WaveformCoordinateMapper::pixelToTime(x, width, span);
 }
 
 qreal WaveformItem::pixelForTime(qint64 positionMs) const
 {
+    const qreal width = renderWidth_ > 0.0 ? renderWidth_ : this->width();
     return WaveformCoordinateMapper::timeToPixel(
-        positionMs, duration_, renderWidth_ > 0.0 ? renderWidth_ : width());
+        positionMs - visibleStartMs_, visibleEndMs_ - visibleStartMs_, width);
+}
+
+void WaveformItem::zoomAt(qreal x, qreal factor)
+{
+    const qreal width = renderWidth_ > 0.0 ? renderWidth_ : this->width();
+    if (duration_ <= 0 || width <= 0.0 || !std::isfinite(factor) || factor <= 0.0) {
+        return;
+    }
+
+    const qint64 currentSpan = visibleEndMs_ - visibleStartMs_;
+    const qint64 minimumSpan = std::max<qint64>(1, (duration_ + 7) / 8);
+    const qint64 nextSpan = std::clamp(
+        qRound64(static_cast<qreal>(currentSpan) / factor), minimumSpan, duration_);
+    const qreal fraction = std::clamp(x / width, qreal{0.0}, qreal{1.0});
+    const qint64 anchor = visibleStartMs_ + qRound64(fraction * currentSpan);
+    const qint64 start = std::clamp(
+        anchor - qRound64(fraction * nextSpan), qint64{0}, duration_ - nextSpan);
+    setVisibleRange(start, start + nextSpan);
 }
 
 void WaveformItem::setHoverPositionForInteraction(qint64 position)
@@ -760,8 +844,7 @@ qreal WaveformItem::renderWidth() const noexcept
 qreal WaveformItem::waveformCursorX() const noexcept
 {
     const qint64 cursor = cursorPosition_ >= 0 ? cursorPosition_ : position_;
-    return WaveformCoordinateMapper::timeToPixel(
-        cursor, duration_, renderWidth_ > 0.0 ? renderWidth_ : width());
+    return pixelForTime(cursor);
 }
 
 bool WaveformItem::pointerInteractionEnabled() const noexcept
@@ -854,6 +937,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || !qFuzzyCompare(node->devicePixelRatio_, devicePixelRatio)
                                  || !qFuzzyCompare(node->density_, density_)
                                  || !qFuzzyCompare(node->lineWidth_, lineWidth_)
+                                 || node->visibleStartMs_ != visibleStartMs_
+                                 || node->visibleEndMs_ != visibleEndMs_
                                  || node->visualMode_ != visualMode_
                                  || node->baseColor_ != baseColor_
                                  || node->progressColor_ != progressColor_
@@ -874,6 +959,10 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const std::size_t strokeCopies = visualMode_ == 2
             ? static_cast<std::size_t>(spectrumBarWidth())
             : static_cast<std::size_t>(std::max(1.0, std::ceil(lineWidth_)));
+        const double waveformStrokeInset = std::min(
+            width() * 0.5, static_cast<double>(strokeCopies) * 0.5);
+        const double waveformSpan = std::max(
+            0.0, width() - waveformStrokeInset * 2.0);
         const std::size_t activeLayers = visualMode_ == 2
             ? (hasMix ? 1U : 0U)
             : (hasMix ? 1U : 0U) + (hasBass ? 1U : 0U)
@@ -898,10 +987,13 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const float center = static_cast<float>(height() * 0.5);
         const float spectrumBaseline = static_cast<float>(height());
         const std::size_t playedCount = computePlayedCount(
-            peakCount, position_, duration_, snapshot->totalSamples);
+            peakCount, position_ - visibleStartMs_,
+            visibleEndMs_ - visibleStartMs_, 0);
 
         if (hasMix) {
-            resampleValues(snapshot->mix->values, peakCount, node->mixValues_);
+            resampleVisibleValues(snapshot->mix->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->mixValues_);
         } else {
             node->mixValues_.clear();
         }
@@ -909,23 +1001,30 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             && snapshot->spectrumPeakHold
             && !snapshot->spectrumPeakHold->values.empty();
         if (hasHeldSpectrum) {
-            resampleValues(snapshot->spectrumPeakHold->values, peakCount,
-                           node->heldSpectrumValues_);
+            resampleVisibleValues(snapshot->spectrumPeakHold->values,
+                                  visibleStartMs_, visibleEndMs_, duration_,
+                                  peakCount, node->heldSpectrumValues_);
         } else {
             node->heldSpectrumValues_.clear();
         }
         if (hasBass) {
-            resampleValues(snapshot->bass->values, peakCount, node->bassValues_);
+            resampleVisibleValues(snapshot->bass->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->bassValues_);
         } else {
             node->bassValues_.clear();
         }
         if (hasMid) {
-            resampleValues(snapshot->mid->values, peakCount, node->midValues_);
+            resampleVisibleValues(snapshot->mid->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->midValues_);
         } else {
             node->midValues_.clear();
         }
         if (hasHigh) {
-            resampleValues(snapshot->high->values, peakCount, node->highValues_);
+            resampleVisibleValues(snapshot->high->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->highValues_);
         } else {
             node->highValues_.clear();
         }
@@ -975,7 +1074,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                     const double logicalX = visualMode_ == 2
                         ? spectrumStart + spectrumBarWidth() * 0.5
                             + static_cast<double>(index) * spectrumStride
-                        : normalizedX * width();
+                        : waveformStrokeInset + normalizedX * waveformSpan;
                     const float x = static_cast<float>(std::clamp(
                         logicalX + offset, 0.0, width()));
                     const double spectrumEnvelope = visualMode_ == 2
@@ -1104,6 +1203,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node->lineWidth_ = lineWidth_;
         node->position_ = position_;
         node->duration_ = duration_;
+        node->visibleStartMs_ = visibleStartMs_;
+        node->visibleEndMs_ = visibleEndMs_;
         node->waveformColor_ = waveformColor_;
         node->visualMode_ = visualMode_;
         node->baseColor_ = baseColor_;
@@ -1121,7 +1222,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     const std::size_t newPlayedCount = computePlayedCount(
-        peakCount, position_, duration_, snapshot->totalSamples);
+        peakCount, position_ - visibleStartMs_, visibleEndMs_ - visibleStartMs_, 0);
     const bool colorChanged = node->waveformColor_ != waveformColor_
                               || node->playedCount_ != newPlayedCount;
     if (!colorChanged) {
@@ -1171,6 +1272,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 
     node->position_ = position_;
     node->duration_ = duration_;
+    node->visibleStartMs_ = visibleStartMs_;
+    node->visibleEndMs_ = visibleEndMs_;
     node->waveformColor_ = waveformColor_;
     node->playedCount_ = newPlayedCount;
     node->markDirty(QSGNode::DirtyMaterial);
@@ -1238,4 +1341,37 @@ void WaveformItem::setHoverPosition(qint64 position)
     }
     hoverPosition_ = position;
     emit hoverPositionChanged();
+}
+
+void WaveformItem::setVisibleRange(qint64 startMs, qint64 endMs)
+{
+    if (duration_ <= 0) {
+        startMs = 0;
+        endMs = 0;
+    } else {
+        startMs = std::clamp(startMs, qint64{0}, duration_);
+        endMs = std::clamp(endMs, qint64{0}, duration_);
+        if (endMs < startMs) {
+            std::swap(startMs, endMs);
+        }
+        if (endMs == startMs) {
+            startMs = 0;
+            endMs = duration_;
+        }
+    }
+    const bool startChanged = visibleStartMs_ != startMs;
+    const bool endChanged = visibleEndMs_ != endMs;
+    if (!startChanged && !endChanged) {
+        return;
+    }
+    visibleStartMs_ = startMs;
+    visibleEndMs_ = endMs;
+    if (startChanged) {
+        emit visibleStartMsChanged();
+    }
+    if (endChanged) {
+        emit visibleEndMsChanged();
+    }
+    emit waveformCursorXChanged();
+    update();
 }

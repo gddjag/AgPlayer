@@ -1,10 +1,14 @@
 #include "audio_editor/selection_drag_controller.hpp"
+#include "audio_editor/playback_clip_drag_adapter.hpp"
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/audio_document.hpp"
+#include "library_model.hpp"
 
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
+#include <QSignalSpy>
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <QTemporaryDir>
@@ -101,6 +105,97 @@ private slots:
         QVERIFY2(revised.success, qPrintable(revised.error));
         QVERIFY(revised.path != first.path);
         QVERIFY(QFileInfo(revised.path).isFile());
+    }
+
+    void assetManagerUsesRequestedReadableStemAndShortHash()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        const auto analysis = AudioFileAnalyzer::analyze(
+            std::filesystem::u8path(fixture.constData()), 256);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        HandoffAssetManager manager(directory.path());
+        HandoffRequest request;
+        request.snapshot = AudioDocument::fromSource(analysis.source)
+            .timelineSnapshot();
+        request.selection = Selection{0, std::min<qint64>(
+            analysis.source.total_frames, 2'048)};
+        request.sourceIdentity = QString::fromUtf8(fixture);
+        request.timelineRevision = request.snapshot.revision;
+        request.renderState = {
+            static_cast<int>(analysis.source.sample_rate),
+            static_cast<int>(analysis.source.channels), 1.0F, false};
+        request.outputFileStem = QStringLiteral("歌曲名_01m22.350-01m38.710");
+
+        const auto result = manager.prepare(request);
+        QVERIFY2(result.success, qPrintable(result.error));
+        const QString name = QFileInfo(result.path).fileName();
+        QVERIFY(name.startsWith(
+            QStringLiteral("歌曲名_01m22.350-01m38.710_")));
+        QVERIFY(QRegularExpression(
+            QStringLiteral("_[0-9a-f]{8}\\.wav$"))
+                    .match(name).hasMatch());
+    }
+
+    void playbackAdapterDefersProbeAndFileUntilThresholdThenExportsOneClip()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        const QString sourcePath = QString::fromUtf8(fixture);
+        const auto source = AudioFileAnalyzer::analyze(
+            std::filesystem::u8path(fixture.constData()), 64);
+        QVERIFY2(source.success, source.message.c_str());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        LibraryModel library;
+        TrackRecord track;
+        track.trackId = QStringLiteral("clip-track");
+        track.path = sourcePath;
+        track.title = QStringLiteral("歌/曲:名");
+        track.sampleRate = static_cast<int>(source.source.sample_rate);
+        track.durationMs = static_cast<qint64>(
+            source.source.total_frames * 1000 / source.source.sample_rate);
+        track.available = true;
+        QVERIFY(library.append(track));
+
+        QList<QUrl> drags;
+        PlaybackClipDragAdapter adapter(
+            &library, directory.path(),
+            [&drags](const QUrl& url) { drags.append(url); });
+        QSignalSpy ready(&adapter,
+                         &PlaybackClipDragAdapter::handoffReady);
+        const int threshold = QApplication::startDragDistance();
+        QVERIFY(adapter.begin(10, 10, track.trackId, 100, 350));
+        adapter.update(10 + std::max(0, threshold - 1), 10);
+        QTest::qWait(30);
+        QCOMPARE(QDir(directory.path()).entryList(QDir::Files).size(), 0);
+        QCOMPARE(drags.size(), 0);
+
+        adapter.update(10 + threshold, 10);
+        QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 1, 10'000);
+        QTRY_COMPARE_WITH_TIMEOUT(drags.size(), 1, 10'000);
+        QVERIFY(drags.front().isLocalFile());
+        QCOMPARE(QDir(directory.path()).entryList(
+                     {QStringLiteral("*.wav")}, QDir::Files).size(), 1);
+
+        const auto clip = AudioFileAnalyzer::analyze(
+            std::filesystem::path(drags.front().toLocalFile().toStdWString()),
+            64);
+        QVERIFY2(clip.success, clip.message.c_str());
+        QCOMPARE(clip.source.sample_rate, source.source.sample_rate);
+        QCOMPARE(clip.source.channels, source.source.channels);
+        const qint64 expectedFrames = static_cast<qint64>(
+            source.source.sample_rate) * 250 / 1000;
+        QVERIFY(std::abs(clip.source.total_frames - expectedFrames) <= 1);
+
+        adapter.update(10 + threshold * 2, 10);
+        QTest::qWait(30);
+        QCOMPARE(ready.size(), 1);
+        QCOMPARE(drags.size(), 1);
     }
 
     void assetManagerUsesTimePitchPipelineAndKeysEveryRenderParameter()

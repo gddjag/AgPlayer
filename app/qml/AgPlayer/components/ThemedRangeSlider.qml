@@ -4,12 +4,18 @@ import AgPlayer
 
 T.RangeSlider {
     id: control
+    property bool glassStyle: false
     implicitHeight: 28
     background: Rectangle {
+        objectName: "rangeSliderTrack"
         x: control.leftPadding
         y: control.topPadding + control.availableHeight / 2 - height / 2
-        width: control.availableWidth; height: 3; radius: 1.5
-        color: control.enabled ? Theme.controlSubtleBorder : Theme.disabled
+        width: control.availableWidth
+        height: 3
+        radius: height / 2
+        color: !control.enabled ? Theme.disabled
+              : control.glassStyle ? Theme.integratedSoftOutline
+                                   : Theme.controlSubtleBorder
         Rectangle {
             x: control.first.visualPosition * parent.width
             width: (control.second.visualPosition - control.first.visualPosition) * parent.width
@@ -18,39 +24,49 @@ T.RangeSlider {
         }
     }
     first.handle: Rectangle {
+        objectName: "rangeSliderFirstHandle"
         x: control.leftPadding + control.first.visualPosition
            * (control.availableWidth - width)
         y: control.topPadding + control.availableHeight / 2 - height / 2
         width: 12; height: 12; radius: 6
         color: !control.enabled ? Theme.border
+              : control.glassStyle
+                ? Theme.integratedSliderHandle
               : (control.first.pressed || control.hovered
-                 ? Theme.surfaceHover : "#FFFFFF")
-        border.color: control.activeFocus ? Theme.focus : Theme.controlSubtleBorder
+                 ? Theme.surfaceHover : Theme.controlHandle)
+        border.color: control.activeFocus ? Theme.focus
+                      : control.glassStyle ? Theme.integratedSoftOutline
+                                           : Theme.controlSubtleBorder
         border.width: control.activeFocus ? 2 : 1
         Rectangle {
             z: -1
             x: -1; y: 1
             width: parent.width + 2; height: parent.height + 2
             radius: width / 2
-            color: Qt.rgba(0, 0, 0, 0.16)
+            color: Theme.controlHandleShadow
         }
     }
     second.handle: Rectangle {
+        objectName: "rangeSliderSecondHandle"
         x: control.leftPadding + control.second.visualPosition
            * (control.availableWidth - width)
         y: control.topPadding + control.availableHeight / 2 - height / 2
         width: 12; height: 12; radius: 6
         color: !control.enabled ? Theme.border
+              : control.glassStyle
+                ? Theme.integratedSliderHandle
               : (control.second.pressed || control.hovered
-                 ? Theme.surfaceHover : "#FFFFFF")
-        border.color: control.activeFocus ? Theme.focus : Theme.controlSubtleBorder
+                 ? Theme.surfaceHover : Theme.controlHandle)
+        border.color: control.activeFocus ? Theme.focus
+                      : control.glassStyle ? Theme.integratedSoftOutline
+                                           : Theme.controlSubtleBorder
         border.width: control.activeFocus ? 2 : 1
         Rectangle {
             z: -1
             x: -1; y: 1
             width: parent.width + 2; height: parent.height + 2
             radius: width / 2
-            color: Qt.rgba(0, 0, 0, 0.16)
+            color: Theme.controlHandleShadow
         }
     }
 }

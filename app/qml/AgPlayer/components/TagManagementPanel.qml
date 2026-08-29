@@ -10,10 +10,20 @@ Item {
     property var tagModel: TagModel
     property var filterModel: null
     property alias searchText: tagSearchField.text
+    // The same panel is used by both shells.  Integrated opts into the
+    // tighter, always-visible presentation instead of owning a copy.
+    property bool compact: false
+    property bool collapsible: false
+    property bool expanded: true
+    property bool showHeader: true
+    property string panelTitle: qsTr("标签管理")
     readonly property int visibleTagCount: tagRepeater.count
     readonly property int pillHorizontalPadding: 4
     readonly property int pillContentSpacing: 2
     readonly property int pillMinimumWidth: 48
+    readonly property color controlBorder: compact
+                                                   ? Theme.integratedSoftOutline
+                                                   : Theme.controlSubtleBorder
     property string contextTagKey: ""
     property string contextTagName: ""
     property color contextTagColor: "transparent"
@@ -245,14 +255,49 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 12
+        anchors.margins: root.compact ? 10 : 14
+        spacing: root.compact ? 8 : 12
 
         RowLayout {
+            visible: root.showHeader && (root.compact || root.collapsible)
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            Layout.maximumHeight: 34
-            spacing: 8
+            Layout.preferredHeight: visible ? 26 : 0
+            Layout.maximumHeight: visible ? 26 : 0
+            spacing: 6
+
+            Text {
+                objectName: "tagPanelTitle"
+                text: root.panelTitle + " (" + (root.tagModel
+                                                ? root.tagModel.rowCount() : 0)
+                      + ")"
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+            }
+
+            ToolButton {
+                objectName: "tagPanelCollapseButton"
+                visible: root.collapsible
+                Layout.preferredWidth: visible ? 26 : 0
+                Layout.preferredHeight: 26
+                icon.source: Theme.icon(root.expanded
+                                        ? "arrow-up-s-line"
+                                        : "arrow-down-s-line")
+                icon.color: Theme.iconSecondary
+                onClicked: root.expanded = !root.expanded
+                background: null
+            }
+        }
+
+         RowLayout {
+             visible: root.expanded
+             Layout.fillWidth: true
+             Layout.preferredHeight: visible ? 34 : 0
+             Layout.maximumHeight: visible ? 34 : 0
+             spacing: root.compact ? 6 : 8
 
             TextField {
                 id: tagSearchField
@@ -267,9 +312,11 @@ Item {
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
                 background: Rectangle {
-                    color: "transparent"
+                    objectName: "tagSearchGlassBackground"
+                    color: tagSearchField.activeFocus
+                           ? Theme.subtleGlassHover : Theme.subtleGlassFill
                     border.color: tagSearchField.activeFocus
-                                  ? Theme.accent : Theme.controlSubtleBorder
+                                  ? Theme.accent : root.controlBorder
                     border.width: 1
                     radius: Theme.radiusSm
                     ThemedIcon {
@@ -287,9 +334,9 @@ Item {
             Button {
                 id: addTagButton
                 objectName: "addTagButton"
-                Layout.preferredWidth: 102
+                Layout.preferredWidth: root.compact ? 92 : 102
                 Layout.fillHeight: true
-                text: qsTr("添加标签")
+                text: root.compact ? qsTr("添加") : qsTr("添加标签")
                 icon.source: Theme.icon("add-line")
                 icon.color: Theme.primaryText
                 icon.width: 16
@@ -311,9 +358,11 @@ Item {
                     }
                 }
                 background: Rectangle {
-                    color: addTagButton.down ? Theme.listSelectedSurface
-                                             : Theme.tagAddSurface
-                    border.color: Theme.controlSubtleBorder
+                    objectName: "tagAddGlassBackground"
+                    color: addTagButton.down ? Theme.subtleGlassActive
+                          : addTagButton.hovered ? Theme.subtleGlassHover
+                                                  : Theme.subtleGlassFill
+                    border.color: root.controlBorder
                     border.width: 1
                     radius: Theme.radiusSm
                 }
@@ -325,6 +374,7 @@ Item {
             objectName: "tagFlickable"
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: root.expanded
             clip: true
             contentWidth: width
             contentHeight: tagFlow.height
@@ -405,9 +455,9 @@ Item {
                             height: implicitHeight
                             radius: 12
                             clip: true
-                            color: Qt.rgba(resolvedSurface.r, // theme-color-allow: user tag color with glass opacity
+                            color: Qt.rgba(resolvedSurface.r, // theme-color-allow: user tag color
                                            resolvedSurface.g,
-                                           resolvedSurface.b, 0.78)
+                                           resolvedSurface.b, 0.68)
                             border.color: dropVisual || selectedVisual
                                           || focusedVisual
                                           ? Theme.tagPillHighlightBorder
@@ -423,7 +473,7 @@ Item {
                                 anchors.rightMargin: 7
                                 height: 1
                                 radius: 0.5
-                                color: Qt.rgba(1, 1, 1, 0.16) // theme-color-allow: fixed glass highlight
+                                color: Qt.rgba(1, 1, 1, 0.16) // theme-color-allow: tag pill gloss
                             }
 
                             Text {
@@ -434,10 +484,7 @@ Item {
                                 font.pixelSize: 11
                             }
                             Row {
-                                anchors.left: parent.left
-                                anchors.leftMargin: root.pillHorizontalPadding
-                                anchors.right: parent.right
-                                anchors.rightMargin: root.pillHorizontalPadding
+                                anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: root.pillContentSpacing
                                 Text {

@@ -3541,6 +3541,11 @@ Clear: Remove all known aliases for this field.</translation>
         <translation>Dual-window theme</translation>
     </message>
     <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1476"/>
+        <source>单窗口主题</source>
+        <translation>Single-window theme</translation>
+    </message>
+    <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1853"/>
         <source>导出路径与转码参数</source>
         <translation>Export path and transcoding parameters</translation>

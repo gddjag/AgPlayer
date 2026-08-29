@@ -1472,9 +1472,11 @@ Item {
                         objectName: "windowLayoutThemeCombo"
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: qsTr("双窗口主题"), value: "dual-window" }
+                            { text: qsTr("双窗口主题"), value: "dual-window" },
+                            { text: qsTr("单窗口主题"), value: "single-window" }
                         ]
-                        currentIndex: 0
+                        currentIndex: SettingsController.windowLayoutTheme === "single-window"
+                                      ? 1 : 0
                         onActivated: SettingsController.windowLayoutTheme = currentValue
                     }
                 }

@@ -33,6 +33,10 @@ private slots:
     void startsPlaybackFromVisibleListScope();
     void editorOutputRestoresExactScopedPlaybackSession();
     void exactWaveformDurationAlignsPlaybackTimeline();
+    void selectionCommitAdjustAndExternalSeekFollowContract();
+    void exactDurationShrinkReclampsActiveSelection();
+    void selectionLoopReturnsToStartAndPausePreservesSelection();
+    void trackChangeClearsSelection();
     void loadsRowWithoutStartingPlayback();
     void nullCoreReportsStableErrors();
     void survivesLibraryModelDestruction();
@@ -342,6 +346,139 @@ void PlaybackControllerTest::unavailableRowsAreExcludedFromQueueIndices()
         QCOMPARE(countChanged.count(), 1);
         QCOMPARE(indexChanged.count(), 3);
         QCOMPARE(trackIdChanged.count(), 3);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::selectionCommitAdjustAndExternalSeekFollowContract()
+{
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        QTRY_COMPARE(controller.durationMs(), qint64{2'000});
+
+        controller.commitSelection(900, 850);
+        QCOMPARE(controller.selectionStartMs(), qint64{850});
+        QCOMPARE(controller.selectionEndMs(), qint64{950});
+        QVERIFY(controller.selectionLoopEnabled());
+        QVERIFY(qAbs(controller.positionMs() - qint64{850}) <= 3);
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+
+        controller.adjustSelection(300, 700);
+        QCOMPARE(controller.selectionStartMs(), qint64{300});
+        QCOMPARE(controller.selectionEndMs(), qint64{700});
+        QVERIFY(controller.selectionLoopEnabled());
+
+        controller.disableSelectionLoopAndSeek(1'200);
+        QVERIFY(!controller.selectionLoopEnabled());
+        QCOMPARE(controller.selectionStartMs(), qint64{300});
+        QCOMPARE(controller.selectionEndMs(), qint64{700});
+        QTRY_VERIFY(qAbs(controller.positionMs() - qint64{1'200}) <= 3);
+
+        controller.clearSelection();
+        QCOMPARE(controller.selectionStartMs(), qint64{0});
+        QCOMPARE(controller.selectionEndMs(), qint64{0});
+        QVERIFY(!controller.selectionLoopEnabled());
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::exactDurationShrinkReclampsActiveSelection()
+{
+    const QString path = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!path.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("duration-shrink");
+    track.path = path;
+    track.available = true;
+    QVERIFY(model.append(track));
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+        QTRY_COMPARE(controller.durationMs(), qint64{2'000});
+
+        controller.adjustSelection(1'500, 1'900);
+        QVERIFY(controller.selectionLoopEnabled());
+        QVERIFY(controller.applyWaveformDuration(
+            controller.currentTrackId(), 1'000));
+
+        QCOMPARE(controller.selectionStartMs(), qint64{900});
+        QCOMPARE(controller.selectionEndMs(), qint64{1'000});
+        QVERIFY(controller.selectionLoopEnabled());
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::selectionLoopReturnsToStartAndPausePreservesSelection()
+{
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        QTRY_COMPARE(controller.durationMs(), qint64{2'000});
+
+        controller.adjustSelection(100, 250);
+        QVERIFY(controller.selectionLoopEnabled());
+        controller.seek(100);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QTest::qWait(400);
+        QTRY_VERIFY(controller.positionMs() >= 100 && controller.positionMs() < 250);
+
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QCOMPARE(controller.selectionStartMs(), qint64{100});
+        QCOMPARE(controller.selectionEndMs(), qint64{250});
+        QVERIFY(controller.selectionLoopEnabled());
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::trackChangeClearsSelection()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel model;
+    for (const QString& id : {QStringLiteral("first"), QStringLiteral("second")}) {
+        TrackRecord track;
+        track.trackId = id;
+        track.path = directory.filePath(id + QStringLiteral(".wav"));
+        track.available = true;
+        QVERIFY(QFile::copy(fixture, track.path));
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.playRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("first"));
+        controller.adjustSelection(100, 300);
+        QVERIFY(controller.selectionLoopEnabled());
+
+        controller.playRow(1);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("second"));
+        QCOMPARE(controller.selectionStartMs(), qint64{0});
+        QCOMPARE(controller.selectionEndMs(), qint64{0});
+        QVERIFY(!controller.selectionLoopEnabled());
     }
     ag_player_destroy(core);
 }

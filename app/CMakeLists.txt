@@ -60,6 +60,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/player-shell-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
@@ -77,6 +78,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-arrows-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/side-panel-toggle.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/stop-fill.svg
@@ -139,6 +141,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/SettingsPage.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
+        qml/AgPlayer/components/IntegratedPlayerShell.qml
+        qml/AgPlayer/components/WaveSelectionOverlay.qml
+        qml/AgPlayer/components/WaveformSession.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/EqualizerBandSlider.qml

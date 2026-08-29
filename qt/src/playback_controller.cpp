@@ -127,6 +127,21 @@ bool PlaybackController::replayGainClippingWarning() const noexcept
     return replayGainClippingWarning_;
 }
 
+qint64 PlaybackController::selectionStartMs() const noexcept
+{
+    return selectionStartMs_;
+}
+
+qint64 PlaybackController::selectionEndMs() const noexcept
+{
+    return selectionEndMs_;
+}
+
+bool PlaybackController::selectionLoopEnabled() const noexcept
+{
+    return selectionLoopEnabled_;
+}
+
 void PlaybackController::setLibraryModel(LibraryModel* library)
 {
     disconnect(playRequestedConnection_);
@@ -308,6 +323,48 @@ void PlaybackController::seek(qint64 positionMs)
     }
 }
 
+void PlaybackController::commitSelection(qint64 startMs, qint64 endMs)
+{
+    if (!setSelection(startMs, endMs, true)) {
+        return;
+    }
+    seek(selectionStartMs_);
+    play();
+}
+
+void PlaybackController::adjustSelection(qint64 startMs, qint64 endMs)
+{
+    setSelection(startMs, endMs, true);
+}
+
+void PlaybackController::disableSelectionLoopAndSeek(qint64 positionMs)
+{
+    if (selectionLoopEnabled_) {
+        selectionLoopEnabled_ = false;
+        emit selectionLoopEnabledChanged();
+    }
+    seek(positionMs);
+}
+
+void PlaybackController::clearSelection()
+{
+    const bool startChanged = selectionStartMs_ != 0;
+    const bool endChanged = selectionEndMs_ != 0;
+    const bool loopChanged = selectionLoopEnabled_;
+    selectionStartMs_ = 0;
+    selectionEndMs_ = 0;
+    selectionLoopEnabled_ = false;
+    if (startChanged) {
+        emit selectionStartMsChanged();
+    }
+    if (endChanged) {
+        emit selectionEndMsChanged();
+    }
+    if (loopChanged) {
+        emit selectionLoopEnabledChanged();
+    }
+}
+
 bool PlaybackController::applyWaveformDuration(const QString& trackId,
                                                qint64 durationMs)
 {
@@ -332,6 +389,56 @@ bool PlaybackController::applyWaveformDuration(const QString& trackId,
     if (positionMs_ > durationMs_) {
         positionMs_ = durationMs_;
         emit positionMsChanged();
+    }
+    if (selectionEndMs_ > selectionStartMs_) {
+        const bool loopEnabled = selectionLoopEnabled_;
+        if (!setSelection(selectionStartMs_, selectionEndMs_, loopEnabled)) {
+            clearSelection();
+        }
+    }
+    return true;
+}
+
+bool PlaybackController::setSelection(qint64 startMs,
+                                      qint64 endMs,
+                                      bool loopEnabled)
+{
+    if (durationMs_ <= 0) {
+        return false;
+    }
+    const qint64 low = std::clamp(
+        std::min(startMs, endMs), qint64{0}, durationMs_);
+    qint64 high = std::clamp(
+        std::max(startMs, endMs), qint64{0}, durationMs_);
+    constexpr qint64 minimumSelectionMs = 100;
+    if (high - low < minimumSelectionMs) {
+        high = std::min(durationMs_, low + minimumSelectionMs);
+        if (high - low < minimumSelectionMs) {
+            startMs = std::max(qint64{0}, high - minimumSelectionMs);
+        } else {
+            startMs = low;
+        }
+    } else {
+        startMs = low;
+    }
+    if (high - startMs < minimumSelectionMs) {
+        return false;
+    }
+
+    const bool startChanged = selectionStartMs_ != startMs;
+    const bool endChanged = selectionEndMs_ != high;
+    const bool loopChanged = selectionLoopEnabled_ != loopEnabled;
+    selectionStartMs_ = startMs;
+    selectionEndMs_ = high;
+    selectionLoopEnabled_ = loopEnabled;
+    if (startChanged) {
+        emit selectionStartMsChanged();
+    }
+    if (endChanged) {
+        emit selectionEndMsChanged();
+    }
+    if (loopChanged) {
+        emit selectionLoopEnabledChanged();
     }
     return true;
 }
@@ -820,6 +927,18 @@ void PlaybackController::pollSnapshot()
     QString nextTrackId;
     if (nextTrackIndex >= 0 && nextTrackIndex < queueTrackIds_.size()) {
         nextTrackId = queueTrackIds_.at(nextTrackIndex);
+    }
+    const bool trackChanged = currentTrackId_ != nextTrackId;
+    if (trackChanged) {
+        clearSelection();
+    }
+    if (!trackChanged && selectionLoopEnabled_ && nextState == Playing
+        && snapshot.position_ms >= selectionEndMs_) {
+        const ag_result loopResult = ag_player_seek(player_, selectionStartMs_);
+        runCommand(loopResult);
+        if (loopResult == AG_OK) {
+            snapshot.position_ms = selectionStartMs_;
+        }
     }
 
     if (state_ != nextState) {

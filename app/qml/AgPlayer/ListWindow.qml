@@ -38,6 +38,7 @@ Window {
 
     property var windows: WindowController
     property var filterModel: null
+    property alias tagSearchText: tagManagementPanel.searchText
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
     property var activeImportDialog: null
@@ -628,6 +629,7 @@ Window {
                     }
 
                     TagManagementPanel {
+                        id: tagManagementPanel
                         objectName: "tagManagementPanel"
                         Layout.preferredWidth: listWorkspace.rightColumnWidth
                         Layout.minimumWidth: listWorkspace.rightColumnWidth
