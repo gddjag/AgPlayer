@@ -1,9 +1,13 @@
 #pragma once
 
+#include <array>
+#include <optional>
+
 #include <QColor>
 #include <QObject>
 #include <QPalette>
 #include <QString>
+#include <QVariantList>
 
 class QGuiApplication;
 class QEvent;
@@ -11,6 +15,10 @@ class SettingsController;
 
 struct ThemePalette final {
     QColor background;
+    QColor backdropStart;
+    QColor backdropMiddle;
+    QColor backdropEnd;
+
     QColor surface;
     QColor surfaceElevated;
     QColor surfaceHover;
@@ -40,6 +48,14 @@ struct ThemePalette final {
     QColor focus;
     QColor currentTrackSurface;
 
+    QColor glassSurface;
+    QColor glassSurfaceElevated;
+    QColor glassSurfaceHover;
+    QColor glassSurfacePressed;
+    QColor glassBorder;
+    QColor glassDivider;
+    QColor glassInnerHighlight;
+
     QColor success;
     QColor warning;
     QColor error;
@@ -55,6 +71,9 @@ class ThemeManager final : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QColor background READ background NOTIFY paletteChanged)
+    Q_PROPERTY(QColor backdropStart READ backdropStart NOTIFY paletteChanged)
+    Q_PROPERTY(QColor backdropMiddle READ backdropMiddle NOTIFY paletteChanged)
+    Q_PROPERTY(QColor backdropEnd READ backdropEnd NOTIFY paletteChanged)
     Q_PROPERTY(QColor surface READ surface NOTIFY paletteChanged)
     Q_PROPERTY(QColor surfaceElevated READ surfaceElevated NOTIFY paletteChanged)
     Q_PROPERTY(QColor surfaceHover READ surfaceHover NOTIFY paletteChanged)
@@ -79,6 +98,13 @@ class ThemeManager final : public QObject {
     Q_PROPERTY(QColor highlightText READ highlightText NOTIFY paletteChanged)
     Q_PROPERTY(QColor focus READ focus NOTIFY paletteChanged)
     Q_PROPERTY(QColor currentTrackSurface READ currentTrackSurface NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassSurface READ glassSurface NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassSurfaceElevated READ glassSurfaceElevated NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassSurfaceHover READ glassSurfaceHover NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassSurfacePressed READ glassSurfacePressed NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassBorder READ glassBorder NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassDivider READ glassDivider NOTIFY paletteChanged)
+    Q_PROPERTY(QColor glassInnerHighlight READ glassInnerHighlight NOTIFY paletteChanged)
     Q_PROPERTY(QColor success READ success NOTIFY paletteChanged)
     Q_PROPERTY(QColor warning READ warning NOTIFY paletteChanged)
     Q_PROPERTY(QColor error READ error NOTIFY paletteChanged)
@@ -86,8 +112,11 @@ class ThemeManager final : public QObject {
     Q_PROPERTY(QColor recording READ recording NOTIFY paletteChanged)
     Q_PROPERTY(QColor critical READ critical NOTIFY paletteChanged)
     Q_PROPERTY(bool isLight READ isLight NOTIFY paletteChanged)
+    Q_PROPERTY(QVariantList recommendedPresets READ recommendedPresets CONSTANT)
 
 public:
+    using SkinStops = std::array<QColor, 3>;
+
     enum class AppearanceMode {
         Dark = 0,
         Light = 1,
@@ -101,32 +130,45 @@ public:
     };
     Q_ENUM(SkinMode)
 
+    enum class SkinKind {
+        Solid = 0,
+        Gradient = 1,
+    };
+    Q_ENUM(SkinKind)
+
     struct Preset final {
         QString id;
-        QColor seed;
+        SkinStops stops;
 
         bool operator==(const Preset& other) const
         {
-            return id == other.id && seed == other.seed;
+            return id == other.id && stops == other.stops;
         }
     };
 
     struct Preferences final {
         AppearanceMode appearanceMode = AppearanceMode::System;
         SkinMode skinMode = SkinMode::Default;
-        QColor skinSeed = defaultSeed();
+        SkinKind skinKind = SkinKind::Solid;
+        SkinStops skinStops{defaultSeed(), defaultSeed(), defaultSeed()};
     };
 
     explicit ThemeManager(QGuiApplication& application, QObject* parent = nullptr);
 
     static QColor defaultSeed();
     static QList<Preset> presets();
+    static std::optional<QColor> legacyPresetSeed(const QString& id);
+
+    QVariantList recommendedPresets() const;
 
     void applyPreferences(const Preferences& preferences);
     const Preferences& preferences() const { return preferences_; }
     const ThemePalette& palette() const { return palette_; }
 
     QColor background() const { return palette_.background; }
+    QColor backdropStart() const { return palette_.backdropStart; }
+    QColor backdropMiddle() const { return palette_.backdropMiddle; }
+    QColor backdropEnd() const { return palette_.backdropEnd; }
     QColor surface() const { return palette_.surface; }
     QColor surfaceElevated() const { return palette_.surfaceElevated; }
     QColor surfaceHover() const { return palette_.surfaceHover; }
@@ -151,6 +193,13 @@ public:
     QColor highlightText() const { return palette_.highlightText; }
     QColor focus() const { return palette_.focus; }
     QColor currentTrackSurface() const { return palette_.currentTrackSurface; }
+    QColor glassSurface() const { return palette_.glassSurface; }
+    QColor glassSurfaceElevated() const { return palette_.glassSurfaceElevated; }
+    QColor glassSurfaceHover() const { return palette_.glassSurfaceHover; }
+    QColor glassSurfacePressed() const { return palette_.glassSurfacePressed; }
+    QColor glassBorder() const { return palette_.glassBorder; }
+    QColor glassDivider() const { return palette_.glassDivider; }
+    QColor glassInnerHighlight() const { return palette_.glassInnerHighlight; }
     QColor success() const { return palette_.success; }
     QColor warning() const { return palette_.warning; }
     QColor error() const { return palette_.error; }
