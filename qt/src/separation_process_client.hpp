@@ -35,7 +35,6 @@ public:
 
     bool startProbe(const QJsonObject& payload);
     bool startJob(const QJsonObject& payload);
-    bool retryLast();
     void cancel();
 
 signals:
@@ -49,7 +48,7 @@ signals:
 
 private:
     bool begin(agplayer::separation::ProtocolType type,
-               const QJsonObject& payload, bool remember);
+               const QJsonObject& payload);
     void setState(State state);
     void send(agplayer::separation::ProtocolType type,
               const QString& requestId, const QJsonObject& payload = {});
@@ -71,9 +70,6 @@ private:
     State state_ = Stopped;
     agplayer::separation::ProtocolType pendingType_;
     QJsonObject pendingPayload_;
-    agplayer::separation::ProtocolType lastType_;
-    QJsonObject lastPayload_;
-    bool hasLastRequest_ = false;
     QString helloRequestId_;
     QString activeRequestId_;
     QString timeoutFailure_;

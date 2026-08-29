@@ -1,4 +1,5 @@
 #include "vocal_separation_history.hpp"
+#include "vocal_separation_path_safety.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -22,7 +23,8 @@ QVariantMap withAvailability(QVariantMap record)
     for (QVariant& value : stems) {
         QVariantMap stem = value.toMap();
         stem.insert(QStringLiteral("available"),
-                    QFileInfo::exists(stem.value(QStringLiteral("path")).toString()));
+                    vocal_separation_paths::safeExistingFile(
+                        stem.value(QStringLiteral("path")).toString()));
         value = stem;
     }
     record.insert(QStringLiteral("stems"), stems);
@@ -38,12 +40,14 @@ VocalSeparationHistoryStore::VocalSeparationHistoryStore(QString filePath)
 
 QVariantList VocalSeparationHistoryStore::load() const
 {
-    const QFileInfo info(filePath_);
-    if (!info.isFile() || info.size() > kMaximumHistoryBytes) return {};
     QFile file(filePath_);
-    if (!file.open(QIODevice::ReadOnly)) return {};
+    if (!vocal_separation_paths::openRegularFileForRead(&file)
+        || file.size() > kMaximumHistoryBytes) return {};
+    const QByteArray bytes = file.read(kMaximumHistoryBytes + 1);
+    if (bytes.size() > kMaximumHistoryBytes
+        || file.size() > kMaximumHistoryBytes) return {};
     QJsonParseError error;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &error);
     if (error.error != QJsonParseError::NoError || !document.isArray()) return {};
     QVariantList result;
     const QJsonArray records = document.array();

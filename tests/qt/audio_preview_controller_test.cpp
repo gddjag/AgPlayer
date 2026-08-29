@@ -220,11 +220,16 @@ void AudioPreviewControllerTest::preservesActiveDspWhenSwitchingSources()
     preview.setDspParameters(1.5, 0, true, false, false, true);
     QTRY_VERIFY_WITH_TIMEOUT(!preview.processing(), 10'000);
     QTRY_VERIFY_WITH_TIMEOUT(preview.durationMs() < originalDuration, 10'000);
+    preview.seek(650);
+    QTRY_VERIFY_WITH_TIMEOUT(preview.positionMs() >= 600, 2'000);
+    const qint64 absoluteBeforeSwitch = preview.positionMs();
 
     QVERIFY(preview.switchSourcePreservingPosition(QUrl::fromLocalFile(stem)));
     QTRY_VERIFY_WITH_TIMEOUT(!preview.processing(), 10'000);
     QVERIFY(preview.isCurrentSource(QUrl::fromLocalFile(stem)));
     QVERIFY(preview.durationMs() < originalDuration);
+    QVERIFY(preview.playing());
+    QVERIFY(qAbs(preview.positionMs() - absoluteBeforeSwitch) <= 125);
 }
 
 QTEST_MAIN(AudioPreviewControllerTest)

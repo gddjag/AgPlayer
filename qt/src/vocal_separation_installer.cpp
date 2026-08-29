@@ -1,7 +1,10 @@
 #include "vocal_separation_installer.hpp"
 
+#include "vocal_separation_path_safety.hpp"
+
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QNetworkAccessManager>
@@ -17,16 +20,21 @@ namespace {
 
 constexpr int kMaxAttempts = 3;
 
-QString hashFile(const QString& path)
+bool isCancelled(const std::shared_ptr<std::atomic_bool>& cancellation)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
+    return cancellation
+        && cancellation->load(std::memory_order_acquire);
+}
+
+QString hashOpenFile(
+    QFile* file,
+    const std::shared_ptr<std::atomic_bool>& cancellation = {})
+{
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    while (!file.atEnd()) {
-        const QByteArray bytes = file.read(1024 * 1024);
-        if (bytes.isEmpty() && file.error() != QFile::NoError) {
+    while (!file->atEnd()) {
+        if (isCancelled(cancellation)) return {};
+        const QByteArray bytes = file->read(1024 * 1024);
+        if (bytes.isEmpty() && file->error() != QFile::NoError) {
             return {};
         }
         hash.addData(bytes);
@@ -39,10 +47,14 @@ VocalInstallResult fail(const QString& error)
     return {false, error};
 }
 
-bool fileMatches(const VocalDownloadFile& file, const QString& path)
+bool fileMatches(
+    const VocalDownloadFile& file, const QString& path,
+    const std::shared_ptr<std::atomic_bool>& cancellation = {})
 {
-    return QFileInfo(path).size() == file.bytes
-        && hashFile(path) == file.sha256;
+    QFile candidate(path);
+    return vocal_separation_paths::openRegularFileForRead(&candidate)
+        && candidate.size() == file.bytes
+        && hashOpenFile(&candidate, cancellation) == file.sha256;
 }
 
 bool isSha256(const QString& value)
@@ -68,6 +80,14 @@ const QList<VocalDownloadFile>& runtimeFiles()
          QStringLiteral("265c8daf29637cb259cac8be9f08f2cd45f3883f0f0e4949cbfddd5b4cbec3b6")},
     };
     return files;
+}
+
+QSet<QString> runtimeAllowedNames()
+{
+    QSet<QString> names{QStringLiteral("runtime.sha256")};
+    for (const VocalDownloadFile& file : runtimeFiles())
+        names.insert(file.fileName);
+    return names;
 }
 
 } // namespace
@@ -188,32 +208,85 @@ VocalInstallResult VocalSeparationInstaller::activateVerifiedPart(
     if (!QFile::rename(part, destination)) {
         return fail(QStringLiteral("Cannot atomically activate verified download"));
     }
+    if (!fileMatches(file, destination)) {
+        QFile::remove(destination);
+        return fail(QStringLiteral("Activated download failed final integrity verification"));
+    }
+    return {true, {}};
+}
+
+VocalInstallResult VocalSeparationInstaller::deleteModelFiles(
+    const VocalModelCard& model, const QString& modelsRoot)
+{
+    if (model.id.isEmpty() || QFileInfo(model.id).fileName() != model.id) {
+        return fail(QStringLiteral("Invalid model identifier"));
+    }
+    const QString directory = QDir(modelsRoot).filePath(model.id);
+    const auto kind = vocal_separation_paths::safePathKind(directory);
+    if (kind == vocal_separation_paths::SafePathKind::Missing) return {true, {}};
+    if (!vocal_separation_paths::safeExistingDirectory(modelsRoot)
+        || !vocal_separation_paths::safeExistingPathWithin(
+            directory, modelsRoot,
+            vocal_separation_paths::SafePathKind::Directory)) {
+        return fail(QStringLiteral("Refusing to delete an unsafe model directory"));
+    }
+    QSet<QString> allowedNames;
+    for (const VocalDownloadFile& file : model.files) {
+        allowedNames.insert(file.fileName);
+        allowedNames.insert(file.fileName + QStringLiteral(".part"));
+    }
+    if (!vocal_separation_paths::validateFlatDirectory(directory, allowedNames)) {
+        return fail(QStringLiteral("Refusing to delete a non-flat or unexpected model directory"));
+    }
+    if (!vocal_separation_paths::removeKnownFlatDirectory(directory, allowedNames)) {
+        return fail(QStringLiteral("Cannot delete model files"));
+    }
     return {true, {}};
 }
 
 VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
-    const QString& nupkgPath, const QString& runtimeRoot)
+    const QString& nupkgPath, const QString& runtimeRoot,
+    const std::shared_ptr<std::atomic_bool>& cancellation)
 {
+    const auto cancelledResult = [] {
+        return fail(QStringLiteral("DirectML runtime installation was cancelled"));
+    };
+    if (isCancelled(cancellation)) return cancelledResult();
     const VocalRuntimePackage package = VocalSeparationCatalog::directMlRuntime();
     VocalDownloadFile archive;
     archive.fileName = QStringLiteral("runtime.nupkg");
     archive.bytes = package.bytes;
     archive.sha256 = package.sha256;
-    if (!fileMatches(archive, nupkgPath)) {
+    if (!fileMatches(archive, nupkgPath, cancellation)) {
+        if (isCancelled(cancellation)) return cancelledResult();
         return fail(QStringLiteral("DirectML runtime package did not match its pinned SHA-256 or size"));
     }
 
     const QString versionedRoot = runtimeVersionDirectory(runtimeRoot);
     const QString stagingRoot = versionedRoot + QStringLiteral(".staging");
-    if (QFileInfo::exists(versionedRoot)) {
+    const auto versionKind = vocal_separation_paths::safePathKind(versionedRoot);
+    if (versionKind != vocal_separation_paths::SafePathKind::Missing) {
         if (!runtimeDirectoryIsVerified(versionedRoot, package.sha256)) {
             return fail(QStringLiteral("Existing DirectML runtime failed integrity verification"));
         }
         return {true, {}};
     }
-    QDir(stagingRoot).removeRecursively();
+    const QSet<QString> allowedNames = runtimeAllowedNames();
+    if (!vocal_separation_paths::removeKnownFlatDirectory(
+            stagingRoot, allowedNames)) {
+        return fail(QStringLiteral("Refusing to clean an unsafe DirectML staging directory"));
+    }
+    if (isCancelled(cancellation)) return cancelledResult();
     if (!QDir().mkpath(stagingRoot)) {
         return fail(QStringLiteral("Cannot create DirectML runtime staging directory"));
+    }
+    const auto cleanupStaging = [&] {
+        return vocal_separation_paths::removeKnownFlatDirectory(
+            stagingRoot, allowedNames);
+    };
+    if (isCancelled(cancellation)) {
+        cleanupStaging();
+        return cancelledResult();
     }
 
     const QString script = QStringLiteral(
@@ -235,34 +308,82 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
                    QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                    QStringLiteral("-Command"), script});
     process.closeWriteChannel();
-    const bool processFinished = process.waitForFinished(60'000);
-    if (!processFinished) {
+    QElapsedTimer extractionTimer;
+    extractionTimer.start();
+    bool processFinished = false;
+    while (extractionTimer.elapsed() < 60'000) {
+        if (isCancelled(cancellation)) {
+            if (process.state() != QProcess::NotRunning) {
+                process.kill();
+                process.waitForFinished(1'000);
+            }
+            cleanupStaging();
+            return cancelledResult();
+        }
+        if (process.waitForFinished(50)
+            || process.state() == QProcess::NotRunning) {
+            processFinished = true;
+            break;
+        }
+    }
+    if (!processFinished && process.state() != QProcess::NotRunning) {
         process.kill();
-        process.waitForFinished();
+        process.waitForFinished(1'000);
     }
     if (!processFinished || process.exitStatus() != QProcess::NormalExit
         || process.exitCode() != 0) {
-        QDir(stagingRoot).removeRecursively();
+        const QString processError = QString::fromLocal8Bit(
+            process.readAllStandardError().right(4'096)).trimmed();
+        cleanupStaging();
         return fail(QStringLiteral("Cannot extract pinned DirectML runtime: %1")
-                        .arg(QString::fromLocal8Bit(process.readAllStandardError()).trimmed()));
+                        .arg(processError));
     }
     for (const VocalDownloadFile& file : runtimeFiles()) {
-        if (!fileMatches(file, QDir(stagingRoot).filePath(file.fileName))) {
-            QDir(stagingRoot).removeRecursively();
+        if (isCancelled(cancellation)) {
+            cleanupStaging();
+            return cancelledResult();
+        }
+        if (!fileMatches(file, QDir(stagingRoot).filePath(file.fileName),
+                         cancellation)) {
+            cleanupStaging();
+            if (isCancelled(cancellation)) return cancelledResult();
             return fail(QStringLiteral("Extracted DirectML runtime file failed integrity verification"));
         }
+    }
+    if (isCancelled(cancellation)) {
+        cleanupStaging();
+        return cancelledResult();
     }
     QFile stagingMarker(QDir(stagingRoot).filePath(QStringLiteral("runtime.sha256")));
     if (!stagingMarker.open(QIODevice::WriteOnly | QIODevice::Truncate)
         || stagingMarker.write(package.sha256.toLatin1())
                != static_cast<qint64>(package.sha256.size())) {
-        QDir(stagingRoot).removeRecursively();
+        cleanupStaging();
         return fail(QStringLiteral("Cannot write DirectML runtime verification marker"));
     }
     stagingMarker.close();
+    if (isCancelled(cancellation)) {
+        cleanupStaging();
+        return cancelledResult();
+    }
+    if (!vocal_separation_paths::validateFlatDirectory(
+            stagingRoot, allowedNames)) {
+        cleanupStaging();
+        return fail(QStringLiteral("DirectML staging directory contained unexpected entries"));
+    }
     if (!QDir().rename(stagingRoot, versionedRoot)) {
-        QDir(stagingRoot).removeRecursively();
+        cleanupStaging();
         return fail(QStringLiteral("Cannot atomically activate DirectML runtime"));
+    }
+    if (isCancelled(cancellation)) {
+        vocal_separation_paths::removeKnownFlatDirectory(
+            versionedRoot, allowedNames);
+        return cancelledResult();
+    }
+    if (!runtimeDirectoryIsVerified(versionedRoot, package.sha256)) {
+        vocal_separation_paths::removeKnownFlatDirectory(
+            versionedRoot, allowedNames);
+        return fail(QStringLiteral("Activated DirectML runtime failed final integrity verification"));
     }
     return {true, {}};
 }
@@ -273,9 +394,17 @@ bool VocalSeparationInstaller::runtimeDirectoryIsVerified(
     if (!isSha256(expectedArchiveSha256)) {
         return false;
     }
+    const QSet<QString> allowedNames = runtimeAllowedNames();
+    if (!vocal_separation_paths::safeExistingDirectory(runtimeDirectory)
+        || !vocal_separation_paths::validateFlatDirectory(
+            runtimeDirectory, allowedNames)) {
+        return false;
+    }
     QFile marker(QDir(runtimeDirectory).filePath(QStringLiteral("runtime.sha256")));
-    if (!marker.open(QIODevice::ReadOnly)
-        || QString::fromLatin1(marker.readAll()).trimmed() != expectedArchiveSha256) {
+    if (!vocal_separation_paths::openRegularFileForReadWithin(
+            &marker, runtimeDirectory)
+        || marker.size() > 128
+        || QString::fromLatin1(marker.read(129)).trimmed() != expectedArchiveSha256) {
         return false;
     }
     for (const VocalDownloadFile& file : runtimeFiles()) {
@@ -510,7 +639,36 @@ void VocalSeparationDownloader::verifyAndActivate(quint64 operation)
             result = {false,
                 QStringLiteral("Cannot atomically activate verified download")};
         } else {
-            result = {true, {}};
+            auto* const finalWatcher = new QFutureWatcher<bool>(this);
+            m_verificationWatcher = finalWatcher;
+            connect(finalWatcher, &QFutureWatcher<bool>::finished,
+                    this, [this, finalWatcher, operation, destination] {
+                const bool finalVerified = finalWatcher->result();
+                finalWatcher->deleteLater();
+                if (m_verificationWatcher == finalWatcher)
+                    m_verificationWatcher = nullptr;
+                if (operation != m_operation
+                    || m_state.state() != VocalDownloadState::Verifying) return;
+                if (!finalVerified) {
+                    QFile::remove(destination);
+                    m_state.fail();
+                    setState(VocalDownloadState::Failed);
+                    const VocalInstallResult failed = {
+                        false,
+                        QStringLiteral("Activated download failed final integrity verification")};
+                    m_error = failed.error;
+                    emit finished(failed);
+                    return;
+                }
+                m_state.complete();
+                setState(VocalDownloadState::Complete);
+                emit finished({true, {}});
+            });
+            finalWatcher->setFuture(QtConcurrent::run(
+                [file, destination] {
+                    return VocalSeparationInstaller::isVerifiedFile(file, destination);
+                }));
+            return;
         }
         if (result.ok) {
             m_state.complete();

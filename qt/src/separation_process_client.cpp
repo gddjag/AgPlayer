@@ -14,8 +14,7 @@ SeparationProcessClient::SeparationProcessClient(
       program_(std::move(program)),
       arguments_(std::move(arguments)),
       deadlines_(deadlines),
-      pendingType_(ProtocolType::Probe),
-      lastType_(ProtocolType::Probe)
+      pendingType_(ProtocolType::Probe)
 {
     for (QTimer* timer : {&helloTimer_, &heartbeatTimer_, &exitTimer_}) {
         timer->setSingleShot(true);
@@ -98,21 +97,16 @@ QString SeparationProcessClient::activeRequestId() const
 
 bool SeparationProcessClient::startProbe(const QJsonObject& payload)
 {
-    return begin(ProtocolType::Probe, payload, true);
+    return begin(ProtocolType::Probe, payload);
 }
 
 bool SeparationProcessClient::startJob(const QJsonObject& payload)
 {
-    return begin(ProtocolType::Start, payload, true);
-}
-
-bool SeparationProcessClient::retryLast()
-{
-    return hasLastRequest_ && begin(lastType_, lastPayload_, false);
+    return begin(ProtocolType::Start, payload);
 }
 
 bool SeparationProcessClient::begin(ProtocolType type,
-                                    const QJsonObject& payload, bool remember)
+                                    const QJsonObject& payload)
 {
     if (program_.isEmpty() || (state_ != Stopped && state_ != Error)
         || process_.state() != QProcess::NotRunning) {
@@ -120,11 +114,6 @@ bool SeparationProcessClient::begin(ProtocolType type,
     }
     pendingType_ = type;
     pendingPayload_ = payload;
-    if (remember) {
-        lastType_ = type;
-        lastPayload_ = payload;
-        hasLastRequest_ = true;
-    }
     activeRequestId_ = QStringLiteral("request-")
         + QUuid::createUuid().toString(QUuid::WithoutBraces);
     timeoutFailure_.clear();
@@ -233,7 +222,8 @@ void SeparationProcessClient::handleLine(const QByteArray& line)
     if (state_ == Cancelling
         && (message.type == ProtocolType::Progress
             || message.type == ProtocolType::Result
-            || message.type == ProtocolType::Error)) {
+            || message.type == ProtocolType::Error
+            || message.type == ProtocolType::Probe)) {
         return;
     }
     if (message.type == ProtocolType::Progress && state_ == Busy

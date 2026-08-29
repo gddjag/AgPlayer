@@ -450,8 +450,11 @@ void WaveformProvider::onAnalysisFinished()
         if (job.waveform != nullptr) {
             ag_waveform_destroy(job.waveform);
         }
-        if (job.path == currentPath_) {
+        if (job.path == currentPath_ && job.trackId == currentTrackId_
+            && job.generation == activeGeneration_) {
             setAnalysisProgress(0.0);
+            emit waveformFailed(job.path, job.trackId, job.generation,
+                                static_cast<int>(job.result));
         }
         return;
     }

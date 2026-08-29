@@ -18,7 +18,7 @@ private slots:
     void cancellationIsIdempotentAndBounded();
     void cancellationBeforeHelloNeverDispatchesPendingRequest();
     void lateMessagesAfterCancellationAreIgnored();
-    void retryAfterCrashReusesTheSameRequest();
+    void newExplicitRequestAfterCrashUsesTheSuppliedPayload();
     void heartbeatTimeoutCancelsThenFailsRetryably();
     void rejectsWrongDirectionAndProtocolVersion();
     void rejectsAnOversizedRemainingProtocolTailImmediately();
@@ -125,6 +125,7 @@ void SeparationProcessClientTest::lateMessagesAfterCancellationAreIgnored()
         {QStringLiteral("late-after-cancel")}, shortDeadlines());
     QSignalSpy progress(&client, &SeparationProcessClient::progressReceived);
     QSignalSpy result(&client, &SeparationProcessClient::resultReceived);
+    QSignalSpy probe(&client, &SeparationProcessClient::probeReceived);
     QSignalSpy cancelled(&client, &SeparationProcessClient::cancelled);
     QSignalSpy failed(&client, &SeparationProcessClient::failed);
     QVERIFY(client.startJob({}));
@@ -134,11 +135,12 @@ void SeparationProcessClientTest::lateMessagesAfterCancellationAreIgnored()
     QTRY_COMPARE_WITH_TIMEOUT(cancelled.count(), 1, 1500);
     QCOMPARE(progress.count(), 1);
     QCOMPARE(result.count(), 0);
+    QCOMPARE(probe.count(), 0);
     QCOMPARE(failed.count(), 0);
     QCOMPARE(client.state(), SeparationProcessClient::Stopped);
 }
 
-void SeparationProcessClientTest::retryAfterCrashReusesTheSameRequest()
+void SeparationProcessClientTest::newExplicitRequestAfterCrashUsesTheSuppliedPayload()
 {
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -149,10 +151,13 @@ void SeparationProcessClientTest::retryAfterCrashReusesTheSameRequest()
         shortDeadlines());
     QSignalSpy failed(&client, &SeparationProcessClient::failed);
     QSignalSpy result(&client, &SeparationProcessClient::resultReceived);
-    QVERIFY(client.startJob({{QStringLiteral("inputPath"), QStringLiteral("unused")}}));
+    QVERIFY(client.startJob({{QStringLiteral("inputPath"), QStringLiteral("request-A")}}));
     QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, 1500);
-    QVERIFY(client.retryLast());
+    QVERIFY(client.startJob({{QStringLiteral("inputPath"), QStringLiteral("request-B")}}));
     QTRY_COMPARE_WITH_TIMEOUT(result.count(), 1, 1500);
+    QCOMPARE(result.first().at(0).toJsonObject()
+                 .value(QStringLiteral("echoInput")).toString(),
+             QStringLiteral("request-B"));
 }
 
 void SeparationProcessClientTest::heartbeatTimeoutCancelsThenFailsRetryably()

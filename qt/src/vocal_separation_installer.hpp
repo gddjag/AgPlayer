@@ -6,6 +6,9 @@
 #include <QFutureWatcher>
 #include <QTimer>
 
+#include <atomic>
+#include <memory>
+
 class QNetworkAccessManager;
 class QNetworkReply;
 
@@ -50,10 +53,13 @@ public:
                                const QString& path);
     static VocalInstallResult activateVerifiedPart(const VocalDownloadFile& file,
                                                    const QString& destination);
+    static VocalInstallResult deleteModelFiles(const VocalModelCard& model,
+                                               const QString& modelsRoot);
     static bool runtimeDirectoryIsVerified(const QString& runtimeDirectory,
                                            const QString& expectedArchiveSha256);
     static VocalInstallResult installDirectMlRuntime(const QString& nupkgPath,
-                                                     const QString& runtimeRoot);
+                                                     const QString& runtimeRoot,
+                                                     const std::shared_ptr<std::atomic_bool>& cancellation = {});
 };
 
 class VocalSeparationDownloader final : public QObject {

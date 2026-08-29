@@ -4,9 +4,14 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTest>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 class VocalSeparationHistoryTest final : public QObject {
     Q_OBJECT
@@ -17,6 +22,7 @@ private slots:
     void marksMissingUnicodeOutputsUnavailable();
     void appendAtomicallyReplacesValidJson();
     void rejectsOversizedOrNonFileHistoryInput();
+    void marksAReparseResultUnavailable();
 };
 
 namespace {
@@ -140,6 +146,39 @@ void VocalSeparationHistoryTest::rejectsOversizedOrNonFileHistoryInput()
     const QString directory = temporary.filePath(QStringLiteral("history-directory"));
     QVERIFY(QDir().mkpath(directory));
     QCOMPARE(VocalSeparationHistoryStore(directory).load().size(), 0);
+}
+
+void VocalSeparationHistoryTest::marksAReparseResultUnavailable()
+{
+#ifndef Q_OS_WIN
+    QSKIP("Windows reparse-point coverage");
+#else
+    QTemporaryDir temporary;
+    QTemporaryDir external;
+    QVERIFY(temporary.isValid());
+    QVERIFY(external.isValid());
+    const QString outside = external.filePath(QStringLiteral("outside.wav"));
+    QVERIFY(writeBytes(outside, QByteArrayLiteral("audio")));
+    const QString junction = temporary.filePath(QStringLiteral("result-link"));
+    QProcess process;
+    process.start(QStringLiteral("cmd.exe"),
+                  {QStringLiteral("/d"), QStringLiteral("/c"),
+                   QStringLiteral("mklink"), QStringLiteral("/J"),
+                   QDir::toNativeSeparators(junction),
+                   QDir::toNativeSeparators(external.path())});
+    if (!process.waitForFinished(5'000) || process.exitCode() != 0)
+        QSKIP("This Windows environment cannot create an NTFS junction");
+    const QString history = temporary.filePath(QStringLiteral("history.json"));
+    VocalSeparationHistoryStore store(history);
+    QVERIFY(store.append(record(
+        QStringLiteral("linked"), QDir(junction).filePath(QStringLiteral("outside.wav")))));
+    const QVariantList loaded = store.load();
+    QCOMPARE(loaded.size(), 1);
+    QVERIFY(!loaded.first().toMap().value(QStringLiteral("stems")).toList()
+                 .first().toMap().value(QStringLiteral("available")).toBool());
+    const QString native = QDir::toNativeSeparators(junction);
+    RemoveDirectoryW(reinterpret_cast<LPCWSTR>(native.utf16()));
+#endif
 }
 
 QTEST_GUILESS_MAIN(VocalSeparationHistoryTest)

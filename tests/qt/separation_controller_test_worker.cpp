@@ -126,7 +126,13 @@ int main(int argc, char* argv[])
                         if (scenario != QStringLiteral("missing-result")
                             && (scenario != QStringLiteral("partial-result")
                                 || outputIndex == 0)) {
-                            QFile::copy(inputPath, output);
+                            if (scenario == QStringLiteral("invalid-audio")) {
+                                QFile invalid(output);
+                                if (invalid.open(QIODevice::WriteOnly))
+                                    invalid.write("not audio");
+                            } else {
+                                QFile::copy(inputPath, output);
+                            }
                         }
                         outputs.push_back(output);
                         ++outputIndex;
@@ -134,6 +140,7 @@ int main(int argc, char* argv[])
                     send(ProtocolType::Result, message.requestId,
                          {{QStringLiteral("outputs"), outputs},
                           {QStringLiteral("provider"), QStringLiteral("cpu")},
+                          {QStringLiteral("echoInput"), inputPath},
                           {QStringLiteral("fallbackReason"), QStringLiteral("No tested GPU")}});
                 }
             } else if (message.type == ProtocolType::Cancel) {
@@ -144,6 +151,9 @@ int main(int argc, char* argv[])
                     send(ProtocolType::Result, message.requestId,
                          {{QStringLiteral("outputs"), QJsonArray{}},
                           {QStringLiteral("provider"), QStringLiteral("cpu")}});
+                    send(ProtocolType::Probe, message.requestId,
+                         {{QStringLiteral("cpu"), true},
+                          {QStringLiteral("gpu"), true}});
                 }
                 send(ProtocolType::Cancel, message.requestId,
                      {{QStringLiteral("accepted"), true}});

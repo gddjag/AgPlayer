@@ -30,6 +30,7 @@ private slots:
     void newerTrackSuppressesStaleAnalysisResult();
     void resultCarriesTrackIdentityAndGeneration();
     void prefetchTracksWarmsCacheWithoutChangingCurrentTrack();
+    void failedAnalysisEmitsATerminalSignalWithIdentity();
 
 private:
     QString fixturePath_;
@@ -393,6 +394,26 @@ void WaveformProviderTest::prefetchTracksWarmsCacheWithoutChangingCurrentTrack()
 
     provider.loadForTrack(prefetchedPath);
     QCOMPARE(waveformSpy.count(), 1);
+}
+
+void WaveformProviderTest::failedAnalysisEmitsATerminalSignalWithIdentity()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString invalid = temporary.filePath(QStringLiteral("损坏音频.wav"));
+    QFile file(invalid);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("not audio"), qint64(9));
+    file.close();
+
+    WaveformProvider provider;
+    QSignalSpy failed(&provider, &WaveformProvider::waveformFailed);
+    const qulonglong generation = provider.loadForTrack(
+        QStringLiteral("result-generation-7"), invalid);
+    QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, 5'000);
+    QCOMPARE(failed.first().at(0).toString(), invalid);
+    QCOMPARE(failed.first().at(1).toString(), QStringLiteral("result-generation-7"));
+    QCOMPARE(failed.first().at(2).toULongLong(), generation);
 }
 
 QTEST_MAIN(WaveformProviderTest)

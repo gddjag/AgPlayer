@@ -39,6 +39,8 @@ public:
 
 signals:
     void waveformReady(const QString& path, const QVariantMap& layers);
+    void waveformFailed(const QString& path, const QString& trackId,
+                        qulonglong generation, int errorCode);
     void analysisProgressChanged();
     void activeGenerationChanged();
 

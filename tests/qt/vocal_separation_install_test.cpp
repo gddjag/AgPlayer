@@ -4,8 +4,10 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QElapsedTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
 #include <QSignalSpy>
@@ -14,6 +16,8 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThread>
+#include <QtConcurrent/QtConcurrentRun>
 
 class VocalSeparationInstallTest final : public QObject {
     Q_OBJECT
@@ -26,9 +30,13 @@ private slots:
     void resumesAndActivatesOnlyVerifiedFiles();
     void downloaderSignalsInitialState();
     void completePartVerificationIsAsynchronous();
+    void downloaderRehashesActivatedDestinationBeforeCompletion();
+    void modelDeletionRejectsUnsafeFlatDirectoryWithoutPartialRemoval();
     void overlappingStartPreservesActiveTransfer();
     void cancelledRetryDoesNotReconnect();
     void runtimeVerificationRejectsChangedNativeFile();
+    void cancelledRuntimeExtractionStopsAndCleansKnownStaging();
+    void runtimeExtractionRefusesUnsafePreexistingStaging();
     void httpResumeValidatesRangeAndFallback();
     void pauseAndCancelPreventBackoffReconnect();
 };
@@ -319,6 +327,65 @@ void VocalSeparationInstallTest::completePartVerificationIsAsynchronous()
     QVERIFY(QFileInfo::exists(destination));
 }
 
+void VocalSeparationInstallTest::downloaderRehashesActivatedDestinationBeforeCompletion()
+{
+    const QByteArray payload(64 * 1024 * 1024, 'r');
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString destination = temporary.filePath(QStringLiteral("model.onnx"));
+    QVERIFY(writeFile(VocalSeparationInstaller::partPath(destination), payload));
+
+    QFileSystemWatcher directoryWatcher;
+    QVERIFY(directoryWatcher.addPath(temporary.path()));
+    bool replacedAfterActivation = false;
+    connect(&directoryWatcher, &QFileSystemWatcher::directoryChanged,
+            this, [&](const QString&) {
+        if (replacedAfterActivation || !QFileInfo::exists(destination)) return;
+        replacedAfterActivation = writeFile(destination, QByteArray("tampered"));
+    });
+
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    downloader.start(downloadFileFor(payload, QUrl::fromLocalFile(destination)),
+                     destination);
+
+    QVERIFY(finished.wait(10'000));
+    QVERIFY(replacedAfterActivation);
+    QCOMPARE(downloader.state(), VocalDownloadState::Failed);
+}
+
+void VocalSeparationInstallTest::modelDeletionRejectsUnsafeFlatDirectoryWithoutPartialRemoval()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const VocalModelCard model = VocalSeparationCatalog::models().first();
+    const QString modelsRoot = temporary.filePath(QStringLiteral("models"));
+    const QString modelRoot = QDir(modelsRoot).filePath(model.id);
+    QVERIFY(QDir().mkpath(modelRoot));
+    const QString expected = QDir(modelRoot).filePath(model.files.first().fileName);
+    const QString partial = VocalSeparationInstaller::partPath(expected);
+    const QString unexpected = QDir(modelRoot).filePath(QStringLiteral("keep-me.txt"));
+    QVERIFY(writeFile(expected, QByteArray("installed")));
+    QVERIFY(writeFile(partial, QByteArray("partial")));
+    QVERIFY(writeFile(unexpected, QByteArray("sentinel")));
+
+    const VocalInstallResult rejected =
+        VocalSeparationInstaller::deleteModelFiles(model, modelsRoot);
+    QVERIFY(!rejected.ok);
+    QVERIFY(QFileInfo::exists(expected));
+    QVERIFY(QFileInfo::exists(partial));
+    QVERIFY(QFileInfo::exists(unexpected));
+
+    QVERIFY(QFile::remove(unexpected));
+    const VocalInstallResult removed =
+        VocalSeparationInstaller::deleteModelFiles(model, modelsRoot);
+    QVERIFY2(removed.ok, qPrintable(removed.error));
+    QVERIFY(!QFileInfo::exists(modelRoot));
+}
+
 void VocalSeparationInstallTest::overlappingStartPreservesActiveTransfer()
 {
     const QByteArray activePayload("active-transfer");
@@ -385,9 +452,75 @@ void VocalSeparationInstallTest::runtimeVerificationRejectsChangedNativeFile()
         QStringLiteral("onnxruntime-directml-1.24.4"));
     QVERIFY(VocalSeparationInstaller::runtimeDirectoryIsVerified(
         runtime, VocalSeparationCatalog::directMlRuntime().sha256));
+    const QString unexpected = QDir(runtime).filePath(QStringLiteral("unexpected.dll"));
+    QVERIFY(writeFile(unexpected, QByteArray("unexpected")));
+    QVERIFY(!VocalSeparationInstaller::runtimeDirectoryIsVerified(
+        runtime, VocalSeparationCatalog::directMlRuntime().sha256));
+    QVERIFY(QFile::remove(unexpected));
+    QVERIFY(VocalSeparationInstaller::runtimeDirectoryIsVerified(
+        runtime, VocalSeparationCatalog::directMlRuntime().sha256));
     QVERIFY(writeFile(QDir(runtime).filePath(QStringLiteral("onnxruntime.dll")), QByteArray()));
     QVERIFY(!VocalSeparationInstaller::runtimeDirectoryIsVerified(runtime,
                                                                    VocalSeparationCatalog::directMlRuntime().sha256));
+}
+
+void VocalSeparationInstallTest::cancelledRuntimeExtractionStopsAndCleansKnownStaging()
+{
+    const QString packagePath = QDir(QStandardPaths::writableLocation(
+        QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
+    if (!QFileInfo(packagePath).isFile()) {
+        QSKIP("Pinned DirectML archive fixture is unavailable");
+    }
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString versioned = VocalSeparationInstaller::runtimeVersionDirectory(
+        temporary.path());
+    const QString staging = versioned + QStringLiteral(".staging");
+    auto cancellation = std::make_shared<std::atomic_bool>(false);
+    QFuture<bool> cancellationFuture = QtConcurrent::run([=] {
+        for (int attempt = 0; attempt < 5'000; ++attempt) {
+            if (QFileInfo::exists(staging)) {
+                cancellation->store(true, std::memory_order_release);
+                return true;
+            }
+            QThread::msleep(1);
+        }
+        return false;
+    });
+    QElapsedTimer elapsed;
+    elapsed.start();
+    const VocalInstallResult installed =
+        VocalSeparationInstaller::installDirectMlRuntime(
+            packagePath, temporary.path(), cancellation);
+    cancellationFuture.waitForFinished();
+    QVERIFY(cancellationFuture.result());
+    QVERIFY(!installed.ok);
+    QVERIFY2(elapsed.elapsed() < 5'000, "Cancellation did not stop extraction promptly");
+    QVERIFY(!QFileInfo::exists(versioned));
+    QVERIFY(!QFileInfo::exists(staging));
+}
+
+void VocalSeparationInstallTest::runtimeExtractionRefusesUnsafePreexistingStaging()
+{
+    const QString packagePath = QDir(QStandardPaths::writableLocation(
+        QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
+    if (!QFileInfo(packagePath).isFile()) {
+        QSKIP("Pinned DirectML archive fixture is unavailable");
+    }
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString staging = VocalSeparationInstaller::runtimeVersionDirectory(
+        temporary.path()) + QStringLiteral(".staging");
+    const QString sentinel = QDir(staging).filePath(
+        QStringLiteral("nested/keep-me.txt"));
+    QVERIFY(QDir().mkpath(QFileInfo(sentinel).absolutePath()));
+    QVERIFY(writeFile(sentinel, QByteArray("sentinel")));
+
+    const VocalInstallResult installed =
+        VocalSeparationInstaller::installDirectMlRuntime(
+            packagePath, temporary.path());
+    QVERIFY(!installed.ok);
+    QVERIFY(QFileInfo::exists(sentinel));
 }
 
 void VocalSeparationInstallTest::httpResumeValidatesRangeAndFallback()

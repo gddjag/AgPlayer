@@ -147,6 +147,7 @@ signals:
     void errorChanged();
     void stemsChanged();
     void historyChanged();
+    void playlistOperationFinished(bool success, const QString& diagnostic);
 
 private:
     enum class RequestKind { Probe, Separation };
@@ -160,6 +161,20 @@ private:
         DeviceMode device = DeviceMode::Auto;
         QList<StemKind> stemKinds;
         QStringList stemNames;
+        quint64 resultGeneration = 0;
+    };
+
+    struct WaveformWork {
+        QString path;
+        QString trackId;
+        StemKind kind = StemKind::Original;
+        quint64 resultGeneration = 0;
+    };
+
+    struct PlaylistOperation {
+        QString playlistId;
+        QStringList paths;
+        QStringList addedTrackIds;
     };
 
     struct DownloadItem {
@@ -189,6 +204,10 @@ private:
                             const VerificationResult& result);
     bool launchProbe();
     bool launchSeparation(const ActiveRequestContext& context);
+    bool beginSeparationRequest(ActiveRequestContext context);
+    void failRequest(const ActiveRequestContext& context,
+                     const QString& error, const QString& stage);
+    void invalidateRetry();
     void refreshModels();
     void rebuildStems();
     void setJobState(JobState state, const QString& stage = {});
@@ -198,14 +217,20 @@ private:
     void handleResult(const QJsonObject& payload);
     void analyzeNextWaveform();
     void handleWaveform(const QString& path, const QVariantMap& layers);
+    void handleWaveformFailure(const QString& path, const QString& trackId,
+                               qulonglong generation, int errorCode);
+    void clearPublishedResult();
     bool requestInFlight() const noexcept;
     QString pathForStem(StemKind kind) const;
     QStringList selectedStemNames() const;
     QList<StemKind> selectedStemKinds() const;
     bool addPathsToPlaylist(const QStringList& paths,
                             const QString& playlistId);
+    bool playlistExists(const QString& playlistId) const;
+    void finishPlaylistOperation(bool success, const QString& diagnostic);
     static QVariantList boundedPeaks(const QVariantList& peaks);
     static bool atomicCopyNoOverwrite(const QString& source,
+                                      const QString& sourceRoot,
                                       const QString& destination);
 
     QPointer<AudioPreviewController> preview_;
@@ -220,6 +245,7 @@ private:
     std::unique_ptr<VocalSeparationDownloader> downloader_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
     QFutureWatcher<VocalInstallResult>* runtimeInstallerWatcher_ = nullptr;
+    std::shared_ptr<std::atomic_bool> runtimeInstallCancellation_;
     VerificationPurpose verificationPurpose_ = VerificationPurpose::None;
     quint64 verificationGeneration_ = 0;
     QString verifyingModelId_;
@@ -242,7 +268,9 @@ private:
     double progress_ = 0.0;
     QString error_;
     std::optional<ActiveRequestContext> activeRequest_;
+    std::optional<ActiveRequestContext> failedRequest_;
     QString publishedOutputRoot_;
-    QStringList waveformQueue_;
-    QHash<QString, StemKind> waveformKinds_;
+    QList<WaveformWork> waveformQueue_;
+    quint64 resultGeneration_ = 0;
+    std::optional<PlaylistOperation> playlistOperation_;
 };
