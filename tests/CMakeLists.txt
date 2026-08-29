@@ -828,6 +828,55 @@ function(prepare_theme_contract_fixture fixture_name output_variable)
     set(${output_variable} "${fixture_root}" PARENT_SCOPE)
 endfunction()
 
+set(rejected_theme_contract_runner
+    "${CMAKE_CURRENT_BINARY_DIR}/RunRejectedThemeContract.cmake")
+file(WRITE "${rejected_theme_contract_runner}" [=[
+foreach(required_argument IN ITEMS CHECKER ROOT EXPECTED_PRIMARY)
+    if(NOT DEFINED ${required_argument})
+        message(FATAL_ERROR "${required_argument} is required")
+    endif()
+endforeach()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" "-DROOT=${ROOT}" -P "${CHECKER}"
+    RESULT_VARIABLE checker_result
+    OUTPUT_VARIABLE checker_stdout
+    ERROR_VARIABLE checker_stderr
+)
+string(CONCAT checker_output "${checker_stdout}" "\n" "${checker_stderr}")
+if(checker_result EQUAL 0)
+    message(FATAL_ERROR
+        "Theme contract unexpectedly accepted ${ROOT}:\n${checker_output}")
+endif()
+
+foreach(expected_text IN ITEMS "${EXPECTED_PRIMARY}" "${EXPECTED_SECONDARY}")
+    if(NOT expected_text STREQUAL "")
+        string(FIND "${checker_output}" "${expected_text}" expected_offset)
+        if(expected_offset EQUAL -1)
+            message(FATAL_ERROR
+                "Theme contract failed for an unrelated reason. Expected '${expected_text}':\n${checker_output}")
+        endif()
+    endif()
+endforeach()
+
+message(STATUS
+    "Theme contract rejected for the expected reason: ${EXPECTED_PRIMARY}")
+]=])
+
+function(add_rejected_theme_contract_test test_name fixture_root
+         expected_primary expected_secondary)
+    add_test(
+        NAME "${test_name}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DCHECKER=${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+            "-DROOT=${fixture_root}"
+            "-DEXPECTED_PRIMARY=${expected_primary}"
+            "-DEXPECTED_SECONDARY=${expected_secondary}"
+            -P "${rejected_theme_contract_runner}"
+    )
+    set_tests_properties("${test_name}" PROPERTIES TIMEOUT 10)
+endfunction()
+
 foreach(forbidden_picker_function IN ITEMS lighter darker hsla)
     prepare_theme_contract_fixture(
         "picker-${forbidden_picker_function}"
@@ -835,29 +884,22 @@ foreach(forbidden_picker_function IN ITEMS lighter darker hsla)
     file(APPEND
         "${picker_fixture_root}/app/qml/AgPlayer/components/AgColorPicker.qml"
         "\nItem { property color derived: Qt.${forbidden_picker_function}(baseColor) } // theme-color-allow: negative fixture\n")
-    add_test(
-        NAME "qml_theme_picker_${forbidden_picker_function}_rejected_test"
-        COMMAND "${CMAKE_COMMAND}"
-            "-DROOT=${picker_fixture_root}"
-            -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
-    )
-    set_tests_properties(
+    add_rejected_theme_contract_test(
         "qml_theme_picker_${forbidden_picker_function}_rejected_test"
-        PROPERTIES TIMEOUT 10 WILL_FAIL TRUE)
+        "${picker_fixture_root}"
+        "app/qml/AgPlayer/components/AgColorPicker.qml:"
+        "page-local color derivation")
 endforeach()
 
 prepare_theme_contract_fixture("ordinary-hsva" ordinary_hsva_fixture_root)
 file(WRITE
     "${ordinary_hsva_fixture_root}/app/qml/AgPlayer/HsvaAllowFixture.qml"
     "Item { property color derived: Qt.hsva(0.1, 0.2, 0.3, 1.0) } // theme-color-allow: negative fixture\n")
-add_test(
-    NAME qml_theme_ordinary_hsva_rejected_test
-    COMMAND "${CMAKE_COMMAND}"
-        "-DROOT=${ordinary_hsva_fixture_root}"
-        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
-)
-set_tests_properties(qml_theme_ordinary_hsva_rejected_test PROPERTIES
-    TIMEOUT 10 WILL_FAIL TRUE)
+add_rejected_theme_contract_test(
+    qml_theme_ordinary_hsva_rejected_test
+    "${ordinary_hsva_fixture_root}"
+    "app/qml/AgPlayer/HsvaAllowFixture.qml:1:"
+    "page-local color derivation")
 
 prepare_theme_contract_fixture(
     "translation-wrong-context" translation_context_fixture_root)
@@ -873,34 +915,56 @@ string(REPLACE "</TS>"
     "<context><name>WrongContext</name>${aurora_message}</context>\n</TS>"
     translation_context_source "${translation_context_source}")
 file(WRITE "${translation_context_catalog}" "${translation_context_source}")
-add_test(
-    NAME translation_theme_selector_context_required_test
-    COMMAND "${CMAKE_COMMAND}"
-        "-DROOT=${translation_context_fixture_root}"
-        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
-)
-set_tests_properties(translation_theme_selector_context_required_test PROPERTIES
-    TIMEOUT 10 WILL_FAIL TRUE)
+add_rejected_theme_contract_test(
+    translation_theme_selector_context_required_test
+    "${translation_context_fixture_root}"
+    "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Aurora => 极光"
+    "")
 
-prepare_theme_contract_fixture(
-    "translation-obsolete" translation_obsolete_fixture_root)
-set(translation_obsolete_catalog
-    "${translation_obsolete_fixture_root}/translations/agplayer_zh.ts")
-file(READ "${translation_obsolete_catalog}" translation_obsolete_source
-    ENCODING UTF-8)
-string(REPLACE
-    "<message><source>Solid</source><translation>单色</translation></message>"
-    "<message><source>Solid</source><translation type=\"obsolete\">单色</translation></message>"
-    translation_obsolete_source "${translation_obsolete_source}")
-file(WRITE "${translation_obsolete_catalog}" "${translation_obsolete_source}")
-add_test(
-    NAME translation_required_entry_obsolete_test
-    COMMAND "${CMAKE_COMMAND}"
-        "-DROOT=${translation_obsolete_fixture_root}"
-        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+function(add_invalid_required_translation_test case_name translation_markup)
+    prepare_theme_contract_fixture(
+        "translation-${case_name}" invalid_translation_fixture_root)
+    set(invalid_translation_catalog
+        "${invalid_translation_fixture_root}/translations/agplayer_zh.ts")
+    file(READ "${invalid_translation_catalog}" invalid_translation_source
+        ENCODING UTF-8)
+    set(valid_solid_message
+        "<message><source>Solid</source><translation>单色</translation></message>")
+    set(invalid_solid_message
+        "<message><source>Solid</source>${translation_markup}</message>")
+    string(REPLACE "${valid_solid_message}" "${invalid_solid_message}"
+        mutated_translation_source "${invalid_translation_source}")
+    if(mutated_translation_source STREQUAL invalid_translation_source)
+        message(FATAL_ERROR
+            "Failed to prepare invalid translation fixture ${case_name}")
+    endif()
+    file(WRITE "${invalid_translation_catalog}"
+        "${mutated_translation_source}")
+
+    set(test_name "translation_required_entry_${case_name}_test")
+    add_rejected_theme_contract_test(
+        "${test_name}"
+        "${invalid_translation_fixture_root}"
+        "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Solid => 单色"
+        "")
+endfunction()
+
+set(invalid_required_translation_cases
+    "obsolete|<translation type=\"obsolete\">单色</translation>"
+    "vanished|<translation type=\"vanished\">单色</translation>"
+    "unfinished|<translation type=\"unfinished\">单色</translation>"
+    "empty|<translation></translation>"
+    "wrong_text|<translation>错误非空翻译</translation>"
 )
-set_tests_properties(translation_required_entry_obsolete_test PROPERTIES
-    TIMEOUT 10 WILL_FAIL TRUE)
+foreach(invalid_required_translation_case
+        IN LISTS invalid_required_translation_cases)
+    string(REPLACE "|" ";" invalid_translation_values
+        "${invalid_required_translation_case}")
+    list(GET invalid_translation_values 0 invalid_translation_case_name)
+    list(GET invalid_translation_values 1 invalid_translation_markup)
+    add_invalid_required_translation_test(
+        "${invalid_translation_case_name}" "${invalid_translation_markup}")
+endforeach()
 
 add_test(
     NAME qa_skin_incomplete_gradient_rejected_test
